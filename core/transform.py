@@ -110,9 +110,16 @@ class Transform(ABC, Generic[C]):
                     "dropped into a graph and run immediately."
                 )
 
-    def fingerprint(self) -> str:
+    def fingerprint(self, config: C | None = None) -> str:
         """Model id, revision, and provider API version — folded into the
-        artifact id. Returns 'none' for model-free transforms."""
+        artifact id. Returns 'none' for model-free transforms.
+
+        The executor passes the *validated* config, because model identity is a
+        function of it: which embedder a node selected decides which revision
+        belongs in the recipe hash. `config` is optional so that the contract
+        suite — and any other caller with no node in hand — can still ask a
+        transform for its default-config fingerprint with `fingerprint()`.
+        """
         return "none"
 
     @abstractmethod

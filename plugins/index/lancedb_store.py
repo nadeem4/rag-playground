@@ -14,8 +14,8 @@ artifact meta, but a downstream transform is handed payloads only — it never
 sees `Artifact.meta` — so meta alone could not tell a retriever which embedder
 to query with. `descriptor.json` inside the index is the channel that actually
 reaches the consumer, and it survives a cache hit for free because it is part of
-the committed artifact. The same dict is also published on `ctx.extras["meta"]`
-for the executor to fold into `Artifact.meta` once core supports it.
+the committed artifact. The same dict is also published on `ctx.extras["meta"]`,
+which the executor folds into `Artifact.meta` for the store and the UI.
 
 *Vectors come from `chunk.text_to_embed`.* That is the contextual-retrieval
 seam: an augmented text is retrieved on while the original is cited. The full
@@ -88,11 +88,10 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         vectors. A truncated index is likewise a different index, not a
         different view of one.
 
-        `config` is optional because `executor.run` calls `fingerprint()` with no
-        arguments; see the note in the module tests. Until core passes the
-        validated config through, a *non-default* embedder's revision change is
-        not covered here — the config hash still separates the two embedders by
-        name, so only a revision bump on a non-default embedder is at risk.
+        `executor.run` passes the node's *validated* config, so a revision bump
+        on a non-default embedder does move the artifact id. `config` stays
+        optional — falling back to the default config — only for callers with no
+        node in hand, such as the contract suite.
         """
         cfg = config or self.config_model()
         embedder = get_embedder(cfg.embedder)
@@ -166,8 +165,9 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             shutil.rmtree(build_dir)
         _build(build_dir, rows, schema, descriptor, build_fts=config.build_fts)
 
-        # The executor owns `Artifact.meta`, so this is an offer, not a write.
-        # `descriptor.json` above is what downstream actually reads.
+        # The executor owns `Artifact.meta` and merges this under its own keys,
+        # so it reaches the store and the UI. `descriptor.json` above remains
+        # what a downstream transform actually reads.
         ctx.extras["meta"] = {"index_descriptor": descriptor}
 
         def write(dest: Path) -> None:

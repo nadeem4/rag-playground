@@ -259,3 +259,188 @@ def test_events_are_json_serializable(store):
     events = []
     run(g_linear("boom"), counting_registry(), store, on_event=events.append)
     json.dumps(events)  # tracebacks must not break SSE framing
+
+
+# --------------------------------------------------------------------------
+# fingerprint sees the validated config
+#
+# A transform's model identity is a function of its config: which embedder was
+# selected. Config hashing already separates two embedder *names*, so the case
+# that matters is a **revision bump on a non-default embedder** — a change the
+# config hash cannot see. `REVISIONS` below stands in for the provider registry.
+# --------------------------------------------------------------------------
+
+
+REVISIONS: dict[str, str] = {"default_model": "r1", "other_model": "r1"}
+
+#: Every config `fingerprint` was handed, in call order. `None` means the
+#: executor called `fingerprint()` with no argument.
+SEEN_CONFIGS: list[object] = []
+
+
+class ModelCfg(BaseModel):
+    model: str = "default_model"
+
+
+def fingerprint_registry() -> Registry:
+    """A source transform whose fingerprint depends on its configured model."""
+    CALLS.clear()
+    SEEN_CONFIGS.clear()
+    r = Registry()
+
+    class Fp(Transform[ModelCfg]):
+        name = "fp_source"
+        stage = Stage.SOURCE
+        inputs = {}
+        output = ArtifactType.RAW_FILE
+        config_model = ModelCfg
+
+        def fingerprint(self, config=None):
+            SEEN_CONFIGS.append(config)
+            cfg = config or self.config_model()
+            return f"{cfg.model}@{REVISIONS[cfg.model]}"
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("fp_source")
+            return {"model": config.model}
+
+    class Plain(Transform[Cfg]):
+        """Keeps the inherited no-arg `fingerprint()`."""
+
+        name = "plain_source"
+        stage = Stage.SOURCE
+        inputs = {}
+        output = ArtifactType.RAW_FILE
+        config_model = Cfg
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("plain_source")
+            return {"tag": config.tag}
+
+    for cls in (Fp, Plain):
+        r.register(cls)
+    return r
+
+
+def g_one(transform: str, config: dict | None = None) -> Graph:
+    return Graph(nodes=[Node("s", Stage.SOURCE, transform, config or {})], edges=[])
+
+
+def test_fingerprint_receives_the_validated_config(store):
+    run(g_one("fp_source", {"model": "other_model"}), fingerprint_registry(), store)
+    assert SEEN_CONFIGS, "fingerprint was never called"
+    assert isinstance(SEEN_CONFIGS[0], ModelCfg)
+    assert SEEN_CONFIGS[0].model == "other_model"
+
+
+def test_revision_bump_on_a_non_default_model_changes_the_artifact_id(store):
+    """The uncovered case: config is identical, only the revision moved.
+
+    Without the config reaching `fingerprint`, the executor folds in the
+    *default* model's revision and the id does not move — a cache hit on an
+    index built by a different model.
+    """
+    reg = fingerprint_registry()
+    g = g_one("fp_source", {"model": "other_model"})
+    before = run(g, reg, store).nodes["s"].artifact.id
+
+    REVISIONS["other_model"] = "r2"
+    try:
+        after = run(g, reg, store).nodes["s"].artifact.id
+    finally:
+        REVISIONS["other_model"] = "r1"
+
+    assert after != before
+
+
+def test_fingerprint_varying_with_config_separates_artifact_ids(store):
+    reg = fingerprint_registry()
+    a = run(g_one("fp_source", {"model": "default_model"}), reg, store)
+    b = run(g_one("fp_source", {"model": "other_model"}), reg, store)
+    assert a.nodes["s"].artifact.id != b.nodes["s"].artifact.id
+
+
+def test_default_no_arg_fingerprint_still_runs(store):
+    res = run(g_one("plain_source"), fingerprint_registry(), store)
+    assert res.nodes["s"].status is NodeStatus.EXECUTED
+    assert CALLS == ["plain_source"]
+
+
+def test_fingerprint_remains_callable_with_no_arguments():
+    """The contract suite calls `fingerprint()` bare on every transform."""
+
+    class Bare(Transform[Cfg]):
+        name = "bare"
+        stage = Stage.SOURCE
+        inputs = {}
+        output = ArtifactType.RAW_FILE
+        config_model = Cfg
+
+        def apply(self, inputs, config, ctx):
+            return {}
+
+    assert Bare().fingerprint() == "none"
+
+
+# --------------------------------------------------------------------------
+# transform-supplied artifact meta
+#
+# Built-in keys win: the spread goes first and `transform`/`node_id` are
+# written after it, so a plugin cannot spoof either one.
+# --------------------------------------------------------------------------
+
+
+def meta_registry(offered: dict | None) -> Registry:
+    CALLS.clear()
+    r = Registry()
+
+    class MetaSrc(Transform[Cfg]):
+        name = "meta_source"
+        stage = Stage.SOURCE
+        inputs = {}
+        output = ArtifactType.RAW_FILE
+        config_model = Cfg
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("meta_source")
+            if offered is not None:
+                ctx.extras["meta"] = dict(offered)
+            return {"tag": config.tag}
+
+    r.register(MetaSrc)
+    return r
+
+
+def test_transform_supplied_meta_reaches_the_artifact(store):
+    reg = meta_registry({"index_descriptor": {"backends": ["dense"]}})
+    res = run(g_one("meta_source"), reg, store)
+    aid = res.nodes["s"].artifact.id
+    assert res.nodes["s"].artifact.meta["index_descriptor"] == {"backends": ["dense"]}
+    assert store.get_meta(aid).meta["index_descriptor"] == {"backends": ["dense"]}
+
+
+def test_transform_offering_nothing_still_gets_the_builtin_meta(store):
+    res = run(g_one("meta_source"), meta_registry(None), store)
+    assert res.nodes["s"].artifact.meta == {
+        "transform": "meta_source",
+        "node_id": "s",
+    }
+
+
+def test_transform_cannot_overwrite_builtin_meta_keys(store):
+    reg = meta_registry({"transform": "spoofed", "node_id": "spoofed"})
+    res = run(g_one("meta_source"), reg, store)
+    meta = res.nodes["s"].artifact.meta
+    assert meta["transform"] == "meta_source"
+    assert meta["node_id"] == "s"
+
+
+def test_meta_survives_a_cache_hit(store):
+    reg = meta_registry({"index_descriptor": {"backends": ["dense"]}})
+    g = g_one("meta_source")
+    first = run(g, reg, store)
+    CALLS.clear()
+    second = run(g, reg, store)
+    assert CALLS == []
+    assert second.nodes["s"].status is NodeStatus.CACHED
+    assert second.nodes["s"].artifact.meta == first.nodes["s"].artifact.meta

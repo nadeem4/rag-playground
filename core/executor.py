@@ -142,7 +142,10 @@ def run(
         aid = compute_artifact_id(
             transform_name=cls.name,
             transform_version=cls.version,
-            fingerprint=instance.fingerprint(),
+            # The validated config, because model identity depends on it: a
+            # revision bump on a *non-default* embedder moves nothing in the
+            # config hash, so only the fingerprint can invalidate the id.
+            fingerprint=instance.fingerprint(config),
             output_type=cls.output,
             config=canonical_config,
             inputs=input_ids,
@@ -192,8 +195,17 @@ def run(
             emit(event("node_failed", node_id=nid, error=err))
             continue
 
+        # Transform-supplied meta is merged *under* the built-ins: the spread
+        # goes first, so a plugin can attach a capability descriptor for the
+        # store and the UI but cannot spoof `transform` or `node_id`.
         artifact = Artifact(
-            id=aid, type=cls.output, meta={"transform": cls.name, "node_id": nid}
+            id=aid,
+            type=cls.output,
+            meta={
+                **ctx.extras.get("meta", {}),
+                "transform": cls.name,
+                "node_id": nid,
+            },
         )
         if cls.cacheable:
             store.put(artifact, payload)

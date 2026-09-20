@@ -50,11 +50,15 @@ class Transform(ABC, Generic[C]):
     #: chiefly. Otherwise asking the same question twice replays the old answer.
     cacheable: bool = True
 
-    #: Capability predicate on input ports, checked at graph validation.
-    #: A bm25 retriever declares requires = {"backends": ["fts"]} so it cannot be
-    #: wired to a dense-only index — a type-legal edge that would otherwise fail
-    #: at run time, or worse, return silent garbage.
-    requires: dict[str, Any] = {}
+    #: Capability predicates on input ports, keyed by *port name*, checked at
+    #: graph validation for both explicit edges and ambient bindings. A bm25
+    #: retriever declares requires = {"index": {"backends": ["fts"]}} so it
+    #: cannot be wired to a dense-only index — a type-legal edge that would
+    #: otherwise fail at run time, or worse, return silent garbage. The contract
+    #: is per port because it is a statement about one input: the same retriever
+    #: says nothing about its `query` port, and a port absent from this mapping
+    #: is unconstrained.
+    requires: dict[str, dict[str, Any]] = {}
 
     #: Capability claims on the output, matched against a consumer's `requires`.
     provides: dict[str, Any] = {}

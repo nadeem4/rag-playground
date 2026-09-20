@@ -138,12 +138,14 @@ class Graph:
                     f"match port type '{port.type}'"
                 )
 
-            if not _capabilities_satisfied(
-                specs[e.dst].requires, specs[e.src].provides
-            ):
+            # `requires` is keyed by port name: a contract about the index port
+            # says nothing about the query port, and a port with no entry is
+            # unconstrained.
+            needed = specs[e.dst].requires.get(e.port, {})
+            if not _capabilities_satisfied(needed, specs[e.src].provides):
                 raise GraphValidationError(
                     f"edge {e.src}->{e.dst}.{e.port}: capability mismatch — "
-                    f"requires {specs[e.dst].requires}, "
+                    f"port '{e.port}' requires {needed}, "
                     f"source provides {specs[e.src].provides}"
                 )
 
@@ -222,8 +224,18 @@ class Graph:
                         f"{', '.join(terminal)}. Wire the port explicitly "
                         "with an edge."
                     )
-                bindings[nid][pname] = terminal[0]
-                parents[nid].add(terminal[0])
+                # The same per-port contract an explicit edge would face, so
+                # ambient and explicit wiring accept exactly the same graphs.
+                chosen = terminal[0]
+                needed = specs[nid].requires.get(pname, {})
+                if not _capabilities_satisfied(needed, specs[chosen].provides):
+                    raise GraphValidationError(
+                        f"{nid}.{pname}: capability mismatch — ambient port "
+                        f"'{pname}' requires {needed}, but its only producer "
+                        f"'{chosen}' provides {specs[chosen].provides}"
+                    )
+                bindings[nid][pname] = chosen
+                parents[nid].add(chosen)
 
         # --- topological order (after ambient, which adds parents) ----------
         sorter = TopologicalSorter({nid: parents[nid] for nid in by_id})

@@ -55,11 +55,14 @@ class PortSpec:
     `variadic` gives fan-in: an index node consuming many chunk sets is how a
     corpus works, and N-way score fusion depends on the same thing.
 
-    `ambient` resolves to the nearest ancestor producing this type rather than
-    needing an explicit edge. Rerank needs the query and enrich needs the source
-    doc — both are edges from non-adjacent ancestors that a linear column UI
-    cannot draw. One mechanism, no user-visible wiring, and it degrades to an
-    explicit edge when the canvas ships.
+    `ambient` binds the port to the unique *terminal* producer of this type in
+    the graph — excluding the consumer itself and its descendants, which would
+    make the binding a cycle — rather than needing an explicit edge. Zero
+    candidates (when the port is required) or more than one is an error, never a
+    guess. Rerank needs the query and enrich needs the source doc — both are
+    edges from non-adjacent ancestors that a linear column UI cannot draw. One
+    mechanism, no user-visible wiring, and it degrades to an explicit edge when
+    the canvas ships.
     """
 
     type: ArtifactType

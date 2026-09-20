@@ -84,6 +84,15 @@ def reg():
     )
     r.register(
         _make(
+            "fake_fts_index",
+            Stage.INDEX,
+            {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)},
+            ArtifactType.INDEX,
+            provides={"backends": ["fts"]},
+        )
+    )
+    r.register(
+        _make(
             "dense",
             Stage.RETRIEVE,
             {
@@ -91,7 +100,7 @@ def reg():
                 "query": PortSpec(ArtifactType.QUERY, ambient=True),
             },
             ArtifactType.RETRIEVAL_RESULT,
-            requires={"backends": ["dense"]},
+            requires={"index": {"backends": ["dense"]}},
         )
     )
     r.register(
@@ -103,7 +112,19 @@ def reg():
                 "query": PortSpec(ArtifactType.QUERY, ambient=True),
             },
             ArtifactType.RETRIEVAL_RESULT,
-            requires={"backends": ["fts"]},
+            requires={"index": {"backends": ["fts"]}},
+        )
+    )
+    r.register(
+        _make(
+            "ambient_bm25",
+            Stage.RETRIEVE,
+            {
+                "index": PortSpec(ArtifactType.INDEX, ambient=True),
+                "query": PortSpec(ArtifactType.QUERY, ambient=True),
+            },
+            ArtifactType.RETRIEVAL_RESULT,
+            requires={"index": {"backends": ["fts"]}},
         )
     )
     r.register(

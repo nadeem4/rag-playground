@@ -366,6 +366,66 @@ def test_capability_mismatch_is_rejected(reg):
         g.validate(reg)
 
 
+def test_explicit_edge_into_port_without_requires_entry_is_accepted(reg):
+    """The regression: `requires` is per-port, so a query edge is unconstrained.
+
+    `dense` requires a dense backend on its *index* port. Wiring the query
+    explicitly used to be rejected because the index contract was checked
+    against the query node's (empty) `provides`.
+    """
+    g = full_pipeline()
+    g.edges = g.edges + [Edge("q", "r", "query")]
+    res = g.validate(reg)
+    assert res.bindings["r"]["query"] == "q"
+    assert res.bindings["r"]["index"] == "ix"
+
+
+def test_port_without_requires_entry_imposes_no_constraint(reg):
+    """Only the ports named in `requires` carry a capability contract."""
+    g = Graph(
+        nodes=[
+            n("s", Stage.SOURCE, "upload"),
+            n("p", Stage.PARSE, "fake_parse"),
+            n("c", Stage.CHUNK, "fixed"),
+            n("ix", Stage.INDEX, "fake_fts_index"),
+            n("q", Stage.QUERY, "text", text="hello"),
+            n("r", Stage.RETRIEVE, "bm25"),
+        ],
+        edges=[
+            Edge("s", "p", "file"),
+            Edge("p", "c", "doc"),
+            Edge("c", "ix", "chunks"),
+            Edge("ix", "r", "index"),
+            Edge("q", "r", "query"),
+        ],
+    )
+    res = g.validate(reg)
+    assert res.bindings["r"] == {"index": "ix", "query": "q"}
+
+
+def test_ambient_binding_failing_capability_check_is_rejected(reg):
+    """Ambient must enforce the same contract an explicit edge would."""
+    g = Graph(
+        nodes=[
+            n("s", Stage.SOURCE, "upload"),
+            n("p", Stage.PARSE, "fake_parse"),
+            n("c", Stage.CHUNK, "fixed"),
+            n("ix", Stage.INDEX, "fake_index"),  # provides dense only
+            n("q", Stage.QUERY, "text", text="hello"),
+            n("r", Stage.RETRIEVE, "ambient_bm25"),  # requires fts on index
+        ],
+        edges=[
+            Edge("s", "p", "file"),
+            Edge("p", "c", "doc"),
+            Edge("c", "ix", "chunks"),
+        ],
+    )
+    with pytest.raises(GraphValidationError, match="capability") as exc:
+        g.validate(reg)
+    msg = str(exc.value)
+    assert "index" in msg and "fts" in msg and "dense" in msg
+
+
 def test_ancestors_includes_the_targets_themselves(reg):
     r = full_pipeline().validate(reg)
     assert r.ancestors({"c"}) == {"s", "p", "c"}

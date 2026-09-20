@@ -52,9 +52,14 @@ class MmrRerank(Transform[MmrRerankConfig]):
     output = ArtifactType.RETRIEVAL_RESULT
     config_model = MmrRerankConfig
 
-    def fingerprint(self) -> str:
-        """The embedder's identity: different vectors, different selection."""
-        return get_embedder(self.config_model().embedder).fingerprint()
+    def fingerprint(self, config: MmrRerankConfig | None = None) -> str:
+        """The embedder's identity: different vectors, different selection.
+
+        Reads the node's own config, not the default — otherwise changing a
+        node's embedder would not move the artifact id.
+        """
+        cfg = config or self.config_model()
+        return get_embedder(cfg.embedder).fingerprint()
 
     def apply(
         self, inputs: Mapping[str, Any], config: MmrRerankConfig, ctx: RunContext

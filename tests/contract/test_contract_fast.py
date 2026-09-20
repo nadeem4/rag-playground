@@ -104,12 +104,30 @@ def test_config_roundtrips_through_json(cls):
     assert cls.config_model(**dumped).model_dump(mode="json") == dumped
 
 
+def test_fingerprint_accepts_the_config(cls):
+    """The executor ALWAYS calls `fingerprint(config)`.
+
+    A plugin declaring `fingerprint(self)` typechecks, passes every other
+    contract test, and then dies with a TypeError the first time its node is
+    executed — the transform is simply unrunnable. This caught exactly that in
+    `rerank/mmr`, which had never executed through the executor.
+
+    Both arities must work: no-arg for callers that have no config in hand,
+    and with-config for the executor.
+    """
+    inst = cls()
+    bare = inst.fingerprint()
+    with_config = inst.fingerprint(cls.config_model())
+    assert isinstance(bare, str) and bare
+    assert isinstance(with_config, str) and with_config
+
+
 def test_artifact_id_is_deterministic(cls):
     inst = cls()
     kw = dict(
         transform_name=cls.name,
         transform_version=cls.version,
-        fingerprint=inst.fingerprint(),
+        fingerprint=inst.fingerprint(cls.config_model()),
         output_type=cls.output,
         config=cls.config_model().model_dump(mode="json"),
         inputs={port_name: "0" * 64 for port_name in cls.inputs},

@@ -244,6 +244,118 @@ def test_ambient_port_with_no_producer_is_rejected(reg):
         g.validate(reg)
 
 
+def _index_side():
+    """The corpus half of a pipeline: `ix` is a usable index node."""
+    return (
+        [
+            n("s", Stage.SOURCE, "upload"),
+            n("p", Stage.PARSE, "fake_parse"),
+            n("c", Stage.CHUNK, "fixed"),
+            n("ix", Stage.INDEX, "fake_index"),
+        ],
+        [Edge("s", "p", "file"), Edge("p", "c", "doc"), Edge("c", "ix", "chunks")],
+    )
+
+
+def test_ambient_binds_to_terminal_query_transform(reg):
+    """With `q -> qt1 -> qt2`, retrieve must read the *end* of the chain."""
+    nodes, edges = _index_side()
+    g = Graph(
+        nodes=nodes
+        + [
+            n("q", Stage.QUERY, "text", text="hello"),
+            n("qt1", Stage.QUERY_TRANSFORM, "rewrite"),
+            n("qt2", Stage.QUERY_TRANSFORM, "rewrite"),
+            n("r", Stage.RETRIEVE, "dense"),
+        ],
+        edges=edges
+        + [
+            Edge("q", "qt1", "query"),
+            Edge("qt1", "qt2", "query"),
+            Edge("ix", "r", "index"),
+        ],
+    )
+    r = g.validate(reg)
+    assert r.bindings["r"]["query"] == "qt2"
+    assert "qt2" in r.parents["r"]
+
+
+def test_ambient_with_two_terminal_producers_is_ambiguous(reg):
+    """Two unwired query nodes: guessing one would be a silent mis-binding."""
+    nodes, edges = _index_side()
+    g = Graph(
+        nodes=nodes
+        + [
+            n("q1", Stage.QUERY, "text", text="a"),
+            n("q2", Stage.QUERY, "text", text="b"),
+            n("r", Stage.RETRIEVE, "dense"),
+        ],
+        edges=edges + [Edge("ix", "r", "index")],
+    )
+    with pytest.raises(GraphValidationError, match="ambiguous") as exc:
+        g.validate(reg)
+    msg = str(exc.value)
+    assert "q1" in msg and "q2" in msg
+
+
+def _order_independence_graph(reversed_nodes: bool):
+    """Same logical graph, node list declared in two different orders.
+
+    The query chain is exactly as deep as the retrieve node, so any resolution
+    that leans on `static_order`'s insertion-order tie-break returns a
+    different answer for the two declaration orders.
+    """
+    nodes, edges = _index_side()
+    nodes = nodes + [
+        n("q", Stage.QUERY, "text", text="hello"),
+        n("qt1", Stage.QUERY_TRANSFORM, "rewrite"),
+        n("qt2", Stage.QUERY_TRANSFORM, "rewrite"),
+        n("qt3", Stage.QUERY_TRANSFORM, "rewrite"),
+        n("qt4", Stage.QUERY_TRANSFORM, "rewrite"),
+        n("r", Stage.RETRIEVE, "dense"),
+    ]
+    edges = edges + [
+        Edge("q", "qt1", "query"),
+        Edge("qt1", "qt2", "query"),
+        Edge("qt2", "qt3", "query"),
+        Edge("qt3", "qt4", "query"),
+        Edge("ix", "r", "index"),
+    ]
+    return Graph(nodes=list(reversed(nodes)) if reversed_nodes else nodes, edges=edges)
+
+
+def test_ambient_resolution_is_independent_of_node_declaration_order(reg):
+    """Bindings feed the recipe hash, so they must not depend on node order."""
+    a = _order_independence_graph(reversed_nodes=False).validate(reg)
+    b = _order_independence_graph(reversed_nodes=True).validate(reg)
+    assert a.bindings["r"]["query"] == b.bindings["r"]["query"] == "qt4"
+    assert a.bindings == b.bindings
+
+
+def test_explicit_edge_overrides_ambient_resolution(reg):
+    """An explicit wire wins even when ambient would pick a different node."""
+    nodes, edges = _index_side()
+    g = Graph(
+        nodes=nodes
+        + [
+            n("q", Stage.QUERY, "text", text="hello"),
+            n("qt1", Stage.QUERY_TRANSFORM, "rewrite"),
+            n("r", Stage.RETRIEVE, "dense"),
+            n("rr", Stage.RERANK, "mmr"),
+        ],
+        edges=edges
+        + [
+            Edge("q", "qt1", "query"),
+            Edge("ix", "r", "index"),
+            Edge("r", "rr", "result"),
+            Edge("q", "rr", "query"),  # explicit, against the ambient answer
+        ],
+    )
+    res = g.validate(reg)
+    assert res.bindings["rr"]["query"] == "q"
+    assert res.bindings["r"]["query"] == "qt1"
+
+
 def test_capability_mismatch_is_rejected(reg):
     """bm25 requires an fts backend; fake_index provides only dense."""
     g = full_pipeline()

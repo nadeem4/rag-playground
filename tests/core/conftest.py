@@ -67,6 +67,14 @@ def reg():
     )
     r.register(
         _make(
+            "rewrite",
+            Stage.QUERY_TRANSFORM,
+            {"query": PortSpec(ArtifactType.QUERY)},
+            ArtifactType.QUERY,
+        )
+    )
+    r.register(
+        _make(
             "fake_index",
             Stage.INDEX,
             {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)},

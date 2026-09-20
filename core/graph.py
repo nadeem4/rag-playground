@@ -162,35 +162,75 @@ class Graph:
                 slot[e.port] = e.src
             parents[e.dst].add(e.src)
 
-        # --- topological order (needed before ambient resolution) -----------
+        # --- ambient ports: the unique terminal producer of the type --------
+        # Resolution reads only the explicitly wired graph, never a traversal
+        # order: bindings fold into the recipe hash, so two graphs that differ
+        # only in the order their nodes were declared must bind identically.
+        children: dict[str, set[str]] = {nid: set() for nid in by_id}
+        for e in self.edges:
+            children[e.src].add(e.dst)
+
+        def descendants(start: str) -> set[str]:
+            seen: set[str] = set()
+            stack = list(children[start])
+            while stack:
+                cur = stack.pop()
+                if cur in seen:
+                    continue
+                seen.add(cur)
+                stack.extend(children[cur])
+            return seen
+
+        for nd in self.nodes:
+            nid = nd.id
+            for pname, port in specs[nid].inputs.items():
+                if not port.ambient or pname in bindings[nid]:
+                    continue
+
+                # A descendant would make the binding a cycle; the node itself
+                # cannot feed itself either.
+                blocked = descendants(nid) | {nid}
+                candidates = {
+                    other
+                    for other in by_id
+                    if other not in blocked and specs[other].output == port.type
+                }
+                # Drop the non-terminal links of a same-type chain: with
+                # `query -> hyde -> multi_query`, only multi_query is the query.
+                terminal = sorted(
+                    c
+                    for c in candidates
+                    if not any(
+                        e.src == c
+                        and e.dst in candidates
+                        and specs[e.dst].inputs[e.port].type == port.type
+                        for e in self.edges
+                    )
+                )
+
+                if not terminal:
+                    if port.required:
+                        raise GraphValidationError(
+                            f"{nid}.{pname}: ambient port found no node "
+                            f"producing '{port.type}'"
+                        )
+                    continue
+                if len(terminal) > 1:
+                    raise GraphValidationError(
+                        f"{nid}.{pname}: ambient port is ambiguous — "
+                        f"{len(terminal)} nodes produce '{port.type}': "
+                        f"{', '.join(terminal)}. Wire the port explicitly "
+                        "with an edge."
+                    )
+                bindings[nid][pname] = terminal[0]
+                parents[nid].add(terminal[0])
+
+        # --- topological order (after ambient, which adds parents) ----------
         sorter = TopologicalSorter({nid: parents[nid] for nid in by_id})
         try:
             order = list(sorter.static_order())
         except CycleError as exc:
             raise GraphValidationError(f"graph contains a cycle: {exc}") from exc
-
-        position = {nid: i for i, nid in enumerate(order)}
-
-        # --- ambient ports: nearest ancestor producing the type -------------
-        for nid in order:
-            for pname, port in specs[nid].inputs.items():
-                if not port.ambient or pname in bindings[nid]:
-                    continue
-                candidates = [
-                    other
-                    for other in order
-                    if position[other] < position[nid]
-                    and specs[other].output == port.type
-                ]
-                if not candidates:
-                    if port.required:
-                        raise GraphValidationError(
-                            f"{nid}.{pname}: ambient port found no upstream node "
-                            f"producing '{port.type}'"
-                        )
-                    continue
-                bindings[nid][pname] = candidates[-1]
-                parents[nid].add(candidates[-1])
 
         # --- every required port is bound -----------------------------------
         for nid in order:

@@ -1,0 +1,128 @@
+import pytest
+from pydantic import BaseModel
+
+from core.artifacts import ArtifactType
+from core.ports import PortSpec, RunContext, Stage
+from core.transform import Transform, TransformDefinitionError
+
+
+class DummyConfig(BaseModel):
+    size: int = 512
+
+
+def make_valid():
+    class Valid(Transform[DummyConfig]):
+        name = "valid"
+        stage = Stage.CHUNK
+        inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+        output = ArtifactType.CHUNK_SET
+        config_model = DummyConfig
+
+        def apply(self, inputs, config, ctx):
+            return {"chunks": [], "size": config.size}
+
+    return Valid
+
+
+def test_valid_subclass_inherits_defaults():
+    v = make_valid()()
+    assert v.version == "1"
+    assert v.deterministic is True
+    assert v.cacheable is True
+    assert v.requires == {}
+    assert v.provides == {}
+    assert v.fingerprint() == "none"
+
+
+def test_missing_name_raises_at_definition_time():
+    with pytest.raises(TransformDefinitionError, match="name"):
+
+        class NoName(Transform[DummyConfig]):
+            stage = Stage.CHUNK
+            inputs = {}
+            output = ArtifactType.CHUNK_SET
+            config_model = DummyConfig
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+
+def test_missing_config_model_raises():
+    with pytest.raises(TransformDefinitionError, match="config_model"):
+
+        class NoConfig(Transform):
+            name = "x"
+            stage = Stage.CHUNK
+            inputs = {}
+            output = ArtifactType.CHUNK_SET
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+
+def test_config_model_must_have_all_defaults():
+    """A node must be droppable into a graph and runnable immediately."""
+
+    class Required(BaseModel):
+        size: int  # no default
+
+    with pytest.raises(TransformDefinitionError, match="default"):
+
+        class NeedsArg(Transform[Required]):
+            name = "needs_arg"
+            stage = Stage.CHUNK
+            inputs = {}
+            output = ArtifactType.CHUNK_SET
+            config_model = Required
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+
+def test_stage_must_be_consistent_with_output_type():
+    with pytest.raises(TransformDefinitionError, match="stage"):
+
+        class Wrong(Transform[DummyConfig]):
+            name = "wrong"
+            stage = Stage.CHUNK
+            inputs = {}
+            output = ArtifactType.INDEX  # chunk stage must output chunk_set
+            config_model = DummyConfig
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+
+def test_abstract_apply_cannot_be_instantiated():
+    class NoApply(Transform[DummyConfig]):
+        name = "no_apply"
+        stage = Stage.CHUNK
+        inputs = {}
+        output = ArtifactType.CHUNK_SET
+        config_model = DummyConfig
+
+    with pytest.raises(TypeError):
+        NoApply()
+
+
+def test_abstract_intermediate_base_opts_out_of_validation():
+    """A shared base for a family of plugins should not need name/stage."""
+
+    class SomeBase(Transform):
+        __abstract_transform__ = True
+
+        def helper(self):
+            return 42
+
+
+def test_portspec_defaults():
+    port = PortSpec(ArtifactType.QUERY)
+    assert port.variadic is False
+    assert port.ambient is False
+    assert port.required is True
+
+
+def test_apply_receives_typed_config(tmp_path):
+    ctx = RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path)
+    out = make_valid()().apply({}, DummyConfig(size=256), ctx)
+    assert out["size"] == 256

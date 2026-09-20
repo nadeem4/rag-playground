@@ -3,7 +3,11 @@ name = "rag-playground"
 version = "0.1.0"
 description = "A local-first bench for learning and demonstrating RAG by experiment"
 requires-python = ">=3.13,<3.14"
-dependencies = ["pydantic>=2.9"]
+dependencies = [
+    "lancedb>=0.38,<0.39",
+    "pydantic>=2.9",
+    "pypdfium2>=5.13.0",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3", "pytest-cov>=5.0"]

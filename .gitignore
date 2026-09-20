@@ -1,0 +1,36 @@
+# Local design docs and plans (kept out of the repo by request)
+docs/
+.remember/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Playground data — regenerable, sometimes large
+artifacts/
+sources/
+runs/
+graphs/
+qa_sets/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node (phase 5)
+node_modules/
+web/dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

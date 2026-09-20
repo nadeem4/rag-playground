@@ -81,6 +81,27 @@ class Transform(ABC, Generic[C]):
                 f"got '{cls.output}'"
             )
 
+        # A typo'd port name in `requires` would silently mean "no constraint",
+        # which yields wrong retrieval rather than an error. Shape only — the
+        # capability values themselves are the plugin author's business.
+        for port_name, needed in cls.requires.items():
+            if port_name not in cls.inputs:
+                raise TransformDefinitionError(
+                    f"{cls.__name__}: requires['{port_name}'] names no declared "
+                    f"input port. Valid ports: {sorted(cls.inputs) or 'none'}"
+                )
+            if not isinstance(needed, dict):
+                raise TransformDefinitionError(
+                    f"{cls.__name__}: requires['{port_name}'] must be a dict of "
+                    f"capabilities, got {type(needed).__name__}"
+                )
+
+        if not isinstance(cls.provides, dict):
+            raise TransformDefinitionError(
+                f"{cls.__name__}: `provides` must be a dict, got "
+                f"{type(cls.provides).__name__}"
+            )
+
         for field_name, field_info in cls.config_model.model_fields.items():
             if field_info.is_required():
                 raise TransformDefinitionError(

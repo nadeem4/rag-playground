@@ -73,7 +73,7 @@ class FixedCleaner(Transform[CleanConfig]):
     version = "2"
     deterministic = False
     cacheable = False
-    requires = {"doc": ["text"]}
+    requires = {"doc": {"format": "text"}}
     provides = {"normalized": True}
 
     def apply(self, inputs, config, ctx):
@@ -182,7 +182,7 @@ def test_export_schema_carries_class_level_overrides(reg):
     assert entry["version"] == "2"
     assert entry["deterministic"] is False
     assert entry["cacheable"] is False
-    assert entry["requires"] == {"doc": ["text"]}
+    assert entry["requires"] == {"doc": {"format": "text"}}
     assert entry["provides"] == {"normalized": True}
 
 

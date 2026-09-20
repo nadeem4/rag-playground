@@ -115,6 +115,77 @@ def test_abstract_intermediate_base_opts_out_of_validation():
             return 42
 
 
+def test_requires_naming_an_undeclared_port_raises():
+    """A typo'd port name would silently mean 'no constraint'."""
+    with pytest.raises(TransformDefinitionError) as exc:
+
+        class Typo(Transform[DummyConfig]):
+            name = "typo"
+            stage = Stage.RETRIEVE
+            inputs = {"index": PortSpec(ArtifactType.INDEX)}
+            output = ArtifactType.RETRIEVAL_RESULT
+            config_model = DummyConfig
+            requires = {"indx": {"backends": ["fts"]}}
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+    message = str(exc.value)
+    assert "indx" in message
+    assert "index" in message
+
+
+def test_requires_with_a_non_dict_value_raises():
+    """`{"doc": ["text"]}` is the old flat shape, not a per-port contract."""
+    with pytest.raises(TransformDefinitionError, match="requires"):
+
+        class Flat(Transform[DummyConfig]):
+            name = "flat"
+            stage = Stage.CHUNK
+            inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+            output = ArtifactType.CHUNK_SET
+            config_model = DummyConfig
+            requires = {"doc": ["text"]}
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+
+def test_well_formed_nested_requires_is_accepted():
+    class Nested(Transform[DummyConfig]):
+        name = "nested"
+        stage = Stage.RETRIEVE
+        inputs = {"index": PortSpec(ArtifactType.INDEX)}
+        output = ArtifactType.RETRIEVAL_RESULT
+        config_model = DummyConfig
+        requires = {"index": {"backends": ["fts"]}}
+
+        def apply(self, inputs, config, ctx):
+            return None
+
+    assert Nested.requires == {"index": {"backends": ["fts"]}}
+
+
+def test_empty_requires_is_accepted():
+    assert make_valid().requires == {}
+
+
+def test_provides_must_be_a_dict():
+    """`provides` is flat — it describes the single output."""
+    with pytest.raises(TransformDefinitionError, match="provides"):
+
+        class BadProvides(Transform[DummyConfig]):
+            name = "bad_provides"
+            stage = Stage.INDEX
+            inputs = {}
+            output = ArtifactType.INDEX
+            config_model = DummyConfig
+            provides = ["fts"]
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+
 def test_portspec_defaults():
     port = PortSpec(ArtifactType.QUERY)
     assert port.variadic is False

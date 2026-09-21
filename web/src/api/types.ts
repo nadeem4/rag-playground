@@ -363,3 +363,91 @@ export type RunEvent =
   | VariantFinishedEvent
   | RunErrorEvent
   | StreamEndEvent
+
+// ------------------------------------------------------------ credentials --
+// Plan I-8. The server reports only WHICH source it can supply, never a value.
+
+/**
+ * `GET /api/settings/llm`: the key the SERVER itself can supply. "none" means
+ * the UI must supply one. A UI key is known only to the browser's own state.
+ */
+export type LlmServerSource = "env" | "dotenv" | "none"
+
+export interface LlmSettings {
+  source: LlmServerSource
+}
+
+/** `POST /api/settings/llm/check`. `source` is the key that was checked. */
+export interface LlmCheck {
+  ok: boolean
+  source: "header" | "env" | "dotenv" | "none"
+  error: string | null
+}
+
+// -------------------------------------------------------------- pdf pages --
+// Plan I-9. Rects are (left, bottom, right, top) in PDF points, y growing up:
+// the same convention as `Element.bbox`.
+
+export type PdfRect = [number, number, number, number]
+
+/** One entry of `GET /api/sources/{sha}/pages`. `n` is 1-based; sizes in points. */
+export interface PdfPageSize {
+  n: number
+  width: number
+  height: number
+}
+
+/** `GET /api/sources/{sha}/pages/{n}/find?text=...` */
+export interface FindResult {
+  rects: PdfRect[]
+  matched: "exact" | "normalized" | "none"
+}
+
+// ------------------------------------------------------------------- chat --
+// Plan I-10, the `use_case/chat` output.
+
+/** A run of answer text. No citations means the text is NOT grounded in a source. */
+export interface ChatSegment {
+  text: string
+  citations: number[]
+}
+
+/**
+ * One citation. Numbers are shared across segments for an identical
+ * (chunk, start, end). Nullable fields are real cases, and such citations are
+ * still kept:
+ *   page / element_id / bbox null   doc_start falls in no element span
+ *                                   (the blank line between two blocks, say)
+ *   chunk_id / doc_start / doc_end  the model cited a document outside the
+ *     null, verified false          hits list
+ */
+export interface ChatCitation {
+  n: number
+  cited_text: string
+  chunk_id: string | null
+  source_sha: string
+  /** Offsets into the parsed document's rendered markdown. */
+  doc_start: number | null
+  doc_end: number | null
+  page: number | null
+  element_id: string | null
+  /** The element's bbox, not the cited text's. */
+  bbox: PdfRect | null
+  /** The document at doc_start..doc_end equals `cited_text`. */
+  verified: boolean
+}
+
+export interface ChatPayload {
+  question: string
+  /** The model that ACTUALLY answered: a server-side fallback may differ from the configured one. */
+  model: string
+  answer: ChatSegment[]
+  citations: ChatCitation[]
+  usage: { input_tokens: number; output_tokens: number }
+  stop_reason: string | null
+}
+
+export interface ChatOutput {
+  kind: "chat"
+  payload: ChatPayload
+}

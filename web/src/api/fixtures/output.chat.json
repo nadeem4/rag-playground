@@ -1,0 +1,133 @@
+{
+  "kind": "chat",
+  "payload": {
+    "question": "Why does chunk boundary placement matter, and how does recursive splitting help?",
+    "model": "claude-opus-4-8",
+    "answer": [
+      {
+        "text": "A retriever only ever sees chunks, so it can return nothing that a chunk does not contain",
+        "citations": [
+          1
+        ]
+      },
+      {
+        "text": ". Where a boundary falls is therefore a recall decision",
+        "citations": [
+          3
+        ]
+      },
+      {
+        "text": ". ",
+        "citations": []
+      },
+      {
+        "text": "Fixed windows are the cheap baseline, cutting every N tokens",
+        "citations": [
+          4
+        ]
+      },
+      {
+        "text": ", and overlap between windows protects answers that straddle a cut",
+        "citations": [
+          5
+        ]
+      },
+      {
+        "text": ". ",
+        "citations": []
+      },
+      {
+        "text": "Recursive splitting helps because it moves to a finer separator only when a piece is still over the token budget",
+        "citations": [
+          2
+        ]
+      },
+      {
+        "text": ", so it keeps paragraphs and sentences whole wherever it can, which is why most frameworks use it by default.",
+        "citations": []
+      }
+    ],
+    "citations": [
+      {
+        "n": 1,
+        "cited_text": "A retriever never sees a document. It sees chunks, and it can only return what a chunk contains.",
+        "chunk_id": "df092ff8a937983e",
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": 29,
+        "doc_end": 125,
+        "page": 1,
+        "element_id": "e00002",
+        "bbox": [
+          72.0,
+          597.468017578125,
+          486.19189453125,
+          674.8599853515625
+        ],
+        "verified": true
+      },
+      {
+        "n": 2,
+        "cited_text": "It only falls back to a finer separator when a piece is still larger than the budget.",
+        "chunk_id": "f5c1c62c9cc10944",
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": 901,
+        "doc_end": 986,
+        "page": 2,
+        "element_id": "e00009",
+        "bbox": [
+          72.0,
+          597.468017578125,
+          488.8319091796875,
+          674.8599853515625
+        ],
+        "verified": true
+      },
+      {
+        "n": 3,
+        "cited_text": "Boundary placement is therefore a recall decision disguised as a preprocessing step.",
+        "chunk_id": "df092ff8a937983e",
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": 270,
+        "doc_end": 354,
+        "page": 1,
+        "element_id": "e00002",
+        "bbox": [
+          72.0,
+          597.468017578125,
+          486.19189453125,
+          674.8599853515625
+        ],
+        "verified": false
+      },
+      {
+        "n": 4,
+        "cited_text": "\n\nFixed windows\n\nThe simplest strategy cuts the text every N tokens with an overlap of M tokens.",
+        "chunk_id": "10a57a19c6a746b9",
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": 449,
+        "doc_end": 545,
+        "page": null,
+        "element_id": null,
+        "bbox": null,
+        "verified": true
+      },
+      {
+        "n": 5,
+        "cited_text": "Overlap protects answers that straddle a boundary.",
+        "chunk_id": null,
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": null,
+        "doc_end": null,
+        "page": null,
+        "element_id": null,
+        "bbox": null,
+        "verified": false
+      }
+    ],
+    "usage": {
+      "input_tokens": 1847,
+      "output_tokens": 131
+    },
+    "stop_reason": "end_turn"
+  }
+}

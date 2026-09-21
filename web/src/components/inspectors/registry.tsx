@@ -2,6 +2,8 @@ import type { ComponentType } from "react"
 
 import type { ArtifactType, ChunkSet, CleanReportEntry, ParsedDoc, RetrievalResult } from "@/api/types"
 
+import { isChatOutput } from "./chat"
+import { ChatInspector } from "./ChatInspector"
 import { ChunkSetInspector } from "./ChunkSetInspector"
 import { CleanReportInspector } from "./CleanReportInspector"
 import type { SearchOutput } from "./hits"
@@ -21,9 +23,10 @@ export interface InspectorProps {
   status?: InspectorStatus
   /**
    * Related artifacts some inspectors can use: the pre-clean document for a
-   * cleaned one, the upstream chunk set for retrieval (to place hits on it).
+   * cleaned one, the upstream chunk set for retrieval (to place hits on it),
+   * the parsed document the chunks were cut from (for "Show in PDF").
    */
-  context?: { before?: ParsedDoc; chunks?: ChunkSet }
+  context?: { before?: ParsedDoc; chunks?: ChunkSet; doc?: ParsedDoc }
   /** False drops secondary panels (chunk metadata, the hit document). */
   showDetail?: boolean
 }
@@ -36,8 +39,8 @@ function ParsedDocEntry({ data, status, context }: InspectorProps) {
   return <ParsedDocInspector doc={doc} status={status} />
 }
 
-function ChunkSetEntry({ data, status, showDetail }: InspectorProps) {
-  return <ChunkSetInspector chunkSet={data as ChunkSet | undefined} status={status} showDetail={showDetail} />
+function ChunkSetEntry({ data, status, showDetail, context }: InspectorProps) {
+  return <ChunkSetInspector chunkSet={data as ChunkSet | undefined} status={status} showDetail={showDetail} doc={context?.doc} />
 }
 
 function IndexEntry({ data, status }: InspectorProps) {
@@ -45,15 +48,21 @@ function IndexEntry({ data, status }: InspectorProps) {
 }
 
 function RetrievalEntry({ data, status, context, showDetail }: InspectorProps) {
-  return <RetrievalResultInspector result={data as RetrievalResult | undefined} status={status} chunkSet={context?.chunks} showDetail={showDetail} />
+  return <RetrievalResultInspector result={data as RetrievalResult | undefined} status={status} chunkSet={context?.chunks} showDetail={showDetail} doc={context?.doc} />
 }
 
-/** A use case's output. Search results read like a retrieval result; anything else is shown as data. */
+/**
+ * A use case's output. Search results read like a retrieval result, a chat
+ * answer gets its citations; anything else is shown as data.
+ */
 function OutputEntry(props: InspectorProps) {
   const out = props.data as SearchOutput | undefined
   const ready = !props.status || props.status.kind === "ready"
   if (ready && out?.kind === "search" && Array.isArray(out.payload?.results)) {
-    return <SearchOutputInspector output={out} chunkSet={props.context?.chunks} showDetail={props.showDetail} />
+    return <SearchOutputInspector output={out} chunkSet={props.context?.chunks} showDetail={props.showDetail} doc={props.context?.doc} />
+  }
+  if (ready && isChatOutput(props.data)) {
+    return <ChatInspector payload={props.data.payload} chunkSet={props.context?.chunks} />
   }
   return <JsonTreeInspector data={props.data} status={props.status} />
 }

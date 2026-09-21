@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
 
+import { ApiKeyControl } from "./ApiKeyControl"
 import { ThemeToggle } from "./ThemeToggle"
 
 const PRIMARY = [
@@ -47,7 +48,10 @@ export function AppHeader({ path }: { path: string }) {
           ))}
         </nav>
       </div>
-      <ThemeToggle />
+      <div className="flex shrink-0 items-center gap-2">
+        <ApiKeyControl />
+        <ThemeToggle />
+      </div>
     </header>
   )
 }

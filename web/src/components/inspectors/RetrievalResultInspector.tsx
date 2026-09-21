@@ -1,7 +1,9 @@
-import { Fragment, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react"
 
-import type { ChunkSet, RetrievalResult } from "@/api/types"
+import type { ChunkSet, ParsedDoc, RetrievalResult } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
+import { ElementsInPdf } from "@/components/pdf/ElementsInPdf"
+import { Button } from "@/components/ui/button"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { cn } from "@/lib/utils"
 
@@ -13,6 +15,7 @@ import {
   layoutHits,
   movement,
   pages,
+  pdfTarget,
   rowsFromResult,
   rowsFromSearch,
   scaleMax,
@@ -44,6 +47,8 @@ export interface RetrievalViewProps {
   facts: ReactNode
   /** False drops the document, for narrow side-by-side columns. */
   showDetail?: boolean
+  /** The parsed document the chunks were cut from: enables "Show in PDF". */
+  doc?: ParsedDoc
 }
 
 export function RetrievalResultInspector({
@@ -51,11 +56,13 @@ export function RetrievalResultInspector({
   status,
   chunkSet,
   showDetail = true,
+  doc,
 }: {
   result?: RetrievalResult
   status?: InspectorStatus
   chunkSet?: ChunkSet
   showDetail?: boolean
+  doc?: ParsedDoc
 }) {
   const screen = statusScreen(status, "retrieval result")
   if (screen) return <Frame><div className="bg-surface">{screen}</div></Frame>
@@ -76,6 +83,7 @@ export function RetrievalResultInspector({
       rows={rows}
       chunkSet={chunkSet}
       showDetail={showDetail}
+      doc={doc}
       facts={
         <>
           <Fact value={fmt(rows.length)} label={rows.length === 1 ? "hit" : "hits"} id="hits" />
@@ -95,10 +103,12 @@ export function SearchOutputInspector({
   output,
   chunkSet,
   showDetail = true,
+  doc,
 }: {
   output: SearchOutput
   chunkSet?: ChunkSet
   showDetail?: boolean
+  doc?: ParsedDoc
 }) {
   const rows = rowsFromSearch(output)
   const total = output.payload.total_candidates
@@ -107,6 +117,7 @@ export function SearchOutputInspector({
       rows={rows}
       chunkSet={chunkSet}
       showDetail={showDetail}
+      doc={doc}
       facts={
         <>
           <Fact value={fmt(rows.length)} label={rows.length === 1 ? "result" : "results"} id="hits" />
@@ -135,10 +146,18 @@ const BAR = 40 // px, the longest score bar
 const LANE = 6 // px per spine lane: a 4px band plus a 2px gap
 const LABEL = 20 // px for the rank numbers on the spine
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc }: RetrievalViewProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLDivElement>(null)
+  const pdfRef = useRef<HTMLDivElement>(null)
   const [selected, setSelected] = useState<number | null>(null)
+  const [pdfRow, setPdfRow] = useState<number | null>(null)
+  // A discrete click opens the page below the list: bring it into view once.
+  useEffect(() => {
+    if (pdfRow !== null) pdfRef.current?.scrollIntoView?.({ block: "nearest" })
+  }, [pdfRow])
+  const target = pdfRow === null || !rows[pdfRow] ? null : pdfTarget(rows[pdfRow], chunkSet?.chunks)
+  const canPdf = (row: number) => doc !== undefined && pdfTarget(rows[row], chunkSet?.chunks) !== null
 
   const keys = useMemo(() => componentKeys(rows), [rows])
   const layout = useMemo(
@@ -202,12 +221,33 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true }: Retr
       <div ref={rootRef} className="ri" onPointerOver={onPointerOver} onPointerLeave={onPointerLeave}>
         <style>{hoverRules}</style>
         <div className="ri-body" data-doc={layout ? "" : undefined}>
-          <HitList rows={rows} keys={keys} markOf={markOf} selected={selected} onSelect={select} showRetriever={new Set(rows.map((r) => r.retriever)).size > 1} />
+          <HitList
+            rows={rows}
+            keys={keys}
+            markOf={markOf}
+            selected={selected}
+            onSelect={select}
+            onShowPdf={doc ? setPdfRow : undefined}
+            canPdf={canPdf}
+            showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
+          />
           {layout && chunkSet ? (
             <HitDocument layout={layout} rows={rows} source={chunkSet.source_text} selected={selected} onSelect={select} scrollRef={docRef} />
           ) : null}
         </div>
       </div>
+      {doc && target && pdfRow !== null ? (
+        <div ref={pdfRef}>
+          <ElementsInPdf
+            doc={doc}
+            elementIds={target.elementIds}
+            pageSpan={target.pageSpan}
+            slot={target.chunkIndex === null ? null : chunkSlot(target.chunkIndex)}
+            title={`Rank ${rows[pdfRow].rank}`}
+            onClose={() => setPdfRow(null)}
+          />
+        </div>
+      ) : null}
     </Frame>
   )
 }
@@ -233,6 +273,8 @@ function HitList({
   markOf,
   selected,
   onSelect,
+  onShowPdf,
+  canPdf,
   showRetriever,
 }: {
   rows: HitRowData[]
@@ -240,6 +282,8 @@ function HitList({
   markOf: Map<number, number>
   selected: number | null
   onSelect: (row: number) => void
+  onShowPdf?: (row: number) => void
+  canPdf: (row: number) => boolean
   /** Per row only when the rows mix retrievers; otherwise the summary names it once. */
   showRetriever: boolean
 }) {
@@ -301,6 +345,19 @@ function HitList({
                 {showRetriever && r.retriever ? <span>{r.retriever}</span> : null}
                 <span title={r.chunk_id}>{r.chunk_id.slice(0, 8)}</span>
               </p>
+              {onShowPdf && canPdf(i) ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onShowPdf(i)
+                  }}
+                >
+                  Show in PDF
+                </Button>
+              ) : null}
             </div>
           </div>
         )

@@ -1,11 +1,13 @@
 import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react"
 import { X } from "lucide-react"
 
+import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, TransformInfo } from "@/api/types"
 import type { FieldErrors } from "@/components/fields/schema"
 import { CONST_TEXT } from "@/components/fields/ConstField"
 import { CONTROL } from "@/components/fields/types"
+import { KeyHint } from "@/components/ApiKeyControl"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -179,6 +181,7 @@ export function NodeCard(p: NodeCardProps) {
       {failed ? (
         <div role="alert" className="flex min-w-0 flex-col gap-1">
           <p className="font-mono text-xs break-words text-danger">{errorHeadline(failed)}</p>
+          {needsKey(p.node.transform, failed) ? <KeyHint /> : null}
           <details className="min-w-0 rounded-control border border-hairline" onClick={(e) => e.stopPropagation()}>
             <summary className="flex h-row-compact items-center px-2 text-xs text-fg-muted select-none hover:bg-muted">Traceback</summary>
             <pre className="m-0 max-h-[240px] overflow-auto border-t border-hairline p-2 font-mono text-2xs whitespace-pre text-fg-muted">

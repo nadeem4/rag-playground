@@ -19,6 +19,10 @@ export interface HitRowData {
   /** The ORIGINAL chunk text (or the Search snippet of it), never `embed_text`. */
   text: string
   page_span: [number, number] | null
+  /** The chunk's source elements, when the row carries the chunk (a retrieval result). */
+  element_ids: string[] | null
+  /** The chunk's position in its chunk set: its palette slot when the set is not at hand. */
+  ordinal: number | null
 }
 
 export function rowsFromResult(r: RetrievalResult): HitRowData[] {
@@ -31,6 +35,8 @@ export function rowsFromResult(r: RetrievalResult): HitRowData[] {
     chunk_id: h.chunk.id,
     text: h.chunk.text,
     page_span: h.chunk.page_span,
+    element_ids: h.chunk.source_element_ids ?? null,
+    ordinal: typeof h.chunk.ordinal === "number" ? h.chunk.ordinal : null,
   }))
 }
 
@@ -61,6 +67,8 @@ export function rowsFromSearch(out: SearchOutput): HitRowData[] {
     chunk_id: r.chunk_id,
     text: r.snippet ?? "",
     page_span: r.page_span ?? null,
+    element_ids: null,
+    ordinal: null,
   }))
 }
 
@@ -182,4 +190,19 @@ export function topKAgreement(base: readonly string[], ids: readonly string[], k
   const want = new Set(base.slice(0, k))
   const top = ids.slice(0, k)
   return { match: top.filter((id) => want.has(id)).length, of: top.length }
+}
+
+/**
+ * What "Show in PDF" needs for a hit: its source elements, page span and
+ * palette slot. The chunk set is preferred (a Search row carries only the
+ * chunk id); the row's own chunk fields are the fallback.
+ */
+export function pdfTarget(
+  row: HitRowData,
+  chunks: readonly Chunk[] | undefined,
+): { elementIds: string[]; pageSpan: [number, number] | null; chunkIndex: number | null } | null {
+  const i = chunks ? chunks.findIndex((c) => c.id === row.chunk_id) : -1
+  if (chunks && i !== -1) return { elementIds: chunks[i].source_element_ids, pageSpan: chunks[i].page_span, chunkIndex: i }
+  if (row.element_ids) return { elementIds: row.element_ids, pageSpan: row.page_span, chunkIndex: row.ordinal }
+  return null
 }

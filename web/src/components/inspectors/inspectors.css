@@ -190,3 +190,66 @@
 [data-hover] .ri-mark {
   opacity: 0.4;
 }
+
+/*
+ * Chat answer (plan I-10). `--tone` / `--tone-text` / `--tone-mark` are the
+ * cited chunk's fill, paired text and hue (neutral when the chunk is unknown).
+ *
+ *   verified      the chunk's fill with its paired text
+ *   not verified  no fill, a dashed outline in the chunk's hue: never styled
+ *                 like a verified citation
+ *   not grounded  secondary ink, dashed underline: the same mark as text no
+ *                 chunk covers in the Chunk inspector
+ */
+.chat-sup {
+  line-height: 0; /* a superscript must not open the line's leading */
+}
+.chat-cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  margin-left: 2px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--text-primary);
+  outline: 1px dashed var(--tone-mark);
+  outline-offset: -1px;
+}
+.chat-cite[data-verified] {
+  background: var(--tone);
+  color: var(--tone-text);
+  outline: none;
+}
+button.chat-cite {
+  cursor: pointer;
+}
+button.chat-cite[aria-pressed="true"] {
+  /* Selection is an accent use (contract §3, Channel A). */
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.chat-cite[data-missing] {
+  outline-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+.chat-ungrounded {
+  color: var(--text-secondary);
+  text-decoration: underline dashed 1px;
+  text-underline-offset: 4px;
+}
+/* Verified rows carry a solid left rule, unverified a dashed one. */
+.chat-row {
+  border-left: 3px solid var(--text-secondary);
+}
+.chat-row:not([data-verified]) {
+  border-left-style: dashed;
+}
+.chat-quote {
+  quotes: "\201C" "\201D";
+}

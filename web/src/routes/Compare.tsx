@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState, type CSSProperties } from "react"
 import { Plus } from "lucide-react"
 
+import { useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState, VariantState } from "@/api/runState"
 import type { GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
@@ -126,6 +127,7 @@ function Sweep({
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { key: apiKey } = useApiKey()
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
 
@@ -158,12 +160,15 @@ function Sweep({
     setError(null)
     setSubmitting(true)
     try {
-      const { run_id } = await api.createSweep({
-        graph,
-        node_id: target.id,
-        variants,
-        ...(through !== target.id ? { through } : {}),
-      })
+      const { run_id } = await api.createSweep(
+        {
+          graph,
+          node_id: target.id,
+          variants,
+          ...(through !== target.id ? { through } : {}),
+        },
+        { apiKey },
+      )
       setSubmitted({ variants, through })
       setRunId(run_id)
     } catch (err) {

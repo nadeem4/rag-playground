@@ -1,13 +1,15 @@
 import type { ReactNode } from "react"
 
 import artifacts from "@/api/fixtures/artifacts.json"
+import chatOutput from "@/api/fixtures/output.chat.json"
 import chunkMarkdown from "@/api/fixtures/chunk_set.markdown_header.json"
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
 import chunkRecursiveLines from "@/api/fixtures/chunk_set.recursive_character.join_lines_off.json"
 import chunkToken from "@/api/fixtures/chunk_set.token_based.json"
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
 import cleanedDoc from "@/api/fixtures/parsed_doc_cleaned.json"
-import type { ChunkSet, ParsedDoc } from "@/api/types"
+import type { ChatOutput, ChunkSet, ParsedDoc } from "@/api/types"
+import { ChatInspector } from "@/components/inspectors/ChatInspector"
 import { ChunkSetInspector } from "@/components/inspectors/ChunkSetInspector"
 import { ParsedDocInspector } from "@/components/inspectors/ParsedDocInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
@@ -24,6 +26,8 @@ const markdown = chunkMarkdown as unknown as ChunkSet
 const tokenBased = chunkToken as unknown as ChunkSet
 const parsed = parsedDoc as unknown as ParsedDoc
 const cleaned = cleanedDoc as unknown as ParsedDoc
+const chat = chatOutput as unknown as ChatOutput
+const refusal = { ...chat.payload, answer: [], citations: [], stop_reason: "refusal", usage: { input_tokens: 1612, output_tokens: 4 } }
 const emptySet: ChunkSet = { chunks: [], source_text: "", doc_id: recursive.doc_id, chunker_meta: { chunker: "recursive_character" } }
 
 function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
@@ -42,8 +46,17 @@ export function Inspect() {
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-hairline">
       <div className="flex flex-col gap-px">
-        <Section title="recursive_character" note="chunk_size 400, chunk_overlap 80. The first two cuts land on paragraph breaks and share nothing; where a section runs past the budget, adjacent chunks overlap.">
-          <ChunkSetInspector chunkSet={recursive} initialSelected={1} />
+        <Section
+          title="Chat answer"
+          note="Hand-written I-10 payload over the recursive chunks. Citation 3 fails verification; 4 fell between elements, so it has no page of its own; 5 cites a document outside the hits. The page views need the fixture PDF uploaded to the server."
+        >
+          <ArtifactInspector type="output" data={chat} context={{ chunks: recursive }} />
+        </Section>
+        <Section title="Chat refusal">
+          <ChatInspector payload={refusal} />
+        </Section>
+        <Section title="recursive_character" note="chunk_size 400, chunk_overlap 80. The first two cuts land on paragraph breaks and share nothing; where a section runs past the budget, adjacent chunks overlap. Show in PDF highlights the selected chunk's source elements.">
+          <ChunkSetInspector chunkSet={recursive} initialSelected={1} doc={cleaned} />
         </Section>
         <Section title="pdfium join_lines: off vs on" note="Off, every PDF line is its own paragraph, so recursive_character cuts by size mid-paragraph; on, lines are rejoined into paragraphs and the cuts fall on paragraph breaks.">
           <div data-compare="join_lines" className="grid items-start gap-3 xl:grid-cols-2">

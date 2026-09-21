@@ -1,3 +1,4 @@
+import { ApiKeyProvider } from "@/api/apiKey"
 import { AppHeader } from "@/components/AppHeader"
 import { Compare } from "@/routes/Compare"
 import { Forms } from "@/routes/Forms"
@@ -25,9 +26,12 @@ export default function App() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/"
   const Page = ROUTES[path] ?? Shell
   return (
-    <div className="flex h-[100dvh] flex-col">
-      <AppHeader path={path} />
-      <Page />
-    </div>
+    // The typed API key lives in this provider's memory only (plan I-8).
+    <ApiKeyProvider>
+      <div className="flex h-[100dvh] flex-col">
+        <AppHeader path={path} />
+        <Page />
+      </div>
+    </ApiKeyProvider>
   )
 }

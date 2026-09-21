@@ -8,6 +8,10 @@ import type {
   ArtifactMeta,
   CacheCleared,
   CancelResponse,
+  FindResult,
+  LlmCheck,
+  LlmSettings,
+  PdfPageSize,
   Registry,
   RunCreated,
   RunRequest,
@@ -50,11 +54,31 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
-const json = (body: unknown): RequestInit => ({
+const json = (body: unknown, headers: Record<string, string> = {}): RequestInit => ({
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", ...headers },
   body: JSON.stringify(body),
 })
+
+/** The header that carries a key typed in the UI (plan I-8). */
+export const KEY_HEADER = "X-Anthropic-Api-Key"
+
+/**
+ * The key header, present ONLY when a UI key is set. Without it the server
+ * falls back to its own environment or .env. The key goes nowhere else: not a
+ * body, not a URL, not an error message.
+ */
+export function keyHeaders(apiKey?: string | null): Record<string, string> {
+  const k = apiKey?.trim()
+  return k ? { [KEY_HEADER]: k } : {}
+}
+
+/** Options for requests that may carry a UI key. */
+export interface KeyOpts {
+  apiKey?: string | null
+}
+
+const sha = (s: string) => encodeURIComponent(s)
 
 export const api = {
   registry: () => request<Registry>("/registry"),
@@ -67,8 +91,9 @@ export const api = {
   },
 
   /** 400 on an invalid graph; 422 `{detail: {node_id, errors}}` on a bad config. */
-  createRun: (body: RunRequest) => request<RunCreated>("/runs", json(body)),
-  createSweep: (body: SweepRequest) => request<RunCreated>("/sweeps", json(body)),
+  createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.apiKey))),
+  createSweep: (body: SweepRequest, opts: KeyOpts = {}) =>
+    request<RunCreated>("/sweeps", json(body, keyHeaders(opts.apiKey))),
   run: (runId: string) => request<RunSnapshot>(`/runs/${encodeURIComponent(runId)}`),
   /** 409 when the run has already finished. */
   cancelRun: (runId: string) =>
@@ -81,6 +106,18 @@ export const api = {
   artifact: (id: string) => request<ArtifactMeta>(`/artifacts/${encodeURIComponent(id)}`),
   artifactPayload: <T = unknown>(id: string) =>
     request<T>(`/artifacts/${encodeURIComponent(id)}/payload`),
+
+  /** Which key source the SERVER can supply. Never a value. */
+  llmSettings: () => request<LlmSettings>("/settings/llm"),
+  /** Lists models with the resolved key: costs no tokens. */
+  checkLlm: (opts: KeyOpts = {}) =>
+    request<LlmCheck>("/settings/llm/check", { method: "POST", headers: keyHeaders(opts.apiKey) }),
+
+  /** Page sizes in PDF points, 1-based `n`. */
+  pages: (source: string) => request<PdfPageSize[]>(`/sources/${sha(source)}/pages`),
+  pageImageUrl: (source: string, n: number, scale = 2) => `${API_BASE}/sources/${sha(source)}/pages/${n}.png?scale=${scale}`,
+  findOnPage: (source: string, n: number, text: string) =>
+    request<FindResult>(`/sources/${sha(source)}/pages/${n}/find?text=${encodeURIComponent(text)}`),
 
   /** 409 while a run is live. */
   clearCache: () => request<CacheCleared>("/cache", { method: "DELETE" }),

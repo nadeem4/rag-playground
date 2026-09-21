@@ -31,8 +31,10 @@ source → parse → clean* → chunk → enrich* → index → retrieve → rer
 
 ## Status
 
-Phases 1 (engine) and 2 (plugins) are complete. Phase 3 (API and web UI) is in progress: the
-API is done. See the Notion board for delivery and issue tracking.
+The engine, the plugins, the API and the web UI are in place: Load, Parse, Clean, Chunk, Index,
+Ask, Retrieve, Rerank and Search or Chat run from the browser, and Compare sweeps any stage.
+Answers from Chat carry citations that open the exact passage in the original PDF. See the
+Notion board for delivery and issue tracking.
 
 ## Run it
 
@@ -53,8 +55,9 @@ Uploads go to `sources/` and cached artifacts to `artifacts/` at the repo root. 
 Answers with citations call Claude, so they need an Anthropic API key. Give it to the app in
 one of three ways; the first one found wins:
 
-1. **The UI field.** Type it into the key setting. The browser keeps it in memory only and
-   sends it with each run; it is never saved.
+1. **The UI field.** Open **API key** at the top right, paste the key and choose Apply. The
+   browser keeps it in memory for that tab only and sends it with each run; it is never saved,
+   and a reload clears it. **Check key** tests it without spending tokens.
 2. **The `ANTHROPIC_API_KEY` environment variable**, set for the server process only:
    `ANTHROPIC_API_KEY=sk-ant-... uv run rag-playground` (bash) or
    `$env:ANTHROPIC_API_KEY="sk-ant-..."; uv run rag-playground` (PowerShell, current window
@@ -68,6 +71,19 @@ start would inherit it, including Claude Code sessions, which would then see and
 your key. The server never stores, logs or returns the key, and replaces it with
 `[redacted]` in any error it reports. `GET /api/settings/llm` says which source the server
 has, and `POST /api/settings/llm/check` tests a key without spending tokens.
+
+### Citations and Show in PDF
+
+Pick **chat** on the last card to get an answer from Claude. Each claim carries a numbered
+citation to the exact quoted span it relies on. The citation is mapped back to the parsed
+document and checked: if the text at that position does not match the quote, the citation is
+shown as unverified instead of being trusted. Text with no citation is marked as not tied to a
+source. Clicking a citation opens the original PDF page with the quoted sentence highlighted;
+if the sentence cannot be found on the page, the whole paragraph is outlined and the view says
+so.
+
+**Show in PDF** works without a key: any chunk or search hit can open its page with its source
+paragraphs outlined.
 
 ### Parsers
 

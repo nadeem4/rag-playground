@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 
+import { needsKey, useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 import type { Registry } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
+import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { fmtMs } from "@/components/pipeline/NodeCard"
@@ -71,6 +73,7 @@ function Build({ registry }: { registry: Registry }) {
   const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
   const [columnError, setColumnError] = useState<string | null>(null)
   const run = useRun(runId)
+  const { key: apiKey } = useApiKey()
 
   useEffect(() => storeGraph(graph), [graph])
   useEffect(() => setResults((prev) => mergeResults(prev, run.nodes)), [run.nodes])
@@ -104,7 +107,7 @@ function Build({ registry }: { registry: Registry }) {
     setColumnError(null)
     setSubmitting(true)
     try {
-      const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }))
+      const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }), { apiKey })
       const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       setSelected(target ?? order[order.length - 1]?.id ?? null)
@@ -251,8 +254,15 @@ function InspectorPanel({
   const relatedResult = related ? results[related.id] : undefined
   const relatedId = artifactId && relatedResult && !stale.has(related!.id) ? relatedResult.artifact_id : undefined
 
+  // The parsed document the chunks were cut from (the last cleaner, else the
+  // parser): "Show in PDF" reads its elements' pages and bboxes.
+  const docNode = node && (node.stage === "chunk" || RETRIEVAL.has(node.stage)) ? upstreamOfStage(graph, node.id, ["clean", "parse"]) : undefined
+  const docResult = docNode ? results[docNode.id] : undefined
+  const docId = artifactId && docResult && !stale.has(docNode!.id) ? docResult.artifact_id : undefined
+
   const payload = useArtifactPayload(artifactId)
   const before = useArtifactPayload(relatedId)
+  const parsed = useArtifactPayload(docId)
   const verb = node ? titleFor(node) : ""
 
   let body: ReactNode
@@ -277,6 +287,7 @@ function InspectorPanel({
       <div role="alert" className="flex flex-col gap-1 p-4">
         <p className="text-sm font-medium text-danger">{verb} failed</p>
         <p className="max-w-[82ch] font-mono text-xs break-words text-fg-muted">{errorHeadline(result.error ?? "")}</p>
+        {needsKey(node.transform, result.error) ? <KeyHint /> : null}
         <p className="text-sm text-fg-muted">The full traceback is on the card.</p>
       </div>
     )
@@ -284,7 +295,8 @@ function InspectorPanel({
     body = <EmptyState title={`${verb} was skipped`}>A card above it failed or the run was cancelled.</EmptyState>
   } else {
     const waitingBefore = relatedId && before.status.kind === "loading"
-    const context = !before.data ? undefined : relatedStage === "chunk" ? { chunks: before.data as never } : { before: before.data as never }
+    const known = !before.data ? {} : relatedStage === "chunk" ? { chunks: before.data as never } : { before: before.data as never }
+    const context = parsed.data ? { ...known, doc: parsed.data as never } : known
     body = (
       <ArtifactInspector
         type={type ?? "unknown"}

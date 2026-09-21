@@ -299,13 +299,14 @@ export function ancestors(g: PipelineGraph, id: string, registry?: Registry): Se
   return out
 }
 
-/** The nearest strict ancestor of `id` on `stage`, walking producer edges. */
-export function upstreamOfStage(g: PipelineGraph, id: string, stage: Stage): GraphNode | undefined {
+/** The nearest strict ancestor of `id` on `stage` (or any of `stage`), walking producer edges. */
+export function upstreamOfStage(g: PipelineGraph, id: string, stage: Stage | readonly Stage[]): GraphNode | undefined {
+  const want: readonly Stage[] = typeof stage === "string" ? [stage] : stage
   const byId = new Map(g.nodes.map((n) => [n.id, n]))
   let frontier = g.edges.filter((e) => e.dst === id).map((e) => e.src)
   const seen = new Set<string>()
   while (frontier.length) {
-    const hit = frontier.map((x) => byId.get(x)).find((n) => n?.stage === stage)
+    const hit = frontier.map((x) => byId.get(x)).find((n) => n !== undefined && want.includes(n.stage))
     if (hit) return hit
     frontier.forEach((x) => seen.add(x))
     frontier = g.edges.filter((e) => frontier.includes(e.dst) && !seen.has(e.src)).map((e) => e.src)

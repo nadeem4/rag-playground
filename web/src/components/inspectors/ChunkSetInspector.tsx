@@ -1,7 +1,9 @@
-import { Fragment, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react"
 
-import type { Chunk, ChunkSet } from "@/api/types"
+import type { Chunk, ChunkSet, ParsedDoc } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
+import { ElementsInPdf } from "@/components/pdf/ElementsInPdf"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 import "./inspectors.css"
@@ -23,9 +25,11 @@ export interface ChunkSetInspectorProps {
   initialSelected?: number | null
   /** False drops the metadata panel, for side-by-side comparisons. */
   showDetail?: boolean
+  /** The parsed document the chunker consumed: enables "Show in PDF". */
+  doc?: ParsedDoc
 }
 
-export function ChunkSetInspector({ chunkSet, status, initialSelected = null, showDetail = true }: ChunkSetInspectorProps) {
+export function ChunkSetInspector({ chunkSet, status, initialSelected = null, showDetail = true, doc }: ChunkSetInspectorProps) {
   const screen = statusScreen(status, "chunk set")
   if (screen) return <Frame>{<div className="bg-surface">{screen}</div>}</Frame>
   if (!chunkSet) {
@@ -37,7 +41,7 @@ export function ChunkSetInspector({ chunkSet, status, initialSelected = null, sh
       </Frame>
     )
   }
-  return <ChunkSetView set={chunkSet} initialSelected={initialSelected} showDetail={showDetail} />
+  return <ChunkSetView set={chunkSet} initialSelected={initialSelected} showDetail={showDetail} doc={doc} />
 }
 
 // ---------------------------------------------------------------- layout --
@@ -50,14 +54,22 @@ function ChunkSetView({
   set,
   initialSelected,
   showDetail,
+  doc,
 }: {
   set: ChunkSet
   initialSelected: number | null
   showDetail: boolean
+  doc?: ParsedDoc
 }) {
   const { chunks, source_text: source } = set
   const [selected, setSelected] = useState<number | null>(initialSelected)
+  const [pdfChunk, setPdfChunk] = useState<number | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const pdfRef = useRef<HTMLDivElement>(null)
+  // A discrete click opens the page below the text: bring it into view once.
+  useEffect(() => {
+    if (pdfChunk !== null) pdfRef.current?.scrollIntoView?.({ block: "nearest" })
+  }, [pdfChunk])
 
   const segments = useMemo(() => projectSpans(source, chunks), [source, chunks])
   const derived = useMemo(() => {
@@ -173,9 +185,27 @@ function ChunkSetView({
             </div>
           ) : null}
         </div>
-        {showDetail ? <Detail chunk={selected === null ? undefined : chunks[selected]} index={selected} /> : null}
+        {showDetail ? (
+          <Detail
+            chunk={selected === null ? undefined : chunks[selected]}
+            index={selected}
+            onShowPdf={doc && selected !== null ? () => setPdfChunk(selected) : undefined}
+          />
+        ) : null}
       </div>
       </div>
+      {doc && pdfChunk !== null && chunks[pdfChunk] ? (
+        <div ref={pdfRef}>
+          <ElementsInPdf
+            doc={doc}
+            elementIds={chunks[pdfChunk].source_element_ids}
+            pageSpan={chunks[pdfChunk].page_span}
+            slot={chunkSlot(pdfChunk)}
+            title={`Chunk ${pdfChunk + 1}`}
+            onClose={() => setPdfChunk(null)}
+          />
+        </div>
+      ) : null}
     </Frame>
   )
 }
@@ -399,7 +429,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function Detail({ chunk, index }: { chunk?: Chunk; index: number | null }) {
+function Detail({ chunk, index, onShowPdf }: { chunk?: Chunk; index: number | null; onShowPdf?: () => void }) {
   if (!chunk || index === null) {
     return (
       <aside data-testid="chunk-detail" className="bg-surface">
@@ -419,6 +449,11 @@ function Detail({ chunk, index }: { chunk?: Chunk; index: number | null }) {
       <div className="flex items-center gap-2">
         <span aria-hidden className="block h-[12px] w-[4px]" style={{ background: `var(--chunk-${slot})` }} />
         <h3 className="text-sm font-semibold">Chunk {index + 1}</h3>
+        {onShowPdf ? (
+          <Button variant="outline" size="sm" className="ml-auto" onClick={onShowPdf}>
+            Show in PDF
+          </Button>
+        ) : null}
       </div>
       <dl className="grid grid-cols-[88px_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1">
         <Field label="id">{chunk.id}</Field>

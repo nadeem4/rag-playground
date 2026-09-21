@@ -1,0 +1,40 @@
+/*
+ * The PDF page view. Every color is a token (contract §3).
+ *
+ * Highlight: Channel B. `--hl` is the chunk's hue; the fill is that hue at
+ * partial strength so the text under it stays readable, with a 1px edge in
+ * the full hue. A region that stands in for the real one (an element's bbox
+ * when the quote was not found) is dashed and lighter: weaker evidence reads
+ * weaker, the same solid-vs-broken rule the pipeline cards use.
+ */
+.pdf-hl {
+  background: color-mix(in oklch, var(--hl) 38%, transparent);
+  outline: 1px solid var(--hl);
+  pointer-events: none;
+}
+.pdf-hl[data-approximate] {
+  background: color-mix(in oklch, var(--hl) 14%, transparent);
+  outline: 1px dashed var(--hl);
+}
+
+/*
+ * Page Theme Lock (contract §6): no white paper panel inside a dark shell.
+ * In dark mode the rendered page is inverted and hue-rotated, which keeps
+ * hues while turning white paper into near-black (0.93, never pure black).
+ * The highlight is a sibling, so its hue is untouched. Both dark selectors,
+ * as in tokens.css.
+ */
+:root[data-theme="dark"] .pdf-img {
+  filter: invert(0.93) hue-rotate(180deg);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pdf-img {
+    filter: invert(0.93) hue-rotate(180deg);
+  }
+}
+
+/* The page's edge: a hairline outline (no layout change, so the overlay's
+   arithmetic holds), visible when the inverted page meets a dark panel. */
+.pdf-page {
+  outline: 1px solid var(--hairline);
+}

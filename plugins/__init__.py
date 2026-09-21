@@ -38,6 +38,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.retrieve.hybrid_rrf",
     "plugins.rerank.mmr",
     "plugins.use_case.search",
+    "plugins.use_case.chat",
 )
 
 _discovered = False

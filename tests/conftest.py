@@ -47,3 +47,49 @@ def _no_model_downloads_outside_models_tests(request, monkeypatch):
         )
 
     monkeypatch.setattr("providers.embeddings._load_model", refuse)
+
+
+def pytest_configure(config):
+    # Registered here, not in pyproject.toml, which this workstream may not edit.
+    config.addinivalue_line(
+        "markers",
+        "live_api: calls the real Anthropic API; needs ANTHROPIC_API_KEY "
+        "(deselected by default; select with -m live_api)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Deselect `live_api` tests unless the `-m` expression names the marker.
+
+    A real API call costs money and needs a key, so it must be asked for by
+    name: `pytest -m live_api`. The default run never sees these tests.
+    """
+    if "live_api" in (config.option.markexpr or ""):
+        return
+    kept = [item for item in items if not item.get_closest_marker("live_api")]
+    if len(kept) != len(items):
+        config.hook.pytest_deselected(
+            items=[item for item in items if item.get_closest_marker("live_api")]
+        )
+        items[:] = kept
+
+
+@pytest.fixture(autouse=True)
+def _no_anthropic_calls_outside_live_api_tests(request, monkeypatch):
+    """The default suite must never reach the Anthropic API.
+
+    `plugins.use_case.chat.make_client` is the one place a real client is
+    built. Replacing it here means a test that forgets to install a fake fails
+    with the reason instead of spending tokens; a test that installs its own
+    fake patches over this one.
+    """
+    if request.node.get_closest_marker("live_api"):
+        return
+
+    def refuse(api_key: str):
+        raise AssertionError(
+            "test tried to build a real Anthropic client without "
+            "@pytest.mark.live_api; monkeypatch plugins.use_case.chat.make_client"
+        )
+
+    monkeypatch.setattr("plugins.use_case.chat.make_client", refuse)

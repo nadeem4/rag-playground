@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import artifacts from "@/api/fixtures/artifacts.json"
 import chunkMarkdown from "@/api/fixtures/chunk_set.markdown_header.json"
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
+import chunkRecursiveLines from "@/api/fixtures/chunk_set.recursive_character.join_lines_off.json"
 import chunkToken from "@/api/fixtures/chunk_set.token_based.json"
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
 import cleanedDoc from "@/api/fixtures/parsed_doc_cleaned.json"
@@ -18,6 +19,7 @@ import { ArtifactInspector } from "@/components/inspectors/registry"
  */
 
 const recursive = chunkRecursive as unknown as ChunkSet
+const recursiveLines = chunkRecursiveLines as unknown as ChunkSet
 const markdown = chunkMarkdown as unknown as ChunkSet
 const tokenBased = chunkToken as unknown as ChunkSet
 const parsed = parsedDoc as unknown as ParsedDoc
@@ -40,8 +42,20 @@ export function Inspect() {
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-hairline">
       <div className="flex flex-col gap-px">
-        <Section title="recursive_character" note="chunk_size 400, chunk_overlap 80. Adjacent chunks share their last and first 80 characters, so every boundary is an overlap.">
+        <Section title="recursive_character" note="chunk_size 400, chunk_overlap 80. The first two cuts land on paragraph breaks and share nothing; where a section runs past the budget, adjacent chunks overlap.">
           <ChunkSetInspector chunkSet={recursive} initialSelected={1} />
+        </Section>
+        <Section title="pdfium join_lines: off vs on" note="Off, every PDF line is its own paragraph, so recursive_character cuts by size mid-paragraph; on, lines are rejoined into paragraphs and the cuts fall on paragraph breaks.">
+          <div data-compare="join_lines" className="grid items-start gap-3 xl:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-2">
+              <span className="meta">join_lines false</span>
+              <ChunkSetInspector chunkSet={recursiveLines} showDetail={false} />
+            </div>
+            <div className="flex min-w-0 flex-col gap-2">
+              <span className="meta">join_lines true</span>
+              <ChunkSetInspector chunkSet={recursive} showDetail={false} />
+            </div>
+          </div>
         </Section>
         <Section title="markdown_header" note="The parser found no headings, so the chunker fell back to its token budget. The blank lines between sections belong to no chunk.">
           <ChunkSetInspector chunkSet={markdown} />
@@ -52,7 +66,7 @@ export function Inspect() {
         <Section title="Empty chunk set" note="A document with no text produces zero chunks.">
           <ChunkSetInspector chunkSet={emptySet} />
         </Section>
-        <Section title="Parsed document" note="pdfium, text mode: 42 elements, before cleaning.">
+        <Section title="Parsed document" note="pdfium, text mode, join_lines on: 20 elements, before cleaning.">
           <ParsedDocInspector doc={parsed} />
         </Section>
         <Section title="Clean report" note="header_footer_strip, then dedupe_blocks, drawn on the document before cleaning.">

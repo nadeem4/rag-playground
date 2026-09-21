@@ -66,8 +66,10 @@ describe("types mirror the engine's real payloads", () => {
   })
 
   it("the three chunkers really do cut the document differently", () => {
-    const counts = [chunkRecursive, chunkMarkdown, chunkToken].map((s) => s.chunks.length)
-    expect(new Set(counts).size).toBe(3)
+    const cuts = [chunkRecursive, chunkMarkdown, chunkToken].map((s) =>
+      s.chunks.map((c) => `${c.start_char}-${c.end_char}`).join(","),
+    )
+    expect(new Set(cuts).size).toBe(3)
     expect(Object.keys(artifacts)).toContain("chunk_token")
   })
 })

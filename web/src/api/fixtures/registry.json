@@ -57,7 +57,7 @@
   "parse": {
     "pdfium": {
       "name": "pdfium",
-      "version": "1",
+      "version": "2",
       "stage": "parse",
       "output": "parsed_doc",
       "stackable": false,
@@ -80,6 +80,11 @@
             "default": "text",
             "title": "Mode",
             "type": "string"
+          },
+          "join_lines": {
+            "default": true,
+            "title": "Join Lines",
+            "type": "boolean"
           }
         },
         "title": "PdfiumConfig",

@@ -115,30 +115,33 @@ describe("projectSpans", () => {
     }
   })
 
-  it("finds the 6 overlapping adjacent pairs in the recursive fixture", () => {
+  it("finds the 3 overlapping adjacent pairs in the recursive fixture", () => {
     const segs = projectSpans(recursive.source_text, recursive.chunks)
     const overlaps = segs.filter((s) => s.chunks.length >= 2)
-    expect(overlaps).toHaveLength(6)
+    expect(overlaps).toHaveLength(3)
     expect(overlaps.map((s) => s.chunks)).toEqual([
-      [0, 1],
-      [1, 2],
       [2, 3],
       [3, 4],
       [4, 5],
-      [5, 6],
     ])
-    // chunk 0 is 0-370 and chunk 1 starts at 346: the overlap is exactly that span.
-    expect(overlaps[0]).toMatchObject({ start: 346, end: 370 })
-    expect(overlapPairs(segs)).toHaveLength(6)
+    // chunk 2 is 745-1134 and chunk 3 starts at 1112: the overlap is exactly that span.
+    expect(overlaps[0]).toMatchObject({ start: 1112, end: 1134 })
+    expect(overlapPairs(segs)).toHaveLength(3)
+    // The first two boundaries fall on paragraph breaks: a clean cut, no overlap.
+    expect(segs.filter((s) => s.chunks.length === 0).map((s) => [s.start, s.end])).toEqual([
+      [366, 368],
+      [743, 745],
+    ])
   })
 
   it("finds the uncovered separators in the markdown_header fixture", () => {
     const segs = projectSpans(markdown.source_text, markdown.chunks)
     const gaps = segs.filter((s) => s.chunks.length === 0)
     expect(gaps.map((s) => [s.start, s.end])).toEqual([
-      [617, 619],
-      [1223, 1225],
-      [1852, 1854],
+      [464, 466],
+      [774, 776],
+      [1134, 1136],
+      [1759, 1761],
     ])
     expect(overlapPairs(segs)).toHaveLength(0)
   })

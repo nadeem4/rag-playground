@@ -43,8 +43,50 @@ def _escape(line: str) -> bytes:
     ).encode("ascii")
 
 
+#: Line pitch of the generated text, in points (the `TL` operator).
+LEADING = 16
+
+
+def _page_stream(paragraphs: list[list[str]], paragraph_gap: int) -> bytes:
+    """One page's content stream: Helvetica 12 on a 16pt pitch.
+
+    `paragraph_gap` extra points of vertical space go between paragraphs, which
+    is the layout signal a paragraph-rebuilding parser reads. With a gap of 0
+    the stream is byte-identical to the original one-list-of-lines generator.
+    """
+    parts = [b"BT", b"/F1 12 Tf", b"%d TL" % LEADING, b"72 720 Td"]
+    for n, lines in enumerate(paragraphs):
+        if n and paragraph_gap:
+            parts.append(b"0 -%d Td" % paragraph_gap)
+        for line in lines:
+            parts.append(b"(" + _escape(line) + b") Tj")
+            parts.append(b"T*")
+    parts.append(b"ET")
+    return b"\n".join(parts)
+
+
 def build_pdf(pages: list[list[str]]) -> bytes:
-    """A minimal, deterministic PDF: one Helvetica text line per entry."""
+    """A minimal, deterministic PDF: one Helvetica text line per entry.
+
+    Every line sits on the same pitch, so there is no paragraph structure in
+    the layout at all. Use `build_paragraph_pdf` when there should be.
+    """
+    return _assemble([_page_stream([lines], 0) for lines in pages])
+
+
+def build_paragraph_pdf(
+    pages: list[list[list[str]]], paragraph_gap: int = 12
+) -> bytes:
+    """Like `build_pdf`, but each page is a list of paragraphs, each a list of
+    lines, laid out with `paragraph_gap` extra points between paragraphs.
+
+    Real typesetting: lines inside a paragraph are one pitch apart, paragraphs
+    are one pitch plus the gap apart.
+    """
+    return _assemble([_page_stream(paragraphs, paragraph_gap) for paragraphs in pages])
+
+
+def _assemble(streams: list[bytes]) -> bytes:
     objects: list[bytes] = []
 
     def add(body: bytes) -> int:
@@ -53,20 +95,13 @@ def build_pdf(pages: list[list[str]]) -> bytes:
 
     font_id = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
 
-    content_ids: list[int] = []
-    for lines in pages:
-        parts = [b"BT", b"/F1 12 Tf", b"16 TL", b"72 720 Td"]
-        for line in lines:
-            parts.append(b"(" + _escape(line) + b") Tj")
-            parts.append(b"T*")
-        parts.append(b"ET")
-        stream = b"\n".join(parts)
-        content_ids.append(
-            add(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(stream), stream))
-        )
+    content_ids = [
+        add(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(stream), stream))
+        for stream in streams
+    ]
 
     # The page objects must name their parent, which is allocated after them.
-    pages_id = len(objects) + len(pages) + 1
+    pages_id = len(objects) + len(streams) + 1
     page_ids = [
         add(
             b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "

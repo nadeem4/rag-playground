@@ -21,9 +21,11 @@ export interface ChunkSetInspectorProps {
   status?: InspectorStatus
   /** Index into `chunks` to select on mount (gallery and tests). */
   initialSelected?: number | null
+  /** False drops the metadata panel, for side-by-side comparisons. */
+  showDetail?: boolean
 }
 
-export function ChunkSetInspector({ chunkSet, status, initialSelected = null }: ChunkSetInspectorProps) {
+export function ChunkSetInspector({ chunkSet, status, initialSelected = null, showDetail = true }: ChunkSetInspectorProps) {
   const screen = statusScreen(status, "chunk set")
   if (screen) return <Frame>{<div className="bg-surface">{screen}</div>}</Frame>
   if (!chunkSet) {
@@ -35,7 +37,7 @@ export function ChunkSetInspector({ chunkSet, status, initialSelected = null }: 
       </Frame>
     )
   }
-  return <ChunkSetView set={chunkSet} initialSelected={initialSelected} />
+  return <ChunkSetView set={chunkSet} initialSelected={initialSelected} showDetail={showDetail} />
 }
 
 // ---------------------------------------------------------------- layout --
@@ -44,7 +46,15 @@ const LANE = 6 // px per spine lane: a 4px band plus a 2px surface gap
 const BAR_MAX = 44 // px, the widest token bar
 const LABEL_W = 28 // px reserved for the token-count label
 
-function ChunkSetView({ set, initialSelected }: { set: ChunkSet; initialSelected: number | null }) {
+function ChunkSetView({
+  set,
+  initialSelected,
+  showDetail,
+}: {
+  set: ChunkSet
+  initialSelected: number | null
+  showDetail: boolean
+}) {
   const { chunks, source_text: source } = set
   const [selected, setSelected] = useState<number | null>(initialSelected)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -128,7 +138,7 @@ function ChunkSetView({ set, initialSelected }: { set: ChunkSet; initialSelected
         data-chunk-inspector=""
         onPointerOver={onPointerOver}
         onPointerLeave={onPointerLeave}
-        className="grid min-h-0 gap-px bg-hairline lg:grid-cols-[minmax(0,1fr)_320px]"
+        className={cn("grid min-h-0 gap-px bg-hairline", showDetail && "lg:grid-cols-[minmax(0,1fr)_320px]")}
       >
         <style>{hoverRules}</style>
         <div className="max-h-[560px] min-w-0 overflow-y-auto bg-surface">
@@ -158,7 +168,7 @@ function ChunkSetView({ set, initialSelected }: { set: ChunkSet; initialSelected
             </div>
           ) : null}
         </div>
-        <Detail chunk={selected === null ? undefined : chunks[selected]} index={selected} />
+        {showDetail ? <Detail chunk={selected === null ? undefined : chunks[selected]} index={selected} /> : null}
       </div>
     </Frame>
   )
@@ -309,6 +319,24 @@ function gapText(text: string): ReactNode {
   ))
 }
 
+/**
+ * Covered text, with every blank line that lies wholly inside the segment
+ * given a zero-height, full-width filler. On a blank line the span has no
+ * glyphs, so its fragment would be zero wide and the chunk would break into
+ * two stripes; the filler widens that fragment to the column, and the span's
+ * own padded background fills it. It holds no characters, so the DOM text is
+ * still exactly the source.
+ */
+function coveredText(text: string): ReactNode {
+  if (!text.includes("\n\n")) return text
+  return text.split("\n").map((line, k, all) => (
+    <Fragment key={k}>
+      {k > 0 ? "\n" : null}
+      {line === "" && k > 0 && k < all.length - 1 ? <span aria-hidden data-blank-fill="" className="ci-fill" /> : line}
+    </Fragment>
+  ))
+}
+
 function Reading({
   segments,
   source,
@@ -346,7 +374,7 @@ function Reading({
             )}
             style={segmentStyle(s)}
           >
-            {gap ? gapText(text) : text}
+            {gap ? gapText(text) : coveredText(text)}
           </span>
         )
       })}

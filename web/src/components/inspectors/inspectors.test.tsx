@@ -60,12 +60,29 @@ describe("ChunkSetInspector", () => {
     expect(segs(reading).map((s) => (s.textContent ?? "").replace(/↵/g, "")).join("")).toBe(recursive.source_text)
   })
 
-  it("marks the 6 overlaps of the recursive fixture, and a spine band per chunk", () => {
+  it("marks the 3 overlaps of the recursive fixture, and a spine band per chunk", () => {
     const { container } = render(<ChunkSetInspector chunkSet={recursive} />)
-    expect(container.querySelectorAll("[data-seg][data-overlap]")).toHaveLength(6)
-    expect(container.querySelectorAll("[data-band]")).toHaveLength(7)
-    expect(container.querySelectorAll("[data-bar]")).toHaveLength(7)
-    expect(screen.getByTestId("summary-overlaps").textContent).toBe("6")
+    expect(container.querySelectorAll("[data-seg][data-overlap]")).toHaveLength(3)
+    expect(container.querySelectorAll("[data-band]")).toHaveLength(6)
+    expect(container.querySelectorAll("[data-bar]")).toHaveLength(6)
+    expect(screen.getByTestId("summary-overlaps").textContent).toBe("3")
+  })
+
+  it("fills a blank line inside a chunk, and only inside a chunk, without adding text", () => {
+    const set: ChunkSet = {
+      source_text: "Heading\n\nBody text.\n\nNext",
+      chunks: [{ ...makeChunk(0, 0, 19), text: "Heading\n\nBody text." }],
+      doc_id: "d",
+      chunker_meta: {},
+    }
+    const { container } = render(<ChunkSetInspector chunkSet={set} />)
+    const [covered, gap] = segs(container)
+    // One blank line inside the chunk: one fill for it.
+    expect(covered.querySelectorAll("[data-blank-fill]")).toHaveLength(1)
+    // The uncovered separator keeps its return glyphs and gets no fill.
+    expect(gap.querySelectorAll("[data-blank-fill]")).toHaveLength(0)
+    // The fill carries no characters: the text is still exactly the source.
+    expect(covered.textContent).toBe("Heading\n\nBody text.")
   })
 
   it("cycles chunk colours past the eighth chunk", () => {
@@ -78,8 +95,8 @@ describe("ChunkSetInspector", () => {
   it("renders uncovered text as a gap", () => {
     const { container } = render(<ChunkSetInspector chunkSet={markdown} />)
     const gaps = container.querySelectorAll("[data-seg][data-gap]")
-    expect(gaps).toHaveLength(3)
-    expect(screen.getByTestId("summary-uncovered").textContent).toBe("6")
+    expect(gaps).toHaveLength(4)
+    expect(screen.getByTestId("summary-uncovered").textContent).toBe("8")
   })
 
   it("selects a chunk from the spine and shows its metadata", () => {
@@ -106,7 +123,7 @@ describe("ChunkSetInspector", () => {
     const root = container.querySelector<HTMLElement>("[data-chunk-inspector]")!
     const overlap = container.querySelector<HTMLElement>("[data-seg][data-overlap]")!
     fireEvent.pointerOver(overlap)
-    expect(root.dataset.hover).toBe("c0 c1")
+    expect(root.dataset.hover).toBe("c2 c3")
     fireEvent.pointerLeave(root)
     expect(root.dataset.hover).toBeUndefined()
   })
@@ -138,10 +155,10 @@ describe("ChunkSetInspector", () => {
 describe("ParsedDocInspector", () => {
   it("renders every element as a block, then as a table ordered by order", () => {
     const { container } = render(<ParsedDocInspector doc={parsed} />)
-    expect(container.querySelectorAll("[data-element]")).toHaveLength(42)
+    expect(container.querySelectorAll("[data-element]")).toHaveLength(20)
     fireEvent.click(screen.getByRole("radio", { name: "Table" }))
     const rows = container.querySelectorAll("[data-row]")
-    expect(rows).toHaveLength(42)
+    expect(rows).toHaveLength(20)
     expect(rows[14].querySelector("[data-col=order]")!.textContent).toBe("14")
   })
 
@@ -155,10 +172,10 @@ describe("CleanReportInspector", () => {
   it("matches removals to the pre-clean document by element id", () => {
     const { container } = render(<CleanReportInspector before={parsed} report={report} />)
     const removed = [...container.querySelectorAll<HTMLElement>("[data-element][data-removed]")].map((e) => e.dataset.element)
-    expect(removed.sort()).toEqual(["e00000", "e00014", "e00015", "e00027", "e00028", "e00034", "e00035", "e00041"])
-    expect(container.querySelectorAll("[data-element]")).toHaveLength(42)
+    expect(removed.sort()).toEqual(["e00000", "e00006", "e00007", "e00012", "e00013", "e00016", "e00019"])
+    expect(container.querySelectorAll("[data-element]")).toHaveLength(20)
     // One spine tick per removed element.
-    expect(container.querySelectorAll("[data-tick]")).toHaveLength(8)
+    expect(container.querySelectorAll("[data-tick]")).toHaveLength(7)
   })
 
   it("lists removals in application order, with duplicate_of for dedupe", () => {
@@ -166,9 +183,9 @@ describe("CleanReportInspector", () => {
     const groups = [...container.querySelectorAll<HTMLElement>("[data-cleaner]")].map((g) => g.dataset.cleaner)
     expect(groups).toEqual(["header_footer_strip", "dedupe_blocks"])
     const rows = [...container.querySelectorAll<HTMLElement>("[data-removal]")].map((r) => r.dataset.removal)
-    expect(rows).toEqual(["e00000", "e00014", "e00015", "e00027", "e00028", "e00041", "e00034", "e00035"])
-    const dup = container.querySelector<HTMLElement>('[data-removal="e00034"] [data-col=duplicate_of]')!
-    expect(dup.textContent).toBe("e00007")
+    expect(rows).toEqual(["e00000", "e00006", "e00007", "e00012", "e00013", "e00019", "e00016"])
+    const dup = container.querySelector<HTMLElement>('[data-removal="e00016"] [data-col=duplicate_of]')!
+    expect(dup.textContent).toBe("e00003")
   })
 
   it("flags a removal whose id is not in the document", () => {
@@ -201,12 +218,12 @@ describe("inspector registry", () => {
 
   it("routes a parsed_doc with a pre-clean document to the clean report", () => {
     const { container } = render(<ArtifactInspector type="parsed_doc" data={cleaned} context={{ before: parsed }} />)
-    expect(container.querySelectorAll("[data-tick]")).toHaveLength(8)
+    expect(container.querySelectorAll("[data-tick]")).toHaveLength(7)
   })
 
   it("renders a chunk_set through the registry", () => {
     const { container } = render(<ArtifactInspector type="chunk_set" data={recursive} />)
-    expect(container.querySelectorAll("[data-band]")).toHaveLength(7)
+    expect(container.querySelectorAll("[data-band]")).toHaveLength(6)
   })
 
   it("gives the fallback its own empty and error states", () => {

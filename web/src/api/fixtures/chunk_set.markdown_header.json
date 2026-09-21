@@ -1,30 +1,23 @@
 {
   "chunks": [
     {
-      "id": "dd802f6282c12a47",
-      "text": "Why chunk boundaries matter\n\nA retriever never sees a document. It sees chunks, and it can only return what\n\na chunk contains. If the sentence that answers a question is split across two\n\nchunks, neither half may score well enough to be retrieved, and the generator\n\nis left to guess. Boundary placement is therefore a recall decision disguised\n\nas a preprocessing step.\n\nToken counts in this note come from the heuristic counter, not a model\n\ntokenizer.\n\nFixed windows\n\nThe simplest strategy cuts the text every N tokens with an overlap of M\n\ntokens. It is predictable and cheap, and every chunk has the same cost to",
+      "id": "1ab6f5e4146a9c74",
+      "text": "Why chunk boundaries matter\n\nA retriever never sees a document. It sees chunks, and it can only return what a chunk contains. If the sentence that answers a question is split across two chunks, neither half may score well enough to be retrieved, and the generator is left to guess. Boundary placement is therefore a recall decision disguised as a preprocessing step.\n\nToken counts in this note come from the heuristic counter, not a model tokenizer.\n\nFixed windows",
       "embed_text": null,
       "start_char": 0,
-      "end_char": 617,
-      "token_count": 117,
+      "end_char": 464,
+      "token_count": 87,
       "kind": "chunk",
       "parent_id": null,
       "level": 0,
       "ordinal": 0,
-      "doc_id": "a6045d1d0d694fd8b0c01c71ce57307e43bec5b3d16a8a645340b19da915d751",
+      "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
       "heading_path": [],
       "source_element_ids": [
         "e00001",
         "e00002",
         "e00003",
-        "e00004",
-        "e00005",
-        "e00006",
-        "e00007",
-        "e00008",
-        "e00009",
-        "e00010",
-        "e00011"
+        "e00004"
       ],
       "page_span": [
         1,
@@ -33,29 +26,21 @@
       "metadata": {}
     },
     {
-      "id": "32c4c35c24df839d",
-      "text": "embed. It is also blind to structure: a window will happily start in the\n\nmiddle of a table row or end halfway through a definition.\n\nRecursive character splitting\n\nRecursive splitting tries a list of separators in order: blank lines, then\n\nsingle newlines, then sentence ends, then spaces. It only falls back to a\n\nfiner separator when a piece is still larger than the budget. The result\n\nrespects paragraphs where it can and sentences where it must, which is why it\n\nis the default in most frameworks.\n\nHeading-aware sections\n\nA heading-aware chunker starts a new chunk at every heading and carries the",
+      "id": "59a56b3a44709415",
+      "text": "The simplest strategy cuts the text every N tokens with an overlap of M tokens. It is predictable and cheap, and every chunk has the same cost to embed. It is also blind to structure: a window will happily start in the middle of a table row or end halfway through a definition.\n\nRecursive character splitting",
       "embed_text": null,
-      "start_char": 619,
-      "end_char": 1223,
-      "token_count": 116,
+      "start_char": 466,
+      "end_char": 774,
+      "token_count": 61,
       "kind": "chunk",
       "parent_id": null,
       "level": 0,
       "ordinal": 1,
-      "doc_id": "a6045d1d0d694fd8b0c01c71ce57307e43bec5b3d16a8a645340b19da915d751",
+      "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
       "heading_path": [],
       "source_element_ids": [
-        "e00012",
-        "e00013",
-        "e00016",
-        "e00017",
-        "e00018",
-        "e00019",
-        "e00020",
-        "e00021",
-        "e00022",
-        "e00023"
+        "e00005",
+        "e00008"
       ],
       "page_span": [
         1,
@@ -64,29 +49,46 @@
       "metadata": {}
     },
     {
-      "id": "9e29657852636b72",
-      "text": "heading path into the chunk metadata. This only works when the parser reports\n\nheadings. A plain text extractor returns every line as a paragraph, so the\n\nchunker sees one long section and falls back to its token budget.\n\nOverlap and its cost\n\nOverlap protects answers that straddle a boundary, but every overlapped token\n\nis embedded and stored twice. At an overlap of twenty percent the index grows\n\nby a quarter, and near-duplicate chunks start to crowd each other out of the\n\ntop results unless a reranker such as MMR spreads them.\n\nWhat to measure\n\nCompare strategies on the same parsed document. Count chunks, look at the",
+      "id": "b67a37f16b58a0af",
+      "text": "Recursive splitting tries a list of separators in order: blank lines, then single newlines, then sentence ends, then spaces. It only falls back to a finer separator when a piece is still larger than the budget. The result respects paragraphs where it can and sentences where it must, which is why it is the default in most frameworks.\n\nHeading-aware sections",
       "embed_text": null,
-      "start_char": 1225,
-      "end_char": 1852,
-      "token_count": 118,
+      "start_char": 776,
+      "end_char": 1134,
+      "token_count": 70,
       "kind": "chunk",
       "parent_id": null,
       "level": 0,
       "ordinal": 2,
-      "doc_id": "a6045d1d0d694fd8b0c01c71ce57307e43bec5b3d16a8a645340b19da915d751",
+      "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
       "heading_path": [],
       "source_element_ids": [
-        "e00024",
-        "e00025",
-        "e00026",
-        "e00029",
-        "e00030",
-        "e00031",
-        "e00032",
-        "e00033",
-        "e00036",
-        "e00037"
+        "e00009",
+        "e00010"
+      ],
+      "page_span": [
+        2,
+        2
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "a18187b7957b61ca",
+      "text": "A heading-aware chunker starts a new chunk at every heading and carries the heading path into the chunk metadata. This only works when the parser reports headings. A plain text extractor returns every line as a paragraph, so the chunker sees one long section and falls back to its token budget.\n\nOverlap and its cost\n\nOverlap protects answers that straddle a boundary, but every overlapped token is embedded and stored twice. At an overlap of twenty percent the index grows by a quarter, and near-duplicate chunks start to crowd each other out of the top results unless a reranker such as MMR spreads them.\n\nWhat to measure",
+      "embed_text": null,
+      "start_char": 1136,
+      "end_char": 1759,
+      "token_count": 119,
+      "kind": "chunk",
+      "parent_id": null,
+      "level": 0,
+      "ordinal": 3,
+      "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+      "heading_path": [],
+      "source_element_ids": [
+        "e00011",
+        "e00014",
+        "e00015",
+        "e00017"
       ],
       "page_span": [
         2,
@@ -95,22 +97,20 @@
       "metadata": {}
     },
     {
-      "id": "a290fadcef30b46f",
-      "text": "token distribution, and check recall at ten on a fixed question set. A\n\nstrategy that wins on one corpus can lose on another, so the comparison is the\n\nresult, not the ranking.",
+      "id": "6bfa96ac7a1ca42f",
+      "text": "Compare strategies on the same parsed document. Count chunks, look at the token distribution, and check recall at ten on a fixed question set. A strategy that wins on one corpus can lose on another, so the comparison is the result, not the ranking.",
       "embed_text": null,
-      "start_char": 1854,
-      "end_char": 2030,
-      "token_count": 37,
+      "start_char": 1761,
+      "end_char": 2009,
+      "token_count": 51,
       "kind": "chunk",
       "parent_id": null,
       "level": 0,
-      "ordinal": 3,
-      "doc_id": "a6045d1d0d694fd8b0c01c71ce57307e43bec5b3d16a8a645340b19da915d751",
+      "ordinal": 4,
+      "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
       "heading_path": [],
       "source_element_ids": [
-        "e00038",
-        "e00039",
-        "e00040"
+        "e00018"
       ],
       "page_span": [
         3,
@@ -119,8 +119,8 @@
       "metadata": {}
     }
   ],
-  "doc_id": "a6045d1d0d694fd8b0c01c71ce57307e43bec5b3d16a8a645340b19da915d751",
-  "source_text": "Why chunk boundaries matter\n\nA retriever never sees a document. It sees chunks, and it can only return what\n\na chunk contains. If the sentence that answers a question is split across two\n\nchunks, neither half may score well enough to be retrieved, and the generator\n\nis left to guess. Boundary placement is therefore a recall decision disguised\n\nas a preprocessing step.\n\nToken counts in this note come from the heuristic counter, not a model\n\ntokenizer.\n\nFixed windows\n\nThe simplest strategy cuts the text every N tokens with an overlap of M\n\ntokens. It is predictable and cheap, and every chunk has the same cost to\n\nembed. It is also blind to structure: a window will happily start in the\n\nmiddle of a table row or end halfway through a definition.\n\nRecursive character splitting\n\nRecursive splitting tries a list of separators in order: blank lines, then\n\nsingle newlines, then sentence ends, then spaces. It only falls back to a\n\nfiner separator when a piece is still larger than the budget. The result\n\nrespects paragraphs where it can and sentences where it must, which is why it\n\nis the default in most frameworks.\n\nHeading-aware sections\n\nA heading-aware chunker starts a new chunk at every heading and carries the\n\nheading path into the chunk metadata. This only works when the parser reports\n\nheadings. A plain text extractor returns every line as a paragraph, so the\n\nchunker sees one long section and falls back to its token budget.\n\nOverlap and its cost\n\nOverlap protects answers that straddle a boundary, but every overlapped token\n\nis embedded and stored twice. At an overlap of twenty percent the index grows\n\nby a quarter, and near-duplicate chunks start to crowd each other out of the\n\ntop results unless a reranker such as MMR spreads them.\n\nWhat to measure\n\nCompare strategies on the same parsed document. Count chunks, look at the\n\ntoken distribution, and check recall at ten on a fixed question set. A\n\nstrategy that wins on one corpus can lose on another, so the comparison is the\n\nresult, not the ranking.",
+  "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+  "source_text": "Why chunk boundaries matter\n\nA retriever never sees a document. It sees chunks, and it can only return what a chunk contains. If the sentence that answers a question is split across two chunks, neither half may score well enough to be retrieved, and the generator is left to guess. Boundary placement is therefore a recall decision disguised as a preprocessing step.\n\nToken counts in this note come from the heuristic counter, not a model tokenizer.\n\nFixed windows\n\nThe simplest strategy cuts the text every N tokens with an overlap of M tokens. It is predictable and cheap, and every chunk has the same cost to embed. It is also blind to structure: a window will happily start in the middle of a table row or end halfway through a definition.\n\nRecursive character splitting\n\nRecursive splitting tries a list of separators in order: blank lines, then single newlines, then sentence ends, then spaces. It only falls back to a finer separator when a piece is still larger than the budget. The result respects paragraphs where it can and sentences where it must, which is why it is the default in most frameworks.\n\nHeading-aware sections\n\nA heading-aware chunker starts a new chunk at every heading and carries the heading path into the chunk metadata. This only works when the parser reports headings. A plain text extractor returns every line as a paragraph, so the chunker sees one long section and falls back to its token budget.\n\nOverlap and its cost\n\nOverlap protects answers that straddle a boundary, but every overlapped token is embedded and stored twice. At an overlap of twenty percent the index grows by a quarter, and near-duplicate chunks start to crowd each other out of the top results unless a reranker such as MMR spreads them.\n\nWhat to measure\n\nCompare strategies on the same parsed document. Count chunks, look at the token distribution, and check recall at ten on a fixed question set. A strategy that wins on one corpus can lose on another, so the comparison is the result, not the ranking.",
   "chunker_meta": {
     "chunker": "markdown_header",
     "max_tokens": 120

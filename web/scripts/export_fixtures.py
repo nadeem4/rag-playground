@@ -9,12 +9,17 @@ What it does:
 
 1. `plugins.discover()` then `registry.export_schema()` -> `registry.json`.
 2. Builds a three-page technical PDF with the same generator the plugin tests use
-   (`tests/plugins/conftest.py::build_pdf`), with a running head and a page
-   number on every page and one repeated sentence, so both cleaners have real
-   work to do.
+   (`tests/plugins/conftest.py::build_paragraph_pdf`), typeset with real
+   paragraph spacing (a larger gap between paragraphs than between lines), a
+   running head and a page number on every page and one repeated paragraph, so
+   both cleaners have real work to do.
 3. Runs a real graph through `core.executor.run` against a throwaway store:
    upload -> pdfium -> header_footer_strip -> dedupe_blocks -> three chunkers.
 4. Writes each node's payload, plus the executor's event stream, as JSON.
+5. Runs the same document once more with pdfium's `join_lines` off, through the
+   same cleaners into `recursive_character` only, and writes that pair as
+   `*.join_lines_off.json`: one element per line versus rebuilt paragraphs,
+   the parsing lesson the `/inspect` gallery shows side by side.
 
 Everything runs in a temp directory; nothing is written to `sources/` or the
 artifact store.
@@ -40,7 +45,7 @@ from core.ports import Stage  # noqa: E402
 from core.registry import registry  # noqa: E402
 from core.storage import Store  # noqa: E402
 from plugins.source import upload  # noqa: E402
-from tests.plugins.conftest import build_pdf  # noqa: E402
+from tests.plugins.conftest import build_paragraph_pdf  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "api" / "fixtures"
 FILENAME = "chunking-notes.pdf"
@@ -48,8 +53,8 @@ RUNNING_HEAD = "RAG Playground - chunking notes"
 REPEATED = "Token counts in this note come from the heuristic counter, not a model tokenizer."
 WRAP = 78
 
-#: (heading, paragraphs) per page. Headings are plain lines: pdfium detects no
-#: headings, and the fixtures must show what the real parser returns.
+#: (heading, paragraphs) per page. Headings are plain one-line paragraphs: pdfium
+#: detects no headings, and the fixtures must show what the real parser returns.
 PAGES: list[list[tuple[str | None, list[str]]]] = [
     [
         (
@@ -118,15 +123,20 @@ PAGES: list[list[tuple[str | None, list[str]]]] = [
 ]
 
 
-def page_lines(page_no: int, sections: list[tuple[str | None, list[str]]]) -> list[str]:
-    lines = [RUNNING_HEAD]
+def page_paragraphs(
+    page_no: int, sections: list[tuple[str | None, list[str]]]
+) -> list[list[str]]:
+    """One page as paragraphs of wrapped lines. The running head, each heading
+    and the page number are paragraphs of their own, set apart by the same
+    paragraph gap a typesetter would leave."""
+    blocks = [[RUNNING_HEAD]]
     for heading, paragraphs in sections:
         if heading:
-            lines.append(heading)
+            blocks.append([heading])
         for paragraph in paragraphs:
-            lines.extend(textwrap.wrap(paragraph, WRAP))
-    lines.append(f"Page {page_no} of {len(PAGES)}")
-    return lines
+            blocks.append(textwrap.wrap(paragraph, WRAP))
+    blocks.append([f"Page {page_no} of {len(PAGES)}"])
+    return blocks
 
 
 CHUNKERS = {
@@ -136,10 +146,10 @@ CHUNKERS = {
 }
 
 
-def build_graph(sha: str) -> Graph:
+def build_graph(sha: str, parse_config: dict | None = None, chunkers: dict = CHUNKERS) -> Graph:
     nodes = [
         Node("src", Stage.SOURCE, "upload", {"sha": sha, "filename": FILENAME}),
-        Node("parse", Stage.PARSE, "pdfium", {}),
+        Node("parse", Stage.PARSE, "pdfium", parse_config or {}),
         Node("clean_strip", Stage.CLEAN, "header_footer_strip", {}),
         Node("clean_dedupe", Stage.CLEAN, "dedupe_blocks", {}),
     ]
@@ -148,7 +158,7 @@ def build_graph(sha: str) -> Graph:
         Edge("parse", "clean_strip", "doc"),
         Edge("clean_strip", "clean_dedupe", "doc"),
     ]
-    for nid, (transform, config) in CHUNKERS.items():
+    for nid, (transform, config) in chunkers.items():
         nodes.append(Node(nid, Stage.CHUNK, transform, config))
         edges.append(Edge("clean_dedupe", nid, "doc"))
     return Graph(nodes=nodes, edges=edges)
@@ -165,7 +175,9 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     dump("registry.json", registry.export_schema())
 
-    pdf = build_pdf([page_lines(i + 1, sections) for i, sections in enumerate(PAGES)])
+    pdf = build_paragraph_pdf(
+        [page_paragraphs(i + 1, sections) for i, sections in enumerate(PAGES)]
+    )
     sha = hashlib.sha256(pdf).hexdigest()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -206,6 +218,25 @@ def main() -> None:
                 if "duration_ms" in e:
                     e["duration_ms"] = round(e["duration_ms"], 3)
             dump("run_events.json", events)
+
+            # The comparison pair: same document, same cleaners, one element per
+            # extracted line. Its own run, so run_events/artifacts stay the
+            # canonical graph's.
+            lines_only = {"chunk_recursive": CHUNKERS["chunk_recursive"]}
+            off = run(
+                build_graph(sha, {"join_lines": False}, lines_only), registry, store
+            )
+            if not off.ok:
+                failures = {n: r.error for n, r in off.nodes.items() if r.error}
+                raise SystemExit(f"join_lines=false pipeline failed: {failures}")
+            dump(
+                "parsed_doc.join_lines_off.json",
+                store.load(off.nodes["parse"].artifact.id, ArtifactType.PARSED_DOC),
+            )
+            dump(
+                "chunk_set.recursive_character.join_lines_off.json",
+                store.load(off.nodes["chunk_recursive"].artifact.id, ArtifactType.CHUNK_SET),
+            )
         finally:
             upload.SOURCES_DIR = previous
 

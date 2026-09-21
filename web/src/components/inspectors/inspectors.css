@@ -18,6 +18,38 @@
   transition: opacity 120ms;
 }
 
+/*
+ * A chunk reads as ONE region, not a stack of stripes.
+ *
+ * An inline background covers only the font's content area, which is shorter
+ * than the line box (line-height 1.65), so every wrapped line would be its own
+ * stripe. Vertical padding on an inline box changes no layout, only the
+ * painted area: padding each covered span by exactly half the leading makes
+ * the painted box one line pitch tall, so consecutive lines touch. It is
+ * measured in the browser for Geist Mono (content area 18px at 14px, so
+ * 1.2857em; see --ci-leading), not guessed. A blank line inside a chunk has no glyphs, so the span's fragment
+ * there is widened by `.ci-fill` and painted by the same background.
+ *
+ * `box-decoration-break: clone` repaints the hatch per line fragment instead
+ * of slicing one image across all of them, so an overlap that wraps keeps
+ * its hatch aligned on every line.
+ */
+.ci-seg:not([data-gap]) {
+  /* +0.5px: rows sit on fractional pixels, and without a full pixel of overlap
+     an antialiased edge shows as a dark seam every few lines (seen in dark
+     mode). The overlap lands in padding, never on glyphs. */
+  --ci-leading: calc((1.65em - 1.2857em) / 2 + 0.5px);
+  padding-block: var(--ci-leading);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.ci-fill {
+  display: inline-block;
+  width: 100%;
+  height: 0;
+}
+
 .ci-seg[data-overlap] {
   background-color: color-mix(in oklch, var(--a) 50%, var(--b));
   background-image: repeating-linear-gradient(

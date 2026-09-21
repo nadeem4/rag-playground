@@ -28,6 +28,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.parse.docling",
     "plugins.clean.header_footer_strip",
     "plugins.clean.dedupe_blocks",
+    "plugins.clean.drop_matching",
     "plugins.chunk.recursive_character",
     "plugins.chunk.markdown_header",
     "plugins.chunk.token_based",

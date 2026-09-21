@@ -21,6 +21,7 @@ from core.payloads import Element, ParsedDoc
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import registry
 from plugins.clean.dedupe_blocks import DedupeBlocks
+from plugins.clean.drop_matching import DropMatching
 from plugins.clean.header_footer_strip import HeaderFooterStrip
 
 # --------------------------------------------------------------------------
@@ -164,7 +165,16 @@ def messy_doc() -> ParsedDoc:
     return doc(elements, page_count=4)
 
 
-CLEANERS = [HeaderFooterStrip, DedupeBlocks]
+CLEANERS = [HeaderFooterStrip, DedupeBlocks, DropMatching]
+
+#: Config the shared invariant tests use, per cleaner. The others remove blocks
+#: from `messy_doc` with their defaults; `drop_matching` defaults to an empty
+#: pattern (a no-op), so it is given one that removes the running heads.
+INVARIANT_CONFIG: dict[type, dict] = {DropMatching: {"pattern": "ACME Corp"}}
+
+
+def cfg(cls) -> dict:
+    return INVARIANT_CONFIG.get(cls, {})
 
 
 # --------------------------------------------------------------------------
@@ -192,7 +202,7 @@ def test_accepts_a_plain_dict_payload(cls, tmp_path):
     inst = cls()
     ctx = RunContext(output_dir=tmp_path, emit=lambda ev: None, tmp=tmp_path)
     out = inst.apply(
-        {"doc": messy_doc().model_dump(mode="json")}, inst.config_model(), ctx
+        {"doc": messy_doc().model_dump(mode="json")}, inst.config_model(**cfg(cls)), ctx
     )
     assert ParsedDoc.model_validate(
         out.model_dump(mode="json") if isinstance(out, ParsedDoc) else out
@@ -203,7 +213,7 @@ def test_accepts_a_plain_dict_payload(cls, tmp_path):
 def test_does_not_mutate_its_input(cls, tmp_path):
     original = messy_doc()
     before = original.model_dump(mode="json")
-    run(cls, original, tmp_path)
+    run(cls, original, tmp_path, **cfg(cls))
     assert original.model_dump(mode="json") == before
 
 
@@ -538,14 +548,14 @@ def test_a_document_with_no_duplicates_writes_no_report(tmp_path):
 
 @pytest.mark.parametrize("cls", CLEANERS)
 def test_order_is_total_and_contiguous_from_zero(cls, tmp_path):
-    out = run(cls, messy_doc(), tmp_path)
+    out = run(cls, messy_doc(), tmp_path, **cfg(cls))
     orders = sorted(e.order for e in out.elements)
     assert orders == list(range(len(out.elements)))
 
 
 @pytest.mark.parametrize("cls", CLEANERS)
 def test_no_parent_id_points_at_a_removed_element(cls, tmp_path):
-    out = run(cls, messy_doc(), tmp_path)
+    out = run(cls, messy_doc(), tmp_path, **cfg(cls))
     surviving = {e.id for e in out.elements}
     dangling = [e.id for e in out.elements if e.parent_id not in (None, *surviving)]
     assert dangling == []
@@ -596,7 +606,7 @@ def test_a_removed_root_leaves_its_children_parentless(tmp_path):
 @pytest.mark.parametrize("cls", CLEANERS)
 def test_relative_order_of_survivors_is_unchanged(cls, tmp_path):
     before = messy_doc()
-    out = run(cls, before, tmp_path)
+    out = run(cls, before, tmp_path, **cfg(cls))
     survivors = {e.id for e in out.elements}
     expected = [
         e.id for e in sorted(before.elements, key=lambda e: e.order)
@@ -609,7 +619,7 @@ def test_relative_order_of_survivors_is_unchanged(cls, tmp_path):
 def test_cleaning_leaves_no_stale_markdown_offsets(cls, tmp_path):
     before = messy_doc()
     before.render_markdown()  # stamp offsets that removal would invalidate
-    out = run(cls, before, tmp_path)
+    out = run(cls, before, tmp_path, **cfg(cls))
     assert all(e.md_start is None and e.md_end is None for e in out.elements)
 
     markdown, offsets = out.render_markdown()
@@ -631,21 +641,21 @@ def test_cleaning_an_already_clean_document_is_a_no_op(cls, tmp_path):
             el("b3", "Third body paragraph.", 2, page=3),
         ]
     )
-    out = run(cls, clean, tmp_path)
+    out = run(cls, clean, tmp_path, **cfg(cls))
     assert out.model_dump(mode="json") == clean.model_dump(mode="json")
 
 
 @pytest.mark.parametrize("cls", CLEANERS)
 def test_applying_a_cleaner_twice_equals_applying_it_once(cls, tmp_path):
-    once = run(cls, messy_doc(), tmp_path)
-    twice = run(cls, once, tmp_path)
+    once = run(cls, messy_doc(), tmp_path, **cfg(cls))
+    twice = run(cls, once, tmp_path, **cfg(cls))
     assert twice.model_dump(mode="json") == once.model_dump(mode="json")
 
 
 @pytest.mark.parametrize("cls", CLEANERS)
 def test_an_empty_document_cleans_without_raising(cls, tmp_path):
     empty = ParsedDoc(elements=[])
-    out = run(cls, empty, tmp_path)
+    out = run(cls, empty, tmp_path, **cfg(cls))
     assert out.elements == []
     assert out.render_markdown() == ("", {})
 

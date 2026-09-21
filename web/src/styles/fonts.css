@@ -1,0 +1,20 @@
+/*
+ * Geist Sans + Geist Mono, self-hosted from the `geist` npm package.
+ * `@fonts` is a Vite alias to node_modules/geist/dist/fonts, so the files are
+ * fingerprinted into dist/ at build time. No font CDN, no <link> to Google.
+ */
+@font-face {
+  font-family: "Geist";
+  src: url("@fonts/geist-sans/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("@fonts/geist-mono/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

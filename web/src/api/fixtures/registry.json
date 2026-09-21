@@ -1,0 +1,573 @@
+{
+  "source": {
+    "upload": {
+      "name": "upload",
+      "version": "1",
+      "stage": "source",
+      "output": "raw_file",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {},
+      "config_schema": {
+        "properties": {
+          "sha": {
+            "default": "",
+            "title": "Sha",
+            "type": "string"
+          },
+          "filename": {
+            "default": "",
+            "title": "Filename",
+            "type": "string"
+          }
+        },
+        "title": "UploadConfig",
+        "type": "object"
+      }
+    }
+  },
+  "query": {
+    "text": {
+      "name": "text",
+      "version": "1",
+      "stage": "query",
+      "output": "query",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {},
+      "config_schema": {
+        "properties": {
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "title": "TextQueryConfig",
+        "type": "object"
+      }
+    }
+  },
+  "parse": {
+    "pdfium": {
+      "name": "pdfium",
+      "version": "1",
+      "stage": "parse",
+      "output": "parsed_doc",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "file": {
+          "type": "raw_file",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "mode": {
+            "const": "text",
+            "default": "text",
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "PdfiumConfig",
+        "type": "object"
+      }
+    }
+  },
+  "clean": {
+    "header_footer_strip": {
+      "name": "header_footer_strip",
+      "version": "1",
+      "stage": "clean",
+      "output": "parsed_doc",
+      "stackable": true,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "min_page_ratio": {
+            "default": 0.5,
+            "description": "Fraction of pages a block must appear on, at the same page edge, to count as a running artefact.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Page Ratio",
+            "type": "number"
+          },
+          "drop": {
+            "default": true,
+            "description": "Remove detected blocks from `elements`. When false they are only retyped, which already excludes them from the markdown projection while keeping them visible for inspection.",
+            "title": "Drop",
+            "type": "boolean"
+          }
+        },
+        "title": "HeaderFooterStripConfig",
+        "type": "object"
+      }
+    },
+    "dedupe_blocks": {
+      "name": "dedupe_blocks",
+      "version": "1",
+      "stage": "clean",
+      "output": "parsed_doc",
+      "stackable": true,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "similarity": {
+            "default": 0.95,
+            "description": "Minimum difflib ratio to call two blocks duplicates. Only consulted when `scope` is 'near'.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Similarity",
+            "type": "number"
+          },
+          "scope": {
+            "default": "exact",
+            "description": "'exact' compares normalized text; 'near' compares by similarity ratio.",
+            "enum": [
+              "exact",
+              "near"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "DedupeBlocksConfig",
+        "type": "object"
+      }
+    }
+  },
+  "chunk": {
+    "recursive_character": {
+      "name": "recursive_character",
+      "version": "1",
+      "stage": "chunk",
+      "output": "chunk_set",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "chunk_size": {
+            "default": 1000,
+            "minimum": 1,
+            "title": "Chunk Size",
+            "type": "integer"
+          },
+          "chunk_overlap": {
+            "default": 200,
+            "minimum": 0,
+            "title": "Chunk Overlap",
+            "type": "integer"
+          }
+        },
+        "title": "RecursiveCharacterConfig",
+        "type": "object"
+      }
+    },
+    "markdown_header": {
+      "name": "markdown_header",
+      "version": "1",
+      "stage": "chunk",
+      "output": "chunk_set",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "max_tokens": {
+            "default": 512,
+            "minimum": 1,
+            "title": "Max Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "MarkdownHeaderConfig",
+        "type": "object"
+      }
+    },
+    "token_based": {
+      "name": "token_based",
+      "version": "1",
+      "stage": "chunk",
+      "output": "chunk_set",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "max_tokens": {
+            "default": 512,
+            "minimum": 1,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "overlap": {
+            "default": 64,
+            "minimum": 0,
+            "title": "Overlap",
+            "type": "integer"
+          }
+        },
+        "title": "TokenBasedConfig",
+        "type": "object"
+      }
+    }
+  },
+  "index": {
+    "lancedb": {
+      "name": "lancedb",
+      "version": "1",
+      "stage": "index",
+      "output": "index",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {
+        "backends": [
+          "dense",
+          "fts"
+        ]
+      },
+      "inputs": {
+        "chunks": {
+          "type": "chunk_set",
+          "variadic": true,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "embedder": {
+            "default": "fake-deterministic",
+            "title": "Embedder",
+            "type": "string"
+          },
+          "truncate_dim": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Truncate Dim"
+          },
+          "metric": {
+            "default": "cosine",
+            "enum": [
+              "cosine",
+              "l2"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "build_fts": {
+            "default": true,
+            "title": "Build Fts",
+            "type": "boolean"
+          }
+        },
+        "title": "LanceDbIndexConfig",
+        "type": "object"
+      }
+    }
+  },
+  "retrieve": {
+    "dense": {
+      "name": "dense",
+      "version": "1",
+      "stage": "retrieve",
+      "output": "retrieval_result",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {
+        "index": {
+          "backends": [
+            "dense"
+          ]
+        }
+      },
+      "provides": {},
+      "inputs": {
+        "index": {
+          "type": "index",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          },
+          "fetch_k": {
+            "default": 20,
+            "title": "Fetch K",
+            "type": "integer"
+          }
+        },
+        "title": "DenseConfig",
+        "type": "object"
+      }
+    },
+    "bm25": {
+      "name": "bm25",
+      "version": "1",
+      "stage": "retrieve",
+      "output": "retrieval_result",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {
+        "index": {
+          "backends": [
+            "fts"
+          ]
+        }
+      },
+      "provides": {},
+      "inputs": {
+        "index": {
+          "type": "index",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          },
+          "fetch_k": {
+            "default": 20,
+            "title": "Fetch K",
+            "type": "integer"
+          }
+        },
+        "title": "Bm25Config",
+        "type": "object"
+      }
+    },
+    "hybrid_rrf": {
+      "name": "hybrid_rrf",
+      "version": "1",
+      "stage": "retrieve",
+      "output": "retrieval_result",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {
+        "index": {
+          "backends": [
+            "dense",
+            "fts"
+          ]
+        }
+      },
+      "provides": {},
+      "inputs": {
+        "index": {
+          "type": "index",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          },
+          "fetch_k": {
+            "default": 20,
+            "title": "Fetch K",
+            "type": "integer"
+          },
+          "rrf_k": {
+            "default": 60,
+            "title": "Rrf K",
+            "type": "integer"
+          }
+        },
+        "title": "HybridRrfConfig",
+        "type": "object"
+      }
+    }
+  },
+  "rerank": {
+    "mmr": {
+      "name": "mmr",
+      "version": "1",
+      "stage": "rerank",
+      "output": "retrieval_result",
+      "stackable": true,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "lambda_mult": {
+            "default": 0.5,
+            "title": "Lambda Mult",
+            "type": "number"
+          },
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          },
+          "embedder": {
+            "default": "fake-deterministic",
+            "title": "Embedder",
+            "type": "string"
+          }
+        },
+        "title": "MmrRerankConfig",
+        "type": "object"
+      }
+    }
+  },
+  "use_case": {
+    "search": {
+      "name": "search",
+      "version": "1",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "max_snippet_chars": {
+            "default": 400,
+            "title": "Max Snippet Chars",
+            "type": "integer"
+          }
+        },
+        "title": "SearchUseCaseConfig",
+        "type": "object"
+      }
+    }
+  }
+}

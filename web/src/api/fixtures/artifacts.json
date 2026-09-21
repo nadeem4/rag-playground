@@ -1,0 +1,58 @@
+{
+  "src": {
+    "id": "1154782e885e08e03ec571ced92d0ed0612d09c55dcc7825d05d885af3ab534b",
+    "type": "raw_file",
+    "meta": {
+      "transform": "upload",
+      "node_id": "src"
+    }
+  },
+  "parse": {
+    "id": "2b45793658cedbb3ff9041501fc3030c2b8e9627f8bab1baa86300382c8359f1",
+    "type": "parsed_doc",
+    "meta": {
+      "transform": "pdfium",
+      "node_id": "parse"
+    }
+  },
+  "clean_strip": {
+    "id": "610ada617f08d55bed70b1bf64053da7d2054de06b45936b349d2361e9bef170",
+    "type": "parsed_doc",
+    "meta": {
+      "transform": "header_footer_strip",
+      "node_id": "clean_strip"
+    }
+  },
+  "clean_dedupe": {
+    "id": "af1d791ad11ac0cbbaa81706960db4189b5982f299e3f95a0c26effca3ec5eb2",
+    "type": "parsed_doc",
+    "meta": {
+      "transform": "dedupe_blocks",
+      "node_id": "clean_dedupe"
+    }
+  },
+  "chunk_recursive": {
+    "id": "bd1877c469c9de868ab6acae820a5190cf05d2179a4f924f73ce23af7c8afc73",
+    "type": "chunk_set",
+    "meta": {
+      "transform": "recursive_character",
+      "node_id": "chunk_recursive"
+    }
+  },
+  "chunk_markdown_header": {
+    "id": "1a33156cce3bdff33fc6ad4ee22cb1a5a2c3c28205c75c1dd25b540fd1b1a396",
+    "type": "chunk_set",
+    "meta": {
+      "transform": "markdown_header",
+      "node_id": "chunk_markdown_header"
+    }
+  },
+  "chunk_token": {
+    "id": "d4a307fa50d7d0f4c094f917d788b51b384a0dcdccbac1ce0aa351da08227f39",
+    "type": "chunk_set",
+    "meta": {
+      "transform": "token_based",
+      "node_id": "chunk_token"
+    }
+  }
+}

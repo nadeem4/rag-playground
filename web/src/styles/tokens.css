@@ -1,0 +1,316 @@
+/*
+ * RAG Playground design tokens. The single source of every color, size and
+ * radius in the UI. Binding contract: docs/superpowers/design-system.md.
+ *
+ * DESIGN_VARIANCE: 3 / MOTION_INTENSITY: 2 / VISUAL_DENSITY: 9
+ *
+ * Two color channels, never mixed:
+ *   Channel A (chrome)  zinc neutrals, off-black / off-white, one hairline,
+ *                       exactly ONE accent (focus, selection, primary action).
+ *   Channel B (data)    encodes something or does not appear. Categorical chunk
+ *                       identity, a sequential score ramp, a kept/removed pair.
+ *                       Every fill ships with a contrast-checked paired text.
+ *
+ * Dark mode swaps the same semantic names under BOTH `[data-theme="dark"]`
+ * (the toggle) and `prefers-color-scheme: dark` (the OS, unless the toggle has
+ * pinned light). The two dark blocks must stay identical; tokens.test.ts
+ * enforces it. One theme per page (Page Theme Lock): nothing below may be
+ * scoped to a sub-tree to flip it.
+ *
+ * Palette provenance (dataviz method, validate_palette.js):
+ *   chunk-1..8   OKLCH L 0.74 light / 0.64 dark, C 0.11, H varies only.
+ *                Order [9, 234, 54, 189, 99, 324, 144, 279] maximises the
+ *                worst adjacent CVD separation, wrap-around included.
+ *   score-1..5   one hue (H 65), monotone L, --ordinal checks pass.
+ *   kept/removed H 190 / H 25, marks pass the categorical checks.
+ */
+
+/* ---------------------------------------------------------------- light -- */
+:root {
+  color-scheme: light;
+
+  /* Channel A: chrome */
+  --surface: #fafaf9; /* page, off-white, never pure white */
+  --surface-elevated: #f4f4f5; /* zinc-100: panels, a background step, not a shadow */
+  --surface-hover: #e4e4e7; /* zinc-200 wash for hover */
+  --hairline: #e4e4e7; /* zinc-200 */
+  --text-primary: #18181b; /* zinc-900, 16.1:1 on elevated */
+  --text-secondary: #52525b; /* zinc-600, 7.0:1 on elevated */
+  --accent: oklch(0.52 0.17 262); /* the one accent, 5.2:1 on elevated */
+  --accent-fg: #fafaf9; /* 5.4:1 on accent */
+  --selection: oklch(0.93 0.04 262);
+  --danger: oklch(0.52 0.17 25); /* error text, always with a label, 5.5:1 */
+
+  /* Form fields: contrast-verified once here, so a schema renderer cannot emit
+     an off-palette field. Border clears WCAG 1.4.11 (3:1) on both surfaces. */
+  --field-bg: var(--surface);
+  --field-border: #8a8a93; /* 3.3:1 surface, 3.1:1 elevated */
+  --field-text: var(--text-primary);
+  --field-label: var(--text-primary);
+  --field-help: var(--text-secondary);
+  --field-placeholder: var(--text-secondary);
+  --field-error: var(--danger);
+  --focus-ring: var(--accent);
+
+  /* Channel B: categorical chunk identity. fill / paired text (WCAG contrast;
+     dark pairs measure 5.5-6.0:1). tokens.test.ts enforces >= 4.5:1. */
+  --chunk-1: oklch(0.74 0.11 9);    --chunk-1-text: oklch(0.24 0.04 9);    /* 6.9 */
+  --chunk-2: oklch(0.74 0.11 234);  --chunk-2-text: oklch(0.24 0.04 234);  /* 7.3 */
+  --chunk-3: oklch(0.74 0.11 54);   --chunk-3-text: oklch(0.24 0.04 54);   /* 6.9 */
+  --chunk-4: oklch(0.74 0.11 189);  --chunk-4-text: oklch(0.24 0.04 189);  /* 7.4 */
+  --chunk-5: oklch(0.74 0.11 99);   --chunk-5-text: oklch(0.24 0.04 99);   /* 7.2 */
+  --chunk-6: oklch(0.74 0.11 324);  --chunk-6-text: oklch(0.24 0.04 324);  /* 6.9 */
+  --chunk-7: oklch(0.74 0.11 144);  --chunk-7-text: oklch(0.24 0.04 144);  /* 7.4 */
+  --chunk-8: oklch(0.74 0.11 279);  --chunk-8-text: oklch(0.24 0.04 279);  /* 7.0 */
+
+  /* Channel B: sequential score ramp, one hue, 1 = lowest score */
+  --score-1: oklch(0.76 0.12 65);
+  --score-2: oklch(0.68 0.13 65);
+  --score-3: oklch(0.6 0.13 65);
+  --score-4: oklch(0.52 0.11 65);
+  --score-5: oklch(0.44 0.1 65);
+
+  /* Channel B: kept / removed. fill + paired text for rows, mark for the spine */
+  --kept: oklch(0.92 0.04 190);     --kept-text: oklch(0.32 0.04 190);     /* 10.1 */
+  --removed: oklch(0.92 0.04 25);   --removed-text: oklch(0.32 0.05 25);   /* 10.1 */
+  --kept-mark: oklch(0.58 0.1 190);
+  --removed-mark: oklch(0.56 0.14 25);
+}
+
+/* ----------------------------------------------------------------- dark -- */
+/* Block 1 of 2: the toggle. Keep identical to block 2. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #0b0b0c;
+  --surface-elevated: #18181b;
+  --surface-hover: #27272a;
+  --hairline: #27272a;
+  --text-primary: #fafaf9;
+  --text-secondary: #a1a1aa;
+  --accent: oklch(0.72 0.14 262);
+  --accent-fg: #0b0b0c;
+  --selection: oklch(0.3 0.06 262);
+  --danger: oklch(0.72 0.13 25);
+  --field-border: #71717a;
+  --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
+  --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
+  --chunk-3: oklch(0.64 0.11 54);   --chunk-3-text: oklch(0.16 0.03 54);
+  --chunk-4: oklch(0.64 0.11 189);  --chunk-4-text: oklch(0.16 0.03 189);
+  --chunk-5: oklch(0.64 0.11 99);   --chunk-5-text: oklch(0.16 0.03 99);
+  --chunk-6: oklch(0.64 0.11 324);  --chunk-6-text: oklch(0.16 0.03 324);
+  --chunk-7: oklch(0.64 0.11 144);  --chunk-7-text: oklch(0.16 0.03 144);
+  --chunk-8: oklch(0.64 0.11 279);  --chunk-8-text: oklch(0.16 0.03 279);
+  --score-1: oklch(0.44 0.09 65);
+  --score-2: oklch(0.52 0.11 65);
+  --score-3: oklch(0.6 0.13 65);
+  --score-4: oklch(0.68 0.13 65);
+  --score-5: oklch(0.76 0.12 65);
+  --kept: oklch(0.3 0.04 190);      --kept-text: oklch(0.9 0.04 190);
+  --removed: oklch(0.3 0.04 25);    --removed-text: oklch(0.9 0.05 25);
+  --kept-mark: oklch(0.66 0.1 190);
+  --removed-mark: oklch(0.66 0.14 25);
+}
+
+/* Block 2 of 2: the OS preference, unless the toggle pinned light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #0b0b0c;
+    --surface-elevated: #18181b;
+    --surface-hover: #27272a;
+    --hairline: #27272a;
+    --text-primary: #fafaf9;
+    --text-secondary: #a1a1aa;
+    --accent: oklch(0.72 0.14 262);
+    --accent-fg: #0b0b0c;
+    --selection: oklch(0.3 0.06 262);
+    --danger: oklch(0.72 0.13 25);
+    --field-border: #71717a;
+    --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
+    --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
+    --chunk-3: oklch(0.64 0.11 54);   --chunk-3-text: oklch(0.16 0.03 54);
+    --chunk-4: oklch(0.64 0.11 189);  --chunk-4-text: oklch(0.16 0.03 189);
+    --chunk-5: oklch(0.64 0.11 99);   --chunk-5-text: oklch(0.16 0.03 99);
+    --chunk-6: oklch(0.64 0.11 324);  --chunk-6-text: oklch(0.16 0.03 324);
+    --chunk-7: oklch(0.64 0.11 144);  --chunk-7-text: oklch(0.16 0.03 144);
+    --chunk-8: oklch(0.64 0.11 279);  --chunk-8-text: oklch(0.16 0.03 279);
+    --score-1: oklch(0.44 0.09 65);
+    --score-2: oklch(0.52 0.11 65);
+    --score-3: oklch(0.6 0.13 65);
+    --score-4: oklch(0.68 0.13 65);
+    --score-5: oklch(0.76 0.12 65);
+    --kept: oklch(0.3 0.04 190);      --kept-text: oklch(0.9 0.04 190);
+    --removed: oklch(0.3 0.04 25);    --removed-text: oklch(0.9 0.05 25);
+    --kept-mark: oklch(0.66 0.1 190);
+    --removed-mark: oklch(0.66 0.14 25);
+  }
+}
+
+/* ------------------------------------------------------- Tailwind theme -- */
+/*
+ * Every default scale is cleared first, so off-contract values cannot be
+ * typed: no `py-32`, no `text-4xl`, no `shadow-lg`, no `bg-white`, no
+ * `animate-pulse`. Only what is declared here compiles.
+ */
+@theme {
+  --*: initial;
+
+  /* Type: one sans, one mono. Six sizes, nothing above 20px. */
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+  --text-2xs: 11px; --text-2xs--line-height: 16px; /* uppercase mono metadata */
+  --text-xs: 12px;  --text-xs--line-height: 16px;
+  --text-sm: 13px;  --text-sm--line-height: 20px;  /* the workhorse */
+  --text-base: 14px; --text-base--line-height: 1.65; /* markdown reading surface only */
+  --text-lg: 16px;  --text-lg--line-height: 24px;
+  --text-xl: 20px;  --text-xl--line-height: 28px;  /* panel title, nothing else */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --tracking-meta: 0.06em;
+
+  /* Spacing: 4px base, capped at 24px. There is no `--spacing` multiplier,
+     so only these keys resolve: p-1 p-2 p-3 p-4 p-6 (and p-0, p-px). */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+
+  /* Shape: one radius per role, zero shadows (none are declared). */
+  --radius-control: 4px; /* interactive */
+  --radius-panel: 6px; /* panels */
+
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --container-reading: 82ch;
+}
+
+@theme inline {
+  /* Channel A, semantic */
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-hairline: var(--hairline);
+  --color-fg: var(--text-primary);
+  --color-fg-muted: var(--text-secondary);
+  --color-selection: var(--selection);
+  --color-danger: var(--danger);
+  --color-field: var(--field-bg);
+  --color-field-border: var(--field-border);
+
+  /* shadcn/ui names, re-themed onto the tokens above. The UI accent reaches
+     components ONLY as `primary` (the Run action) and `ring` (focus).
+     NOTE: shadcn's `accent` is a hover wash, not the UI accent. Keep it so. */
+  --color-background: var(--surface);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--surface-elevated);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--surface-elevated);
+  --color-popover-foreground: var(--text-primary);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-fg);
+  --color-secondary: var(--surface-elevated);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--surface-hover);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--surface-hover);
+  --color-accent-foreground: var(--text-primary);
+  --color-destructive: var(--danger);
+  --color-border: var(--hairline);
+  --color-input: var(--field-border);
+  --color-ring: var(--focus-ring);
+
+  /* Channel B */
+  --color-chunk-1: var(--chunk-1); --color-chunk-1-text: var(--chunk-1-text);
+  --color-chunk-2: var(--chunk-2); --color-chunk-2-text: var(--chunk-2-text);
+  --color-chunk-3: var(--chunk-3); --color-chunk-3-text: var(--chunk-3-text);
+  --color-chunk-4: var(--chunk-4); --color-chunk-4-text: var(--chunk-4-text);
+  --color-chunk-5: var(--chunk-5); --color-chunk-5-text: var(--chunk-5-text);
+  --color-chunk-6: var(--chunk-6); --color-chunk-6-text: var(--chunk-6-text);
+  --color-chunk-7: var(--chunk-7); --color-chunk-7-text: var(--chunk-7-text);
+  --color-chunk-8: var(--chunk-8); --color-chunk-8-text: var(--chunk-8-text);
+  --color-score-1: var(--score-1);
+  --color-score-2: var(--score-2);
+  --color-score-3: var(--score-3);
+  --color-score-4: var(--score-4);
+  --color-score-5: var(--score-5);
+  --color-kept: var(--kept); --color-kept-text: var(--kept-text);
+  --color-removed: var(--removed); --color-removed-text: var(--removed-text);
+  --color-kept-mark: var(--kept-mark);
+  --color-removed-mark: var(--removed-mark);
+}
+
+/* Theme switching is variable-driven; `dark:` exists only for rare escapes. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+/* Radix state variants used by shadcn components. */
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+/* Data rows: 28px, 24px compact. Sizes, not spacing, so outside the cap. */
+@utility h-row {
+  height: 28px;
+}
+@utility h-row-compact {
+  height: 24px;
+}
+@utility h-control {
+  height: 28px;
+}
+
+/* The 11px metadata voice: uppercase mono, tracked. */
+@utility meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    background: var(--surface);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--text-primary);
+  }
+  *,
+  ::before,
+  ::after {
+    border-color: var(--hairline);
+  }
+  /* Mono does the numbers; tabular figures so token counts align. */
+  code,
+  kbd,
+  pre,
+  samp,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+  ::selection {
+    background: var(--selection);
+    color: var(--text-primary);
+  }
+}

@@ -110,3 +110,83 @@
   color: var(--removed-text);
   text-decoration: line-through 1px;
 }
+
+/*
+ * Chunk inspector layout by its OWN width, not the viewport's: a container
+ * query. Beside the pipeline column, or in a Compare column, the viewport is
+ * wide while the inspector is not; the metadata panel is dropped below
+ * 900px of inspector width rather than crushing the reading column.
+ */
+.ci-frame {
+  container-type: inline-size;
+}
+.ci-layout {
+  display: grid;
+  gap: 1px;
+  background: var(--hairline);
+}
+.ci-layout > [data-testid="chunk-detail"] {
+  display: none;
+}
+@container (min-width: 900px) {
+  .ci-layout[data-detail] {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  .ci-layout > [data-testid="chunk-detail"] {
+    display: flex;
+  }
+}
+
+/*
+ * Retrieval: ranked hits beside the document they came from. The list and the
+ * document sit side by side once the inspector is 880px wide, stacked below.
+ */
+.ri {
+  container-type: inline-size;
+}
+.ri-body {
+  display: grid;
+  gap: 1px;
+  background: var(--hairline);
+}
+@container (min-width: 880px) {
+  /* The columns differ in height, so the hairline is one border, not the
+     gap-grid (whose background would show under the shorter column). */
+  .ri-body[data-doc] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 0;
+    background: var(--surface);
+  }
+  .ri-body[data-doc] > :last-child {
+    border-left: 1px solid var(--hairline);
+  }
+  /* Side by side, the list stays in view while the document scrolls past it. */
+  .ri-body[data-doc] > .ri-list {
+    position: sticky;
+    top: 0;
+  }
+}
+.ri-grid {
+  display: grid;
+  column-gap: 12px;
+  align-items: center;
+}
+.ri-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  white-space: normal;
+}
+.ri-row.bg-selection .ri-snippet {
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+}
+.ri-mark {
+  transition: opacity 120ms;
+}
+[data-hover] .ri-mark {
+  opacity: 0.4;
+}

@@ -71,7 +71,7 @@ describe("defaults", () => {
     const { onChange } = renderForm(schema)
     expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange.mock.calls[0][0]).toEqual({
-      embedder: "fake-deterministic",
+      embedder: "qwen3-embedding-0.6b",
       truncate_dim: null,
       metric: "cosine",
       build_fts: true,

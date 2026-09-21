@@ -221,6 +221,53 @@
         "title": "DedupeBlocksConfig",
         "type": "object"
       }
+    },
+    "drop_matching": {
+      "name": "drop_matching",
+      "version": "1",
+      "stage": "clean",
+      "output": "parsed_doc",
+      "stackable": true,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "pattern": {
+            "default": "",
+            "description": "Text to look for. Any block containing it is removed. Leave empty to remove nothing.",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "mode": {
+            "default": "contains",
+            "description": "'contains' matches the pattern as plain text; 'regex' treats it as a regular expression found anywhere in the block.",
+            "enum": [
+              "contains",
+              "regex"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "case_sensitive": {
+            "default": false,
+            "description": "Match upper and lower case exactly. Off means 'Notice' also matches 'notice'.",
+            "title": "Case Sensitive",
+            "type": "boolean"
+          }
+        },
+        "title": "DropMatchingConfig",
+        "type": "object"
+      }
     }
   },
   "chunk": {
@@ -357,7 +404,12 @@
       "config_schema": {
         "properties": {
           "embedder": {
-            "default": "fake-deterministic",
+            "default": "qwen3-embedding-0.6b",
+            "enum": [
+              "qwen3-embedding-0.6b",
+              "bge-small-en-v1.5",
+              "fake-deterministic"
+            ],
             "title": "Embedder",
             "type": "string"
           },
@@ -565,6 +617,12 @@
           "variadic": false,
           "ambient": true,
           "required": true
+        },
+        "index": {
+          "type": "index",
+          "variadic": false,
+          "ambient": true,
+          "required": true
         }
       },
       "config_schema": {
@@ -578,11 +636,6 @@
             "default": 5,
             "title": "Top K",
             "type": "integer"
-          },
-          "embedder": {
-            "default": "fake-deterministic",
-            "title": "Embedder",
-            "type": "string"
           }
         },
         "title": "MmrRerankConfig",

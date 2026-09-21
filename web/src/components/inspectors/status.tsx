@@ -30,10 +30,14 @@ export function statusScreen(status: InspectorStatus | undefined, what: string):
   return null
 }
 
-/** A hairline-bordered inspector frame. The container encodes a bounded artifact. */
+/**
+ * A hairline-bordered inspector frame. The container encodes a bounded artifact.
+ * `overflow-clip`, not `hidden`: it clips the corners without becoming a
+ * scroll container, so a sticky child (the ranked hit list) sticks to the panel.
+ */
 export function Frame({ children, ...rest }: { children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...rest} className="flex min-w-0 flex-col gap-px overflow-hidden rounded-panel border border-hairline bg-hairline">
+    <div {...rest} className="flex min-w-0 flex-col gap-px overflow-clip rounded-panel border border-hairline bg-hairline">
       {children}
     </div>
   )

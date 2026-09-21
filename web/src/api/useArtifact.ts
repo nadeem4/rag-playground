@@ -11,6 +11,11 @@ import { api } from "./client"
 
 const cache = new Map<string, Promise<unknown>>()
 
+/** The payload, fetched once per session. Also used outside React (Build's sweep preset). */
+export function loadPayload(id: string): Promise<unknown> {
+  return fetchPayload(id)
+}
+
 function fetchPayload(id: string): Promise<unknown> {
   let p = cache.get(id)
   if (!p) {

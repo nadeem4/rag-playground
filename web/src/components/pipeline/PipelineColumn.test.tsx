@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/api/client"
-import { addCleaner, columnOrder, initialGraph } from "@/state/graph"
+import { addCleaner, addReranker, columnOrder, initialGraph } from "@/state/graph"
 import { routeRunError } from "@/state/pipeline"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
@@ -31,6 +31,7 @@ function setup(over: Partial<PipelineColumnProps> = {}) {
     onConfig: vi.fn(),
     onRun: vi.fn(),
     onAddCleaner: vi.fn(),
+    onAddReranker: vi.fn(),
     onRemove: vi.fn(),
     onSweep: vi.fn(),
     ...over,
@@ -45,7 +46,7 @@ describe("PipelineColumn", () => {
   it("titles cards with plain verbs, in graph order", () => {
     setup()
     const titles = [...document.querySelectorAll("article h3")].map((h) => h.textContent)
-    expect(titles).toEqual(["Load", "Parse", "Clean", "Chunk"])
+    expect(titles).toEqual(["Load", "Parse", "Clean", "Chunk", "Index", "Ask", "Retrieve", "Search"])
   })
 
   it("Run on a card runs that node", () => {
@@ -108,12 +109,48 @@ describe("PipelineColumn", () => {
     expect(p.onRemove).toHaveBeenCalledWith(clean.id)
   })
 
-  it("only the Chunk card offers Sweep", () => {
+  it("Parse, Chunk, Index and Retrieve offer Sweep; Index also offers the dimensions preset", () => {
     const p = setup()
     const sweeps = screen.getAllByRole("button", { name: "Sweep" })
-    expect(sweeps).toHaveLength(1)
-    fireEvent.click(sweeps[0])
+    expect(sweeps.map((b) => b.closest("article")!.getAttribute("data-node-id"))).toEqual(["parse", "chunk", "index", "retrieve"])
+    fireEvent.click(sweeps[1])
     expect(p.onSweep).toHaveBeenCalledWith("chunk")
+    fireEvent.click(within(card("index")).getByRole("button", { name: "Sweep dimensions" }))
+    expect(p.onSweep).toHaveBeenCalledWith("index", "matryoshka")
+  })
+
+  it("Add reranker sits after Retrieve; a reranker card is removable and shows its id", () => {
+    const p = setup()
+    const add = screen.getByRole("button", { name: "Add reranker" })
+    expect(add.parentElement!.previousElementSibling!.getAttribute("data-node-id")).toBe("retrieve")
+    fireEvent.click(add)
+    expect(p.onAddReranker).toHaveBeenCalled()
+    cleanup()
+    const graph = addReranker(initialGraph(R), R)
+    const rr = graph.nodes.find((n) => n.stage === "rerank")!
+    const q = setup({ graph })
+    expect(within(card(rr.id)).getByText(rr.id)).toBeTruthy()
+    fireEvent.click(within(card(rr.id)).getByRole("button", { name: `Remove ${rr.id}` }))
+    expect(q.onRemove).toHaveBeenCalledWith(rr.id)
+    // Add reranker now follows the last reranker.
+    expect(screen.getByRole("button", { name: "Add reranker" }).parentElement!.previousElementSibling!.getAttribute("data-node-id")).toBe(rr.id)
+    // Retrieve, Index and Search are not removable.
+    for (const id of ["retrieve", "index", "use_case", "query"]) expect(within(card(id)).queryByRole("button", { name: /^Remove/ })).toBeNull()
+  })
+
+  it("the Ask card edits the question, and its Run runs through Search", () => {
+    const p = setup()
+    const box = within(card("query")).getByLabelText("Question")
+    expect(box.tagName).toBe("TEXTAREA")
+    fireEvent.change(box, { target: { value: "What does overlap cost?" } })
+    expect(p.onConfig).toHaveBeenCalledWith("query", { text: "What does overlap cost?" })
+    fireEvent.click(within(card("query")).getByRole("button", { name: "Run" }))
+    expect(p.onRun).toHaveBeenCalledWith("use_case", false)
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })
+    expect(p.onRun).toHaveBeenCalledTimes(2)
+    // A plain Enter is a newline, not a run.
+    fireEvent.keyDown(box, { key: "Enter" })
+    expect(p.onRun).toHaveBeenCalledTimes(2)
   })
 
   it("a stage with one transform shows its name as text, not a one-option picker", () => {

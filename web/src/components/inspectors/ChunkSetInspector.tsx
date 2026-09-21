@@ -133,12 +133,17 @@ function ChunkSetView({
   return (
     <Frame>
       <Summary stats={derived.stats} meta={set.chunker_meta} />
+      {/* Layout follows the inspector's own width (a container query in
+          inspectors.css), never the viewport's: beside the pipeline column or
+          in a Compare column the viewport is wide and the inspector is not. */}
+      <div className="ci-frame">
       <div
         ref={rootRef}
         data-chunk-inspector=""
+        data-detail={showDetail ? "" : undefined}
         onPointerOver={onPointerOver}
         onPointerLeave={onPointerLeave}
-        className={cn("grid min-h-0 gap-px bg-hairline", showDetail && "lg:grid-cols-[minmax(0,1fr)_320px]")}
+        className="ci-layout min-h-0"
       >
         <style>{hoverRules}</style>
         <div className="max-h-[560px] min-w-0 overflow-y-auto bg-surface">
@@ -169,6 +174,7 @@ function ChunkSetView({
           ) : null}
         </div>
         {showDetail ? <Detail chunk={selected === null ? undefined : chunks[selected]} index={selected} /> : null}
+      </div>
       </div>
     </Frame>
   )

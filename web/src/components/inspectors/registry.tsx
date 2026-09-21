@@ -1,11 +1,14 @@
 import type { ComponentType } from "react"
 
-import type { ArtifactType, ChunkSet, CleanReportEntry, ParsedDoc } from "@/api/types"
+import type { ArtifactType, ChunkSet, CleanReportEntry, ParsedDoc, RetrievalResult } from "@/api/types"
 
 import { ChunkSetInspector } from "./ChunkSetInspector"
 import { CleanReportInspector } from "./CleanReportInspector"
+import type { SearchOutput } from "./hits"
+import { IndexInspector, type IndexDescriptor } from "./IndexInspector"
 import { JsonTreeInspector } from "./JsonTreeInspector"
 import { ParsedDocInspector } from "./ParsedDocInspector"
+import { RetrievalResultInspector, SearchOutputInspector } from "./RetrievalResultInspector"
 import type { InspectorStatus } from "./status"
 
 /**
@@ -16,8 +19,13 @@ import type { InspectorStatus } from "./status"
 export interface InspectorProps {
   data?: unknown
   status?: InspectorStatus
-  /** Related artifacts some inspectors can use; e.g. the pre-clean document. */
-  context?: { before?: ParsedDoc }
+  /**
+   * Related artifacts some inspectors can use: the pre-clean document for a
+   * cleaned one, the upstream chunk set for retrieval (to place hits on it).
+   */
+  context?: { before?: ParsedDoc; chunks?: ChunkSet }
+  /** False drops secondary panels (chunk metadata, the hit document). */
+  showDetail?: boolean
 }
 
 function ParsedDocEntry({ data, status, context }: InspectorProps) {
@@ -28,13 +36,34 @@ function ParsedDocEntry({ data, status, context }: InspectorProps) {
   return <ParsedDocInspector doc={doc} status={status} />
 }
 
-function ChunkSetEntry({ data, status }: InspectorProps) {
-  return <ChunkSetInspector chunkSet={data as ChunkSet | undefined} status={status} />
+function ChunkSetEntry({ data, status, showDetail }: InspectorProps) {
+  return <ChunkSetInspector chunkSet={data as ChunkSet | undefined} status={status} showDetail={showDetail} />
+}
+
+function IndexEntry({ data, status }: InspectorProps) {
+  return <IndexInspector descriptor={data as IndexDescriptor | undefined} status={status} />
+}
+
+function RetrievalEntry({ data, status, context, showDetail }: InspectorProps) {
+  return <RetrievalResultInspector result={data as RetrievalResult | undefined} status={status} chunkSet={context?.chunks} showDetail={showDetail} />
+}
+
+/** A use case's output. Search results read like a retrieval result; anything else is shown as data. */
+function OutputEntry(props: InspectorProps) {
+  const out = props.data as SearchOutput | undefined
+  const ready = !props.status || props.status.kind === "ready"
+  if (ready && out?.kind === "search" && Array.isArray(out.payload?.results)) {
+    return <SearchOutputInspector output={out} chunkSet={props.context?.chunks} showDetail={props.showDetail} />
+  }
+  return <JsonTreeInspector data={props.data} status={props.status} />
 }
 
 export const INSPECTORS: Partial<Record<ArtifactType, ComponentType<InspectorProps>>> = {
   parsed_doc: ParsedDocEntry,
   chunk_set: ChunkSetEntry,
+  index: IndexEntry,
+  retrieval_result: RetrievalEntry,
+  output: OutputEntry,
 }
 
 export function inspectorFor(type: string): ComponentType<InspectorProps> {

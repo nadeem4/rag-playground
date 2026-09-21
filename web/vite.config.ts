@@ -23,8 +23,9 @@ export default defineConfig({
   build: { outDir: 'dist' },
   test: {
     environment: 'jsdom',
-    // tokens.test.ts reads tokens.css?raw; without this Vitest stubs CSS to ''.
-    css: { include: [/tokens.css/] },
+    // tokens.test.ts and inspectors.test.tsx read their CSS with ?raw; without
+    // this Vitest stubs CSS to ''.
+    css: { include: [/tokens.css/, /inspectors.css/] },
     include: ['src/**/*.test.{ts,tsx}'],
   },
 })

@@ -1,5 +1,5 @@
 import type { VariantState } from "@/api/runState"
-import type { Registry, Stage, Variant } from "@/api/types"
+import type { GraphNode, Registry, Stage, Variant } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
 
 /**
@@ -9,46 +9,44 @@ import { defaultsFor } from "@/components/fields/schema"
  */
 
 export interface SweepTally {
-  /** Parse nodes that actually executed: `node_finished` with `cache_hit: false`. */
-  parsed: number
-  /** Executions of the swept node. */
-  swept: number
+  /** Executions per node id: `node_finished` with `cache_hit: false`, across all variants. */
+  executed: Record<string, number>
   /** Every `node_finished` with `cache_hit: true`, any node. */
   cacheHits: number
   variants: number
 }
 
-export function tallySweep(
-  variants: VariantState[],
-  stageOf: Record<string, Stage | undefined>,
-  sweptId: string,
-): SweepTally {
-  let parsed = 0
-  let swept = 0
+export function tallySweep(variants: VariantState[]): SweepTally {
+  const executed: Record<string, number> = {}
   let cacheHits = 0
   for (const v of variants) {
     for (const n of Object.values(v.nodes)) {
-      const finished = n.status === "done" || n.status === "cached"
-      if (!finished) continue
-      if (n.cache_hit) {
-        cacheHits += 1
-        continue
-      }
-      if (stageOf[n.id] === "parse") parsed += 1
-      if (n.id === sweptId) swept += 1
+      if (n.status !== "done" && n.status !== "cached") continue
+      executed[n.id] = executed[n.id] ?? 0
+      if (n.cache_hit) cacheHits += 1
+      else executed[n.id] += 1
     }
   }
-  return { parsed, swept, cacheHits, variants: variants.length }
+  return { executed, cacheHits, variants: variants.length }
 }
 
 const times = (n: number) => `${n} ${n === 1 ? "time" : "times"}`
 
-const PAST: Partial<Record<Stage, string>> = { chunk: "chunked", clean: "cleaned", parse: "parsed" }
+const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`)
 
-/** `parsed 1 time, chunked 3 times, 4 cache hits`. Plain words, no glyphs. */
-export function tallyLine(t: SweepTally, sweptStage: Stage): string {
-  const verb = PAST[sweptStage] ?? `${sweptStage} ran`
-  return `parsed ${times(t.parsed)}, ${verb} ${times(t.swept)}, ${t.cacheHits} cache ${t.cacheHits === 1 ? "hit" : "hits"}`
+/**
+ * `Parse ran 1 time, Index ran 5 times. Load came from the cache.` Plain
+ * words, no glyphs, nodes in column order. A node that finished but never
+ * executed is named as coming from the cache rather than as "ran 0 times".
+ */
+export function tallyLine(t: SweepTally, column: { id: string; title: string }[]): string {
+  const titles = column.map((n) => n.title)
+  const name = (n: { id: string; title: string }) => (titles.filter((x) => x === n.title).length > 1 ? `${n.title} ${n.id}` : n.title)
+  const seen = column.filter((n) => n.id in t.executed)
+  const ran = seen.filter((n) => t.executed[n.id] > 0).map((n) => `${name(n)} ran ${times(t.executed[n.id])}`)
+  const cached = seen.filter((n) => t.executed[n.id] === 0).map(name)
+  if (!ran.length) return cached.length ? "Nothing ran: every step came from the cache." : "Nothing has finished yet."
+  return `${ran.join(", ")}.` + (cached.length ? ` ${list(cached)} came from the cache.` : "")
 }
 
 export interface VariantLabel {
@@ -57,7 +55,7 @@ export interface VariantLabel {
   fields: [string, string][]
 }
 
-const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v))
+const show = (v: unknown) => (v === null ? "native" : typeof v === "string" ? v : JSON.stringify(v))
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 /**
@@ -75,4 +73,44 @@ export function variantLabels(variants: Variant[], registry: Registry, stage: St
       .map(([k, val]): [string, string] => [k, show(val)])
     return { transform: v.transform, fields }
   })
+}
+
+/** A variant's short name in running text: its distinguishing values, else its transform. */
+export function variantName(label: VariantLabel | undefined): string {
+  if (!label) return ""
+  return label.fields.length ? label.fields.map(([, v]) => v).join(" ") : label.transform
+}
+
+/** The Matryoshka widths the preset asks for, below the native width. */
+export const MATRYOSHKA_DIMS = [1024, 512, 256, 128, 64]
+
+/**
+ * The "Matryoshka dimensions" preset: the Index node at its native width, then
+ * every preset width below it. `native` is the embedder's native width when
+ * the Build page knew it (from the Index card's last output). Without it the
+ * widest variant is `truncate_dim: null`, which is the native width whatever
+ * the model, followed by 512 down to 64; a width the model cannot reach fails
+ * as its own variant with the server's message.
+ */
+export function matryoshkaVariants(target: GraphNode, native?: number): Variant[] {
+  const known = native !== undefined && native > 0
+  const dims: (number | null)[] = known ? [native, ...MATRYOSHKA_DIMS.filter((d) => d < native)] : [null, ...MATRYOSHKA_DIMS.slice(1)]
+  return dims.map((d) => ({ transform: target.transform, config: { ...target.config, truncate_dim: d } }))
+}
+
+/**
+ * The variant every other is compared with. When the variants differ in
+ * `truncate_dim`, the widest (native, `null`, counts as widest of all), since
+ * the lesson is how much a narrower index loses. Otherwise the first variant.
+ * Only variants that produced hits are eligible.
+ */
+export function baselineIndex(variants: Variant[], hasHits: (i: number) => boolean): number | null {
+  const eligible = variants.map((_, i) => i).filter(hasHits)
+  if (!eligible.length) return null
+  const dims = variants.map((v) => v.config.truncate_dim)
+  if (new Set(dims.map((d) => JSON.stringify(d ?? null))).size > 1) {
+    const width = (i: number) => (dims[i] === null || dims[i] === undefined ? Infinity : Number(dims[i]))
+    return eligible.reduce((best, i) => (width(i) > width(best) ? i : best), eligible[0])
+  }
+  return eligible[0]
 }

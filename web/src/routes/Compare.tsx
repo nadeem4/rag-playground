@@ -1,40 +1,56 @@
-import { useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useId, useMemo, useState, type CSSProperties } from "react"
 import { Plus } from "lucide-react"
 
 import { api } from "@/api/client"
-import type { VariantState } from "@/api/runState"
-import type { ChunkSet, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
-import { useArtifactPayload } from "@/api/useArtifact"
+import type { NodeState, VariantState } from "@/api/runState"
+import type { GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
+import { loadPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { EmptyState } from "@/components/EmptyState"
-import { ChunkSetInspector } from "@/components/inspectors/ChunkSetInspector"
+import { CONTROL } from "@/components/fields/types"
+import { hitIds, topKAgreement } from "@/components/inspectors/hits"
+import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
+import type { InspectorStatus } from "@/components/inspectors/status"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
-import { columnOrder, defaultConfig, infoFor, readStoredGraph, STAGE_VERB, transformsFor, type PipelineGraph } from "@/state/graph"
+import {
+  ancestors,
+  columnOrder,
+  defaultConfig,
+  infoFor,
+  readStoredGraph,
+  terminalNode,
+  titleFor,
+  transformsFor,
+  upstreamOfStage,
+  type PipelineGraph,
+} from "@/state/graph"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
-import { tallyLine, tallySweep, variantLabels } from "@/state/sweep"
+import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
 import { RegistryScreen } from "./Shell"
 
 /**
  * Compare: sweep one node of the Build pipeline over N variants and show the
  * results side by side. Each variant sits in its own column, its editor above
- * its output, so a config and what it produced read together.
+ * the output of the node the sweep runs through, so a config and what it
+ * produced read together.
  */
 export function Compare() {
   const reg = useRegistry()
   if (reg.kind !== "ready") return <RegistryScreen state={reg} />
+  const params = new URLSearchParams(window.location.search)
   const graph = readStoredGraph(reg.registry)
-  const wanted = new URLSearchParams(window.location.search).get("node")
+  const wanted = params.get("node")
   const target = graph?.nodes.find((n) => n.id === wanted) ?? graph?.nodes.find((n) => n.stage === "chunk")
   if (!graph || !target || !graph.nodes.some((n) => n.stage === "source" && n.config.sha)) {
     return (
       <main className="flex min-h-0 flex-1 flex-col bg-surface">
         <EmptyState title="No pipeline to compare">
-          Build a pipeline with a file and a Chunk step first, then press Sweep on the Chunk card.{" "}
+          Build a pipeline with a file first, then press Sweep on a card.{" "}
           <a href="/" className="text-fg underline">
             Go to Build
           </a>
@@ -42,7 +58,9 @@ export function Compare() {
       </main>
     )
   }
-  return <Sweep registry={reg.registry} graph={graph} target={target} />
+  const native = Number(params.get("native")) || undefined
+  const preset = params.get("preset") === "matryoshka" && target.stage === "index" ? "matryoshka" : undefined
+  return <Sweep registry={reg.registry} graph={graph} target={target} preset={preset} native={native} />
 }
 
 /** The node's own variant first, then every other transform of its stage on defaults. */
@@ -54,28 +72,99 @@ export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Va
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
-function Sweep({ registry, graph, target }: { registry: Registry; graph: PipelineGraph; target: GraphNode }) {
+/** Payloads by artifact id, loaded once each. Artifacts are immutable, so nothing is refetched. */
+function usePayloads(ids: (string | undefined)[]): (id: string | undefined) => { status: InspectorStatus; data?: unknown } {
+  const [data, setData] = useState<Record<string, unknown>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const key = ids.filter(Boolean).join(",")
+  useEffect(() => {
+    let live = true
+    for (const id of new Set(key.split(",").filter(Boolean))) {
+      loadPayload(id).then(
+        (d) => live && setData((m) => (id in m ? m : { ...m, [id]: d })),
+        (e: unknown) => live && setErrors((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) })),
+      )
+    }
+    return () => {
+      live = false
+    }
+  }, [key])
+  return (id) => {
+    if (!id) return { status: { kind: "ready" } }
+    if (id in data) return { status: { kind: "ready" }, data: data[id] }
+    if (id in errors) return { status: { kind: "error", message: errors[id] } }
+    return { status: { kind: "loading" } }
+  }
+}
+
+const finished = (n?: NodeState) => n !== undefined && (n.status === "done" || n.status === "cached")
+
+function Sweep({
+  registry,
+  graph,
+  target,
+  preset,
+  native,
+}: {
+  registry: Registry
+  graph: PipelineGraph
+  target: GraphNode
+  preset?: "matryoshka"
+  native?: number
+}) {
+  const throughId = useId()
   const transforms = transformsFor(registry, target.stage)
-  const [variants, setVariants] = useState<Variant[]>(() => seedVariants(target, transforms))
-  const [submitted, setSubmitted] = useState<Variant[]>([])
+  const order = useMemo(() => columnOrder(graph), [graph])
+  // The target and every card that depends on it: where a sweep can stop.
+  const downstream = useMemo(() => order.filter((n) => n.id === target.id || ancestors(graph, n.id, registry).has(target.id)), [order, graph, registry, target.id])
+  const terminal = terminalNode(graph)
+  const [through, setThrough] = useState<string>(() =>
+    (preset || target.stage === "index" || target.stage === "retrieve") && terminal && downstream.includes(terminal) ? terminal.id : target.id,
+  )
+  const [variants, setVariants] = useState<Variant[]>(() => (preset ? matryoshkaVariants(target, native) : seedVariants(target, transforms)))
+  const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string }>({ variants: [], through })
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
 
-  const stageOf = useMemo(() => Object.fromEntries(graph.nodes.map((n) => [n.id, n.stage])), [graph])
-  const tally = runId ? tallySweep(run.variants, stageOf, target.id) : null
-  const labels = variantLabels(submitted, registry, target.stage)
-  const upstream = columnOrder(graph).filter((n) => n.id !== target.id && (n.stage === "source" || n.stage === "parse" || n.stage === "clean"))
+  const shownThrough = graph.nodes.find((n) => n.id === submitted.through) ?? target
+  const tally = runId ? tallySweep(run.variants) : null
+  const labels = variantLabels(submitted.variants, registry, target.stage)
+  const upstream = order.filter((n) => n.stage !== "source" && ancestors(graph, target.id, registry).has(n.id) && n.stage !== "query")
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
+
+  // Per variant: the through node's output, the chunk set to place hits on,
+  // and the index descriptor (for its embedding counts).
+  const stateOf = (i: number) => run.variants.find((s) => s.index === i)
+  const chunkNode = shownThrough.stage === "chunk" ? undefined : upstreamOfStage(graph, shownThrough.id, "chunk")
+  const indexNode = target.stage === "index" ? target : upstreamOfStage(graph, shownThrough.id, "index")
+  const artifact = (s: VariantState | undefined, id: string | undefined) => (id && finished(s?.nodes[id]) ? s!.nodes[id].artifact_id : undefined)
+  const ids = submitted.variants.map((_, i) => ({
+    through: artifact(stateOf(i), shownThrough.id),
+    chunks: artifact(stateOf(i), chunkNode?.id),
+    index: artifact(stateOf(i), indexNode?.id),
+  }))
+  const payload = usePayloads(ids.flatMap((x) => [x.through, x.chunks, x.index]))
+  const hitLists = ids.map((x) => hitIds(payload(x.through).data))
+  const base = run.closed ? baselineIndex(submitted.variants, (i) => (hitLists[i]?.length ?? 0) > 0) : null
+  // A Matryoshka baseline is named by the width its index was built at, which
+  // the descriptor knows even when the variant asked for "native".
+  const baseDim = base === null ? undefined : (payload(ids[base]?.index).data as IndexDescriptor | undefined)?.dim
+  const baseName = base === null ? "" : "truncate_dim" in submitted.variants[base].config && typeof baseDim === "number" ? String(baseDim) : variantName(labels[base])
 
   async function sweep() {
     setError(null)
     setSubmitting(true)
     try {
-      const { run_id } = await api.createSweep({ graph, node_id: target.id, variants })
-      setSubmitted(variants)
+      const { run_id } = await api.createSweep({
+        graph,
+        node_id: target.id,
+        variants,
+        ...(through !== target.id ? { through } : {}),
+      })
+      setSubmitted({ variants, through })
       setRunId(run_id)
     } catch (err) {
       const routed = routeRunError(err, graph)
@@ -94,13 +183,14 @@ function Sweep({ registry, graph, target }: { registry: Registry; graph: Pipelin
     // A different number of variants no longer lines up with the results.
     if (next.length !== variants.length) {
       setRunId(null)
-      setSubmitted([])
+      setSubmitted({ variants: [], through })
     }
   }
 
   const cols = Math.max(variants.length, 1)
   const grid: CSSProperties = { gridTemplateColumns: `repeat(${cols}, minmax(400px, 1fr))` }
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
+  const verb = titleFor(target)
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -108,15 +198,31 @@ function Sweep({ registry, graph, target }: { registry: Registry; graph: Pipelin
         <div className="flex min-w-0 items-baseline gap-3">
           <h1 className="text-xl font-semibold">Compare</h1>
           <p className="truncate text-sm text-fg-muted">
-            The {STAGE_VERB[target.stage] ?? target.stage} step over{" "}
-            <span className="font-mono">{filename}</span>, after{" "}
-            {upstream
-              .filter((n) => n.stage !== "source")
-              .map((n) => n.transform)
-              .join(", ") || "no steps"}
+            The {verb} step over <span className="font-mono">{filename}</span>
+            {upstream.length ? (
+              <>
+                , after <span className="font-mono">{upstream.map((n) => n.transform).join(", ")}</span>
+              </>
+            ) : null}
+            {preset ? ", at Matryoshka dimensions" : null}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {downstream.length > 1 ? (
+            <div className="flex items-center gap-2">
+              <label htmlFor={throughId} className="text-sm text-fg-muted">
+                Show
+              </label>
+              <select id={throughId} className={`${CONTROL} w-auto`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
+                {downstream.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {titleFor(n)}
+                    {n.stage === "clean" || n.stage === "rerank" ? ` ${n.id}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }])}>
             <Plus aria-hidden strokeWidth={1.75} />
             Add variant
@@ -140,22 +246,16 @@ function Sweep({ registry, graph, target }: { registry: Registry; graph: Pipelin
         ) : tally ? (
           <>
             <p data-testid="tally" className="font-mono text-sm text-fg">
-              {tallyLine(tally, target.stage)}
+              {tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))}
             </p>
             <p className="text-xs text-fg-muted">
-              {running !== null
-                ? `running variant ${running + 1} of ${submitted.length}`
-                : run.closed
-                  ? tally.parsed === 0
-                    ? "Parse was already in the cache from an earlier run."
-                    : "Every variant read the same parsed document."
-                  : "starting"}
+              {running !== null ? `running variant ${running + 1} of ${submitted.variants.length}` : run.closed ? "Steps above the swept one ran once; the rest came from the cache." : "starting"}
             </p>
             {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
           </>
         ) : (
           <p className="text-sm text-fg-muted">
-            Each variant runs the pipeline up to the {STAGE_VERB[target.stage] ?? target.stage} step. Steps above it are shared, so they run once and the rest come from the cache.
+            Each variant runs the pipeline through the {titleFor(graph.nodes.find((n) => n.id === through) ?? target)} step. Steps above {verb} are shared, so they run once and the rest come from the cache.
           </p>
         )}
       </div>
@@ -167,21 +267,44 @@ function Sweep({ registry, graph, target }: { registry: Registry; graph: Pipelin
               key={i}
               variant={v}
               transforms={transforms}
-              changed={submitted[i] !== undefined && !same(submitted[i], v)}
+              changed={submitted.variants[i] !== undefined && !same(submitted.variants[i], v)}
               onChange={(nv) => setVariants(variants.map((x, j) => (j === i ? nv : x)))}
               onRemove={variants.length > 1 && !busy ? () => reshape(variants.filter((_, j) => j !== i)) : undefined}
             />
           ))}
-          {variants.map((_, i) => (
-            <VariantResult
-              key={i}
-              state={run.variants.find((s) => s.index === i)}
-              pending={runId !== null && i < submitted.length}
-              label={labels[i]}
-              targetId={target.id}
-              type={infoFor(registry, { stage: target.stage, transform: submitted[i]?.transform ?? target.transform })?.output ?? "chunk_set"}
-            />
-          ))}
+          {variants.map((_, i) => {
+            const s = stateOf(i)
+            const out = payload(ids[i]?.through)
+            const chunks = payload(ids[i]?.chunks)
+            const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
+            const agreement =
+              base !== null && i !== base && hitLists[i] && hitLists[base] ? topKAgreement(hitLists[base]!, hitLists[i]!) : null
+            return (
+              <VariantResult
+                key={i}
+                state={s}
+                pending={runId !== null && i < submitted.variants.length}
+                label={labels[i]}
+                node={shownThrough}
+                type={
+                  shownThrough.id === target.id
+                    ? (infoFor(registry, { stage: target.stage, transform: submitted.variants[i]?.transform ?? target.transform })?.output ?? "unknown")
+                    : (infoFor(registry, shownThrough)?.output ?? "unknown")
+                }
+                data={out.data}
+                status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
+                chunks={chunks.data}
+                agreement={
+                  agreement
+                    ? `${agreement.match} of ${agreement.of} match ${baseName}`
+                    : i === base && hitLists.some((h, j) => j !== i && h)
+                      ? "the baseline the others are matched against"
+                      : null
+                }
+                embeddings={embeddingCounts(descriptor)}
+              />
+            )
+          })}
         </div>
       </div>
     </main>
@@ -192,67 +315,87 @@ function VariantResult({
   state,
   pending,
   label,
-  targetId,
+  node,
   type,
+  data,
+  status,
+  chunks,
+  agreement,
+  embeddings,
 }: {
   state?: VariantState
   pending: boolean
-  label?: { transform: string; fields: [string, string][] }
-  targetId: string
+  label?: VariantLabel
+  node: GraphNode
   type: string
+  data?: unknown
+  status: InspectorStatus
+  chunks?: unknown
+  /** Top-5 agreement with the baseline variant: the number a sweep is for. */
+  agreement: string | null
+  /** `384 embedded, 0 from cache`, when the index descriptor reports it. */
+  embeddings: string | null
 }) {
-  const node = state?.nodes[targetId]
-  const ok = node && (node.status === "done" || node.status === "cached")
-  const payload = useArtifactPayload(ok ? node.artifact_id : undefined)
+  const n = state?.nodes[node.id]
+  const failed = state ? Object.values(state.nodes).find((x) => x.status === "failed") : undefined
 
   let body
   if (!pending) {
     body = <EmptyState title="Not swept yet">Press Sweep to run this variant.</EmptyState>
-  } else if (!node || node.status === "pending" || node.status === "running") {
+  } else if (failed && (!n || n.status !== "done")) {
+    body = (
+      <div role="alert" className="flex flex-col gap-1 p-4">
+        <p className="text-sm font-medium text-danger">This variant failed at {failed.id}</p>
+        <p className="font-mono text-xs break-words text-fg-muted">{errorHeadline(failed.error ?? "")}</p>
+        <details className="rounded-control border border-hairline">
+          <summary className="flex h-row-compact items-center px-2 text-xs text-fg-muted select-none hover:bg-muted">Traceback</summary>
+          <pre className="m-0 max-h-[240px] overflow-auto border-t border-hairline p-2 font-mono text-2xs text-fg-muted">{failed.error}</pre>
+        </details>
+      </div>
+    )
+  } else if (!n || n.status === "pending" || n.status === "running") {
     body = (
       <p role="status" className="p-4 text-sm text-fg-muted">
         {state ? "Running" : "Waiting for earlier variants"}
       </p>
     )
-  } else if (node.status === "failed") {
-    body = (
-      <div role="alert" className="flex flex-col gap-1 p-4">
-        <p className="text-sm font-medium text-danger">This variant failed</p>
-        <p className="font-mono text-xs break-words text-fg-muted">{errorHeadline(node.error ?? "")}</p>
-        <details className="rounded-control border border-hairline">
-          <summary className="flex h-row-compact items-center px-2 text-xs text-fg-muted select-none hover:bg-muted">Traceback</summary>
-          <pre className="m-0 max-h-[240px] overflow-auto border-t border-hairline p-2 font-mono text-2xs text-fg-muted">{node.error}</pre>
-        </details>
-      </div>
-    )
-  } else if (node.status === "skipped") {
+  } else if (n.status === "skipped") {
     body = <EmptyState title="Skipped">A step above it failed, or the sweep was cancelled.</EmptyState>
   } else {
-    // Side by side there is no room for the chunk detail panel; the spine and
-    // the boundaries over the text are what a comparison reads.
-    body =
-      type === "chunk_set" ? (
-        <ChunkSetInspector chunkSet={payload.data as ChunkSet | undefined} status={payload.status} showDetail={false} />
-      ) : (
-        <ArtifactInspector type={type} data={payload.data} status={payload.status} />
-      )
+    body = <ArtifactInspector type={type} data={data} status={status} context={chunks ? { chunks: chunks as never } : undefined} />
   }
 
   return (
     <section aria-label={`Result ${label?.transform ?? ""}`} className="flex min-w-0 flex-col bg-surface">
-      <header className="flex min-h-[40px] flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
-          <h2 className="font-mono text-sm font-semibold">{label?.transform ?? "not swept"}</h2>
-          {label?.fields.map(([k, v]) => (
-            <span key={k} className="font-mono text-xs text-fg-muted">
-              {k} <span className="text-fg">{v}</span>
+      <header className="flex min-h-[40px] flex-col justify-center gap-1 border-b border-hairline px-3 py-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+            <h2 className="font-mono text-sm font-semibold">{label?.transform ?? "not swept"}</h2>
+            {label?.fields.map(([k, v]) => (
+              <span key={k} className="font-mono text-xs text-fg-muted">
+                {k} <span className="text-fg">{v}</span>
+              </span>
+            ))}
+          </div>
+          {finished(n) ? (
+            <span className="font-mono text-xs text-fg-muted">
+              {titleFor(node)} {n!.cache_hit ? "cached" : "computed"} {fmtMs(n!.duration_ms)}
             </span>
-          ))}
+          ) : null}
         </div>
-        {ok ? (
-          <span className="font-mono text-xs text-fg-muted">
-            {node.cache_hit ? "cached" : "computed"} {fmtMs(node.duration_ms)}
-          </span>
+        {agreement || embeddings ? (
+          <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
+            {agreement ? (
+              <span data-testid="agreement" className="font-medium text-fg">
+                {agreement}
+              </span>
+            ) : null}
+            {embeddings ? (
+              <span data-testid="embeddings" className="text-xs text-fg-muted">
+                {embeddings}
+              </span>
+            ) : null}
+          </p>
         ) : null}
       </header>
       <div className="min-w-0 p-3">{body}</div>

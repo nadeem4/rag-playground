@@ -7,6 +7,8 @@ import type { JsonSchema, PortSchema, Registry, Stage, TransformInfo } from "@/a
  */
 
 const port = (type: PortSchema["type"]): PortSchema => ({ type, variadic: false, ambient: false, required: true })
+const ambient = (type: PortSchema["type"]): PortSchema => ({ ...port(type), ambient: true })
+const variadic = (type: PortSchema["type"]): PortSchema => ({ ...port(type), variadic: true })
 
 function t(
   stage: Stage,
@@ -52,5 +54,24 @@ export const TEST_REGISTRY: Registry = {
       max_tokens: { type: "integer", default: 256, title: "Max Tokens" },
       overlap: { type: "integer", default: 32, title: "Overlap" },
     }),
+  },
+  index: {
+    lancedb: t("index", "lancedb", "index", { chunks: variadic("chunk_set") }, {
+      embedder: { type: "string", default: "fake-deterministic", title: "Embedder" },
+      truncate_dim: { anyOf: [{ type: "integer" }, { type: "null" }], default: null, title: "Truncate Dim" },
+    }),
+  },
+  query: {
+    text: t("query", "text", "query", {}, { text: { type: "string", default: "", title: "Text" } }),
+  },
+  retrieve: {
+    dense: t("retrieve", "dense", "retrieval_result", { index: port("index"), query: ambient("query") }, { top_k: { type: "integer", default: 5, title: "Top K" } }),
+    hybrid_rrf: t("retrieve", "hybrid_rrf", "retrieval_result", { index: port("index"), query: ambient("query") }, { top_k: { type: "integer", default: 5, title: "Top K" } }),
+  },
+  rerank: {
+    mmr: t("rerank", "mmr", "retrieval_result", { result: port("retrieval_result"), query: ambient("query"), index: ambient("index") }, { lambda_mult: { type: "number", default: 0.5, title: "Lambda Mult" } }, true),
+  },
+  use_case: {
+    search: t("use_case", "search", "output", { result: port("retrieval_result") }, { max_snippet_chars: { type: "integer", default: 400, title: "Max Snippet Chars" } }),
   },
 }

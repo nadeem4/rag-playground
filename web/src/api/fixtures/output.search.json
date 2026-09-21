@@ -1,0 +1,123 @@
+{
+  "kind": "search",
+  "payload": {
+    "query_id": "381a9a15f1212a8b",
+    "total_candidates": 6,
+    "results": [
+      {
+        "rank": 1,
+        "score": 0.03278688524590164,
+        "component_scores": {
+          "dense": 0.38284099102020264,
+          "bm25": 5.131432056427002
+        },
+        "prior_rank": 1,
+        "prior_score": 0.03278688524590164,
+        "retriever": "hybrid_rrf",
+        "snippet": "Overlap and its cost\n\nOverlap protects answers that straddle a boundary, but every overlapped token is embedded and stored twice. At an overlap of twenty percent the index grows by a quarter, and near-duplicate chunks start to crowd each other out of the top results unless a reranker such as MMR spreads them.\n\nWhat to measure",
+        "chunk_id": "e98302ea44442e5b",
+        "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "page_span": [
+          3,
+          3
+        ],
+        "source_element_ids": [
+          "e00014",
+          "e00015",
+          "e00017"
+        ]
+      },
+      {
+        "rank": 2,
+        "score": 0.031024531024531024,
+        "component_scores": {
+          "dense": 0.07765567302703857,
+          "bm25": 0.6810339093208313
+        },
+        "prior_rank": 5,
+        "prior_score": 0.031024531024531024,
+        "retriever": "hybrid_rrf",
+        "snippet": "Recursive character splitting\n\nRecursive splitting tries a list of separators in order: blank lines, then single newlines, then sentence ends, then spaces. It only falls back to a finer separator when a piece is still larger than the budget. The result respects paragraphs where it can and sentences where it must, which is why it is the default in most frameworks.\n\nHeading-aware sections",
+        "chunk_id": "f5c1c62c9cc10944",
+        "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "page_span": [
+          2,
+          2
+        ],
+        "source_element_ids": [
+          "e00008",
+          "e00009",
+          "e00010"
+        ]
+      },
+      {
+        "rank": 3,
+        "score": 0.0315136476426799,
+        "component_scores": {
+          "dense": 0.1904125213623047,
+          "bm25": 0.65803462266922
+        },
+        "prior_rank": 2,
+        "prior_score": 0.0315136476426799,
+        "retriever": "hybrid_rrf",
+        "snippet": "Heading-aware sections\n\nA heading-aware chunker starts a new chunk at every heading and carries the heading path into the chunk metadata. This only works when the parser reports headings. A plain text extractor returns every line as a paragraph, so the chunker sees one long section and falls back to its token budget.\n\nOverlap and its cost",
+        "chunk_id": "34f119b0321a0705",
+        "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "page_span": [
+          2,
+          3
+        ],
+        "source_element_ids": [
+          "e00010",
+          "e00011",
+          "e00014"
+        ]
+      },
+      {
+        "rank": 4,
+        "score": 0.0315136476426799,
+        "component_scores": {
+          "dense": 0.08849316835403442,
+          "bm25": 0.7811414003372192
+        },
+        "prior_rank": 3,
+        "prior_score": 0.0315136476426799,
+        "retriever": "hybrid_rrf",
+        "snippet": "What to measure\n\nCompare strategies on the same parsed document. Count chunks, look at the token distribution, and check recall at ten on a fixed question set. A strategy that wins on one corpus can lose on another, so the comparison is the result, not the ranking.",
+        "chunk_id": "862225532f622ea7",
+        "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "page_span": [
+          3,
+          3
+        ],
+        "source_element_ids": [
+          "e00017",
+          "e00018"
+        ]
+      },
+      {
+        "rank": 5,
+        "score": 0.03149801587301587,
+        "component_scores": {
+          "dense": 0.10389465093612671,
+          "bm25": 0.6731910109519958
+        },
+        "prior_rank": 4,
+        "prior_score": 0.03149801587301587,
+        "retriever": "hybrid_rrf",
+        "snippet": "Token counts in this note come from the heuristic counter, not a model tokenizer.\n\nFixed windows\n\nThe simplest strategy cuts the text every N tokens with an overlap of M tokens. It is predictable and cheap, and every chunk has the same cost to embed. It is also blind to structure: a window will happily start in the middle of a table row or end halfway through a definition.",
+        "chunk_id": "10a57a19c6a746b9",
+        "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "page_span": [
+          1,
+          1
+        ],
+        "source_element_ids": [
+          "e00003",
+          "e00004",
+          "e00005"
+        ]
+      }
+    ]
+  }
+}

@@ -12,14 +12,43 @@ import { defaultsFor } from "@/components/fields/schema"
 
 export type PipelineGraph = Graph
 
-/** The stages this phase's column shows, in pipeline order. */
-export const COLUMN_STAGES: Stage[] = ["source", "parse", "clean", "chunk"]
+/**
+ * The column, top to bottom (plan I-7). Clean and Rerank are stackable and
+ * removable; the rest appear once.
+ */
+export const COLUMN_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "index", "query", "retrieve", "rerank", "use_case"]
+
+/** Stages a new graph starts with. Clean and Rerank are added by the user. */
+export const DEFAULT_STAGES: Stage[] = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
 
 export const STAGE_VERB: Partial<Record<Stage, string>> = {
   source: "Load",
   parse: "Parse",
   clean: "Clean",
   chunk: "Chunk",
+  index: "Index",
+  query: "Ask",
+  retrieve: "Retrieve",
+  rerank: "Rerank",
+  use_case: "Search",
+}
+
+function stageRank(stage: Stage): number {
+  const i = COLUMN_STAGES.indexOf(stage)
+  return i === -1 ? COLUMN_STAGES.length : i
+}
+
+/**
+ * A card's title. Every stage is a plain verb, except the use case: that stage
+ * is whatever the pipeline is for, and its transform's name is already the
+ * verb (`search` today, `chat` later), so the card says what it does.
+ */
+export function titleFor(node: Pick<GraphNode, "stage" | "transform">): string {
+  if (node.stage === "use_case" && node.transform) {
+    const t = node.transform.replace(/_/g, " ")
+    return t.charAt(0).toUpperCase() + t.slice(1)
+  }
+  return STAGE_VERB[node.stage] ?? node.stage
 }
 
 export function transformsFor(registry: Registry, stage: Stage): TransformInfo[] {
@@ -36,10 +65,11 @@ export function defaultConfig(info: TransformInfo): Record<string, unknown> {
 
 /**
  * Transforms a new graph prefers when the live registry has them. Docling is
- * layout-aware, so it is the better first parse; absent, the stage's first
- * registered transform is used as before.
+ * layout-aware, so it is the better first parse. Hybrid RRF fuses the dense and
+ * lexical rankings, so its hits carry both component scores and the inspector
+ * shows both. Absent, the stage's first registered transform is used.
  */
-export const PREFERRED_DEFAULT: Partial<Record<Stage, string>> = { parse: "docling" }
+export const PREFERRED_DEFAULT: Partial<Record<Stage, string>> = { parse: "docling", retrieve: "hybrid_rrf", use_case: "search" }
 
 function defaultTransform(registry: Registry, stage: Stage): TransformInfo | undefined {
   const preferred = PREFERRED_DEFAULT[stage]
@@ -64,23 +94,55 @@ export function portFor(registry: Registry, src: GraphNode, dst: GraphNode): str
   return hit ? hit[0] : null
 }
 
-function link(registry: Registry, src: GraphNode, dst: GraphNode): GraphEdge[] {
-  const port = portFor(registry, src, dst)
-  return port ? [{ src: src.id, dst: dst.id, port }] : []
+/**
+ * Wire every explicit input port that has no edge yet from the nearest card
+ * above it in the column whose output is that port's type (plan I-7). Ambient
+ * ports get no edge: the server binds them.
+ */
+export function wire(g: PipelineGraph, registry: Registry): PipelineGraph {
+  const order = columnOrder(g)
+  const added: GraphEdge[] = []
+  order.forEach((dst, i) => {
+    const inputs = infoFor(registry, dst)?.inputs ?? {}
+    for (const [port, spec] of Object.entries(inputs)) {
+      if (spec.ambient || g.edges.some((e) => e.dst === dst.id && e.port === port)) continue
+      const src = order
+        .slice(0, i)
+        .reverse()
+        .find((n) => infoFor(registry, n)?.output === spec.type)
+      if (src) added.push({ src: src.id, dst: dst.id, port })
+    }
+  })
+  return added.length ? { ...g, edges: [...g.edges, ...added] } : g
 }
 
-/** Source, parse and chunk, each on its stage's default transform, wired in a chain. */
+/** The default column for this registry, wired. Stages it lacks are skipped. */
 export function initialGraph(registry: Registry): PipelineGraph {
-  const chain = [
-    makeNode(registry, "source", "source"),
-    makeNode(registry, "parse", "parse"),
-    makeNode(registry, "chunk", "chunk"),
-  ].filter((n): n is GraphNode => n !== null)
-  const edges = chain.slice(1).flatMap((n, i) => link(registry, chain[i], n))
-  return { nodes: chain, edges }
+  const nodes = DEFAULT_STAGES.map((stage) => makeNode(registry, stage, stage)).filter((n): n is GraphNode => n !== null)
+  return wire({ nodes, edges: [] }, registry)
 }
 
-/** Kahn's algorithm, ties broken by insertion order, so a chain reads top to bottom. */
+/**
+ * Add any default stage a stored graph lacks (one saved before retrieval
+ * existed), then wire the new cards. A complete graph comes back unchanged.
+ */
+export function completeGraph(g: PipelineGraph, registry: Registry): PipelineGraph {
+  const have = new Set(g.nodes.map((n) => n.stage))
+  let next = g
+  for (const stage of DEFAULT_STAGES) {
+    if (have.has(stage)) continue
+    const id = next.nodes.some((n) => n.id === stage) ? freshId(next, stage) : stage
+    const node = makeNode(registry, id, stage)
+    if (node) next = { nodes: [...next.nodes, node], edges: next.edges }
+  }
+  return next === g ? g : wire(next, registry)
+}
+
+/**
+ * Column order: a topological walk (Kahn, ties by insertion order), then a
+ * stable sort by stage. The sort is what puts Ask, which has no edges at all,
+ * between Index and Retrieve; within a stage, a stack keeps its edge order.
+ */
 export function columnOrder(g: PipelineGraph): GraphNode[] {
   const indeg = new Map(g.nodes.map((n) => [n.id, 0]))
   for (const e of g.edges) indeg.set(e.dst, (indeg.get(e.dst) ?? 0) + 1)
@@ -99,6 +161,9 @@ export function columnOrder(g: PipelineGraph): GraphNode[] {
   // A cycle should never exist; if it does, still show every node.
   for (const n of g.nodes) if (!out.includes(n)) out.push(n)
   return out
+    .map((n, i) => [n, i] as const)
+    .sort((a, b) => stageRank(a[0].stage) - stageRank(b[0].stage) || a[1] - b[1])
+    .map(([n]) => n)
 }
 
 function freshId(g: PipelineGraph, prefix: string): string {
@@ -109,33 +174,48 @@ function freshId(g: PipelineGraph, prefix: string): string {
 }
 
 /**
- * Insert a clean node after the last cleaner (or after parse when there is
- * none). Edges leaving that node now leave the new cleaner instead, on the
- * same ports. Picks the first cleaner not already in the stack.
+ * Insert a node of a stackable stage after the last node of that stage or,
+ * when there is none, after the last card above it that feeds it (Parse for a
+ * cleaner, Retrieve for a reranker). Edges that left that anchor carrying the
+ * new node's output type now leave the new node, on the same ports. Picks the
+ * first transform not already in the stack.
  */
-export function addCleaner(g: PipelineGraph, registry: Registry): PipelineGraph {
-  const order = columnOrder(g)
-  const anchor = [...order].reverse().find((n) => n.stage === "clean") ?? order.find((n) => n.stage === "parse")
-  if (!anchor) return g
-  const used = new Set(g.nodes.filter((n) => n.stage === "clean").map((n) => n.transform))
-  const choices = transformsFor(registry, "clean")
+export function addStacked(g: PipelineGraph, registry: Registry, stage: Stage): PipelineGraph {
+  const choices = transformsFor(registry, stage)
+  const used = new Set(g.nodes.filter((n) => n.stage === stage).map((n) => n.transform))
   const pick = choices.find((c) => !used.has(c.name)) ?? choices[0]
   if (!pick) return g
-  const node = makeNode(registry, freshId(g, "clean"), "clean", pick.name)!
-  const outgoing = g.edges.filter((e) => e.src === anchor.id)
+  const order = columnOrder(g)
+  const anchor = [...order]
+    .reverse()
+    .find((n) => stageRank(n.stage) <= stageRank(stage) && infoFor(registry, n)?.output === pick.output)
+  if (!anchor) return g
+  const node = makeNode(registry, freshId(g, stage), stage, pick.name)!
+  const byId = new Map(g.nodes.map((n) => [n.id, n]))
+  const moves = (e: GraphEdge) => {
+    const dst = byId.get(e.dst)
+    return e.src === anchor.id && dst !== undefined && infoFor(registry, dst)?.inputs[e.port]?.type === pick.output
+  }
+  const port = portFor(registry, anchor, node)
   const edges = [
-    ...g.edges.filter((e) => e.src !== anchor.id),
-    ...link(registry, anchor, node),
-    ...outgoing.map((e) => ({ ...e, src: node.id })),
+    ...g.edges.filter((e) => !moves(e)),
+    ...(port ? [{ src: anchor.id, dst: node.id, port }] : []),
+    ...g.edges.filter(moves).map((e) => ({ ...e, src: node.id })),
   ]
   const at = g.nodes.indexOf(anchor) + 1
   return { nodes: [...g.nodes.slice(0, at), node, ...g.nodes.slice(at)], edges }
 }
 
+/** A cleaner between Parse (or the last cleaner) and Chunk. */
+export const addCleaner = (g: PipelineGraph, registry: Registry) => addStacked(g, registry, "clean")
+
+/** A reranker between Retrieve (or the last reranker) and Search. */
+export const addReranker = (g: PipelineGraph, registry: Registry) => addStacked(g, registry, "rerank")
+
 /**
  * Remove a node and bridge the gap: each of its consumers is fed by its
  * (single) producer instead, on the consumer's own port. Meant for endomorphic
- * nodes such as cleaners, where input and output types match.
+ * nodes such as cleaners and rerankers, where input and output types match.
  */
 export function removeNode(g: PipelineGraph, id: string): PipelineGraph {
   const incoming = g.edges.filter((e) => e.dst === id)
@@ -169,15 +249,50 @@ export function setConfig(g: PipelineGraph, id: string, config: Record<string, u
   return { ...g, nodes: g.nodes.map((n) => (n.id === id ? { ...n, config } : n)) }
 }
 
-export function ancestors(g: PipelineGraph, id: string): Set<string> {
-  const out = new Set<string>()
+/**
+ * What the server binds each unwired ambient port of `id` to: the unique
+ * terminal producer of the port's type that is neither `id` nor one of its
+ * descendants (core/graph.py). Nothing when there is none, or more than one.
+ */
+export function ambientSources(g: PipelineGraph, registry: Registry, id: string): string[] {
+  const node = g.nodes.find((n) => n.id === id)
+  const inputs = node ? (infoFor(registry, node)?.inputs ?? {}) : {}
+  const blocked = new Set([id])
   const stack = [id]
   while (stack.length) {
     const cur = stack.pop()!
     for (const e of g.edges) {
-      if (e.dst === cur && !out.has(e.src)) {
-        out.add(e.src)
-        stack.push(e.src)
+      if (e.src === cur && !blocked.has(e.dst)) {
+        blocked.add(e.dst)
+        stack.push(e.dst)
+      }
+    }
+  }
+  const out: string[] = []
+  for (const [port, spec] of Object.entries(inputs)) {
+    if (!spec.ambient || g.edges.some((e) => e.dst === id && e.port === port)) continue
+    const candidates = new Set(g.nodes.filter((n) => !blocked.has(n.id) && infoFor(registry, n)?.output === spec.type).map((n) => n.id))
+    const terminal = [...candidates].filter((c) => !g.edges.some((e) => e.src === c && candidates.has(e.dst)))
+    if (terminal.length === 1) out.push(terminal[0])
+  }
+  return out
+}
+
+/**
+ * Every node `id` depends on. Given the registry, ambient bindings count too:
+ * Retrieve depends on Ask although no edge says so.
+ */
+export function ancestors(g: PipelineGraph, id: string, registry?: Registry): Set<string> {
+  const out = new Set<string>()
+  const stack = [id]
+  while (stack.length) {
+    const cur = stack.pop()!
+    const parents = g.edges.filter((e) => e.dst === cur).map((e) => e.src)
+    if (registry) parents.push(...ambientSources(g, registry, cur))
+    for (const p of parents) {
+      if (!out.has(p)) {
+        out.add(p)
+        stack.push(p)
       }
     }
   }
@@ -198,18 +313,27 @@ export function upstreamOfStage(g: PipelineGraph, id: string, stage: Stage): Gra
   return undefined
 }
 
+/** The last card of the column: the use case, the node a question runs through. */
+export function terminalNode(g: PipelineGraph): GraphNode | undefined {
+  const order = columnOrder(g)
+  return order.find((n) => n.stage === "use_case") ?? order[order.length - 1]
+}
+
 /**
  * Identity of a node's output as the column last saw it: its transform and
- * config and those of every ancestor. When this changes, a stored result is
- * stale.
+ * config and those of every ancestor (ambient ones too, given the registry).
+ * When this changes, a stored result is stale.
  */
-export function signature(g: PipelineGraph, id: string): string {
-  const ids = [...ancestors(g, id), id].sort()
+export function signature(g: PipelineGraph, id: string, registry?: Registry): string {
+  const ids = [...ancestors(g, id, registry), id].sort()
   const byId = new Map(g.nodes.map((n) => [n.id, n]))
   return JSON.stringify(ids.map((x) => [x, byId.get(x)?.transform, byId.get(x)?.config]))
 }
 
-/** Parse a stored graph; null unless every node still names a known transform. */
+/**
+ * Parse a stored graph; null unless every node still names a known transform.
+ * A graph stored before retrieval existed is completed with the new cards.
+ */
 export function loadGraph(raw: string | null, registry: Registry): PipelineGraph | null {
   if (!raw) return null
   try {
@@ -218,7 +342,7 @@ export function loadGraph(raw: string | null, registry: Registry): PipelineGraph
     if (!g.nodes.every((n) => typeof n.id === "string" && registry[n.stage]?.[n.transform])) return null
     const ids = new Set(g.nodes.map((n) => n.id))
     if (!g.edges.every((e) => ids.has(e.src) && ids.has(e.dst) && typeof e.port === "string")) return null
-    return g
+    return completeGraph(g, registry)
   } catch {
     return null
   }

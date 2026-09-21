@@ -3,16 +3,17 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 import type { Registry } from "@/api/types"
-import { useArtifactPayload } from "@/api/useArtifact"
+import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { fmtMs } from "@/components/pipeline/NodeCard"
-import { PipelineColumn, type NodeErrors } from "@/components/pipeline/PipelineColumn"
+import { PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { Button } from "@/components/ui/button"
 import {
   addCleaner,
+  addReranker,
   ancestors,
   columnOrder,
   infoFor,
@@ -22,8 +23,8 @@ import {
   setConfig,
   setTransform,
   signature,
-  STAGE_VERB,
   storeGraph,
+  titleFor,
   upstreamOfStage,
   type PipelineGraph,
 } from "@/state/graph"
@@ -77,8 +78,8 @@ function Build({ registry }: { registry: Registry }) {
   const busy = submitting || (runId !== null && !run.closed)
   const order = useMemo(() => columnOrder(graph), [graph])
   const stale = useMemo(
-    () => new Set(Object.keys(results).filter((id) => sigs[id] !== undefined && sigs[id] !== signature(graph, id))),
-    [results, sigs, graph],
+    () => new Set(Object.keys(results).filter((id) => sigs[id] !== undefined && sigs[id] !== signature(graph, id, registry))),
+    [results, sigs, graph, registry],
   )
 
   const edit = useCallback((next: PipelineGraph, touched?: string) => {
@@ -104,8 +105,8 @@ function Build({ registry }: { registry: Registry }) {
     setSubmitting(true)
     try {
       const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }))
-      const covered = target ? [target, ...ancestors(graph, target)] : graph.nodes.map((n) => n.id)
-      setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id)])) }))
+      const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
+      setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       setSelected(target ?? order[order.length - 1]?.id ?? null)
       setRunId(run_id)
     } catch (err) {
@@ -117,6 +118,25 @@ function Build({ registry }: { registry: Registry }) {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  /**
+   * Open Compare on one card. The Matryoshka preset needs the model's native
+   * width to know which dimensions exist; the Index card's last output has it,
+   * so it rides along when known and Compare falls back to 1024 otherwise.
+   */
+  async function openSweep(id: string, preset?: SweepPreset) {
+    storeGraph(graph)
+    const q = new URLSearchParams({ node: id })
+    if (preset) {
+      q.set("preset", preset)
+      const r = results[id]
+      if (r?.artifact_id && !stale.has(id)) {
+        const d = (await loadPayload(r.artifact_id).catch(() => null)) as { native_dim?: unknown } | null
+        if (typeof d?.native_dim === "number") q.set("native", String(d.native_dim))
+      }
+    }
+    window.location.assign(`/compare?${q.toString()}`)
   }
 
   const failedNode = order.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
@@ -168,14 +188,12 @@ function Build({ registry }: { registry: Registry }) {
             onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
             onRun={(id, force) => void start(id, force)}
             onAddCleaner={() => edit(addCleaner(graph, registry))}
+            onAddReranker={() => edit(addReranker(graph, registry))}
             onRemove={(id) => {
               edit(removeNode(graph, id), id)
               if (selected === id) setSelected(null)
             }}
-            onSweep={(id) => {
-              storeGraph(graph)
-              window.location.assign(`/compare?node=${encodeURIComponent(id)}`)
-            }}
+            onSweep={(id, preset) => void openSweep(id, preset)}
           />
           <p className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
             <span className="flex items-center gap-2">
@@ -202,6 +220,9 @@ function Build({ registry }: { registry: Registry }) {
   )
 }
 
+/** Stages whose output is placed on the upstream chunk set's document. */
+const RETRIEVAL = new Set(["retrieve", "rerank", "use_case"])
+
 function InspectorPanel({
   graph,
   registry,
@@ -223,14 +244,16 @@ function InspectorPanel({
   const artifactId = usable ? result.artifact_id : undefined
   const type = node ? infoFor(registry, node)?.output : undefined
 
-  // A cleaned document is drawn against the document before any cleaning.
-  const parse = node?.stage === "clean" ? upstreamOfStage(graph, node.id, "parse") : undefined
-  const parseResult = parse ? results[parse.id] : undefined
-  const beforeId = artifactId && parseResult && !stale.has(parse!.id) ? parseResult.artifact_id : undefined
+  // A cleaned document is drawn against the document before any cleaning;
+  // retrieval is drawn on the chunk set its index was built from.
+  const relatedStage = node?.stage === "clean" ? "parse" : node && RETRIEVAL.has(node.stage) ? "chunk" : undefined
+  const related = node && relatedStage ? upstreamOfStage(graph, node.id, relatedStage) : undefined
+  const relatedResult = related ? results[related.id] : undefined
+  const relatedId = artifactId && relatedResult && !stale.has(related!.id) ? relatedResult.artifact_id : undefined
 
   const payload = useArtifactPayload(artifactId)
-  const before = useArtifactPayload(beforeId)
-  const verb = node ? (STAGE_VERB[node.stage] ?? node.stage) : ""
+  const before = useArtifactPayload(relatedId)
+  const verb = node ? titleFor(node) : ""
 
   let body: ReactNode
   if (!node) {
@@ -260,13 +283,14 @@ function InspectorPanel({
   } else if (result.status === "skipped") {
     body = <EmptyState title={`${verb} was skipped`}>A card above it failed or the run was cancelled.</EmptyState>
   } else {
-    const waitingBefore = beforeId && before.status.kind === "loading"
+    const waitingBefore = relatedId && before.status.kind === "loading"
+    const context = !before.data ? undefined : relatedStage === "chunk" ? { chunks: before.data as never } : { before: before.data as never }
     body = (
       <ArtifactInspector
         type={type ?? "unknown"}
         data={payload.data}
         status={waitingBefore ? { kind: "loading" } : payload.status}
-        context={before.data ? { before: before.data as never } : undefined}
+        context={context}
       />
     )
   }

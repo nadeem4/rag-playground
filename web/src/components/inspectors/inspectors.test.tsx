@@ -5,7 +5,16 @@ import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
 import markdownJson from "@/api/fixtures/chunk_set.markdown_header.json"
 import parsedJson from "@/api/fixtures/parsed_doc.json"
 import cleanedJson from "@/api/fixtures/parsed_doc_cleaned.json"
-import type { Chunk, ChunkSet, CleanReportEntry, ParsedDoc } from "@/api/types"
+import indexJson from "@/api/fixtures/index.lancedb.json"
+import denseJson from "@/api/fixtures/retrieval_result.dense.json"
+import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
+import mmrJson from "@/api/fixtures/retrieval_result.mmr.json"
+import searchJson from "@/api/fixtures/output.search.json"
+import type { Chunk, ChunkSet, CleanReportEntry, ParsedDoc, RetrievalResult } from "@/api/types"
+
+import css from "./inspectors.css?raw"
+import { IndexInspector } from "./IndexInspector"
+import { RetrievalResultInspector } from "./RetrievalResultInspector"
 
 import { ChunkSetInspector } from "./ChunkSetInspector"
 import { CleanReportInspector } from "./CleanReportInspector"
@@ -17,6 +26,9 @@ const markdown = markdownJson as unknown as ChunkSet
 const parsed = parsedJson as unknown as ParsedDoc
 const cleaned = cleanedJson as unknown as ParsedDoc
 const report = cleaned.parser_meta.clean_report as CleanReportEntry[]
+const dense = denseJson as unknown as RetrievalResult
+const hybrid = hybridJson as unknown as RetrievalResult
+const mmr = mmrJson as unknown as RetrievalResult
 
 afterEach(cleanup)
 
@@ -205,8 +217,8 @@ describe("CleanReportInspector", () => {
 describe("inspector registry", () => {
   it("maps artifact types to inspectors and falls back to a JSON tree", () => {
     expect(inspectorFor("unknown_type")).toBe(JsonTreeInspector)
-    expect(inspectorFor("retrieval_result")).toBe(JsonTreeInspector)
-    expect(inspectorFor("chunk_set")).not.toBe(JsonTreeInspector)
+    expect(inspectorFor("qa_set")).toBe(JsonTreeInspector)
+    for (const t of ["chunk_set", "index", "retrieval_result", "output"]) expect(inspectorFor(t)).not.toBe(JsonTreeInspector)
   })
 
   it("renders an unknown type as a JSON tree", () => {
@@ -231,5 +243,138 @@ describe("inspector registry", () => {
     expect(screen.getByText("No data")).toBeTruthy()
     rerender(<ArtifactInspector type="mystery" status={{ kind: "error", message: "boom" }} />)
     expect(screen.getByRole("alert").textContent).toMatch(/boom/)
+  })
+})
+
+describe("ChunkSetInspector layout follows its own width", () => {
+  it("uses a container query, not a viewport breakpoint, for the detail column", () => {
+    const { container } = render(<ChunkSetInspector chunkSet={recursive} />)
+    const layout = container.querySelector<HTMLElement>("[data-chunk-inspector]")!
+    expect(layout.className).not.toMatch(/\b(sm|md|lg|xl):/)
+    expect(layout.classList.contains("ci-layout")).toBe(true)
+    expect(layout.parentElement!.classList.contains("ci-frame")).toBe(true)
+    expect(layout.dataset.detail).toBe("")
+    // The container, the hidden-by-default detail, and the width that shows it.
+    expect(css).toMatch(/\.ci-frame\s*{\s*container-type:\s*inline-size/)
+    expect(css).toMatch(/\.ci-layout > \[data-testid="chunk-detail"\]\s*{\s*display:\s*none/)
+    expect(css).toMatch(/@container \(min-width: 900px\)\s*{[^@]*\.ci-layout\[data-detail\][^@]*display:\s*flex/)
+  })
+
+  it("showDetail passes through the registry", () => {
+    const { container, rerender } = render(<ArtifactInspector type="chunk_set" data={recursive} />)
+    expect(screen.getByTestId("chunk-detail")).toBeTruthy()
+    rerender(<ArtifactInspector type="chunk_set" data={recursive} showDetail={false} />)
+    expect(screen.queryByTestId("chunk-detail")).toBeNull()
+    expect(container.querySelector<HTMLElement>("[data-chunk-inspector]")!.dataset.detail).toBeUndefined()
+  })
+})
+
+describe("RetrievalResultInspector", () => {
+  it("lists hits in rank order with the original chunk text and the score in mono", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const rows = [...container.querySelectorAll<HTMLElement>("[data-hit-row]")]
+    expect(rows.map((r) => r.dataset.hitRow)).toEqual(["1", "2", "3", "4", "5"])
+    expect(rows[0].textContent).toContain(hybrid.hits[0].chunk.text.slice(0, 40))
+    expect(rows[0].textContent).toContain("0.03279")
+    expect(screen.getByTestId("fact-hits").textContent).toBe("5")
+  })
+
+  it("draws a bar per component on its own scale: the largest of each is full length", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const widths = [...container.querySelectorAll<HTMLElement>("[data-hit-row]")].map((r) =>
+      [...r.querySelectorAll<HTMLElement>("[data-bar]")].map((b) => Number(b.dataset.bar)),
+    )
+    // Rank 1 has the top dense and the top bm25 score.
+    expect(widths[0]).toEqual([40, 40])
+    expect(widths.every((w) => w.length === 2)).toBe(true)
+    expect(Math.max(...widths.slice(1).map((w) => w[1]))).toBeLessThan(8)
+  })
+
+  it("a retriever with no components gets one bar on the score itself", () => {
+    const { container } = render(<RetrievalResultInspector result={dense} />)
+    const first = container.querySelector<HTMLElement>("[data-hit-row]")!
+    expect([...first.querySelectorAll<HTMLElement>("[data-bar]")].map((b) => Number(b.dataset.bar))).toEqual([40])
+  })
+
+  it("shows rank movement after rerank as plain text", () => {
+    const { container } = render(<RetrievalResultInspector result={mmr} />)
+    const moves = [...container.querySelectorAll<HTMLElement>("[data-testid=movement]")].map((m) => m.textContent)
+    expect(moves).toEqual(["", "was 5", "was 2", "was 3", "was 4"])
+    expect(screen.getByTestId("fact-moved").textContent).toBe("rerank moved 4 of 5")
+    // A hit that rose is set in weight, not in a colour.
+    const rose = container.querySelectorAll<HTMLElement>("[data-testid=movement]")[1]
+    expect(rose.className).toContain("font-semibold")
+    cleanup()
+    // No movement line before rerank.
+    const { container: before } = render(<RetrievalResultInspector result={hybrid} />)
+    expect(before.querySelector("[data-testid=fact-moved]")).toBeNull()
+  })
+
+  it("with the upstream chunk set, puts a rank tick for every hit on the spine", () => {
+    const { container } = render(<ArtifactInspector type="retrieval_result" data={mmr} context={{ chunks: recursive }} />)
+    const ticks = [...container.querySelectorAll<HTMLElement>("[data-tick]")]
+    expect(ticks.map((t) => t.textContent)).toEqual(["1", "2", "3", "4", "5"])
+    // Each tick is measured against the segment that starts at its chunk.
+    const reading = container.querySelector<HTMLElement>("[data-reading]")!
+    for (const [i, t] of ticks.entries()) {
+      const seg = reading.querySelector<HTMLElement>(`[data-target="${t.dataset.first}"]`)!
+      expect(mmr.hits[i].chunk.text.startsWith(seg.textContent!)).toBe(true)
+    }
+    // The document is drawn once, whole.
+    expect(reading.textContent).toBe(recursive.source_text)
+  })
+
+  it("without the chunk set, or with showDetail off, there is no document", () => {
+    const { container, rerender } = render(<RetrievalResultInspector result={mmr} />)
+    expect(container.querySelector("[data-reading]")).toBeNull()
+    rerender(<RetrievalResultInspector result={mmr} chunkSet={recursive} showDetail={false} />)
+    expect(container.querySelector("[data-reading]")).toBeNull()
+  })
+
+  it("has empty, loading, error and not-run states", () => {
+    const { rerender } = render(<RetrievalResultInspector result={{ ...mmr, hits: [] }} />)
+    expect(screen.getByText("No hits")).toBeTruthy()
+    rerender(<RetrievalResultInspector status={{ kind: "loading" }} />)
+    expect(screen.getByRole("status").textContent).toMatch(/Loading retrieval result/)
+    rerender(<RetrievalResultInspector status={{ kind: "error", message: "gone" }} />)
+    expect(screen.getByRole("alert").textContent).toMatch(/gone/)
+    rerender(<RetrievalResultInspector />)
+    expect(screen.getByText("No retrieval result yet")).toBeTruthy()
+  })
+
+  it("renders a Search output with the same rows", () => {
+    const { container } = render(<ArtifactInspector type="output" data={searchJson} context={{ chunks: recursive }} />)
+    expect([...container.querySelectorAll<HTMLElement>("[data-testid=movement]")].map((m) => m.textContent)[1]).toBe("was 5")
+    expect(container.querySelectorAll("[data-tick]")).toHaveLength(5)
+    cleanup()
+    // Any other use case output falls back to the JSON tree.
+    render(<ArtifactInspector type="output" data={{ kind: "chat", payload: { answer: "hi" } }} />)
+    expect(screen.getByText("answer")).toBeTruthy()
+  })
+})
+
+describe("IndexInspector", () => {
+  it("shows the descriptor as a table, tolerating the embedding counts being absent", () => {
+    // A descriptor from before plan I-3 added the embedding counts.
+    const { embeddings_computed: _c, embeddings_cached: _k, ...older } = indexJson
+    render(<IndexInspector descriptor={older} />)
+    const table = screen.getByTestId("index-descriptor")
+    expect(table.textContent).toContain("fake-deterministic")
+    expect(table.textContent).toContain("dense, fts")
+    expect(table.textContent).toMatch(/embedded\s*not reported/)
+  })
+
+  it("shows embeddings computed and cached, and a truncated dim, when present", () => {
+    expect(indexJson.embeddings_computed).toBe(indexJson.doc_count)
+    render(<IndexInspector descriptor={{ ...indexJson, dim: 128, embeddings_computed: 0, embeddings_cached: 6 }} />)
+    expect(screen.getByText("0 embedded, 6 from cache")).toBeTruthy()
+    expect(screen.getByText("128, truncated from 384")).toBeTruthy()
+  })
+
+  it("has empty and loading states", () => {
+    const { rerender } = render(<IndexInspector />)
+    expect(screen.getByText("No index yet")).toBeTruthy()
+    rerender(<IndexInspector status={{ kind: "loading" }} />)
+    expect(screen.getByRole("status")).toBeTruthy()
   })
 })

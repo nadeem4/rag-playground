@@ -20,6 +20,14 @@ What it does:
    same cleaners into `recursive_character` only, and writes that pair as
    `*.join_lines_off.json`: one element per line versus rebuilt paragraphs,
    the parsing lesson the `/inspect` gallery shows side by side.
+6. Runs a retrieval graph over the recursive chunks: a `lancedb` index on the
+   `fake-deterministic` embedder (explicit, so the export is deterministic and
+   downloads nothing), one question, the three retrievers, and MMR over the
+   hybrid result, then Search over MMR. Writes `index.lancedb.json` (the
+   descriptor the API serves), `retrieval_result.<retriever>.json`,
+   `retrieval_result.mmr.json` and `output.search.json`. The query reaches the
+   retrievers and MMR ambiently, and MMR's index (when it has that port) too:
+   no explicit edge, exactly as the Build column wires it.
 
 Everything runs in a temp directory; nothing is written to `sources/` or the
 artifact store.
@@ -164,6 +172,40 @@ def build_graph(sha: str, parse_config: dict | None = None, chunkers: dict = CHU
     return Graph(nodes=nodes, edges=edges)
 
 
+QUESTION = "How does overlap affect index size and duplicate results?"
+RETRIEVERS = ("dense", "bm25", "hybrid_rrf")
+
+
+def build_retrieval_graph(sha: str) -> Graph:
+    """Upload -> pdfium -> cleaners -> recursive chunks -> index, then one
+    retriever per strategy, MMR over hybrid, and Search over MMR. Only explicit
+    ports get edges; `query` (and MMR's `index`, after R1) are ambient."""
+    transform, config = CHUNKERS["chunk_recursive"]
+    nodes = [
+        Node("src", Stage.SOURCE, "upload", {"sha": sha, "filename": FILENAME}),
+        Node("parse", Stage.PARSE, "pdfium", {}),
+        Node("clean_strip", Stage.CLEAN, "header_footer_strip", {}),
+        Node("clean_dedupe", Stage.CLEAN, "dedupe_blocks", {}),
+        Node("chunk", Stage.CHUNK, transform, config),
+        Node("index", Stage.INDEX, "lancedb", {"embedder": "fake-deterministic"}),
+        Node("ask", Stage.QUERY, "text", {"text": QUESTION}),
+        *[Node(f"retrieve_{r}", Stage.RETRIEVE, r, {}) for r in RETRIEVERS],
+        Node("rerank", Stage.RERANK, "mmr", {}),
+        Node("search", Stage.USE_CASE, "search", {}),
+    ]
+    edges = [
+        Edge("src", "parse", "file"),
+        Edge("parse", "clean_strip", "doc"),
+        Edge("clean_strip", "clean_dedupe", "doc"),
+        Edge("clean_dedupe", "chunk", "doc"),
+        Edge("chunk", "index", "chunks"),
+        *[Edge("index", f"retrieve_{r}", "index") for r in RETRIEVERS],
+        Edge("retrieve_hybrid_rrf", "rerank", "result"),
+        Edge("rerank", "search", "result"),
+    ]
+    return Graph(nodes=nodes, edges=edges)
+
+
 def dump(name: str, data: object) -> None:
     path = OUT / name
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -236,6 +278,30 @@ def main() -> None:
             dump(
                 "chunk_set.recursive_character.join_lines_off.json",
                 store.load(off.nodes["chunk_recursive"].artifact.id, ArtifactType.CHUNK_SET),
+            )
+
+            # Retrieval: descriptor, three retrievers, MMR, and Search.
+            ret = run(build_retrieval_graph(sha), registry, store)
+            if not ret.ok:
+                failures = {n: r.error for n, r in ret.nodes.items() if r.error}
+                raise SystemExit(f"retrieval pipeline failed: {failures}")
+            index_dir = Path(store.load(ret.nodes["index"].artifact.id, ArtifactType.INDEX))
+            dump(
+                "index.lancedb.json",
+                json.loads((index_dir / "descriptor.json").read_text(encoding="utf-8")),
+            )
+            for r in RETRIEVERS:
+                dump(
+                    f"retrieval_result.{r}.json",
+                    store.load(ret.nodes[f"retrieve_{r}"].artifact.id, ArtifactType.RETRIEVAL_RESULT),
+                )
+            dump(
+                "retrieval_result.mmr.json",
+                store.load(ret.nodes["rerank"].artifact.id, ArtifactType.RETRIEVAL_RESULT),
+            )
+            dump(
+                "output.search.json",
+                store.load(ret.nodes["search"].artifact.id, ArtifactType.OUTPUT),
             )
         finally:
             upload.SOURCES_DIR = previous

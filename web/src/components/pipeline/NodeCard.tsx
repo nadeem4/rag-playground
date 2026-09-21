@@ -37,10 +37,12 @@ export interface NodeCardProps {
   onRemove?: () => void
   /** Replaces the schema form (the Load card's source picker). */
   body?: ReactNode
-  /** Show the node id beside the title: stacked cleaners need telling apart. */
+  /** Show the node id beside the title: stacked cards need telling apart. */
   showId?: boolean
-  /** Extra actions in the footer (the Chunk card's Sweep). */
+  /** Extra actions in the footer (Sweep). */
   actions?: ReactNode
+  /** Tooltip for Run when it runs more than this card (Ask runs through Search). */
+  runTitle?: string
 }
 
 export function fmtMs(ms: number | undefined): string {
@@ -131,7 +133,7 @@ export function NodeCard(p: NodeCardProps) {
               size="icon"
               className="h-row-compact w-[24px]"
               aria-label={`Remove ${p.node.id}`}
-              title="Remove this cleaner"
+              title="Remove this step"
               onClick={(e) => {
                 e.stopPropagation()
                 p.onRemove!()
@@ -191,6 +193,7 @@ export function NodeCard(p: NodeCardProps) {
           variant="outline"
           size="sm"
           disabled={p.busy}
+          title={p.runTitle}
           onClick={(e) => {
             e.stopPropagation()
             p.onRun(false)

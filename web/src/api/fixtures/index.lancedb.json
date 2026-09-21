@@ -1,0 +1,15 @@
+{
+  "backends": [
+    "dense",
+    "fts"
+  ],
+  "native_dim": 384,
+  "dim": 384,
+  "metric": "cosine",
+  "embedding_model": "fake-deterministic",
+  "embedding_revision": "1",
+  "vector_kind": "dense",
+  "doc_count": 6,
+  "embeddings_computed": 6,
+  "embeddings_cached": 0
+}

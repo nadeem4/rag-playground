@@ -38,3 +38,6 @@ Thumbs.db
 # Third-party agent skills (installed via `npx skills add`, not project source)
 .agents/
 .claude/skills/
+
+# Browser-automation screenshots and traces
+.playwright-mcp/

@@ -1,0 +1,80 @@
+/*
+ * Inspector encodings (design contract §3, §7, §9). Every color here is a token.
+ *
+ * Hue encodes chunk identity and nothing else:
+ *   single coverage  the chunk's fill (--a) with its paired text (--a-text)
+ *   overlap          the two fills BLENDED, plus a diagonal hatch in text ink.
+ *                    Not a third hue.
+ *   uncovered        no fill, muted ink, dashed underline; a bare line break
+ *                    shows a return glyph so an invisible gap is still visible.
+ *
+ * Hover is CSS-only: JS writes `data-hover="c3 c4"` on the inspector root and
+ * the per-chunk rules the component emits undim the matching marks.
+ */
+
+.ci-seg {
+  background-color: var(--a);
+  color: var(--a-text);
+  transition: opacity 120ms;
+}
+
+.ci-seg[data-overlap] {
+  background-color: color-mix(in oklch, var(--a) 50%, var(--b));
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    color-mix(in oklch, var(--a-text) 55%, transparent) 3px 4px
+  );
+}
+
+.ci-seg[data-gap] {
+  background: none;
+  color: var(--text-secondary);
+  text-decoration: underline dashed 1px;
+  text-underline-offset: 4px;
+}
+
+.ci-seg[data-gap="blank"] {
+  text-decoration: none;
+}
+
+.ci-glyph {
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+/* Selection is an accent use (contract §3, Channel A). */
+.ci-seg.sel {
+  text-decoration: underline solid 2px var(--accent);
+  text-underline-offset: 4px;
+}
+.ci-band.sel {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ci-band,
+.ci-bar {
+  transition: opacity 120ms;
+}
+
+[data-hover] :is(.ci-seg, .ci-band, .ci-bar):not([data-gap]) {
+  opacity: 0.4;
+}
+
+/* The chunk-count legend swatches reuse the exact segment encodings. */
+.ci-key-overlap {
+  background-color: color-mix(in oklch, var(--chunk-1) 50%, var(--chunk-2));
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    color-mix(in oklch, var(--chunk-1-text) 55%, transparent) 3px 4px
+  );
+}
+
+/* Removed by cleaning: strikethrough plus the removed fill (contract §3). */
+.cr-removed {
+  background: var(--removed);
+  color: var(--removed-text);
+  text-decoration: line-through 1px;
+}

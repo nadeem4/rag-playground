@@ -73,7 +73,10 @@ export const api = {
   /** 409 when the run has already finished. */
   cancelRun: (runId: string) =>
     request<CancelResponse>(`/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
-  eventsUrl: (runId: string) => `${API_BASE}/runs/${encodeURIComponent(runId)}/events`,
+  /** `after`: resume after that event id, like a `Last-Event-ID` header. */
+  eventsUrl: (runId: string, after?: number) =>
+    `${API_BASE}/runs/${encodeURIComponent(runId)}/events` +
+    (after !== undefined && after >= 0 ? `?last_event_id=${after}` : ""),
 
   artifact: (id: string) => request<ArtifactMeta>(`/artifacts/${encodeURIComponent(id)}`),
   artifactPayload: <T = unknown>(id: string) =>

@@ -47,12 +47,12 @@ def client(dirs):
         yield c
 
 
-def read_sse(client: TestClient, run_id: str, headers=None) -> list[dict]:
+def read_sse(client: TestClient, run_id: str, headers=None, params=None) -> list[dict]:
     """Consume a run's stream to its end; return parsed events with their ids."""
     out: list[dict] = []
     current: dict = {}
     with client.stream(
-        "GET", f"/api/runs/{run_id}/events", headers=headers or {}
+        "GET", f"/api/runs/{run_id}/events", headers=headers or {}, params=params
     ) as r:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/event-stream")

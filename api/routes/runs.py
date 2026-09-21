@@ -10,7 +10,7 @@ import asyncio
 import json
 from typing import Any, AsyncIterator
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -225,12 +225,22 @@ async def run_events(
     run_id: str,
     request: Request,
     last_event_id: str | None = Header(default=None),
+    resume_after: str | None = Query(default=None, alias="last_event_id"),
 ):
+    """Replay from after `Last-Event-ID`, else from the log start.
+
+    `?last_event_id=N` means the same as the header. `EventSource` cannot set
+    that header on a connection it did not open itself, so a client doing its
+    own reconnect passes the query parameter instead. The header wins when both
+    are sent: it comes from the browser's own, more recent, auto-reconnect.
+    """
     state = _state(request, run_id)
+    resume = last_event_id if last_event_id is not None else resume_after
     try:
-        start = int(last_event_id) + 1 if last_event_id is not None else 0
+        start = int(resume) + 1 if resume is not None else 0
     except ValueError:
         start = 0
+    start = max(start, 0)
 
     async def stream() -> AsyncIterator[str]:
         # Snapshot the backlog and subscribe with no await in between: the log

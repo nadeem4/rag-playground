@@ -10,9 +10,11 @@
  *   field) and is switched on `payload.event` by the reducer.
  * - The stream is closed on `stream_end` only. See runState.ts.
  * - On a dropped connection: fetch the snapshot (`GET /api/runs/{id}`),
- *   rebuild state from its event log, then reopen. EventSource cannot set a
- *   `Last-Event-ID` header on a fresh connection, so the new stream replays
- *   from the start and the reducer skips every id it has already applied.
+ *   rebuild state from its event log, then reopen with
+ *   `?last_event_id=<snapshot.last_event_id>`. EventSource cannot set a
+ *   `Last-Event-ID` header on a fresh connection, so the query parameter
+ *   carries it. The reducer still skips any id it has already applied, as a
+ *   safety net.
  */
 
 import { useEffect, useReducer, useRef } from "react"
@@ -23,11 +25,16 @@ import type { RunEvent } from "./types"
 
 const RETRY_MS = [500, 1000, 2000, 5000]
 
+/** Stable, so `nodes` keeps its identity across renders before any event. */
+const NO_NODES: Record<string, NodeState> = Object.freeze({}) as Record<string, NodeState>
+
 interface Connection {
   runId: string
   es: EventSource | null
   dead: boolean
   attempts: number
+  /** Highest event id seen, so a reopened stream resumes after it. */
+  lastSeq: number
   closeTimer?: ReturnType<typeof setTimeout>
   retryTimer?: ReturnType<typeof setTimeout>
 }
@@ -47,7 +54,7 @@ function shutdown(c: Connection) {
 
 function connect(c: Connection, dispatch: (a: RunAction) => void) {
   if (c.dead) return
-  const es = new EventSource(api.eventsUrl(c.runId))
+  const es = new EventSource(api.eventsUrl(c.runId, c.lastSeq >= 0 ? c.lastSeq : undefined))
   c.es = es
 
   es.onopen = () => {
@@ -64,6 +71,7 @@ function connect(c: Connection, dispatch: (a: RunAction) => void) {
     }
     if (!event || typeof event !== "object" || typeof event.event !== "string") return
     const seq = msg.lastEventId === "" ? undefined : Number(msg.lastEventId)
+    if (seq !== undefined && Number.isFinite(seq)) c.lastSeq = Math.max(c.lastSeq, seq)
     dispatch({ type: "event", event, seq: Number.isFinite(seq) ? seq : undefined })
     if (event.event === "stream_end") {
       es.close()
@@ -84,6 +92,7 @@ async function resync(c: Connection, dispatch: (a: RunAction) => void) {
     const snapshot = await api.run(c.runId)
     if (c.dead) return
     dispatch({ type: "snapshot", snapshot })
+    c.lastSeq = Math.max(c.lastSeq, snapshot.last_event_id)
     if (snapshot.status === "running") connect(c, dispatch)
   } catch {
     if (c.dead) return
@@ -111,7 +120,7 @@ export function useRun(runId: string | null): UseRun {
     } else {
       if (current) shutdown(current)
       dispatch({ type: "reset" })
-      const c: Connection = { runId, es: null, dead: false, attempts: 0 }
+      const c: Connection = { runId, es: null, dead: false, attempts: 0, lastSeq: -1 }
       conn.current = c
       connect(c, dispatch)
     }
@@ -127,5 +136,5 @@ export function useRun(runId: string | null): UseRun {
   }, [runId])
 
   const latest = state.variants[state.variants.length - 1]
-  return { ...state, nodes: latest?.nodes ?? {} }
+  return { ...state, nodes: latest?.nodes ?? NO_NODES }
 }

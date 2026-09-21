@@ -88,6 +88,28 @@ def test_last_event_id_resumes_after_that_event(client):
     assert tail == full[3:]
 
 
+def test_last_event_id_query_param_resumes_like_the_header(client):
+    # EventSource cannot set Last-Event-ID on a new connection; the query
+    # parameter is how a manual reconnect resumes.
+    src = upload_pdf(client)
+    run_id = start(client, ingest_graph(src["sha"], src["filename"]))
+    full = read_sse(client, run_id)
+    tail = read_sse(client, run_id, params={"last_event_id": "2"})
+    assert tail == full[3:]
+    assert tail[0]["_id"] == 3
+
+
+def test_last_event_id_header_wins_over_query_param(client):
+    # A browser's own auto-reconnect sends the header; it is the more recent.
+    src = upload_pdf(client)
+    run_id = start(client, ingest_graph(src["sha"], src["filename"]))
+    full = read_sse(client, run_id)
+    tail = read_sse(
+        client, run_id, headers={"Last-Event-ID": "4"}, params={"last_event_id": "1"}
+    )
+    assert tail == full[5:]
+
+
 def test_snapshot(client):
     src = upload_pdf(client)
     run_id = start(client, ingest_graph(src["sha"], src["filename"]))

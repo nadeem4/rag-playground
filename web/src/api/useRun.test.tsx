@@ -131,7 +131,9 @@ describe("useRun", () => {
     expect(result.current.nodes.a.status).toBe("done")
 
     const second = FakeEventSource.instances[1]
-    // The new stream replays from the start; already-applied ids are skipped.
+    // The reopened stream resumes after the snapshot's last event.
+    expect(second.url).toBe("/api/runs/r3/events?last_event_id=2")
+    // Should a server replay anyway, already-applied ids are still skipped.
     second.emit(0, events[0])
     expect(result.current.nodes.a.status).toBe("done")
     second.emit(3, { event: "node_finished", node_id: "b", artifact_id: "y", cache_hit: true, duration_ms: 1 })

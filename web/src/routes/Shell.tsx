@@ -1,29 +1,296 @@
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+
+import { api } from "@/api/client"
+import type { NodeState } from "@/api/runState"
+import type { Registry } from "@/api/types"
+import { useArtifactPayload } from "@/api/useArtifact"
+import { useRegistry } from "@/api/useRegistry"
+import { useRun } from "@/api/useRun"
 import { EmptyState } from "@/components/EmptyState"
+import { ArtifactInspector } from "@/components/inspectors/registry"
+import { fmtMs } from "@/components/pipeline/NodeCard"
+import { PipelineColumn, type NodeErrors } from "@/components/pipeline/PipelineColumn"
+import { Button } from "@/components/ui/button"
+import {
+  addCleaner,
+  ancestors,
+  columnOrder,
+  infoFor,
+  initialGraph,
+  readStoredGraph,
+  removeNode,
+  setConfig,
+  setTransform,
+  signature,
+  STAGE_VERB,
+  storeGraph,
+  upstreamOfStage,
+  type PipelineGraph,
+} from "@/state/graph"
+import { buildRunRequest, errorHeadline, mergeResults, routeRunError } from "@/state/pipeline"
 
 /**
- * The two-pane instrument: the pipeline column on the left, the inspector on
- * the right. B1 ships the frame only; stage cards (B3) and inspectors (B4)
- * mount into these panes.
+ * Build: the pipeline column on the left, the selected card's output on the
+ * right. The graph is the state; the column renders it.
  */
 export function Shell() {
+  const reg = useRegistry()
+  if (reg.kind !== "ready") return <RegistryScreen state={reg} />
+  return <Build registry={reg.registry} />
+}
+
+export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry> }) {
   return (
-    <main className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-hairline md:grid-cols-[360px_minmax(0,1fr)]">
-      <section aria-label="Pipeline" className="flex min-h-0 flex-col bg-surface">
-        <div className="flex h-[40px] shrink-0 items-center border-b border-hairline px-3">
-          <h1 className="text-xl font-semibold">Pipeline</h1>
+    <main className="flex min-h-0 flex-1 flex-col bg-surface">
+      {state.kind === "loading" ? (
+        <p role="status" className="p-4 text-sm text-fg-muted">
+          Loading transforms
+        </p>
+      ) : state.kind === "error" ? (
+        <div role="alert" className="flex flex-col gap-2 p-4">
+          <p className="text-sm font-medium text-danger">Could not load the transform registry</p>
+          <p className="max-w-[82ch] font-mono text-xs text-fg-muted">{state.message}</p>
+          <p className="text-sm text-fg-muted">Is the server running? Start it with uv run rag-playground.</p>
+          <Button variant="outline" size="sm" className="self-start" onClick={state.retry}>
+            Retry
+          </Button>
         </div>
-        <EmptyState title="No source loaded">
-          Upload a PDF to start a pipeline. Its stages, Load, Clean and Chunk, will appear here.
-        </EmptyState>
-      </section>
-      <section aria-label="Inspector" className="flex min-h-0 flex-col bg-surface">
-        <div className="flex h-[40px] shrink-0 items-center border-b border-hairline px-3">
-          <h2 className="text-xl font-semibold">Inspector</h2>
-        </div>
-        <EmptyState title="Nothing to inspect">
-          Run a stage, then select it to see its output here.
-        </EmptyState>
-      </section>
+      ) : null}
     </main>
+  )
+}
+
+function Build({ registry }: { registry: Registry }) {
+  const [graph, setGraph] = useState<PipelineGraph>(() => readStoredGraph(registry) ?? initialGraph(registry))
+  const [runId, setRunId] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [results, setResults] = useState<Record<string, NodeState>>({})
+  const [sigs, setSigs] = useState<Record<string, string>>({})
+  const [selected, setSelected] = useState<string | null>(null)
+  const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
+  const [columnError, setColumnError] = useState<string | null>(null)
+  const run = useRun(runId)
+
+  useEffect(() => storeGraph(graph), [graph])
+  useEffect(() => setResults((prev) => mergeResults(prev, run.nodes)), [run.nodes])
+
+  const busy = submitting || (runId !== null && !run.closed)
+  const order = useMemo(() => columnOrder(graph), [graph])
+  const stale = useMemo(
+    () => new Set(Object.keys(results).filter((id) => sigs[id] !== undefined && sigs[id] !== signature(graph, id))),
+    [results, sigs, graph],
+  )
+
+  const edit = useCallback((next: PipelineGraph, touched?: string) => {
+    setGraph(next)
+    if (touched) {
+      setErrors((e) => {
+        if (!e[touched]) return e
+        const { [touched]: _, ...rest } = e
+        return rest
+      })
+    }
+  }, [])
+
+  async function start(target: string | undefined, force: boolean) {
+    const source = graph.nodes.find((n) => n.stage === "source")
+    if (source && !source.config.sha) {
+      setErrors((e) => ({ ...e, [source.id]: { message: "Choose or upload a file first." } }))
+      setSelected(source.id)
+      return
+    }
+    setErrors({})
+    setColumnError(null)
+    setSubmitting(true)
+    try {
+      const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }))
+      const covered = target ? [target, ...ancestors(graph, target)] : graph.nodes.map((n) => n.id)
+      setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id)])) }))
+      setSelected(target ?? order[order.length - 1]?.id ?? null)
+      setRunId(run_id)
+    } catch (err) {
+      const routed = routeRunError(err, graph)
+      if (routed.kind === "fields") setErrors({ [routed.nodeId]: { fields: routed.errors } })
+      else if (routed.kind === "node") setErrors({ [routed.nodeId]: { message: routed.message } })
+      else setColumnError(routed.message)
+      if (routed.kind !== "column") setSelected(routed.nodeId)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const failedNode = order.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
+
+  return (
+    <main className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
+      <section aria-label="Pipeline" className="flex min-h-0 flex-col bg-surface">
+        <div className="flex h-[40px] shrink-0 items-center justify-between gap-2 border-b border-hairline px-3">
+          <h1 className="text-xl font-semibold">Pipeline</h1>
+          <div className="flex items-center gap-2">
+            {busy && runId ? (
+              <Button variant="outline" size="sm" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+                Cancel
+              </Button>
+            ) : null}
+            <Button size="sm" disabled={busy} onClick={() => void start(undefined, false)}>
+              {busy ? "Running" : "Run all"}
+            </Button>
+          </div>
+        </div>
+        {columnError || run.error ? (
+          <div role="alert" className="flex flex-col gap-1 border-b border-hairline p-3">
+            <p className="text-sm font-medium text-danger">{columnError ? "The pipeline cannot run" : "The run crashed"}</p>
+            <p className="font-mono text-xs break-words whitespace-pre-wrap text-fg-muted">
+              {columnError ?? errorHeadline(run.error ?? "")}
+            </p>
+          </div>
+        ) : null}
+        {run.warnings.length ? (
+          <div className="flex flex-col gap-1 border-b border-hairline p-3">
+            {run.warnings.map((w) => (
+              <p key={w} className="text-xs text-fg-muted">
+                {w}
+              </p>
+            ))}
+          </div>
+        ) : null}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <PipelineColumn
+            graph={graph}
+            registry={registry}
+            results={results}
+            stale={stale}
+            selected={selected}
+            busy={busy}
+            errors={errors}
+            onSelect={setSelected}
+            onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
+            onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
+            onRun={(id, force) => void start(id, force)}
+            onAddCleaner={() => edit(addCleaner(graph, registry))}
+            onRemove={(id) => {
+              edit(removeNode(graph, id), id)
+              if (selected === id) setSelected(null)
+            }}
+            onSweep={(id) => {
+              storeGraph(graph)
+              window.location.assign(`/compare?node=${encodeURIComponent(id)}`)
+            }}
+          />
+          <p className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="h-[12px] border-l-3 border-solid border-fg-muted" />
+              computed this run
+            </span>
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="h-[12px] border-l-3 border-dotted border-fg-muted" />
+              from cache
+            </span>
+          </p>
+        </div>
+      </section>
+
+      <InspectorPanel
+        graph={graph}
+        registry={registry}
+        results={results}
+        stale={stale}
+        selected={selected}
+        failedHint={failedNode?.id}
+      />
+    </main>
+  )
+}
+
+function InspectorPanel({
+  graph,
+  registry,
+  results,
+  stale,
+  selected,
+  failedHint,
+}: {
+  graph: PipelineGraph
+  registry: Registry
+  results: Record<string, NodeState>
+  stale: Set<string>
+  selected: string | null
+  failedHint?: string
+}) {
+  const node = graph.nodes.find((n) => n.id === selected)
+  const result = node ? results[node.id] : undefined
+  const usable = result && (result.status === "done" || result.status === "cached") && !stale.has(result.id)
+  const artifactId = usable ? result.artifact_id : undefined
+  const type = node ? infoFor(registry, node)?.output : undefined
+
+  // A cleaned document is drawn against the document before any cleaning.
+  const parse = node?.stage === "clean" ? upstreamOfStage(graph, node.id, "parse") : undefined
+  const parseResult = parse ? results[parse.id] : undefined
+  const beforeId = artifactId && parseResult && !stale.has(parse!.id) ? parseResult.artifact_id : undefined
+
+  const payload = useArtifactPayload(artifactId)
+  const before = useArtifactPayload(beforeId)
+  const verb = node ? (STAGE_VERB[node.stage] ?? node.stage) : ""
+
+  let body: ReactNode
+  if (!node) {
+    body = (
+      <EmptyState title="Nothing selected">
+        {failedHint ? `Select ${failedHint} to see why it failed.` : "Select a card in the pipeline to see its output here."}
+      </EmptyState>
+    )
+  } else if (!result) {
+    body = <EmptyState title={`${verb} has not run`}>Run it, or Run all, to see its output here.</EmptyState>
+  } else if (stale.has(node.id)) {
+    body = <EmptyState title="Output is out of date">This card or one above it changed since it last ran. Run it again to see the new output.</EmptyState>
+  } else if (result.status === "running" || result.status === "pending") {
+    body = (
+      <p role="status" className="p-4 text-sm text-fg-muted">
+        Running {verb}
+      </p>
+    )
+  } else if (result.status === "failed") {
+    body = (
+      <div role="alert" className="flex flex-col gap-1 p-4">
+        <p className="text-sm font-medium text-danger">{verb} failed</p>
+        <p className="max-w-[82ch] font-mono text-xs break-words text-fg-muted">{errorHeadline(result.error ?? "")}</p>
+        <p className="text-sm text-fg-muted">The full traceback is on the card.</p>
+      </div>
+    )
+  } else if (result.status === "skipped") {
+    body = <EmptyState title={`${verb} was skipped`}>A card above it failed or the run was cancelled.</EmptyState>
+  } else {
+    const waitingBefore = beforeId && before.status.kind === "loading"
+    body = (
+      <ArtifactInspector
+        type={type ?? "unknown"}
+        data={payload.data}
+        status={waitingBefore ? { kind: "loading" } : payload.status}
+        context={before.data ? { before: before.data as never } : undefined}
+      />
+    )
+  }
+
+  return (
+    <section aria-label="Inspector" className="flex min-h-0 min-w-0 flex-col bg-surface">
+      <div className="flex h-[40px] shrink-0 items-center justify-between gap-3 border-b border-hairline px-3">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="text-xl font-semibold">{node ? verb : "Inspector"}</h2>
+          {node ? <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span> : null}
+        </div>
+        {artifactId ? (
+          <div className="flex shrink-0 items-center gap-3 font-mono text-xs text-fg-muted">
+            <span>{type}</span>
+            <span title={artifactId}>{artifactId.slice(0, 12)}</span>
+            {result?.duration_ms !== undefined ? (
+              <span>
+                {result.cache_hit ? "cached" : "computed"} {fmtMs(result.duration_ms)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">{body}</div>
+    </section>
   )
 }

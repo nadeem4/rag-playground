@@ -56,3 +56,18 @@ uv run pytest
 ```
 
 Requires Python 3.13. `uv python install 3.13` if you don't have it.
+
+### Web UI
+
+```bash
+cd web
+npm install
+npm run dev      # Vite on :5173, proxies /api to 127.0.0.1:8000
+npm test         # Vitest
+npm run build    # outputs web/dist
+```
+
+Every color, size and radius lives in `web/src/styles/tokens.css`, which also clears
+Tailwind's default scales so off-contract values do not compile. `/specimen` renders the
+tokens in both themes for review. The UI is built against JSON fixtures generated from the
+real engine; regenerate them with `uv run python web/scripts/export_fixtures.py`.

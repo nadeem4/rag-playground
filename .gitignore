@@ -34,3 +34,7 @@ web/dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Third-party agent skills (installed via `npx skills add`, not project source)
+.agents/
+.claude/skills/

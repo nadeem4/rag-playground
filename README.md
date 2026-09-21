@@ -31,7 +31,22 @@ source → parse → clean* → chunk → enrich* → index → retrieve → rer
 
 ## Status
 
-Phase 1 (core engine) in progress. See the Notion board for delivery and issue tracking.
+Phases 1 (engine) and 2 (plugins) are complete. Phase 3 (API and web UI) is in progress: the
+API is done. See the Notion board for delivery and issue tracking.
+
+## Run it
+
+```bash
+uv sync
+uv run rag-playground
+```
+
+This starts the server on http://127.0.0.1:8000 and opens your browser. Flags: `--port`,
+`--no-browser`, and `--reload` for development. The API lives under `/api`; the web UI is
+served from `web/dist`, so build it once with `npm install && npm run build` in `web/`.
+
+Uploads go to `sources/` and cached artifacts to `artifacts/` at the repo root. Set
+`RAG_PLAYGROUND_SOURCES` or `RAG_PLAYGROUND_ARTIFACTS` to put them elsewhere.
 
 ## Development
 

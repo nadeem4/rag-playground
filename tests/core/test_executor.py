@@ -444,3 +444,79 @@ def test_meta_survives_a_cache_hit(store):
     assert CALLS == []
     assert second.nodes["s"].status is NodeStatus.CACHED
     assert second.nodes["s"].artifact.meta == first.nodes["s"].artifact.meta
+
+
+# ---------------------------------------------------------------------------
+# Cancellation: checked between nodes, never mid-node
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_before_start_runs_nothing(store):
+    events = []
+    res = run(
+        g_linear(), counting_registry(), store, cancelled=lambda: True,
+        on_event=events.append,
+    )
+    assert CALLS == []
+    assert all(n.status is NodeStatus.SKIPPED for n in res.nodes.values())
+    cancel = [e for e in events if e["event"] == "run_cancelled"]
+    assert len(cancel) == 1 and cancel[0]["skipped"] == ["s", "p", "c"]
+    assert events[-1]["event"] == "run_finished"
+    assert events[-1]["cancelled"] is True
+
+
+def test_cancel_between_nodes_stops_subsequent_nodes(store):
+    # Flip the flag once the parse node has *finished*: the chunker must not run.
+    flag = {"on": False}
+
+    def on_event(e):
+        if e["event"] == "node_finished" and e["node_id"] == "p":
+            flag["on"] = True
+
+    res = run(
+        g_linear(), counting_registry(), store,
+        cancelled=lambda: flag["on"], on_event=on_event,
+    )
+    assert CALLS == ["upload", "parse"]
+    assert res.nodes["p"].status is NodeStatus.EXECUTED
+    assert res.nodes["c"].status is NodeStatus.SKIPPED
+
+
+def test_cancel_does_not_touch_pruned_nodes(store):
+    events = []
+    res = run(
+        g_linear(), counting_registry(), store, targets={"p"},
+        cancelled=lambda: True, on_event=events.append,
+    )
+    assert res.nodes["c"].status is NodeStatus.PRUNED
+    assert next(e for e in events if e["event"] == "run_cancelled")["skipped"] == [
+        "s", "p",
+    ]
+
+
+def test_uncancelled_run_reports_cancelled_false(store):
+    events = []
+    run(g_linear(), counting_registry(), store, on_event=events.append)
+    assert events[-1] == {**events[-1], "event": "run_finished", "cancelled": False}
+    assert not any(e["event"] == "run_cancelled" for e in events)
+
+
+def test_sweep_threads_cancel_and_stops_later_variants(store):
+    from core.executor import sweep
+
+    flag = {"on": False}
+
+    def on_event(e):
+        if e["event"] == "variant_finished" and e["index"] == 0:
+            flag["on"] = True
+
+    res = sweep(
+        g_linear(), counting_registry(), store, node_id="c",
+        variants=[
+            {"transform": "fixed", "config": {"tag": "x"}},
+            {"transform": "fixed", "config": {"tag": "y"}},
+        ],
+        cancelled=lambda: flag["on"], on_event=on_event,
+    )
+    assert len(res.runs) == 1
+    assert CALLS == ["upload", "parse", "chunk"]

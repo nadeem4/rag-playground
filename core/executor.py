@@ -22,7 +22,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Callable, TypedDict
 
 from core.artifacts import Artifact
 from core.events import Emit, event
@@ -75,6 +75,7 @@ def run(
     targets: set[str] | None = None,
     force: bool = False,
     on_event: Emit | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> RunResult:
     """Execute `graph`, reusing every artifact already in `store`.
 
@@ -83,6 +84,11 @@ def run(
     the graph, not a merge into the node's dict, so a sweep variant cannot
     accidentally inherit a field from the baseline. `force` re-executes
     everything in the selected set, cache or no cache.
+
+    `cancelled` is polled *between* nodes, never during one: a transform is
+    synchronous code with no safe interruption point. Once it returns True,
+    every selected node not yet started is SKIPPED, one `run_cancelled` event
+    lists them, and `run_finished` carries `cancelled=True`.
     """
     emit: Emit = on_event or (lambda e: None)
     overrides = overrides or {}
@@ -108,10 +114,16 @@ def run(
 
     payloads: dict[str, Any] = {}
     broken: set[str] = set()
+    skipped_by_cancel: list[str] = []
 
     for nid in resolved.order:
         if nid not in selected:
             result.nodes[nid] = NodeResult(nid, NodeStatus.PRUNED)
+            continue
+
+        if skipped_by_cancel or (cancelled is not None and cancelled()):
+            skipped_by_cancel.append(nid)
+            result.nodes[nid] = NodeResult(nid, NodeStatus.SKIPPED)
             continue
 
         node = by_id[nid]
@@ -233,7 +245,9 @@ def run(
             )
         )
 
-    emit(event("run_finished", ok=result.ok))
+    if skipped_by_cancel:
+        emit(event("run_cancelled", skipped=skipped_by_cancel))
+    emit(event("run_finished", ok=result.ok, cancelled=bool(skipped_by_cancel)))
     return result
 
 
@@ -265,6 +279,7 @@ def sweep(
     through: str | None = None,
     force: bool = False,
     on_event: Emit | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> SweepResult:
     """Run one node over N variants against identical upstream input.
 
@@ -275,12 +290,17 @@ def sweep(
     `through` names how far downstream to execute — pass a use_case node id to
     score a chunker sweep on end-to-end retrieval quality instead of stopping at
     the chunks. A variant that fails is recorded and the sweep continues.
+
+    `cancelled` is threaded into each run and also checked before each
+    variant, so a cancelled sweep starts no further variants.
     """
     emit: Emit = on_event or (lambda e: None)
     out = SweepResult(variants=list(variants))
     target = through or node_id
 
     for i, variant in enumerate(variants):
+        if cancelled is not None and cancelled():
+            break
         g = deepcopy(graph)
         g.nodes = [
             Node(
@@ -295,7 +315,15 @@ def sweep(
         ]
         emit(event("variant_started", index=i, variant=dict(variant)))
         out.runs.append(
-            run(g, registry, store, targets={target}, force=force, on_event=on_event)
+            run(
+                g,
+                registry,
+                store,
+                targets={target},
+                force=force,
+                on_event=on_event,
+                cancelled=cancelled,
+            )
         )
         emit(event("variant_finished", index=i, ok=out.runs[-1].ok))
 

@@ -25,6 +25,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.source.upload",
     "plugins.query.text",
     "plugins.parse.pdfium",
+    "plugins.parse.docling",
     "plugins.clean.header_footer_strip",
     "plugins.clean.dedupe_blocks",
     "plugins.chunk.recursive_character",

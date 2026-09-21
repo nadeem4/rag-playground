@@ -48,11 +48,21 @@ served from `web/dist`, so build it once with `npm install && npm run build` in 
 Uploads go to `sources/` and cached artifacts to `artifacts/` at the repo root. Set
 `RAG_PLAYGROUND_SOURCES` or `RAG_PLAYGROUND_ARTIFACTS` to put them elsewhere.
 
+### Parsers
+
+`docling` is the recommended parser; `pdfium` is the fast baseline. Both read the PDF's text
+through pypdfium2, and Docling adds a vision layout model that finds headings, list items,
+tables and page furniture and fixes reading order. It runs on CPU (torch is the CPU build).
+
+The first Docling run downloads its models from Hugging Face (about 0.5 GB, into
+`~/.cache/huggingface`), so it takes a minute or two. Later runs take roughly a second per page.
+
 ## Development
 
 ```bash
 uv sync --extra dev
 uv run pytest
+uv run pytest -m models   # slow tests that load real models, e.g. Docling
 ```
 
 Requires Python 3.13. `uv python install 3.13` if you don't have it.

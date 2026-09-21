@@ -90,6 +90,53 @@
         "title": "PdfiumConfig",
         "type": "object"
       }
+    },
+    "docling": {
+      "name": "docling",
+      "version": "1",
+      "stage": "parse",
+      "output": "parsed_doc",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "file": {
+          "type": "raw_file",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "do_ocr": {
+            "default": false,
+            "description": "Read text from page images with OCR. Only needed for scanned PDFs with no text layer; it is much slower.",
+            "title": "Do Ocr",
+            "type": "boolean"
+          },
+          "do_table_structure": {
+            "default": true,
+            "description": "Recover rows and columns of detected tables, so a table reaches the chunks as a markdown table instead of loose text.",
+            "title": "Do Table Structure",
+            "type": "boolean"
+          },
+          "table_mode": {
+            "default": "fast",
+            "description": "Which table model to use. Fast is fine for simple grids; accurate handles merged cells better and takes longer.",
+            "enum": [
+              "fast",
+              "accurate"
+            ],
+            "title": "Table Mode",
+            "type": "string"
+          }
+        },
+        "title": "DoclingConfig",
+        "type": "object"
+      }
     }
   },
   "clean": {

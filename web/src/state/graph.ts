@@ -34,8 +34,20 @@ export function defaultConfig(info: TransformInfo): Record<string, unknown> {
   return defaultsFor(info.config_schema, info.config_schema)
 }
 
+/**
+ * Transforms a new graph prefers when the live registry has them. Docling is
+ * layout-aware, so it is the better first parse; absent, the stage's first
+ * registered transform is used as before.
+ */
+export const PREFERRED_DEFAULT: Partial<Record<Stage, string>> = { parse: "docling" }
+
+function defaultTransform(registry: Registry, stage: Stage): TransformInfo | undefined {
+  const preferred = PREFERRED_DEFAULT[stage]
+  return (preferred && registry[stage]?.[preferred]) || transformsFor(registry, stage)[0]
+}
+
 function makeNode(registry: Registry, id: string, stage: Stage, transform?: string): GraphNode | null {
-  const info = transform ? registry[stage]?.[transform] : transformsFor(registry, stage)[0]
+  const info = transform ? registry[stage]?.[transform] : defaultTransform(registry, stage)
   if (!info) return null
   return { id, stage, transform: info.name, config: stage === "source" ? {} : defaultConfig(info) }
 }
@@ -57,7 +69,7 @@ function link(registry: Registry, src: GraphNode, dst: GraphNode): GraphEdge[] {
   return port ? [{ src: src.id, dst: dst.id, port }] : []
 }
 
-/** Source, parse and chunk, each on its stage's first transform, wired in a chain. */
+/** Source, parse and chunk, each on its stage's default transform, wired in a chain. */
 export function initialGraph(registry: Registry): PipelineGraph {
   const chain = [
     makeNode(registry, "source", "source"),

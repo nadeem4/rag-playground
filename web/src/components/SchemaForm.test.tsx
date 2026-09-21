@@ -135,11 +135,28 @@ describe("supported types", () => {
     expect(last()).toEqual({ scope: "near" })
   })
 
-  it("single-value Literal (const) is a one-option enum", () => {
-    const { container } = renderForm(obj({ mode: { const: "text", default: "text", type: "string", title: "Mode" } }))
-    const select = screen.getByLabelText("Mode") as HTMLSelectElement
-    expect([...select.options].map((o) => o.value)).toEqual(["text"])
-    expect(container.querySelector('[data-field-kind="enum"]')).not.toBeNull()
+  it("single-value Literal (const) renders as read-only text, not a control", () => {
+    const { container, last } = renderForm(obj({ mode: { const: "text", default: "text", type: "string", title: "Mode" } }))
+    expect(screen.queryByRole("combobox")).toBeNull()
+    expect(container.querySelector("select, input, textarea")).toBeNull()
+    const shown = screen.getByLabelText("Mode")
+    expect(shown.tagName).toBe("OUTPUT")
+    expect(shown.textContent).toBe("text")
+    expect(shown.className).toContain("font-mono")
+    // Still part of the config the backend receives.
+    expect(last()).toEqual({ mode: "text" })
+  })
+
+  it("an enum with exactly one value renders as read-only text", () => {
+    const { last } = renderForm(obj({ fmt: { type: "string", enum: ["markdown"], default: "markdown", title: "Format" } }))
+    expect(screen.queryByRole("combobox")).toBeNull()
+    expect(screen.getByLabelText("Format").textContent).toBe("markdown")
+    expect(last()).toEqual({ fmt: "markdown" })
+  })
+
+  it("an enum with two values still renders a select", () => {
+    renderForm(obj({ fmt: { type: "string", enum: ["a", "b"], default: "a", title: "Format" } }))
+    expect(screen.getByRole("combobox", { name: "Format" })).toBeTruthy()
   })
 
   it("non-string enum keeps its value type", () => {

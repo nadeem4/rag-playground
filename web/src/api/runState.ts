@@ -31,6 +31,8 @@ export interface NodeState {
   cache_hit?: boolean
   duration_ms?: number
   error?: string
+  /** `node_started` time, epoch seconds (the event's `ts`). */
+  started_at?: number
 }
 
 export interface VariantState {
@@ -120,6 +122,7 @@ function applyEvent(prev: RunState, e: RunEvent): RunState {
     case "node_started":
       return patchNode(state, e.node_id, {
         status: "running",
+        started_at: e.ts,
         transform: e.transform,
         artifact_id: e.artifact_id,
       })

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, type ComponentType } from "react"
 
 import type { JsonSchema } from "@/api/types"
 import { BooleanField } from "@/components/fields/BooleanField"
+import { ConstField } from "@/components/fields/ConstField"
 import { EnumField } from "@/components/fields/EnumField"
 import { describedBy, Errors, FieldShell, fieldIds, Help, UnsetToggle } from "@/components/fields/FieldShell"
 import { JsonField } from "@/components/fields/JsonField"
@@ -217,7 +218,8 @@ function Property({ name, prop, value, onValue, root, path, depth, errors, base 
   }
 
   const kind = f.kind
-  const Control = CONTROLS[kind] ?? JsonField
+  // A single-value Literal offers no choice, so it is not drawn as a control.
+  const Control = kind === "enum" && f.options.length === 1 ? ConstField : (CONTROLS[kind] ?? JsonField)
   const range = f.kind === "integer" || f.kind === "number" ? rangeHint(f.schema) : null
   const aside =
     kind === "json" ? (

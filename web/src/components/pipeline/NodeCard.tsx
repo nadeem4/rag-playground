@@ -1,9 +1,10 @@
-import { useId, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react"
 import { X } from "lucide-react"
 
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, TransformInfo } from "@/api/types"
 import type { FieldErrors } from "@/components/fields/schema"
+import { CONST_TEXT } from "@/components/fields/ConstField"
 import { CONTROL } from "@/components/fields/types"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
@@ -76,12 +77,30 @@ const RULE: Record<Shown["rule"], CSSProperties> = {
   none: { borderLeft: "3px solid transparent" },
 }
 
+/**
+ * Whole seconds since `startedAt` (epoch seconds), ticking once a second while
+ * `startedAt` is set. Feedback for a long parse, not decoration: no animation.
+ */
+export function useElapsed(startedAt: number | undefined): number | undefined {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (startedAt === undefined) return
+    setNow(Date.now())
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [startedAt])
+  if (startedAt === undefined) return undefined
+  return Math.max(0, Math.floor(now / 1000 - startedAt))
+}
+
 export function NodeCard(p: NodeCardProps) {
   const id = useId()
   const info = p.transforms.find((t) => t.name === p.node.transform)
   const shown = describeResult(p.result, p.stale)
   const failed = p.result?.status === "failed" && !p.stale ? p.result.error : undefined
   const hasOutput = shown.rule === "solid" || shown.rule === "dotted"
+  const running = p.result?.status === "running" && !p.stale
+  const elapsed = useElapsed(running ? p.result?.started_at : undefined)
 
   return (
     <article
@@ -100,6 +119,11 @@ export function NodeCard(p: NodeCardProps) {
         </div>
         <div className="flex shrink-0 items-center gap-2" aria-live="polite">
           <span className="meta">{shown.label}</span>
+          {elapsed !== undefined ? (
+            <span className="font-mono text-xs text-fg" title="Elapsed since this node started">
+              {elapsed} s
+            </span>
+          ) : null}
           {shown.duration !== undefined ? <span className="font-mono text-xs text-fg">{fmtMs(shown.duration)}</span> : null}
           {p.onRemove ? (
             <Button
@@ -123,13 +147,20 @@ export function NodeCard(p: NodeCardProps) {
         <label htmlFor={`${id}-transform`} className="text-sm font-medium">
           Transform
         </label>
-        <select id={`${id}-transform`} className={CONTROL} value={p.node.transform} onChange={(e) => p.onTransform(e.target.value)}>
-          {p.transforms.map((t) => (
-            <option key={t.name} value={t.name}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+        {p.transforms.length === 1 ? (
+          // One registered transform: nothing to choose, so no picker.
+          <output id={`${id}-transform`} className={CONST_TEXT}>
+            {p.node.transform}
+          </output>
+        ) : (
+          <select id={`${id}-transform`} className={CONTROL} value={p.node.transform} onChange={(e) => p.onTransform(e.target.value)}>
+            {p.transforms.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {p.body ??

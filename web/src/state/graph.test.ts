@@ -11,6 +11,8 @@ import {
   setTransform,
   upstreamOfStage,
 } from "./graph"
+import type { Registry } from "@/api/types"
+
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const edgeSet = (g: { edges: { src: string; dst: string; port: string }[] }) =>
@@ -23,6 +25,21 @@ describe("graph state", () => {
     expect(edgeSet(g)).toEqual(["parse->chunk:doc", "source->parse:file"])
     // Configs start at the schema defaults.
     expect(g.nodes.find((n) => n.stage === "chunk")!.config).toEqual({ chunk_size: 1000, chunk_overlap: 200 })
+  })
+
+  it("Parse defaults to docling when the registry has it", () => {
+    const withDocling: Registry = {
+      ...R,
+      parse: { ...R.parse, docling: { ...R.parse!.pdfium, name: "docling", config_schema: { type: "object", title: "doclingConfig", properties: { ocr: { type: "boolean", default: false, title: "Ocr" } } } } },
+    }
+    const parse = initialGraph(withDocling).nodes.find((n) => n.stage === "parse")!
+    expect(parse).toMatchObject({ transform: "docling", config: { ocr: false } })
+    expect(edgeSet(initialGraph(withDocling))).toEqual(["parse->chunk:doc", "source->parse:file"])
+  })
+
+  it("Parse falls back to the first parser when docling is absent", () => {
+    expect(R.parse!.docling).toBeUndefined()
+    expect(initialGraph(R).nodes.find((n) => n.stage === "parse")!.transform).toBe("pdfium")
   })
 
   it("adding a cleaner splices it between parse and chunk", () => {

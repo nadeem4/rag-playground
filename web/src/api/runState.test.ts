@@ -113,3 +113,13 @@ describe("runReducer: a plain run", () => {
     expect(state).toEqual(initialRunState)
   })
 })
+
+describe("runReducer: node timing", () => {
+  it("records when a node started, from the event's ts in epoch seconds", () => {
+    const state = reduceEvents([
+      { ts: 100, event: "run_started", nodes: ["parse"], selected: ["parse"] } as RunEvent,
+      { ts: 123.5, event: "node_started", node_id: "parse", transform: "docling", artifact_id: "a" } as RunEvent,
+    ])
+    expect(state.variants[0].nodes.parse).toMatchObject({ status: "running", started_at: 123.5 })
+  })
+})

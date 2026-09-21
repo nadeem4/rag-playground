@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/api/client"
@@ -114,5 +114,83 @@ describe("PipelineColumn", () => {
     expect(sweeps).toHaveLength(1)
     fireEvent.click(sweeps[0])
     expect(p.onSweep).toHaveBeenCalledWith("chunk")
+  })
+
+  it("a stage with one transform shows its name as text, not a one-option picker", () => {
+    setup()
+    // Load has only `upload` and Parse only `pdfium` in the test registry.
+    for (const [id, name] of [["source", "upload"], ["parse", "pdfium"]]) {
+      const shown = within(card(id)).getByLabelText("Transform")
+      expect(shown.tagName).toBe("OUTPUT")
+      expect(shown.textContent).toBe(name)
+    }
+    // Chunk has three: the picker stays.
+    const picker = within(card("chunk")).getByRole("combobox", { name: "Transform" }) as HTMLSelectElement
+    expect(picker.options).toHaveLength(3)
+  })
+
+  describe("elapsed time while running", () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(1_000_000_000))
+    })
+    afterEach(() => vi.useRealTimers())
+
+    it("counts seconds from node_started, once a second, and stops when done", () => {
+      const started = 1_000_000_000 / 1000 - 12
+      const graph = initialGraph(R)
+      const props = {
+        graph,
+        registry: R,
+        stale: new Set<string>(),
+        selected: null,
+        busy: true,
+        errors: {},
+        onSelect: vi.fn(),
+        onTransform: vi.fn(),
+        onConfig: vi.fn(),
+        onRun: vi.fn(),
+        onAddCleaner: vi.fn(),
+        onRemove: vi.fn(),
+        onSweep: vi.fn(),
+      }
+      const { rerender } = render(<PipelineColumn {...props} results={{ parse: { id: "parse", status: "running", started_at: started } }} />)
+      expect(within(card("parse")).getByText("running")).toBeTruthy()
+      expect(within(card("parse")).getByText("12 s")).toBeTruthy()
+      act(() => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(within(card("parse")).getByText("15 s")).toBeTruthy()
+      rerender(<PipelineColumn {...props} results={{ parse: { id: "parse", status: "done", artifact_id: "p", duration_ms: 15000 } }} />)
+      expect(within(card("parse")).queryByText("running")).toBeNull()
+      expect(within(card("parse")).queryByText("15 s")).toBeNull()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it("clears its interval on unmount", () => {
+      const graph = initialGraph(R)
+      const { unmount } = render(
+        <PipelineColumn
+          graph={graph}
+          registry={R}
+          results={{ chunk: { id: "chunk", status: "running", started_at: 1_000_000_000 / 1000 } }}
+          stale={new Set()}
+          selected={null}
+          busy
+          errors={{}}
+          onSelect={vi.fn()}
+          onTransform={vi.fn()}
+          onConfig={vi.fn()}
+          onRun={vi.fn()}
+          onAddCleaner={vi.fn()}
+          onRemove={vi.fn()}
+          onSweep={vi.fn()}
+        />,
+      )
+      expect(within(card("chunk")).getByText("0 s")).toBeTruthy()
+      expect(vi.getTimerCount()).toBe(1)
+      unmount()
+      expect(vi.getTimerCount()).toBe(0)
+    })
   })
 })

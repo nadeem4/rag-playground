@@ -54,7 +54,14 @@ def test_index_payload_is_its_descriptor(client):
     # descriptor rather than trying to serialize a database.
     src = upload_pdf(client)
     g = ingest_graph(src["sha"], src["filename"])
-    g["nodes"].append({"id": "index", "stage": "index", "transform": "lancedb"})
+    g["nodes"].append(
+        {
+            "id": "index",
+            "stage": "index",
+            "transform": "lancedb",
+            "config": {"embedder": "fake-deterministic"},
+        }
+    )
     g["edges"].append({"src": "chunk", "dst": "index", "port": "chunks"})
     r = client.post("/api/runs", json={"graph": g})
     events = read_sse(client, r.json()["run_id"])

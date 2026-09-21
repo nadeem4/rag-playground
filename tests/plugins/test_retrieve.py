@@ -20,6 +20,7 @@ from core.payloads import Chunk, ChunkSet, Query, RetrievalResult
 from core.ports import RunContext, Stage
 from core.storage import Store
 from plugins.index.lancedb_store import DESCRIPTOR, LanceDbIndex, LanceDbIndexConfig
+from plugins.retrieve import _base
 from plugins.retrieve.bm25 import Bm25Config, Bm25Retriever
 from plugins.retrieve.dense import DenseConfig, DenseRetriever
 from plugins.retrieve.hybrid_rrf import HybridRrfConfig, HybridRrfRetriever
@@ -54,6 +55,7 @@ def build_index(tmp_path: Path, *texts: str, embed_texts=None, **config) -> Path
 
     store = Store(tmp_path / "store")
     ctx = _ctx(tmp_path / "index-scratch")
+    config = {"embedder": "fake-deterministic"} | config
     payload = LanceDbIndex().apply(
         {"chunks": [payload_in]}, LanceDbIndexConfig(**config), ctx
     )
@@ -302,21 +304,88 @@ def test_the_query_vector_uses_the_indexed_dimensionality(tmp_path, monkeypatch)
     index_dir = build_index(tmp_path, *CORPUS, truncate_dim=64)
 
     seen: list[tuple[int | None, int]] = []
-    original = FakeDeterministicEmbedder.embed_truncated
+    original = _base.embed_cached
 
-    def spy(self, texts_, dim):
-        out = original(self, texts_, dim)
-        seen.append((dim, len(out[0])))
+    def spy(provider, texts_, *, kind, dim):
+        out = original(provider, texts_, kind=kind, dim=dim)
+        seen.append((dim, len(out[0][0])))
         return out
 
     # Installed *after* the build, so only the query embedding is captured.
-    monkeypatch.setattr(FakeDeterministicEmbedder, "embed_truncated", spy)
+    monkeypatch.setattr(_base, "embed_cached", spy)
 
     retrieve(
         DenseRetriever(), index_dir, Query(text="capital of France"), tmp_path
     )
 
     assert seen == [(64, 64)]
+
+
+# --------------------------------------------------------------------------
+# the query embedding rule (I-4): which text, and which kind
+# --------------------------------------------------------------------------
+
+
+class KindRecorder(FakeDeterministicEmbedder):
+    """The fake, recording `(text, kind)` for every text that reaches it."""
+
+    name = "kind-recorder"
+    model_id = "kind-recorder"
+    calls: list[tuple[str, str]] = []
+
+    def _embed(self, texts, kind):
+        KindRecorder.calls.extend((t, kind) for t in texts)
+        return super()._embed(texts, kind)
+
+
+@pytest.fixture
+def recorder_index(tmp_path, monkeypatch) -> Path:
+    """An index whose descriptor names the recording embedder."""
+    from providers import embeddings
+
+    monkeypatch.setitem(embeddings._EMBEDDERS, KindRecorder.name, KindRecorder)
+    index_dir = build_index(tmp_path, *CORPUS)
+    patch_descriptor(index_dir, embedding_model=KindRecorder.name)
+    KindRecorder.calls = []
+    return index_dir
+
+
+@pytest.mark.parametrize("transform", [DenseRetriever(), HybridRrfRetriever()], ids=["dense", "hybrid_rrf"])
+def test_a_plain_query_is_embedded_as_a_query(tmp_path, recorder_index, transform):
+    retrieve(transform, recorder_index, Query(text="capital of France"), tmp_path)
+    assert KindRecorder.calls == [("capital of France", "query")]
+
+
+@pytest.mark.parametrize("transform", [DenseRetriever(), HybridRrfRetriever()], ids=["dense", "hybrid_rrf"])
+def test_a_hyde_document_is_embedded_as_a_document(tmp_path, recorder_index, transform):
+    """`embed_text` is a hypothetical passage, so no query instruction."""
+    retrieve(
+        transform,
+        recorder_index,
+        Query(text="bananas", embed_text="Bananas are a yellow fruit."),
+        tmp_path,
+    )
+    assert KindRecorder.calls == [("Bananas are a yellow fruit.", "document")]
+
+
+def test_bm25_always_searches_the_question_text(tmp_path, recorder_index):
+    """Lexical search ignores `embed_text` and never embeds anything."""
+    result = retrieve(
+        Bm25Retriever(),
+        recorder_index,
+        Query(text="bananas", embed_text="the mitochondrion powerhouse"),
+        tmp_path,
+    )
+    assert texts(result) == ["Bananas are a yellow tropical fruit"]
+    assert KindRecorder.calls == []
+
+
+def test_the_rule_itself():
+    assert _base.query_embedding_input(Query(text="q")) == ("q", "query")
+    assert _base.query_embedding_input(Query(text="q", embed_text="d")) == (
+        "d",
+        "document",
+    )
 
 
 def test_a_truncated_index_still_retrieves_the_right_chunk(tmp_path):

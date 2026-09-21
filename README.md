@@ -57,12 +57,28 @@ tables and page furniture and fixes reading order. It runs on CPU (torch is the 
 The first Docling run downloads its models from Hugging Face (about 0.5 GB, into
 `~/.cache/huggingface`), so it takes a minute or two. Later runs take roughly a second per page.
 
+### Embedders
+
+The index embeds with `qwen3-embedding-0.6b` by default (Qwen/Qwen3-Embedding-0.6B, 1024
+dimensions, Matryoshka, so `truncate_dim` can shrink it to 512, 256, 128 or 64).
+`bge-small-en-v1.5` is the labelled 2024 baseline (384 dimensions, no truncation), and
+`fake-deterministic` needs no download and is what the tests use. Both real models are
+pinned to a Hugging Face commit and run on CPU through sentence-transformers.
+
+The first index run downloads the model into `~/.cache/huggingface/hub`: about 1.2 GB for
+Qwen3, about 130 MB for bge. On a laptop CPU Qwen3 takes about 1 to 1.5 s per 500-character
+chunk.
+
+Embeddings are cached at full width in SQLite under `artifacts/.embcache/` (or
+`$RAG_PLAYGROUND_EMBED_CACHE`), so re-indexing the same chunks, or sweeping `truncate_dim`,
+embeds each chunk once. Clearing the cache from the UI clears these too.
+
 ## Development
 
 ```bash
 uv sync --extra dev
 uv run pytest
-uv run pytest -m models   # slow tests that load real models, e.g. Docling
+uv run pytest -m models   # slow tests that load real models: Docling, Qwen3, bge
 ```
 
 Requires Python 3.13. `uv python install 3.13` if you don't have it.

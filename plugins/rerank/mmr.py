@@ -1,10 +1,11 @@
 """Maximal Marginal Relevance: the rerank stage at zero dependency cost.
 
-MMR needs no model and no download, which is the point of shipping it first. A
+MMR needs no model of its own, which is the point of shipping it first. A
 cross-encoder is the reranker people actually want, but it is a 500MB download
-and an inference budget; this one is pure arithmetic over vectors that already
-exist, so the *stage* — its ports, its ambient query binding, its rank-movement
-reporting — is proven end to end before any of that weight arrives.
+and an inference budget; this one is arithmetic over vectors that already exist
+(the index's embedder, read back from the embedding cache), so the *stage* (its
+ports, its ambient query and index bindings, its rank-movement reporting) is
+proven end to end before any of that weight arrives.
 
 The rank movement is the pedagogy. Every returned hit carries `prior_rank` and
 `prior_score` from its pre-rerank position, so the bench can draw the arrows
@@ -24,7 +25,8 @@ from core.payloads import Hit, Query, RetrievalResult
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
 from core.transform import Transform
-from providers.embeddings import get_embedder
+from plugins.retrieve import _base
+from providers.embedding_cache import embed_cached
 
 
 class MmrRerankConfig(BaseModel):
@@ -33,7 +35,9 @@ class MmrRerankConfig(BaseModel):
     lambda_mult: float = 0.5
     top_k: int = 5
 
-    embedder: str = "fake-deterministic"
+    # No `embedder` field. The model and width come from the index descriptor,
+    # the same rule the retrievers follow: MMR judges similarity in the space
+    # the hits were retrieved in, and there is no way to say a different one.
 
 
 @register
@@ -48,18 +52,13 @@ class MmrRerank(Transform[MmrRerankConfig]):
         # Ambient: the query reaches the reranker from a non-adjacent ancestor,
         # with no edge a linear column UI would have to draw.
         "query": PortSpec(ArtifactType.QUERY, ambient=True),
+        # Ambient too: the index says which embedder and which width. Its
+        # artifact id is already an input to this node's recipe hash, so a
+        # different model or width moves the id with no fingerprint of its own.
+        "index": PortSpec(ArtifactType.INDEX, ambient=True),
     }
     output = ArtifactType.RETRIEVAL_RESULT
     config_model = MmrRerankConfig
-
-    def fingerprint(self, config: MmrRerankConfig | None = None) -> str:
-        """The embedder's identity: different vectors, different selection.
-
-        Reads the node's own config, not the default — otherwise changing a
-        node's embedder would not move the artifact id.
-        """
-        cfg = config or self.config_model()
-        return get_embedder(cfg.embedder).fingerprint()
 
     def apply(
         self, inputs: Mapping[str, Any], config: MmrRerankConfig, ctx: RunContext
@@ -80,19 +79,25 @@ class MmrRerank(Transform[MmrRerankConfig]):
             hit.prior_rank = hit.rank
             hit.prior_score = hit.score
 
-        embedder = get_embedder(config.embedder)
-        # Phase 3 optimization: read these vectors back from the index instead.
-        # Re-embedding is wasteful in principle — the index already holds the
-        # exact vectors these chunks were stored with — but it is free with the
-        # fake embedder and keeps the reranker independent of the index backend.
-        # `text_to_embed` is used so the contextual-retrieval seam holds: the
-        # augmented text is what was retrieved on, so it is what MMR must judge.
-        vectors = np.asarray(
-            embedder.embed([hit.chunk.text_to_embed for hit in hits]), dtype=float
+        descriptor = _base.read_descriptor(inputs["index"])
+        embedder, dim = _base.embedder_for(descriptor)
+        # Re-embedding the hits goes through the embedding cache, where the
+        # index build already left every chunk's document vector, so with a
+        # real model this is a lookup rather than inference. `text_to_embed` is
+        # used so the contextual-retrieval seam holds: the augmented text is
+        # what was retrieved on, so it is what MMR must judge.
+        doc_vectors, _ = embed_cached(
+            embedder,
+            [hit.chunk.text_to_embed for hit in hits],
+            kind="document",
+            dim=dim,
         )
-        query_vec = np.asarray(
-            embedder.embed([query.embed_text or query.text])[0], dtype=float
+        vectors = np.asarray(doc_vectors, dtype=float)
+        query_text, query_kind = _base.query_embedding_input(query)
+        query_vectors, _ = embed_cached(
+            embedder, [query_text], kind=query_kind, dim=dim
         )
+        query_vec = np.asarray(query_vectors[0], dtype=float)
 
         # Vectors arrive L2-normalized, so a dot product is already the cosine.
         relevance = vectors @ query_vec

@@ -185,7 +185,7 @@ def test_case_and_punctuation_are_ignored(embedder):
 def test_truncated_vectors_are_unit_length(embedder, dim):
     """Slicing a unit vector yields a shorter, non-unit vector. Skipping the
     renormalization silently corrupts every cosine score downstream."""
-    for v in embedder.embed_truncated(["the capital of France is Paris"] * 2, dim):
+    for v in embedder.embed(["the capital of France is Paris"] * 2, dim=dim):
         assert len(v) == dim
         assert math.isclose(math.sqrt(sum(x * x for x in v)), 1.0, rel_tol=1e-9)
 
@@ -193,7 +193,7 @@ def test_truncated_vectors_are_unit_length(embedder, dim):
 def test_truncation_renormalizes_rather_than_slicing_raw(embedder):
     text = "the capital of France is Paris and it is lovely in spring"
     (full,) = embedder.embed([text])
-    (short,) = embedder.embed_truncated([text], 64)
+    (short,) = embedder.embed([text], dim=64)
     raw = full[:64]
     raw_norm = math.sqrt(sum(x * x for x in raw))
     assert raw_norm < 1.0  # the slice really is not unit length
@@ -202,39 +202,40 @@ def test_truncation_renormalizes_rather_than_slicing_raw(embedder):
 
 def test_truncate_to_none_returns_native_vectors(embedder):
     text = "the capital of France is Paris"
-    assert embedder.embed_truncated([text], None) == embedder.embed([text])
+    assert embedder.embed([text], dim=None) == embedder.embed([text])
 
 
 def test_truncation_is_one_directional(embedder):
     """Matryoshka only shrinks. Asking for more than native must fail loudly
     rather than zero-pad into a wrong-shaped index."""
     with pytest.raises(ValueError, match="384"):
-        embedder.embed_truncated(["x"], 385)
+        embedder.embed(["x"], dim=385)
     with pytest.raises(ValueError, match="384"):
-        embedder.embed_truncated(["x"], 1024)
+        embedder.embed(["x"], dim=1024)
 
 
 @pytest.mark.parametrize("dim", [0, -1])
 def test_non_positive_dim_raises(embedder, dim):
     with pytest.raises(ValueError):
-        embedder.embed_truncated(["x"], dim)
+        embedder.embed(["x"], dim=dim)
 
 
 def test_provider_without_matryoshka_refuses_truncation():
     class NoMatryoshka(FakeDeterministicEmbedder):
+        name = "no-matryoshka"
         model_id = "no-matryoshka"
         supports_matryoshka = False
 
     p = NoMatryoshka()
     with pytest.raises(ValueError, match="matryoshka"):
-        p.embed_truncated(["x"], 64)
+        p.embed(["x"], dim=64)
     # None is still fine: it means "no truncation".
-    assert len(p.embed_truncated(["x"], None)[0]) == 384
+    assert len(p.embed(["x"], dim=None)[0]) == 384
 
 
 def test_truncated_vectors_preserve_relative_similarity(embedder):
-    a, b = embedder.embed_truncated(
-        ["The capital of France is Paris", "Paris is the capital of France"], 256
+    a, b = embedder.embed(
+        ["The capital of France is Paris", "Paris is the capital of France"], dim=256
     )
     assert cosine(a, b) > 0.8
 
@@ -254,3 +255,188 @@ def test_get_embedder_is_usable_without_further_setup():
 def test_get_embedder_rejects_unknown_name_and_lists_options():
     with pytest.raises(KeyError, match="fake-deterministic"):
         get_embedder("text-embedding-3-large")
+
+
+# --- kind: the query instruction -------------------------------------------
+
+
+def test_the_fake_ignores_kind(embedder):
+    text = "What is the capital of France?"
+    assert embedder.embed([text], kind="query") == embedder.embed([text], kind="document")
+
+
+def test_kind_defaults_to_document():
+    seen: list[str] = []
+
+    class Recorder(FakeDeterministicEmbedder):
+        def _embed(self, texts, kind):
+            seen.append(kind)
+            return super()._embed(texts, kind)
+
+    Recorder().embed(["x"])
+    Recorder().embed(["x"], kind="query")
+    assert seen == ["document", "query"]
+
+
+def test_empty_input_never_reaches_the_model():
+    class Exploding(FakeDeterministicEmbedder):
+        def _embed(self, texts, kind):
+            raise AssertionError("model called for no texts")
+
+    assert Exploding().embed([], kind="query", dim=64) == []
+
+
+# --- the real models, as declared (no model is loaded here) ---------------
+
+
+def test_embedder_name_literal_matches_the_registry():
+    from typing import get_args
+
+    from providers.embeddings import _EMBEDDERS, EmbedderName
+
+    assert set(get_args(EmbedderName)) == set(_EMBEDDERS)
+    for name, cls in _EMBEDDERS.items():
+        assert cls.name == name
+
+
+def test_registered_real_embedders_match_the_plan():
+    qwen = get_embedder("qwen3-embedding-0.6b")
+    bge = get_embedder("bge-small-en-v1.5")
+
+    assert (qwen.model_id, qwen.native_dim, qwen.supports_matryoshka) == (
+        "Qwen/Qwen3-Embedding-0.6B",
+        1024,
+        True,
+    )
+    assert (bge.model_id, bge.native_dim, bge.supports_matryoshka) == (
+        "BAAI/bge-small-en-v1.5",
+        384,
+        False,
+    )
+
+
+@pytest.mark.parametrize("name", ["qwen3-embedding-0.6b", "bge-small-en-v1.5"])
+def test_real_embedders_pin_a_commit_sha(name):
+    """`main` moves; a cached index must never straddle two model versions."""
+    p = get_embedder(name)
+    assert len(p.revision) == 40 and all(c in "0123456789abcdef" for c in p.revision)
+    assert p.fingerprint() == f"{p.model_id}@{p.revision}#{p.dtype}"
+
+
+@pytest.mark.parametrize("name", ["qwen3-embedding-0.6b", "bge-small-en-v1.5"])
+def test_numeric_dtype_is_part_of_model_identity(name):
+    """float32 and bfloat16 give different vectors from the same checkpoint.
+
+    If the load dtype were not part of the fingerprint and the cache key, a
+    change of dtype would silently reuse vectors computed in the old one. Pure:
+    neither call loads a model.
+    """
+    from providers.embedding_cache import cache_key
+
+    p = get_embedder(name)
+    assert p.dtype == "float32"
+
+    Bf16 = type("Bf16", (type(p),), {"dtype": "bfloat16"})
+    assert Bf16().fingerprint() != p.fingerprint()
+    assert cache_key(p.model_id, p.revision, "document", "t", p.dtype) != cache_key(
+        p.model_id, p.revision, "document", "t", "bfloat16"
+    )
+
+
+def test_fake_embedder_identity_is_unchanged_by_the_dtype_field():
+    """The fake has no dtype, so its fingerprint and cache keys stay as they were."""
+    from providers.embedding_cache import cache_key
+
+    fake = get_embedder("fake-deterministic")
+    assert fake.dtype == ""
+    assert fake.fingerprint() == f"{fake.model_id}@{fake.revision}"
+    assert cache_key("m", "r", "document", "t", "") == cache_key("m", "r", "document", "t")
+
+
+def test_query_instructions_are_wired_per_model():
+    from providers.embeddings import BgeSmallEnV15, Qwen3Embedding06B
+
+    assert Qwen3Embedding06B.query_prompt_name == "query"
+    assert BgeSmallEnV15.query_prefix == (
+        "Represent this sentence for searching relevant passages: "
+    )
+
+
+class _FakeModel:
+    """Stands in for a SentenceTransformer and records how it was called."""
+
+    def __init__(self, dim: int):
+        self.dim = dim
+        self.calls: list[dict] = []
+
+    def encode(self, texts, **kwargs):
+        import numpy as np
+
+        self.calls.append({"texts": list(texts), **kwargs})
+        out = np.zeros((len(texts), self.dim))
+        out[:, 0] = 1.0
+        return out
+
+
+@pytest.mark.parametrize(
+    "name, kind, expected",
+    [
+        ("qwen3-embedding-0.6b", "query", {"prompt_name": "query"}),
+        ("qwen3-embedding-0.6b", "document", {}),
+        (
+            "bge-small-en-v1.5",
+            "query",
+            {"prompt": "Represent this sentence for searching relevant passages: "},
+        ),
+        ("bge-small-en-v1.5", "document", {}),
+    ],
+)
+def test_kind_routes_to_the_model_query_instruction(monkeypatch, name, kind, expected):
+    p = get_embedder(name)
+    model = _FakeModel(p.native_dim)
+    monkeypatch.setattr("providers.embeddings._load_model", lambda *a: model)
+
+    (v,) = p.embed(["hello"], kind=kind)
+
+    assert len(v) == p.native_dim
+    (call,) = model.calls
+    assert call["normalize_embeddings"] is True
+    prompt_keys = {k: call[k] for k in ("prompt", "prompt_name") if k in call}
+    assert prompt_keys == expected
+
+
+def test_truncate_dim_on_bge_is_refused_readably():
+    with pytest.raises(ValueError, match="bge-small-en-v1.5.*matryoshka"):
+        get_embedder("bge-small-en-v1.5").embed(["x"], dim=128)
+
+
+def test_truncate_dim_above_native_is_refused_readably():
+    with pytest.raises(ValueError, match="at most 1024"):
+        get_embedder("qwen3-embedding-0.6b").embed(["x"], dim=2048)
+
+
+def test_importing_providers_does_not_import_torch():
+    """Loading a model is expensive; merely naming one must not be.
+
+    Run in a fresh interpreter, because this process has long since imported
+    torch through docling.
+    """
+    script = "; ".join(
+        [
+            "import sys",
+            "import providers.embeddings, providers.embedding_cache",
+            "import plugins.index.lancedb_store, plugins.retrieve.dense, plugins.rerank.mmr",
+            "from providers.embeddings import get_embedder",
+            "get_embedder('qwen3-embedding-0.6b').fingerprint()",
+            "bad = [m for m in ('torch', 'sentence_transformers', 'transformers') if m in sys.modules]",
+            "print(','.join(bad))",
+        ]
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=ROOT,
+    )
+    assert proc.stdout.strip() == ""

@@ -8,14 +8,18 @@ ordering the rest of the file asserts on.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from core.artifacts import ArtifactType
 from core.payloads import Chunk, Hit, Query, RetrievalResult
 from core.ports import Stage
 from core.registry import registry
+from plugins.index.lancedb_store import DESCRIPTOR
 from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
-from providers.embeddings import get_embedder
+from providers.embeddings import FakeDeterministicEmbedder, get_embedder
 
 QUERY_TEXT = "What is the capital of France?"
 
@@ -71,10 +75,52 @@ def result(
     ).model_dump(mode="json")
 
 
-def rerank(payload: dict | None = None, query: str = QUERY_TEXT, **config) -> RetrievalResult:
+def write_index(directory: Path, **descriptor) -> Path:
+    """An index directory as far as MMR reads one: its `descriptor.json`.
+
+    MMR never searches the table, it only needs to know which embedder and
+    which width the hits were retrieved in.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    desc = {
+        "backends": ["dense", "fts"],
+        "native_dim": 384,
+        "dim": 384,
+        "metric": "cosine",
+        "embedding_model": "fake-deterministic",
+        "embedding_revision": "1",
+        "vector_kind": "dense",
+        "doc_count": 0,
+        "embeddings_computed": 0,
+        "embeddings_cached": 0,
+    } | descriptor
+    (directory / DESCRIPTOR).write_text(json.dumps(desc), encoding="utf-8")
+    return directory
+
+
+#: Set per test by `_index`; the fake embedder at native width by default.
+INDEX: dict[str, Path] = {}
+
+
+@pytest.fixture(autouse=True)
+def _index(tmp_path):
+    INDEX["dir"] = write_index(tmp_path / "index")
+
+
+def rerank(
+    payload: dict | None = None,
+    query: str | Query = QUERY_TEXT,
+    index: Path | None = None,
+    **config,
+) -> RetrievalResult:
     payload = result() if payload is None else payload
+    q = query if isinstance(query, Query) else Query(text=query)
     out = MmrRerank().apply(
-        {"result": payload, "query": Query(text=query).model_dump(mode="json")},
+        {
+            "result": payload,
+            "query": q.model_dump(mode="json"),
+            "index": index or INDEX["dir"],
+        },
         MmrRerankConfig(**config),
         None,
     )
@@ -94,18 +140,92 @@ def test_registered_under_the_rerank_stage():
     assert registry.get(Stage.RERANK, "mmr") is MmrRerank
 
 
-def test_declares_a_result_port_and_an_ambient_query_port():
+def test_declares_a_result_port_and_ambient_query_and_index_ports():
     assert MmrRerank.output is ArtifactType.RETRIEVAL_RESULT
+    assert set(MmrRerank.inputs) == {"result", "query", "index"}
     assert MmrRerank.inputs["result"].type is ArtifactType.RETRIEVAL_RESULT
     assert MmrRerank.inputs["result"].ambient is False
     assert MmrRerank.inputs["query"].type is ArtifactType.QUERY
     assert MmrRerank.inputs["query"].ambient is True
+    assert MmrRerank.inputs["index"].type is ArtifactType.INDEX
+    assert MmrRerank.inputs["index"].ambient is True
 
 
 def test_config_defaults():
     cfg = MmrRerankConfig()
     assert cfg.lambda_mult == 0.5
     assert cfg.top_k == 5
+
+
+def test_config_has_no_embedder_field():
+    """The index says which model; MMR has no way to say a different one."""
+    assert set(MmrRerankConfig.model_fields) == {"lambda_mult", "top_k"}
+
+
+# --------------------------------------------------------------------------
+# the embedder and width come from the index descriptor
+# --------------------------------------------------------------------------
+
+
+class KindRecorder(FakeDeterministicEmbedder):
+    name = "mmr-kind-recorder"
+    model_id = "mmr-kind-recorder"
+    calls: list[tuple[str, str]] = []
+
+    def _embed(self, texts, kind):
+        KindRecorder.calls.extend((t, kind) for t in texts)
+        return super()._embed(texts, kind)
+
+
+@pytest.fixture
+def recorder(monkeypatch, tmp_path) -> Path:
+    from providers import embeddings
+
+    monkeypatch.setitem(embeddings._EMBEDDERS, KindRecorder.name, KindRecorder)
+    KindRecorder.calls = []
+    return write_index(tmp_path / "rec-index", embedding_model=KindRecorder.name)
+
+
+def test_mmr_embeds_with_the_index_embedder(recorder):
+    rerank(index=recorder)
+    embedded = {text for text, _ in KindRecorder.calls}
+    assert embedded == {text for _, text in CANDIDATES} | {QUERY_TEXT}
+
+
+def test_mmr_embeds_hits_as_documents_and_the_question_as_a_query(recorder):
+    rerank(index=recorder)
+    kinds = dict(KindRecorder.calls)
+    assert kinds[QUERY_TEXT] == "query"
+    assert all(kinds[text] == "document" for _, text in CANDIDATES)
+
+
+def test_mmr_embeds_a_hyde_document_as_a_document(recorder):
+    rerank(query=Query(text=QUERY_TEXT, embed_text="Paris is in France."), index=recorder)
+    kinds = dict(KindRecorder.calls)
+    assert kinds["Paris is in France."] == "document"
+    assert QUERY_TEXT not in kinds
+
+
+def test_mmr_works_at_the_index_truncated_width(tmp_path, monkeypatch):
+    seen: list[int | None] = []
+    import plugins.rerank.mmr as mmr
+
+    original = mmr.embed_cached
+
+    def spy(provider, texts_, *, kind, dim):
+        seen.append(dim)
+        return original(provider, texts_, kind=kind, dim=dim)
+
+    monkeypatch.setattr(mmr, "embed_cached", spy)
+    reranked = rerank(index=write_index(tmp_path / "ix64", dim=64), lambda_mult=1.0)
+
+    assert seen == [64, 64]
+    assert keys(reranked) == ["a", "b", "c", "d"]
+
+
+def test_mmr_refuses_a_revision_mismatch(tmp_path):
+    with pytest.raises(ValueError, match="revision"):
+        rerank(index=write_index(tmp_path / "old", embedding_revision="0"))
 
 
 # --------------------------------------------------------------------------

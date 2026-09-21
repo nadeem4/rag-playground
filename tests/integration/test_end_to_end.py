@@ -77,7 +77,9 @@ def graph(
             "recursive_character",
             {"chunk_size": CHUNK_SIZE, "chunk_overlap": 0},
         ),
-        Node("index", Stage.INDEX, "lancedb", dict(index_cfg)),
+        # The fake embedder unless a test says otherwise: the fast suite never
+        # downloads a model.
+        Node("index", Stage.INDEX, "lancedb", {"embedder": "fake-deterministic"} | index_cfg),
         Node("retrieve", Stage.RETRIEVE, retriever, {"top_k": 5, "fetch_k": 20}),
         Node("uc", Stage.USE_CASE, "search", {}),
     ]

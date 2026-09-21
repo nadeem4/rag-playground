@@ -30,7 +30,8 @@ import lancedb
 from core.ids import canonical_json
 from core.payloads import Chunk, Hit, Query, RetrievalResult
 from plugins.index.lancedb_store import DESCRIPTOR, TABLE
-from providers.embeddings import EmbeddingProvider, get_embedder
+from providers.embedding_cache import embed_cached
+from providers.embeddings import EmbedKind, EmbeddingProvider, get_embedder
 
 
 def open_index(raw: Any) -> tuple[Any, dict[str, Any]]:
@@ -41,10 +42,15 @@ def open_index(raw: Any) -> tuple[Any, dict[str, Any]]:
     a database handle of its own.
     """
     directory = Path(raw)
-    descriptor = json.loads(
-        (directory / DESCRIPTOR).read_text(encoding="utf-8")
-    )
-    return lancedb.connect(directory).open_table(TABLE), descriptor
+    return lancedb.connect(directory).open_table(TABLE), read_descriptor(directory)
+
+
+def read_descriptor(raw: Any) -> dict[str, Any]:
+    """The index's `descriptor.json`, without opening the database.
+
+    For consumers such as MMR that need the model and width but no search.
+    """
+    return json.loads((Path(raw) / DESCRIPTOR).read_text(encoding="utf-8"))
 
 
 def require_backend(descriptor: dict[str, Any], backend: str, retriever: str) -> None:
@@ -80,20 +86,36 @@ def embedder_for(descriptor: dict[str, Any]) -> tuple[EmbeddingProvider, int | N
     return embedder, (None if dim == native else dim)
 
 
-def embed_query(descriptor: dict[str, Any], query: Query) -> list[float]:
-    """`query.embed_text or query.text` — the HyDE seam.
+def query_embedding_input(query: Query) -> tuple[str, EmbedKind]:
+    """What to embed for a query, and as which kind. The one rule, spec I-4.
 
-    A query transform that writes a hypothetical answer into `embed_text` changes
-    what is retrieved on without changing what the user asked, which is what lets
-    the original question still be displayed and re-used downstream.
+    A HyDE transform writes a hypothetical *document* into `embed_text`, so it
+    is embedded as a document: the query instruction would tell an asymmetric
+    model to treat a passage as a question. Otherwise the user's question is
+    embedded with the model's query instruction. Retrievers and rerankers both
+    come through here, so they can never disagree.
     """
+    if query.embed_text is not None:
+        return query.embed_text, "document"
+    return query.text, "query"
+
+
+def embed_query(descriptor: dict[str, Any], query: Query) -> list[float] | None:
+    """The query vector, in the index's own model and width.
+
+    `None` for a blank query: an instruction-aware model would happily embed
+    the bare instruction and return plausible-looking hits for nothing at all.
+    """
+    text, kind = query_embedding_input(query)
+    if not text.strip():
+        return None
     embedder, truncate_dim = embedder_for(descriptor)
-    text = query.embed_text or query.text
-    return embedder.embed_truncated([text], truncate_dim)[0]
+    vectors, _ = embed_cached(embedder, [text], kind=kind, dim=truncate_dim)
+    return vectors[0]
 
 
 def dense_rows(
-    table: Any, vector: list[float], descriptor: dict[str, Any], limit: int
+    table: Any, vector: list[float] | None, descriptor: dict[str, Any], limit: int
 ) -> list[dict[str, Any]]:
     """Vector search, using the distance type the index declared.
 
@@ -101,6 +123,8 @@ def dense_rows(
     be the one the index was *declared* with, or the ranking is measured against
     a geometry the vectors were never normalized for.
     """
+    if vector is None:
+        return []
     return (
         table.search(vector)
         .distance_type(descriptor["metric"])

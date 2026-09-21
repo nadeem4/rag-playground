@@ -57,7 +57,9 @@ def build(tmp_path: Path, *sets: dict, **config) -> tuple[Path, RunContext, Stor
     """
     store = Store(tmp_path / "store")
     tf = LanceDbIndex()
-    cfg = LanceDbIndexConfig(**config)
+    # The fake unless a test says otherwise: the default is a real model, and
+    # the fast suite never downloads one.
+    cfg = LanceDbIndexConfig(**({"embedder": "fake-deterministic"} | config))
     ctx = RunContext(
         output_dir=tmp_path / "scratch" / "out",
         emit=lambda e: None,
@@ -235,6 +237,8 @@ DESCRIPTOR_KEYS = {
     "embedding_revision",
     "vector_kind",
     "doc_count",
+    "embeddings_computed",
+    "embeddings_cached",
 }
 
 
@@ -254,6 +258,8 @@ def test_descriptor_carries_every_capability_field(tmp_path):
         "embedding_revision": "1",
         "vector_kind": "dense",
         "doc_count": 1,
+        "embeddings_computed": 1,
+        "embeddings_cached": 0,
     }
 
 
@@ -277,6 +283,74 @@ def test_descriptor_is_offered_as_artifact_meta(tmp_path):
     assert DESCRIPTOR_KEYS <= set(ctx.extras["meta"]["index_descriptor"])
 
 
+def test_descriptor_counts_computed_and_cached_embeddings(tmp_path):
+    """A truncate_dim sweep over one corpus embeds each chunk once."""
+    texts = ("Paris is the capital of France", "Bananas are yellow", "Cells")
+    counts = []
+    for n, dim in enumerate((None, 256, 64)):
+        index_dir, _, _ = build(tmp_path / str(n), chunk_set(*texts), truncate_dim=dim)
+        desc = descriptor_of(index_dir)
+        counts.append((desc["embeddings_computed"], desc["embeddings_cached"]))
+
+    assert counts == [(3, 0), (0, 3), (0, 3)]
+
+
+def test_truncated_index_from_cache_matches_a_fresh_one(tmp_path, monkeypatch):
+    texts = ("Paris is the capital of France", "Bananas are yellow")
+    build(tmp_path / "warm", chunk_set(*texts))  # native width into the cache
+    cached_dir, _, _ = build(tmp_path / "cached", chunk_set(*texts), truncate_dim=64)
+
+    monkeypatch.setenv("RAG_PLAYGROUND_EMBED_CACHE", str(tmp_path / "cold-cache"))
+    fresh_dir, _, _ = build(tmp_path / "fresh", chunk_set(*texts), truncate_dim=64)
+
+    assert descriptor_of(cached_dir)["embeddings_computed"] == 0
+    assert descriptor_of(fresh_dir)["embeddings_computed"] == 2
+    rows = lambda d: [r["vector"] for r in open_table(d).to_arrow().to_pylist()]  # noqa: E731
+    assert rows(cached_dir) == rows(fresh_dir)
+
+
+# --------------------------------------------------------------------------
+# config: the embedder and truncate_dim
+# --------------------------------------------------------------------------
+
+
+def test_the_default_embedder_is_qwen3():
+    assert LanceDbIndexConfig().embedder == "qwen3-embedding-0.6b"
+
+
+def test_the_embedder_is_a_choice_of_registered_names():
+    from pydantic import ValidationError
+
+    schema = LanceDbIndexConfig.model_json_schema()["properties"]["embedder"]
+    assert set(schema["enum"]) == {
+        "qwen3-embedding-0.6b",
+        "bge-small-en-v1.5",
+        "fake-deterministic",
+    }
+    with pytest.raises(ValidationError):
+        LanceDbIndexConfig(embedder="text-embedding-3-large")
+
+
+def test_truncate_dim_above_native_fails_readably(tmp_path):
+    with pytest.raises(ValueError, match="at most 384"):
+        build(tmp_path, chunk_set("Paris"), truncate_dim=512)
+
+
+def test_truncate_dim_on_a_non_matryoshka_embedder_fails_before_loading(tmp_path):
+    """bge is not matryoshka: refused with the reason, and no model download.
+
+    The autouse guard in `tests/conftest.py` fails any model load here, so
+    reaching the error proves validation came first.
+    """
+    with pytest.raises(ValueError, match="bge-small-en-v1.5.*truncate_dim"):
+        build(
+            tmp_path,
+            chunk_set("Paris"),
+            embedder="bge-small-en-v1.5",
+            truncate_dim=128,
+        )
+
+
 # --------------------------------------------------------------------------
 # fingerprint
 # --------------------------------------------------------------------------
@@ -289,7 +363,7 @@ def test_fingerprint_is_stable_for_the_same_config():
 
 def test_fingerprint_changes_with_the_embedder_revision(monkeypatch):
     tf = LanceDbIndex()
-    cfg = LanceDbIndexConfig()
+    cfg = LanceDbIndexConfig(embedder="fake-deterministic")
     before = tf.fingerprint(cfg)
 
     from providers.embeddings import FakeDeterministicEmbedder

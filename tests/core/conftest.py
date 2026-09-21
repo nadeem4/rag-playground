@@ -134,6 +134,7 @@ def reg():
             {
                 "result": PortSpec(ArtifactType.RETRIEVAL_RESULT),
                 "query": PortSpec(ArtifactType.QUERY, ambient=True),
+                "index": PortSpec(ArtifactType.INDEX, ambient=True),
             },
             ArtifactType.RETRIEVAL_RESULT,
         )

@@ -39,7 +39,8 @@ from core.payloads import ChunkSet
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
 from core.transform import Transform
-from providers.embeddings import get_embedder
+from providers.embedding_cache import embed_cached
+from providers.embeddings import EmbedderName, get_embedder
 
 #: The single table every backend reads. Dense and FTS are two indexes over one
 #: set of rows, not two stores — that is what makes hybrid fusion honest.
@@ -53,9 +54,12 @@ TEXT_COLUMN = "text"
 
 
 class LanceDbIndexConfig(BaseModel):
-    embedder: str = "fake-deterministic"
+    #: The first real run downloads the model (Qwen3 is about 1.2 GB).
+    embedder: EmbedderName = "qwen3-embedding-0.6b"
 
-    #: Matryoshka truncation. `None` keeps the model's native width.
+    #: Matryoshka truncation. `None` keeps the model's native width. Checked
+    #: against the chosen embedder at run time: it must not exceed the native
+    #: width, and a non-matryoshka embedder takes none at all.
     truncate_dim: int | None = None
 
     #: Recorded in the descriptor rather than baked into an index: with no ANN
@@ -112,9 +116,17 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         ]
 
         embedder = get_embedder(config.embedder)
+        # Before any embedding, so a bad width fails with the reason and not
+        # after a model download.
+        embedder.check_dim(config.truncate_dim)
         dim = config.truncate_dim or embedder.native_dim
-        vectors = embedder.embed_truncated(
-            [chunk.text_to_embed for chunk in chunks], config.truncate_dim
+        # Through the cache at native width: a truncate_dim sweep embeds each
+        # chunk once and slices the rest.
+        vectors, stats = embed_cached(
+            embedder,
+            [chunk.text_to_embed for chunk in chunks],
+            kind="document",
+            dim=config.truncate_dim,
         )
 
         rows = [
@@ -154,10 +166,13 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             "native_dim": embedder.native_dim,
             "dim": dim,
             "metric": config.metric,
-            "embedding_model": embedder.model_id,
+            # The registry name, which is what `get_embedder` resolves.
+            "embedding_model": embedder.name,
             "embedding_revision": embedder.revision,
             "vector_kind": embedder.vector_kind,
             "doc_count": len(rows),
+            "embeddings_computed": stats.computed,
+            "embeddings_cached": stats.cached,
         }
 
         build_dir = ctx.output_dir / "lancedb"

@@ -76,6 +76,7 @@ def run(
     force: bool = False,
     on_event: Emit | None = None,
     cancelled: Callable[[], bool] | None = None,
+    context_extras: dict[str, Any] | None = None,
 ) -> RunResult:
     """Execute `graph`, reusing every artifact already in `store`.
 
@@ -89,6 +90,13 @@ def run(
     synchronous code with no safe interruption point. Once it returns True,
     every selected node not yet started is SKIPPED, one `run_cancelled` event
     lists them, and `run_finished` carries `cancelled=True`.
+
+    `context_extras` is merged into every node's `RunContext.extras`, a fresh
+    shallow copy per node. It is how per-run values that are not part of any
+    recipe reach a transform: credentials travel as
+    `{"credentials": {"anthropic_api_key": ...}}`. Nothing here is hashed, and
+    only `extras["meta"]` is ever copied into artifact meta, so a credential can
+    never reach an artifact id, meta or the store.
     """
     emit: Emit = on_event or (lambda e: None)
     overrides = overrides or {}
@@ -189,6 +197,7 @@ def run(
             output_dir=store.root / ".scratch" / aid[:16],
             emit=emit,
             tmp=store.root / ".scratch" / "tmp",
+            extras=dict(context_extras or {}),
         )
         ctx.output_dir.mkdir(parents=True, exist_ok=True)
         ctx.tmp.mkdir(parents=True, exist_ok=True)
@@ -280,6 +289,7 @@ def sweep(
     force: bool = False,
     on_event: Emit | None = None,
     cancelled: Callable[[], bool] | None = None,
+    context_extras: dict[str, Any] | None = None,
 ) -> SweepResult:
     """Run one node over N variants against identical upstream input.
 
@@ -293,6 +303,7 @@ def sweep(
 
     `cancelled` is threaded into each run and also checked before each
     variant, so a cancelled sweep starts no further variants.
+    `context_extras` is passed to every run unchanged (see `run`).
     """
     emit: Emit = on_event or (lambda e: None)
     out = SweepResult(variants=list(variants))
@@ -323,6 +334,7 @@ def sweep(
                 force=force,
                 on_event=on_event,
                 cancelled=cancelled,
+                context_extras=context_extras,
             )
         )
         emit(event("variant_finished", index=i, ok=out.runs[-1].ok))

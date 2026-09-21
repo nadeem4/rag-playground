@@ -2,18 +2,26 @@
 
 Requests are validated *before* a run is created: an invalid graph is a 400 and
 an invalid node config a 422, rather than a run that dies in its worker thread.
+
+The Anthropic key is resolved once per request (`api.credentials`) and handed
+to the executor as `context_extras`. It lives only in the job's closure for the
+run's duration, never on `RunState`, and every event the run emits is passed
+through `redact`, so a transform that puts the key in an exception message
+cannot surface it in `node_failed`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import traceback
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
+from api.credentials import redact, resolve_key
 from api.runs import RunState
 from core.executor import run, sweep
 from core.graph import Edge, Graph, GraphValidationError, Node
@@ -94,6 +102,24 @@ def _check(graph: Graph, registry: Registry, overrides: dict | None = None) -> N
             ) from exc
 
 
+def _credentials(header: str | None) -> tuple[str | None, dict[str, Any] | None]:
+    """(key, context_extras). No key resolved means no credentials entry."""
+    key, _source = resolve_key(header)
+    if not key:
+        return None, None
+    return key, {"credentials": {"anthropic_api_key": key}}
+
+
+def _guarded(key: str | None, fn):
+    """Run `fn`, re-raising any crash with the key scrubbed from its traceback."""
+    try:
+        return fn()
+    except Exception:
+        if not key:
+            raise
+        raise RuntimeError(redact(traceback.format_exc(), key)) from None
+
+
 def _unknown(graph: Graph, ids: list[str], what: str) -> None:
     known = {nd.id for nd in graph.nodes}
     missing = [i for i in ids if i not in known]
@@ -102,11 +128,16 @@ def _unknown(graph: Graph, ids: list[str], what: str) -> None:
 
 
 @router.post("/runs", status_code=202)
-async def create_run(body: RunIn, request: Request) -> dict[str, str]:
+async def create_run(
+    body: RunIn,
+    request: Request,
+    x_anthropic_api_key: str | None = Header(default=None),
+) -> dict[str, str]:
     deps = request.app.state.deps
     graph = body.graph.to_graph()
     _check(graph, deps.registry, body.overrides)
     _unknown(graph, body.targets or [], "target")
+    key, extras = _credentials(x_anthropic_api_key)
 
     def job(emit, cancelled):
         seen: list[bool] = []
@@ -114,17 +145,21 @@ async def create_run(body: RunIn, request: Request) -> dict[str, str]:
         def on_event(e):
             if e["event"] == "run_cancelled":
                 seen.append(True)
-            emit(e)
+            emit(redact(e, key))
 
-        res = run(
-            graph,
-            deps.registry,
-            deps.store,
-            overrides=body.overrides,
-            targets=set(body.targets) if body.targets else None,
-            force=body.force,
-            on_event=on_event,
-            cancelled=cancelled,
+        res = _guarded(
+            key,
+            lambda: run(
+                graph,
+                deps.registry,
+                deps.store,
+                overrides=body.overrides,
+                targets=set(body.targets) if body.targets else None,
+                force=body.force,
+                on_event=on_event,
+                cancelled=cancelled,
+                context_extras=extras,
+            ),
         )
         return res.ok, bool(seen)
 
@@ -133,7 +168,11 @@ async def create_run(body: RunIn, request: Request) -> dict[str, str]:
 
 
 @router.post("/sweeps", status_code=202)
-async def create_sweep(body: SweepIn, request: Request) -> dict[str, str]:
+async def create_sweep(
+    body: SweepIn,
+    request: Request,
+    x_anthropic_api_key: str | None = Header(default=None),
+) -> dict[str, str]:
     deps = request.app.state.deps
     graph = body.graph.to_graph()
     _unknown(graph, [body.node_id] + ([body.through] if body.through else []), "node")
@@ -157,6 +196,7 @@ async def create_sweep(body: SweepIn, request: Request) -> dict[str, str]:
         )
         _check(variant_graph, deps.registry)
     variants = [{"transform": v.transform, "config": v.config} for v in body.variants]
+    key, extras = _credentials(x_anthropic_api_key)
 
     def job(emit, cancelled):
         seen: list[bool] = []
@@ -164,18 +204,22 @@ async def create_sweep(body: SweepIn, request: Request) -> dict[str, str]:
         def on_event(e):
             if e["event"] == "run_cancelled":
                 seen.append(True)
-            emit(e)
+            emit(redact(e, key))
 
-        res = sweep(
-            graph,
-            deps.registry,
-            deps.store,
-            node_id=body.node_id,
-            variants=variants,
-            through=body.through,
-            force=body.force,
-            on_event=on_event,
-            cancelled=cancelled,
+        res = _guarded(
+            key,
+            lambda: sweep(
+                graph,
+                deps.registry,
+                deps.store,
+                node_id=body.node_id,
+                variants=variants,
+                through=body.through,
+                force=body.force,
+                on_event=on_event,
+                cancelled=cancelled,
+                context_extras=extras,
+            ),
         )
         stopped_early = len(res.runs) < len(variants)
         return all(r.ok for r in res.runs), bool(seen) or stopped_early

@@ -8,6 +8,7 @@ dependencies = [
     "docling>=2.129.0",
     "fastapi>=0.141.1",
     "lancedb>=0.38,<0.39",
+    "pillow>=12.3.0",
     "pydantic>=2.9",
     "pypdfium2>=5.13.0",
     "python-dotenv>=1.2.3",

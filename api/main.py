@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from api.deps import Deps, build_deps
-from api.routes import artifacts, registry, runs, sources
+from api.routes import artifacts, pages, registry, runs, settings, sources
 from api.runs import RunManager
 from api.static import mount_spa
 
@@ -28,7 +28,14 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     app = FastAPI(title="RAG Playground", lifespan=lifespan)
     app.state.deps = deps or build_deps()
     app.state.runs = manager
-    for r in (registry.router, sources.router, runs.router, artifacts.router):
+    for r in (
+        registry.router,
+        sources.router,
+        pages.router,
+        runs.router,
+        artifacts.router,
+        settings.router,
+    ):
         app.include_router(r, prefix="/api")
     mount_spa(app, app.state.deps.web_dist)  # last: the catch-all route
     return app

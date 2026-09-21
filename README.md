@@ -48,6 +48,27 @@ served from `web/dist`, so build it once with `npm install && npm run build` in 
 Uploads go to `sources/` and cached artifacts to `artifacts/` at the repo root. Set
 `RAG_PLAYGROUND_SOURCES` or `RAG_PLAYGROUND_ARTIFACTS` to put them elsewhere.
 
+### API key
+
+Answers with citations call Claude, so they need an Anthropic API key. Give it to the app in
+one of three ways; the first one found wins:
+
+1. **The UI field.** Type it into the key setting. The browser keeps it in memory only and
+   sends it with each run; it is never saved.
+2. **The `ANTHROPIC_API_KEY` environment variable**, set for the server process only:
+   `ANTHROPIC_API_KEY=sk-ant-... uv run rag-playground` (bash) or
+   `$env:ANTHROPIC_API_KEY="sk-ant-..."; uv run rag-playground` (PowerShell, current window
+   only).
+3. **A `.env` file** at the repo root. Copy `.env.example` to `.env` and fill in
+   `ANTHROPIC_API_KEY=`. `.env` is gitignored; the server reads it without adding it to its
+   environment.
+
+Do not set the key as a system-wide or user-wide environment variable. Every process you
+start would inherit it, including Claude Code sessions, which would then see and could use
+your key. The server never stores, logs or returns the key, and replaces it with
+`[redacted]` in any error it reports. `GET /api/settings/llm` says which source the server
+has, and `POST /api/settings/llm/check` tests a key without spending tokens.
+
 ### Parsers
 
 `docling` is the recommended parser; `pdfium` is the fast baseline. Both read the PDF's text

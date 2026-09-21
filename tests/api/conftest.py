@@ -20,6 +20,20 @@ from plugins.source import upload
 from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
 
 
+@pytest.fixture(autouse=True)
+def no_server_key(tmp_path: Path, monkeypatch) -> None:
+    """Hide any real Anthropic key from every API test.
+
+    The resolver reads the process environment and `<repo>/.env`; a developer's
+    real key in either would otherwise flow into test runs. A test that wants a
+    server-side key sets one explicitly.
+    """
+    from api import credentials
+
+    monkeypatch.delenv(credentials.ENV_VAR, raising=False)
+    monkeypatch.setattr(credentials, "DOTENV_PATH", tmp_path / "no-such.env")
+
+
 @pytest.fixture
 def dirs(tmp_path: Path, monkeypatch) -> dict[str, Path]:
     # build_deps rebinds the upload module's global; restore it afterwards.

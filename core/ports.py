@@ -82,6 +82,10 @@ class RunContext:
     `emit` is called from a worker thread (the executor runs CPU-bound
     transforms off the event loop), so an async consumer must marshal via
     `loop.call_soon_threadsafe`.
+
+    `extras` starts as a copy of the run's `context_extras` (for example
+    `{"credentials": {"anthropic_api_key": ...}}`). A transform may set
+    `extras["meta"]`, the only key the executor copies into artifact meta.
     """
 
     output_dir: Path

@@ -5,10 +5,10 @@ is one file on disk, addressed by its sha256. The config carries the sha rather
 than a path, so a graph is portable and a node's artifact id changes exactly
 when the bytes do.
 
-**Where `sources/` lives** is a module-level global, not `ctx.extras`: the
-executor builds its `RunContext` itself and never populates `extras`, so a
-transform cannot read anything from it today. A module global is the one knob
-that both the eventual API server and a test can actually turn
+**Where `sources/` lives** is a module-level global, not `ctx.extras`: extras
+carry per-run values (credentials) that the executor copies into every node,
+while the source directory is process-wide. A module global is the one knob
+that both the API server and a test can turn
 (`monkeypatch.setattr(upload, "SOURCES_DIR", tmp_path)`).
 """
 

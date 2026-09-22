@@ -95,7 +95,6 @@ The server starts on http://127.0.0.1:8000 and opens your browser. Options:
 ## Stages and supported strategies
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#888888', 'clusterBkg': '#ffffff', 'clusterBorder': '#888888', 'titleColor': '#000000', 'fontFamily': 'monospace'}}}%%
 flowchart TB
     subgraph ingest["Indexing: once per document"]
         direction LR
@@ -106,6 +105,11 @@ flowchart TB
         query --> qt["query_transform *"] --> retrieve --> rerank["rerank *"] --> use_case
     end
     ingest --> ask
+    classDef stage fill:#ffffff,stroke:#000000,color:#000000
+    class source,parse,clean,chunk,enrich,index,query,qt,retrieve,rerank,use_case stage
+    style ingest fill:#ffffff,stroke:#888888,color:#000000
+    style ask fill:#ffffff,stroke:#888888,color:#000000
+    linkStyle default stroke:#888888
 ```
 
 `*` marks a stackable stage: its input and output have the same type, so you can add it

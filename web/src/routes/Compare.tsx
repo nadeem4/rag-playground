@@ -127,7 +127,7 @@ function Sweep({
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { key: apiKey } = useApiKey()
+  const { keys } = useApiKey()
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
 
@@ -167,7 +167,7 @@ function Sweep({
           variants,
           ...(through !== target.id ? { through } : {}),
         },
-        { apiKey },
+        { keys },
       )
       setSubmitted({ variants, through })
       setRunId(run_id)

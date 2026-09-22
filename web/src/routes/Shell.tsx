@@ -77,7 +77,7 @@ function Build({ registry }: { registry: Registry }) {
   const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
   const [columnError, setColumnError] = useState<string | null>(null)
   const run = useRun(runId)
-  const { key: apiKey } = useApiKey()
+  const { keys } = useApiKey()
   // Plan I-15: null until `GET /api/sources` answers, and if it fails.
   const [uploaded, setUploaded] = useState<Source[] | null>(null)
   const [sampleLoaded, setSampleLoaded] = useState(false)
@@ -121,7 +121,7 @@ function Build({ registry }: { registry: Registry }) {
     setColumnError(null)
     setSubmitting(true)
     try {
-      const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }), { apiKey })
+      const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }), { keys })
       const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       setSelected(target ?? order[order.length - 1]?.id ?? null)

@@ -22,7 +22,7 @@ from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
 
 @pytest.fixture(autouse=True)
 def no_server_key(tmp_path: Path, monkeypatch) -> None:
-    """Hide any real Anthropic key from every API test.
+    """Hide any real provider key (Anthropic, OpenAI, custom) from every API test.
 
     The resolver reads the process environment and `<repo>/.env`; a developer's
     real key in either would otherwise flow into test runs. A test that wants a
@@ -30,7 +30,8 @@ def no_server_key(tmp_path: Path, monkeypatch) -> None:
     """
     from api import credentials
 
-    monkeypatch.delenv(credentials.ENV_VAR, raising=False)
+    for provider in credentials.PROVIDERS.values():
+        monkeypatch.delenv(provider.env_var, raising=False)
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
     monkeypatch.setattr(credentials, "DOTENV_PATH", tmp_path / "no-such.env")
 

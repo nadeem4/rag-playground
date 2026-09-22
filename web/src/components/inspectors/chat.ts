@@ -1,4 +1,4 @@
-import type { ChatCitation, ChatPayload, ChatSegment, ChunkSet } from "@/api/types"
+import type { ChatCitation, ChatPayload, ChatSegment, ChunkSet, Grounding, GroundingStats } from "@/api/types"
 
 import { chunkSlot } from "./spans"
 
@@ -89,5 +89,26 @@ export function stopNote(stop: string | null, empty: boolean): string | null {
   if (stop === "refusal") return "The model declined to answer this question."
   if (stop === "max_tokens") return "The answer stopped at the token limit, so it may be cut off."
   if (empty) return "The model returned no text."
+  return null
+}
+
+/**
+ * The sentence-id label a segment is drawn with (plan I-20). Null for native
+ * segments, which keep the I-10 marks, and for text with no word in it.
+ */
+export function claimKind(seg: ChatSegment): Grounding | null {
+  if (!seg.grounding) return null
+  return segmentKind(seg) === "plain" ? null : seg.grounding
+}
+
+/** "4 cited · 1 weak · 0 similarity · 1 not grounded · 0 invalid ids" */
+export function groundingLine(s: GroundingStats): string {
+  const ids = s.unknown_ids === 1 ? "invalid id" : "invalid ids"
+  return `${s.cited} cited · ${s.weak} weak · ${s.similarity} similarity · ${s.none} not grounded · ${s.unknown_ids} ${ids}`
+}
+
+export function methodCaption(method: ChatPayload["citation_method"]): string | null {
+  if (method === "native") return "Citations: native (Claude)"
+  if (method === "sentence_ids") return "Citations: sentence ids, checked by us"
   return null
 }

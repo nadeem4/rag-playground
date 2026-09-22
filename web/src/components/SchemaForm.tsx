@@ -11,6 +11,7 @@ import {
   defaultsFor,
   describeField,
   isPlainObject,
+  isShown,
   rangeHint,
   seedValue,
   validate,
@@ -112,7 +113,9 @@ interface FieldsProps {
 function Fields({ schema, value, onValue, ...rest }: FieldsProps) {
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {Object.entries(schema.properties ?? {}).map(([key, prop]) => (
+      {Object.entries(schema.properties ?? {})
+        .filter(([, prop]) => isShown(prop, value))
+        .map(([key, prop]) => (
         <Property
           key={key}
           name={key}

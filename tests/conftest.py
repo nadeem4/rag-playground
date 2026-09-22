@@ -76,7 +76,7 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(autouse=True)
 def _no_anthropic_calls_outside_live_api_tests(request, monkeypatch):
-    """The default suite must never reach the Anthropic API.
+    """The default suite must never reach the Anthropic, OpenAI or any custom API.
 
     `plugins.use_case.chat.make_client` is the one place a real client is
     built. Replacing it here means a test that forgets to install a fake fails
@@ -93,3 +93,12 @@ def _no_anthropic_calls_outside_live_api_tests(request, monkeypatch):
         )
 
     monkeypatch.setattr("plugins.use_case.chat.make_client", refuse)
+
+    def refuse_llm(*args, **kwargs):
+        raise AssertionError(
+            "test tried to build a real chat model client without "
+            "@pytest.mark.live_api; monkeypatch providers.llm.make_*_client"
+        )
+
+    monkeypatch.setattr("providers.llm.make_anthropic_client", refuse_llm)
+    monkeypatch.setattr("providers.llm.make_openai_client", refuse_llm)

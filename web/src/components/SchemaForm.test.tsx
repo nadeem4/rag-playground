@@ -6,7 +6,7 @@ import { cleanup } from "@testing-library/react"
 import registryJson from "@/api/fixtures/registry.json"
 import type { JsonSchema, Registry } from "@/api/types"
 import { SchemaForm } from "./SchemaForm"
-import { defaultsFor, describeField, errorsFromPydantic } from "./fields/schema"
+import { defaultsFor, describeField, errorsFromPydantic, isShown } from "./fields/schema"
 
 const registry = registryJson as unknown as Registry
 
@@ -58,9 +58,11 @@ describe("every registered plugin", () => {
     for (const prop of Object.values(schema.properties ?? {})) {
       expect(describeField(prop, schema).kind).not.toBe("json")
     }
-    // Every property got a control, and the form emitted exactly the defaults.
-    const keys = Object.keys(schema.properties ?? {})
-    expect(container.querySelectorAll("[data-field-kind]").length).toBe(keys.length)
+    // Every property shown at the defaults got a control (x-show-when may hide some),
+    // and the form emitted exactly the defaults.
+    const defaults = defaultsFor(schema, schema) as Record<string, unknown>
+    const shown = Object.values(schema.properties ?? {}).filter((prop) => isShown(prop, defaults))
+    expect(container.querySelectorAll("[data-field-kind]").length).toBe(shown.length)
     expect(last()).toEqual(defaultsFor(schema, schema))
   })
 })
@@ -409,5 +411,56 @@ describe("form rules", () => {
   it("no visible string contains an em or en dash", () => {
     const { container } = renderForm(registry.clean!.dedupe_blocks.config_schema)
     expect(container.textContent).not.toMatch(new RegExp("[\\u2013\\u2014]"))
+  })
+})
+
+describe("x-show-when", () => {
+  const schema = obj({
+    kind: { type: "string", enum: ["a", "other"], default: "a", title: "Kind" },
+    extra: { type: "string", default: "", title: "Extra", "x-show-when": { kind: "other" } },
+    always: { type: "string", default: "", title: "Always" },
+  })
+
+  it("isShown matches every key against the current values", () => {
+    expect(isShown({ "x-show-when": { kind: "other" } }, { kind: "other" })).toBe(true)
+    expect(isShown({ "x-show-when": { kind: "other" } }, { kind: "a" })).toBe(false)
+    expect(isShown({ "x-show-when": { kind: "other", n: 2 } }, { kind: "other", n: 3 })).toBe(false)
+    expect(isShown({}, {})).toBe(true)
+    expect(isShown({ "x-show-when": "nonsense" }, {})).toBe(true)
+  })
+
+  it("hides the field until the condition holds, and keeps its value in the config", () => {
+    const { last } = renderForm(schema)
+    expect(screen.queryByLabelText("Extra")).toBeNull()
+    expect(screen.getByLabelText("Always")).toBeTruthy()
+    expect(last()).toEqual({ kind: "a", extra: "", always: "" })
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "other" } })
+    fireEvent.change(screen.getByLabelText("Extra"), { target: { value: "x" } })
+    expect(last()).toEqual({ kind: "other", extra: "x", always: "" })
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "a" } })
+    expect(screen.queryByLabelText("Extra")).toBeNull()
+    expect(last()).toEqual({ kind: "a", extra: "x", always: "" })
+  })
+
+  it("works inside a nested object, against that object's values", () => {
+    renderForm(obj({ inner: { type: "object", title: "Inner", properties: schema.properties!, default: { kind: "other" } } }))
+    expect(screen.getByLabelText("Extra")).toBeTruthy()
+  })
+})
+
+describe("x-labels", () => {
+  it("shows a label per option when the schema has one, the id otherwise, and emits the id", () => {
+    const { last } = renderForm(
+      obj({
+        model: { type: "string", enum: ["m-1", "m-2"], default: "m-1", title: "Model", "x-labels": { "m-1": "Model One" } },
+      }),
+    )
+    const select = screen.getByLabelText("Model") as HTMLSelectElement
+    expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+      ["m-1", "Model One"],
+      ["m-2", "m-2"],
+    ])
+    fireEvent.change(select, { target: { value: "m-2" } })
+    expect(last()).toEqual({ model: "m-2" })
   })
 })

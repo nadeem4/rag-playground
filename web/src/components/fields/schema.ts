@@ -216,3 +216,21 @@ export function errorsFromPydantic(errors: PydanticError[]): FieldErrors {
   }
   return out
 }
+
+/**
+ * `x-show-when: {field: value}` on a property: draw it only while every named
+ * sibling has that value. Anything else (absent, malformed) means always shown.
+ * A hidden field keeps its value in the config; it is only not drawn.
+ */
+export function isShown(prop: JsonSchema, values: Record<string, unknown>): boolean {
+  const when = prop["x-show-when"]
+  if (!isPlainObject(when)) return true
+  return Object.entries(when).every(([k, want]) => values[k] === want)
+}
+
+/** `x-labels: {option: label}` on an enum: the text to show. The option itself otherwise. */
+export function optionLabel(schema: JsonSchema, option: unknown): string {
+  const labels = schema["x-labels"]
+  const label = isPlainObject(labels) ? labels[String(option)] : undefined
+  return typeof label === "string" && label ? label : String(option)
+}

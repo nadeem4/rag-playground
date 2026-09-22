@@ -68,8 +68,8 @@ describe("categorical chunk palette (Channel B)", () => {
   it.each([
     ["light", light],
     ["dark", darkToggle],
-  ])("%s: kept and removed fills clear 4.5:1 with their text", (_, tokens) => {
-    for (const k of ["kept", "removed"]) {
+  ])("%s: kept, removed and warn fills clear 4.5:1 with their text", (_, tokens) => {
+    for (const k of ["kept", "removed", "warn"]) {
       expect(contrast(tokens.get(`--${k}`)!, tokens.get(`--${k}-text`)!), k).toBeGreaterThanOrEqual(4.5)
     }
   })

@@ -30,6 +30,149 @@
       }
     }
   },
+  "use_case": {
+    "chat": {
+      "name": "chat",
+      "version": "2",
+      "summary": "Sends the retrieved pieces and your question to a chat model (Claude, OpenAI, or any OpenAI-compatible server), which answers using only those pieces. Every claim points at the passages it relied on, and each citation is checked against the parsed document.",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": false,
+      "cacheable": false,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        },
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        },
+        "index": {
+          "type": "index",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "model": {
+            "default": "claude-opus-5",
+            "enum": [
+              "claude-opus-5",
+              "claude-sonnet-5",
+              "claude-haiku-4-5",
+              "gpt-6-astra",
+              "gpt-5.6-sol",
+              "gpt-5.6-luna",
+              "custom"
+            ],
+            "title": "Model",
+            "type": "string",
+            "x-labels": {
+              "claude-haiku-4-5": "Claude Haiku 4.5",
+              "claude-opus-5": "Claude Opus 5",
+              "claude-sonnet-5": "Claude Sonnet 5",
+              "custom": "Custom (OpenAI-compatible)",
+              "gpt-5.6-luna": "GPT-5.6 Luna",
+              "gpt-5.6-sol": "GPT-5.6 Sol",
+              "gpt-6-astra": "GPT-6 Astra"
+            }
+          },
+          "custom_base_url": {
+            "default": "",
+            "title": "Custom Base Url",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "custom_model": {
+            "default": "",
+            "title": "Custom Model",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "citation_method": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "sentence_ids"
+            ],
+            "title": "Citation Method",
+            "type": "string"
+          },
+          "support_threshold": {
+            "default": 0.55,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Support Threshold",
+            "type": "number"
+          },
+          "max_chunks": {
+            "default": 5,
+            "minimum": 1,
+            "title": "Max Chunks",
+            "type": "integer"
+          }
+        },
+        "title": "ChatConfig",
+        "type": "object"
+      }
+    },
+    "search": {
+      "name": "search",
+      "version": "1",
+      "summary": "Shows the retrieved pieces as a ranked list with their scores and pages. No language model, no API key and no cost: you see exactly what retrieval found.",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          },
+          "max_snippet_chars": {
+            "default": 400,
+            "title": "Max Snippet Chars",
+            "type": "integer"
+          }
+        },
+        "title": "SearchUseCaseConfig",
+        "type": "object"
+      }
+    }
+  },
   "query": {
     "text": {
       "name": "text",
@@ -639,98 +782,6 @@
           }
         },
         "title": "MmrRerankConfig",
-        "type": "object"
-      }
-    }
-  },
-  "use_case": {
-    "search": {
-      "name": "search",
-      "version": "1",
-      "summary": "Shows the retrieved pieces as a ranked list with their scores and pages. No language model, no API key and no cost: you see exactly what retrieval found.",
-      "stage": "use_case",
-      "output": "output",
-      "stackable": false,
-      "deterministic": true,
-      "cacheable": true,
-      "requires": {},
-      "provides": {},
-      "inputs": {
-        "result": {
-          "type": "retrieval_result",
-          "variadic": false,
-          "ambient": false,
-          "required": true
-        }
-      },
-      "config_schema": {
-        "properties": {
-          "top_k": {
-            "default": 5,
-            "title": "Top K",
-            "type": "integer"
-          },
-          "max_snippet_chars": {
-            "default": 400,
-            "title": "Max Snippet Chars",
-            "type": "integer"
-          }
-        },
-        "title": "SearchUseCaseConfig",
-        "type": "object"
-      }
-    },
-    "chat": {
-      "name": "chat",
-      "version": "1",
-      "summary": "Sends the retrieved pieces and your question to Claude, which answers using only those pieces. The answer cites the exact passages it relied on, and each citation is checked against the parsed document.",
-      "stage": "use_case",
-      "output": "output",
-      "stackable": false,
-      "deterministic": false,
-      "cacheable": false,
-      "requires": {},
-      "provides": {},
-      "inputs": {
-        "result": {
-          "type": "retrieval_result",
-          "variadic": false,
-          "ambient": false,
-          "required": true
-        },
-        "query": {
-          "type": "query",
-          "variadic": false,
-          "ambient": true,
-          "required": true
-        },
-        "doc": {
-          "type": "parsed_doc",
-          "variadic": false,
-          "ambient": true,
-          "required": true
-        }
-      },
-      "config_schema": {
-        "properties": {
-          "model": {
-            "default": "claude-opus-5",
-            "enum": [
-              "claude-opus-5",
-              "claude-sonnet-5",
-              "claude-haiku-4-5"
-            ],
-            "title": "Model",
-            "type": "string"
-          },
-          "max_chunks": {
-            "default": 5,
-            "minimum": 1,
-            "title": "Max Chunks",
-            "type": "integer"
-          }
-        },
-        "title": "ChatConfig",
         "type": "object"
       }
     }

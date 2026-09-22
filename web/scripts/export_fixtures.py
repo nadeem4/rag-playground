@@ -28,6 +28,12 @@ What it does:
    `retrieval_result.mmr.json` and `output.search.json`. The query reaches the
    retrievers and MMR ambiently, and MMR's index (when it has that port) too:
    no explicit edge, exactly as the Build column wires it.
+7. Calls `chat` on MMR's result with an OpenAI model, so it cites by sentence
+   ids, and writes `output.chat.sentence_ids.json`. The OpenAI client is a fake that
+   reads the numbered sources in the prompt and answers with one claim of each
+   grounding label (cited, weak, similarity, none) plus one invalid id; the
+   grounding itself is the real code on the index's real (fake) embedder. No
+   network, no key.
 
 Everything runs in a temp directory; nothing is written to `sources/` or the
 artifact store.
@@ -49,10 +55,12 @@ import plugins  # noqa: E402
 from core.artifacts import ArtifactType  # noqa: E402
 from core.executor import run  # noqa: E402
 from core.graph import Edge, Graph, Node  # noqa: E402
-from core.ports import Stage  # noqa: E402
+from core.ports import RunContext, Stage  # noqa: E402
 from core.registry import registry  # noqa: E402
 from core.storage import Store  # noqa: E402
 from plugins.source import upload  # noqa: E402
+from plugins.use_case.chat import ChatConfig, ChatUseCase  # noqa: E402
+from providers import llm  # noqa: E402
 from tests.plugins.conftest import build_paragraph_pdf  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "api" / "fixtures"
@@ -206,6 +214,40 @@ def build_retrieval_graph(sha: str) -> Graph:
     return Graph(nodes=nodes, edges=edges)
 
 
+class FakeOpenAI:
+    """Stands in for `openai.OpenAI` in the chat fixture: reads the numbered
+    sources in the prompt and writes one claim per grounding label."""
+
+    def __init__(self) -> None:
+        from types import SimpleNamespace
+
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    @staticmethod
+    def _create(**kwargs):
+        import re
+        from types import SimpleNamespace
+
+        prompt = kwargs["messages"][1]["content"]
+        shown = dict(re.findall(r"^\[(\d+\.\d+)\] (.+)$", prompt, flags=re.M))
+        ids = list(shown)
+        overlap = next(i for i in ids if "overlap" in shown[i].lower() and len(shown[i]) > 40)
+        other = next(i for i in reversed(ids) if "overlap" not in shown[i].lower())
+        unrelated = ids[0] if ids[0] not in (overlap, other) else ids[1]
+        text = (
+            f"{shown[overlap]} [{overlap}] "
+            f"{shown[other]} [{unrelated}] "
+            "Most teams settle on an overlap of ten percent [9.9]. "
+            f"{shown[ids[len(ids) // 2]]}"
+        )
+        return SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(content=text, refusal=None), finish_reason="stop"
+            )],
+            usage=SimpleNamespace(prompt_tokens=812, completion_tokens=96),
+        )
+
+
 def dump(name: str, data: object) -> None:
     path = OUT / name
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -303,6 +345,36 @@ def main() -> None:
                 "output.search.json",
                 store.load(ret.nodes["search"].artifact.id, ArtifactType.OUTPUT),
             )
+
+            # Chat by sentence ids, against a fake OpenAI client. Called
+            # directly, with exactly the inputs the executor would bind, so
+            # the fake stays local to this one call.
+            previous_client = llm.make_openai_client
+            llm.make_openai_client = lambda api_key, base_url=None: FakeOpenAI()
+            try:
+                output = ChatUseCase().apply(
+                    {
+                        "result": store.load(
+                            ret.nodes["rerank"].artifact.id, ArtifactType.RETRIEVAL_RESULT
+                        ),
+                        "query": store.load(ret.nodes["ask"].artifact.id, ArtifactType.QUERY),
+                        "doc": store.load(
+                            ret.nodes["clean_dedupe"].artifact.id, ArtifactType.PARSED_DOC
+                        ),
+                        "index": index_dir,
+                    },
+                    ChatConfig(model="gpt-6-astra"),
+                    RunContext(
+                        output_dir=root, emit=lambda e: None, tmp=root,
+                        extras={"credentials": {"openai_api_key": "fixture-key"}},
+                    ),
+                )
+            finally:
+                llm.make_openai_client = previous_client
+            stats = output["payload"]["stats"]
+            if not all(stats[k] >= 1 for k in ("cited", "weak", "similarity", "none", "unknown_ids")):
+                raise SystemExit(f"the chat fixture must show every label, got {stats}")
+            dump("output.chat.sentence_ids.json", output)
         finally:
             upload.SOURCES_DIR = previous
 

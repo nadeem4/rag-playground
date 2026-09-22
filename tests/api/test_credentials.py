@@ -349,14 +349,15 @@ def auth_error(message: str) -> anthropic.AuthenticationError:
 
 
 def test_settings_reports_server_source_only(client, monkeypatch):
-    assert client.get("/api/settings/llm").json() == {"source": "none"}
+    # I-18: one source per provider; the Anthropic one is checked here.
+    assert client.get("/api/settings/llm").json()["anthropic"] == "none"
     # a header is not a server source
-    assert client.get("/api/settings/llm", headers=HEADER).json() == {"source": "none"}
+    assert client.get("/api/settings/llm", headers=HEADER).json()["anthropic"] == "none"
     write_dotenv(credentials.DOTENV_PATH, DOTENV_KEY)
-    assert client.get("/api/settings/llm").json() == {"source": "dotenv"}
+    assert client.get("/api/settings/llm").json()["anthropic"] == "dotenv"
     monkeypatch.setenv("ANTHROPIC_API_KEY", ENV_KEY)
     r = client.get("/api/settings/llm")
-    assert r.json() == {"source": "env"}
+    assert r.json()["anthropic"] == "env"
     assert ENV_KEY not in r.text
 
 

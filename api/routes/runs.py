@@ -3,11 +3,15 @@
 Requests are validated *before* a run is created: an invalid graph is a 400 and
 an invalid node config a 422, rather than a run that dies in its worker thread.
 
-The Anthropic key is resolved once per request (`api.credentials`) and handed
-to the executor as `context_extras`. It lives only in the job's closure for the
-run's duration, never on `RunState`, and every event the run emits is passed
-through `redact`, so a transform that puts the key in an exception message
-cannot surface it in `node_failed`.
+Every provider's key (Anthropic, OpenAI, custom endpoint) is resolved once per
+request (`api.credentials`) and handed to the executor as `context_extras`. The
+keys live only in the job's closure for the run's duration, never on
+`RunState`, and every event the run emits is passed through `redact`, so a
+transform that puts a key in an exception message cannot surface it in
+`node_failed`.
+
+In demo mode a chat node set to the `custom` model is refused with a 403: it
+would make the server send a request to a URL a visitor chose.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from api import demo
-from api.credentials import redact, resolve_key
+from api.credentials import redact, resolve_all
 from api.runs import RunState
 from core.executor import run, sweep
 from core.graph import Edge, Graph, GraphValidationError, Node
@@ -30,6 +34,11 @@ from core.ports import Stage
 from core.registry import Registry, UnknownTransformError
 
 router = APIRouter()
+
+DEMO_NO_CUSTOM = (
+    "custom endpoints are disabled in this hosted demo: the server would send "
+    "a request to a URL a visitor chose. Run the playground locally to use one."
+)
 
 #: Seconds between SSE comment heartbeats on an idle stream.
 HEARTBEAT_S = 15.0
@@ -87,11 +96,16 @@ class SweepIn(BaseModel):
 
 def _check(graph: Graph, registry: Registry, overrides: dict | None = None) -> None:
     """Raise the HTTP error a run would otherwise hit in its worker thread."""
+    overrides = overrides or {}
+    if demo.enabled():
+        for nd in graph.nodes:
+            cfg = overrides.get(nd.id, nd.config)
+            if _is_custom_chat(nd.stage, nd.transform, cfg):
+                raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
     try:
         graph.validate(registry)
     except GraphValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    overrides = overrides or {}
     for nd in graph.nodes:
         cfg = overrides.get(nd.id, nd.config)
         if nd.stage == Stage.SOURCE and cfg.get("sha") and not demo.readable(cfg["sha"]):
@@ -108,22 +122,28 @@ def _check(graph: Graph, registry: Registry, overrides: dict | None = None) -> N
             ) from exc
 
 
-def _credentials(header: str | None) -> tuple[str | None, dict[str, Any] | None]:
-    """(key, context_extras). No key resolved means no credentials entry."""
-    key, _source = resolve_key(header)
-    if not key:
-        return None, None
-    return key, {"credentials": {"anthropic_api_key": key}}
+def _is_custom_chat(stage: Stage, transform: str, cfg: dict[str, Any]) -> bool:
+    return stage == Stage.USE_CASE and transform == "chat" and cfg.get("model") == "custom"
 
 
-def _guarded(key: str | None, fn):
-    """Run `fn`, re-raising any crash with the key scrubbed from its traceback."""
+def _credentials(
+    anthropic: str | None, openai: str | None, custom: str | None
+) -> tuple[list[str], dict[str, Any] | None]:
+    """(keys, context_extras). No key resolved means no credentials entry."""
+    creds = resolve_all({"anthropic": anthropic, "openai": openai, "custom": custom})
+    if not creds:
+        return [], None
+    return list(creds.values()), {"credentials": creds}
+
+
+def _guarded(keys: list[str], fn):
+    """Run `fn`, re-raising any crash with the keys scrubbed from its traceback."""
     try:
         return fn()
     except Exception:
-        if not key:
+        if not keys:
             raise
-        raise RuntimeError(redact(traceback.format_exc(), key)) from None
+        raise RuntimeError(redact(traceback.format_exc(), keys)) from None
 
 
 def _unknown(graph: Graph, ids: list[str], what: str) -> None:
@@ -138,12 +158,14 @@ async def create_run(
     body: RunIn,
     request: Request,
     x_anthropic_api_key: str | None = Header(default=None),
+    x_openai_api_key: str | None = Header(default=None),
+    x_custom_api_key: str | None = Header(default=None),
 ) -> dict[str, str]:
     deps = request.app.state.deps
     graph = body.graph.to_graph()
     _check(graph, deps.registry, body.overrides)
     _unknown(graph, body.targets or [], "target")
-    key, extras = _credentials(x_anthropic_api_key)
+    keys, extras = _credentials(x_anthropic_api_key, x_openai_api_key, x_custom_api_key)
 
     def job(emit, cancelled):
         seen: list[bool] = []
@@ -151,10 +173,10 @@ async def create_run(
         def on_event(e):
             if e["event"] == "run_cancelled":
                 seen.append(True)
-            emit(redact(e, key))
+            emit(redact(e, keys))
 
         res = _guarded(
-            key,
+            keys,
             lambda: run(
                 graph,
                 deps.registry,
@@ -178,11 +200,17 @@ async def create_sweep(
     body: SweepIn,
     request: Request,
     x_anthropic_api_key: str | None = Header(default=None),
+    x_openai_api_key: str | None = Header(default=None),
+    x_custom_api_key: str | None = Header(default=None),
 ) -> dict[str, str]:
     deps = request.app.state.deps
     graph = body.graph.to_graph()
     _unknown(graph, [body.node_id] + ([body.through] if body.through else []), "node")
     target = graph.node(body.node_id)
+    if demo.enabled() and any(
+        _is_custom_chat(target.stage, v.transform, v.config) for v in body.variants
+    ):
+        raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
     for v in body.variants:
         try:
             deps.registry.get(target.stage, v.transform)
@@ -202,7 +230,7 @@ async def create_sweep(
         )
         _check(variant_graph, deps.registry)
     variants = [{"transform": v.transform, "config": v.config} for v in body.variants]
-    key, extras = _credentials(x_anthropic_api_key)
+    keys, extras = _credentials(x_anthropic_api_key, x_openai_api_key, x_custom_api_key)
 
     def job(emit, cancelled):
         seen: list[bool] = []
@@ -210,10 +238,10 @@ async def create_sweep(
         def on_event(e):
             if e["event"] == "run_cancelled":
                 seen.append(True)
-            emit(redact(e, key))
+            emit(redact(e, keys))
 
         res = _guarded(
-            key,
+            keys,
             lambda: sweep(
                 graph,
                 deps.registry,

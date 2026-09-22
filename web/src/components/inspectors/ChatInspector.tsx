@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
-import type { ChatCitation, ChatPayload, ChunkSet } from "@/api/types"
+import type { ChatCitation, ChatPayload, ChatSegment, ChunkSet, Grounding } from "@/api/types"
 import { useFind } from "@/api/usePdf"
 import { EmptyState } from "@/components/EmptyState"
 import { citationHighlight, highlightWords } from "@/components/pdf/geometry"
@@ -8,7 +8,18 @@ import { PdfPageView } from "@/components/pdf/PdfPageView"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-import { chatStats, citationPage, citationSlot, quoteText, segmentKind, stopNote, unverifiedReason } from "./chat"
+import {
+  chatStats,
+  citationPage,
+  citationSlot,
+  claimKind,
+  groundingLine,
+  methodCaption,
+  quoteText,
+  segmentKind,
+  stopNote,
+  unverifiedReason,
+} from "./chat"
 import "./inspectors.css"
 import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
 
@@ -25,7 +36,13 @@ import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
  *                  inspector gives text no chunk covers. One mark, one meaning:
  *                  no source behind this text
  *
- * Clicking a number opens the page it cites, with the quote found on it.
+ * A sentence-id answer (plan I-20) also marks each claim by its label, as the
+ * approved explainer does: cited in its chunk's hue with a solid rule,
+ * similarity in the same hue with a dotted rule, weak on the warning fill
+ * with a dashed rule, not grounded in danger ink with a dotted rule. A native
+ * answer (grounding null) is drawn exactly as above.
+ *
+ * Clicking a number, or a claim, opens the page it cites, with the quote found on it.
  */
 
 export function ChatInspector({ payload, status, chunkSet }: { payload?: ChatPayload; status?: InspectorStatus; chunkSet?: ChunkSet }) {
@@ -60,6 +77,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
   const note = stopNote(payload.stop_reason, payload.answer.every((s) => !s.text.trim()))
   const current = open === null ? undefined : byN.get(open)
   const place = current ? citationPage(current, chunkSet) : null
+  const method = methodCaption(payload.citation_method)
 
   // A discrete click: bring the page, or the citation when it has no page, into view.
   useEffect(() => {
@@ -80,6 +98,19 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         {payload.stop_reason ? <span className="font-mono text-xs text-fg-muted">{payload.stop_reason}</span> : null}
       </div>
 
+      {method ? (
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-surface-elevated px-3 py-2">
+          <span data-testid="chat-method" className="text-xs text-fg-muted">
+            {method}
+          </span>
+          {payload.citation_method === "sentence_ids" && payload.stats ? (
+            <span data-testid="chat-grounding" className="font-mono text-xs text-fg tabular-nums">
+              {groundingLine(payload.stats)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-1 bg-surface px-3 py-2">
         <span className="meta">question</span>
         <p className="max-w-[82ch] text-sm text-fg">{payload.question}</p>
@@ -93,6 +124,10 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         ) : null}
         <p data-answer="" className="max-w-[82ch] text-base leading-[1.65] whitespace-pre-wrap text-fg">
           {payload.answer.map((seg, k) => {
+            const grounding = claimKind(seg)
+            if (grounding) {
+              return <Claim key={k} seg={seg} grounding={grounding} byN={byN} chunkSet={chunkSet} open={open} onOpen={setOpen} />
+            }
             const kind = segmentKind(seg)
             if (kind === "ungrounded") {
               return (
@@ -114,7 +149,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         </p>
       </div>
 
-      <Legend />
+      <Legend claims={payload.citation_method === "sentence_ids"} />
 
       {payload.citations.length ? (
         <ol ref={listRef} aria-label="Citations" className="flex flex-col bg-surface">
@@ -189,9 +224,98 @@ function CiteMark({
   )
 }
 
-function Legend() {
+const CLAIM_TITLE: Record<Grounding, string> = {
+  cited: "Cited: the named sentences support this",
+  weak: "Weak support: the named sentences are not similar enough. Read them to judge.",
+  similarity: "Similarity match: no id given, but a shown sentence matches",
+  none: "Not grounded: no source sentence supports this",
+}
+
+/** One sentence-id claim. It opens its first citation, like its number does. */
+function Claim({
+  seg,
+  grounding,
+  byN,
+  chunkSet,
+  open,
+  onOpen,
+}: {
+  seg: ChatSegment
+  grounding: Grounding
+  byN: Map<number, ChatCitation>
+  chunkSet?: ChunkSet
+  open: number | null
+  onOpen: (n: number) => void
+}) {
+  const first = seg.citations.map((n) => byN.get(n)).find((c) => c !== undefined)
+  const hued = grounding === "cited" || grounding === "similarity"
+  // The mark covers the words, not the space before or after them.
+  const [, lead, body, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(seg.text)!
+  const go = first ? () => onOpen(first.n) : undefined
+  return (
+    <span data-segment="claim">
+      {lead}
+      <span
+        data-grounding={grounding}
+        className="chat-claim"
+        style={hued ? toneOf(first ? citationSlot(first, chunkSet) : null) : undefined}
+        title={CLAIM_TITLE[grounding]}
+        role={go ? "button" : undefined}
+        tabIndex={go ? 0 : undefined}
+        aria-pressed={first ? open === first.n : undefined}
+        onClick={go}
+        onKeyDown={
+          go
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  go()
+                }
+              }
+            : undefined
+        }
+      >
+        {body}
+      </span>
+      {trail}
+      {seg.citations.map((n) => (
+        <CiteMark key={n} n={n} citation={byN.get(n)} chunkSet={chunkSet} selected={open === n} onOpen={() => onOpen(n)} />
+      ))}
+    </span>
+  )
+}
+
+function Legend({ claims }: { claims: boolean }) {
   return (
     <p className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-surface px-3 py-2 text-xs text-fg-muted">
+      {claims ? (
+        <>
+          <span className="flex items-center gap-1">
+            <span aria-hidden className="chat-claim" data-grounding="cited" style={toneOf(null)}>
+              text
+            </span>
+            cited
+          </span>
+          <span className="flex items-center gap-1">
+            <span aria-hidden className="chat-claim" data-grounding="weak">
+              text
+            </span>
+            weak support
+          </span>
+          <span className="flex items-center gap-1">
+            <span aria-hidden className="chat-claim" data-grounding="similarity" style={toneOf(null)}>
+              text
+            </span>
+            similarity match
+          </span>
+          <span className="flex items-center gap-1">
+            <span aria-hidden className="chat-claim" data-grounding="none">
+              text
+            </span>
+            not grounded
+          </span>
+        </>
+      ) : null}
       <span className="flex items-center gap-1">
         <span aria-hidden className="chat-cite font-mono" data-verified="" style={toneOf(null)}>
           1
@@ -230,6 +354,8 @@ function CitationRow({ c, chunkSet, selected, onOpen }: { c: ChatCitation; chunk
         <p className="flex flex-wrap gap-x-3 font-mono text-2xs text-fg-muted">
           <span className={c.verified ? "text-fg" : undefined}>{c.verified ? "verified" : "not verified"}</span>
           {c.chunk_id ? <span title={c.chunk_id}>chunk {c.chunk_id.slice(0, 8)}</span> : <span>not in the hits</span>}
+          {c.method === "id" ? <span>cited by id</span> : c.method === "similarity" ? <span>similarity match</span> : null}
+          {typeof c.support === "number" ? <span>support {c.support.toFixed(2)}</span> : null}
           {c.doc_start !== null && c.doc_end !== null ? (
             <span>
               chars {c.doc_start}-{c.doc_end}

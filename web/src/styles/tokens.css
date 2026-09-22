@@ -75,6 +75,9 @@
   --removed: oklch(0.92 0.04 25);   --removed-text: oklch(0.32 0.05 25);   /* 10.1 */
   --kept-mark: oklch(0.58 0.1 190);
   --removed-mark: oklch(0.56 0.14 25);
+
+  /* Channel B: weak support, a flag for a person to read (chat claims). */
+  --warn: oklch(0.86 0.08 75);      --warn-text: oklch(0.38 0.08 75);
 }
 
 /* ----------------------------------------------------------------- dark -- */
@@ -109,6 +112,7 @@
   --removed: oklch(0.3 0.04 25);    --removed-text: oklch(0.9 0.05 25);
   --kept-mark: oklch(0.66 0.1 190);
   --removed-mark: oklch(0.66 0.14 25);
+  --warn: oklch(0.42 0.07 75);      --warn-text: oklch(0.92 0.06 75);
 }
 
 /* Block 2 of 2: the OS preference, unless the toggle pinned light. */
@@ -143,6 +147,7 @@
     --removed: oklch(0.3 0.04 25);    --removed-text: oklch(0.9 0.05 25);
     --kept-mark: oklch(0.66 0.1 190);
     --removed-mark: oklch(0.66 0.14 25);
+    --warn: oklch(0.42 0.07 75);      --warn-text: oklch(0.92 0.06 75);
   }
 }
 
@@ -238,6 +243,7 @@
   --color-kept: var(--kept); --color-kept-text: var(--kept-text);
   --color-removed: var(--removed); --color-removed-text: var(--removed-text);
   --color-kept-mark: var(--kept-mark);
+  --color-warn: var(--warn); --color-warn-text: var(--warn-text);
   --color-removed-mark: var(--removed-mark);
 }
 

@@ -250,6 +250,44 @@ button.chat-cite[aria-pressed="true"] {
 .chat-row:not([data-verified]) {
   border-left-style: dashed;
 }
+/*
+ * Sentence-id claims (plan I-20), after the approved explainer. Hue is the
+ * cited chunk's; the rule style says how the pointer was found.
+ *   cited       chunk fill, solid rule
+ *   similarity  chunk fill, dotted rule
+ *   weak        warning fill, dashed rule
+ *   none        no fill, danger ink, dotted rule
+ */
+.chat-claim {
+  background: var(--tone);
+  color: var(--tone-text);
+  border-bottom: 2px solid var(--tone-text);
+  padding-bottom: 1px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.chat-claim[data-grounding="similarity"] {
+  border-bottom-style: dotted;
+}
+.chat-claim[data-grounding="weak"] {
+  background: var(--warn);
+  color: var(--warn-text);
+  border-bottom: 2px dashed var(--warn-text);
+}
+.chat-claim[data-grounding="none"] {
+  background: transparent;
+  color: var(--danger);
+  border-bottom: 2px dotted var(--danger);
+}
+.chat-claim[role="button"] {
+  cursor: pointer;
+}
+.chat-claim[aria-pressed="true"],
+.chat-claim:focus-visible {
+  /* Selection is an accent use (contract section 3, Channel A). */
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .chat-quote {
   quotes: "\201C" "\201D";
 }

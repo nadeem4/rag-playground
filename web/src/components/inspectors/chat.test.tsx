@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import chatJson from "@/api/fixtures/output.chat.json"
 import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
-import type { ChatOutput, ChunkSet, FindResult } from "@/api/types"
+import type { ChatOutput, ChatPayload, ChunkSet, FindResult } from "@/api/types"
 import { clearPdfCaches } from "@/api/usePdf"
 import { titleFor } from "@/state/graph"
 
-import { chatStats, citationPage, segmentKind } from "./chat"
+import { chatStats, citationPage, claimKind, groundingLine, methodCaption, segmentKind } from "./chat"
 import { ChatInspector } from "./ChatInspector"
 import { ArtifactInspector } from "./registry"
 
@@ -57,11 +57,14 @@ const how = () => document.querySelector("[data-highlight-how]")?.getAttribute("
 
 describe("the fixture matches I-10", () => {
   it("has the payload keys and citation keys, with every edge case", () => {
-    expect(Object.keys(chat.payload).sort()).toEqual(["answer", "citations", "model", "question", "stop_reason", "usage"])
+    // The I-10 keys, plus only the additive I-20 ones.
+    const top = ["answer", "citations", "model", "question", "stop_reason", "usage"]
+    expect(Object.keys(chat.payload)).toEqual(expect.arrayContaining(top))
+    expect(Object.keys(chat.payload).filter((k) => !top.includes(k)).every((k) => ["provider", "citation_method", "stats"].includes(k))).toBe(true)
+    const keys = ["bbox", "chunk_id", "cited_text", "doc_end", "doc_start", "element_id", "n", "page", "source_sha", "verified"]
     for (const c of chat.payload.citations) {
-      expect(Object.keys(c).sort()).toEqual(
-        ["bbox", "chunk_id", "cited_text", "doc_end", "doc_start", "element_id", "n", "page", "source_sha", "verified"].sort(),
-      )
+      expect(Object.keys(c)).toEqual(expect.arrayContaining(keys))
+      expect(Object.keys(c).filter((k) => !keys.includes(k)).every((k) => ["method", "support"].includes(k))).toBe(true)
     }
     const cs = chat.payload.citations
     expect(cs.some((c) => c.verified)).toBe(true)
@@ -234,5 +237,106 @@ describe("ChatInspector", () => {
 describe("the use case card", () => {
   it("is titled Chat when chat is chosen", () => {
     expect(titleFor({ stage: "use_case", transform: "chat" })).toBe("Chat")
+  })
+})
+
+// A sentence-id answer (plan I-20), one claim per label. Its citations reuse
+// the I-10 fixture's real chunk ids and pages so the viewer can be exercised.
+const SID: ChatPayload = {
+  question: "Why do chunk boundaries matter?",
+  model: "gpt-6-astra",
+  provider: "openai",
+  citation_method: "sentence_ids",
+  answer: [
+    { text: "A retriever only returns what a chunk contains.", citations: [1], grounding: "cited" },
+    { text: " Boundaries decide recall.", citations: [2], grounding: "weak" },
+    { text: " A split table loses its caption.", citations: [3], grounding: "similarity" },
+    { text: " Most teams use 500 tokens.", citations: [], grounding: "none" },
+    { text: " ", citations: [], grounding: "none" },
+  ],
+  citations: [
+    { ...byN(1), n: 1, method: "id", support: 0.83 },
+    { ...byN(2), n: 2, method: "id", support: 0.41 },
+    { ...byN(1), n: 3, method: "similarity", support: 0.71 },
+  ],
+  usage: { input_tokens: 900, output_tokens: 60 },
+  stop_reason: "stop",
+  stats: { cited: 4, weak: 1, similarity: 0, none: 1, unknown_ids: 0 },
+}
+const claim = (g: string) => answer().querySelector<HTMLElement>(`[data-grounding="${g}"]`)!
+
+describe("sentence-id grounding helpers", () => {
+  it("a claim takes its label, except native segments and bare punctuation", () => {
+    expect(claimKind({ text: "It is fast", citations: [1], grounding: "weak" })).toBe("weak")
+    expect(claimKind({ text: "It is fast", citations: [], grounding: "none" })).toBe("none")
+    expect(claimKind({ text: " ", citations: [], grounding: "none" })).toBeNull()
+    expect(claimKind({ text: "It is fast", citations: [1], grounding: null })).toBeNull()
+    expect(claimKind({ text: "It is fast", citations: [1] })).toBeNull()
+  })
+
+  it("the stats line counts every label and the invalid ids", () => {
+    expect(groundingLine(SID.stats!)).toBe("4 cited · 1 weak · 0 similarity · 1 not grounded · 0 invalid ids")
+    expect(groundingLine({ cited: 1, weak: 0, similarity: 2, none: 0, unknown_ids: 1 })).toBe(
+      "1 cited · 0 weak · 2 similarity · 0 not grounded · 1 invalid id",
+    )
+  })
+
+  it("names the method", () => {
+    expect(methodCaption("native")).toBe("Citations: native (Claude)")
+    expect(methodCaption("sentence_ids")).toBe("Citations: sentence ids, checked by us")
+    expect(methodCaption(undefined)).toBeNull()
+  })
+})
+
+describe("ChatInspector, sentence ids", () => {
+  it("marks each claim with its label", () => {
+    render(<ChatInspector payload={SID} chunkSet={chunks} />)
+    for (const g of ["cited", "weak", "similarity", "none"]) {
+      expect(claim(g).className).toContain("chat-claim")
+    }
+    expect(claim("cited").textContent).toBe("A retriever only returns what a chunk contains.")
+    // Cited and similarity carry their chunk's hue; weak and none do not.
+    expect(claim("cited").getAttribute("style")).toMatch(/--tone: var\(--chunk-\d\)/)
+    expect(claim("similarity").getAttribute("style")).toMatch(/--tone: var\(--chunk-\d\)/)
+    expect(claim("weak").getAttribute("style") ?? "").not.toMatch(/chunk/)
+    expect(claim("none").getAttribute("title")).toBe("Not grounded: no source sentence supports this")
+    // A claim with no citation is not a control.
+    expect(claim("none").getAttribute("role")).toBeNull()
+    // Whitespace is not a claim.
+    expect(answer().querySelectorAll("[data-grounding]")).toHaveLength(4)
+    // The numbers still follow the claims.
+    expect([...answer().querySelectorAll("sup [data-cite]")].map((m) => m.getAttribute("data-cite"))).toEqual(["1", "2", "3"])
+  })
+
+  it("shows the stats line and names the method", () => {
+    render(<ChatInspector payload={SID} chunkSet={chunks} />)
+    expect(screen.getByTestId("chat-grounding").textContent).toBe("4 cited · 1 weak · 0 similarity · 1 not grounded · 0 invalid ids")
+    expect(screen.getByTestId("chat-method").textContent).toBe("Citations: sentence ids, checked by us")
+    expect(document.body.textContent).not.toMatch(new RegExp("[\u2013\u2014]"))
+  })
+
+  it("shows each citation's support", () => {
+    render(<ChatInspector payload={SID} chunkSet={chunks} />)
+    const row = document.querySelector<HTMLElement>('li[data-citation="2"]')!
+    expect(within(row).getByText("support 0.41")).toBeTruthy()
+  })
+
+  it("clicking a claim opens its page, as a number does", async () => {
+    render(<ChatInspector payload={SID} chunkSet={chunks} />)
+    fireEvent.click(claim("cited"))
+    await waitFor(() => expect(view().querySelector("[data-pdf-page='1']")).toBeTruthy())
+    expect(claim("cited").getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("a native answer names its method and keeps today's marks", () => {
+    render(<ChatInspector payload={{ ...chat.payload, citation_method: "native" }} chunkSet={chunks} />)
+    expect(screen.getByTestId("chat-method").textContent).toBe("Citations: native (Claude)")
+    expect(answer().querySelector("[data-grounding]")).toBeNull()
+    expect(screen.queryByTestId("chat-grounding")).toBeNull()
+  })
+
+  it("an I-10 payload shows no method caption", () => {
+    render(<ChatInspector payload={chat.payload} chunkSet={chunks} />)
+    expect(screen.queryByTestId("chat-method")).toBeNull()
   })
 })

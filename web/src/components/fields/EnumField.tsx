@@ -1,3 +1,4 @@
+import { optionLabel } from "./schema"
 import type { ControlProps } from "./types"
 import { CONTROL } from "./types"
 
@@ -17,7 +18,7 @@ export function EnumField({ f, id, value, disabled, invalid, describedBy, onChan
       {known ? null : <option value="" disabled hidden />}
       {f.options.map((o) => (
         <option key={String(o)} value={String(o)}>
-          {String(o)}
+          {optionLabel(f.schema, o)}
         </option>
       ))}
     </select>

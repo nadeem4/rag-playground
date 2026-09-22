@@ -13,6 +13,7 @@ import type {
   Explanation,
   FindResult,
   LlmCheck,
+  LlmProvider,
   LlmSettings,
   PdfPageSize,
   Registry,
@@ -64,22 +65,33 @@ const json = (body: unknown, headers: Record<string, string> = {}): RequestInit 
   body: JSON.stringify(body),
 })
 
-/** The header that carries a key typed in the UI (plan I-8). */
-export const KEY_HEADER = "X-Anthropic-Api-Key"
-
-/**
- * The key header, present ONLY when a UI key is set. Without it the server
- * falls back to its own environment or .env. The key goes nowhere else: not a
- * body, not a URL, not an error message.
- */
-export function keyHeaders(apiKey?: string | null): Record<string, string> {
-  const k = apiKey?.trim()
-  return k ? { [KEY_HEADER]: k } : {}
+/** The header that carries each provider's key typed in the UI (plan I-8, I-18). */
+export const KEY_HEADERS: Record<LlmProvider, string> = {
+  anthropic: "X-Anthropic-Api-Key",
+  openai: "X-OpenAI-Api-Key",
+  custom: "X-Custom-Api-Key",
 }
 
-/** Options for requests that may carry a UI key. */
+/** UI keys by provider; null or absent when not set. */
+export type UiKeys = Partial<Record<LlmProvider, string | null>>
+
+/**
+ * One header per UI key that is set, and nothing for the rest. Without it the
+ * server falls back to its own environment or .env. A key goes nowhere else:
+ * not a body, not a URL, not an error message.
+ */
+export function keyHeaders(keys?: UiKeys | null): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [p, header] of Object.entries(KEY_HEADERS) as [LlmProvider, string][]) {
+    const k = keys?.[p]?.trim()
+    if (k) out[header] = k
+  }
+  return out
+}
+
+/** Options for requests that may carry UI keys. */
 export interface KeyOpts {
-  apiKey?: string | null
+  keys?: UiKeys | null
 }
 
 const sha = (s: string) => encodeURIComponent(s)
@@ -101,9 +113,9 @@ export const api = {
   sampleSource: () => request<Source>("/sources/sample", { method: "POST" }),
 
   /** 400 on an invalid graph; 422 `{detail: {node_id, errors}}` on a bad config. */
-  createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.apiKey))),
+  createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.keys))),
   createSweep: (body: SweepRequest, opts: KeyOpts = {}) =>
-    request<RunCreated>("/sweeps", json(body, keyHeaders(opts.apiKey))),
+    request<RunCreated>("/sweeps", json(body, keyHeaders(opts.keys))),
   run: (runId: string) => request<RunSnapshot>(`/runs/${encodeURIComponent(runId)}`),
   /** 409 when the run has already finished. */
   cancelRun: (runId: string) =>
@@ -122,8 +134,8 @@ export const api = {
   /** Which key source the SERVER can supply. Never a value. */
   llmSettings: () => request<LlmSettings>("/settings/llm"),
   /** Lists models with the resolved key: costs no tokens. */
-  checkLlm: (opts: KeyOpts = {}) =>
-    request<LlmCheck>("/settings/llm/check", { method: "POST", headers: keyHeaders(opts.apiKey) }),
+  checkLlm: (provider: LlmProvider, opts: KeyOpts = {}) =>
+    request<LlmCheck>("/settings/llm/check", json({ provider }, keyHeaders({ [provider]: opts.keys?.[provider] }))),
 
   /** Page sizes in PDF points, 1-based `n`. */
   pages: (source: string) => request<PdfPageSize[]>(`/sources/${sha(source)}/pages`),

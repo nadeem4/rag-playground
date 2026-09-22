@@ -7,7 +7,8 @@ inspect in the browser. You can also chain the stages into a full pipeline and c
 strategies side by side.
 
 It runs entirely on your machine. The only network calls are the one-time model downloads
-and, if you choose the chat answer, a call to Claude.
+and, if you choose the chat answer, a call to the chat model you pick: Claude, OpenAI, or
+any OpenAI-compatible server (which can be a local one, such as Ollama).
 
 It is built for learning and demos, not for production: there is no auth, no multi-user
 support and no scaling story.
@@ -19,7 +20,7 @@ support and no scaling story.
 - [What you can do](#what-you-can-do)
 - [Stages and supported strategies](#stages-and-supported-strategies)
 - [Models and downloads](#models-and-downloads)
-- [API key for chat answers](#api-key-for-chat-answers)
+- [API keys for chat answers](#api-keys-for-chat-answers)
 - [How it works](#how-it-works)
 - [Adding a strategy](#adding-a-strategy)
 - [Development](#development)
@@ -88,9 +89,10 @@ Then open http://localhost:8000.
 - **Your models and uploads live in a named volume**, mounted at `/data` in the container.
   They survive `docker compose down` and rebuilds. To delete them, run
   `docker compose down -v`.
-- **API key for chat answers:** put `ANTHROPIC_API_KEY=...` in a `.env` file next to
-  `docker-compose.yml` (copy `.env.example`). Compose passes it to the container at start.
-  It is never copied into the image, and the setup works without a `.env` at all.
+- **API keys for chat answers:** put `ANTHROPIC_API_KEY=...`, `OPENAI_API_KEY=...` or
+  `OPENAI_COMPATIBLE_API_KEY=...` in a `.env` file next to `docker-compose.yml` (copy
+  `.env.example`). Compose passes them to the container at start. They are never copied
+  into the image, and the setup works without a `.env` at all.
 - **Another port:** `RAG_PLAYGROUND_PORT=8080 docker compose up` serves the UI on
   http://localhost:8080.
 - **Only your machine can reach it.** Compose publishes the port on `127.0.0.1`, because
@@ -105,9 +107,13 @@ unsafe to share:
 - **No uploads.** `POST /api/sources` is refused, and the UI hides Upload. Visitors work with
   the bundled sample only, and no route lists or reads any other file, so nobody sees
   another visitor's document.
-- **No server API key.** The key comes only from the request header, that is, a key the
-  visitor types in the UI. `ANTHROPIC_API_KEY` in the environment or in `.env` is ignored,
-  so visitors can never spend the host's key.
+- **No server API keys.** Every key, for every provider, comes only from the request
+  header, that is, a key the visitor types in the UI. `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY` and `OPENAI_COMPATIBLE_API_KEY` in the environment or in `.env` are
+  ignored, so visitors can never spend the host's keys.
+- **No custom endpoints.** A run or sweep with a chat node set to the `custom` model is
+  refused with 403, and so is checking a custom endpoint: the server would otherwise send
+  a request to any URL a visitor chose.
 
 `GET /api/settings/app` returns `{"demo": true}` so the UI can say so.
 
@@ -127,9 +133,16 @@ unsafe to share:
   how the chosen strategy works, and what it will do with your current settings, including
   the trade-off. Settings that make no sense show a warning and disable Run. After a run,
   the card says what the step did compared with the previous run.
-- **Get answers with checked citations.** The chat step asks Claude to answer from the
-  retrieved chunks only.
-  - Every claim cites the exact passage it relied on.
+- **Get answers with checked citations, from any model.** The chat step asks Claude, an
+  OpenAI model, or any OpenAI-compatible server to answer from the retrieved chunks only.
+  - Every claim cites the exact passage it relied on. Claude can use its own citations
+    feature; every model can cite by sentence ids, where each retrieved sentence gets an
+    id, the model writes the ids after each claim, and the playground quotes those
+    sentences itself.
+  - With sentence ids, each claim is compared with the sentences it cites using the
+    index's embedder, and is shown as cited, weak (the cited sentences do not match it
+    well), matched by similarity (it cited nothing, but a shown sentence matches it), or
+    not grounded.
   - Each citation is checked against the parsed document; one that does not match is
     marked unverified rather than trusted.
   - Clicking a citation opens the original PDF page with the sentence highlighted.
@@ -211,7 +224,7 @@ several times, for example two cleaners in a row.
 | Strategy | How it works | Needs a key |
 |---|---|---|
 | `search` | Shows the top 5 chunks as a ranked list with scores and pages, and how many candidates there were. | No |
-| `chat` | Claude answers from the top 5 retrieved chunks only, with a checked citation for every claim. | Yes |
+| `chat` | A chat model (Claude, OpenAI, or a custom OpenAI-compatible endpoint) answers from the top 5 retrieved chunks only, and every claim points at the sentences it relied on. `citation_method` is `auto` (Claude's own citations for a Claude model, sentence ids for any other) or `sentence_ids`. With sentence ids, `support_threshold` (0.55) decides when a claim counts as cited rather than weak. | Yes, for the chosen provider; optional for a custom endpoint |
 
 ## Models and downloads
 
@@ -228,30 +241,50 @@ first time they are used, so the first run of a step is slow and later runs are 
 Both real embedders are pinned to a Hugging Face commit. Embeddings are cached at full width
 in SQLite, so re-indexing the same chunks, or sweeping `truncate_dim`, embeds each chunk once.
 
-## API key for chat answers
+## API keys for chat answers
 
-Only the `chat` step needs an Anthropic API key. Everything else works without one. The
-server looks for a key in three places and uses the first it finds:
+Only the `chat` step needs a key, and only for the provider of the model it uses.
+Everything else works without one.
 
-1. **Typed in the UI.** Open **API key** at the top right, paste the key and choose Apply.
-   The browser keeps it in memory for that tab only. It is never saved, and reloading the
-   page clears it. **Check key** tests it without spending tokens.
-2. **The `ANTHROPIC_API_KEY` environment variable of the server process:**
+| Provider | Models | Header the UI sends | Environment variable and `.env` entry |
+|---|---|---|---|
+| Anthropic | Claude Opus 5, Sonnet 5, Haiku 4.5 | `X-Anthropic-Api-Key` | `ANTHROPIC_API_KEY` |
+| OpenAI | GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Luna | `X-OpenAI-Api-Key` | `OPENAI_API_KEY` |
+| Custom endpoint | any model on an OpenAI-compatible server (set `custom_base_url` and `custom_model` on the chat node) | `X-Custom-Api-Key` | `OPENAI_COMPATIBLE_API_KEY` |
+
+The custom endpoint's key is optional: a local server such as Ollama
+(`http://localhost:11434/v1`) usually needs none. A missing key for any other provider fails
+the chat node with a message naming the key.
+
+For each provider, the server looks for its key in three places and uses the first it
+finds:
+
+1. **Typed in the UI.** Open **API key** at the top right. The panel has one row per
+   provider: Anthropic, OpenAI, and Custom endpoint (optional, since a local server may
+   need no key). Paste a key into its row and choose Apply. The browser keeps each key in
+   memory for that tab only. It is never saved, and reloading the page clears it. The
+   Anthropic and OpenAI rows have **Check key**, which tests that key without spending
+   tokens. A custom endpoint's key is checked when chat runs against it.
+2. **The provider's environment variable in the server process,** for example:
 
    ```bash
    ANTHROPIC_API_KEY=sk-ant-... uv run rag-playground            # bash
    $env:ANTHROPIC_API_KEY="sk-ant-..."; uv run rag-playground    # PowerShell, this window only
    ```
 
-3. **A `.env` file** at the repo root. Copy `.env.example` to `.env` and fill in
-   `ANTHROPIC_API_KEY=`. `.env` is gitignored. The server reads it without adding it to its
-   own environment.
+3. **A `.env` file** at the repo root. Copy `.env.example` to `.env` and fill in the keys
+   you need. `.env` is gitignored. The server reads it without adding it to its own
+   environment.
 
-Don't set the key as a system-wide or user-wide environment variable. Every program you start
+Don't set a key as a system-wide or user-wide environment variable. Every program you start
 would inherit it, including AI coding tools that could then read and use it.
 
-The server never stores, logs or returns the key, and it shows `[redacted]` in its place in
-any error.
+The server never stores, logs or returns a key, and it shows `[redacted]` in its place in
+any error. `GET /api/settings/llm` reports only which source the server itself has for
+each provider, as `{"anthropic": ..., "openai": ..., "custom": ...}` with `env`, `dotenv`
+or `none`. `POST /api/settings/llm/check` with `{"provider": "anthropic" | "openai" |
+"custom"}` tests one key with a model listing, which costs no tokens; a custom check also
+needs `"base_url"`.
 
 ## How it works
 
@@ -332,4 +365,5 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 
 `sources/`, `artifacts/` and `.env` are gitignored. **Clear cache** in the UI deletes the
 cached results and the embedding cache. Nothing leaves your machine except model downloads
-and, when you use `chat`, the question and retrieved chunks sent to Claude.
+and, when you use `chat`, the question and retrieved chunks sent to the chat model's
+provider (Anthropic, OpenAI, or the custom endpoint you set).

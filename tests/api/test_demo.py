@@ -137,7 +137,7 @@ def test_settings_report_no_server_key(client, monkeypatch):
     demo_on(monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", ENV_KEY)
     write_dotenv(credentials.DOTENV_PATH, DOTENV_KEY)
-    assert client.get("/api/settings/llm").json() == {"source": "none"}
+    assert client.get("/api/settings/llm").json()["anthropic"] == "none"
 
 
 def test_check_never_spends_the_host_key(client, monkeypatch):
@@ -189,3 +189,49 @@ def test_visitor_header_key_still_reaches_a_run(kclient, monkeypatch):
     assert SEEN and all(
         s["credentials"] == {"anthropic_api_key": FAKE_KEY} for s in SEEN
     )
+
+
+# --- custom endpoints: a server-side request to a visitor's URL ----------------
+
+
+def chat_graph(model: str = "claude-opus-5") -> dict:
+    return {
+        "nodes": [
+            {"id": "chat", "stage": "use_case", "transform": "chat",
+             "config": {"model": model, "custom_base_url": "http://169.254.169.254/",
+                        "custom_model": "m"}},
+        ],
+        "edges": [],
+    }
+
+
+def test_a_custom_chat_node_is_refused_in_runs(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post("/api/runs", json={"graph": chat_graph("custom")})
+    assert r.status_code == 403
+    assert "custom" in r.json()["detail"].lower()
+
+
+def test_an_override_cannot_switch_a_chat_node_to_custom(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post(
+        "/api/runs",
+        json={"graph": chat_graph(), "overrides": {"chat": {"model": "custom"}}},
+    )
+    assert r.status_code == 403
+
+
+def test_a_custom_chat_variant_is_refused_in_sweeps(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post(
+        "/api/sweeps",
+        json={"graph": chat_graph(), "node_id": "chat",
+              "variants": [{"transform": "chat", "config": {"model": "gpt-6-astra"}},
+                           {"transform": "chat", "config": {"model": "custom"}}]},
+    )
+    assert r.status_code == 403
+
+
+def test_outside_demo_a_custom_chat_node_is_not_refused(client):
+    r = client.post("/api/runs", json={"graph": chat_graph("custom")})
+    assert r.status_code != 403  # the one-node graph is invalid for other reasons

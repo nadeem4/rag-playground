@@ -1,0 +1,108 @@
+{
+  "kind": "chat",
+  "payload": {
+    "question": "How does overlap affect index size and duplicate results?",
+    "model": "gpt-6-astra",
+    "provider": "openai",
+    "citation_method": "sentence_ids",
+    "usage": {
+      "input_tokens": 812,
+      "output_tokens": 96
+    },
+    "stop_reason": "stop",
+    "answer": [
+      {
+        "text": "Overlap protects answers that straddle a boundary, but every overlapped token is embedded and stored twice. ",
+        "citations": [
+          1
+        ],
+        "grounding": "cited"
+      },
+      {
+        "text": " Boundary placement is therefore a recall decision disguised as a preprocessing step. ",
+        "citations": [
+          2
+        ],
+        "grounding": "weak"
+      },
+      {
+        "text": " Most teams settle on an overlap of ten percent",
+        "citations": [],
+        "grounding": "none"
+      },
+      {
+        "text": ". This only works when the parser reports headings.",
+        "citations": [
+          3
+        ],
+        "grounding": "similarity"
+      }
+    ],
+    "citations": [
+      {
+        "n": 1,
+        "cited_text": "Overlap protects answers that straddle a boundary, but every overlapped token is embedded and stored twice.",
+        "chunk_id": "e98302ea44442e5b",
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": 1454,
+        "doc_end": 1561,
+        "page": 3,
+        "element_id": "e00015",
+        "bbox": [
+          72.0,
+          613.468017578125,
+          492.20391845703125,
+          674.8599853515625
+        ],
+        "verified": true,
+        "method": "id",
+        "support": 1.0
+      },
+      {
+        "n": 2,
+        "cited_text": "Overlap and its cost",
+        "chunk_id": "e98302ea44442e5b",
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": 1432,
+        "doc_end": 1452,
+        "page": 3,
+        "element_id": "e00014",
+        "bbox": [
+          72.0,
+          689.468017578125,
+          178.0439910888672,
+          702.8599853515625
+        ],
+        "verified": true,
+        "method": "id",
+        "support": -0.0082
+      },
+      {
+        "n": 3,
+        "cited_text": "This only works when the parser reports headings.",
+        "chunk_id": "34f119b0321a0705",
+        "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "doc_start": 1250,
+        "doc_end": 1299,
+        "page": 2,
+        "element_id": "e00011",
+        "bbox": [
+          72.0,
+          493.4679870605469,
+          492.20391845703125,
+          554.8599853515625
+        ],
+        "verified": true,
+        "method": "similarity",
+        "support": 1.0
+      }
+    ],
+    "stats": {
+      "cited": 1,
+      "weak": 1,
+      "similarity": 1,
+      "none": 1,
+      "unknown_ids": 1
+    }
+  }
+}

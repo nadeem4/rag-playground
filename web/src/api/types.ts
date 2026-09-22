@@ -378,7 +378,10 @@ export interface AppSettings {
 }
 
 // ------------------------------------------------------------ credentials --
-// Plan I-8. The server reports only WHICH source it can supply, never a value.
+// Plan I-8 and I-18. The server reports only WHICH source it can supply, never a value.
+
+/** One key per provider. `custom` is the OpenAI-compatible endpoint. */
+export type LlmProvider = "anthropic" | "openai" | "custom"
 
 /**
  * `GET /api/settings/llm`: the key the SERVER itself can supply. "none" means
@@ -386,9 +389,7 @@ export interface AppSettings {
  */
 export type LlmServerSource = "env" | "dotenv" | "none"
 
-export interface LlmSettings {
-  source: LlmServerSource
-}
+export type LlmSettings = Record<LlmProvider, LlmServerSource>
 
 /** `POST /api/settings/llm/check`. `source` is the key that was checked. */
 export interface LlmCheck {
@@ -419,10 +420,21 @@ export interface FindResult {
 // ------------------------------------------------------------------- chat --
 // Plan I-10, the `use_case/chat` output.
 
+/**
+ * How a sentence-id claim is backed (plan I-19, I-20):
+ *   cited       the model named sentences, and they support the claim
+ *   weak        the model named sentences, but similarity is below the threshold
+ *   similarity  no ids, but one shown sentence matches above the threshold
+ *   none        no ids and nothing matches
+ */
+export type Grounding = "cited" | "weak" | "similarity" | "none"
+
 /** A run of answer text. No citations means the text is NOT grounded in a source. */
 export interface ChatSegment {
   text: string
   citations: number[]
+  /** Plan I-20. Null (or absent) on native Claude segments, which keep the I-10 behaviour. */
+  grounding?: Grounding | null
 }
 
 /**
@@ -448,6 +460,19 @@ export interface ChatCitation {
   bbox: PdfRect | null
   /** The document at doc_start..doc_end equals `cited_text`. */
   verified: boolean
+  /** Plan I-20: how the pointer was found. Absent on I-10 payloads. */
+  method?: "native" | "id" | "similarity"
+  /** Plan I-20: cosine similarity of claim and sentence; null for native. */
+  support?: number | null
+}
+
+/** Plan I-20: claim counts per label, and marker ids that named no sentence. */
+export interface GroundingStats {
+  cited: number
+  weak: number
+  similarity: number
+  none: number
+  unknown_ids: number
 }
 
 export interface ChatPayload {
@@ -458,6 +483,11 @@ export interface ChatPayload {
   citations: ChatCitation[]
   usage: { input_tokens: number; output_tokens: number }
   stop_reason: string | null
+  /** Plan I-20; absent on I-10 payloads. */
+  provider?: string
+  /** Plan I-20: the method actually used. */
+  citation_method?: "native" | "sentence_ids"
+  stats?: GroundingStats
 }
 
 export interface ChatOutput {

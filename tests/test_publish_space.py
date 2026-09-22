@@ -8,7 +8,7 @@ _spec = importlib.util.spec_from_file_location(
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
-space_dockerfile, space_readme = _mod.space_dockerfile, _mod.space_readme
+space_readme, DEMO_VAR = _mod.space_readme, _mod.DEMO_VAR
 
 
 def test_readme_starts_with_space_header_and_keeps_the_body():
@@ -20,9 +20,7 @@ def test_readme_starts_with_space_header_and_keeps_the_body():
     assert body.lstrip("\n") == "# RAG Playground\n\nBody.\n"
 
 
-def test_dockerfile_turns_demo_mode_on_before_the_command():
-    src = 'FROM python:3.13-slim\nEXPOSE 8000\nCMD ["rag-playground"]\n'
-    out = space_dockerfile(src)
-    assert "ENV RAG_PLAYGROUND_DEMO=1\n" in out
-    assert out.index("RAG_PLAYGROUND_DEMO") < out.index("CMD")
-    assert out.replace("ENV RAG_PLAYGROUND_DEMO=1\n", "") == src
+def test_demo_mode_is_a_space_variable_not_a_baked_in_image():
+    """Whoever duplicates the Space can turn demo mode off; the image stays neutral."""
+    assert DEMO_VAR == ("RAG_PLAYGROUND_DEMO", "1")
+    assert "RAG_PLAYGROUND_DEMO" not in (_mod.ROOT / "Dockerfile").read_text(encoding="utf-8")

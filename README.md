@@ -1,5 +1,7 @@
 # RAG Playground
 
+[Try the live demo](https://huggingface.co/spaces/nadeem4nk/rag-playground) | [Run your own copy](https://huggingface.co/spaces/nadeem4nk/rag-playground?duplicate=true) | [Run it locally](#quick-start)
+
 A local bench for learning how retrieval-augmented generation (RAG) works by trying it on
 your own documents. Each stage of a RAG pipeline (parsing, cleaning, chunking, indexing,
 retrieval, reranking and the final answer) is a strategy you can swap, run on its own and
@@ -25,6 +27,10 @@ support and no scaling story.
 - [Adding a strategy](#adding-a-strategy)
 - [Development](#development)
 - [Where your data goes](#where-your-data-goes)
+
+The live demo runs in demo mode: it uses the bundled sample document, uploads are turned off, and
+it never uses a key of ours, so chat answers need your own key typed into the app. Duplicate the Space
+or run it locally to use your own PDFs.
 
 ## Quick start
 

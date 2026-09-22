@@ -7,11 +7,12 @@ import type { Registry } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
+import { useExplanations } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { fmtMs } from "@/components/pipeline/NodeCard"
-import { PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
+import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { Button } from "@/components/ui/button"
 import {
   addCleaner,
@@ -30,7 +31,7 @@ import {
   upstreamOfStage,
   type PipelineGraph,
 } from "@/state/graph"
-import { buildRunRequest, errorHeadline, mergeResults, routeRunError } from "@/state/pipeline"
+import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 
 /**
  * Build: the pipeline column on the left, the selected card's output on the
@@ -67,7 +68,8 @@ function Build({ registry }: { registry: Registry }) {
   const [graph, setGraph] = useState<PipelineGraph>(() => readStoredGraph(registry) ?? initialGraph(registry))
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [results, setResults] = useState<Record<string, NodeState>>({})
+  const [tracked, setTracked] = useState<Tracked>({ results: {}, history: {} })
+  const results: Record<string, NodeState> = tracked.results
   const [sigs, setSigs] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
@@ -76,10 +78,13 @@ function Build({ registry }: { registry: Registry }) {
   const { key: apiKey } = useApiKey()
 
   useEffect(() => storeGraph(graph), [graph])
-  useEffect(() => setResults((prev) => mergeResults(prev, run.nodes)), [run.nodes])
+  useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
+  const explanations = useExplanations(graph.nodes)
 
   const busy = submitting || (runId !== null && !run.closed)
   const order = useMemo(() => columnOrder(graph), [graph])
+  // Run all stops at the first card whose settings cannot run.
+  const blocker = order.find((n) => blockingNode(graph, registry, explanations, n.id)?.id === n.id)
   const stale = useMemo(
     () => new Set(Object.keys(results).filter((id) => sigs[id] !== undefined && sigs[id] !== signature(graph, id, registry))),
     [results, sigs, graph, registry],
@@ -155,11 +160,21 @@ function Build({ registry }: { registry: Registry }) {
                 Cancel
               </Button>
             ) : null}
-            <Button size="sm" disabled={busy} onClick={() => void start(undefined, false)}>
+            <Button
+              size="sm"
+              disabled={busy || Boolean(blocker)}
+              title={blocker ? `Fix the ${titleFor(blocker)} settings to run the pipeline` : undefined}
+              onClick={() => void start(undefined, false)}
+            >
               {busy ? "Running" : "Run all"}
             </Button>
           </div>
         </div>
+        {blocker ? (
+          <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
+            Fix the {titleFor(blocker)} settings to run the pipeline.
+          </p>
+        ) : null}
         {columnError || run.error ? (
           <div role="alert" className="flex flex-col gap-1 border-b border-hairline p-3">
             <p className="text-sm font-medium text-danger">{columnError ? "The pipeline cannot run" : "The run crashed"}</p>
@@ -197,6 +212,8 @@ function Build({ registry }: { registry: Registry }) {
               if (selected === id) setSelected(null)
             }}
             onSweep={(id, preset) => void openSweep(id, preset)}
+            explanations={explanations}
+            history={tracked.history}
           />
           <p className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
             <span className="flex items-center gap-2">

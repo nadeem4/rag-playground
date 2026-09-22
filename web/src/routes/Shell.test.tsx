@@ -80,3 +80,40 @@ describe("Build page", () => {
     expect(posts).toHaveLength(0)
   })
 })
+
+describe("Build page explanations", () => {
+  it("a blocking explanation disables Run all with a visible reason, as the user types", async () => {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/explain") {
+          const body = JSON.parse(String(init?.body))
+          const bad = body.stage === "chunk" && body.config.chunk_overlap >= body.config.chunk_size
+          return new Response(
+            JSON.stringify({
+              settings: "s",
+              tradeoff: null,
+              warning: bad ? "Overlap must be smaller than the chunk size." : null,
+              blocking: bad,
+            }),
+            { status: 200 },
+          )
+        }
+        return base(url, init)
+      }),
+    )
+    await ready()
+    const runAll = () => document.querySelector("section[aria-label=Pipeline]")!.querySelector("button:not([aria-label])") as HTMLButtonElement
+    expect(runAll().textContent).toBe("Run all")
+    await waitFor(() => expect(runAll().disabled).toBe(false))
+    fireEvent.change(within(card("chunk")).getByLabelText("Chunk Overlap"), { target: { value: "5000" } })
+    await waitFor(() => expect(within(card("chunk")).getByTestId("explain-warning").textContent).toBe("Overlap must be smaller than the chunk size."), {
+      timeout: 2000,
+    })
+    expect(runAll().disabled).toBe(true)
+    expect(document.querySelector("[data-testid=run-all-blocked]")!.textContent).toBe("Fix the Chunk settings to run the pipeline.")
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Run" }))
+    expect(posts).toHaveLength(0)
+  })
+})

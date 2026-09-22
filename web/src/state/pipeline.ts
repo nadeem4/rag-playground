@@ -78,3 +78,35 @@ export function errorHeadline(traceback: string): string {
   const lines = traceback.trim().split("\n").filter((l) => l.trim())
   return lines[lines.length - 1]?.trim() ?? "Failed"
 }
+
+/** The artifact of a card's latest completed run, and of the run before it. */
+export interface RunHistory {
+  current?: string
+  previous?: string
+}
+
+export interface Tracked {
+  results: Record<string, NodeState>
+  /** Per node id, in memory only: what "(was N)" compares against. */
+  history: Record<string, RunHistory>
+}
+
+const completed = (s: NodeState | undefined) => (s?.status === "done" || s?.status === "cached") && typeof s.artifact_id === "string"
+
+/**
+ * `mergeResults`, plus the run history. Every newly completed node state is a
+ * run of that card: its artifact becomes current and the old current becomes
+ * previous. A cache hit counts too, so a rerun with unchanged settings
+ * compares against itself and shows no "(was N)".
+ */
+export function foldRun(t: Tracked, run: Record<string, NodeState>): Tracked {
+  const results = mergeResults(t.results, run)
+  if (results === t.results) return t
+  let history = t.history
+  for (const [id, s] of Object.entries(results)) {
+    if (s === t.results[id] || !completed(s)) continue
+    if (history === t.history) history = { ...t.history }
+    history[id] = { current: s.artifact_id, previous: t.history[id]?.current }
+  }
+  return { results, history }
+}

@@ -8,6 +8,8 @@ import type {
   ArtifactMeta,
   CacheCleared,
   CancelResponse,
+  ExplainRequest,
+  Explanation,
   FindResult,
   LlmCheck,
   LlmSettings,
@@ -17,6 +19,7 @@ import type {
   RunRequest,
   RunSnapshot,
   Source,
+  StageInfo,
   SweepRequest,
 } from "./types"
 
@@ -82,6 +85,10 @@ const sha = (s: string) => encodeURIComponent(s)
 
 export const api = {
   registry: () => request<Registry>("/registry"),
+  /** Plan I-12: one plain paragraph per stage. */
+  stages: () => request<StageInfo>("/stages"),
+  /** Plan I-12: pure, no model loads. 422 `{detail: {errors}}` on a bad config, 404 on an unknown transform. */
+  explain: (body: ExplainRequest, signal?: AbortSignal) => request<Explanation>("/explain", { ...json(body), signal }),
 
   sources: () => request<Source[]>("/sources"),
   uploadSource: (file: File) => {

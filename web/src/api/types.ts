@@ -75,6 +75,8 @@ export interface TransformInfo {
   provides: Record<string, unknown>
   inputs: Record<string, PortSchema>
   config_schema: JsonSchema
+  /** Plan I-11: how this strategy works, in plain language. Optional while older servers omit it. */
+  summary?: string
 }
 
 /** `GET /api/registry`: stage -> transform name -> info. */
@@ -450,4 +452,26 @@ export interface ChatPayload {
 export interface ChatOutput {
   kind: "chat"
   payload: ChatPayload
+}
+
+// ----------------------------------------------------------- explanations --
+// Plan I-11 / I-12.
+
+/** `GET /api/stages`: what each step is for in RAG. */
+export type StageInfo = Partial<Record<Stage, { what: string }>>
+
+/** `POST /api/explain`: what a transform will do with THESE settings. */
+export interface Explanation {
+  settings: string
+  tradeoff: string | null
+  /** Settings valid in type that make no sense (overlap >= chunk size, say). */
+  warning: string | null
+  /** True: the UI disables Run. */
+  blocking: boolean
+}
+
+export interface ExplainRequest {
+  stage: Stage
+  transform: string
+  config: Record<string, unknown>
 }

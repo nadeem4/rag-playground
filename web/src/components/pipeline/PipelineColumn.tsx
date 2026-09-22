@@ -1,11 +1,13 @@
-import { Fragment } from "react"
+import { Fragment, useState } from "react"
 import { Plus } from "lucide-react"
 
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, Registry, Stage } from "@/api/types"
+import { useStages, type ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { Button } from "@/components/ui/button"
-import { columnOrder, COLUMN_STAGES, infoFor, terminalNode, titleFor, transformsFor, type PipelineGraph } from "@/state/graph"
+import { ancestors, columnOrder, COLUMN_STAGES, infoFor, terminalNode, titleFor, transformsFor, type PipelineGraph } from "@/state/graph"
+import type { RunHistory } from "@/state/pipeline"
 
 import { NodeCard } from "./NodeCard"
 import { QuestionField } from "./QuestionField"
@@ -41,6 +43,28 @@ export interface PipelineColumnProps {
   onAddReranker?: () => void
   onRemove: (id: string) => void
   onSweep: (id: string, preset?: SweepPreset) => void
+  /** Plan I-12, per node id: the explanation of each card's current settings. */
+  explanations?: Record<string, ExplainState>
+  /** Per node id: the current and previous run's artifacts, for "(was N)". */
+  history?: Record<string, RunHistory>
+}
+
+/**
+ * The card whose settings stop `id` from running: `id` itself, else the
+ * nearest ancestor whose explanation is blocking. Running would only fail there.
+ */
+export function blockingNode(
+  graph: PipelineGraph,
+  registry: Registry,
+  explanations: Record<string, ExplainState> | undefined,
+  id: string,
+): GraphNode | undefined {
+  if (!explanations) return undefined
+  const blocking = (nid: string) => explanations[nid]?.data?.blocking === true
+  const self = graph.nodes.find((n) => n.id === id)
+  if (self && blocking(id)) return self
+  const up = ancestors(graph, id, registry)
+  return columnOrder(graph).filter((n) => up.has(n.id) && blocking(n.id)).pop()
 }
 
 /** Cards whose variants are worth comparing side by side. */
@@ -54,6 +78,9 @@ function addAnchor(order: GraphNode[], stage: Stage, feeder: Stage): GraphNode |
 export function PipelineColumn(p: PipelineColumnProps) {
   const order = columnOrder(p.graph).filter((n) => COLUMN_STAGES.includes(n.stage))
   const terminal = terminalNode(p.graph)
+  const stages = useStages()
+  // One explanation pop-over at a time.
+  const [open, setOpen] = useState<string | null>(null)
   const adds: { anchor?: GraphNode; label: string; onAdd?: () => void }[] = [
     { anchor: transformsFor(p.registry, "clean").length ? addAnchor(order, "clean", "parse") : undefined, label: "Add cleaner", onAdd: p.onAddCleaner },
     { anchor: transformsFor(p.registry, "rerank").length ? addAnchor(order, "rerank", "retrieve") : undefined, label: "Add reranker", onAdd: p.onAddReranker },
@@ -84,6 +111,15 @@ export function PipelineColumn(p: PipelineColumnProps) {
               onTransform={(t) => p.onTransform(node.id, t)}
               onConfig={(c) => p.onConfig(node.id, c)}
               onRun={(force) => p.onRun(runTarget, force)}
+              explain={p.explanations?.[node.id]}
+              what={stages[node.stage]?.what}
+              explainOpen={open === node.id}
+              onExplainOpenChange={(o) => setOpen((cur) => (o ? node.id : cur === node.id ? null : cur))}
+              blockedBy={(() => {
+                const b = blockingNode(p.graph, p.registry, p.explanations, runTarget)
+                return b ? titleFor(b) : undefined
+              })()}
+              previousArtifactId={p.history?.[node.id]?.previous}
               runTitle={runTarget !== node.id && terminal ? `Ask this question and run through ${titleFor(terminal)}` : undefined}
               showId={stacked}
               onRemove={stacked ? () => p.onRemove(node.id) : undefined}

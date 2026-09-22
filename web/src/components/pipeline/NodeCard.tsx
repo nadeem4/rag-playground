@@ -1,9 +1,11 @@
-import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react"
-import { X } from "lucide-react"
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { Info, X } from "lucide-react"
+import { Popover } from "radix-ui"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, TransformInfo } from "@/api/types"
+import type { ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { CONST_TEXT } from "@/components/fields/ConstField"
 import { CONTROL } from "@/components/fields/types"
@@ -12,6 +14,9 @@ import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { errorHeadline } from "@/state/pipeline"
+
+import { ExplainPanel } from "./ExplainPanel"
+import { WhatItDid } from "./WhatItDid"
 
 /**
  * One node of the pipeline column. The container encodes state (contract §5):
@@ -45,6 +50,17 @@ export interface NodeCardProps {
   actions?: ReactNode
   /** Tooltip for Run when it runs more than this card (Ask runs through Search). */
   runTitle?: string
+  /** Plan I-12: this card's explanation for its CURRENT settings. */
+  explain?: ExplainState
+  /** Plan I-12: what this stage is for. */
+  what?: string
+  /** The explanation pop-over; the column keeps one open at a time. */
+  explainOpen?: boolean
+  onExplainOpenChange?: (open: boolean) => void
+  /** Title of the card (this one or an ancestor) whose settings block a run. */
+  blockedBy?: string
+  /** This card's previous run's artifact, for "(was N)". */
+  previousArtifactId?: string
 }
 
 export function fmtMs(ms: number | undefined): string {
@@ -105,16 +121,33 @@ export function NodeCard(p: NodeCardProps) {
   const hasOutput = shown.rule === "solid" || shown.rule === "dotted"
   const running = p.result?.status === "running" && !p.stale
   const elapsed = useElapsed(running ? p.result?.started_at : undefined)
+  const cardRef = useRef<HTMLElement>(null)
+  const warning = p.explain?.data?.warning
+  const completed = (p.result?.status === "done" || p.result?.status === "cached") && p.result.artifact_id ? p.result.artifact_id : undefined
+  const runNote = p.blockedBy
+    ? p.blockedBy === p.title
+      ? "Fix the settings to run."
+      : `Fix the ${p.blockedBy} settings to run.`
+    : completed && p.stale
+      ? "Settings changed since the last run."
+      : null
 
   return (
+    <Popover.Root open={p.explainOpen} onOpenChange={p.onExplainOpenChange}>
+    <Popover.Anchor asChild>
     <article
+      ref={cardRef}
       aria-label={`${p.title} ${p.node.transform}`}
       data-node-id={p.node.id}
       data-rule={shown.rule}
       aria-current={p.selected ? "true" : undefined}
       onClick={p.onSelect}
       style={RULE[shown.rule]}
-      className={cn("flex min-w-0 flex-col gap-3 bg-surface p-3", p.selected && "bg-selection")}
+      className={cn(
+        "flex min-w-0 flex-col gap-3 bg-surface p-3",
+        p.selected && "bg-selection",
+        p.explainOpen && "outline-1 -outline-offset-1 outline-fg-muted outline-solid",
+      )}
     >
       <header className="flex min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -129,6 +162,18 @@ export function NodeCard(p: NodeCardProps) {
             </span>
           ) : null}
           {shown.duration !== undefined ? <span className="font-mono text-xs text-fg">{fmtMs(shown.duration)}</span> : null}
+          <Popover.Trigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={`Explain the ${p.title} step`}
+              title={`Explain the ${p.title} step`}
+              className={cn(p.explainOpen && "border-fg-muted bg-surface-elevated")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Info aria-hidden strokeWidth={1.5} className="size-[16px]" />
+            </Button>
+          </Popover.Trigger>
           {p.onRemove ? (
             <Button
               variant="ghost"
@@ -172,6 +217,12 @@ export function NodeCard(p: NodeCardProps) {
           <SchemaForm key={`${p.node.id}:${info.name}`} schema={info.config_schema} value={p.node.config} onChange={p.onConfig} errors={p.fieldErrors} />
         ) : null)}
 
+      {warning ? (
+        <p role="status" data-testid="explain-warning" className="text-xs leading-[1.5] break-words text-danger">
+          {warning}
+        </p>
+      ) : null}
+
       {p.message ? (
         <p role="alert" className="text-xs break-words text-danger">
           {p.message}
@@ -191,11 +242,12 @@ export function NodeCard(p: NodeCardProps) {
         </div>
       ) : null}
 
-      <footer className="flex items-center gap-2">
+      <div className="-mx-3 flex flex-col gap-2 border-t border-hairline px-3 pt-3">
+      <footer className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           size="sm"
-          disabled={p.busy}
+          disabled={p.busy || Boolean(p.blockedBy)}
           title={p.runTitle}
           onClick={(e) => {
             e.stopPropagation()
@@ -208,7 +260,7 @@ export function NodeCard(p: NodeCardProps) {
           <Button
             variant="ghost"
             size="sm"
-            disabled={p.busy}
+            disabled={p.busy || Boolean(p.blockedBy)}
             title="Run again, ignoring the cache"
             onClick={(e) => {
               e.stopPropagation()
@@ -218,8 +270,27 @@ export function NodeCard(p: NodeCardProps) {
             Rerun
           </Button>
         ) : null}
+        {runNote ? (
+          <span data-testid="run-note" className={cn("text-xs", p.blockedBy ? "text-danger" : "text-fg-muted")}>
+            {runNote}
+          </span>
+        ) : null}
         {p.actions}
       </footer>
+      {completed ? (
+        <WhatItDid stage={p.node.stage} type={info?.output} artifactId={completed} previousId={p.previousArtifactId} stale={p.stale} />
+      ) : null}
+      </div>
     </article>
+    </Popover.Anchor>
+    <ExplainPanel
+      title={p.title}
+      transform={p.node.transform}
+      what={p.what}
+      summary={info?.summary}
+      explain={p.explain}
+      anchor={() => cardRef.current}
+    />
+    </Popover.Root>
   )
 }

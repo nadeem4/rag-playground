@@ -30,6 +30,7 @@ function t(
     provides: {},
     inputs,
     config_schema: { type: "object", title: `${name}Config`, properties },
+    summary: `Summary of ${name}.`,
   }
 }
 

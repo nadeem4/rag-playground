@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import type { InspectorStatus } from "@/components/inspectors/status"
 
 import { api } from "./client"
+import type { ArtifactMeta } from "./types"
 
 /**
  * Load an artifact's payload. Artifacts are content-addressed and immutable,
@@ -54,4 +55,17 @@ export function useArtifactPayload(id: string | undefined): ArtifactState {
   if (!id) return IDLE
   // Until the effect runs for a new id, report loading rather than old data.
   return state.id === id ? state.value : { status: { kind: "loading" } }
+}
+
+const metaCache = new Map<string, Promise<ArtifactMeta>>()
+
+/** `GET /api/artifacts/{id}`, once per session: meta is as immutable as the payload. */
+export function loadMeta(id: string): Promise<ArtifactMeta> {
+  let p = metaCache.get(id)
+  if (!p) {
+    p = api.artifact(id)
+    p.catch(() => metaCache.delete(id))
+    metaCache.set(id, p)
+  }
+  return p
 }

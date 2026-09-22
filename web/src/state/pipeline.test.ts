@@ -4,7 +4,7 @@ import { ApiError } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 
 import { addCleaner, columnOrder, initialGraph } from "./graph"
-import { buildRunRequest, mergeResults, routeRunError } from "./pipeline"
+import { buildRunRequest, foldRun, mergeResults, routeRunError, type Tracked } from "./pipeline"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 describe("buildRunRequest", () => {
@@ -67,5 +67,30 @@ describe("mergeResults", () => {
       chunk: prev.chunk,
       parse: run.parse,
     })
+  })
+})
+
+describe("foldRun keeps the previous result of each card", () => {
+  const done = (id: string, artifact_id: string, cache_hit = false): NodeState => ({ id, status: cache_hit ? "cached" : "done", artifact_id, cache_hit })
+
+  it("the first run has no previous; the second remembers the first", () => {
+    let t: Tracked = { results: {}, history: {} }
+    t = foldRun(t, { chunk: { id: "chunk", status: "running" } })
+    expect(t.history.chunk).toBeUndefined()
+    t = foldRun(t, { chunk: done("chunk", "a") })
+    expect(t.history.chunk).toEqual({ current: "a", previous: undefined })
+    t = foldRun(t, { chunk: done("chunk", "b") })
+    expect(t.history.chunk).toEqual({ current: "b", previous: "a" })
+    // Another card's run leaves this history alone.
+    t = foldRun(t, { chunk: t.results.chunk, parse: done("parse", "p") })
+    expect(t.history.chunk).toEqual({ current: "b", previous: "a" })
+    // A cache hit is a run too: it compares against itself.
+    t = foldRun(t, { chunk: done("chunk", "b", true) })
+    expect(t.history.chunk).toEqual({ current: "b", previous: "b" })
+  })
+
+  it("an unchanged run returns the same object", () => {
+    const t: Tracked = { results: {}, history: {} }
+    expect(foldRun(t, {})).toBe(t)
   })
 })

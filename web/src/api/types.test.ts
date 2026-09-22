@@ -36,7 +36,11 @@ describe("types mirror the engine's real payloads", () => {
   it("registry entries carry exactly the TransformInfo fields", () => {
     const entries = Object.values(registry).flatMap((stage) => Object.values(stage))
     expect(entries.length).toBeGreaterThanOrEqual(14)
-    for (const t of entries) expect(keys(t)).toEqual([...TRANSFORM_KEYS].sort())
+    for (const t of entries) {
+      // `summary` (plan I-11) is additive: fixtures exported before it lack it.
+      expect(keys(t).filter((k) => k !== "summary")).toEqual([...TRANSFORM_KEYS].sort())
+      if ("summary" in t) expect(typeof t.summary === "string" && t.summary.length > 0).toBe(true)
+    }
   })
 
   it.each([

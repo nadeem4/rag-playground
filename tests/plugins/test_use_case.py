@@ -78,6 +78,21 @@ def test_is_cacheable_and_deterministic():
 
 def test_config_default():
     assert SearchUseCaseConfig().max_snippet_chars == 400
+    assert SearchUseCaseConfig().top_k == 5
+
+
+def test_shows_only_the_top_k_of_the_pool_and_counts_the_candidates():
+    pool = [hit(f"passage {rank}", rank=rank) for rank in range(1, 21)]
+
+    output = run(*pool, top_k=3)
+
+    assert [row["rank"] for row in results(output)] == [1, 2, 3]
+    assert output.payload["total_candidates"] == 20
+
+
+def test_explain_names_top_k():
+    exp = SearchUseCase().explain(SearchUseCaseConfig(top_k=7))
+    assert "7" in exp.settings
 
 
 # --------------------------------------------------------------------------

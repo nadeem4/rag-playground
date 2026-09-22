@@ -209,6 +209,20 @@ def test_max_chunks_caps_the_documents(fake, pipeline):
     assert sum(b["type"] == "document" for b in content) == 2
 
 
+def test_reads_only_the_top_max_chunks_of_a_wide_pool(fake, pipeline):
+    """A retriever hands on 20; chat must read only the best `max_chunks`."""
+    doc, chunks = pipeline
+    pool = [chunks[i % len(chunks)] for i in range(20)]
+    ChatUseCase().apply(
+        {"result": result_of(pool), "query": {"text": QUESTION}, "doc": doc},
+        ChatConfig(),
+        ctx(),
+    )
+    content = fake.client.requests[0]["messages"][0]["content"]
+    sent = [b["source"]["data"] for b in content if b["type"] == "document"]
+    assert sent == [c.text for c in pool[:5]]
+
+
 def test_the_key_reaches_the_factory(fake, pipeline):
     run(pipeline)
     assert fake.client.keys == [KEY]

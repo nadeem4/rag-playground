@@ -358,3 +358,27 @@ def test_embeds_the_augmented_text_not_the_cited_text():
     reranked = rerank(payload, lambda_mult=1.0)
     assert keys(reranked)[0] == "d"
     assert reranked.hits[0].chunk.text == DISTINCT[1]
+
+
+# --------------------------------------------------------------------------
+# retrieve wide, narrow later
+# --------------------------------------------------------------------------
+
+
+def test_the_result_counts_the_pool_mmr_chose_from():
+    """"2 results from 4 candidates": the candidates are what MMR received."""
+    payload = result()
+    payload["total_candidates"] = 99  # the retriever's own count, overwritten
+
+    reranked = rerank(payload, top_k=2)
+
+    assert len(reranked.hits) == 2
+    assert reranked.total_candidates == len(CANDIDATES)
+
+
+def test_explain_says_it_picks_top_k_from_the_pool():
+    exp = MmrRerank().explain(MmrRerankConfig(top_k=3))
+    assert "3" in exp.settings
+    assert "pool" in exp.settings.lower()
+    # The old wording described the bug: the retriever passing on only top_k.
+    assert "give the retriever a top_k" not in (exp.tradeoff or "")

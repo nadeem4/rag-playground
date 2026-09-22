@@ -33,6 +33,7 @@ class MmrRerankConfig(BaseModel):
     #: 1.0 is pure relevance (the retriever's own order, recomputed); 0.0 is
     #: pure diversity, which after the first pick ignores the query entirely.
     lambda_mult: float = 0.5
+    #: How many it picks from the retriever's candidate pool (20 by default).
     top_k: int = 5
 
     # No `embedder` field. The model and width come from the index descriptor,
@@ -78,14 +79,15 @@ class MmrRerank(Transform[MmrRerankConfig]):
                 f"different from earlier picks at {1 - lam:.0%}"
             )
         settings = (
-            f"lambda_mult is {lam:g}: {meaning}. It returns up to {top} pieces, "
-            "and the first is always the best match."
+            f"lambda_mult is {lam:g}: {meaning}. It picks {top} pieces from the "
+            "candidate pool the retriever hands on (20 by default), and the "
+            "first is always the best match."
         )
         tradeoff = (
             "More variety means fewer near-duplicate hits, but a piece that "
-            "repeats the best answer in other words may be dropped. MMR only "
-            "chooses among the pieces the retriever passed on, so to let it drop "
-            f"some, give the retriever a top_k larger than {top}."
+            "repeats the best answer in other words may be dropped. MMR can only "
+            f"choose when the pool is larger than {top}; a pool of {top} or fewer "
+            "is merely reordered."
         )
         warning, blocking = None, False
         if not 0 <= lam <= 1:
@@ -148,6 +150,8 @@ class MmrRerank(Transform[MmrRerankConfig]):
         result.hits = [
             _at_rank(hits[index], rank) for rank, index in enumerate(selected, start=1)
         ]
+        # The pool MMR chose from, so "5 results from 20 candidates" is true.
+        result.total_candidates = len(hits)
         return result.model_dump(mode="json")
 
 

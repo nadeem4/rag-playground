@@ -172,13 +172,48 @@
       "retriever": "dense",
       "component_scores": {},
       "highlights": []
+    },
+    {
+      "chunk": {
+        "id": "f5c1c62c9cc10944",
+        "text": "Recursive character splitting\n\nRecursive splitting tries a list of separators in order: blank lines, then single newlines, then sentence ends, then spaces. It only falls back to a finer separator when a piece is still larger than the budget. The result respects paragraphs where it can and sentences where it must, which is why it is the default in most frameworks.\n\nHeading-aware sections",
+        "embed_text": null,
+        "start_char": 745,
+        "end_char": 1134,
+        "token_count": 73,
+        "kind": "chunk",
+        "parent_id": null,
+        "level": 0,
+        "ordinal": 2,
+        "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "heading_path": [],
+        "source_element_ids": [
+          "e00008",
+          "e00009",
+          "e00010"
+        ],
+        "page_span": [
+          2,
+          2
+        ],
+        "metadata": {}
+      },
+      "score": 0.07765567302703857,
+      "rank": 6,
+      "prior_rank": null,
+      "prior_score": null,
+      "matched_chunk_id": "f5c1c62c9cc10944",
+      "expansion": "none",
+      "retriever": "dense",
+      "component_scores": {},
+      "highlights": []
     }
   ],
   "query_id": "381a9a15f1212a8b",
   "fetch_k": 20,
   "total_candidates": 6,
   "timings_ms": {
-    "embed": 14.607999939471483,
-    "search": 27.536100009456277
+    "embed": 1.0489000706002116,
+    "search": 16.81319996714592
   }
 }

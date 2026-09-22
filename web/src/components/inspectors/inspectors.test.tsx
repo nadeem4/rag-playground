@@ -273,10 +273,10 @@ describe("RetrievalResultInspector", () => {
   it("lists hits in rank order with the original chunk text and the score in mono", () => {
     const { container } = render(<RetrievalResultInspector result={hybrid} />)
     const rows = [...container.querySelectorAll<HTMLElement>("[data-hit-row]")]
-    expect(rows.map((r) => r.dataset.hitRow)).toEqual(["1", "2", "3", "4", "5"])
+    expect(rows.map((r) => r.dataset.hitRow)).toEqual(["1", "2", "3", "4", "5", "6"])
     expect(rows[0].textContent).toContain(hybrid.hits[0].chunk.text.slice(0, 40))
     expect(rows[0].textContent).toContain("0.03279")
-    expect(screen.getByTestId("fact-hits").textContent).toBe("5")
+    expect(screen.getByTestId("fact-hits").textContent).toBe("6")
   })
 
   it("draws a bar per component on its own scale: the largest of each is full length", () => {
@@ -286,8 +286,9 @@ describe("RetrievalResultInspector", () => {
     )
     // Rank 1 has the top dense and the top bm25 score.
     expect(widths[0]).toEqual([40, 40])
-    expect(widths.every((w) => w.length === 2)).toBe(true)
-    expect(Math.max(...widths.slice(1).map((w) => w[1]))).toBeLessThan(8)
+    // The sixth was found by the dense search only, so it has no bm25 bar.
+    expect(widths.map((w) => w.length)).toEqual([2, 2, 2, 2, 2, 1])
+    expect(Math.max(...widths.slice(1, 5).map((w) => w[1]))).toBeLessThan(8)
   })
 
   it("a retriever with no components gets one bar on the score itself", () => {
@@ -299,7 +300,7 @@ describe("RetrievalResultInspector", () => {
   it("shows rank movement after rerank as plain text", () => {
     const { container } = render(<RetrievalResultInspector result={mmr} />)
     const moves = [...container.querySelectorAll<HTMLElement>("[data-testid=movement]")].map((m) => m.textContent)
-    expect(moves).toEqual(["", "was 5", "was 2", "was 3", "was 4"])
+    expect(moves).toEqual(["", "was 5", "was 2", "was 3", "was 6"])
     expect(screen.getByTestId("fact-moved").textContent).toBe("rerank moved 4 of 5")
     // A hit that rose is set in weight, not in a colour.
     const rose = container.querySelectorAll<HTMLElement>("[data-testid=movement]")[1]

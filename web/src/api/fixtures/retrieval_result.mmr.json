@@ -153,22 +153,21 @@
     },
     {
       "chunk": {
-        "id": "10a57a19c6a746b9",
-        "text": "Token counts in this note come from the heuristic counter, not a model tokenizer.\n\nFixed windows\n\nThe simplest strategy cuts the text every N tokens with an overlap of M tokens. It is predictable and cheap, and every chunk has the same cost to embed. It is also blind to structure: a window will happily start in the middle of a table row or end halfway through a definition.",
+        "id": "df092ff8a937983e",
+        "text": "Why chunk boundaries matter\n\nA retriever never sees a document. It sees chunks, and it can only return what a chunk contains. If the sentence that answers a question is split across two chunks, neither half may score well enough to be retrieved, and the generator is left to guess. Boundary placement is therefore a recall decision disguised as a preprocessing step.",
         "embed_text": null,
-        "start_char": 368,
-        "end_char": 743,
-        "token_count": 76,
+        "start_char": 0,
+        "end_char": 366,
+        "token_count": 69,
         "kind": "chunk",
         "parent_id": null,
         "level": 0,
-        "ordinal": 1,
+        "ordinal": 0,
         "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
         "heading_path": [],
         "source_element_ids": [
-          "e00003",
-          "e00004",
-          "e00005"
+          "e00001",
+          "e00002"
         ],
         "page_span": [
           1,
@@ -176,16 +175,15 @@
         ],
         "metadata": {}
       },
-      "score": 0.03149801587301587,
+      "score": 0.015625,
       "rank": 5,
-      "prior_rank": 4,
-      "prior_score": 0.03149801587301587,
-      "matched_chunk_id": "10a57a19c6a746b9",
+      "prior_rank": 6,
+      "prior_score": 0.015625,
+      "matched_chunk_id": "df092ff8a937983e",
       "expansion": "none",
       "retriever": "hybrid_rrf",
       "component_scores": {
-        "dense": 0.10389465093612671,
-        "bm25": 0.6731910109519958
+        "dense": 0.09810513257980347
       },
       "highlights": []
     }
@@ -194,8 +192,8 @@
   "fetch_k": 20,
   "total_candidates": 6,
   "timings_ms": {
-    "dense": 14.526300015859306,
-    "bm25": 14.260999974794686,
-    "fuse": 0.4265999887138605
+    "dense": 5.361699964851141,
+    "bm25": 5.10860001668334,
+    "fuse": 0.13160007074475288
   }
 }

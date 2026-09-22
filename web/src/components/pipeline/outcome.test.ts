@@ -50,7 +50,7 @@ describe("what it did, per artifact type", () => {
   })
 
   it("retrieval_result: hits and candidates; a reranker says how many hits moved", () => {
-    expect(text("retrieve", "retrieval_result", hybrid)).toBe("Returned 5 hits from 6 candidates.")
+    expect(text("retrieve", "retrieval_result", hybrid)).toBe("Returned 6 hits from 6 candidates.")
     // MMR moved ranks 2..5.
     expect(text("rerank", "retrieval_result", mmr)).toBe("Moved 4 of 5 hits.")
   })

@@ -80,7 +80,7 @@ def graph(
         # The fake embedder unless a test says otherwise: the fast suite never
         # downloads a model.
         Node("index", Stage.INDEX, "lancedb", {"embedder": "fake-deterministic"} | index_cfg),
-        Node("retrieve", Stage.RETRIEVE, retriever, {"top_k": 5, "fetch_k": 20}),
+        Node("retrieve", Stage.RETRIEVE, retriever, {"top_k": 20}),
         Node("uc", Stage.USE_CASE, "search", {}),
     ]
     edges = [

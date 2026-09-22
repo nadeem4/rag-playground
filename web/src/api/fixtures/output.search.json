@@ -97,25 +97,23 @@
       },
       {
         "rank": 5,
-        "score": 0.03149801587301587,
+        "score": 0.015625,
         "component_scores": {
-          "dense": 0.10389465093612671,
-          "bm25": 0.6731910109519958
+          "dense": 0.09810513257980347
         },
-        "prior_rank": 4,
-        "prior_score": 0.03149801587301587,
+        "prior_rank": 6,
+        "prior_score": 0.015625,
         "retriever": "hybrid_rrf",
-        "snippet": "Token counts in this note come from the heuristic counter, not a model tokenizer.\n\nFixed windows\n\nThe simplest strategy cuts the text every N tokens with an overlap of M tokens. It is predictable and cheap, and every chunk has the same cost to embed. It is also blind to structure: a window will happily start in the middle of a table row or end halfway through a definition.",
-        "chunk_id": "10a57a19c6a746b9",
+        "snippet": "Why chunk boundaries matter\n\nA retriever never sees a document. It sees chunks, and it can only return what a chunk contains. If the sentence that answers a question is split across two chunks, neither half may score well enough to be retrieved, and the generator is left to guess. Boundary placement is therefore a recall decision disguised as a preprocessing step.",
+        "chunk_id": "df092ff8a937983e",
         "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
         "page_span": [
           1,
           1
         ],
         "source_element_ids": [
-          "e00003",
-          "e00004",
-          "e00005"
+          "e00001",
+          "e00002"
         ]
       }
     ]

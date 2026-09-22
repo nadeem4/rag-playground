@@ -21,8 +21,8 @@ from plugins.retrieve import _base
 
 
 class Bm25Config(BaseModel):
-    top_k: int = 5
-    fetch_k: int = 20
+    #: The candidate pool handed on; the next step narrows it.
+    top_k: int = 20
 
 
 @register
@@ -44,11 +44,11 @@ class Bm25Retriever(Transform[Bm25Config]):
     )
 
     def explain(self, config: Bm25Config) -> Explanation:
-        warning, blocking = _base._limits_warning(config.top_k, config.fetch_k)
+        warning, blocking = _base._limits_warning(config.top_k)
         return Explanation(
             settings=(
-                f"Fetches the {config.fetch_k} best keyword matches and returns the "
-                f"top {config.top_k}. {_base.passed_on(config.top_k, config.fetch_k)} "
+                f"Finds the {config.top_k} best keyword matches. "
+                f"{_base.pool_words(config.top_k)} "
                 "It needs an index built with build_fts on."
             ),
             tradeoff=_base.TOP_K_TRADEOFF,
@@ -67,7 +67,7 @@ class Bm25Retriever(Transform[Bm25Config]):
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "search"):
-            rows = _base.fts_rows(table, query, config.fetch_k)
+            rows = _base.fts_rows(table, query, config.top_k)
 
         # LanceDB's `_score` is the BM25 score: already higher-is-better and
         # already sorted, so no sign flip and no re-sort.
@@ -75,13 +75,13 @@ class Bm25Retriever(Transform[Bm25Config]):
             _base.make_hit(
                 row, rank=rank, score=row["_score"], retriever=self.name
             )
-            for rank, row in enumerate(rows[: config.top_k], start=1)
+            for rank, row in enumerate(rows, start=1)
         ]
 
         return _base.result(
             hits,
             query=query,
-            fetch_k=config.fetch_k,
+            fetch_k=config.top_k,
             total_candidates=len(rows),
             timings_ms=timings,
         )

@@ -292,11 +292,7 @@ def test_rrf_k_changes_the_fusion(tmp_path):
 @pytest.mark.parametrize("transform", ALL, ids=ALL_IDS)
 def test_no_config_field_names_an_embedder(transform):
     """The retriever must have no way to disagree with the index about vectors."""
-    assert set(transform.config_model.model_fields) <= {
-        "top_k",
-        "fetch_k",
-        "rrf_k",
-    }
+    assert set(transform.config_model.model_fields) <= {"top_k", "rrf_k"}
 
 
 def test_the_query_vector_uses_the_indexed_dimensionality(tmp_path, monkeypatch):
@@ -486,10 +482,10 @@ def test_the_result_carries_its_metadata(tmp_path, transform):
         Query(text="capital of France"),
         tmp_path,
         top_k=1,
-        fetch_k=7,
     )
 
-    assert result.fetch_k == 7
+    # `fetch_k` in the payload is how deep each search went: the pool size.
+    assert result.fetch_k == 1
     assert result.total_candidates >= 1
     assert result.total_candidates >= len(result.hits)
     assert result.timings_ms and all(v >= 0 for v in result.timings_ms.values())
@@ -508,20 +504,37 @@ def test_the_query_id_is_stable_and_query_dependent(tmp_path):
     assert qid("capital of France") != qid("bananas")
 
 
-def test_fetch_k_bounds_the_candidate_pool(tmp_path):
+@pytest.mark.parametrize("transform", ALL, ids=ALL_IDS)
+def test_a_pool_larger_than_the_index_returns_every_row(tmp_path, transform):
     index_dir = build_index(tmp_path, *CORPUS)
 
     result = retrieve(
-        DenseRetriever(),
+        transform,
         index_dir,
         Query(text="capital France bananas cell"),
         tmp_path,
         top_k=10,
-        fetch_k=2,
     )
 
-    assert result.total_candidates == 2
-    assert len(result.hits) == 2
+    assert len(result.hits) == len(CORPUS)
+
+
+#: Enough distinct passages that every search has more than 20 rows to rank.
+WIDE_CORPUS = [f"Passage {i} mentions the capital of France and bananas" for i in range(30)]
+
+
+@pytest.mark.parametrize("transform", ALL, ids=ALL_IDS)
+def test_by_default_a_retriever_hands_on_a_pool_of_20(tmp_path, transform):
+    """Retrieve wide, narrow later: the reranker or use case picks from 20."""
+    index_dir = build_index(tmp_path, *WIDE_CORPUS)
+
+    result = retrieve(
+        transform, index_dir, Query(text="capital of France bananas"), tmp_path
+    )
+
+    assert len(result.hits) == 20
+    assert [hit.rank for hit in result.hits] == list(range(1, 21))
+    assert result.total_candidates >= 20
 
 
 # --------------------------------------------------------------------------
@@ -549,6 +562,14 @@ def test_each_retriever_declares_the_backends_it_needs():
 
 
 def test_config_defaults_match_the_plan():
-    assert (DenseConfig().top_k, DenseConfig().fetch_k) == (5, 20)
-    assert (Bm25Config().top_k, Bm25Config().fetch_k) == (5, 20)
-    assert HybridRrfConfig().rrf_k == 60
+    assert DenseConfig().top_k == 20
+    assert Bm25Config().top_k == 20
+    assert (HybridRrfConfig().top_k, HybridRrfConfig().rrf_k) == (20, 60)
+
+
+@pytest.mark.parametrize("transform", ALL, ids=ALL_IDS)
+def test_explain_describes_a_pool_for_the_next_step(transform):
+    exp = transform.explain(transform.config_model())
+    assert "20" in exp.settings
+    assert "pool" in exp.settings.lower()
+    assert "top 5" not in exp.settings

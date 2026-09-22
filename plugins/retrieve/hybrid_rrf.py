@@ -23,11 +23,10 @@ from plugins.retrieve import _base
 
 
 class HybridRrfConfig(BaseModel):
-    top_k: int = 5
-
-    #: Fetched from *each* backend before fusion. A document has to appear in at
-    #: least one list to be fusable at all, so this is what decides recall.
-    fetch_k: int = 20
+    #: The candidate pool handed on, and also how deep each search goes before
+    #: fusion. A document has to appear in at least one list to be fusable at
+    #: all, so this is what decides recall. The next step narrows the pool.
+    top_k: int = 20
 
     #: The rank-fusion constant. 60 is the value from the original TREC paper;
     #: smaller makes rank 1 dominate, larger flattens the lists together.
@@ -53,8 +52,8 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
     )
 
     def explain(self, config: HybridRrfConfig) -> Explanation:
-        k, fetch, top = config.rrf_k, config.fetch_k, config.top_k
-        warning, blocking = _base._limits_warning(top, fetch)
+        k, top = config.rrf_k, config.top_k
+        warning, blocking = _base._limits_warning(top)
         if k < 0:
             warning, blocking = (
                 "rrf_k must be 0 or more; a negative value can divide by zero or "
@@ -62,16 +61,15 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
                 True,
             )
         settings = (
-            f"Fetches the top {fetch} from each search (fetch_k), merges them, and "
-            f"returns the best {top} (top_k). Each piece scores 1/({k} + its place) "
-            f"in every list it appears in (rrf_k = {k}), so first place is worth "
-            f"1/{k + 1} and tenth place 1/{k + 10}."
+            f"Takes the top {top} from each search, merges them, and keeps the "
+            f"best {top}. Each piece scores 1/({k} + its place) in every list it "
+            f"appears in (rrf_k = {k}), so first place is worth 1/{k + 1} and "
+            f"tenth place 1/{k + 10}. {_base.pool_words(top)}"
         )
         tradeoff = (
             "A small rrf_k lets the first few places of each list dominate; a "
             "large one, such as the usual 60, flattens the lists so pieces found "
-            "by both searches rise. A larger fetch_k lets more pieces take part in "
-            "the merge, for a slightly slower search."
+            "by both searches rise. " + _base.TOP_K_TRADEOFF
         )
         return Explanation(
             settings=settings, tradeoff=tradeoff, warning=warning, blocking=blocking
@@ -88,9 +86,9 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         timings: dict[str, float] = {}
         with _base.timed(timings, "dense"):
             vector = _base.embed_query(descriptor, query)
-            dense = _base.dense_rows(table, vector, descriptor, config.fetch_k)
+            dense = _base.dense_rows(table, vector, descriptor, config.top_k)
         with _base.timed(timings, "bm25"):
-            lexical = _base.fts_rows(table, query, config.fetch_k)
+            lexical = _base.fts_rows(table, query, config.top_k)
 
         with _base.timed(timings, "fuse"):
             hits = self._fuse(dense, lexical, descriptor, config)
@@ -98,7 +96,7 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         return _base.result(
             hits,
             query=query,
-            fetch_k=config.fetch_k,
+            fetch_k=config.top_k,
             # Unique documents across both lists — the pool fusion actually chose
             # from, which is more than either list contributed on its own.
             total_candidates=len({row["id"] for row in dense + lexical}),

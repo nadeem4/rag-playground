@@ -188,14 +188,50 @@
         "bm25": 0.6810339093208313
       },
       "highlights": []
+    },
+    {
+      "chunk": {
+        "id": "df092ff8a937983e",
+        "text": "Why chunk boundaries matter\n\nA retriever never sees a document. It sees chunks, and it can only return what a chunk contains. If the sentence that answers a question is split across two chunks, neither half may score well enough to be retrieved, and the generator is left to guess. Boundary placement is therefore a recall decision disguised as a preprocessing step.",
+        "embed_text": null,
+        "start_char": 0,
+        "end_char": 366,
+        "token_count": 69,
+        "kind": "chunk",
+        "parent_id": null,
+        "level": 0,
+        "ordinal": 0,
+        "doc_id": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
+        "heading_path": [],
+        "source_element_ids": [
+          "e00001",
+          "e00002"
+        ],
+        "page_span": [
+          1,
+          1
+        ],
+        "metadata": {}
+      },
+      "score": 0.015625,
+      "rank": 6,
+      "prior_rank": null,
+      "prior_score": null,
+      "matched_chunk_id": "df092ff8a937983e",
+      "expansion": "none",
+      "retriever": "hybrid_rrf",
+      "component_scores": {
+        "dense": 0.09810513257980347
+      },
+      "highlights": []
     }
   ],
   "query_id": "381a9a15f1212a8b",
   "fetch_k": 20,
   "total_candidates": 6,
   "timings_ms": {
-    "dense": 14.526300015859306,
-    "bm25": 14.260999974794686,
-    "fuse": 0.4265999887138605
+    "dense": 5.361699964851141,
+    "bm25": 5.10860001668334,
+    "fuse": 0.13160007074475288
   }
 }

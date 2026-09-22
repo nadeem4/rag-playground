@@ -43,6 +43,7 @@
     "id": "f6ac394ef11e788d318e7a5b97db23a8d5c1c1b7fb3db832fcd16fdb074ffab8",
     "type": "chunk_set",
     "meta": {
+      "note": "The parser found no headings, so the whole document was treated as one section and packed into pieces of up to 120 tokens.",
       "transform": "markdown_header",
       "node_id": "chunk_markdown_header"
     }

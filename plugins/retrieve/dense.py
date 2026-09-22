@@ -1,6 +1,6 @@
 """Vector similarity search over the index's dense side.
 
-The config is two integers. Everything else a dense search needs — which model,
+The config is one integer: the size of the candidate pool it hands on. Everything else a dense search needs — which model,
 which revision, which width, which distance type — is read from the index's
 `descriptor.json`; see `plugins.retrieve._base` for why that is not a shortcut
 but the point.
@@ -21,12 +21,9 @@ from plugins.retrieve import _base
 
 
 class DenseConfig(BaseModel):
-    #: Hits returned.
-    top_k: int = 5
-
-    #: Candidates fetched before truncation. Larger than `top_k` so a downstream
-    #: reranker has something to rerank.
-    fetch_k: int = 20
+    #: The candidate pool handed on. Wide on purpose: a reranker or use case
+    #: after this step narrows it to its own, smaller top_k.
+    top_k: int = 20
 
 
 @register
@@ -50,11 +47,11 @@ class DenseRetriever(Transform[DenseConfig]):
     )
 
     def explain(self, config: DenseConfig) -> Explanation:
-        warning, blocking = _base._limits_warning(config.top_k, config.fetch_k)
+        warning, blocking = _base._limits_warning(config.top_k)
         return Explanation(
             settings=(
-                f"Fetches the {config.fetch_k} closest pieces and returns the top "
-                f"{config.top_k}. {_base.passed_on(config.top_k, config.fetch_k)} "
+                f"Finds the {config.top_k} closest pieces. "
+                f"{_base.pool_words(config.top_k)} "
                 "The model and vector size come from the index, so they always match it."
             ),
             tradeoff=_base.TOP_K_TRADEOFF,
@@ -73,7 +70,7 @@ class DenseRetriever(Transform[DenseConfig]):
         with _base.timed(timings, "embed"):
             vector = _base.embed_query(descriptor, query)
         with _base.timed(timings, "search"):
-            rows = _base.dense_rows(table, vector, descriptor, config.fetch_k)
+            rows = _base.dense_rows(table, vector, descriptor, config.top_k)
 
         hits = [
             _base.make_hit(
@@ -82,13 +79,13 @@ class DenseRetriever(Transform[DenseConfig]):
                 score=_base.similarity(row["_distance"], descriptor["metric"]),
                 retriever=self.name,
             )
-            for rank, row in enumerate(rows[: config.top_k], start=1)
+            for rank, row in enumerate(rows, start=1)
         ]
 
         return _base.result(
             hits,
             query=query,
-            fetch_k=config.fetch_k,
+            fetch_k=config.top_k,
             total_candidates=len(rows),
             timings_ms=timings,
         )

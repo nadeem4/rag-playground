@@ -34,29 +34,26 @@ from providers.embedding_cache import embed_cached
 from providers.embeddings import EmbedKind, EmbeddingProvider, get_embedder
 
 
-def _limits_warning(top_k: int, fetch_k: int) -> tuple[str | None, bool]:
-    """(warning, blocking) for the two counts every retriever takes."""
-    if top_k < 1 or fetch_k < 1:
-        return "top_k and fetch_k must both be at least 1.", True
+def _limits_warning(top_k: int) -> tuple[str | None, bool]:
+    """(warning, blocking) for the pool size every retriever takes."""
+    if top_k < 1:
+        return "top_k must be at least 1.", True
     return None, False
 
 
-def passed_on(top_k: int, fetch_k: int) -> str:
-    """What happens to the fetched candidates beyond `top_k`."""
-    if fetch_k > top_k:
-        return (
-            f"Only the top {top_k} are passed on; the other {fetch_k - top_k} "
-            "are fetched only to be counted, so a reranker after this step sees "
-            f"just {top_k}."
-        )
-    if fetch_k < top_k:
-        return f"Since fetch_k is below top_k, at most {fetch_k} come back."
-    return f"All {top_k} are passed on."
+def pool_words(top_k: int) -> str:
+    """What happens to the pool a retriever hands on."""
+    return (
+        f"All {top_k} are handed on as a candidate pool; a reranker or the use "
+        "case after this step picks its own, smaller top from them."
+    )
 
 
 TOP_K_TRADEOFF = (
-    "A larger top_k gives the next step more to work with, but a chat answer "
-    "then reads more text, which costs more and can dilute the answer."
+    "Retrieve wide, narrow later: a larger pool gives a reranker more to choose "
+    "from and makes it likelier the right piece is in it at all, but the "
+    "search and any reranking take a little longer. The number of pieces a "
+    "person reads, or a chat answer uses, is set by the step that narrows it."
 )
 
 
@@ -224,8 +221,8 @@ def result(
     hits: list[Hit],
     *,
     query: Query,
-    fetch_k: int,
     total_candidates: int,
+    fetch_k: int,
     timings_ms: dict[str, float],
 ) -> dict[str, Any]:
     return RetrievalResult(

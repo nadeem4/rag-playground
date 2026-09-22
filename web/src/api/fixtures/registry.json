@@ -3,6 +3,7 @@
     "upload": {
       "name": "upload",
       "version": "1",
+      "summary": "Takes a file you uploaded. Files are stored once, named by a fingerprint of their bytes, so the same file used in several pipelines is a single copy on disk.",
       "stage": "source",
       "output": "raw_file",
       "stackable": false,
@@ -33,6 +34,7 @@
     "text": {
       "name": "text",
       "version": "1",
+      "summary": "The question, exactly as you type it. It is a step of its own so that trying another question reruns only retrieval and what follows, reusing everything before it.",
       "stage": "query",
       "output": "query",
       "stackable": false,
@@ -58,6 +60,7 @@
     "pdfium": {
       "name": "pdfium",
       "version": "2",
+      "summary": "Reads the text stored in the PDF, in the order the PDF drew it. It cannot tell a heading from a paragraph, so every block comes out as a plain paragraph, and a scanned page with no stored text comes out empty. Fast, with no model to load.",
       "stage": "parse",
       "output": "parsed_doc",
       "stackable": false,
@@ -94,6 +97,7 @@
     "docling": {
       "name": "docling",
       "version": "1",
+      "summary": "Renders each page as an image and runs a layout model that labels every region: title, section heading, list item, table, page header and footer. A reading-order model then puts the regions in sequence. Much slower than pdfium, with far more structure.",
       "stage": "parse",
       "output": "parsed_doc",
       "stackable": false,
@@ -143,6 +147,7 @@
     "header_footer_strip": {
       "name": "header_footer_strip",
       "version": "1",
+      "summary": "Finds running heads, running feet and page numbers: short blocks that sit first or last on a page and repeat across pages, or look like a page number. It checks again after each pass, because removing a page number can expose another footer behind it.",
       "stage": "clean",
       "output": "parsed_doc",
       "stackable": true,
@@ -182,6 +187,7 @@
     "dedupe_blocks": {
       "name": "dedupe_blocks",
       "version": "1",
+      "summary": "Removes a block whose text repeats an earlier block, keeping the first copy in reading order. Blocks are compared only with blocks of the same kind, so a heading and a paragraph with the same words are both kept.",
       "stage": "clean",
       "output": "parsed_doc",
       "stackable": true,
@@ -225,6 +231,7 @@
     "drop_matching": {
       "name": "drop_matching",
       "version": "1",
+      "summary": "Removes every block whose text contains a pattern you name. Use it for boilerplate the automatic cleaners miss, such as a notice repeated in the middle of pages.",
       "stage": "clean",
       "output": "parsed_doc",
       "stackable": true,
@@ -274,6 +281,7 @@
     "recursive_character": {
       "name": "recursive_character",
       "version": "1",
+      "summary": "Cuts at paragraph breaks first. A paragraph too long for one piece is cut at line breaks, then at sentence ends, then at spaces, so each cut lands on the most natural boundary available. The parts are then packed together until a piece is full.",
       "stage": "chunk",
       "output": "chunk_set",
       "stackable": false,
@@ -311,6 +319,7 @@
     "markdown_header": {
       "name": "markdown_header",
       "version": "1",
+      "summary": "Cuts at headings, so each piece is one section: a heading and everything under it, up to the next heading. A section too long for one piece is cut between its blocks, and only a single block that is itself too long is cut mid-text. Pieces do not overlap.",
       "stage": "chunk",
       "output": "chunk_set",
       "stackable": false,
@@ -342,6 +351,7 @@
     "token_based": {
       "name": "token_based",
       "version": "1",
+      "summary": "Counts tokens and cuts each time the count is reached, wherever that falls. A token here is a word or a single punctuation mark. It ignores the structure of the text completely, which makes it a useful baseline to compare the other chunkers against.",
       "stage": "chunk",
       "output": "chunk_set",
       "stackable": false,
@@ -381,6 +391,7 @@
     "lancedb": {
       "name": "lancedb",
       "version": "1",
+      "summary": "Turns every piece into a vector (a list of numbers that captures its meaning) with an embedding model, and stores it in a LanceDB table with a keyword index over the same rows. Vector search and keyword search then read the same pieces, which is what lets hybrid search combine them fairly.",
       "stage": "index",
       "output": "index",
       "stackable": false,
@@ -449,6 +460,7 @@
     "dense": {
       "name": "dense",
       "version": "1",
+      "summary": "Turns the question into a vector with the same model the index used, and returns the pieces whose vectors are closest. It matches meaning, so it finds paraphrases, but it can miss exact names, codes and rare words.",
       "stage": "retrieve",
       "output": "retrieval_result",
       "stackable": false,
@@ -479,13 +491,8 @@
       "config_schema": {
         "properties": {
           "top_k": {
-            "default": 5,
-            "title": "Top K",
-            "type": "integer"
-          },
-          "fetch_k": {
             "default": 20,
-            "title": "Fetch K",
+            "title": "Top K",
             "type": "integer"
           }
         },
@@ -496,6 +503,7 @@
     "bm25": {
       "name": "bm25",
       "version": "1",
+      "summary": "Scores pieces by the words they share with the question, counting rare words for more than common ones (the BM25 formula). It finds exact names, codes and terms that vector search can miss, but it does not know that different words can mean the same thing.",
       "stage": "retrieve",
       "output": "retrieval_result",
       "stackable": false,
@@ -526,13 +534,8 @@
       "config_schema": {
         "properties": {
           "top_k": {
-            "default": 5,
-            "title": "Top K",
-            "type": "integer"
-          },
-          "fetch_k": {
             "default": 20,
-            "title": "Fetch K",
+            "title": "Top K",
             "type": "integer"
           }
         },
@@ -543,6 +546,7 @@
     "hybrid_rrf": {
       "name": "hybrid_rrf",
       "version": "1",
+      "summary": "Runs vector search and keyword search side by side, then merges the two ranked lists by position rather than by score (reciprocal rank fusion). A piece near the top of both lists wins, so it gets the strengths of both searches.",
       "stage": "retrieve",
       "output": "retrieval_result",
       "stackable": false,
@@ -574,13 +578,8 @@
       "config_schema": {
         "properties": {
           "top_k": {
-            "default": 5,
-            "title": "Top K",
-            "type": "integer"
-          },
-          "fetch_k": {
             "default": 20,
-            "title": "Fetch K",
+            "title": "Top K",
             "type": "integer"
           },
           "rrf_k": {
@@ -598,6 +597,7 @@
     "mmr": {
       "name": "mmr",
       "version": "1",
+      "summary": "Maximal Marginal Relevance picks results one at a time, each time taking the piece that best matches the question while being least like the pieces already picked. It trades a little relevance for variety, and it reuses the index's own vectors, so it needs no extra model.",
       "stage": "rerank",
       "output": "retrieval_result",
       "stackable": true,
@@ -647,6 +647,7 @@
     "search": {
       "name": "search",
       "version": "1",
+      "summary": "Shows the retrieved pieces as a ranked list with their scores and pages. No language model, no API key and no cost: you see exactly what retrieval found.",
       "stage": "use_case",
       "output": "output",
       "stackable": false,
@@ -664,6 +665,11 @@
       },
       "config_schema": {
         "properties": {
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          },
           "max_snippet_chars": {
             "default": 400,
             "title": "Max Snippet Chars",
@@ -671,6 +677,60 @@
           }
         },
         "title": "SearchUseCaseConfig",
+        "type": "object"
+      }
+    },
+    "chat": {
+      "name": "chat",
+      "version": "1",
+      "summary": "Sends the retrieved pieces and your question to Claude, which answers using only those pieces. The answer cites the exact passages it relied on, and each citation is checked against the parsed document.",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": false,
+      "cacheable": false,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        },
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "model": {
+            "default": "claude-opus-5",
+            "enum": [
+              "claude-opus-5",
+              "claude-sonnet-5",
+              "claude-haiku-4-5"
+            ],
+            "title": "Model",
+            "type": "string"
+          },
+          "max_chunks": {
+            "default": 5,
+            "minimum": 1,
+            "title": "Max Chunks",
+            "type": "integer"
+          }
+        },
+        "title": "ChatConfig",
         "type": "object"
       }
     }

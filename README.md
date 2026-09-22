@@ -154,8 +154,8 @@ several times, for example two cleaners in a row.
 | **enrich** \* | Adds context to chunks before indexing | planned |
 | **index** | Embeds the chunks and stores them for vector and keyword search | `lancedb` |
 | **query_transform** \* | Rewrites the question before retrieval | planned |
-| **retrieve** | Finds the chunks most relevant to the question | `dense`, `bm25`, `hybrid_rrf` |
-| **rerank** \* | Reorders the retrieved chunks | `mmr` |
+| **retrieve** | Finds the chunks most relevant to the question and hands on a pool of candidates (20 by default) | `dense`, `bm25`, `hybrid_rrf` |
+| **rerank** \* | Picks the best few from the retrieved candidates | `mmr` |
 | **use_case** | What the user finally gets | `search`, `chat` |
 
 ### Parse
@@ -189,14 +189,14 @@ several times, for example two cleaners in a row.
 | retrieve | `dense` | Vector search: finds chunks whose meaning is closest to the question, including paraphrases. |
 | retrieve | `bm25` | Keyword search: scores chunks by shared words, weighting rare words higher. Finds exact names and codes. |
 | retrieve | `hybrid_rrf` | Runs both searches and merges the two rankings by position (reciprocal rank fusion). |
-| rerank | `mmr` | Maximal Marginal Relevance: trades a little relevance for variety, so the results don't all say the same thing. |
+| rerank | `mmr` | Maximal Marginal Relevance: picks its top 5 from the retriever's pool of 20, trading a little relevance for variety, so it can drop near-duplicates instead of only reordering them. |
 
 ### Use case
 
 | Strategy | How it works | Needs a key |
 |---|---|---|
-| `search` | Shows the retrieved chunks as a ranked list with scores and pages. | No |
-| `chat` | Claude answers from the retrieved chunks only, with a checked citation for every claim. | Yes |
+| `search` | Shows the top 5 chunks as a ranked list with scores and pages, and how many candidates there were. | No |
+| `chat` | Claude answers from the top 5 retrieved chunks only, with a checked citation for every claim. | Yes |
 
 ## Models and downloads
 

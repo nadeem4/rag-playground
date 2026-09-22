@@ -27,6 +27,9 @@ from core.transform import Explanation, Transform
 
 
 class SearchUseCaseConfig(BaseModel):
+    #: Results shown, taken from the top of the candidate pool it receives.
+    top_k: int = 5
+
     #: Characters, not bytes and not tokens. Slicing a `str` cuts on code
     #: points, so a multi-byte character can never be split in half.
     max_snippet_chars: int = 400
@@ -49,12 +52,19 @@ class SearchUseCase(Transform[SearchUseCaseConfig]):
     )
 
     def explain(self, config: SearchUseCaseConfig) -> Explanation:
-        n = config.max_snippet_chars
+        n, top = config.max_snippet_chars, config.top_k
         settings = (
-            f"Each result shows the first {n:,} characters of its piece, with its "
-            "rank, score and pages. If a reranker ran, each result also shows "
-            "where it stood before."
+            f"Shows the top {top} of the candidates it receives, and says how "
+            f"many candidates there were. Each result shows the first {n:,} "
+            "characters of its piece, with its rank, score and pages. If a "
+            "reranker ran, each result also shows where it stood before."
         )
+        if top < 1:
+            return Explanation(
+                settings=settings,
+                warning="top_k must be at least 1, or nothing is shown.",
+                blocking=True,
+            )
         if n < 1:
             return Explanation(
                 settings=settings,
@@ -81,7 +91,8 @@ class SearchUseCase(Transform[SearchUseCaseConfig]):
                 "query_id": result.query_id,
                 "total_candidates": result.total_candidates,
                 "results": [
-                    _row(hit, config.max_snippet_chars) for hit in result.hits
+                    _row(hit, config.max_snippet_chars)
+                    for hit in result.hits[: config.top_k]
                 ],
             },
         ).model_dump(mode="json")

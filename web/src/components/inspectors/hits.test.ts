@@ -35,7 +35,7 @@ describe("rank movement", () => {
 
   it("the real MMR fixture moved its fifth hit to second", () => {
     const rows = rowsFromResult(mmr)
-    expect(rows.map((r) => movement(r).kind)).toEqual(["none", "up", "down", "down", "down"])
+    expect(rows.map((r) => movement(r).kind)).toEqual(["none", "up", "down", "down", "up"])
     expect(movement(rows[1])).toMatchObject({ text: "was 5" })
   })
 })
@@ -79,7 +79,7 @@ describe("hits on the position spine", () => {
     const rows = rowsFromResult(hybrid)
     const { segments, marks, unplaced } = layoutHits(chunkSet.source_text, chunkSet.chunks, rows)
     expect(unplaced).toEqual([])
-    expect(marks.map((m) => m.rank)).toEqual([1, 2, 3, 4, 5])
+    expect(marks.map((m) => m.rank)).toEqual([1, 2, 3, 4, 5, 6])
     for (const m of marks) {
       const chunk = chunkSet.chunks[m.chunkIndex]
       expect(chunk.id).toBe(rows[m.row].chunk_id)
@@ -123,7 +123,7 @@ describe("hits on the position spine", () => {
     rows[2] = { ...rows[2], chunk_id: "elsewhere" }
     const { marks, unplaced } = layoutHits(chunkSet.source_text, chunkSet.chunks, rows)
     expect(unplaced).toEqual([3])
-    expect(marks.map((m) => m.rank)).toEqual([1, 2, 4, 5])
+    expect(marks.map((m) => m.rank)).toEqual([1, 2, 4, 5, 6])
   })
 })
 
@@ -135,8 +135,9 @@ describe("top-k agreement", () => {
     expect(topKAgreement([], ["a"])).toEqual({ match: 0, of: 1 })
   })
 
-  it("MMR over hybrid only reorders: its top five all match hybrid's", () => {
+  it("MMR chooses from hybrid's wider pool: four of its five are in hybrid's top five", () => {
     const ids = (r: RetrievalResult) => r.hits.map((h) => h.chunk.id)
-    expect(topKAgreement(ids(hybrid), ids(mmr))).toEqual({ match: 5, of: 5 })
+    expect(hybrid.hits.length).toBeGreaterThan(mmr.hits.length)
+    expect(topKAgreement(ids(hybrid), ids(mmr))).toEqual({ match: 4, of: 5 })
   })
 })

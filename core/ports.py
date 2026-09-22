@@ -105,6 +105,19 @@ STAGE_WHAT: dict[Stage, str] = {
     ),
 }
 
+#: The longer lesson Learn mode shows at the top of a stage's card, as
+#: paragraphs. Only stages whose lesson is written appear here.
+STAGE_LESSON: dict[Stage, list[str]] = {
+    Stage.CHUNK: [
+        "Before a search can find anything, the document is cut into smaller "
+        "pieces called chunks. The search compares your question with each chunk "
+        "and returns the ones that match best.",
+        "So the way you cut the document decides what the search can find. If "
+        "the answer to a question is cut in half, neither half may match well "
+        "enough to be found.",
+    ],
+}
+
 #: Stages whose input type equals their output type, so they may repeat.
 #: Cleaners stack, enrichers stack, query transforms stack, rerankers stack.
 STACKABLE: frozenset[Stage] = frozenset(

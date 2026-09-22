@@ -27,7 +27,8 @@
         },
         "title": "UploadConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   },
   "use_case": {
@@ -134,7 +135,8 @@
         },
         "title": "ChatConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     },
     "search": {
       "name": "search",
@@ -170,7 +172,8 @@
         },
         "title": "SearchUseCaseConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   },
   "query": {
@@ -196,7 +199,8 @@
         },
         "title": "TextQueryConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   },
   "parse": {
@@ -235,7 +239,8 @@
         },
         "title": "PdfiumConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     },
     "docling": {
       "name": "docling",
@@ -283,7 +288,8 @@
         },
         "title": "DoclingConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   },
   "clean": {
@@ -325,7 +331,8 @@
         },
         "title": "HeaderFooterStripConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     },
     "dedupe_blocks": {
       "name": "dedupe_blocks",
@@ -369,7 +376,8 @@
         },
         "title": "DedupeBlocksConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     },
     "drop_matching": {
       "name": "drop_matching",
@@ -417,7 +425,8 @@
         },
         "title": "DropMatchingConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   },
   "chunk": {
@@ -457,6 +466,31 @@
         },
         "title": "RecursiveCharacterConfig",
         "type": "object"
+      },
+      "learn": {
+        "_strategy": {
+          "hint": "This strategy cuts the text at the most natural place it can find.",
+          "more": [
+            "It first tries to cut between paragraphs. If a paragraph is too long, it cuts between lines, then between sentences, and only as a last resort between words.",
+            "It then joins the small pieces back together until each chunk is as big as the chunk size you chose."
+          ]
+        },
+        "chunk_size": {
+          "hint": "This is the largest a chunk can be, counted in characters.",
+          "more": [
+            "A character is one letter, number, space or punctuation mark. Four characters are roughly one token, which is the unit language models count in.",
+            "Small chunks match a question very precisely. But an answer that is longer than one chunk gets split, and each chunk carries little of the text around it.",
+            "Large chunks keep more of the text together. But one useful sentence can get lost among many sentences that are not about your question."
+          ]
+        },
+        "chunk_overlap": {
+          "hint": "This is how much text each chunk repeats from the end of the chunk before it, counted in characters.",
+          "more": [
+            "It helps when an important sentence sits right on the border between two chunks, because the sentence then appears whole in at least one of them.",
+            "This strategy only repeats whole paragraphs, lines, sentences or words. It never cuts a word in half to repeat it. So if the chunk before ends with a paragraph that is longer than the overlap, nothing is repeated.",
+            "Overlap has a cost. Repeated text is stored and searched more than once. The overlap must also be smaller than the chunk size, or the chunks would never move forward through the text."
+          ]
+        }
       }
     },
     "markdown_header": {
@@ -489,6 +523,23 @@
         },
         "title": "MarkdownHeaderConfig",
         "type": "object"
+      },
+      "learn": {
+        "_strategy": {
+          "hint": "This strategy cuts the document at its headings.",
+          "more": [
+            "Each chunk is one section, which means a heading and everything under it until the next heading. This keeps each topic together, and people often ask questions about one topic at a time.",
+            "It needs a parser that recognises headings, such as Docling. If the parser found no headings, the whole document is treated as one section and is cut only by size."
+          ]
+        },
+        "max_tokens": {
+          "hint": "This is the largest a chunk can be, counted in tokens.",
+          "more": [
+            "Here a token is one word or one punctuation mark.",
+            "If a section is longer than this, it is split between its paragraphs, lists and tables. One of these is only cut in the middle if it is longer than this limit on its own.",
+            "Chunks from this strategy never overlap."
+          ]
+        }
       }
     },
     "token_based": {
@@ -527,6 +578,29 @@
         },
         "title": "TokenBasedConfig",
         "type": "object"
+      },
+      "learn": {
+        "_strategy": {
+          "hint": "This strategy counts tokens and cuts every time the count reaches the limit, wherever that happens to be.",
+          "more": [
+            "It ignores sentences, paragraphs and headings.",
+            "That makes it a useful baseline. Compare it with the other strategies to see how much it helps to cut in natural places."
+          ]
+        },
+        "max_tokens": {
+          "hint": "This is how many tokens go into each chunk.",
+          "more": [
+            "Here a token is one word or one punctuation mark.",
+            "The cut happens exactly at this count, even in the middle of a sentence."
+          ]
+        },
+        "overlap": {
+          "hint": "This is how many tokens each chunk repeats from the end of the chunk before it.",
+          "more": [
+            "If a sentence is cut at a border and it is shorter than the overlap, it appears whole at the start of the next chunk.",
+            "The overlap must be smaller than the max tokens."
+          ]
+        }
       }
     }
   },
@@ -596,7 +670,8 @@
         },
         "title": "LanceDbIndexConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   },
   "retrieve": {
@@ -641,7 +716,8 @@
         },
         "title": "DenseConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     },
     "bm25": {
       "name": "bm25",
@@ -684,7 +760,8 @@
         },
         "title": "Bm25Config",
         "type": "object"
-      }
+      },
+      "learn": {}
     },
     "hybrid_rrf": {
       "name": "hybrid_rrf",
@@ -733,7 +810,8 @@
         },
         "title": "HybridRrfConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   },
   "rerank": {
@@ -783,7 +861,8 @@
         },
         "title": "MmrRerankConfig",
         "type": "object"
-      }
+      },
+      "learn": {}
     }
   }
 }

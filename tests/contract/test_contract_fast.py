@@ -21,7 +21,7 @@ import pytest
 
 from core.artifacts import ArtifactType
 from core.ids import compute_artifact_id
-from core.ports import STAGE_OUTPUT, PortSpec
+from core.ports import STAGE_OUTPUT, PortSpec, Stage
 from core.registry import registry
 from core.transform import Explanation, Transform
 from pydantic import ValidationError
@@ -248,3 +248,62 @@ def test_explain_is_setting_aware(cls):
                 f"(default {info.default!r})"
             )
         assert tried, f"{ids(cls)}: found no valid alternative for {name}"
+
+
+# ---------------------------------------------------------------------------
+# I-22: every setting teaches itself (Learn mode)
+# ---------------------------------------------------------------------------
+
+#: Stages whose plugins must carry `learn` for the strategy and every setting.
+#: Add a stage here once its lesson text is written; the checks below then
+#: cover it with no other change.
+LEARN_REQUIRED: frozenset[Stage] = frozenset({Stage.CHUNK})
+
+#: A sentence end followed by the start of another sentence.
+_SENTENCE_BREAK = re.compile(r"[.!?]\s+\S")
+
+
+def _learn_texts(cls) -> list[str]:
+    return [
+        text
+        for lesson in cls.learn.values()
+        for text in (lesson["hint"], *lesson["more"])
+    ]
+
+
+def test_learn_covers_the_strategy_and_every_setting(cls):
+    if cls.stage not in LEARN_REQUIRED:
+        return
+    expected = {"_strategy", *cls.config_model.model_fields}
+    assert set(cls.learn) == expected, (
+        f"{ids(cls)}: `learn` must have exactly {sorted(expected)}, "
+        f"got {sorted(cls.learn)}"
+    )
+
+
+def test_learn_entries_are_a_hint_plus_more(cls):
+    for key, lesson in cls.learn.items():
+        assert set(lesson) == {"hint", "more"}, f"{ids(cls)}: learn[{key!r}]"
+        assert isinstance(lesson["hint"], str) and lesson["hint"].strip()
+        assert isinstance(lesson["more"], list)
+        assert all(isinstance(p, str) and p.strip() for p in lesson["more"])
+
+
+def test_learn_hint_is_exactly_one_sentence(cls):
+    for key, lesson in cls.learn.items():
+        assert not _SENTENCE_BREAK.search(lesson["hint"]), (
+            f"{ids(cls)}: learn[{key!r}] hint must be one sentence: "
+            f"{lesson['hint']!r}"
+        )
+
+
+def test_learn_text_ends_with_a_full_stop(cls):
+    for text in _learn_texts(cls):
+        assert text.endswith("."), f"{ids(cls)}: no full stop at the end of {text!r}"
+
+
+def test_learn_text_has_no_em_or_en_dashes(cls):
+    for text in _learn_texts(cls):
+        assert "—" not in text and "–" not in text, (
+            f"{ids(cls)}: dash in {text!r}"
+        )

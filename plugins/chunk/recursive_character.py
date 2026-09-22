@@ -117,6 +117,52 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
         "lands on the most natural boundary available. The parts are then packed "
         "together until a piece is full."
     )
+    learn = {
+        "_strategy": {
+            "hint": (
+                "This strategy cuts the text at the most natural place it can find."
+            ),
+            "more": [
+                "It first tries to cut between paragraphs. If a paragraph is too "
+                "long, it cuts between lines, then between sentences, and only as a "
+                "last resort between words.",
+                "It then joins the small pieces back together until each chunk is "
+                "as big as the chunk size you chose.",
+            ],
+        },
+        "chunk_size": {
+            "hint": "This is the largest a chunk can be, counted in characters.",
+            "more": [
+                "A character is one letter, number, space or punctuation mark. Four "
+                "characters are roughly one token, which is the unit language "
+                "models count in.",
+                "Small chunks match a question very precisely. But an answer that "
+                "is longer than one chunk gets split, and each chunk carries little "
+                "of the text around it.",
+                "Large chunks keep more of the text together. But one useful "
+                "sentence can get lost among many sentences that are not about your "
+                "question.",
+            ],
+        },
+        "chunk_overlap": {
+            "hint": (
+                "This is how much text each chunk repeats from the end of the chunk "
+                "before it, counted in characters."
+            ),
+            "more": [
+                "It helps when an important sentence sits right on the border "
+                "between two chunks, because the sentence then appears whole in at "
+                "least one of them.",
+                "This strategy only repeats whole paragraphs, lines, sentences or "
+                "words. It never cuts a word in half to repeat it. So if the chunk "
+                "before ends with a paragraph that is longer than the overlap, "
+                "nothing is repeated.",
+                "Overlap has a cost. Repeated text is stored and searched more than "
+                "once. The overlap must also be smaller than the chunk size, or the "
+                "chunks would never move forward through the text.",
+            ],
+        },
+    }
 
     def explain(self, config: RecursiveCharacterConfig) -> Explanation:
         size, overlap = config.chunk_size, config.chunk_overlap

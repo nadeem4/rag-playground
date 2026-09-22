@@ -78,6 +78,7 @@ class Registry:
                         for port_name, port in cls.inputs.items()
                     },
                     "config_schema": cls.config_model.model_json_schema(),
+                    "learn": cls.learn,
                 }
                 for name, cls in bucket.items()
             }

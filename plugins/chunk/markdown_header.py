@@ -105,6 +105,29 @@ class MarkdownHeaderChunker(Transform[MarkdownHeaderConfig]):
         "piece is cut between its blocks, and only a single block that is itself "
         "too long is cut mid-text. Pieces do not overlap."
     )
+    learn = {
+        "_strategy": {
+            "hint": "This strategy cuts the document at its headings.",
+            "more": [
+                "Each chunk is one section, which means a heading and everything "
+                "under it until the next heading. This keeps each topic together, "
+                "and people often ask questions about one topic at a time.",
+                "It needs a parser that recognises headings, such as Docling. If the "
+                "parser found no headings, the whole document is treated as one "
+                "section and is cut only by size.",
+            ],
+        },
+        "max_tokens": {
+            "hint": "This is the largest a chunk can be, counted in tokens.",
+            "more": [
+                "Here a token is one word or one punctuation mark.",
+                "If a section is longer than this, it is split between its "
+                "paragraphs, lists and tables. One of these is only cut in the "
+                "middle if it is longer than this limit on its own.",
+                "Chunks from this strategy never overlap.",
+            ],
+        },
+    }
 
     def explain(self, config: MarkdownHeaderConfig) -> Explanation:
         size = config.max_tokens

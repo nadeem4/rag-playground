@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from api.deps import Deps, build_deps
-from api.routes import artifacts, pages, registry, runs, settings, sources
+from api.routes import artifacts, learn, pages, registry, runs, settings, sources
 from api.runs import RunManager
 from api.static import mount_spa
 
@@ -35,6 +35,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         runs.router,
         artifacts.router,
         settings.router,
+        learn.router,
     ):
         app.include_router(r, prefix="/api")
     mount_spa(app, app.state.deps.web_dist)  # last: the catch-all route

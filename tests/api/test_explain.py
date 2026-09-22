@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.ports import STAGE_WHAT, Stage
+from core.ports import STAGE_LESSON, STAGE_WHAT, Stage
 from tests.api.conftest import ingest_graph, read_sse, upload_pdf
 
 
@@ -12,7 +12,18 @@ def test_stages_lists_every_stage_with_what_it_is_for(client):
     body = r.json()
     assert set(body) == {str(s) for s in Stage}
     for stage in Stage:
-        assert body[str(stage)] == {"what": STAGE_WHAT[stage]}
+        expected = {"what": STAGE_WHAT[stage]}
+        if stage in STAGE_LESSON:
+            expected["lesson"] = STAGE_LESSON[stage]
+        assert body[str(stage)] == expected
+
+
+def test_stages_carries_the_chunk_lesson_and_only_where_one_exists(client):
+    body = client.get("/api/stages").json()
+    lesson = body["chunk"]["lesson"]
+    assert len(lesson) == 2
+    assert lesson[0].startswith("Before a search can find anything")
+    assert "lesson" not in body["parse"]
 
 
 def explain(client, stage, transform, config=None):

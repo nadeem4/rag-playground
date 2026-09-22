@@ -15,7 +15,7 @@ and generics that typecheck. Protocol's only advantage — no inheritance requir
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Mapping, TypeVar
+from typing import Any, Generic, Mapping, TypedDict, TypeVar
 
 from pydantic import BaseModel
 
@@ -38,6 +38,17 @@ class Explanation(BaseModel):
     tradeoff: str | None = None
     warning: str | None = None
     blocking: bool = False
+
+
+class Lesson(TypedDict):
+    """Learn-mode text for a strategy or one setting (I-22).
+
+    `hint` is one sentence, shown under the field. `more` is the rest, one idea
+    per paragraph, shown behind "Read more".
+    """
+
+    hint: str
+    more: list[str]
 
 
 class TransformDefinitionError(TypeError):
@@ -81,6 +92,11 @@ class Transform(ABC, Generic[C]):
     #: How this strategy works, in one or two plain sentences. Required: a
     #: learning playground whose steps cannot explain themselves teaches nothing.
     summary: str
+
+    #: Learn-mode text (I-22). The key "_strategy" describes the strategy itself;
+    #: every other key is a config field. The contract suite requires it, for
+    #: the strategy and every field, on the stages in its `LEARN_REQUIRED`.
+    learn: dict[str, Lesson] = {}
 
     #: Config fields whose value `explain()` deliberately does not mention. The
     #: contract suite requires every other number, bool and choice to change

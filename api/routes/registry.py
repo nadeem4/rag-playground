@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 
-from core.ports import STAGE_WHAT, Stage
+from core.ports import STAGE_LESSON, STAGE_WHAT, Stage
 from core.registry import UnknownTransformError
 
 router = APIRouter()
@@ -20,9 +20,15 @@ def get_registry(request: Request) -> dict[str, Any]:
 
 
 @router.get("/stages")
-def get_stages() -> dict[str, dict[str, str]]:
-    """What every step is for in RAG, keyed by stage (I-12)."""
-    return {str(stage): {"what": STAGE_WHAT[stage]} for stage in Stage}
+def get_stages() -> dict[str, dict[str, Any]]:
+    """What every step is for in RAG, keyed by stage (I-12), plus the stage's
+    Learn-mode lesson where one is written (I-22)."""
+    out: dict[str, dict[str, Any]] = {}
+    for stage in Stage:
+        out[str(stage)] = {"what": STAGE_WHAT[stage]}
+        if stage in STAGE_LESSON:
+            out[str(stage)]["lesson"] = STAGE_LESSON[stage]
+    return out
 
 
 class ExplainIn(BaseModel):

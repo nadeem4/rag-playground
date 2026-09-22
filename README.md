@@ -316,13 +316,17 @@ a new strategy needs no frontend change.
 1. Create `plugins/<stage>/<name>.py` with a Pydantic config model and a `Transform`
    subclass decorated with `@register`. Give the class:
    - a `summary` of how the strategy works;
-   - an `explain(config)` that describes what these settings will do.
+   - an `explain(config)` that describes what these settings will do;
+   - for a chunk strategy, `learn`: a one-sentence `hint` and more paragraphs for the
+     strategy itself (the key `_strategy`) and for every setting. Learn mode shows them.
 2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py`. A test fails if a plugin
    module exists but is not listed.
 3. Run `uv run pytest`. The contract suite checks every plugin automatically, including:
    - determinism;
    - the cache key;
-   - that the explanation changes with each setting.
+   - that the explanation changes with each setting;
+   - for a chunk strategy, that `learn` covers every setting in full sentences, with no
+     dashes.
 
 Look at `plugins/clean/drop_matching.py` for a small, complete example.
 

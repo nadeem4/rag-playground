@@ -48,6 +48,38 @@ class TokenBasedChunker(Transform[TokenBasedConfig]):
         "the structure of the text completely, which makes it a useful baseline "
         "to compare the other chunkers against."
     )
+    learn = {
+        "_strategy": {
+            "hint": (
+                "This strategy counts tokens and cuts every time the count reaches "
+                "the limit, wherever that happens to be."
+            ),
+            "more": [
+                "It ignores sentences, paragraphs and headings.",
+                "That makes it a useful baseline. Compare it with the other "
+                "strategies to see how much it helps to cut in natural places.",
+            ],
+        },
+        "max_tokens": {
+            "hint": "This is how many tokens go into each chunk.",
+            "more": [
+                "Here a token is one word or one punctuation mark.",
+                "The cut happens exactly at this count, even in the middle of a "
+                "sentence.",
+            ],
+        },
+        "overlap": {
+            "hint": (
+                "This is how many tokens each chunk repeats from the end of the "
+                "chunk before it."
+            ),
+            "more": [
+                "If a sentence is cut at a border and it is shorter than the "
+                "overlap, it appears whole at the start of the next chunk.",
+                "The overlap must be smaller than the max tokens.",
+            ],
+        },
+    }
 
     def explain(self, config: TokenBasedConfig) -> Explanation:
         size, overlap = config.max_tokens, config.overlap

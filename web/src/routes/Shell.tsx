@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { needsKey, useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { Registry } from "@/api/types"
+import type { Registry, Source } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
@@ -11,6 +11,7 @@ import { useExplanations } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
+import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,7 @@ import {
   initialGraph,
   readStoredGraph,
   removeNode,
+  sampleGraph,
   setConfig,
   setTransform,
   signature,
@@ -76,6 +78,13 @@ function Build({ registry }: { registry: Registry }) {
   const [columnError, setColumnError] = useState<string | null>(null)
   const run = useRun(runId)
   const { key: apiKey } = useApiKey()
+  // Plan I-15: null until `GET /api/sources` answers, and if it fails.
+  const [uploaded, setUploaded] = useState<Source[] | null>(null)
+  const [sampleLoaded, setSampleLoaded] = useState(false)
+
+  useEffect(() => {
+    api.sources().then(setUploaded, () => undefined)
+  }, [])
 
   useEffect(() => storeGraph(graph), [graph])
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
@@ -147,6 +156,25 @@ function Build({ registry }: { registry: Registry }) {
     window.location.assign(`/compare?${q.toString()}`)
   }
 
+  // Plan I-15: the first-run screen, while nothing is uploaded and no file is selected.
+  const sourceNode = graph.nodes.find((n) => n.stage === "source")
+  const firstRun = uploaded?.length === 0 && sourceNode !== undefined && !sourceNode.config.sha
+  const intro = firstRun
+    ? { title: "Nothing to show yet", body: "Load a PDF, or try the sample document. Then press Run all, and select any step to see what it did." }
+    : sampleLoaded && Object.keys(results).length === 0
+      ? {
+          title: "Ready to run",
+          body: "The sample is loaded and every step has a sensible default. Press Run all, then select any step to see what it did. The question on the Ask card is already filled in.",
+        }
+      : undefined
+
+  function loadSample(src: Source) {
+    edit(sampleGraph(registry, src))
+    setUploaded((u) => [...(u ?? []), src])
+    setSelected(null)
+    setSampleLoaded(true)
+  }
+
   const failedNode = order.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
 
   return (
@@ -162,7 +190,7 @@ function Build({ registry }: { registry: Registry }) {
             ) : null}
             <Button
               size="sm"
-              disabled={busy || Boolean(blocker)}
+              disabled={busy || Boolean(blocker) || firstRun}
               title={blocker ? `Fix the ${titleFor(blocker)} settings to run the pipeline` : undefined}
               onClick={() => void start(undefined, false)}
             >
@@ -170,7 +198,7 @@ function Build({ registry }: { registry: Registry }) {
             </Button>
           </div>
         </div>
-        {blocker ? (
+        {blocker && !firstRun ? (
           <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
             Fix the {titleFor(blocker)} settings to run the pipeline.
           </p>
@@ -193,38 +221,44 @@ function Build({ registry }: { registry: Registry }) {
           </div>
         ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <PipelineColumn
-            graph={graph}
-            registry={registry}
-            results={results}
-            stale={stale}
-            selected={selected}
-            busy={busy}
-            errors={errors}
-            onSelect={setSelected}
-            onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
-            onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
-            onRun={(id, force) => void start(id, force)}
-            onAddCleaner={() => edit(addCleaner(graph, registry))}
-            onAddReranker={() => edit(addReranker(graph, registry))}
-            onRemove={(id) => {
-              edit(removeNode(graph, id), id)
-              if (selected === id) setSelected(null)
-            }}
-            onSweep={(id, preset) => void openSweep(id, preset)}
-            explanations={explanations}
-            history={tracked.history}
-          />
-          <p className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
-            <span className="flex items-center gap-2">
-              <span aria-hidden className="h-[12px] border-l-3 border-solid border-fg-muted" />
-              computed this run
-            </span>
-            <span className="flex items-center gap-2">
-              <span aria-hidden className="h-[12px] border-l-3 border-dotted border-fg-muted" />
-              from cache
-            </span>
-          </p>
+          {firstRun && sourceNode ? (
+            <FirstRun onSource={(v) => edit(setConfig(graph, sourceNode.id, { ...v }), sourceNode.id)} onSample={loadSample} />
+          ) : (
+            <>
+              <PipelineColumn
+                graph={graph}
+                registry={registry}
+                results={results}
+                stale={stale}
+                selected={selected}
+                busy={busy}
+                errors={errors}
+                onSelect={setSelected}
+                onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
+                onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
+                onRun={(id, force) => void start(id, force)}
+                onAddCleaner={() => edit(addCleaner(graph, registry))}
+                onAddReranker={() => edit(addReranker(graph, registry))}
+                onRemove={(id) => {
+                  edit(removeNode(graph, id), id)
+                  if (selected === id) setSelected(null)
+                }}
+                onSweep={(id, preset) => void openSweep(id, preset)}
+                explanations={explanations}
+                history={tracked.history}
+              />
+              <p className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
+                <span className="flex items-center gap-2">
+                  <span aria-hidden className="h-[12px] border-l-3 border-solid border-fg-muted" />
+                  computed this run
+                </span>
+                <span className="flex items-center gap-2">
+                  <span aria-hidden className="h-[12px] border-l-3 border-dotted border-fg-muted" />
+                  from cache
+                </span>
+              </p>
+            </>
+          )}
         </div>
       </section>
 
@@ -235,6 +269,7 @@ function Build({ registry }: { registry: Registry }) {
         stale={stale}
         selected={selected}
         failedHint={failedNode?.id}
+        intro={intro}
       />
     </main>
   )
@@ -250,6 +285,7 @@ function InspectorPanel({
   stale,
   selected,
   failedHint,
+  intro,
 }: {
   graph: PipelineGraph
   registry: Registry
@@ -257,6 +293,8 @@ function InspectorPanel({
   stale: Set<string>
   selected: string | null
   failedHint?: string
+  /** What the empty inspector says on a first visit, and after the sample loads. */
+  intro?: { title: string; body: string }
 }) {
   const node = graph.nodes.find((n) => n.id === selected)
   const result = node ? results[node.id] : undefined
@@ -283,7 +321,9 @@ function InspectorPanel({
   const verb = node ? titleFor(node) : ""
 
   let body: ReactNode
-  if (!node) {
+  if (!node && intro) {
+    body = <EmptyState title={intro.title}>{intro.body}</EmptyState>
+  } else if (!node) {
     body = (
       <EmptyState title="Nothing selected">
         {failedHint ? `Select ${failedHint} to see why it failed.` : "Select a card in the pipeline to see its output here."}

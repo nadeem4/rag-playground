@@ -96,6 +96,8 @@ export const api = {
     form.append("file", file)
     return request<Source>("/sources", { method: "POST", body: form })
   },
+  /** Plan I-14: registers the bundled sample PDF like an upload. Idempotent. */
+  sampleSource: () => request<Source>("/sources/sample", { method: "POST" }),
 
   /** 400 on an invalid graph; 422 `{detail: {node_id, errors}}` on a bad config. */
   createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.apiKey))),

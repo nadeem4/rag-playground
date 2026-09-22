@@ -6,6 +6,9 @@ import {
   ancestors,
   columnOrder,
   completeGraph,
+  defaultConfig,
+  SAMPLE_QUESTION,
+  sampleGraph,
   initialGraph,
   loadGraph,
   removeNode,
@@ -16,6 +19,7 @@ import {
   upstreamOfStage,
   type PipelineGraph,
 } from "./graph"
+import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
 import { TEST_REGISTRY as R } from "./testRegistry"
@@ -185,5 +189,42 @@ describe("graph state", () => {
     expect(loadGraph(JSON.stringify(broken), R)).toBeNull()
     expect(loadGraph("not json", R)).toBeNull()
     expect(loadGraph(null, R)).toBeNull()
+  })
+})
+
+describe("sample graph (plan I-15)", () => {
+  const LIVE = liveRegistry as unknown as Registry
+  const SRC = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
+
+  it("is Load, Parse docling, Clean dedupe_blocks, Chunk recursive_character, Index, Ask, Retrieve hybrid_rrf, Search", () => {
+    const g = sampleGraph(LIVE, SRC)
+    expect(columnOrder(g).map((n) => [n.stage, n.transform])).toEqual([
+      ["source", "upload"],
+      ["parse", "docling"],
+      ["clean", "dedupe_blocks"],
+      ["chunk", "recursive_character"],
+      ["index", "lancedb"],
+      ["query", "text"],
+      ["retrieve", "hybrid_rrf"],
+      ["use_case", "search"],
+    ])
+    // Clean sits between Parse and Chunk.
+    expect(edgeSet(g)).toContain("clean_1->chunk:doc")
+    expect(edgeSet(g)).toContain("parse->clean_1:doc")
+  })
+
+  it("selects the sample source, embeds with Qwen3 and pre-fills the question", () => {
+    const g = sampleGraph(LIVE, SRC)
+    const by = (stage: string) => g.nodes.find((n) => n.stage === stage)!
+    expect(by("source").config).toEqual(SRC)
+    expect(by("index").config.embedder).toBe("qwen3-embedding-0.6b")
+    expect(by("query").config.text).toBe(SAMPLE_QUESTION)
+    expect(SAMPLE_QUESTION).toBe("Why do chunk boundaries matter?")
+  })
+
+  it("leaves every other setting at its schema default", () => {
+    const g = sampleGraph(LIVE, SRC)
+    const chunk = g.nodes.find((n) => n.stage === "chunk")!
+    expect(chunk.config).toEqual(defaultConfig(LIVE.chunk!.recursive_character))
   })
 })

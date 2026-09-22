@@ -122,6 +122,38 @@ export function initialGraph(registry: Registry): PipelineGraph {
   return wire({ nodes, edges: [] }, registry)
 }
 
+/** The question the sample graph's Ask card starts with (plan I-15). */
+export const SAMPLE_QUESTION = "Why do chunk boundaries matter?"
+
+/** The transform each stage of the sample graph uses. Clean is added to the default column. */
+const SAMPLE_TRANSFORMS: Partial<Record<Stage, string>> = {
+  parse: "docling",
+  clean: "dedupe_blocks",
+  chunk: "recursive_character",
+  retrieve: "hybrid_rrf",
+  use_case: "search",
+}
+
+/**
+ * The graph "Try the sample document" sets (plan I-15): the default column plus
+ * a duplicate-block cleaner (Docling already drops page headers and footers), with the sample source selected, the Qwen3 embedder
+ * and the question filled in. Every other setting is its schema default. A
+ * transform the registry lacks keeps the stage's default.
+ */
+export function sampleGraph(registry: Registry, source: { sha: string; filename: string }): PipelineGraph {
+  let g = addCleaner(initialGraph(registry), registry)
+  for (const n of g.nodes) {
+    const t = SAMPLE_TRANSFORMS[n.stage]
+    if (t && registry[n.stage]?.[t]) g = setTransform(g, n.id, t, registry)
+  }
+  const extra: Partial<Record<Stage, Record<string, unknown>>> = {
+    source: { sha: source.sha, filename: source.filename },
+    index: { embedder: "qwen3-embedding-0.6b" },
+    query: { text: SAMPLE_QUESTION },
+  }
+  return { ...g, nodes: g.nodes.map((n) => (extra[n.stage] ? { ...n, config: { ...n.config, ...extra[n.stage] } } : n)) }
+}
+
 /**
  * Add any default stage a stored graph lacks (one saved before retrieval
  * existed), then wire the new cards. A complete graph comes back unchanged.

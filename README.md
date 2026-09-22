@@ -55,7 +55,11 @@ The server starts on http://127.0.0.1:8000 and opens your browser. Options:
 
 **First steps in the UI:**
 
-1. On **Build**, upload a PDF.
+1. On **Build**, choose **Try the sample document** or upload a PDF.
+   - The sample, `samples/chunking-primer.pdf`, is three pages of notes on chunking. It comes
+     with a ready pipeline and a question, so pressing **Run all** shows every step working.
+   - Choosing it also starts loading the Docling and Qwen3 models in the background.
+   - To regenerate the sample, run `uv run python scripts/make_sample_pdf.py`.
 2. Pick a parser and press **Run** on the Parse card. The inspector shows the text and the
    elements the parser found.
 3. Add a cleaner, pick a chunker and run again. The chunk view draws every chunk boundary

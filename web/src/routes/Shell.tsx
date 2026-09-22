@@ -269,7 +269,7 @@ function Build({ registry }: { registry: Registry }) {
         results={results}
         stale={stale}
         selected={selected}
-        failedHint={failedNode?.id}
+        failedHint={failedNode ? titleFor(failedNode) : undefined}
         intro={intro}
       />
     </main>
@@ -327,7 +327,7 @@ function InspectorPanel({
   } else if (!node) {
     body = (
       <EmptyState title="Nothing selected">
-        {failedHint ? `Select ${failedHint} to see why it failed.` : "Select a card in the pipeline to see its output here."}
+        {failedHint ? `Select the ${failedHint} card to see why it failed.` : "Select a card in the pipeline to see its output here."}
       </EmptyState>
     )
   } else if (!result) {

@@ -74,7 +74,7 @@ class Upload(Transform[UploadConfig]):
     ) -> dict[str, Any]:
         if not config.sha:
             raise ValueError(
-                "upload: `sha` is empty — nothing to resolve. Upload a file "
+                "upload: `sha` is empty, so there is nothing to resolve. Upload a file "
                 "first; the sha is what identifies it."
             )
 

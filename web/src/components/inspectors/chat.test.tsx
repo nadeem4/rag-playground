@@ -275,9 +275,9 @@ describe("sentence-id grounding helpers", () => {
   })
 
   it("the stats line counts every label and the invalid ids", () => {
-    expect(groundingLine(SID.stats!)).toBe("4 cited · 1 weak · 0 similarity · 1 not grounded · 0 invalid ids")
+    expect(groundingLine(SID.stats!)).toBe("4 cited, 1 weak, 0 similarity, 1 not grounded, 0 invalid ids")
     expect(groundingLine({ cited: 1, weak: 0, similarity: 2, none: 0, unknown_ids: 1 })).toBe(
-      "1 cited · 0 weak · 2 similarity · 0 not grounded · 1 invalid id",
+      "1 cited, 0 weak, 2 similarity, 0 not grounded, 1 invalid id",
     )
   })
 
@@ -310,7 +310,7 @@ describe("ChatInspector, sentence ids", () => {
 
   it("shows the stats line and names the method", () => {
     render(<ChatInspector payload={SID} chunkSet={chunks} />)
-    expect(screen.getByTestId("chat-grounding").textContent).toBe("4 cited · 1 weak · 0 similarity · 1 not grounded · 0 invalid ids")
+    expect(screen.getByTestId("chat-grounding").textContent).toBe("4 cited, 1 weak, 0 similarity, 1 not grounded, 0 invalid ids")
     expect(screen.getByTestId("chat-method").textContent).toBe("Citations: sentence ids, checked by us")
     expect(document.body.textContent).not.toMatch(new RegExp("[\u2013\u2014]"))
   })

@@ -254,7 +254,7 @@ function Sweep({
               {tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))}
             </p>
             <p className="text-xs text-fg-muted">
-              {running !== null ? `running variant ${running + 1} of ${submitted.variants.length}` : run.closed ? "Steps above the swept one ran once; the rest came from the cache." : "starting"}
+              {running !== null ? `Running variant ${running + 1} of ${submitted.variants.length}.` : run.closed ? "Steps above the swept one ran once; the rest came from the cache." : "Starting."}
             </p>
             {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
           </>
@@ -372,37 +372,39 @@ function VariantResult({
 
   return (
     <section aria-label={`Result ${label?.transform ?? ""}`} className="flex min-w-0 flex-col bg-surface">
-      <header className="flex min-h-[40px] flex-col justify-center gap-1 border-b border-hairline px-3 py-1">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
-            <h2 className="font-mono text-sm font-semibold">{label?.transform ?? "not swept"}</h2>
-            {label?.fields.map(([k, v]) => (
-              <span key={k} className="font-mono text-xs text-fg-muted">
-                {k} <span className="text-fg">{v}</span>
+      {label ? (
+        <header className="flex min-h-[40px] flex-col justify-center gap-1 border-b border-hairline px-3 py-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+              <h2 className="font-mono text-sm font-semibold">{label.transform}</h2>
+              {label.fields.map(([k, v]) => (
+                <span key={k} className="font-mono text-xs text-fg-muted">
+                  {k} <span className="text-fg">{v}</span>
+                </span>
+              ))}
+            </div>
+            {finished(n) ? (
+              <span className="font-mono text-xs text-fg-muted">
+                {titleFor(node)} {n!.cache_hit ? "cached" : "computed"} {fmtMs(n!.duration_ms)}
               </span>
-            ))}
+            ) : null}
           </div>
-          {finished(n) ? (
-            <span className="font-mono text-xs text-fg-muted">
-              {titleFor(node)} {n!.cache_hit ? "cached" : "computed"} {fmtMs(n!.duration_ms)}
-            </span>
+          {agreement || embeddings ? (
+            <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
+              {agreement ? (
+                <span data-testid="agreement" className="font-medium text-fg">
+                  {agreement}
+                </span>
+              ) : null}
+              {embeddings ? (
+                <span data-testid="embeddings" className="text-xs text-fg-muted">
+                  {embeddings}
+                </span>
+              ) : null}
+            </p>
           ) : null}
-        </div>
-        {agreement || embeddings ? (
-          <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
-            {agreement ? (
-              <span data-testid="agreement" className="font-medium text-fg">
-                {agreement}
-              </span>
-            ) : null}
-            {embeddings ? (
-              <span data-testid="embeddings" className="text-xs text-fg-muted">
-                {embeddings}
-              </span>
-            ) : null}
-          </p>
-        ) : null}
-      </header>
+        </header>
+      ) : null}
       <div className="min-w-0 p-3">{body}</div>
     </section>
   )

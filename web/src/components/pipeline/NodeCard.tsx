@@ -179,7 +179,7 @@ export function NodeCard(p: NodeCardProps) {
               className={cn(p.explainOpen && "border-fg-muted bg-surface-elevated")}
               onClick={(e) => e.stopPropagation()}
             >
-              <Info aria-hidden strokeWidth={1.5} className="size-[16px]" />
+              <Info aria-hidden strokeWidth={1.75} className="size-[16px]" />
             </Button>
           </Popover.Trigger>
           {p.onRemove ? (

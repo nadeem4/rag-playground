@@ -47,7 +47,7 @@ export function CleanReportInspector({ before, report, status }: CleanReportInsp
     return (
       <Frame>
         <div className="bg-surface">
-          <EmptyState title="No clean report yet">Run a Clean stage to see which elements it removes.</EmptyState>
+          <EmptyState title="No clean report yet">Run a Clean step to see which elements it removes.</EmptyState>
         </div>
       </Frame>
     )

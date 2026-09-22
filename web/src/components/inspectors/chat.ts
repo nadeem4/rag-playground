@@ -101,10 +101,10 @@ export function claimKind(seg: ChatSegment): Grounding | null {
   return segmentKind(seg) === "plain" ? null : seg.grounding
 }
 
-/** "4 cited · 1 weak · 0 similarity · 1 not grounded · 0 invalid ids" */
+/** "4 cited, 1 weak, 0 similarity, 1 not grounded, 0 invalid ids" */
 export function groundingLine(s: GroundingStats): string {
   const ids = s.unknown_ids === 1 ? "invalid id" : "invalid ids"
-  return `${s.cited} cited · ${s.weak} weak · ${s.similarity} similarity · ${s.none} not grounded · ${s.unknown_ids} ${ids}`
+  return `${s.cited} cited, ${s.weak} weak, ${s.similarity} similarity, ${s.none} not grounded, ${s.unknown_ids} ${ids}`
 }
 
 export function methodCaption(method: ChatPayload["citation_method"]): string | null {

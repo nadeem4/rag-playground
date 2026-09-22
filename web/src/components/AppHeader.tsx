@@ -55,7 +55,7 @@ function DevMenu({ path }: { path: string }) {
         )}
       >
         Dev
-        <ChevronDown aria-hidden className="size-3" />
+        <ChevronDown aria-hidden strokeWidth={1.75} className="size-3" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content

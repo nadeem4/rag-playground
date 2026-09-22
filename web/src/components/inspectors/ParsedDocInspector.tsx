@@ -28,7 +28,7 @@ export function ParsedDocInspector({ doc, status }: ParsedDocInspectorProps) {
     return (
       <Frame>
         <div className="bg-surface">
-          <EmptyState title="No parsed document yet">Run the Parse stage to extract elements from the source file.</EmptyState>
+          <EmptyState title="No parsed document yet">Run the Parse step to extract elements from the source file.</EmptyState>
         </div>
       </Frame>
     )

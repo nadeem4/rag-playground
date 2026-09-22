@@ -36,7 +36,7 @@ export function ChunkSetInspector({ chunkSet, status, initialSelected = null, sh
     return (
       <Frame>
         <div className="bg-surface">
-          <EmptyState title="No chunk set yet">Run the Chunk stage to cut this document into chunks.</EmptyState>
+          <EmptyState title="No chunk set yet">Run the Chunk step to cut this document into chunks.</EmptyState>
         </div>
       </Frame>
     )

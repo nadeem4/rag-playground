@@ -144,7 +144,7 @@ class Graph:
             needed = specs[e.dst].requires.get(e.port, {})
             if not _capabilities_satisfied(needed, specs[e.src].provides):
                 raise GraphValidationError(
-                    f"edge {e.src}->{e.dst}.{e.port}: capability mismatch — "
+                    f"edge {e.src}->{e.dst}.{e.port}: capability mismatch: "
                     f"port '{e.port}' requires {needed}, "
                     f"source provides {specs[e.src].provides}"
                 )
@@ -219,7 +219,7 @@ class Graph:
                     continue
                 if len(terminal) > 1:
                     raise GraphValidationError(
-                        f"{nid}.{pname}: ambient port is ambiguous — "
+                        f"{nid}.{pname}: ambient port is ambiguous: "
                         f"{len(terminal)} nodes produce '{port.type}': "
                         f"{', '.join(terminal)}. Wire the port explicitly "
                         "with an edge."
@@ -230,7 +230,7 @@ class Graph:
                 needed = specs[nid].requires.get(pname, {})
                 if not _capabilities_satisfied(needed, specs[chosen].provides):
                     raise GraphValidationError(
-                        f"{nid}.{pname}: capability mismatch — ambient port "
+                        f"{nid}.{pname}: capability mismatch: ambient port "
                         f"'{pname}' requires {needed}, but its only producer "
                         f"'{chosen}' provides {specs[chosen].provides}"
                     )

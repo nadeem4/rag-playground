@@ -95,7 +95,7 @@ The server starts on http://127.0.0.1:8000 and opens your browser. Options:
 ## Stages and supported strategies
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#888888', 'clusterBkg': 'transparent', 'clusterBorder': '#888888', 'titleColor': '#888888', 'fontFamily': 'monospace'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#888888', 'clusterBkg': '#ffffff', 'clusterBorder': '#888888', 'titleColor': '#000000', 'fontFamily': 'monospace'}}}%%
 flowchart TB
     subgraph ingest["Indexing: once per document"]
         direction LR

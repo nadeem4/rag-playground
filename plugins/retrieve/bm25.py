@@ -16,7 +16,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Query
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.retrieve import _base
 
 
@@ -36,6 +36,25 @@ class Bm25Retriever(Transform[Bm25Config]):
     output = ArtifactType.RETRIEVAL_RESULT
     requires = {"index": {"backends": ["fts"]}}
     config_model = Bm25Config
+    summary = (
+        "Scores pieces by the words they share with the question, counting rare "
+        "words for more than common ones (the BM25 formula). It finds exact "
+        "names, codes and terms that vector search can miss, but it does not "
+        "know that different words can mean the same thing."
+    )
+
+    def explain(self, config: Bm25Config) -> Explanation:
+        warning, blocking = _base._limits_warning(config.top_k, config.fetch_k)
+        return Explanation(
+            settings=(
+                f"Fetches the {config.fetch_k} best keyword matches and returns the "
+                f"top {config.top_k}. {_base.passed_on(config.top_k, config.fetch_k)} "
+                "It needs an index built with build_fts on."
+            ),
+            tradeoff=_base.TOP_K_TRADEOFF,
+            warning=warning,
+            blocking=blocking,
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: Bm25Config, ctx: RunContext

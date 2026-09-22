@@ -45,7 +45,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Element, ParsedDoc
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 
 _NEWLINES = re.compile(r"[\r\n]+")
 _LINE = re.compile(r"[^\r\n]+")
@@ -83,6 +83,37 @@ class PdfiumParse(Transform[PdfiumConfig]):
     inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
     output = ArtifactType.PARSED_DOC
     config_model = PdfiumConfig
+    summary = (
+        "Reads the text stored in the PDF, in the order the PDF drew it. It "
+        "cannot tell a heading from a paragraph, so every block comes out as a "
+        "plain paragraph, and a scanned page with no stored text comes out empty. "
+        "Fast, with no model to load."
+    )
+
+    def explain(self, config: PdfiumConfig) -> Explanation:
+        # `mode` has a single value, so there is nothing to say about it.
+        if config.join_lines:
+            return Explanation(
+                settings=(
+                    "Lines are joined back into paragraphs using the layout: a "
+                    "line starts a new paragraph when the gap above it is more "
+                    f"than {PARAGRAPH_GAP_RATIO:g} times the page's usual line "
+                    "spacing, or when it jumps up to a new column. A page with "
+                    "even spacing throughout becomes a single paragraph."
+                ),
+                tradeoff=(
+                    "Paragraphs give chunkers natural places to cut, but no "
+                    "headings are found, so heading-based chunking has nothing to "
+                    "split on."
+                ),
+            )
+        return Explanation(
+            settings="Every line of the PDF becomes its own block, exactly as extracted.",
+            tradeoff=(
+                "Nothing is guessed, but a PDF line often ends mid-sentence, and a "
+                "chunker that cuts at block breaks will cut there too."
+            ),
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: PdfiumConfig, ctx: RunContext

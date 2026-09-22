@@ -38,7 +38,7 @@ from core.artifacts import ArtifactType
 from core.payloads import ChunkSet
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from providers.embedding_cache import embed_cached
 from providers.embeddings import EmbedderName, get_embedder
 
@@ -81,6 +81,95 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
     output = ArtifactType.INDEX
     provides = {"backends": ["dense", "fts"]}
     config_model = LanceDbIndexConfig
+    summary = (
+        "Turns every piece into a vector (a list of numbers that captures its "
+        "meaning) with an embedding model, and stores it in a LanceDB table with a "
+        "keyword index over the same rows. Vector search and keyword search then "
+        "read the same pieces, which is what lets hybrid search combine them fairly."
+    )
+
+    def explain(self, config: LanceDbIndexConfig) -> Explanation:
+        # `get_embedder` only builds the provider object; no model is loaded.
+        embedder = get_embedder(config.embedder)
+        name, native, dim = embedder.name, embedder.native_dim, config.truncate_dim
+        if embedder.supports_matryoshka:
+            kind = (
+                "a model trained so that the first part of a vector still works "
+                "on its own (Matryoshka)"
+            )
+        else:
+            kind = "a model not trained to have its vectors cut shorter"
+        kept = "all are kept" if dim is None else (
+            f"each is cut to its first {dim} and rescaled to length 1"
+        )
+        fts = (
+            " A keyword index is built too, for bm25 and hybrid_rrf."
+            if config.build_fts
+            else ""
+        )
+        settings = (
+            f"Embeds with {name}, {kind}. Its vectors have {native} numbers and "
+            f"{kept}; they are cached at full width, so trying another size later "
+            f"reuses them instead of embedding again.{fts}"
+        )
+        metric = (
+            f"Vectors are compared by {config.metric} distance; since every vector "
+            "has length 1, cosine and l2 put hits in the same order."
+        )
+
+        if name == "qwen3-embedding-0.6b":
+            model = "The first run downloads the model, about 1.2 GB."
+        elif name == "bge-small-en-v1.5":
+            model = (
+                "A small, fast model that downloads quickly, but it usually "
+                "matches less well than qwen3-embedding-0.6b."
+            )
+        else:
+            model = (
+                "A stand-in for tests: it matches texts that share words, not "
+                "meaning, and needs no download."
+            )
+        if dim is None:
+            size = (
+                "Full width gives the best matches; a smaller truncate_dim makes a "
+                "smaller, faster index, usually for a small loss in quality."
+                if embedder.supports_matryoshka
+                else "Full width is the only choice for this model."
+            )
+        else:
+            size = (
+                f"Keeping {dim} of {native} numbers makes the index about "
+                f"{dim / native:.0%} of full size and search faster, usually for a "
+                "small loss in match quality."
+            )
+        tradeoff = f"{model} {size} {metric}"
+
+        # The same conditions `embedder.check_dim` raises on at run time.
+        warning = None
+        if dim is not None:
+            if not embedder.supports_matryoshka:
+                warning = (
+                    f"{name} was not trained for Matryoshka truncation, so "
+                    "truncate_dim must be left empty: cutting its vectors would "
+                    "throw information away."
+                )
+            elif dim <= 0:
+                warning = "truncate_dim must be a positive number of dimensions."
+            elif dim > native:
+                warning = (
+                    f"{name} makes vectors of {native} numbers, and truncation "
+                    f"can only shrink them. Pick {native} or less."
+                )
+        if warning is not None:
+            return Explanation(
+                settings=settings, tradeoff=tradeoff, warning=warning, blocking=True
+            )
+        if not config.build_fts:
+            warning = (
+                "No keyword index is built, so bm25 and hybrid_rrf will fail on "
+                "this index. Use dense retrieval, or turn build_fts back on."
+            )
+        return Explanation(settings=settings, tradeoff=tradeoff, warning=warning)
 
     def fingerprint(self, config: LanceDbIndexConfig | None = None) -> str:
         """Model identity plus truncation width.

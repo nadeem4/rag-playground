@@ -26,6 +26,7 @@ class CleanConfig(BaseModel):
 
 
 class FixedChunker(Transform[ChunkConfig]):
+    summary = "A test transform."
     name = "fixed"
     stage = Stage.CHUNK
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
@@ -37,6 +38,7 @@ class FixedChunker(Transform[ChunkConfig]):
 
 
 class SemanticChunker(Transform[ChunkConfig]):
+    summary = "A test transform."
     """A second chunker, so name collisions can be told apart from stage ones."""
 
     name = "semantic"
@@ -50,6 +52,7 @@ class SemanticChunker(Transform[ChunkConfig]):
 
 
 class RivalFixedChunker(Transform[ChunkConfig]):
+    summary = "A test transform."
     """Same stage and same name as `FixedChunker` — must be rejected."""
 
     name = "fixed"
@@ -63,6 +66,7 @@ class RivalFixedChunker(Transform[ChunkConfig]):
 
 
 class FixedCleaner(Transform[CleanConfig]):
+    summary = "A test transform."
     """Same name as `FixedChunker` but a different stage — must be allowed."""
 
     name = "fixed"
@@ -81,6 +85,7 @@ class FixedCleaner(Transform[CleanConfig]):
 
 
 class MergeIndexer(Transform[ChunkConfig]):
+    summary = "A test transform."
     """Exercises variadic and ambient ports in the export."""
 
     name = "merge"
@@ -211,6 +216,7 @@ def test_export_schema_preserves_config_defaults_and_descriptions(reg):
 
 
 class TitleEnricher(Transform[ChunkConfig]):
+    summary = "A test transform."
     name = "titles"
     stage = Stage.ENRICH
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET)}
@@ -222,6 +228,7 @@ class TitleEnricher(Transform[ChunkConfig]):
 
 
 class RewriteQuery(Transform[ChunkConfig]):
+    summary = "A test transform."
     name = "rewrite"
     stage = Stage.QUERY_TRANSFORM
     inputs = {"query": PortSpec(ArtifactType.QUERY)}
@@ -233,6 +240,7 @@ class RewriteQuery(Transform[ChunkConfig]):
 
 
 class CrossEncoderRerank(Transform[ChunkConfig]):
+    summary = "A test transform."
     name = "cross_encoder"
     stage = Stage.RERANK
     inputs = {"hits": PortSpec(ArtifactType.RETRIEVAL_RESULT)}
@@ -280,6 +288,7 @@ def test_export_schema_is_json_serializable(reg):
 def test_register_decorator_writes_to_the_module_registry():
     @register
     class DecoratorProbe(Transform[ChunkConfig]):
+        summary = "A test transform."
         name = "decorator_probe"
         stage = Stage.CHUNK
         inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}

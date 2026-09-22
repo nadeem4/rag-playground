@@ -20,8 +20,8 @@ from core.artifacts import ArtifactType
 from core.payloads import ChunkSet
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
-from plugins.chunk import DocView, Span, build_chunk_set, normalize
+from core.transform import Explanation, Transform
+from plugins.chunk import DocView, Span, build_chunk_set, normalize, size_tradeoff
 
 #: `(separator, keep)` — `keep` is how many characters of the match stay with
 #: the piece before it. A sentence keeps its full stop; whitespace separators
@@ -111,6 +111,52 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.CHUNK_SET
     config_model = RecursiveCharacterConfig
+    summary = (
+        "Cuts at paragraph breaks first. A paragraph too long for one piece is "
+        "cut at line breaks, then at sentence ends, then at spaces, so each cut "
+        "lands on the most natural boundary available. The parts are then packed "
+        "together until a piece is full."
+    )
+
+    def explain(self, config: RecursiveCharacterConfig) -> Explanation:
+        size, overlap = config.chunk_size, config.chunk_overlap
+        if overlap >= size:
+            # `apply` would silently clamp the overlap to size - 1, which moves
+            # forward one leaf at a time: valid, never what anyone meant.
+            return Explanation(
+                settings=(
+                    f"The overlap ({overlap:,} characters) is not smaller than "
+                    f"the chunk size ({size:,} characters)."
+                ),
+                warning=(
+                    "Overlap must be smaller than the chunk size, or the pieces "
+                    "would never move forward through the text. Lower the overlap "
+                    "or raise the chunk size."
+                ),
+                blocking=True,
+            )
+        tokens = max(1, round(size / 4))
+        if overlap:
+            repeat = (
+                f"and starts with up to the last {overlap:,} characters of the one "
+                "before, so text near a boundary appears whole in one of them. "
+                "Only whole parts are repeated (paragraphs, lines, sentences "
+                "or words), so when a piece ends with a paragraph longer than "
+                f"{overlap:,} characters nothing is repeated at all."
+            )
+        else:
+            repeat = (
+                "With no overlap the pieces share no text. Cuts land on paragraph "
+                "and sentence breaks where possible, so little is lost, but an "
+                "idea spread over two paragraphs can be split between pieces."
+            )
+        return Explanation(
+            settings=(
+                f"Each piece holds up to {size:,} characters, about {tokens:,} "
+                f"tokens{',' if overlap else '.'} {repeat}"
+            ),
+            tradeoff=size_tradeoff(tokens),
+        )
 
     def apply(
         self,

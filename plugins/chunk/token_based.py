@@ -19,8 +19,15 @@ from core.artifacts import ArtifactType
 from core.payloads import ChunkSet
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
-from plugins.chunk import DocView, Span, build_chunk_set, normalize, token_spans
+from core.transform import Explanation, Transform
+from plugins.chunk import (
+    DocView,
+    Span,
+    build_chunk_set,
+    normalize,
+    size_tradeoff,
+    token_spans,
+)
 
 
 class TokenBasedConfig(BaseModel):
@@ -35,6 +42,47 @@ class TokenBasedChunker(Transform[TokenBasedConfig]):
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.CHUNK_SET
     config_model = TokenBasedConfig
+    summary = (
+        "Counts tokens and cuts each time the count is reached, wherever that "
+        "falls. A token here is a word or a single punctuation mark. It ignores "
+        "the structure of the text completely, which makes it a useful baseline "
+        "to compare the other chunkers against."
+    )
+
+    def explain(self, config: TokenBasedConfig) -> Explanation:
+        size, overlap = config.max_tokens, config.overlap
+        if overlap >= size:
+            # `apply` floors the stride at one token rather than failing.
+            return Explanation(
+                settings=(
+                    f"The overlap ({overlap} tokens) is not smaller than max "
+                    f"tokens ({size})."
+                ),
+                warning=(
+                    "Overlap must be smaller than max tokens. At or above it, each "
+                    "piece moves forward by a single token, so you would get "
+                    "almost one piece per token of the document."
+                ),
+                blocking=True,
+            )
+        if overlap:
+            repeat = (
+                f"The last {overlap} tokens of each piece repeat at the start of "
+                f"the next, so a sentence shorter than {overlap} tokens that is "
+                "cut at a boundary still appears whole in one of them."
+            )
+        else:
+            repeat = (
+                "With no overlap, a sentence cut at a boundary is split between "
+                "two pieces."
+            )
+        return Explanation(
+            settings=(
+                f"Every piece is {size} tokens (the last may be shorter), cut "
+                f"wherever the count lands, even mid-sentence or mid-table. {repeat}"
+            ),
+            tradeoff=size_tradeoff(size),
+        )
 
     def apply(
         self,

@@ -253,6 +253,7 @@ def gated_registry(gates, entered) -> Registry:
     r = Registry()
 
     class Src(Transform[Cfg]):
+        summary = "A test transform."
         name = "gate"
         stage = Stage.SOURCE
         inputs = {}
@@ -265,6 +266,7 @@ def gated_registry(gates, entered) -> Registry:
             return {"tag": config.tag}
 
     class Parse(Transform[Cfg]):
+        summary = "A test transform."
         name = "p"
         stage = Stage.PARSE
         inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
@@ -275,6 +277,7 @@ def gated_registry(gates, entered) -> Registry:
             return {"from": inputs["file"]["tag"]}
 
     class Chunk(Transform[Cfg]):
+        summary = "A test transform."
         name = "c"
         stage = Stage.CHUNK
         inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}

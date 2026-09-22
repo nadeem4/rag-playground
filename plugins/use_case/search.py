@@ -23,7 +23,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Hit, Output, RetrievalResult
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 
 
 class SearchUseCaseConfig(BaseModel):
@@ -42,6 +42,29 @@ class SearchUseCase(Transform[SearchUseCaseConfig]):
     inputs = {"result": PortSpec(ArtifactType.RETRIEVAL_RESULT)}
     output = ArtifactType.OUTPUT
     config_model = SearchUseCaseConfig
+    summary = (
+        "Shows the retrieved pieces as a ranked list with their scores and "
+        "pages. No language model, no API key and no cost: you see exactly what "
+        "retrieval found."
+    )
+
+    def explain(self, config: SearchUseCaseConfig) -> Explanation:
+        n = config.max_snippet_chars
+        settings = (
+            f"Each result shows the first {n:,} characters of its piece, with its "
+            "rank, score and pages. If a reranker ran, each result also shows "
+            "where it stood before."
+        )
+        if n < 1:
+            return Explanation(
+                settings=settings,
+                warning="max_snippet_chars must be at least 1, or every snippet is empty.",
+                blocking=True,
+            )
+        return Explanation(
+            settings=settings,
+            tradeoff="Longer snippets show more context but make the list harder to scan.",
+        )
 
     #: Formatting hits has nothing to re-roll, so the answer may be reused.
     #: `chat` will set this to False: replaying a cached generation would make

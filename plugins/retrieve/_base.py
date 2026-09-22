@@ -34,6 +34,32 @@ from providers.embedding_cache import embed_cached
 from providers.embeddings import EmbedKind, EmbeddingProvider, get_embedder
 
 
+def _limits_warning(top_k: int, fetch_k: int) -> tuple[str | None, bool]:
+    """(warning, blocking) for the two counts every retriever takes."""
+    if top_k < 1 or fetch_k < 1:
+        return "top_k and fetch_k must both be at least 1.", True
+    return None, False
+
+
+def passed_on(top_k: int, fetch_k: int) -> str:
+    """What happens to the fetched candidates beyond `top_k`."""
+    if fetch_k > top_k:
+        return (
+            f"Only the top {top_k} are passed on; the other {fetch_k - top_k} "
+            "are fetched only to be counted, so a reranker after this step sees "
+            f"just {top_k}."
+        )
+    if fetch_k < top_k:
+        return f"Since fetch_k is below top_k, at most {fetch_k} come back."
+    return f"All {top_k} are passed on."
+
+
+TOP_K_TRADEOFF = (
+    "A larger top_k gives the next step more to work with, but a chat answer "
+    "then reads more text, which costs more and can dilute the answer."
+)
+
+
 def open_index(raw: Any) -> tuple[Any, dict[str, Any]]:
     """Return `(table, descriptor)` for the index directory the executor loaded.
 

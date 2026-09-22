@@ -26,9 +26,9 @@ from typing import Any, Callable, Literal, Mapping
 from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
-from core.ports import PortSpec, RunContext, Stage
+from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.clean import apply_edits, as_parsed_doc, make_report, report_entry
 
 
@@ -74,6 +74,46 @@ class DropMatching(Transform[DropMatchingConfig]):
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.PARSED_DOC
     config_model = DropMatchingConfig
+    summary = (
+        "Removes every block whose text contains a pattern you name. Use it for "
+        "boilerplate the automatic cleaners miss, such as a notice repeated in "
+        "the middle of pages."
+    )
+
+    def explain(self, config: DropMatchingConfig) -> Explanation:
+        how = "as a regular expression" if config.mode == "regex" else "as plain text"
+        case = "matching case exactly" if config.case_sensitive else "ignoring case"
+        if not config.pattern:
+            return Explanation(
+                settings=(
+                    "No pattern is set, so nothing is removed. Once you add one, "
+                    f"it will be matched {how}, {case}."
+                ),
+            )
+        if config.mode == "regex":
+            try:
+                _matcher(config)
+            except ValueError as exc:
+                cause = str(exc.__cause__ or exc)
+                return Explanation(
+                    settings=f"Matches the regular expression {config.pattern}, {case}.",
+                    warning=(
+                        f"This is not a valid regular expression ({cause}), so "
+                        "the step would fail."
+                    ),
+                    blocking=True,
+                )
+            target = f"the regular expression {config.pattern} matches anywhere"
+        else:
+            target = f'"{config.pattern}" appears as plain text'
+        return Explanation(
+            settings=f"Removes every block where {target}, {case}.",
+            tradeoff=(
+                "The whole block goes, not just the matching words, so a short "
+                "pattern can remove a paragraph of real content that merely "
+                "mentions it."
+            ),
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: DropMatchingConfig, ctx: RunContext
@@ -90,6 +130,7 @@ class DropMatching(Transform[DropMatchingConfig]):
             if matches(element.text)
         ]
         if not removed:
+            set_note(ctx, "The pattern matched no block, so nothing was removed.")
             return apply_edits(doc)
 
         report = make_report(

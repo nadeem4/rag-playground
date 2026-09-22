@@ -18,9 +18,9 @@ from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import ChunkSet, Element
-from core.ports import PortSpec, RunContext, Stage
+from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.chunk import (
     DocView,
     Span,
@@ -99,6 +99,36 @@ class MarkdownHeaderChunker(Transform[MarkdownHeaderConfig]):
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.CHUNK_SET
     config_model = MarkdownHeaderConfig
+    summary = (
+        "Cuts at headings, so each piece is one section: a heading and "
+        "everything under it, up to the next heading. A section too long for one "
+        "piece is cut between its blocks, and only a single block that is itself "
+        "too long is cut mid-text. Pieces do not overlap."
+    )
+
+    def explain(self, config: MarkdownHeaderConfig) -> Explanation:
+        size = config.max_tokens
+        return Explanation(
+            settings=(
+                f"A section of up to {size} tokens becomes one piece and keeps its "
+                "heading path, for example Qualifications > Python. A longer "
+                f"section is split between its paragraphs into pieces of up to "
+                f"{size} tokens. This needs a parser that finds headings, such as "
+                "docling; pdfium finds none, so with it the whole document is one "
+                "section."
+            ),
+            tradeoff=(
+                "Pieces follow the author's own structure, so each hit is a "
+                "complete section, but sections vary in size, so some hits are "
+                "long and some are short."
+                + (
+                    f" A limit of {size} tokens splits most sections, which loses "
+                    "the one-section-per-piece benefit."
+                    if size < 100
+                    else ""
+                )
+            ),
+        )
 
     def apply(
         self,
@@ -107,6 +137,15 @@ class MarkdownHeaderChunker(Transform[MarkdownHeaderConfig]):
         ctx: RunContext,
     ) -> ChunkSet:
         view = DocView.of(inputs["doc"])
+        if view.rendered and not any(e.type == "heading" for e in view.rendered):
+            # `_sections` then yields one section holding every block, which
+            # `_section_spans` packs by size: the fallback, worth saying so.
+            set_note(
+                ctx,
+                "The parser found no headings, so the whole document was treated "
+                "as one section and packed into pieces of up to "
+                f"{config.max_tokens} tokens.",
+            )
 
         spans: list[Span] = []
         paths: list[list[str]] = []

@@ -36,6 +36,26 @@ _TOKEN_RE = re.compile(r"\w+|[^\w\s]")
 _COUNTER: TokenCounter = HeuristicTokenCounter()
 
 
+def size_tradeoff(tokens: int) -> str:
+    """The piece-size trade-off every chunker's explanation ends with."""
+    if tokens < 100:
+        return (
+            "Small pieces match precisely, but an answer that spans more than one "
+            "piece comes back incomplete, and the model sees little context "
+            "around it."
+        )
+    if tokens > 400:
+        return (
+            "Large pieces carry plenty of context, but each is matched on its "
+            "overall meaning, so one relevant sentence can be drowned out by the "
+            "rest of the piece."
+        )
+    return (
+        "A middle size: enough context to make sense on its own, and small "
+        "enough that the relevant sentence still dominates the match."
+    )
+
+
 def count_tokens(text: str) -> int:
     return _COUNTER.count(text)
 

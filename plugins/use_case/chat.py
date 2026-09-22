@@ -42,7 +42,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Hit, Output, ParsedDoc, Query, RetrievalResult
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 
 NO_KEY_MESSAGE = (
     "No Anthropic API key. Add one in the UI (API key, top right) "
@@ -78,6 +78,23 @@ class ChatConfig(BaseModel):
     max_chunks: int = Field(default=5, ge=1)
 
 
+#: How each model is described to a newcomer: its name and its cost, in words.
+_MODEL_WORDS: dict[str, tuple[str, str]] = {
+    "claude-opus-5": (
+        "Claude Opus 5",
+        "the most capable of the three models and the most expensive per question",
+    ),
+    "claude-sonnet-5": (
+        "Claude Sonnet 5",
+        "a balance of quality and price, cheaper per question than Opus 5",
+    ),
+    "claude-haiku-4-5": (
+        "Claude Haiku 4.5",
+        "the fastest and cheapest of the three, and the weakest on hard questions",
+    ),
+}
+
+
 def make_client(api_key: str) -> Any:
     """The one place a real client is built. Tests monkeypatch this."""
     import anthropic
@@ -104,6 +121,30 @@ class ChatUseCase(Transform[ChatConfig]):
     #: would make asking twice look deterministic when it is not.
     cacheable = False
     deterministic = False
+    summary = (
+        "Sends the retrieved pieces and your question to Claude, which answers "
+        "using only those pieces. The answer cites the exact passages it relied "
+        "on, and each citation is checked against the parsed document."
+    )
+
+    def explain(self, config: ChatConfig) -> Explanation:
+        name, cost = _MODEL_WORDS[config.model]
+        n = config.max_chunks
+        return Explanation(
+            settings=(
+                f"Answers with {name}, {cost}. It reads up to {n} retrieved "
+                f"piece{'s' if n != 1 else ''}, and every citation is verified "
+                "against the parsed text; one that does not match is shown as "
+                "unverified rather than hidden. It needs an Anthropic API key "
+                "(API key, top right, or ANTHROPIC_API_KEY in .env), and every "
+                "run is a new paid request, never a cached answer."
+            ),
+            tradeoff=(
+                "More pieces give the model more evidence, but make each request "
+                "longer and pricier, and weak pieces can distract it. It can only "
+                "read as many pieces as the step before passes on."
+            ),
+        )
 
     def fingerprint(self, config: ChatConfig | None = None) -> str:
         return (config or ChatConfig()).model

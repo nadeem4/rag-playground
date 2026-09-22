@@ -16,7 +16,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Query
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.retrieve import _base
 
 
@@ -42,6 +42,25 @@ class DenseRetriever(Transform[DenseConfig]):
     output = ArtifactType.RETRIEVAL_RESULT
     requires = {"index": {"backends": ["dense"]}}
     config_model = DenseConfig
+    summary = (
+        "Turns the question into a vector with the same model the index used, "
+        "and returns the pieces whose vectors are closest. It matches meaning, "
+        "so it finds paraphrases, but it can miss exact names, codes and rare "
+        "words."
+    )
+
+    def explain(self, config: DenseConfig) -> Explanation:
+        warning, blocking = _base._limits_warning(config.top_k, config.fetch_k)
+        return Explanation(
+            settings=(
+                f"Fetches the {config.fetch_k} closest pieces and returns the top "
+                f"{config.top_k}. {_base.passed_on(config.top_k, config.fetch_k)} "
+                "The model and vector size come from the index, so they always match it."
+            ),
+            tradeoff=_base.TOP_K_TRADEOFF,
+            warning=warning,
+            blocking=blocking,
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: DenseConfig, ctx: RunContext

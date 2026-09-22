@@ -25,6 +25,21 @@ from core.ports import STAGE_OUTPUT, PortSpec, RunContext, Stage
 C = TypeVar("C", bound=BaseModel)
 
 
+class Explanation(BaseModel):
+    """What a transform will do with one set of settings (I-11).
+
+    `settings` states the actual values and what they cause, `tradeoff` the
+    real cost or benefit of the choice. `warning` flags settings that are valid
+    in type but would fail or make no sense; `blocking` tells the UI to disable
+    Run until they are fixed.
+    """
+
+    settings: str
+    tradeoff: str | None = None
+    warning: str | None = None
+    blocking: bool = False
+
+
 class TransformDefinitionError(TypeError):
     """Raised at class-definition time when a Transform is malformed.
 
@@ -63,6 +78,15 @@ class Transform(ABC, Generic[C]):
     #: Capability claims on the output, matched against a consumer's `requires`.
     provides: dict[str, Any] = {}
 
+    #: How this strategy works, in one or two plain sentences. Required: a
+    #: learning playground whose steps cannot explain themselves teaches nothing.
+    summary: str
+
+    #: Config fields whose value `explain()` deliberately does not mention. The
+    #: contract suite requires every other number, bool and choice to change
+    #: the explanation; each name here must carry a comment saying why.
+    EXPLAIN_EXEMPT: frozenset[str] = frozenset()
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -73,6 +97,13 @@ class Transform(ABC, Generic[C]):
         for attr in ("name", "stage", "output", "config_model"):
             if getattr(cls, attr, None) is None:
                 raise TransformDefinitionError(f"{cls.__name__} must define `{attr}`")
+
+        summary = getattr(cls, "summary", None)
+        if not isinstance(summary, str) or not summary.strip():
+            raise TransformDefinitionError(
+                f"{cls.__name__} must define a non-empty `summary` saying how "
+                "the strategy works"
+            )
 
         expected = STAGE_OUTPUT[cls.stage]
         if cls.output != expected:
@@ -121,6 +152,19 @@ class Transform(ABC, Generic[C]):
         transform for its default-config fingerprint with `fingerprint()`.
         """
         return "none"
+
+    def explain(self, config: C) -> Explanation:
+        """What this transform will do with THESE settings. Pure: no model
+        loads, no network, no file access.
+
+        This default only lists the values. Every registered plugin overrides
+        it; the contract suite enforces that.
+        """
+        values = config.model_dump(mode="json")
+        listed = ", ".join(f"{k} = {v!r}" for k, v in values.items())
+        return Explanation(
+            settings=f"Runs with {listed}." if listed else "This step has no settings."
+        )
 
     @abstractmethod
     def apply(self, inputs: Mapping[str, Any], config: C, ctx: RunContext) -> Any:

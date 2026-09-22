@@ -85,6 +85,16 @@ so.
 **Show in PDF** works without a key: any chunk or search hit can open its page with its source
 paragraphs outlined.
 
+### Every step explains itself
+
+Each card has an info button. It says what the step is for in RAG, how the chosen strategy
+works, and what it will do with your current settings, including the real values and the
+trade-off. Settings that would fail or make no sense (an overlap as large as the chunk size,
+a `truncate_dim` the embedder cannot honour) show a warning in the card and disable Run.
+After a run, a plugin can add a short note about anything noteworthy, for example
+`markdown_header` saying the parser found no headings. The text comes from the plugins
+themselves (`summary` and `explain()`), served by `GET /api/stages` and `POST /api/explain`.
+
 ### Parsers
 
 `docling` is the recommended parser; `pdfium` is the fast baseline. Both read the PDF's text

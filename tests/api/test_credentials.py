@@ -108,6 +108,7 @@ def keyed_registry() -> Registry:
     r = Registry()
 
     class Src(Transform[Cfg]):
+        summary = "A test transform."
         name = "keyed"
         stage = Stage.SOURCE
         inputs = {}
@@ -121,6 +122,7 @@ def keyed_registry() -> Registry:
             return {"tag": config.tag, "has_key": key is not None}
 
     class Parse(Transform[Cfg]):
+        summary = "A test transform."
         name = "p"
         stage = Stage.PARSE
         inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
@@ -132,6 +134,7 @@ def keyed_registry() -> Registry:
             return {"from": inputs["file"]["tag"], "tag": config.tag}
 
     class Boom(Transform[Cfg]):
+        summary = "A test transform."
         name = "boom"
         stage = Stage.PARSE
         inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}

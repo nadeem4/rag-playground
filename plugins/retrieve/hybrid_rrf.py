@@ -18,7 +18,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Query
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.retrieve import _base
 
 
@@ -45,6 +45,37 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
     output = ArtifactType.RETRIEVAL_RESULT
     requires = {"index": {"backends": ["dense", "fts"]}}
     config_model = HybridRrfConfig
+    summary = (
+        "Runs vector search and keyword search side by side, then merges the "
+        "two ranked lists by position rather than by score (reciprocal rank "
+        "fusion). A piece near the top of both lists wins, so it gets the "
+        "strengths of both searches."
+    )
+
+    def explain(self, config: HybridRrfConfig) -> Explanation:
+        k, fetch, top = config.rrf_k, config.fetch_k, config.top_k
+        warning, blocking = _base._limits_warning(top, fetch)
+        if k < 0:
+            warning, blocking = (
+                "rrf_k must be 0 or more; a negative value can divide by zero or "
+                "rank lower places above higher ones.",
+                True,
+            )
+        settings = (
+            f"Fetches the top {fetch} from each search (fetch_k), merges them, and "
+            f"returns the best {top} (top_k). Each piece scores 1/({k} + its place) "
+            f"in every list it appears in (rrf_k = {k}), so first place is worth "
+            f"1/{k + 1} and tenth place 1/{k + 10}."
+        )
+        tradeoff = (
+            "A small rrf_k lets the first few places of each list dominate; a "
+            "large one, such as the usual 60, flattens the lists so pieces found "
+            "by both searches rise. A larger fetch_k lets more pieces take part in "
+            "the merge, for a slightly slower search."
+        )
+        return Explanation(
+            settings=settings, tradeoff=tradeoff, warning=warning, blocking=blocking
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: HybridRrfConfig, ctx: RunContext

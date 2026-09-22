@@ -34,6 +34,7 @@ def counting_registry() -> Registry:
     r = Registry()
 
     class Src(Transform[Cfg]):
+        summary = "A test transform."
         name = "upload"
         stage = Stage.SOURCE
         inputs = {}
@@ -45,6 +46,7 @@ def counting_registry() -> Registry:
             return {"tag": config.tag}
 
     class Parse(Transform[Cfg]):
+        summary = "A test transform."
         name = "fake_parse"
         stage = Stage.PARSE
         inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
@@ -56,6 +58,7 @@ def counting_registry() -> Registry:
             return {"from": inputs["file"]["tag"]}
 
     class Chunk(Transform[Cfg]):
+        summary = "A test transform."
         name = "fixed"
         stage = Stage.CHUNK
         inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
@@ -67,6 +70,7 @@ def counting_registry() -> Registry:
             return {"chunks": [config.tag]}
 
     class Boom(Transform[Cfg]):
+        summary = "A test transform."
         name = "boom"
         stage = Stage.CHUNK
         inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
@@ -78,6 +82,7 @@ def counting_registry() -> Registry:
             raise RuntimeError("kaboom")
 
     class Index(Transform[Cfg]):
+        summary = "A test transform."
         """An INDEX payload is a callable that writes into a directory."""
 
         name = "fake_index"
@@ -289,6 +294,7 @@ def fingerprint_registry() -> Registry:
     r = Registry()
 
     class Fp(Transform[ModelCfg]):
+        summary = "A test transform."
         name = "fp_source"
         stage = Stage.SOURCE
         inputs = {}
@@ -305,6 +311,7 @@ def fingerprint_registry() -> Registry:
             return {"model": config.model}
 
     class Plain(Transform[Cfg]):
+        summary = "A test transform."
         """Keeps the inherited no-arg `fingerprint()`."""
 
         name = "plain_source"
@@ -370,6 +377,7 @@ def test_fingerprint_remains_callable_with_no_arguments():
     """The contract suite calls `fingerprint()` bare on every transform."""
 
     class Bare(Transform[Cfg]):
+        summary = "A test transform."
         name = "bare"
         stage = Stage.SOURCE
         inputs = {}
@@ -395,6 +403,7 @@ def meta_registry(offered: dict | None) -> Registry:
     r = Registry()
 
     class MetaSrc(Transform[Cfg]):
+        summary = "A test transform."
         name = "meta_source"
         stage = Stage.SOURCE
         inputs = {}

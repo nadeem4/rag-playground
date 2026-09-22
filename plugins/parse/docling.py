@@ -38,7 +38,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Element, ElementType, ParsedDoc
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 
 #: Markdown has six heading levels.
 MAX_HEADING_LEVEL = 6
@@ -184,6 +184,47 @@ class DoclingParse(Transform[DoclingConfig]):
     output = ArtifactType.PARSED_DOC
     config_model = DoclingConfig
     deterministic = True
+    summary = (
+        "Renders each page as an image and runs a layout model that labels every "
+        "region: title, section heading, list item, table, page header and "
+        "footer. A reading-order model then puts the regions in sequence. Much "
+        "slower than pdfium, with far more structure."
+    )
+
+    def explain(self, config: DoclingConfig) -> Explanation:
+        if config.do_ocr:
+            ocr = (
+                "OCR is on: text is also read from the page images, which "
+                "recovers scanned pages but is much slower."
+            )
+        else:
+            ocr = (
+                "OCR is off, so only the text stored in the PDF is read; a "
+                "scanned page would come out empty."
+            )
+        if config.do_table_structure:
+            model = (
+                "the fast table model, fine for simple grids"
+                if config.table_mode == "fast"
+                else "the accurate table model, better with merged cells but slower"
+            )
+            tables = (
+                f"Tables are rebuilt as rows and columns with {model}, so a table "
+                "reaches the pieces as a markdown table."
+            )
+        else:
+            tables = (
+                "Table structure is off, so a table comes through as loose text, "
+                f"and the table model setting ({config.table_mode}) is not used."
+            )
+        return Explanation(
+            settings=f"{ocr} {tables} Page headers and footers it recognises are kept out of the text.",
+            tradeoff=(
+                "The first run downloads the layout models, and each page takes "
+                "seconds rather than milliseconds, but you get headings, which "
+                "markdown_header needs to split by section."
+            ),
+        )
 
     def fingerprint(self, config: DoclingConfig | None = None) -> str:
         # The models ship inside these packages' releases, so their versions

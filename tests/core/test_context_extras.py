@@ -28,6 +28,7 @@ def recording_registry(seen: list[dict]) -> Registry:
     r = Registry()
 
     class Src(Transform[Cfg]):
+        summary = "A test transform."
         name = "src"
         stage = Stage.SOURCE
         inputs = {}
@@ -40,6 +41,7 @@ def recording_registry(seen: list[dict]) -> Registry:
             return {"tag": config.tag}
 
     class Parse(Transform[Cfg]):
+        summary = "A test transform."
         name = "parse"
         stage = Stage.PARSE
         inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}

@@ -35,7 +35,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Element
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.clean import apply_edits, as_parsed_doc, make_report, normalize, report_entry
 
 
@@ -82,6 +82,47 @@ class DedupeBlocks(Transform[DedupeBlocksConfig]):
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.PARSED_DOC
     config_model = DedupeBlocksConfig
+    summary = (
+        "Removes a block whose text repeats an earlier block, keeping the first "
+        "copy in reading order. Blocks are compared only with blocks of the same "
+        "kind, so a heading and a paragraph with the same words are both kept."
+    )
+
+    def explain(self, config: DedupeBlocksConfig) -> Explanation:
+        s = config.similarity
+        if config.scope == "exact":
+            return Explanation(
+                settings=(
+                    "Exact mode: two blocks are copies when their text matches "
+                    "after ignoring case and spacing. The similarity threshold "
+                    f"({s:.2f}) is only used in near mode."
+                ),
+                tradeoff=(
+                    "Exact never removes text a reader would call different, but "
+                    "misses copies that differ by a single character, such as a "
+                    "typo or an OCR slip."
+                ),
+            )
+        warning = None
+        if s <= 0.5:
+            warning = (
+                f"At {s:.0%} similarity, blocks that share only part of their "
+                "characters count as copies, so real content is likely to be "
+                "removed."
+            )
+        return Explanation(
+            settings=(
+                "Near mode: a block is removed when its text is at least "
+                f"{s:.0%} the same, character by character, as an earlier block "
+                "of the same kind."
+            ),
+            tradeoff=(
+                "Near mode catches copies with small differences, but a low "
+                "threshold can remove genuinely different blocks that share most "
+                "of their wording, such as numbered clauses."
+            ),
+            warning=warning,
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: DedupeBlocksConfig, ctx: RunContext

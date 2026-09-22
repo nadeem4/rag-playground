@@ -29,6 +29,7 @@ def _make(name, stage, inputs, output, cfg=EmptyCfg, fn=None, **attrs):
         "inputs": inputs,
         "output": output,
         "config_model": cfg,
+        "summary": "A test transform.",
         "apply": fn or (lambda self, inputs, config, ctx: {"n": name}),
         **attrs,
     }

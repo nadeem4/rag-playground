@@ -60,6 +60,7 @@ class Registry:
                 name: {
                     "name": name,
                     "version": cls.version,
+                    "summary": cls.summary,
                     "stage": str(stage),
                     "output": str(cls.output),
                     "stackable": stage in STACKABLE,

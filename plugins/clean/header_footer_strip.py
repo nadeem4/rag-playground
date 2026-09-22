@@ -34,6 +34,7 @@ point by construction.
 
 from __future__ import annotations
 
+import math
 import re
 from collections import defaultdict
 from typing import Any, Mapping
@@ -42,9 +43,9 @@ from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import EXCLUDED_FROM_MARKDOWN, Element
-from core.ports import PortSpec, RunContext, Stage
+from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.clean import apply_edits, as_parsed_doc, make_report, normalize, report_entry
 
 #: A running head is short by definition. A repeated *paragraph* is boilerplate,
@@ -146,6 +147,52 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.PARSED_DOC
     config_model = HeaderFooterStripConfig
+    summary = (
+        "Finds running heads, running feet and page numbers: short blocks that "
+        "sit first or last on a page and repeat across pages, or look like a "
+        "page number. It checks again after each pass, because removing a page "
+        "number can expose another footer behind it."
+    )
+
+    def explain(self, config: HeaderFooterStripConfig) -> Explanation:
+        ratio = config.min_page_ratio
+        pct = f"{ratio * 100:g}%"
+        action = (
+            "Detected blocks are removed."
+            if config.drop
+            else "Detected blocks are only relabelled: they stay out of the text "
+            "but remain visible in the element list, so you can check them."
+        )
+        settings = (
+            "A block counts as running when it sits at the same page edge on at "
+            f"least {pct} of pages. {action}"
+        )
+        tradeoff = (
+            "A lower ratio catches heads that appear on only some pages but risks "
+            "removing a real line that happens to repeat; a higher one is safer "
+            "and misses more."
+        )
+        if ratio == 0:
+            return Explanation(
+                settings=settings,
+                tradeoff=tradeoff,
+                warning=(
+                    "At 0% every first and last block counts as running, pass "
+                    "after pass, so the whole document would be stripped."
+                ),
+                blocking=True,
+            )
+        # One block on one page meets the ratio when ratio * pages <= 1, and
+        # the detector then repeats until every page is empty.
+        short = math.floor(1 / ratio + 1e-9)
+        warning = None
+        if short >= 2:
+            warning = (
+                f"On a document of {short} pages or fewer, one block on one page "
+                f"already meets {pct}, so every block would be stripped. Raise "
+                "the ratio for very short documents."
+            )
+        return Explanation(settings=settings, tradeoff=tradeoff, warning=warning)
 
     def apply(
         self,
@@ -170,6 +217,21 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
             if not found:
                 break
             verdicts.update(found)
+
+        pages = {e.page for e in doc.elements if e.page is not None}
+        if len(pages) == 1:
+            set_note(
+                ctx,
+                "The document has only one page, so nothing can repeat across "
+                "pages and nothing was stripped.",
+            )
+        elif doc.elements and len(verdicts) == len(doc.elements):
+            set_note(
+                ctx,
+                "Every block was marked as a running head, foot or page number: "
+                "on a document this short, one block on one page already meets "
+                "the ratio.",
+            )
 
         if not verdicts:
             return apply_edits(doc)

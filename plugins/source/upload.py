@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from core.artifacts import ArtifactType
 from core.ports import RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 
 #: The global source directory. Rebind this to relocate the store.
 SOURCES_DIR: Path = Path("sources")
@@ -46,6 +46,28 @@ class Upload(Transform[UploadConfig]):
     inputs = {}
     output = ArtifactType.RAW_FILE
     config_model = UploadConfig
+    summary = (
+        "Takes a file you uploaded. Files are stored once, named by a "
+        "fingerprint of their bytes, so the same file used in several pipelines "
+        "is a single copy on disk."
+    )
+
+    def explain(self, config: UploadConfig) -> Explanation:
+        if not config.sha:
+            # `apply` raises on an empty sha: say so before the run.
+            return Explanation(
+                settings="No file is chosen yet.",
+                warning="Choose a file first; there is nothing to read yet.",
+                blocking=True,
+            )
+        name = config.filename or "the file"
+        return Explanation(
+            settings=(
+                f"Reads {name}, fingerprint {config.sha[:12]}. A file that differs "
+                "by even one byte gets a new fingerprint, so every later step "
+                "runs again for it, while the same file reuses earlier results."
+            ),
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: UploadConfig, ctx: RunContext

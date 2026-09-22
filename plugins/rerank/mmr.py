@@ -24,7 +24,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Hit, Query, RetrievalResult
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.transform import Transform
+from core.transform import Explanation, Transform
 from plugins.retrieve import _base
 from providers.embedding_cache import embed_cached
 
@@ -59,6 +59,46 @@ class MmrRerank(Transform[MmrRerankConfig]):
     }
     output = ArtifactType.RETRIEVAL_RESULT
     config_model = MmrRerankConfig
+    summary = (
+        "Maximal Marginal Relevance picks results one at a time, each time taking "
+        "the piece that best matches the question while being least like the "
+        "pieces already picked. It trades a little relevance for variety, and it "
+        "reuses the index's own vectors, so it needs no extra model."
+    )
+
+    def explain(self, config: MmrRerankConfig) -> Explanation:
+        lam, top = config.lambda_mult, config.top_k
+        if lam >= 1:
+            meaning = "pure relevance, so the retriever's own order is kept"
+        elif lam <= 0:
+            meaning = "pure variety: after the first pick the question is ignored"
+        else:
+            meaning = (
+                f"each pick weighs matching the question at {lam:.0%} and being "
+                f"different from earlier picks at {1 - lam:.0%}"
+            )
+        settings = (
+            f"lambda_mult is {lam:g}: {meaning}. It returns up to {top} pieces, "
+            "and the first is always the best match."
+        )
+        tradeoff = (
+            "More variety means fewer near-duplicate hits, but a piece that "
+            "repeats the best answer in other words may be dropped. MMR only "
+            "chooses among the pieces the retriever passed on, so to let it drop "
+            f"some, give the retriever a top_k larger than {top}."
+        )
+        warning, blocking = None, False
+        if not 0 <= lam <= 1:
+            warning, blocking = (
+                "lambda_mult must be between 0 and 1; outside that range the "
+                "formula rewards repetition or penalises relevance.",
+                True,
+            )
+        elif top < 1:
+            warning, blocking = "top_k must be at least 1.", True
+        return Explanation(
+            settings=settings, tradeoff=tradeoff, warning=warning, blocking=blocking
+        )
 
     def apply(
         self, inputs: Mapping[str, Any], config: MmrRerankConfig, ctx: RunContext

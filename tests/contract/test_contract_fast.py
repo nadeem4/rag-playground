@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import re
+import types
+from typing import Any, Literal, Union, get_args, get_origin
 
 import pytest
 
@@ -21,7 +23,8 @@ from core.artifacts import ArtifactType
 from core.ids import compute_artifact_id
 from core.ports import STAGE_OUTPUT, PortSpec
 from core.registry import registry
-from core.transform import Transform
+from core.transform import Explanation, Transform
+from pydantic import ValidationError
 
 IDENT = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -140,3 +143,108 @@ def test_determinism_and_cacheability_are_declared(cls):
         f"{ids(cls)}: `deterministic` must be a bool"
     )
     assert isinstance(cls.cacheable, bool), f"{ids(cls)}: `cacheable` must be a bool"
+
+
+# ---------------------------------------------------------------------------
+# I-11: every plugin explains itself
+# ---------------------------------------------------------------------------
+
+
+def test_summary_is_non_empty(cls):
+    assert isinstance(cls.summary, str) and cls.summary.strip(), (
+        f"{ids(cls)}: `summary` must say how this strategy works"
+    )
+
+
+def test_explain_is_implemented_by_the_plugin(cls):
+    assert cls.explain is not Transform.explain, (
+        f"{ids(cls)}: must override `explain(config)`; the base default says "
+        "nothing about the plugin's own settings"
+    )
+
+
+def test_explain_default_config_has_settings_text(cls):
+    exp = cls().explain(cls.config_model())
+    assert isinstance(exp, Explanation)
+    assert exp.settings.strip(), f"{ids(cls)}: explain().settings is empty"
+
+
+def test_explanation_text_has_no_em_dashes(cls):
+    exp = cls().explain(cls.config_model())
+    for text in (cls.summary, exp.settings, exp.tradeoff, exp.warning):
+        assert "—" not in (text or ""), f"{ids(cls)}: em-dash in {text!r}"
+
+
+def test_explain_exemptions_name_real_fields(cls):
+    exempt = getattr(cls, "EXPLAIN_EXEMPT", frozenset())
+    unknown = set(exempt) - set(cls.config_model.model_fields)
+    assert not unknown, f"{ids(cls)}: EXPLAIN_EXEMPT names unknown fields {unknown}"
+
+
+def _unwrap_optional(annotation: Any) -> tuple[Any, bool]:
+    args = get_args(annotation)
+    if get_origin(annotation) in (Union, types.UnionType) and type(None) in args:
+        rest = [a for a in args if a is not type(None)]
+        return rest[0], True
+    return annotation, False
+
+
+def _candidates(annotation: Any, default: Any) -> list[Any] | None:
+    """Other valid-looking values for a field, or None when the field is not a
+    number, a bool or a multi-value Literal (strings are free text)."""
+    inner, optional = _unwrap_optional(annotation)
+    out: list[Any] = []
+    if inner is bool:
+        out = [not default]
+    elif get_origin(inner) is Literal:
+        values = list(get_args(inner))
+        if len(values) < 2:
+            return None
+        out = [v for v in values if v != default]
+    elif inner in (int, float):
+        step = 1 if inner is int else 0.1
+        if default is None:
+            out = [256, 64, 1] if inner is int else [0.5]
+        else:
+            out = [default + step, default - step, default * 2]
+            if inner is float:
+                out = [round(v, 6) for v in out]
+    else:
+        return None
+    if optional and default is not None:
+        out = [None] + out
+    return out
+
+
+def _valid(cls, field: str, value: Any) -> Any | None:
+    try:
+        return cls.config_model(**{field: value})
+    except ValidationError:
+        return None
+
+
+def test_explain_is_setting_aware(cls):
+    """Change each number, bool or multi-value choice from its default to other
+    valid values: every change must change the explanation, unless the plugin
+    exempts the field in `EXPLAIN_EXEMPT` with a reason."""
+    exempt = getattr(cls, "EXPLAIN_EXEMPT", frozenset())
+    inst = cls()
+    base = inst.explain(cls.config_model()).model_dump()
+    for name, info in cls.config_model.model_fields.items():
+        if name in exempt:
+            continue
+        candidates = _candidates(info.annotation, info.default)
+        if candidates is None:
+            continue
+        tried = 0
+        for value in candidates:
+            cfg = _valid(cls, name, value)
+            if cfg is None:
+                continue
+            tried += 1
+            changed = inst.explain(cfg).model_dump()
+            assert changed != base, (
+                f"{ids(cls)}: explain() ignores {name}={value!r} "
+                f"(default {info.default!r})"
+            )
+        assert tried, f"{ids(cls)}: found no valid alternative for {name}"

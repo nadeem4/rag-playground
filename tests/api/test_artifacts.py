@@ -19,6 +19,68 @@ def run_ingest(client) -> dict[str, str]:
     }
 
 
+def chat_graph(sha: str, filename: str) -> dict:
+    return {
+        "nodes": [
+            {"id": "src", "stage": "source", "transform": "upload",
+             "config": {"sha": sha, "filename": filename}},
+            {"id": "parse", "stage": "parse", "transform": "pdfium", "config": {}},
+            {"id": "chunk", "stage": "chunk", "transform": "recursive_character",
+             "config": {}},
+            {"id": "index", "stage": "index", "transform": "lancedb",
+             "config": {"embedder": "fake-deterministic"}},
+            {"id": "ask", "stage": "query", "transform": "text",
+             "config": {"text": "Where is Paris?"}},
+            {"id": "retrieve", "stage": "retrieve", "transform": "dense", "config": {}},
+            {"id": "chat", "stage": "use_case", "transform": "chat",
+             "config": {"model": "claude-opus-5"}},
+        ],
+        "edges": [
+            {"src": "src", "dst": "parse", "port": "file"},
+            {"src": "parse", "dst": "chunk", "port": "doc"},
+            {"src": "chunk", "dst": "index", "port": "chunks"},
+            {"src": "index", "dst": "retrieve", "port": "index"},
+            {"src": "retrieve", "dst": "chat", "port": "result"},
+        ],
+    }
+
+
+def test_chat_answer_payload_is_served_after_a_run(client, monkeypatch):
+    """Chat is not cacheable, but its answer must still be fetchable by id."""
+    from plugins.use_case import chat as chat_module
+    from tests.plugins.test_use_case_chat import FakeClient, response, text_block
+
+    monkeypatch.setattr(
+        chat_module, "make_client",
+        lambda api_key: FakeClient(response(text_block("Paris is in France."))),
+    )
+    src = upload_pdf(client)
+    r = client.post(
+        "/api/runs",
+        json={"graph": chat_graph(src["sha"], src["filename"])},
+        headers={"X-Anthropic-Api-Key": "sk-ant-test-0123456789"},
+    )
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+    events = read_sse(client, run_id)
+    finished = {e["node_id"]: e for e in events if e["event"] == "node_finished"}
+    assert "chat" in finished, [e for e in events if e["event"] == "node_failed"]
+    chat_id = finished["chat"]["artifact_id"]
+
+    snap = client.get(f"/api/runs/{run_id}").json()
+    assert any(
+        e["event"] == "node_finished" and e["node_id"] == "chat"
+        and e["artifact_id"] == chat_id
+        for e in snap["events"]
+    )
+
+    r = client.get(f"/api/artifacts/{chat_id}/payload")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["kind"] == "chat"
+    assert "Paris is in France." in json.dumps(body["payload"]["answer"])
+
+
 def test_artifact_meta(client):
     ids = run_ingest(client)
     r = client.get(f"/api/artifacts/{ids['chunk']}")

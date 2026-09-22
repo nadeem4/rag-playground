@@ -97,7 +97,14 @@ class Store:
         dest = self.path_for(artifact_id)
         dest.parent.mkdir(parents=True, exist_ok=True)
         if dest.exists():
+            # Replacing (a non-cacheable node re-ran). Uncommit first, so an old
+            # entry that Windows will not fully delete is never served as a hit.
+            (dest / META).unlink(missing_ok=True)
             shutil.rmtree(dest, ignore_errors=True)
+            if dest.exists():
+                # Moving onto a surviving directory would nest tmp inside it.
+                shutil.rmtree(tmp, ignore_errors=True)
+                raise OSError(f"could not replace artifact {artifact_id}: in use")
         shutil.move(str(tmp), str(dest))
 
     def put(self, artifact: Artifact, payload: Any) -> Artifact:

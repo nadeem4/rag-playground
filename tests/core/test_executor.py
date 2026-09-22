@@ -456,6 +456,50 @@ def test_meta_survives_a_cache_hit(store):
 
 
 # ---------------------------------------------------------------------------
+# Non-cacheable: never reused, but always persisted (the latest run wins)
+# ---------------------------------------------------------------------------
+
+
+def volatile_registry() -> Registry:
+    CALLS.clear()
+    r = Registry()
+
+    class Volatile(Transform[Cfg]):
+        summary = "A test transform."
+        name = "volatile"
+        stage = Stage.SOURCE
+        inputs = {}
+        output = ArtifactType.RAW_FILE
+        config_model = Cfg
+        cacheable = False
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("volatile")
+            return {"call": len(CALLS)}
+
+    r.register(Volatile)
+    return r
+
+
+def test_non_cacheable_output_is_stored(store):
+    res = run(g_one("volatile"), volatile_registry(), store)
+    aid = res.nodes["s"].artifact.id
+    assert store.has(aid)
+    assert store.load(aid, ArtifactType.RAW_FILE) == {"call": 1}
+
+
+def test_non_cacheable_recomputes_and_replaces_the_stored_payload(store):
+    reg = volatile_registry()
+    first = run(g_one("volatile"), reg, store)
+    second = run(g_one("volatile"), reg, store)
+    aid = second.nodes["s"].artifact.id
+    assert aid == first.nodes["s"].artifact.id
+    assert CALLS == ["volatile", "volatile"]
+    assert second.nodes["s"].status is NodeStatus.EXECUTED
+    assert store.load(aid, ArtifactType.RAW_FILE) == {"call": 2}
+
+
+# ---------------------------------------------------------------------------
 # Cancellation: checked between nodes, never mid-node
 # ---------------------------------------------------------------------------
 

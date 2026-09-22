@@ -228,15 +228,15 @@ def run(
                 "node_id": nid,
             },
         )
-        if cls.cacheable:
-            store.put(artifact, payload)
-            # Read back, so a downstream node sees exactly what it would see on
-            # a cache hit. An index payload is a *writer callable* going in and a
-            # directory coming out; without this, "executed" and "cached" would
-            # hand downstream two different things.
-            payloads[nid] = store.load(aid, cls.output)
-        else:
-            payloads[nid] = payload
+        # Always persisted, cacheable or not: `cacheable = False` only means the
+        # stored result is never *reused* (above). Writing it anyway lets the UI
+        # fetch it by artifact id; a re-run replaces it, so the latest run wins.
+        store.put(artifact, payload)
+        # Read back, so a downstream node sees exactly what it would see on a
+        # cache hit. An index payload is a *writer callable* going in and a
+        # directory coming out; without this, "executed" and "cached" would
+        # hand downstream two different things.
+        payloads[nid] = store.load(aid, cls.output)
 
         result.nodes[nid] = NodeResult(
             nid,

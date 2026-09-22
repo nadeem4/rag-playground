@@ -77,6 +77,28 @@ def test_directory_payload_roundtrip(store):
     assert (handle / "table.bin").read_bytes() == b"\x00\x01"
 
 
+def test_put_replaces_an_existing_entry(store):
+    art = Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={"n": 1})
+    store.put(art, {"v": 1})
+    store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={"n": 2}), {"v": 2})
+    assert store.load(AID, ArtifactType.CHUNK_SET) == {"v": 2}
+    assert store.get_meta(AID).meta == {"n": 2}
+    assert not any(p.name.startswith(".tmp-") for p in store.path_for(AID).iterdir())
+
+
+def test_replace_that_cannot_remove_the_old_entry_leaves_no_stale_hit(
+    store, monkeypatch
+):
+    """Windows: a held handle can stop the old directory being deleted. The old
+    entry must be uncommitted first, and the new one must not be nested in it."""
+    store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={}), {"v": 1})
+    monkeypatch.setattr("core.storage.shutil.rmtree", lambda *a, **k: None)
+    with pytest.raises(OSError):
+        store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={}), {"v": 2})
+    assert store.has(AID) is False
+    assert not any(p.name.startswith(".tmp-") for p in store.path_for(AID).iterdir())
+
+
 def test_clear_removes_everything(store):
     store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={}), {"a": 1})
     store.clear()

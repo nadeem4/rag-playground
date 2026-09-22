@@ -96,6 +96,21 @@ Then open http://localhost:8000.
 - **Only your machine can reach it.** Compose publishes the port on `127.0.0.1`, because
   the playground has no login.
 
+### Demo mode
+
+For a public host that strangers share, such as a Hugging Face Space, set
+`RAG_PLAYGROUND_DEMO=1`. The playground has no login, so demo mode switches off what is
+unsafe to share:
+
+- **No uploads.** `POST /api/sources` is refused, and the UI hides Upload. Visitors work with
+  the bundled sample only, and no route lists or reads any other file, so nobody sees
+  another visitor's document.
+- **No server API key.** The key comes only from the request header, that is, a key the
+  visitor types in the UI. `ANTHROPIC_API_KEY` in the environment or in `.env` is ignored,
+  so visitors can never spend the host's key.
+
+`GET /api/settings/app` returns `{"demo": true}` so the UI can say so.
+
 ## What you can do
 
 - **Run any stage on its own and look at the result.** Every stage has an inspector:

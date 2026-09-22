@@ -31,6 +31,7 @@ def no_server_key(tmp_path: Path, monkeypatch) -> None:
     from api import credentials
 
     monkeypatch.delenv(credentials.ENV_VAR, raising=False)
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
     monkeypatch.setattr(credentials, "DOTENV_PATH", tmp_path / "no-such.env")
 
 

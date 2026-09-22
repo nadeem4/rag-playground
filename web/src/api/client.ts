@@ -5,6 +5,7 @@
  */
 
 import type {
+  AppSettings,
   ArtifactMeta,
   CacheCleared,
   CancelResponse,
@@ -116,6 +117,8 @@ export const api = {
   artifactPayload: <T = unknown>(id: string) =>
     request<T>(`/artifacts/${encodeURIComponent(id)}/payload`),
 
+  /** `demo`: hosted demo mode, no uploads. */
+  appSettings: () => request<AppSettings>("/settings/app"),
   /** Which key source the SERVER can supply. Never a value. */
   llmSettings: () => request<LlmSettings>("/settings/llm"),
   /** Lists models with the resolved key: costs no tokens. */

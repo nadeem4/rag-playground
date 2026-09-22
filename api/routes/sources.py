@@ -16,15 +16,13 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 
-from api import warmup
+from api import demo, warmup
 
 router = APIRouter()
 
 META_DIR = ".meta"
 
-#: The first-run sample, committed to the repo and made by
-#: `scripts/make_sample_pdf.py`.
-SAMPLE_PDF = Path(__file__).resolve().parents[2] / "samples" / "chunking-primer.pdf"
+SAMPLE_PDF = demo.SAMPLE_PDF
 
 
 @router.get("/sources")
@@ -33,11 +31,14 @@ def list_sources(request: Request) -> list[dict[str, Any]]:
     if not meta_dir.is_dir():
         return []
     items = [json.loads(p.read_text(encoding="utf-8")) for p in meta_dir.glob("*.json")]
+    items = [m for m in items if demo.readable(m["sha"])]
     return sorted(items, key=lambda m: m["filename"].lower())
 
 
 @router.post("/sources")
 async def upload_source(request: Request, file: UploadFile) -> dict[str, Any]:
+    if demo.enabled():
+        raise HTTPException(status_code=403, detail=demo.NO_UPLOADS)
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")

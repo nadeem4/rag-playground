@@ -3,13 +3,14 @@ import { Upload } from "lucide-react"
 
 import { api } from "@/api/client"
 import type { Source } from "@/api/types"
+import { useDemo } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { CONTROL } from "@/components/fields/types"
 
 /**
  * The Load card's body: upload a file (`POST /api/sources`) or pick one
  * already uploaded (`GET /api/sources`). Emits the source node's config,
- * `{sha, filename}`.
+ * `{sha, filename}`. A hosted demo has no Upload: the server refuses it.
  */
 
 export interface SourceConfig {
@@ -32,6 +33,7 @@ export function SourcePicker({
   errors?: string[]
 }) {
   const id = useId()
+  const demo = useDemo()
   const fileRef = useRef<HTMLInputElement>(null)
   const [list, setList] = useState<ListState>({ kind: "loading" })
   const [upload, setUpload] = useState<{ name: string; error?: string } | null>(null)
@@ -83,7 +85,7 @@ export function SourcePicker({
             </Button>
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-fg-muted">No files uploaded yet. Upload a PDF to start.</p>
+          <p className="text-sm text-fg-muted">{demo ? "No files yet." : "No files uploaded yet. Upload a PDF to start."}</p>
         ) : (
           <select
             id={`${id}-pick`}
@@ -123,26 +125,28 @@ export function SourcePicker({
         ) : null}
       </div>
 
-      <div className="flex min-w-0 items-center gap-2">
-        <input
-          ref={fileRef}
-          id={`${id}-file`}
-          type="file"
-          accept=".pdf,application/pdf"
-          className="sr-only"
-          aria-label="Upload a file"
-          onChange={(e) => void onFile(e.target.files?.[0])}
-        />
-        <Button variant="outline" size="sm" disabled={Boolean(upload && !upload.error)} onClick={() => fileRef.current?.click()}>
-          <Upload aria-hidden strokeWidth={1.75} />
-          Upload
-        </Button>
-        {upload && !upload.error ? (
-          <span role="status" className="truncate text-xs text-fg-muted">
-            Uploading {upload.name}
-          </span>
-        ) : null}
-      </div>
+      {demo ? null : (
+        <div className="flex min-w-0 items-center gap-2">
+          <input
+            ref={fileRef}
+            id={`${id}-file`}
+            type="file"
+            accept=".pdf,application/pdf"
+            className="sr-only"
+            aria-label="Upload a file"
+            onChange={(e) => void onFile(e.target.files?.[0])}
+          />
+          <Button variant="outline" size="sm" disabled={Boolean(upload && !upload.error)} onClick={() => fileRef.current?.click()}>
+            <Upload aria-hidden strokeWidth={1.75} />
+            Upload
+          </Button>
+          {upload && !upload.error ? (
+            <span role="status" className="truncate text-xs text-fg-muted">
+              Uploading {upload.name}
+            </span>
+          ) : null}
+        </div>
+      )}
       {upload?.error ? (
         <p role="alert" className="text-xs text-danger">
           Upload of {upload.name} failed: {upload.error}

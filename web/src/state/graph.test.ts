@@ -218,13 +218,15 @@ describe("sample graph (plan I-15)", () => {
     const by = (stage: string) => g.nodes.find((n) => n.stage === stage)!
     expect(by("source").config).toEqual(SRC)
     expect(by("index").config.embedder).toBe("qwen3-embedding-0.6b")
+    // Small enough that the 3-page sample yields a pool larger than what search shows.
+    expect(by("chunk").config).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
     expect(by("query").config.text).toBe(SAMPLE_QUESTION)
     expect(SAMPLE_QUESTION).toBe("Why do chunk boundaries matter?")
   })
 
   it("leaves every other setting at its schema default", () => {
     const g = sampleGraph(LIVE, SRC)
-    const chunk = g.nodes.find((n) => n.stage === "chunk")!
-    expect(chunk.config).toEqual(defaultConfig(LIVE.chunk!.recursive_character))
+    const retrieve = g.nodes.find((n) => n.stage === "retrieve")!
+    expect(retrieve.config).toEqual(defaultConfig(LIVE.retrieve!.hybrid_rrf))
   })
 })

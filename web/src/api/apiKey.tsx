@@ -65,7 +65,7 @@ const CHECKED: Record<LlmCheck["source"], string> = {
 }
 
 export function checkMessage(check: LlmCheck): { ok: boolean; text: string } {
-  if (check.source === "none") return { ok: false, text: "There is no key to check. Enter one above, or set ANTHROPIC_API_KEY in .env." }
+  if (check.source === "none") return { ok: false, text: "There is no key to check. Enter one above." }
   if (check.ok) return { ok: true, text: `The key works. Checked ${CHECKED[check.source]}.` }
   return { ok: false, text: `The key did not work. Checked ${CHECKED[check.source]}.` }
 }

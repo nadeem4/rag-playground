@@ -1,4 +1,5 @@
-"""LLM settings: which key source the server has, and whether a key works.
+"""App and LLM settings: demo mode, which key source the server has, and
+whether a key works.
 
 Neither endpoint ever returns a key. `GET` reports only the source the *server*
 can supply; `check` makes one `models.list()` call, which costs no tokens.
@@ -10,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Header
 
+from api import demo
 from api.credentials import redact, resolve_key, server_source
 
 router = APIRouter()
@@ -19,6 +21,12 @@ NO_KEY = (
     "process, or put it in .env at the repo root"
 )
 REJECTED = "authentication failed: the API key was rejected"
+
+
+@router.get("/settings/app")
+def get_app_settings() -> dict[str, bool]:
+    """`demo`: uploads are off and only a key typed in the UI is used."""
+    return {"demo": demo.enabled()}
 
 
 @router.get("/settings/llm")

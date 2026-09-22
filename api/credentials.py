@@ -7,6 +7,9 @@ Resolution, first match wins, once per run request (spec §9):
 3. `<repo>/.env`, read with `dotenv_values`. It is **never** loaded into
    `os.environ`, so a key kept there is not inherited by child processes.
 
+In demo mode (`api.demo`) only the header counts: the server has no key of its
+own, so a public host's key can never be spent by its visitors.
+
 The key is never stored, echoed, hashed or logged. The API hands it to a run as
 `context_extras={"credentials": {"anthropic_api_key": key}}` and holds it only
 in that run's worker closure. `redact` scrubs it out of anything the run emits.
@@ -19,6 +22,8 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import dotenv_values
+
+from api import demo
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,6 +46,8 @@ def _clean(value: str | None) -> str | None:
 
 
 def _server_key() -> tuple[str | None, str]:
+    if demo.enabled():
+        return None, "none"
     key = _clean(os.environ.get(ENV_VAR))
     if key:
         return key, "env"
@@ -60,7 +67,8 @@ def resolve_key(header: str | None) -> tuple[str | None, str]:
 
 
 def server_source() -> str:
-    """Which source the server itself can supply: "env", "dotenv" or "none"."""
+    """Which source the server itself can supply: "env", "dotenv" or "none".
+    Always "none" in demo mode: only a key in the request header works."""
     return _server_key()[1]
 
 

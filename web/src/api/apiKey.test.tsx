@@ -163,6 +163,8 @@ describe("key source words", () => {
     expect(checkMessage({ ok: true, source: "dotenv", error: null })).toEqual({ ok: true, text: "The key works. Checked the key from .env." })
     expect(checkMessage({ ok: false, source: "header", error: "401" }).ok).toBe(false)
     expect(checkMessage({ ok: false, source: "none", error: null }).text).toMatch(/no key to check/)
+    // A hosted demo ignores .env, so the message must not point there.
+    expect(checkMessage({ ok: false, source: "none", error: null }).text).not.toMatch(/\.env/)
   })
 
   it("points a chat failure about the key to the control, nothing else", () => {

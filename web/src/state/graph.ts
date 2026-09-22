@@ -148,6 +148,8 @@ export function sampleGraph(registry: Registry, source: { sha: string; filename:
   }
   const extra: Partial<Record<Stage, Record<string, unknown>>> = {
     source: { sha: source.sha, filename: source.filename },
+    // Smaller chunks, so the 3-page sample gives retrieval a pool larger than search shows.
+    chunk: { chunk_size: 400, chunk_overlap: 80 },
     index: { embedder: "qwen3-embedding-0.6b" },
     query: { text: SAMPLE_QUESTION },
   }

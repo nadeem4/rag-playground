@@ -21,6 +21,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
+from api import demo
 from api.credentials import redact, resolve_key
 from api.runs import RunState
 from core.executor import run, sweep
@@ -92,9 +93,14 @@ def _check(graph: Graph, registry: Registry, overrides: dict | None = None) -> N
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     overrides = overrides or {}
     for nd in graph.nodes:
+        cfg = overrides.get(nd.id, nd.config)
+        if nd.stage == Stage.SOURCE and cfg.get("sha") and not demo.readable(cfg["sha"]):
+            raise HTTPException(
+                status_code=403, detail="this hosted demo reads only the sample document"
+            )
         cls = registry.get(nd.stage, nd.transform)
         try:
-            cls.config_model(**overrides.get(nd.id, nd.config))
+            cls.config_model(**cfg)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=422,

@@ -22,6 +22,8 @@ import pypdfium2.raw as pdfium_c
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
+from api import demo
+
 router = APIRouter()
 
 _SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -35,7 +37,7 @@ _SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}
 
 def _source_path(request: Request, sha: str) -> Path:
     sources: Path = request.app.state.deps.sources_dir
-    if _SHA.match(sha) and sources.is_dir():
+    if _SHA.match(sha) and demo.readable(sha) and sources.is_dir():
         for p in sorted(sources.glob(f"{sha}*")):
             if p.is_file() and not p.name.endswith(".part"):
                 return p

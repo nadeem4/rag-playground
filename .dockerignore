@@ -1,0 +1,25 @@
+# Private data and secrets: never in the build context
+sources/
+artifacts/
+.env
+.env.*
+
+# Build outputs and environments, rebuilt inside the image
+.venv/
+web/node_modules/
+web/dist/
+
+# Local tooling and docs
+docs/
+.git/
+.remember/
+.agents/
+.claude/
+.playwright-mcp/
+
+# Caches
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.coverage
+htmlcov/

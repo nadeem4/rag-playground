@@ -1,0 +1,14 @@
+services:
+  rag-playground:
+    build: .
+    ports:
+      # Localhost only: the playground has no auth, so it is not published to your network.
+      - "127.0.0.1:${RAG_PLAYGROUND_PORT:-8000}:8000"
+    volumes:
+      - data:/data
+    env_file:
+      - path: .env
+        required: false
+
+volumes:
+  data:

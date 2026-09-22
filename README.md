@@ -15,6 +15,7 @@ support and no scaling story.
 ## Contents
 
 - [Quick start](#quick-start)
+- [Run with Docker](#run-with-docker)
 - [What you can do](#what-you-can-do)
 - [Stages and supported strategies](#stages-and-supported-strategies)
 - [Models and downloads](#models-and-downloads)
@@ -49,9 +50,13 @@ The server starts on http://127.0.0.1:8000 and opens your browser. Options:
 
 | Flag | Effect |
 |---|---|
-| `--port 8080` | Use another port |
+| `--port 8080` | Use another port. Without the flag, the `PORT` environment variable is used if set |
+| `--host 0.0.0.0` | Listen on another interface. Without the flag, `RAG_PLAYGROUND_HOST` is used if set. No browser opens unless the host is `127.0.0.1`, `localhost` or `::1` |
 | `--no-browser` | Don't open a browser tab |
 | `--reload` | Restart the server when Python files change (for development) |
+
+`--host 0.0.0.0` makes the playground reachable from other machines on your network. It has
+no auth, so only do that on a network you trust.
 
 **First steps in the UI:**
 
@@ -66,6 +71,30 @@ The server starts on http://127.0.0.1:8000 and opens your browser. Options:
    over the text.
 4. Type a question in **Ask** and run through **Search** to see what retrieval finds.
 5. Open **Compare** to run several chunkers, or several embedding sizes, side by side.
+
+## Run with Docker
+
+If you would rather not install Python and Node, Docker runs the whole thing:
+
+```bash
+docker compose up --build
+```
+
+Then open http://localhost:8000.
+
+- **It takes a while the first time.** The build installs PyTorch (CPU only) and builds the
+  UI, and the image is about 3.5 GB. The first run of each model also downloads it, which
+  is another 1 to 2 GB.
+- **Your models and uploads live in a named volume**, mounted at `/data` in the container.
+  They survive `docker compose down` and rebuilds. To delete them, run
+  `docker compose down -v`.
+- **API key for chat answers:** put `ANTHROPIC_API_KEY=...` in a `.env` file next to
+  `docker-compose.yml` (copy `.env.example`). Compose passes it to the container at start.
+  It is never copied into the image, and the setup works without a `.env` at all.
+- **Another port:** `RAG_PLAYGROUND_PORT=8080 docker compose up` serves the UI on
+  http://localhost:8080.
+- **Only your machine can reach it.** Compose publishes the port on `127.0.0.1`, because
+  the playground has no login.
 
 ## What you can do
 

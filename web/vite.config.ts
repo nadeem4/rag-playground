@@ -11,8 +11,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': here('./src'),
-      // Geist is self-hosted from the npm package: no font CDN, ever.
-      '@fonts': here('./node_modules/geist/dist/fonts'),
+      // The faces are self-hosted from the npm packages: no font CDN, ever.
+      '@fonts': here('./node_modules/@fontsource-variable'),
     },
   },
   server: {

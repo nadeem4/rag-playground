@@ -114,7 +114,7 @@ function TypeScale() {
     ["xl", 20, <span className="text-xl font-semibold">Inspector</span>],
   ]
   return (
-    <Section title="Type" note="Geist Sans for labels and prose, Geist Mono for every number. Six sizes; hierarchy comes from weight and tint.">
+    <Section title="Type" note="Atkinson Hyperlegible Next for labels and prose, Martian Mono for every number. Six sizes; hierarchy comes from weight and tint.">
       <div className="flex flex-col gap-px overflow-hidden rounded-panel border border-hairline bg-hairline">
         {rows.map(([name, px, sample]) => (
           <div key={name} className="grid grid-cols-[96px_minmax(0,1fr)] items-baseline gap-3 bg-surface px-3 py-2">

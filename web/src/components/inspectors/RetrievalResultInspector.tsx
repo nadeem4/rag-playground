@@ -264,7 +264,10 @@ function Summary({ children }: { children: ReactNode }) {
  * components the score gets the single bar column, unlabelled beside its number.
  */
 function columns(bars: number): CSSProperties {
-  return { gridTemplateColumns: `28px 44px 64px repeat(${bars}, ${BAR + 36}px)` }
+  // The widths hold the mono text they carry: a 4 letter tracked column label
+  // in the rank column, and a bar plus a five decimal score in each bar column.
+  // Martian Mono is wider than a usual mono, so they were measured for it.
+  return { gridTemplateColumns: `32px 44px 64px repeat(${bars}, ${BAR + 48}px)` }
 }
 
 function HitList({

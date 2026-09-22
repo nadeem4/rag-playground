@@ -139,8 +139,9 @@ function LearnModeSwitch() {
 
 export function AppHeader({ path }: { path: string }) {
   return (
-    <header className="flex h-[40px] shrink-0 items-center justify-between gap-2 border-b border-hairline bg-surface px-3">
-      <div className="flex min-w-0 items-center gap-2 md:gap-4">
+    // Wraps to a second row on a phone, so the page itself never scrolls sideways.
+    <header className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 md:gap-x-4">
         <a href="/" className="text-sm font-semibold whitespace-nowrap text-fg no-underline">
           RAG Playground
         </a>

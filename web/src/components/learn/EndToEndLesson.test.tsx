@@ -1,28 +1,50 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { clearPdfCaches } from "@/api/usePdf"
 import { chunkById, chunkStep, cleanStep, parseStep, quoteSource, rerankStep, retrieveStep, RUN } from "@/learn/e2e"
 import { readProgress, resetProgressForTests } from "@/state/lessons"
 
 import { EndToEndLesson } from "./EndToEndLesson"
 
+const SHA = "34".repeat(32)
+
 beforeEach(() => {
   window.localStorage.clear()
   resetProgressForTests()
+  clearPdfCaches()
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const ok = (b: unknown) => new Response(JSON.stringify(b))
+      if (url === "/api/learn/document") return ok({ filename: RUN.filename, page_count: RUN.page_count, text: "A retriever scores each chunk as a whole." })
+      if (url === `/api/sources/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
+      if (url.startsWith(`/api/sources/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
+      return new Response("{}", { status: 404 })
+    }),
+  )
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 function lesson() {
   const onRun = vi.fn()
   const onChat = vi.fn()
-  render(<EndToEndLesson onRun={onRun} onChat={onChat} />)
+  render(<EndToEndLesson sha={SHA} onRun={onRun} onChat={onChat} />)
   return { onRun, onChat }
 }
 
-const stepHeadings = () =>
-  screen
-    .getAllByRole("heading", { level: 3 })
-    .map((h) => h.textContent)
+const rail = () => screen.getByRole("navigation", { name: "Steps" })
+const steps = () => within(rail()).getAllByRole("button")
+const stepPanel = () => screen.getByRole("region", { name: "The step" })
+
+/** Open the step whose title matches, and return the step panel. */
+function open(title: string) {
+  fireEvent.click(within(rail()).getByRole("button", { name: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }))
+  return stepPanel()
+}
 
 describe("How RAG works, end to end", () => {
   it("says it shows a recorded run, and Run it yourself opens Build with the same graph", () => {
@@ -57,55 +79,63 @@ describe("How RAG works, end to end", () => {
     expect(onChat).toHaveBeenCalledOnce()
   })
 
-  it("walks back from Rerank to Parse, with words computed from the run", () => {
+  it("steps back from Rerank to Parse, with words computed from the run", () => {
     lesson()
-    expect(stepHeadings()).toEqual([
-      rerankStep(RUN).title,
-      retrieveStep(RUN).title,
-      chunkStep(RUN).title,
-      cleanStep(RUN).title,
-      parseStep(RUN).title,
+    expect(steps().map((b) => b.textContent)).toEqual([
+      `1What came back`,
+      `2${rerankStep(RUN).title}`,
+      `3${retrieveStep(RUN).title}`,
+      `4${chunkStep(RUN).title}`,
+      `5${cleanStep(RUN).title}`,
+      `6${parseStep(RUN).title}`,
+      `7Recap`,
     ])
-    for (const w of [...rerankStep(RUN).words, ...parseStep(RUN).words, ...cleanStep(RUN).words]) expect(screen.getByText(w)).toBeTruthy()
+    for (const step of [rerankStep(RUN), cleanStep(RUN), parseStep(RUN)]) {
+      const panel = open(step.title)
+      expect(within(panel).getByRole("heading", { level: 2, name: step.title })).toBeTruthy()
+      for (const w of step.words) expect(within(panel).getByText(w)).toBeTruthy()
+    }
   })
 
   it("shows every candidate on request", () => {
     lesson()
-    const rerank = screen.getByRole("region", { name: rerankStep(RUN).title })
-    fireEvent.click(within(rerank).getByRole("button", { name: `Show all ${RUN.pool.length} candidates` }))
-    expect(within(rerank).getByText(`#${RUN.pool.length}`)).toBeTruthy()
+    const panel = open(rerankStep(RUN).title)
+    fireEvent.click(within(panel).getByRole("button", { name: `Show all ${RUN.pool.length} candidates` }))
+    expect(within(panel).getByText(`#${RUN.pool.length}`)).toBeTruthy()
   })
 
   it("reads another chunk when its bar is clicked", () => {
     lesson()
-    const chunk = screen.getByRole("region", { name: chunkStep(RUN).title })
-    const bars = within(chunk).getAllByRole("button", { name: /^Chunk \d+,/ })
+    const panel = open(chunkStep(RUN).title)
+    const bars = within(panel).getAllByRole("button", { name: /^Chunk \d+,/ })
     expect(bars).toHaveLength(RUN.chunks.length)
     const top = chunkById(RUN, RUN.mmr[0])
     expect(bars[top.ordinal].getAttribute("aria-pressed")).toBe("true")
     fireEvent.click(bars[0])
     const c = RUN.chunks[0]
-    expect(within(chunk).getByText(`Chunk 1, ${c.end - c.start} characters, page ${c.page_span[0]}. Click a bar to read another chunk.`)).toBeTruthy()
+    expect(within(panel).getByText(`Chunk 1, ${c.end - c.start} characters, page ${c.page_span[0]}. Click a bar to read another chunk.`)).toBeTruthy()
   })
 
   it("shows the removed duplicate and the page-1 blocks", () => {
     lesson()
-    const clean = screen.getByRole("region", { name: cleanStep(RUN).title })
-    expect(within(clean).getByText(`page ${RUN.removed[0].page}, removed as a duplicate`)).toBeTruthy()
-    const parse = screen.getByRole("region", { name: parseStep(RUN).title })
-    expect(within(parse).getAllByTestId("block")).toHaveLength(RUN.elements.filter((e) => e.page === 1).length)
+    expect(within(open(cleanStep(RUN).title)).getByText(`page ${RUN.removed[0].page}, removed as a duplicate`)).toBeTruthy()
+    expect(within(open(parseStep(RUN).title)).getAllByTestId("block")).toHaveLength(RUN.elements.filter((e) => e.page === 1).length)
   })
 
-  it("ends with Mark as done and Next: Chunking", () => {
+  it("recaps what the lesson showed, then Mark as done and Next: Chunking", () => {
     lesson()
-    const next = screen.getByRole("link", { name: "Next: Chunking" })
-    expect(next.getAttribute("href")).toBe("/learn/chunking")
-    fireEvent.click(screen.getByRole("link", { name: "Mark as done" }))
+    const panel = open("Recap")
+    expect(within(panel).getByText(/One question travelled through parse, clean, chunk, retrieve and rerank/)).toBeTruthy()
+    expect(within(panel).getByRole("link", { name: "Next: Chunking" }).getAttribute("href")).toBe("/learn/chunking")
+    fireEvent.click(within(panel).getByRole("link", { name: "Mark as done" }))
     expect(readProgress()).toEqual({ "end-to-end": true })
   })
 
   it("has no em-dashes or en-dashes", () => {
     lesson()
-    expect(document.body.textContent).not.toMatch(/[–—]/)
+    for (let i = 0; i < steps().length; i++) {
+      fireEvent.click(steps()[i])
+      expect(document.body.textContent).not.toMatch(/[–—]/)
+    }
   })
 })

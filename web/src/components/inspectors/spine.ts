@@ -50,7 +50,7 @@ export function useSpineLayout(rootRef: RefObject<HTMLElement | null>, deps: rea
     const measure = () => layoutSpine(root)
     measure()
     let cancelled = false
-    // Geist is self-hosted with font-display: swap; line breaks move when it lands.
+    // The faces are self-hosted with font-display: swap; line breaks move when they land.
     document.fonts?.ready.then(() => {
       if (!cancelled) measure()
     })

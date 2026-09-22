@@ -161,8 +161,13 @@
   --*: initial;
 
   /* Type: one sans, one mono. Six sizes, nothing above 20px. */
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+  --font-sans: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Martian Mono", ui-monospace, "SF Mono", monospace;
+  /* Martian Mono is wide: 0.70em per character at its normal width. Its width
+     axis runs 75 to 112.5, and it is narrowed once here to 0.65em, which keeps
+     the letters open while a dense row of counts still fits its column. Applied
+     in the base layer below and in the `meta` utility. */
+  --mono-stretch: 87.5%;
   --text-2xs: 11px; --text-2xs--line-height: 16px; /* uppercase mono metadata */
   --text-xs: 12px;  --text-xs--line-height: 16px;
   --text-sm: 13px;  --text-sm--line-height: 20px;  /* the workhorse */
@@ -277,6 +282,7 @@
 /* The 11px metadata voice: uppercase mono, tracked. */
 @utility meta {
   font-family: var(--font-mono);
+  font-stretch: var(--mono-stretch);
   font-size: 11px;
   line-height: 16px;
   text-transform: uppercase;
@@ -303,13 +309,15 @@
   ::after {
     border-color: var(--hairline);
   }
-  /* Mono does the numbers; tabular figures so token counts align. */
+  /* Mono does the numbers; tabular figures so token counts align. Martian Mono
+     is narrowed on its width axis so dense rows and tables still fit. */
   code,
   kbd,
   pre,
   samp,
   .font-mono {
     font-variant-numeric: tabular-nums;
+    font-stretch: var(--mono-stretch);
   }
   :focus-visible {
     outline: 2px solid var(--focus-ring);

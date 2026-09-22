@@ -21,16 +21,19 @@ import {
 } from "@/learn/e2e"
 import { cn } from "@/lib/utils"
 
-import { LessonEnd } from "./LessonEnd"
+import { LessonShell, type LessonStep } from "./LessonShell"
 import "./learn.css"
 
 /**
  * Learn > How RAG works, end to end: one question traced from what came back
- * to the PDF, drawn from a recorded real run. Every number is computed from
- * that run (`learn/e2e.ts`). The written answer is an example, and says so.
+ * to the PDF, drawn from a recorded real run, stepped through in the shared
+ * lesson shell. Every number is computed from that run (`learn/e2e.ts`). The
+ * written answer is an example, and says so.
  */
 
 export interface EndToEndLessonProps {
+  /** The sample's sha, for the document panel. */
+  sha: string | null
   /** "Run it yourself": open Build with the recorded run's graph. */
   onRun: () => void
   /** Open Build with the sample and a chat step. */
@@ -294,87 +297,126 @@ function ParseView() {
   )
 }
 
-function Step({ id, step, links, children }: { id: string; step: StepWords; links?: ReactNode; children: ReactNode }) {
+/** One pipeline step: the words the run computed, then the view of what it produced. */
+function PipelineStep({ step, links, children }: { step: StepWords; links?: ReactNode; children: ReactNode }) {
   return (
-    <section aria-labelledby={`e2e-${id}`} className="grid grid-cols-1 gap-4 border-t border-hairline py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6">
-      <div className="learn-sticky flex flex-col gap-2 self-start">
-        <h3 id={`e2e-${id}`} className="m-0 text-xl font-semibold">
-          {step.title}
-        </h3>
+    <section aria-label={step.title} className="flex min-w-0 flex-col gap-4">
+      <div className="flex max-w-[68ch] flex-col gap-2">
         {step.words.map((w) => (
-          <p key={w} className="m-0 text-base">
+          <p key={w} className="m-0 text-base leading-[1.65]">
             {w}
           </p>
         ))}
         {links}
       </div>
-      <div className="min-w-0 self-start rounded-panel border border-hairline bg-surface-elevated p-4">{children}</div>
+      <div className="min-w-0 rounded-panel border border-hairline bg-surface-elevated p-4">{children}</div>
     </section>
   )
 }
 
-export function EndToEndLesson({ onRun, onChat }: EndToEndLessonProps) {
+const RECAP = [
+  "One question travelled through parse, clean, chunk, retrieve and rerank before any model saw it.",
+  "Search on its own already returns the passages that answer the question, and it costs nothing to run.",
+  "Every view in this lesson was drawn from a recorded run of this playground, not from a picture of one.",
+  "Every number in the answer points back to a real sentence on a page of the PDF.",
+]
+
+export function EndToEndLesson({ sha, onRun, onChat }: EndToEndLessonProps) {
+  const [i, setI] = useState(0)
+  const steps: LessonStep[] = [
+    {
+      id: "answer",
+      title: "What came back",
+      sentence: ANSWER[0].quote,
+      body: (
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-3 rounded-panel border border-hairline bg-surface-elevated px-4 py-3">
+            <span className="text-lg font-medium">"{RUN.question}"</span>
+            <span className="text-sm text-fg-muted">
+              asked of {RUN.filename}, {RUN.page_count} pages
+            </span>
+          </div>
+          <Result onChat={onChat} />
+        </div>
+      ),
+    },
+    {
+      id: "rerank",
+      title: rerankStep(RUN).title,
+      body: (
+        <PipelineStep step={rerankStep(RUN)}>
+          <RerankView />
+        </PipelineStep>
+      ),
+    },
+    {
+      id: "retrieve",
+      title: retrieveStep(RUN).title,
+      body: (
+        <PipelineStep step={retrieveStep(RUN)}>
+          <RetrieveView />
+        </PipelineStep>
+      ),
+    },
+    {
+      id: "chunk",
+      title: chunkStep(RUN).title,
+      body: (
+        <PipelineStep
+          step={chunkStep(RUN)}
+          links={
+            <a href="/learn/chunking" className="w-fit text-base font-medium text-fg underline decoration-fg-muted underline-offset-2">
+              Learn how chunking works
+            </a>
+          }
+        >
+          <ChunkView />
+        </PipelineStep>
+      ),
+    },
+    {
+      id: "clean",
+      title: cleanStep(RUN).title,
+      body: (
+        <PipelineStep step={cleanStep(RUN)}>
+          <CleanView />
+        </PipelineStep>
+      ),
+    },
+    {
+      id: "parse",
+      title: parseStep(RUN).title,
+      body: (
+        <PipelineStep step={parseStep(RUN)}>
+          <ParseView />
+        </PipelineStep>
+      ),
+    },
+  ]
+
   return (
-    <article className="flex min-w-0 flex-col">
-      <header className="flex max-w-[720px] flex-col gap-3 pb-6">
-        <h1 className="learn-title">How RAG works, end to end</h1>
-        <p className="learn-lead">
-          We asked a short PDF about chunking one question. Start with what came back, then scroll down to see how each step produced it.
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="m-0 text-base text-fg-muted">This page shows a recorded run of this playground on its sample document.</p>
-          <Button variant="outline" onClick={onRun}>
-            Run it yourself
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 rounded-panel border border-hairline bg-surface-elevated px-4 py-3">
-          <span className="text-lg font-medium">"{RUN.question}"</span>
-          <span className="text-sm text-fg-muted">
-            asked of {RUN.filename}, {RUN.page_count} pages
-          </span>
-        </div>
-      </header>
-
-      <Result onChat={onChat} />
-
-      <header className="flex max-w-[720px] flex-col gap-2 pt-6 pb-4">
-        <h2 className="learn-h2">How that answer was made</h2>
-        <p className="m-0 text-lg text-fg-muted">
-          Each step below is one part of the pipeline, from the last step back to the PDF. The views show what that step really produced.
-        </p>
-      </header>
-
-      <Step id="rerank" step={rerankStep(RUN)}>
-        <RerankView />
-      </Step>
-      <Step id="retrieve" step={retrieveStep(RUN)}>
-        <RetrieveView />
-      </Step>
-      <Step
-        id="chunk"
-        step={chunkStep(RUN)}
-        links={
-          <a href="/learn/chunking" className="text-base font-medium text-fg underline decoration-fg-muted underline-offset-2">
-            Learn how chunking works
-          </a>
-        }
-      >
-        <ChunkView />
-      </Step>
-      <Step id="clean" step={cleanStep(RUN)}>
-        <CleanView />
-      </Step>
-      <Step id="parse" step={parseStep(RUN)}>
-        <ParseView />
-      </Step>
-
-      <section className="learn-band flex max-w-[720px] flex-col gap-3">
-        <h2 className="learn-h2">You have followed one question from start to finish.</h2>
-        <p className="m-0 text-lg text-fg-muted">
-          Next, look closer at one step. The chunking lesson lets you predict what a setting will do, then see it happen.
-        </p>
-        <LessonEnd slug="end-to-end" />
-      </section>
-    </article>
+    <LessonShell
+      title="How RAG works, end to end"
+      slug="end-to-end"
+      sha={sha}
+      steps={steps}
+      step={i}
+      onStep={setI}
+      recap={RECAP}
+      intro={
+        <>
+          <p className="learn-lead">
+            We asked a short PDF about chunking one question. Start with what came back, then step back through how each part of the pipeline produced
+            it.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="m-0 text-base text-fg-muted">This page shows a recorded run of this playground on its sample document.</p>
+            <Button variant="outline" onClick={onRun}>
+              Run it yourself
+            </Button>
+          </div>
+        </>
+      }
+    />
   )
 }

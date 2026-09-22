@@ -4,7 +4,6 @@ import { api } from "@/api/client"
 import type { Registry, Source } from "@/api/types"
 import { useRegistry } from "@/api/useRegistry"
 import { ChunkingLesson } from "@/components/learn/ChunkingLesson"
-import { DocumentPanel } from "@/components/learn/DocumentPanel"
 import { CitationsLesson } from "@/components/learn/CitationsLesson"
 import { EndToEndLesson } from "@/components/learn/EndToEndLesson"
 import { chatSampleGraph, e2eSampleGraph, storeGraph, type PipelineGraph } from "@/state/graph"
@@ -56,7 +55,7 @@ export function Learn() {
 
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-surface">
-      <div className="learn-page flex flex-col gap-4 py-6">
+      <div className="learn-page learn-page-wide flex flex-col gap-4 py-6">
         <a href="/" className="w-fit text-base font-medium text-fg underline decoration-fg-muted underline-offset-2">
           All lessons
         </a>
@@ -65,9 +64,8 @@ export function Learn() {
             The sample document could not be loaded, so the lessons cannot run. {sampleError}
           </p>
         ) : null}
-        <DocumentPanel sha={sample?.sha ?? null} />
         {topic === "end-to-end" ? (
-          <EndToEndLesson onRun={build(e2eSampleGraph)} onChat={build(chatSampleGraph)} />
+          <EndToEndLesson sha={sample?.sha ?? null} onRun={build(e2eSampleGraph)} onChat={build(chatSampleGraph)} />
         ) : topic === "chunking" ? (
           <ChunkingLesson registry={registry} sha={sample?.sha ?? null} />
         ) : (

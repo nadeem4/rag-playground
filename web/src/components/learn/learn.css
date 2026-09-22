@@ -13,6 +13,11 @@
   padding-inline: 16px;
 }
 
+/* A lesson carries three columns, so it is given the width they need. */
+.learn-page-wide {
+  max-width: 1400px;
+}
+
 .learn-display {
   margin: 0;
   font-size: clamp(30px, 4.4vw, 44px);
@@ -54,6 +59,107 @@
 .learn-band {
   padding-block: 40px 56px;
   border-top: 1px solid var(--hairline);
+}
+
+/*
+ * The lesson shell: the step list, the step, and the document.
+ *
+ * Below 900px it is one column, and the Lesson and Document tabs choose which
+ * of the two panes you see, so a phone can flip to the text and back. From
+ * 900px both panes are shown and the tabs are gone, with the step list as a bar
+ * above them. From 1200px the step list becomes the first of three columns.
+ *
+ * Nothing here may scroll the page sideways. A wide table or the chunk viewer
+ * scrolls inside its own box instead; `min-width: 0` on every track is what
+ * lets a grid child do that.
+ */
+.lesson-shell {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "panes"
+    "rail"
+    "main"
+    "doc";
+}
+.lesson-panes {
+  grid-area: panes;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lesson-rail {
+  grid-area: rail;
+  min-width: 0;
+}
+.lesson-main {
+  grid-area: main;
+}
+.lesson-doc {
+  grid-area: doc;
+}
+.lesson-shell[data-pane="lesson"] > .lesson-doc,
+.lesson-shell[data-pane="document"] > .lesson-main {
+  display: none;
+}
+
+/* The step list. A wrapping bar of chips, a column once there is room. */
+.lesson-rail-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.lesson-rail-list > li > button {
+  width: auto;
+}
+
+@media (min-width: 900px) {
+  .lesson-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "rail rail"
+      "main doc";
+  }
+  .lesson-panes {
+    display: none;
+  }
+  .lesson-shell[data-pane] > .lesson-doc {
+    display: block;
+  }
+  .lesson-shell[data-pane] > .lesson-main {
+    display: flex;
+  }
+}
+
+@media (min-width: 1200px) {
+  .lesson-shell {
+    grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "rail main doc";
+  }
+  .lesson-rail {
+    position: sticky;
+    top: 16px;
+  }
+  .lesson-rail-list {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .lesson-rail-list > li > button {
+    width: 100%;
+  }
+}
+
+/* The sentence a step is about, in the parsed text. The selection token, so no
+   new colour enters the palette for it. */
+.lesson-mark {
+  background: var(--selection);
+  color: var(--text-primary);
+  border-radius: var(--radius-control);
 }
 
 /* The chunk map: one bar per chunk, height by length. */

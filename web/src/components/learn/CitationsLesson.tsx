@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils"
 
 import "@/components/inspectors/inspectors.css"
 
-import { LessonEnd } from "./LessonEnd"
+import { LessonShell, type LessonStep } from "./LessonShell"
 
 /**
- * Learn > How citations work: one worked example, stepped through. The source
- * sentences are real sentences from the sample document, so the last visual
- * step finds them on its real page. The support scores are made up for the
- * example, and the page says so.
+ * Learn > How citations work: one worked example, stepped through in the shared
+ * lesson shell. The source sentences are real sentences from the sample
+ * document, so the last visual step finds them on its real page. The support
+ * scores are made up for the example, and the page says so.
  */
 
 export interface CitationsLessonProps {
@@ -227,12 +227,15 @@ function Labels({ onTry }: { onTry: () => void }) {
 interface Step {
   title: string
   words: string[]
+  /** The real sentence of the sample this step is about, marked in the document. */
+  sentence?: string
   visual: (p: CitationsLessonProps) => ReactNode
 }
 
 const STEPS: Step[] = [
   {
     title: "We number every sentence",
+    sentence: SENTENCE["1.2"],
     words: [
       `The search found two chunks for the question "${QUESTION}".`,
       "We split each chunk into sentences and give each one a number. The number 2.2 means the second sentence of chunk 2.",
@@ -265,6 +268,7 @@ const STEPS: Step[] = [
   },
   {
     title: "We find it on the page",
+    sentence: SENTENCE["2.2"],
     words: [
       "We know exactly where every sentence sits in the document, so we can find its page and draw a box around its lines.",
       "Click a claim to see where it lands in the sample document.",
@@ -281,72 +285,53 @@ const STEPS: Step[] = [
   },
 ]
 
+const RECAP = [
+  "Every sentence in the retrieved chunks is given a number.",
+  "The model writes that number after each claim, so it points at a sentence instead of copying it.",
+  "We look every number up, and throw away the ones that name a sentence that does not exist.",
+  "We score how well the named sentence supports the claim, and label every claim so you can check it yourself.",
+]
+
 export function CitationsLesson(p: CitationsLessonProps) {
   const [i, setI] = useState(0)
-  const step = STEPS[i]
-  return (
-    <article className="flex min-w-0 flex-col gap-6">
-      <header className="flex max-w-[68ch] flex-col gap-2">
-        <h1 className="text-xl font-semibold">How citations work</h1>
-        <p className="m-0 text-base leading-[1.65]">
-          A citation connects a claim in the answer to the place in your document it came from. You can click it and check the answer yourself, instead
-          of trusting it.
-        </p>
-        <p className="m-0 text-base leading-[1.65]">
-          Only Claude can return citations on its own. For every other model, we use one simple idea: the model points, and we quote. Step through it
-          below.
-        </p>
-      </header>
-
-      <div role="tablist" aria-label="Steps" className="flex flex-wrap gap-2">
-        {STEPS.map((s, k) => (
-          <button
-            key={s.title}
-            type="button"
-            role="tab"
-            id={`cite-tab-${k}`}
-            aria-selected={k === i}
-            aria-controls="cite-panel"
-            onClick={() => setI(k)}
-            className={cn(
-              "h-control rounded-control border px-2 text-xs",
-              k === i ? "border-fg bg-fg text-surface" : k < i ? "border-hairline bg-surface text-fg" : "border-hairline bg-surface text-fg-muted hover:text-fg",
-            )}
-          >
-            {s.title}
-          </button>
-        ))}
-      </div>
-
-      <section
-        role="tabpanel"
-        id="cite-panel"
-        aria-labelledby={`cite-tab-${i}`}
-        className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]"
-      >
+  const steps: LessonStep[] = STEPS.map((s) => ({
+    id: s.title,
+    title: s.title,
+    sentence: s.sentence ?? null,
+    body: (
+      <div className="flex min-w-0 flex-col gap-4">
         <div className="flex max-w-[68ch] flex-col gap-3">
-          <h2 className="m-0 text-lg font-semibold">{step.title}</h2>
-          {step.words.map((w) => (
+          {s.words.map((w) => (
             <p key={w} className="m-0 text-base leading-[1.65]">
               {w}
             </p>
           ))}
         </div>
-        <div className="min-w-0 rounded-panel border border-hairline bg-surface p-4">{step.visual(p)}</div>
-      </section>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button variant="outline" disabled={i === 0} onClick={() => setI(i - 1)}>
-          Back
-        </Button>
-        <Button variant="outline" disabled={i === STEPS.length - 1} onClick={() => setI(i + 1)}>
-          Next step
-        </Button>
+        <div className="min-w-0 rounded-panel border border-hairline bg-surface p-4">{s.visual(p)}</div>
       </div>
+    ),
+  }))
 
-      <div className="border-t border-hairline pt-6">
-        <LessonEnd slug="citations" />
-      </div>
-    </article>
+  return (
+    <LessonShell
+      title="How citations work"
+      slug="citations"
+      sha={p.sha}
+      steps={steps}
+      step={i}
+      onStep={setI}
+      recap={RECAP}
+      intro={
+        <>
+          <p className="m-0 text-base leading-[1.65]">
+            A citation connects a claim in the answer to the place in your document it came from. You can click it and check the answer yourself,
+            instead of trusting it.
+          </p>
+          <p className="m-0 text-base leading-[1.65]">
+            Only Claude can return citations on its own. For every other model, we use one simple idea: the model points, and we quote.
+          </p>
+        </>
+      }
+    />
   )
 }

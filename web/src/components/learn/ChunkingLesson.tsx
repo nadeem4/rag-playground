@@ -13,12 +13,16 @@ import { cn } from "@/lib/utils"
 
 import { ChunkCards } from "./ChunkCards"
 import { LearnHint } from "./LearnHint"
-import { LessonEnd } from "./LessonEnd"
+import { LessonShell, type LessonStep } from "./LessonShell"
 
 /**
  * Learn > Chunking: predict, then see. Every answer runs the REAL chunker on
  * the sample (parsed as the backend says) through the run API, and the result
  * is read from those real chunks. The sliders explore the same way.
+ *
+ * The lesson is five steps in the shared shell: read the idea, predict the
+ * first challenge, see what the chunker really did, work through the other
+ * challenges, and read the recap.
  */
 
 export interface ChunkingLessonProps {
@@ -61,6 +65,17 @@ const HOW_IT_WORKS = [
   "Getting a prediction wrong is fine, and is the point. The surprise is what shows you where the boundaries fall.",
 ]
 
+const RECAP = [
+  "A document is cut into chunks before anything can search it.",
+  "The chunk size decides whether the answer sentence stays whole or is split in two.",
+  "Overlap repeats the end of one chunk at the start of the next, so a sentence on a border survives.",
+  "Every chunk you saw came from the real chunker running on the sample, with the settings you chose.",
+]
+
+/** The step a challenge is asked on: the first one alone, the rest together. */
+const PREDICT = 1
+const MORE = 3
+
 export function ChunkingLesson({ registry, sha, pollMs, debounceMs = 250 }: ChunkingLessonProps) {
   const [data, setData] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: LearnChunking }>({
     kind: "loading",
@@ -78,36 +93,39 @@ export function ChunkingLesson({ registry, sha, pollMs, debounceMs = 250 }: Chun
   const stages = useStages()
   const lead = stages.chunk?.lesson ?? []
 
-  return (
-    <article className="flex min-w-0 flex-col gap-6">
-      <header className="flex max-w-[68ch] flex-col gap-2">
-        <h1 className="text-xl font-semibold">Chunking</h1>
-        {[...lead, ...HOW_IT_WORKS].map((p) => (
-          <p key={p} className="m-0 text-base leading-[1.65]">
-            {p}
-          </p>
-        ))}
-      </header>
-      {data.kind === "loading" ? (
-        <p role="status" className="text-sm text-fg-muted">
-          Loading the chunking lesson
-        </p>
-      ) : data.kind === "error" ? (
-        <div role="alert" className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-danger">Could not load the chunking lesson</p>
-          <p className="font-mono text-xs text-fg-muted">{data.message}</p>
-        </div>
-      ) : (
-        <Lab registry={registry} sha={sha} data={data.data} pollMs={pollMs} debounceMs={debounceMs} />
-      )}
-      <div className="border-t border-hairline pt-6">
-        <LessonEnd slug="chunking" />
+  if (data.kind === "loading") {
+    return (
+      <p role="status" className="text-sm text-fg-muted">
+        Loading the chunking lesson
+      </p>
+    )
+  }
+  if (data.kind === "error") {
+    return (
+      <div role="alert" className="flex flex-col gap-1">
+        <p className="text-sm font-medium text-danger">Could not load the chunking lesson</p>
+        <p className="font-mono text-xs text-fg-muted">{data.message}</p>
       </div>
-    </article>
-  )
+    )
+  }
+  return <Lab registry={registry} sha={sha} data={data.data} lead={lead} pollMs={pollMs} debounceMs={debounceMs} />
 }
 
-function Lab({ registry, sha, data, pollMs, debounceMs }: { registry: Registry; sha: string | null; data: LearnChunking; pollMs?: number; debounceMs: number }) {
+function Lab({
+  registry,
+  sha,
+  data,
+  lead,
+  pollMs,
+  debounceMs,
+}: {
+  registry: Registry
+  sha: string | null
+  data: LearnChunking
+  lead: string[]
+  pollMs?: number
+  debounceMs: number
+}) {
   const first = data.challenges[0]
   const [settings, setSettings] = useState<Settings & { delay: number }>(() => ({ strategy: first?.strategy ?? "", config: first?.config ?? {}, delay: 0 }))
   // Nothing runs until the first prediction or slider move: no spoilers.
@@ -115,6 +133,7 @@ function Lab({ registry, sha, data, pollMs, debounceMs }: { registry: Registry; 
   const [run, setRun] = useState<Run | null>(null)
   const [index, setIndex] = useState(0)
   const [answer, setAnswer] = useState<Answer | null>(null)
+  const [step, setStep] = useState(0)
 
   const { size, overlap } = sizeAndOverlap(settings.config)
   const invalid = size && overlap && Number(settings.config[overlap]) >= Number(settings.config[size]) ? { size, overlap } : null
@@ -161,53 +180,126 @@ function Lab({ registry, sha, data, pollMs, debounceMs }: { registry: Registry; 
     setLive(true)
   }
 
+  /** The other challenges start at the second one, and each step asks its own. */
+  const goto = (next: number) => {
+    if (next === MORE && index === 0) {
+      setIndex(1)
+      setAnswer(null)
+    }
+    if (next === PREDICT && index !== 0) {
+      setIndex(0)
+      setAnswer(null)
+    }
+    setStep(next)
+  }
+
   const strategies = [...new Set(data.challenges.map((c) => c.strategy))]
   const shown = run?.kind === "ready" ? run : run?.kind === "loading" ? run.last : undefined
 
-  return (
-    <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
-      <Controls
-        registry={registry}
-        strategies={strategies}
-        settings={settings}
-        invalid={invalid}
-        onStrategy={(s) => {
-          const c = data.challenges.find((x) => x.strategy === s)
-          explore({ strategy: s, config: c?.config ?? {} }, 0)
-        }}
-        onField={(k, v) => explore({ strategy: settings.strategy, config: { ...settings.config, [k]: v } }, debounceMs)}
-      />
-      <div className="flex min-w-0 flex-col gap-6">
-        <Challenge
-          data={data}
-          index={index}
-          answer={answer}
-          disabled={!sha}
-          running={Boolean(answer && !answer.result && run?.kind === "loading")}
-          onChoose={choose}
-          onNext={() => {
-            setIndex((i) => (i + 1) % data.challenges.length)
-            setAnswer(null)
-          }}
-        />
-        {run?.kind === "error" ? (
-          <div role="alert" className="flex flex-col gap-1">
-            <p className="m-0 text-sm font-medium text-danger">The chunker could not run</p>
-            <p className="m-0 font-mono text-xs break-words text-fg-muted">{run.message}</p>
-          </div>
-        ) : null}
-        {shown ? (
-          <Result done={shown} data={data} loading={run?.kind === "loading"} />
-        ) : !run ? (
-          <p className="m-0 text-sm text-fg-muted">Make a prediction to run the chunker on the sample. Its real chunks appear here.</p>
-        ) : run.kind === "loading" ? (
-          <p role="status" className="m-0 text-sm text-fg-muted">
-            Running the chunker on the sample
-          </p>
-        ) : null}
-      </div>
-    </div>
+  const controls = (
+    <Controls
+      registry={registry}
+      strategies={strategies}
+      settings={settings}
+      invalid={invalid}
+      onStrategy={(s) => {
+        const c = data.challenges.find((x) => x.strategy === s)
+        explore({ strategy: s, config: c?.config ?? {} }, 0)
+      }}
+      onField={(k, v) => explore({ strategy: settings.strategy, config: { ...settings.config, [k]: v } }, debounceMs)}
+    />
   )
+
+  const error =
+    run?.kind === "error" ? (
+      <div role="alert" className="flex flex-col gap-1">
+        <p className="m-0 text-sm font-medium text-danger">The chunker could not run</p>
+        <p className="m-0 font-mono text-xs break-words text-fg-muted">{run.message}</p>
+      </div>
+    ) : null
+
+  const result = shown ? (
+    <Result done={shown} data={data} loading={run?.kind === "loading"} />
+  ) : !run ? (
+    <p className="m-0 text-sm text-fg-muted">Make a prediction to run the chunker on the sample. Its real chunks appear here.</p>
+  ) : run.kind === "loading" ? (
+    <p role="status" className="m-0 text-sm text-fg-muted">
+      Running the chunker on the sample
+    </p>
+  ) : null
+
+  const challenge = (
+    <Challenge
+      data={data}
+      index={index}
+      answer={answer}
+      disabled={!sha}
+      running={Boolean(answer && !answer.result && run?.kind === "loading")}
+      onChoose={choose}
+      onNext={() => {
+        setIndex((i) => (i % (data.challenges.length - 1)) + 1)
+        setAnswer(null)
+      }}
+    />
+  )
+
+  const steps: LessonStep[] = [
+    {
+      id: "idea",
+      title: "Read the idea",
+      sentence: data.answer_sentence,
+      body: (
+        <div className="flex max-w-[68ch] flex-col gap-2">
+          {[...lead, ...HOW_IT_WORKS].map((p) => (
+            <p key={p} className="m-0 text-base leading-[1.65]">
+              {p}
+            </p>
+          ))}
+          <p className="m-0 text-base leading-[1.65]">
+            The sentence that answers &ldquo;{data.question}&rdquo; is marked in the document beside this step. Every challenge asks what happens to it.
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: "predict",
+      title: "Predict",
+      sentence: data.answer_sentence,
+      body: (
+        <>
+          {challenge}
+          {error}
+        </>
+      ),
+    },
+    {
+      id: "result",
+      title: "See the result",
+      sentence: data.answer_sentence,
+      body: (
+        <>
+          {error}
+          {result}
+          {controls}
+        </>
+      ),
+    },
+    {
+      id: "more",
+      title: "The other challenges",
+      sentence: data.answer_sentence,
+      body: (
+        <>
+          {challenge}
+          {error}
+          {result}
+          {controls}
+        </>
+      ),
+    },
+  ]
+
+  return <LessonShell title="Chunking" slug="chunking" sha={sha} steps={steps} step={step} onStep={goto} recap={RECAP} />
 }
 
 function Controls({
@@ -230,7 +322,7 @@ function Controls({
   const fields = Object.keys(settings.config).filter((k) => FIELDS[k])
   return (
     <section aria-label="Settings" className="flex min-w-0 flex-col gap-4 rounded-panel border border-hairline bg-surface-elevated p-4">
-      <h2 className="m-0 text-lg font-semibold">Settings</h2>
+      <h3 className="m-0 text-lg font-semibold">Settings</h3>
       <div className="flex flex-col gap-1">
         <label htmlFor={`${id}-strategy`} className="text-sm font-medium">
           Strategy
@@ -265,7 +357,8 @@ function Controls({
               step={f.step}
               value={v}
               onChange={(e) => onField(k, Number(e.target.value))}
-              className="w-full [accent-color:var(--text-primary)]"
+              // h-control keeps the thumb a comfortable target on a phone.
+              className="h-control w-full [accent-color:var(--text-primary)]"
             />
             {invalid?.overlap === k ? (
               <p role="status" className="m-0 text-xs text-danger">
@@ -305,7 +398,7 @@ function Challenge({
   return (
     <section aria-label="Challenge" aria-live="polite" className="flex min-w-0 flex-col gap-3 rounded-panel border border-hairline bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="m-0 text-lg font-semibold">Your turn: predict</h2>
+        <h3 className="m-0 text-lg font-semibold">Your turn: predict</h3>
         <span className="text-xs text-fg-muted">
           Challenge {index + 1} of {data.challenges.length}: {ch.title}
         </span>
@@ -337,7 +430,7 @@ function Challenge({
           <p className="m-0">The settings have changed to match. Move them yourself to explore.</p>
         </div>
       ) : null}
-      {answer?.result ? (
+      {answer?.result && index > 0 ? (
         <div>
           <Button variant="outline" onClick={onNext}>
             {last ? "Start again" : "Next challenge"}
@@ -361,7 +454,7 @@ function Result({ done, data, loading }: { done: Done; data: LearnChunking; load
   return (
     <div className={cn("flex min-w-0 flex-col gap-4", loading && "opacity-60")} aria-busy={loading || undefined}>
       <section aria-label="What you are seeing" className="flex flex-col gap-2">
-        <h2 className="m-0 text-lg font-semibold">What you are seeing</h2>
+        <h3 className="m-0 text-lg font-semibold">What you are seeing</h3>
         <ul className="m-0 flex max-w-[68ch] flex-col gap-1 pl-4 text-sm">
           {lines.map((l) => (
             <li key={l}>{l}</li>

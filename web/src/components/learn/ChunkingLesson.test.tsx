@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Chunk, ChunkSet, LearnChunking } from "@/api/types"
+import { clearPdfCaches } from "@/api/usePdf"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
 import { clearChunkRunCache } from "@/learn/runChunks"
@@ -68,6 +69,7 @@ beforeEach(() => {
   posts = []
   failRuns = false
   clearChunkRunCache()
+  clearPdfCaches()
   outcome = (c) => {
     if (c.overlap) return OVERLAPPED
     if (c.chunk_size === 300) return WHOLE
@@ -78,6 +80,9 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
       if (url === "/api/learn/chunking") return ok(DATA)
+      if (url === "/api/learn/document") return ok({ filename: "chunking-primer.pdf", page_count: 3, text: DOC })
+      if (url === `/api/sources/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
+      if (url.startsWith(`/api/sources/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
       if (url === "/api/stages") return ok({ chunk: { what: "x", lesson: ["Before a search can find anything, the document has to be cut."] } })
       if (url === "/api/runs" && init?.method === "POST") {
         posts.push(JSON.parse(String(init.body)))
@@ -102,18 +107,39 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+const rail = () => screen.getByRole("navigation", { name: "Steps" })
+const railStep = (name: RegExp | string) => within(rail()).getByRole("button", { name })
+
+/** Open the lesson and walk to the step that asks challenge 1. */
 async function open() {
   render(<ChunkingLesson registry={TEST_REGISTRY} sha={SHA} pollMs={1} debounceMs={20} />)
+  await screen.findByRole("navigation", { name: "Steps" })
+  fireEvent.click(railStep(/Predict/))
   return await screen.findByRole("region", { name: "Challenge" })
+}
+
+/** The step that shows the chunker's real output. */
+function result() {
+  fireEvent.click(railStep(/See the result/))
+  return screen.getByRole("region", { name: "The step" })
 }
 
 const lastChunkConfig = () => posts[posts.length - 1].graph.nodes.find((n) => n.id === "chunk")!
 
 describe("Chunking lesson", () => {
-  it("says how the lesson works, and that a wrong prediction is the point", async () => {
-    await open()
+  it("opens on the idea, in a shell of steps with the document beside it", async () => {
+    render(<ChunkingLesson registry={TEST_REGISTRY} sha={SHA} pollMs={1} debounceMs={20} />)
+    await screen.findByRole("navigation", { name: "Steps" })
+    expect(within(rail()).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "1Read the idea",
+      "2Predict",
+      "3See the result",
+      "4The other challenges",
+      "5Recap",
+    ])
     expect(screen.getByText(/predict what a setting will do/)).toBeTruthy()
     expect(screen.getByText(/Getting a prediction wrong is fine, and is the point\./)).toBeTruthy()
+    expect(screen.getByRole("region", { name: "The document" })).toBeTruthy()
   })
 
   it("asks challenge 1 as a question, under a label that says it is the reader's turn", async () => {
@@ -136,27 +162,29 @@ describe("Chunking lesson", () => {
     const chunk = lastChunkConfig()
     expect(chunk.transform).toBe("recursive_character")
     expect(chunk.config).toEqual({ chunk_size: 60, chunk_overlap: 0 })
-    // The real chunks are shown, the answer underlined, and the cut is noted.
-    const list = screen.getByRole("list", { name: "Chunks" })
+    // Every choice is locked once answered.
+    expect((within(ch).getByRole("button", { name: "Yes, it stays whole" }) as HTMLButtonElement).disabled).toBe(true)
+    // The next step shows the real chunks, the answer underlined, and the cut noted.
+    const step = result()
+    const list = within(step).getByRole("list", { name: "Chunks" })
     expect(within(list).getAllByRole("listitem")).toHaveLength(2)
     expect(list.querySelectorAll("[data-answer]").length).toBe(2)
     expect(within(list).getByText("The answer sentence is cut here and continues in chunk 2.")).toBeTruthy()
-    // Every choice is locked once answered.
-    expect((within(ch).getByRole("button", { name: "Yes, it stays whole" }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it("draws the boundaries on the document, with the answer sentence still marked", async () => {
     const ch = await open()
     fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
-    await waitFor(() => expect(screen.getByRole("list", { name: "Chunks" })).toBeTruthy())
-    fireEvent.click(screen.getByRole("tab", { name: "Document with boundaries" }))
-    expect(screen.queryByRole("list", { name: "Chunks" })).toBeNull()
-    const reading = document.querySelector("[data-reading]")!
+    await waitFor(() => expect(within(ch).getByText("You were right.")).toBeTruthy())
+    const step = result()
+    fireEvent.click(within(step).getByRole("tab", { name: "Document with boundaries" }))
+    expect(within(step).queryByRole("list", { name: "Chunks" })).toBeNull()
+    const reading = step.querySelector("[data-reading]")!
     // The whole parsed text is drawn once, cut into segments by the chunks.
     expect([...reading.querySelectorAll("[data-seg]")].map((s) => s.textContent).join("")).toBe(DOC)
     expect([...reading.querySelectorAll("[data-answer]")].map((m) => m.textContent).join("")).toBe(DOC.slice(A0, A0 + ANSWER.length))
-    fireEvent.click(screen.getByRole("tab", { name: "Chunk cards" }))
-    expect(screen.getByRole("list", { name: "Chunks" })).toBeTruthy()
+    fireEvent.click(within(step).getByRole("tab", { name: "Chunk cards" }))
+    expect(within(step).getByRole("list", { name: "Chunks" })).toBeTruthy()
   })
 
   it("shows the real result when it disagrees with what the challenge expected", async () => {
@@ -169,11 +197,15 @@ describe("Chunking lesson", () => {
   })
 
   it("tints repeated text when the chunks overlap", async () => {
-    const ch = await open()
-    for (let i = 0; i < 3; i++) {
+    await open()
+    // The other challenges step starts at challenge 2 and walks on to the last.
+    fireEvent.click(railStep(/The other challenges/))
+    let ch = screen.getByRole("region", { name: "Challenge" })
+    for (let i = 0; i < 2; i++) {
       fireEvent.click(within(ch).getAllByRole("button")[0])
       await waitFor(() => expect(within(ch).getByRole("button", { name: "Next challenge" })).toBeTruthy())
       fireEvent.click(within(ch).getByRole("button", { name: "Next challenge" }))
+      ch = screen.getByRole("region", { name: "Challenge" })
     }
     expect(within(ch).getByText(/Challenge 4 of 4: Overlap to the rescue/)).toBeTruthy()
     fireEvent.click(within(ch).getByRole("button", { name: "Yes, in one chunk" }))
@@ -187,6 +219,7 @@ describe("Chunking lesson", () => {
     const ch = await open()
     fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
     await waitFor(() => expect(within(ch).getByText("You were right.")).toBeTruthy())
+    result()
     const before = posts.length
     const size = screen.getByLabelText("Chunk size") as HTMLInputElement
     fireEvent.change(size, { target: { value: "200" } })
@@ -202,10 +235,13 @@ describe("Chunking lesson", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/ValueError: bad settings/))
   })
 
-  it("ends with Mark as done and Next: How citations work", async () => {
+  it("recaps what the lesson showed, then offers Mark as done and Next: How citations work", async () => {
     await open()
-    expect(screen.getByRole("link", { name: "Next: How citations work" }).getAttribute("href")).toBe("/learn/citations")
-    fireEvent.click(screen.getByRole("link", { name: "Mark as done" }))
+    fireEvent.click(railStep(/Recap/))
+    const step = screen.getByRole("region", { name: "The step" })
+    expect(within(step).getByText("Overlap repeats the end of one chunk at the start of the next, so a sentence on a border survives.")).toBeTruthy()
+    expect(within(step).getByRole("link", { name: "Next: How citations work" }).getAttribute("href")).toBe("/learn/citations")
+    fireEvent.click(within(step).getByRole("link", { name: "Mark as done" }))
     expect(readProgress()).toMatchObject({ chunking: true })
   })
 })

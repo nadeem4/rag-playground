@@ -1,7 +1,6 @@
 import { ApiKeyProvider } from "@/api/apiKey"
 import { AppHeader } from "@/components/AppHeader"
 import { Compare } from "@/routes/Compare"
-import { Forms } from "@/routes/Forms"
 import { Inspect } from "@/routes/Inspect"
 import { Shell } from "@/routes/Shell"
 import { Specimen } from "@/routes/Specimen"
@@ -12,19 +11,23 @@ import { Specimen } from "@/routes/Specimen"
 // "/" is Build (the pipeline column, Shell) and /compare is the sweep view.
 // They share the pipeline graph through per-viewer storage (state/graph.ts).
 //
-// /forms and /inspect are development galleries that render components against
-// real-engine fixtures, so each can be built and checked in both themes before
-// the pipeline column wires them to live runs.
+// /inspect and /design are development pages, reached from the header's Dev
+// menu. /specimen is the design page's old path, kept so no old link breaks.
+// Any other path, including the removed /forms, falls through to Build.
 const ROUTES: Record<string, () => React.JSX.Element> = {
   "/compare": Compare,
+  "/design": Specimen,
   "/specimen": Specimen,
-  "/forms": Forms,
   "/inspect": Inspect,
+}
+
+export function pageFor(path: string): () => React.JSX.Element {
+  return ROUTES[path] ?? Shell
 }
 
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/"
-  const Page = ROUTES[path] ?? Shell
+  const Page = pageFor(path)
   return (
     // The typed API key lives in this provider's memory only (plan I-8).
     <ApiKeyProvider>

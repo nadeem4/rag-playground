@@ -1,0 +1,103 @@
+/*
+ * Home and the lessons: pages a person reads, not the workbench. They follow
+ * the Learn and Home dials in the plan (variance 5, motion 4, density 4), so
+ * they get a display size and more space than the 20px and 24px caps allow.
+ * Everything else still comes from tokens.css. Documented in
+ * docs/superpowers/design-system.md, section 5.
+ */
+
+.learn-page {
+  width: 100%;
+  max-width: 1080px;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+
+.learn-display {
+  margin: 0;
+  font-size: clamp(30px, 4.4vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.learn-title {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.learn-h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.learn-lead {
+  margin: 0;
+  max-width: 60ch;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.learn-top {
+  padding-block: 48px 24px;
+}
+
+.learn-band {
+  padding-block: 40px 56px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* The chunk map: one bar per chunk, height by length. */
+.chunk-map {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 3px;
+  align-items: end;
+}
+/* A chunk's role in the run: the top pick, one of the final picks, or unused. */
+[data-chunk] {
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+[data-chunk="kept"] {
+  background: var(--kept);
+  border-color: var(--kept-mark);
+}
+[data-chunk="top"] {
+  background: var(--kept-mark);
+  border-color: var(--kept-mark);
+}
+.chunk-map button[data-chunk] {
+  cursor: pointer;
+}
+.chunk-map button[aria-pressed="true"] {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+/* The step's words stay beside its view while the view scrolls past. */
+@media (min-width: 1024px) {
+  .learn-sticky {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .learn-page a,
+  .learn-page button {
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+}

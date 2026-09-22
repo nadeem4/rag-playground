@@ -8,10 +8,12 @@ import { ApiKeyControl } from "./ApiKeyControl"
 import { ThemeToggle } from "./ThemeToggle"
 
 const PRIMARY = [
-  { href: "/", label: "Build" },
+  { href: "/", label: "Lessons" },
+  { href: "/build", label: "Build" },
   { href: "/compare", label: "Compare" },
-  { href: "/learn", label: "Learn" },
 ]
+
+const REPO = "https://github.com/nadeem4/rag-playground"
 
 /** Development pages: real components against real-engine fixtures. */
 const DEV = [
@@ -23,8 +25,8 @@ const DEV = [
 const DEV_PATHS = new Set(["/inspect", "/design", "/specimen"])
 
 function NavLink({ href, label, path }: { href: string; label: string; path: string }) {
-  // Learn has a page per topic under /learn.
-  const current = path === href || (href === "/learn" && path.startsWith("/learn/"))
+  // Home lists the lessons; each lesson has its own page under /learn.
+  const current = path === href || (href === "/" && path.startsWith("/learn/"))
   return (
     <a
       href={href}
@@ -107,11 +109,16 @@ export function AppHeader({ path }: { path: string }) {
   return (
     <header className="flex h-[40px] shrink-0 items-center justify-between gap-2 border-b border-hairline bg-surface px-3">
       <div className="flex min-w-0 items-center gap-2 md:gap-4">
-        <span className="text-sm font-semibold whitespace-nowrap">RAG Playground</span>
+        <a href="/" className="text-sm font-semibold whitespace-nowrap text-fg no-underline">
+          RAG Playground
+        </a>
         <nav className="flex items-center gap-1" aria-label="Main">
           {PRIMARY.map((l) => (
             <NavLink key={l.href} {...l} path={path} />
           ))}
+          <a href={REPO} className="flex h-row-compact items-center rounded-control px-2 text-sm text-fg-muted hover:text-fg">
+            GitHub
+          </a>
         </nav>
         <DevMenu path={path} />
       </div>

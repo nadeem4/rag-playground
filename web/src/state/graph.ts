@@ -171,6 +171,14 @@ export function chatSampleGraph(registry: Registry, source: { sha: string; filen
 }
 
 /**
+ * The sample graph with an MMR reranker before Search: the run the end-to-end
+ * lesson recorded ("Run it yourself" on Learn > How RAG works, end to end).
+ */
+export function e2eSampleGraph(registry: Registry, source: { sha: string; filename: string }): PipelineGraph {
+  return addReranker(sampleGraph(registry, source), registry)
+}
+
+/**
  * Add any default stage a stored graph lacks (one saved before retrieval
  * existed), then wire the new cards. A complete graph comes back unchanged.
  */

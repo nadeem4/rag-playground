@@ -9,6 +9,7 @@ import {
   defaultConfig,
   SAMPLE_QUESTION,
   chatSampleGraph,
+  e2eSampleGraph,
   sampleGraph,
   initialGraph,
   loadGraph,
@@ -249,5 +250,28 @@ describe("chat sample graph (Learn > How citations work > Try it yourself)", () 
   it("falls back to the plain sample graph when the registry has no chat step", () => {
     const g = chatSampleGraph(R, SRC)
     expect(g.nodes.find((n) => n.stage === "use_case")!.transform).toBe("search")
+  })
+})
+
+describe("end-to-end sample graph (Learn > How RAG works > Run it yourself)", () => {
+  const LIVE = liveRegistry as unknown as Registry
+  const SRC = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
+
+  it("is the sample graph with MMR between Retrieve and Search, the run the lesson recorded", () => {
+    const g = e2eSampleGraph(LIVE, SRC)
+    expect(columnOrder(g).map((n) => [n.stage, n.transform])).toEqual([
+      ["source", "upload"],
+      ["parse", "docling"],
+      ["clean", "dedupe_blocks"],
+      ["chunk", "recursive_character"],
+      ["index", "lancedb"],
+      ["query", "text"],
+      ["retrieve", "hybrid_rrf"],
+      ["rerank", "mmr"],
+      ["use_case", "search"],
+    ])
+    expect(edgeSet(g)).toContain("retrieve->rerank_1:result")
+    expect(edgeSet(g)).toContain("rerank_1->use_case:result")
+    expect(g.nodes.find((n) => n.stage === "rerank")!.config).toEqual(defaultConfig(LIVE.rerank!.mmr))
   })
 })

@@ -6,6 +6,8 @@ import { TEST_REGISTRY } from "@/state/testRegistry"
 
 import { clearChunkRunCache } from "@/learn/runChunks"
 
+import { readProgress } from "@/state/lessons"
+
 import { ChunkingLesson } from "./ChunkingLesson"
 
 const SHA = "ef".repeat(32)
@@ -174,5 +176,12 @@ describe("Chunking lesson", () => {
     const ch = await open()
     fireEvent.click(within(ch).getByRole("button", { name: "It gets cut" }))
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/ValueError: bad settings/))
+  })
+
+  it("ends with Mark as done and Next: How citations work", async () => {
+    await open()
+    expect(screen.getByRole("link", { name: "Next: How citations work" }).getAttribute("href")).toBe("/learn/citations")
+    fireEvent.click(screen.getByRole("link", { name: "Mark as done" }))
+    expect(readProgress()).toMatchObject({ chunking: true })
   })
 })

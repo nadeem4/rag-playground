@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils"
 
 import "@/components/inspectors/inspectors.css"
 
+import { LessonEnd } from "./LessonEnd"
+
 /**
  * Learn > How citations work: one worked example, stepped through. The source
  * sentences are real sentences from the sample document, so the last visual
@@ -340,6 +342,10 @@ export function CitationsLesson(p: CitationsLessonProps) {
         <Button variant="outline" disabled={i === STEPS.length - 1} onClick={() => setI(i + 1)}>
           Next step
         </Button>
+      </div>
+
+      <div className="border-t border-hairline pt-6">
+        <LessonEnd slug="citations" />
       </div>
     </article>
   )

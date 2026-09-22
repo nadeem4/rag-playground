@@ -2,7 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider } from "@/api/apiKey"
-import { pageFor } from "@/App"
+import { canonicalPath, pageFor } from "@/App"
+import { Home } from "@/routes/Home"
 import { Inspect } from "@/routes/Inspect"
 import { Learn, topicFor } from "@/routes/Learn"
 import { readLearnMode, resetLearnModeForTests } from "@/state/learnMode"
@@ -36,14 +37,27 @@ function header(path = "/") {
 const devButton = () => screen.getByRole("button", { name: "Dev" })
 
 describe("AppHeader", () => {
-  it("shows Build, Compare and Learn as primary navigation", () => {
+  it("shows Lessons, Build, Compare and GitHub as primary navigation", () => {
     header()
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Build", "Compare", "Learn"])
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/compare", "/learn"])
+    expect(links.map((l) => l.textContent)).toEqual(["Lessons", "Build", "Compare", "GitHub"])
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/build", "/compare", "https://github.com/nadeem4/rag-playground"])
     expect(screen.queryByText("Forms")).toBeNull()
     expect(screen.queryByText("Tokens")).toBeNull()
+  })
+
+  it("links the brand to Home", () => {
+    header("/build")
+    expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/")
+  })
+
+  it("marks Build as current on /build and Lessons on Home", () => {
+    header("/build")
+    expect(screen.getByRole("link", { name: "Build" }).getAttribute("aria-current")).toBe("page")
+    cleanup()
+    header("/")
+    expect(screen.getByRole("link", { name: "Lessons" }).getAttribute("aria-current")).toBe("page")
   })
 
   it("keeps the dev pages out of sight until the Dev menu opens", () => {
@@ -70,9 +84,9 @@ describe("AppHeader", () => {
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
   })
 
-  it("marks Learn as current on any Learn topic", () => {
+  it("marks Lessons as current on any lesson", () => {
     header("/learn/citations")
-    expect(screen.getByRole("link", { name: "Learn" }).getAttribute("aria-current")).toBe("page")
+    expect(screen.getByRole("link", { name: "Lessons" }).getAttribute("aria-current")).toBe("page")
   })
 
   it("has a Learn mode switch, on for a first visit, remembered when turned off", () => {
@@ -97,22 +111,29 @@ describe("routes", () => {
     expect(pageFor("/specimen")).toBe(Specimen)
   })
 
-  it("renders Learn at /learn and at each topic", () => {
-    expect(pageFor("/learn")).toBe(Learn)
+  it("renders Home at /, Build at /build, and each lesson under /learn", () => {
+    expect(pageFor("/")).toBe(Home)
+    expect(pageFor("/build")).toBe(Shell)
+    expect(pageFor("/learn/end-to-end")).toBe(Learn)
     expect(pageFor("/learn/chunking")).toBe(Learn)
     expect(pageFor("/learn/citations")).toBe(Learn)
-    expect(topicFor("/learn")).toBe("chunking")
+    expect(topicFor("/learn/end-to-end")).toBe("end-to-end")
     expect(topicFor("/learn/citations")).toBe("citations")
-    expect(topicFor("/learn/nope")).toBe("chunking")
+    expect(topicFor("/learn/nope")).toBe("end-to-end")
+  })
+
+  it("redirects /learn to Home", () => {
+    expect(canonicalPath("/learn")).toBe("/")
+    expect(pageFor(canonicalPath("/learn"))).toBe(Home)
+    expect(canonicalPath("/build")).toBe("/build")
   })
 
   it("keeps /inspect", () => {
     expect(pageFor("/inspect")).toBe(Inspect)
   })
 
-  it("no longer has a /forms gallery: it falls through to Build like any unknown path", () => {
-    expect(pageFor("/forms")).toBe(Shell)
-    expect(pageFor("/nope")).toBe(Shell)
-    expect(pageFor("/")).toBe(Shell)
+  it("sends an unknown path, including the removed /forms, to Home", () => {
+    expect(pageFor("/forms")).toBe(Home)
+    expect(pageFor("/nope")).toBe(Home)
   })
 })

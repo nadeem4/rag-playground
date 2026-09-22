@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 
 import { ChunkCards } from "./ChunkCards"
 import { LearnHint } from "./LearnHint"
+import { LessonEnd } from "./LessonEnd"
 
 /**
  * Learn > Chunking: predict, then see. Every answer runs the REAL chunker on
@@ -90,6 +91,9 @@ export function ChunkingLesson({ registry, sha, pollMs, debounceMs = 250 }: Chun
       ) : (
         <Lab registry={registry} sha={sha} data={data.data} pollMs={pollMs} debounceMs={debounceMs} />
       )}
+      <div className="border-t border-hairline pt-6">
+        <LessonEnd slug="chunking" />
+      </div>
     </article>
   )
 }

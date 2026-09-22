@@ -61,11 +61,19 @@ no auth, so only do that on a network you trust.
 
 **First steps in the UI:**
 
+The playground opens on **Lessons** (`/`): three short lessons on the sample PDF, in order.
+The first one follows one question through a recorded real run of the pipeline, from the
+answer back to the PDF. Your progress is kept in your browser. To work on your own
+document, open **Build** (`/build`):
+
 1. On **Build**, choose **Try the sample document** or upload a PDF.
    - The sample, `samples/chunking-primer.pdf`, is three pages of notes on chunking. It comes
      with a ready pipeline and a question, so pressing **Run all** shows every step working.
    - Choosing it also starts loading the Docling and Qwen3 models in the background.
    - To regenerate the sample, run `uv run python scripts/make_sample_pdf.py`.
+   - The end-to-end lesson reads `web/src/learn/e2e-run.json`. To record it again after a
+     change to the pipeline, run `uv run python scripts/record_e2e_lesson.py` (it needs the
+     Docling and Qwen3 models).
 2. Pick a parser and press **Run** on the Parse card. The inspector shows the text and the
    elements the parser found.
 3. Add a cleaner, pick a chunker and run again. The chunk view draws every chunk boundary
@@ -304,7 +312,7 @@ core/        the engine: artifacts, transforms, graph, executor, content-address
 providers/   embedding models and the embedding cache
 plugins/     one module per strategy, grouped by stage
 api/         FastAPI server: registry, sources, runs (streamed as server-sent events), artifacts
-web/         React UI: Build, Compare, inspectors
+web/         React UI: Lessons, Build, Compare, inspectors
 tests/       pytest: unit, plugin contract, API and integration tests
 ```
 

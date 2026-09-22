@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { clearPdfCaches } from "@/api/usePdf"
 
+import { readProgress } from "@/state/lessons"
+
 import { CitationsLesson } from "./CitationsLesson"
 
 const SHA = "12".repeat(32)
@@ -89,5 +91,12 @@ describe("How citations work", () => {
       expect(text).not.toMatch(/[—–]/)
       for (const el of document.querySelectorAll("p, li, span, button")) expect((el.textContent ?? "").split("·").length).toBeLessThanOrEqual(2)
     }
+  })
+
+  it("ends with Mark as done and Back to lessons", () => {
+    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    expect(screen.getByRole("link", { name: "Back to lessons" }).getAttribute("href")).toBe("/")
+    fireEvent.click(screen.getByRole("link", { name: "Mark as done" }))
+    expect(readProgress()).toMatchObject({ citations: true })
   })
 })

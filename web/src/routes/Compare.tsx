@@ -52,7 +52,7 @@ export function Compare() {
       <main className="flex min-h-0 flex-1 flex-col bg-surface">
         <EmptyState title="No pipeline to compare">
           Build a pipeline with a file first, then press Sweep on a card.{" "}
-          <a href="/" className="text-fg underline">
+          <a href="/build" className="text-fg underline">
             Go to Build
           </a>
         </EmptyState>

@@ -7,10 +7,11 @@ and answer questions about page 7 with the words "page 7".
 Two detectors, both anchored to the first or last block of a page:
 
 * **repetition** — the same short text at the same page edge on at least
-  `min_page_ratio` of pages. Compared on normalized text with the digits left
+  `min_page_ratio` of pages, and never fewer than two pages (`MIN_PAGES`). Compared on normalized text with the digits left
   in, so `Section 1` … `Section 4` are four headings, not one running head.
 * **page-number shape** — a block matching `3`, `Page 3`, `Page 3 of 9`, `- 3 -`
-  at the same page edge on at least `min_page_ratio` of pages. Page numbers are
+  at the same page edge on at least `min_page_ratio` of pages (and at least
+  two). Page numbers are
   the one running artefact that never repeats, so repetition alone cannot see
   them.
 
@@ -34,7 +35,6 @@ point by construction.
 
 from __future__ import annotations
 
-import math
 import re
 from collections import defaultdict
 from typing import Any, Mapping
@@ -58,6 +58,10 @@ PAGE_NUMBER = re.compile(
     r"^[-–—\[(]?\s*(?:page\s*)?\d{1,4}\s*(?:(?:/|of|\|)\s*\d{1,4})?\s*[-–—\])]?$",
     re.IGNORECASE,
 )
+
+#: A running artefact must turn up on at least this many pages, whatever the
+#: ratio says.
+MIN_PAGES = 2
 
 #: Which end of the page a block sits at. The tuple order is the precedence
 #: order when one block is both (a page holding a single element).
@@ -103,8 +107,12 @@ def _detect(
     if n_pages < 2:
         return {}
 
-    # Float-tolerant: 2 of 4 pages must satisfy a ratio of exactly 0.5.
-    threshold = min_page_ratio * n_pages - 1e-9
+    # Float-tolerant: 2 of 4 pages must satisfy a ratio of exactly 0.5. And
+    # never fewer than 2 pages: something seen once has not *repeated*, and on
+    # a short document one page is already half of them, so without this floor
+    # every first and last block would qualify, pass after pass, until the
+    # document was empty.
+    threshold = max(MIN_PAGES, min_page_ratio * n_pages - 1e-9)
     verdicts: dict[str, tuple[str, str]] = {}
 
     for position, repeat_type in POSITIONS:
@@ -165,32 +173,18 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
         )
         settings = (
             "A block counts as running when it sits at the same page edge on at "
-            f"least {pct} of pages. {action}"
+            f"least {pct} of pages, and never on fewer than two pages. {action}"
         )
         tradeoff = (
             "A lower ratio catches heads that appear on only some pages but risks "
             "removing a real line that happens to repeat; a higher one is safer "
             "and misses more."
         )
-        if ratio == 0:
-            return Explanation(
-                settings=settings,
-                tradeoff=tradeoff,
-                warning=(
-                    "At 0% every first and last block counts as running, pass "
-                    "after pass, so the whole document would be stripped."
-                ),
-                blocking=True,
-            )
-        # One block on one page meets the ratio when ratio * pages <= 1, and
-        # the detector then repeats until every page is empty.
-        short = math.floor(1 / ratio + 1e-9)
         warning = None
-        if short >= 2:
+        if ratio == 0:
             warning = (
-                f"On a document of {short} pages or fewer, one block on one page "
-                f"already meets {pct}, so every block would be stripped. Raise "
-                "the ratio for very short documents."
+                "At 0% the ratio adds nothing: any short text at the same page "
+                "edge on just two pages is stripped, however long the document."
             )
         return Explanation(settings=settings, tradeoff=tradeoff, warning=warning)
 
@@ -229,8 +223,8 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
             set_note(
                 ctx,
                 "Every block was marked as a running head, foot or page number: "
-                "on a document this short, one block on one page already meets "
-                "the ratio.",
+                "each one repeated, or looked like a page number, at the same "
+                "page edge on at least two pages.",
             )
 
         if not verdicts:

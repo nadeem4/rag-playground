@@ -1,0 +1,120 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 2159 >>
+stream
+BT /F2 20 Tf 72 720 Td (Chunking in Retrieval-Augmented Generation) Tj ET
+BT /F1 11 Tf 72 685 Td (Retrieval-augmented generation answers a question in two steps. First it finds passages) Tj ET
+BT /F1 11 Tf 72 670 Td (that look relevant, then it asks a language model to answer from those passages alone.) Tj ET
+BT /F1 11 Tf 72 655 Td (The passages are chunks: pieces of the original documents, cut before anything is) Tj ET
+BT /F1 11 Tf 72 640 Td (indexed. How they are cut decides what the retriever can ever find.) Tj ET
+BT /F2 15 Tf 72 606 Td (Why chunk boundaries matter) Tj ET
+BT /F1 11 Tf 72 577 Td (A retriever scores each chunk as a whole. When a boundary falls in the middle of an) Tj ET
+BT /F1 11 Tf 72 562 Td (explanation, the question lands on one half and the answer on the other, and neither) Tj ET
+BT /F1 11 Tf 72 547 Td (half scores well on its own. The model then receives a passage that mentions the topic) Tj ET
+BT /F1 11 Tf 72 532 Td (but never resolves it.) Tj ET
+BT /F1 11 Tf 72 508 Td (Boundaries also decide what travels together. A definition separated from the term it) Tj ET
+BT /F1 11 Tf 72 493 Td (defines, or a table separated from its caption, loses the context that made it useful.) Tj ET
+BT /F1 11 Tf 72 478 Td (The embedding of such a chunk describes a fragment, not an idea, so it drifts away from) Tj ET
+BT /F1 11 Tf 72 463 Td (the questions it should match.) Tj ET
+BT /F1 11 Tf 72 439 Td (A useful rule of thumb: a chunk should answer one question well. If you cannot say in a) Tj ET
+BT /F1 11 Tf 72 424 Td (sentence what a chunk is about, a retriever will struggle to decide when it is relevant,) Tj ET
+BT /F1 11 Tf 72 409 Td (and a reader will struggle to use it.) Tj ET
+BT /F1 11 Tf 72 385 Td (Bad boundaries are hard to see from the final answer. The model is fluent either way, so) Tj ET
+BT /F1 11 Tf 72 370 Td (the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks) Tj ET
+BT /F1 11 Tf 72 355 Td (themselves, before indexing, is the quickest way to catch the problem.) Tj ET
+BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
+BT /F1 9 Tf 510 760 Td (Page 1) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Length 2077 >>
+stream
+BT /F2 15 Tf 72 720 Td (Chunk size and overlap) Tj ET
+BT /F1 11 Tf 72 691 Td (Chunk size is a trade between precision and context. Small chunks match a question) Tj ET
+BT /F1 11 Tf 72 676 Td (closely, because every sentence in them is about the same thing. Large chunks carry more) Tj ET
+BT /F1 11 Tf 72 661 Td (surrounding context, but their embedding averages over several topics and matches none) Tj ET
+BT /F1 11 Tf 72 646 Td (of them sharply.) Tj ET
+BT /F1 11 Tf 72 622 Td (There is also a budget on the other side. Every retrieved chunk is pasted into the) Tj ET
+BT /F1 11 Tf 72 607 Td (prompt, so the number of chunks you retrieve times their size must fit in the context) Tj ET
+BT /F1 11 Tf 72 592 Td (window, with room left for the question and the answer. Doubling the chunk size roughly) Tj ET
+BT /F1 11 Tf 72 577 Td (halves how many distinct passages the model can see.) Tj ET
+BT /F1 11 Tf 72 553 Td (Overlap repeats the end of one chunk at the start of the next. It is a cheap insurance) Tj ET
+BT /F1 11 Tf 72 538 Td (policy against a boundary that lands in the wrong place: a sentence cut at the edge of) Tj ET
+BT /F1 11 Tf 72 523 Td (one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate) Tj ET
+BT /F1 11 Tf 72 508 Td (results, since adjacent chunks now share text.) Tj ET
+BT /F1 11 Tf 72 484 Td (A common starting point is a few hundred tokens per chunk with an overlap of ten to) Tj ET
+BT /F1 11 Tf 72 469 Td (twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents) Tj ET
+BT /F1 11 Tf 72 454 Td (with short, self-contained entries, such as a glossary or an FAQ, often want much) Tj ET
+BT /F1 11 Tf 72 439 Td (smaller chunks than long narrative reports.) Tj ET
+BT /F1 11 Tf 72 415 Td (Overlap should always be smaller than the chunk itself. When the two are equal, each) Tj ET
+BT /F1 11 Tf 72 400 Td (step moves forward by nothing, and a splitter either loops or refuses to run.) Tj ET
+BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
+BT /F1 9 Tf 510 760 Td (Page 2) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Length 2077 >>
+stream
+BT /F2 15 Tf 72 720 Td (Structure-aware splitting) Tj ET
+BT /F1 11 Tf 72 691 Td (Fixed-size splitting ignores the document's own shape. Structure-aware splitting uses) Tj ET
+BT /F1 11 Tf 72 676 Td (it: headings, paragraphs, list items and tables become the natural places to cut. A) Tj ET
+BT /F1 11 Tf 72 661 Td (section under one heading usually discusses one subject, which is exactly what a good) Tj ET
+BT /F1 11 Tf 72 646 Td (chunk should do.) Tj ET
+BT /F1 11 Tf 72 622 Td (This only works when the parser recovers the structure. A layout-aware parser labels) Tj ET
+BT /F1 11 Tf 72 607 Td (headings, footers and tables, while a plain text extractor returns a flat stream of) Tj ET
+BT /F1 11 Tf 72 592 Td (lines. Cleaning comes next: running headers, footers and page numbers are removed, so) Tj ET
+BT /F1 11 Tf 72 577 Td (they do not end up in the middle of chunks.) Tj ET
+BT /F1 11 Tf 72 553 Td (A useful rule of thumb: a chunk should answer one question well. If you cannot say in a) Tj ET
+BT /F1 11 Tf 72 538 Td (sentence what a chunk is about, a retriever will struggle to decide when it is relevant,) Tj ET
+BT /F1 11 Tf 72 523 Td (and a reader will struggle to use it.) Tj ET
+BT /F1 11 Tf 72 499 Td (A structure-aware splitter still needs a size limit. A long section is split again) Tj ET
+BT /F1 11 Tf 72 484 Td (inside itself, preferably at paragraph and then sentence boundaries, and each piece) Tj ET
+BT /F1 11 Tf 72 469 Td (keeps its heading path so that the retriever knows where it came from.) Tj ET
+BT /F2 15 Tf 72 435 Td (Choosing a starting point) Tj ET
+BT /F1 11 Tf 72 406 Td (Start simple, look at the chunks, then ask a handful of real questions and check which) Tj ET
+BT /F1 11 Tf 72 391 Td (chunks come back. Change one setting at a time and compare the results side by side. The) Tj ET
+BT /F1 11 Tf 72 376 Td (right configuration is the one that retrieves the passage a careful reader would have) Tj ET
+BT /F1 11 Tf 72 361 Td (picked.) Tj ET
+BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
+BT /F1 9 Tf 510 760 Td (Page 3) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 9 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 9 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 9 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+endobj
+9 0 obj
+<< /Type /Pages /Kids [6 0 R 7 0 R 8 0 R] /Count 3 >>
+endobj
+10 0 obj
+<< /Type /Catalog /Pages 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000000154 00000 n 
+0000002365 00000 n 
+0000004494 00000 n 
+0000006623 00000 n 
+0000006759 00000 n 
+0000006895 00000 n 
+0000007031 00000 n 
+0000007100 00000 n 
+trailer
+<< /Size 11 /Root 10 0 R >>
+startxref
+7150
+%%EOF

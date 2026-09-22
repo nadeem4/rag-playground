@@ -396,6 +396,44 @@ def test_stripping_runs_to_a_fixed_point(tmp_path):
     assert ids_in_order(out) == ["b1", "b2", "b3", "b4"]
 
 
+def _two_page_doc(footer: str | None = None) -> ParsedDoc:
+    """Two pages of four distinct blocks each, optionally closed by a footer."""
+    elements = []
+    order = 0
+    for page in (1, 2):
+        texts_on_page = [f"Heading {page}", f"First {page}.", f"Second {page}.", f"Last {page}."]
+        for i, text in enumerate(texts_on_page):
+            elements.append(el(f"p{page}b{i}", text, order, page=page))
+            order += 1
+        if footer is not None:
+            elements.append(el(f"f{page}", footer, order, page=page))
+            order += 1
+    return doc(elements)
+
+
+def test_a_short_document_keeps_its_body(tmp_path):
+    """Regression: 2 pages, 8 blocks. A block on 1 of 2 pages meets 0.5, and
+    the strip used to repeat until every block was gone."""
+    out = run(HeaderFooterStrip, _two_page_doc(), tmp_path)
+    assert len(out.elements) == 8
+
+
+def test_a_short_document_loses_only_its_running_footer(tmp_path):
+    out = run(HeaderFooterStrip, _two_page_doc(footer="Sample footer"), tmp_path)
+    assert "Sample footer" not in texts(out)
+    assert len(out.elements) == 8
+
+
+def test_a_page_number_on_a_single_page_is_not_stripped(tmp_path):
+    elements = [
+        el("a", "Opening.", 0, page=1),
+        el("n", "7", 1, page=1),
+        el("b", "Closing.", 2, page=2),
+    ]
+    out = run(HeaderFooterStrip, doc(elements), tmp_path)
+    assert ids_in_order(out) == ["a", "n", "b"]
+
+
 def test_header_report_names_id_type_preview_and_reason(tmp_path):
     out = run(HeaderFooterStrip, paged_doc(), tmp_path)
     (report,) = reports(out)

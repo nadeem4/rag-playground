@@ -16,9 +16,15 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 
+from api import warmup
+
 router = APIRouter()
 
 META_DIR = ".meta"
+
+#: The first-run sample, committed to the repo and made by
+#: `scripts/make_sample_pdf.py`.
+SAMPLE_PDF = Path(__file__).resolve().parents[2] / "samples" / "chunking-primer.pdf"
 
 
 @router.get("/sources")
@@ -35,9 +41,31 @@ async def upload_source(request: Request, file: UploadFile) -> dict[str, Any]:
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
+    return _store(
+        request.app.state.deps.sources_dir,
+        Path(file.filename or "upload").name,
+        data,
+        file.content_type,
+    )
 
-    sources: Path = request.app.state.deps.sources_dir
-    filename = Path(file.filename or "upload").name
+
+@router.post("/sources/sample")
+def sample_source(request: Request) -> dict[str, Any]:
+    """Register the sample PDF exactly like an upload, and start warming up
+    the models its default graph uses. The response never waits for them."""
+    body = _store(
+        request.app.state.deps.sources_dir,
+        SAMPLE_PDF.name,
+        SAMPLE_PDF.read_bytes(),
+        "application/pdf",
+    )
+    warmup.start()
+    return body
+
+
+def _store(
+    sources: Path, filename: str, data: bytes, content_type: str | None
+) -> dict[str, Any]:
     sha = hashlib.sha256(data).hexdigest()
     dest = sources / f"{sha}{Path(filename).suffix}"
 
@@ -51,7 +79,7 @@ async def upload_source(request: Request, file: UploadFile) -> dict[str, Any]:
         "sha": sha,
         "filename": filename,
         "size": len(data),
-        "content_type": file.content_type
+        "content_type": content_type
         or mimetypes.guess_type(filename)[0]
         or "application/octet-stream",
     }

@@ -87,9 +87,18 @@ def test_drop_matching_blocks_an_invalid_regex():
     assert exp.blocking is True
 
 
-def test_header_footer_strip_blocks_a_zero_ratio():
+def test_header_footer_strip_zero_ratio_warns_but_does_not_block():
+    """A block must repeat on at least two pages, so 0% no longer empties
+    the document; it only drops the ratio's extra protection."""
     exp = HeaderFooterStrip().explain(HeaderFooterStripConfig(min_page_ratio=0.0))
-    assert exp.blocking is True
+    assert exp.blocking is False
+    assert "two pages" in exp.warning
+
+
+def test_header_footer_strip_default_has_no_short_document_warning():
+    exp = HeaderFooterStrip().explain(HeaderFooterStripConfig())
+    assert exp.warning is None
+    assert "two pages" in exp.settings
 
 
 # --- outcome notes (I-13) --------------------------------------------------
@@ -140,6 +149,17 @@ def test_header_footer_strip_notes_a_single_page(tmp_path):
         ctx,
     )
     assert "one page" in ctx.extras["meta"]["note"]
+
+
+def test_header_footer_strip_notes_when_every_block_repeats(tmp_path):
+    ctx = _ctx(tmp_path)
+    HeaderFooterStrip().apply(
+        {"doc": _doc([("paragraph", "ACME", 1), ("paragraph", "ACME", 2)])},
+        HeaderFooterStripConfig(),
+        ctx,
+    )
+    note = ctx.extras["meta"]["note"]
+    assert "two pages" in note and "meets the ratio" not in note
 
 
 def test_drop_matching_notes_a_pattern_that_matched_nothing(tmp_path):

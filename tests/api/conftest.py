@@ -34,6 +34,15 @@ def no_server_key(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(credentials, "DOTENV_PATH", tmp_path / "no-such.env")
 
 
+@pytest.fixture(autouse=True)
+def no_model_warm_up(monkeypatch) -> None:
+    """Never load a real model from an API test; start each test un-warmed."""
+    from api import warmup
+
+    monkeypatch.setattr(warmup, "_warm", lambda: None)
+    monkeypatch.setattr(warmup, "_thread", None)
+
+
 @pytest.fixture
 def dirs(tmp_path: Path, monkeypatch) -> dict[str, Path]:
     # build_deps rebinds the upload module's global; restore it afterwards.

@@ -37,9 +37,15 @@ describe("types mirror the engine's real payloads", () => {
     const entries = Object.values(registry).flatMap((stage) => Object.values(stage))
     expect(entries.length).toBeGreaterThanOrEqual(14)
     for (const t of entries) {
-      // `summary` (plan I-11) is additive: fixtures exported before it lack it.
-      expect(keys(t).filter((k) => k !== "summary")).toEqual([...TRANSFORM_KEYS].sort())
+      // `summary` (plan I-11) and `learn` (plan I-22) are additive: older fixtures lack them.
+      expect(keys(t).filter((k) => k !== "summary" && k !== "learn")).toEqual([...TRANSFORM_KEYS].sort())
       if ("summary" in t) expect(typeof t.summary === "string" && t.summary.length > 0).toBe(true)
+      if ("learn" in t) {
+        for (const lesson of Object.values(t.learn as Record<string, { hint: unknown; more: unknown }>)) {
+          expect(typeof lesson.hint).toBe("string")
+          expect(Array.isArray(lesson.more)).toBe(true)
+        }
+      }
     }
   })
 

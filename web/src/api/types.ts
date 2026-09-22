@@ -77,6 +77,17 @@ export interface TransformInfo {
   config_schema: JsonSchema
   /** Plan I-11: how this strategy works, in plain language. Optional while older servers omit it. */
   summary?: string
+  /**
+   * Plan I-22: a lesson per config field, plus `_strategy` for the transform
+   * itself. Required for chunk-stage plugins; absent elsewhere for now.
+   */
+  learn?: Record<string, Lesson>
+}
+
+/** Plan I-22: one sentence under the field, and the paragraphs behind "Read more". */
+export interface Lesson {
+  hint: string
+  more: string[]
 }
 
 /** `GET /api/registry`: stage -> transform name -> info. */
@@ -498,8 +509,31 @@ export interface ChatOutput {
 // ----------------------------------------------------------- explanations --
 // Plan I-11 / I-12.
 
-/** `GET /api/stages`: what each step is for in RAG. */
-export type StageInfo = Partial<Record<Stage, { what: string }>>
+/** `GET /api/stages`: what each step is for in RAG, and (plan I-22) its lesson paragraphs. */
+export type StageInfo = Partial<Record<Stage, { what: string; lesson?: string[] }>>
+
+// ------------------------------------------------------------------ learn --
+// Plan I-22.
+
+/** One predict-then-see challenge. `expect_whole` is what the backend's tests prove. */
+export interface LearnChallenge {
+  id: string
+  title: string
+  strategy: string
+  config: Record<string, unknown>
+  expect_whole: boolean
+}
+
+/** `GET /api/learn/chunking`. */
+export interface LearnChunking {
+  answer_sentence: string
+  question: string
+  /** The answer sentence's length as each chunker counts it. */
+  sentence_chars: number
+  sentence_tokens: number
+  parse: { transform: string; config: Record<string, unknown> }
+  challenges: LearnChallenge[]
+}
 
 /** `POST /api/explain`: what a transform will do with THESE settings. */
 export interface Explanation {

@@ -6,6 +6,7 @@ import type { GraphNode, Registry, Stage } from "@/api/types"
 import { useStages, type ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { Button } from "@/components/ui/button"
+import { useLearnMode } from "@/state/learnMode"
 import { ancestors, columnOrder, COLUMN_STAGES, infoFor, terminalNode, titleFor, transformsFor, type PipelineGraph } from "@/state/graph"
 import type { RunHistory } from "@/state/pipeline"
 
@@ -79,6 +80,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
   const order = columnOrder(p.graph).filter((n) => COLUMN_STAGES.includes(n.stage))
   const terminal = terminalNode(p.graph)
   const stages = useStages()
+  const learn = useLearnMode()
   // One explanation pop-over at a time.
   const [open, setOpen] = useState<string | null>(null)
   const adds: { anchor?: GraphNode; label: string; onAdd?: () => void }[] = [
@@ -113,6 +115,8 @@ export function PipelineColumn(p: PipelineColumnProps) {
               onRun={(force) => p.onRun(runTarget, force)}
               explain={p.explanations?.[node.id]}
               what={stages[node.stage]?.what}
+              learn={learn}
+              lesson={stages[node.stage]?.lesson}
               explainOpen={open === node.id}
               onExplainOpenChange={(o) => setOpen((cur) => (o ? node.id : cur === node.id ? null : cur))}
               blockedBy={(() => {

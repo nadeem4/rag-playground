@@ -157,6 +157,20 @@ export function sampleGraph(registry: Registry, source: { sha: string; filename:
 }
 
 /**
+ * The sample graph with a chat step that cites sentence ids ("Try it yourself"
+ * on Learn > How citations work). The model stays at the registry's default.
+ * Without a chat transform, it is the plain sample graph.
+ */
+export function chatSampleGraph(registry: Registry, source: { sha: string; filename: string }): PipelineGraph {
+  const g = sampleGraph(registry, source)
+  const use = g.nodes.find((n) => n.stage === "use_case")
+  if (!use || !registry.use_case?.chat) return g
+  const chat = setTransform(g, use.id, "chat", registry)
+  const node = chat.nodes.find((n) => n.id === use.id)!
+  return setConfig(chat, use.id, { ...node.config, citation_method: "sentence_ids" })
+}
+
+/**
  * Add any default stage a stored graph lacks (one saved before retrieval
  * existed), then wire the new cards. A complete graph comes back unchanged.
  */

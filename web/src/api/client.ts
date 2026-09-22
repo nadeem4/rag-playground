@@ -12,6 +12,7 @@ import type {
   ExplainRequest,
   Explanation,
   FindResult,
+  LearnChunking,
   LlmCheck,
   LlmProvider,
   LlmSettings,
@@ -100,6 +101,8 @@ export const api = {
   registry: () => request<Registry>("/registry"),
   /** Plan I-12: one plain paragraph per stage. */
   stages: () => request<StageInfo>("/stages"),
+  /** Plan I-22: the sample question, its answer sentence and the chunking challenges. */
+  learnChunking: () => request<LearnChunking>("/learn/chunking"),
   /** Plan I-12: pure, no model loads. 422 `{detail: {errors}}` on a bad config, 404 on an unknown transform. */
   explain: (body: ExplainRequest, signal?: AbortSignal) => request<Explanation>("/explain", { ...json(body), signal }),
 

@@ -8,6 +8,7 @@ import {
   completeGraph,
   defaultConfig,
   SAMPLE_QUESTION,
+  chatSampleGraph,
   sampleGraph,
   initialGraph,
   loadGraph,
@@ -228,5 +229,25 @@ describe("sample graph (plan I-15)", () => {
     const g = sampleGraph(LIVE, SRC)
     const retrieve = g.nodes.find((n) => n.stage === "retrieve")!
     expect(retrieve.config).toEqual(defaultConfig(LIVE.retrieve!.hybrid_rrf))
+  })
+})
+
+describe("chat sample graph (Learn > How citations work > Try it yourself)", () => {
+  const LIVE = liveRegistry as unknown as Registry
+  const SRC = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
+
+  it("is the sample graph with a chat step that cites sentence ids, on the registry's default model", () => {
+    const g = chatSampleGraph(LIVE, SRC)
+    const chat = g.nodes.find((n) => n.stage === "use_case")!
+    expect(chat.transform).toBe("chat")
+    expect(chat.config.citation_method).toBe("sentence_ids")
+    expect(chat.config.model).toBe(LIVE.use_case!.chat.config_schema.properties!.model.default)
+    expect(g.nodes.find((n) => n.stage === "source")!.config).toEqual(SRC)
+    expect(g.nodes.find((n) => n.stage === "query")!.config.text).toBe(SAMPLE_QUESTION)
+  })
+
+  it("falls back to the plain sample graph when the registry has no chat step", () => {
+    const g = chatSampleGraph(R, SRC)
+    expect(g.nodes.find((n) => n.stage === "use_case")!.transform).toBe("search")
   })
 })

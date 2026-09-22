@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react"
 import { DropdownMenu } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { setLearnMode, useLearnMode } from "@/state/learnMode"
 
 import { ApiKeyControl } from "./ApiKeyControl"
 import { ThemeToggle } from "./ThemeToggle"
@@ -9,6 +10,7 @@ import { ThemeToggle } from "./ThemeToggle"
 const PRIMARY = [
   { href: "/", label: "Build" },
   { href: "/compare", label: "Compare" },
+  { href: "/learn", label: "Learn" },
 ]
 
 /** Development pages: real components against real-engine fixtures. */
@@ -21,7 +23,8 @@ const DEV = [
 const DEV_PATHS = new Set(["/inspect", "/design", "/specimen"])
 
 function NavLink({ href, label, path }: { href: string; label: string; path: string }) {
-  const current = path === href
+  // Learn has a page per topic under /learn.
+  const current = path === href || (href === "/learn" && path.startsWith("/learn/"))
   return (
     <a
       href={href}
@@ -82,6 +85,24 @@ function DevMenu({ path }: { path: string }) {
   )
 }
 
+/** Learn mode: stage lessons and setting hints on Build. On for a first visit. */
+function LearnModeSwitch() {
+  const on = useLearnMode()
+  return (
+    <label className="flex items-center gap-2 text-xs whitespace-nowrap text-fg select-none">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={on}
+        aria-checked={on}
+        onChange={(e) => setLearnMode(e.target.checked)}
+        className="size-[14px] [accent-color:var(--text-primary)]"
+      />
+      Learn mode
+    </label>
+  )
+}
+
 export function AppHeader({ path }: { path: string }) {
   return (
     <header className="flex h-[40px] shrink-0 items-center justify-between gap-2 border-b border-hairline bg-surface px-3">
@@ -94,7 +115,8 @@ export function AppHeader({ path }: { path: string }) {
         </nav>
         <DevMenu path={path} />
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-3">
+        <LearnModeSwitch />
         <ApiKeyControl />
         <ThemeToggle />
       </div>

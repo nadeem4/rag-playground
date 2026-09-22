@@ -10,6 +10,7 @@ import type { FieldErrors } from "@/components/fields/schema"
 import { CONST_TEXT } from "@/components/fields/ConstField"
 import { CONTROL } from "@/components/fields/types"
 import { KeyHint } from "@/components/ApiKeyControl"
+import { LearnHint, StageLesson } from "@/components/learn/LearnHint"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -61,7 +62,14 @@ export interface NodeCardProps {
   blockedBy?: string
   /** This card's previous run's artifact, for "(was N)". */
   previousArtifactId?: string
+  /** Learn mode is on: show the stage lesson and the plugin's hints (plan I-22). */
+  learn?: boolean
+  /** Plan I-22: this stage's lesson paragraphs, when the server has them. */
+  lesson?: string[]
 }
+
+/** The heading of a stage's lesson. Stages without one here get a plain question. */
+const LESSON_TITLE: Partial<Record<string, string>> = { chunk: "What is chunking?" }
 
 export function fmtMs(ms: number | undefined): string {
   if (ms === undefined) return ""
@@ -192,6 +200,10 @@ export function NodeCard(p: NodeCardProps) {
         </div>
       </header>
 
+      {p.learn && p.lesson?.length ? (
+        <StageLesson title={LESSON_TITLE[p.node.stage] ?? `What does ${p.title} do?`} paragraphs={p.lesson} />
+      ) : null}
+
       <div className="flex min-w-0 flex-col gap-1">
         <label htmlFor={`${id}-transform`} className="text-sm font-medium">
           Transform
@@ -210,11 +222,19 @@ export function NodeCard(p: NodeCardProps) {
             ))}
           </select>
         )}
+        {p.learn && info?.learn?._strategy ? <LearnHint lesson={info.learn._strategy} /> : null}
       </div>
 
       {p.body ??
         (info ? (
-          <SchemaForm key={`${p.node.id}:${info.name}`} schema={info.config_schema} value={p.node.config} onChange={p.onConfig} errors={p.fieldErrors} />
+          <SchemaForm
+            key={`${p.node.id}:${info.name}`}
+            schema={info.config_schema}
+            value={p.node.config}
+            onChange={p.onConfig}
+            errors={p.fieldErrors}
+            learn={p.learn ? info.learn : undefined}
+          />
         ) : null)}
 
       {warning ? (

@@ -11,6 +11,7 @@ import { useExplanations } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
+import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
@@ -355,12 +356,15 @@ function InspectorPanel({
     const known = !before.data ? {} : relatedStage === "chunk" ? { chunks: before.data as never } : { before: before.data as never }
     const context = parsed.data ? { ...known, doc: parsed.data as never } : known
     body = (
-      <ArtifactInspector
-        type={type ?? "unknown"}
-        data={payload.data}
-        status={waitingBefore ? { kind: "loading" } : payload.status}
-        context={context}
-      />
+      <>
+        {node.stage === "chunk" && payload.status.kind === "ready" ? <WhatYouAreSeeing data={payload.data} /> : null}
+        <ArtifactInspector
+          type={type ?? "unknown"}
+          data={payload.data}
+          status={waitingBefore ? { kind: "loading" } : payload.status}
+          context={context}
+        />
+      </>
     )
   }
 

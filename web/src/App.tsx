@@ -2,6 +2,7 @@ import { ApiKeyProvider } from "@/api/apiKey"
 import { AppHeader } from "@/components/AppHeader"
 import { Compare } from "@/routes/Compare"
 import { Inspect } from "@/routes/Inspect"
+import { Learn } from "@/routes/Learn"
 import { Shell } from "@/routes/Shell"
 import { Specimen } from "@/routes/Specimen"
 
@@ -9,6 +10,7 @@ import { Specimen } from "@/routes/Specimen"
 // index.html for any path, so a plain pathname switch is enough.
 //
 // "/" is Build (the pipeline column, Shell) and /compare is the sweep view.
+// /learn lists the lessons; /learn/<topic> opens one.
 // They share the pipeline graph through per-viewer storage (state/graph.ts).
 //
 // /inspect and /design are development pages, reached from the header's Dev
@@ -19,9 +21,12 @@ const ROUTES: Record<string, () => React.JSX.Element> = {
   "/design": Specimen,
   "/specimen": Specimen,
   "/inspect": Inspect,
+  "/learn": Learn,
 }
 
 export function pageFor(path: string): () => React.JSX.Element {
+  // Learn has one page per topic: /learn/chunking, /learn/citations.
+  if (path.startsWith("/learn/")) return Learn
   return ROUTES[path] ?? Shell
 }
 

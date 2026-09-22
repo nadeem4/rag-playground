@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, type ComponentType } from "react"
 
-import type { JsonSchema } from "@/api/types"
+import type { JsonSchema, Lesson } from "@/api/types"
 import { BooleanField } from "@/components/fields/BooleanField"
 import { ConstField } from "@/components/fields/ConstField"
 import { EnumField } from "@/components/fields/EnumField"
@@ -19,6 +19,7 @@ import {
   type FieldKind,
 } from "@/components/fields/schema"
 import { TextField } from "@/components/fields/TextField"
+import { LearnHint } from "@/components/learn/LearnHint"
 import type { ControlProps } from "@/components/fields/types"
 
 /**
@@ -38,6 +39,12 @@ export interface SchemaFormProps {
   value?: Record<string, unknown>
   onChange: (value: Record<string, unknown>) => void
   errors?: FieldErrors
+  /**
+   * Learn mode (plan I-22): lessons keyed by field path. A field with one
+   * shows its hint and a "Read more" under it. Any plugin that ships `learn`
+   * gets this; absent, the form is unchanged.
+   */
+  learn?: Record<string, Lesson>
 }
 
 const CONTROLS: Partial<Record<FieldKind, ComponentType<ControlProps>>> = {
@@ -50,7 +57,7 @@ const CONTROLS: Partial<Record<FieldKind, ComponentType<ControlProps>>> = {
 
 const humanize = (key: string) => key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
 
-export function SchemaForm({ schema, value, onChange, errors }: SchemaFormProps) {
+export function SchemaForm({ schema, value, onChange, errors, learn }: SchemaFormProps) {
   const defaults = useMemo(() => defaultsFor(schema, schema), [schema])
   const current = value ?? defaults
   const base = useId()
@@ -94,6 +101,7 @@ export function SchemaForm({ schema, value, onChange, errors }: SchemaFormProps)
         depth={1}
         errors={allErrors}
         base={base}
+        learn={learn}
       />
     </div>
   )
@@ -108,6 +116,7 @@ interface FieldsProps {
   depth: number
   errors: FieldErrors
   base: string
+  learn?: Record<string, Lesson>
 }
 
 function Fields({ schema, value, onValue, ...rest }: FieldsProps) {
@@ -136,7 +145,19 @@ interface PropertyProps extends Omit<FieldsProps, "schema" | "value" | "onValue"
   onValue: (v: unknown) => void
 }
 
-function Property({ name, prop, value, onValue, root, path, depth, errors, base }: PropertyProps) {
+function Property(props: PropertyProps) {
+  const lesson = props.learn?.[[...props.path, props.name].join(".")]
+  const field = <Field {...props} />
+  if (!lesson) return field
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      {field}
+      <LearnHint lesson={lesson} />
+    </div>
+  )
+}
+
+function Field({ name, prop, value, onValue, root, path, depth, errors, base, learn }: PropertyProps) {
   const f = describeField(prop, root)
   const at = [...path, name]
   const key = at.join(".")
@@ -168,6 +189,7 @@ function Property({ name, prop, value, onValue, root, path, depth, errors, base 
             depth={depth + 1}
             errors={errors}
             base={base}
+            learn={learn}
           />
         )}
       </>

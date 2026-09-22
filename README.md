@@ -294,6 +294,19 @@ finds:
 Don't set a key as a system-wide or user-wide environment variable. Every program you start
 would inherit it, including AI coding tools that could then read and use it.
 
+### What happens to a key you type in
+
+The key stays in that tab's memory. It is sent as a request header with each run, sweep and
+key check, and with nothing else. It is never written to disk, never logged, never put in a
+URL, and never returned by any endpoint. Closing the tab or reloading the page clears it,
+and nothing brings it back.
+
+Two honest limits. First, while the tab is open the key is in the browser's memory, so
+anything that can reach that page can read it: a browser extension you installed, the React
+developer tools, or a person at your keyboard. That is true of any web app you paste a key
+into. Second, a key in `.env` is on disk, because you put it there. Only you can take it
+off disk again, by deleting the file.
+
 The server never stores, logs or returns a key, and it shows `[redacted]` in its place in
 any error. `GET /api/settings/llm` reports only which source the server itself has for
 each provider, as `{"anthropic": ..., "openai": ..., "custom": ...}` with `env`, `dotenv`
@@ -395,6 +408,10 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 | Cached results | `artifacts/` | `RAG_PLAYGROUND_ARTIFACTS` |
 | Embedding cache | `artifacts/.embcache/` | `RAG_PLAYGROUND_EMBED_CACHE` |
 | Models | `~/.cache/huggingface` | Hugging Face's `HF_HOME` |
+
+A key typed into the app is in none of these places. It stays in the browser tab's memory
+and is gone when the tab closes. See
+[What happens to a key you type in](#what-happens-to-a-key-you-type-in).
 
 `sources/`, `artifacts/` and `.env` are gitignored. **Clear cache** in the UI deletes the
 cached results and the embedding cache. Nothing leaves your machine except model downloads

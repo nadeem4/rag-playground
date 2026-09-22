@@ -246,12 +246,51 @@ describe("the API key panel", () => {
     expect(within(r).getByTestId("key-source").textContent).toBe("Using the key from .env")
   })
 
+  it("says in plain words what happens to a key", async () => {
+    await page()
+    expect(within(openPanel()).getByTestId("key-privacy").textContent).toBe(
+      "The key stays in this tab's memory. It is never saved, and a reload clears it. It is sent only to this app's server.",
+    )
+  })
+
   it.each(PROVIDERS)("%s: the field is a nameless password input, so a native submit could not put it in a URL", async (p) => {
     await page()
     const input = within(row(p)).getByLabelText(LABEL[p]) as HTMLInputElement
     expect(input.type).toBe("password")
     expect(input.getAttribute("name")).toBeNull()
     expect(input.getAttribute("autocomplete")).toBe("off")
+    // No action and no method, so even a submit the handler missed would not
+    // navigate, which is what a password manager watches for.
+    const form = input.closest("form") as HTMLFormElement
+    expect(form.getAttribute("autocomplete")).toBe("off")
+    expect(form.getAttribute("action")).toBeNull()
+    expect(form.getAttribute("method")).toBeNull()
+  })
+
+  it("never echoes a key back into the page or the tab title", async () => {
+    await page()
+    for (const p of PROVIDERS) enterKey(p, FAKE[p])
+    for (const p of PROVIDERS) {
+      expect(document.body.textContent).not.toContain(FAKE[p])
+      expect(document.body.innerHTML).not.toContain(FAKE[p])
+      expect(document.title).not.toContain(FAKE[p])
+    }
+  })
+
+  it("keeps a key out of the console and out of a failed check's message", async () => {
+    const methods = ["log", "info", "warn", "error", "debug"] as const
+    const spies = methods.map((m) => vi.spyOn(console, m).mockImplementation(() => {}))
+    try {
+      await page()
+      const r = enterKey("anthropic", FAKE.anthropic)
+      fireEvent.click(within(r).getByRole("button", { name: "Check key" }))
+      await waitFor(() => expect(within(r).getByTestId("key-check").textContent).toMatch(/did not work/))
+      expect(within(r).getByTestId("key-check").textContent).not.toContain(FAKE.anthropic)
+      const said = spies.flatMap((s) => s.mock.calls).map((c) => c.map(String).join(" ")).join("\n")
+      expect(said).not.toContain(FAKE.anthropic)
+    } finally {
+      spies.forEach((s) => s.mockRestore())
+    }
   })
 
   it("custom: no Check (it needs the endpoint's URL); says when it is checked instead", async () => {

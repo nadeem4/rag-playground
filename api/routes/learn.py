@@ -8,15 +8,23 @@ test says which challenge no longer tells the story.
 
 from __future__ import annotations
 
+from functools import cache
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from fastapi import APIRouter
 
-from plugins.chunk import count_tokens
+from api import demo
+from core.ports import RunContext, Stage
+from core.registry import registry
+from plugins.chunk import DocView, count_tokens
 
 router = APIRouter()
 
 QUESTION = "Why do chunk boundaries matter?"
+
+PARSE: dict[str, Any] = {"transform": "pdfium", "config": {}}
 
 #: Copied from the pdfium parse of the sample, not typed from memory.
 ANSWER_SENTENCE = (
@@ -65,6 +73,37 @@ def get_chunking_lesson() -> dict[str, Any]:
         # characters, token_based with the shared token counter.
         "sentence_chars": len(ANSWER_SENTENCE),
         "sentence_tokens": count_tokens(ANSWER_SENTENCE),
-        "parse": {"transform": "pdfium", "config": {}},
+        "parse": PARSE,
         "challenges": CHALLENGES,
+    }
+
+
+@cache
+def _parsed_sample() -> tuple[str, int]:
+    """The sample parsed the way the lessons parse it.
+
+    The text is the projection the chunkers cut, so the Text view in a lesson
+    shows exactly what the steps work on. Parsed once per process.
+    """
+    cls = registry.get(Stage.PARSE, PARSE["transform"])
+    sample = demo.SAMPLE_PDF
+    with TemporaryDirectory() as tmp:
+        ctx = RunContext(output_dir=Path(tmp), emit=lambda event: None, tmp=Path(tmp))
+        doc = cls().apply(
+            {"file": {"path": str(sample), "sha": "sample", "filename": sample.name}},
+            cls.config_model(**PARSE["config"]),
+            ctx,
+        )
+    view = DocView.of(doc)
+    return view.text, view.doc.page_count
+
+
+@router.get("/learn/document")
+def get_lesson_document() -> dict[str, Any]:
+    """The sample document every lesson works on, as parsed text."""
+    text, page_count = _parsed_sample()
+    return {
+        "filename": demo.SAMPLE_PDF.name,
+        "page_count": page_count,
+        "text": text,
     }

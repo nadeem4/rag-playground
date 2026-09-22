@@ -89,8 +89,24 @@ describe("AppHeader", () => {
     expect(screen.getByRole("link", { name: "Lessons" }).getAttribute("aria-current")).toBe("page")
   })
 
-  it("has a Learn mode switch, on for a first visit, remembered when turned off", () => {
-    header()
+  it("keeps the Learn mode switch off Home and the lessons, where it does nothing", () => {
+    header("/")
+    expect(screen.queryByRole("switch", { name: "Learn mode" })).toBeNull()
+    cleanup()
+    header("/learn/chunking")
+    expect(screen.queryByRole("switch", { name: "Learn mode" })).toBeNull()
+  })
+
+  it("explains what Learn mode does, beside the switch", async () => {
+    header("/build")
+    fireEvent.click(screen.getByRole("button", { name: "What Learn mode does" }))
+    const about = await screen.findByRole("dialog", { name: "About Learn mode" })
+    expect(within(about).getByText(/adds a short explanation under every setting/)).toBeTruthy()
+    expect(within(about).getByText(/Turn it off for a clean workbench\./)).toBeTruthy()
+  })
+
+  it("has a Learn mode switch on Build, on for a first visit, remembered when turned off", () => {
+    header("/build")
     const sw = screen.getByRole("switch", { name: "Learn mode" }) as HTMLInputElement
     expect(sw.checked).toBe(true)
     fireEvent.click(sw)

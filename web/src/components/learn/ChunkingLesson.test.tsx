@@ -110,17 +110,27 @@ async function open() {
 const lastChunkConfig = () => posts[posts.length - 1].graph.nodes.find((n) => n.id === "chunk")!
 
 describe("Chunking lesson", () => {
-  it("asks challenge 1 with the real sentence length and the challenge's own settings", async () => {
+  it("says how the lesson works, and that a wrong prediction is the point", async () => {
+    await open()
+    expect(screen.getByText(/predict what a setting will do/)).toBeTruthy()
+    expect(screen.getByText(/Getting a prediction wrong is fine, and is the point\./)).toBeTruthy()
+  })
+
+  it("asks challenge 1 as a question, under a label that says it is the reader's turn", async () => {
     const ch = await open()
-    expect(within(ch).getByText("Shrink the chunks")).toBeTruthy()
-    expect(within(ch).getByText(/Challenge 1 of 4/)).toBeTruthy()
-    expect(within(ch).getByText(new RegExp(`${ANSWER.length} characters long`))).toBeTruthy()
+    expect(within(ch).getByRole("heading", { name: "Your turn: predict" })).toBeTruthy()
+    expect(within(ch).getByText(/Challenge 1 of 4: Shrink the chunks/)).toBeTruthy()
+    const question = within(ch).getByText(new RegExp(`${ANSWER.length} characters long`))
+    expect(question.textContent?.trim().endsWith("?")).toBe(true)
     expect(within(ch).getByText(/only 60 characters/)).toBeTruthy()
+    // The buttons read as answers to that question.
+    expect(within(ch).getByRole("button", { name: "Yes, it stays whole" })).toBeTruthy()
+    expect(within(ch).getByRole("button", { name: "No, it gets cut" })).toBeTruthy()
   })
 
   it("an answer runs the real chunker with the challenge's settings and states the real outcome", async () => {
     const ch = await open()
-    fireEvent.click(within(ch).getByRole("button", { name: "It gets cut" }))
+    fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
     await waitFor(() => expect(within(ch).getByText("You were right.")).toBeTruthy())
     expect(within(ch).getByText(/It gets cut, across chunks 1 and 2\./)).toBeTruthy()
     const chunk = lastChunkConfig()
@@ -132,13 +142,27 @@ describe("Chunking lesson", () => {
     expect(list.querySelectorAll("[data-answer]").length).toBe(2)
     expect(within(list).getByText("The answer sentence is cut here and continues in chunk 2.")).toBeTruthy()
     // Every choice is locked once answered.
-    expect((within(ch).getByRole("button", { name: "It stays whole" }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(ch).getByRole("button", { name: "Yes, it stays whole" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("draws the boundaries on the document, with the answer sentence still marked", async () => {
+    const ch = await open()
+    fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
+    await waitFor(() => expect(screen.getByRole("list", { name: "Chunks" })).toBeTruthy())
+    fireEvent.click(screen.getByRole("tab", { name: "Document with boundaries" }))
+    expect(screen.queryByRole("list", { name: "Chunks" })).toBeNull()
+    const reading = document.querySelector("[data-reading]")!
+    // The whole parsed text is drawn once, cut into segments by the chunks.
+    expect([...reading.querySelectorAll("[data-seg]")].map((s) => s.textContent).join("")).toBe(DOC)
+    expect([...reading.querySelectorAll("[data-answer]")].map((m) => m.textContent).join("")).toBe(DOC.slice(A0, A0 + ANSWER.length))
+    fireEvent.click(screen.getByRole("tab", { name: "Chunk cards" }))
+    expect(screen.getByRole("list", { name: "Chunks" })).toBeTruthy()
   })
 
   it("shows the real result when it disagrees with what the challenge expected", async () => {
     outcome = () => WHOLE
     const ch = await open()
-    fireEvent.click(within(ch).getByRole("button", { name: "It gets cut" }))
+    fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
     await waitFor(() => expect(within(ch).getByText("Not quite.")).toBeTruthy())
     expect(within(ch).getByText(/It stays whole, in chunk 2\./)).toBeTruthy()
     expect(within(ch).queryByText(/It gets cut, across/)).toBeNull()
@@ -151,7 +175,7 @@ describe("Chunking lesson", () => {
       await waitFor(() => expect(within(ch).getByRole("button", { name: "Next challenge" })).toBeTruthy())
       fireEvent.click(within(ch).getByRole("button", { name: "Next challenge" }))
     }
-    expect(within(ch).getByText("Overlap to the rescue")).toBeTruthy()
+    expect(within(ch).getByText(/Challenge 4 of 4: Overlap to the rescue/)).toBeTruthy()
     fireEvent.click(within(ch).getByRole("button", { name: "Yes, in one chunk" }))
     await waitFor(() => expect(within(ch).getByText("You were right.")).toBeTruthy())
     const list = screen.getByRole("list", { name: "Chunks" })
@@ -161,7 +185,7 @@ describe("Chunking lesson", () => {
 
   it("sliders explore after a challenge: changes rerun the chunker once they settle", async () => {
     const ch = await open()
-    fireEvent.click(within(ch).getByRole("button", { name: "It gets cut" }))
+    fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
     await waitFor(() => expect(within(ch).getByText("You were right.")).toBeTruthy())
     const before = posts.length
     const size = screen.getByLabelText("Chunk size") as HTMLInputElement
@@ -174,7 +198,7 @@ describe("Chunking lesson", () => {
   it("shows the error when a run fails", async () => {
     failRuns = true
     const ch = await open()
-    fireEvent.click(within(ch).getByRole("button", { name: "It gets cut" }))
+    fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/ValueError: bad settings/))
   })
 

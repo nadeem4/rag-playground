@@ -65,8 +65,8 @@ export function ApiKeyControl() {
           {PROVIDERS.map((p) => (
             <KeyRow key={p} provider={p} server={server?.[p] ?? null} />
           ))}
-          <p className="border-t border-hairline px-3 py-2 text-xs text-fg-muted">
-            Held in this tab's memory and sent only to this app's server. Never saved.
+          <p className="border-t border-hairline px-3 py-2 text-xs text-fg-muted" data-testid="key-privacy">
+            The key stays in this tab's memory. It is never saved, and a reload clears it. It is sent only to this app's server.
           </p>
         </Popover.Content>
       </Popover.Portal>

@@ -27,9 +27,11 @@ export interface ChunkSetInspectorProps {
   showDetail?: boolean
   /** The parsed document the chunker consumed: enables "Show in PDF". */
   doc?: ParsedDoc
+  /** Offsets in `source_text` of one sentence to underline, wherever it falls. */
+  mark?: [number, number] | null
 }
 
-export function ChunkSetInspector({ chunkSet, status, initialSelected = null, showDetail = true, doc }: ChunkSetInspectorProps) {
+export function ChunkSetInspector({ chunkSet, status, initialSelected = null, showDetail = true, doc, mark = null }: ChunkSetInspectorProps) {
   const screen = statusScreen(status, "chunk set")
   if (screen) return <Frame>{<div className="bg-surface">{screen}</div>}</Frame>
   if (!chunkSet) {
@@ -41,7 +43,7 @@ export function ChunkSetInspector({ chunkSet, status, initialSelected = null, sh
       </Frame>
     )
   }
-  return <ChunkSetView set={chunkSet} initialSelected={initialSelected} showDetail={showDetail} doc={doc} />
+  return <ChunkSetView set={chunkSet} initialSelected={initialSelected} showDetail={showDetail} doc={doc} mark={mark} />
 }
 
 // ---------------------------------------------------------------- layout --
@@ -55,11 +57,13 @@ function ChunkSetView({
   initialSelected,
   showDetail,
   doc,
+  mark,
 }: {
   set: ChunkSet
   initialSelected: number | null
   showDetail: boolean
   doc?: ParsedDoc
+  mark: [number, number] | null
 }) {
   const { chunks, source_text: source } = set
   const [selected, setSelected] = useState<number | null>(initialSelected)
@@ -181,7 +185,7 @@ function ChunkSetView({
                 selected={selected}
                 onSelect={setSelected}
               />
-              <Reading segments={segments} source={source} selected={selected} onClick={onTextClick} />
+              <Reading segments={segments} source={source} selected={selected} mark={mark} onClick={onTextClick} />
             </div>
           ) : null}
         </div>
@@ -373,15 +377,38 @@ function coveredText(text: string): ReactNode {
   ))
 }
 
+/**
+ * One segment's text, with the marked sentence underlined where it falls
+ * inside it. The mark is given in source offsets, so a sentence a boundary
+ * cuts stays marked in both of the chunks that hold a piece of it.
+ */
+function markedText(text: string, start: number, mark: [number, number] | null): ReactNode {
+  if (!mark) return coveredText(text)
+  const from = Math.max(0, mark[0] - start)
+  const to = Math.min(text.length, mark[1] - start)
+  if (to <= from) return coveredText(text)
+  return (
+    <>
+      {from > 0 ? coveredText(text.slice(0, from)) : null}
+      <span data-answer="" className="underline decoration-fg decoration-2 underline-offset-[3px]">
+        {coveredText(text.slice(from, to))}
+      </span>
+      {to < text.length ? coveredText(text.slice(to)) : null}
+    </>
+  )
+}
+
 function Reading({
   segments,
   source,
   selected,
+  mark,
   onClick,
 }: {
   segments: Segment[]
   source: string
   selected: number | null
+  mark: [number, number] | null
   onClick: (e: React.MouseEvent) => void
 }) {
   return (
@@ -410,7 +437,7 @@ function Reading({
             )}
             style={segmentStyle(s)}
           >
-            {gap ? gapText(text) : coveredText(text)}
+            {gap ? gapText(text) : markedText(text, s.start, mark)}
           </span>
         )
       })}

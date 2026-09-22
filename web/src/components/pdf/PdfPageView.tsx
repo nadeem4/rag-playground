@@ -138,9 +138,12 @@ export function PdfPageView({ sha, initialPage, highlights, slot = null, title, 
             p. {n}
             {count ? ` of ${count}` : ""}
           </span>
-          <span className="text-xs text-fg-muted" data-testid="pdf-region-count">
-            {onPage === 1 ? "1 region on this page" : `${onPage} regions on this page`}
-          </span>
+          {/* Nothing is being pointed at (a lesson showing the plain pages): no count to give. */}
+          {highlights.length ? (
+            <span className="text-xs text-fg-muted" data-testid="pdf-region-count">
+              {onPage === 1 ? "1 region on this page" : `${onPage} regions on this page`}
+            </span>
+          ) : null}
           {elsewhere.length ? (
             <span className="flex items-baseline gap-1 text-xs text-fg-muted">
               also on

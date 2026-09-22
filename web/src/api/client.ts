@@ -13,6 +13,7 @@ import type {
   Explanation,
   FindResult,
   LearnChunking,
+  LearnDocument,
   LlmCheck,
   LlmProvider,
   LlmSettings,
@@ -103,6 +104,8 @@ export const api = {
   stages: () => request<StageInfo>("/stages"),
   /** Plan I-22: the sample question, its answer sentence and the chunking challenges. */
   learnChunking: () => request<LearnChunking>("/learn/chunking"),
+  /** The sample document the lessons work on: its name, its pages and its parsed text. */
+  learnDocument: () => request<LearnDocument>("/learn/document"),
   /** Plan I-12: pure, no model loads. 422 `{detail: {errors}}` on a bad config, 404 on an unknown transform. */
   explain: (body: ExplainRequest, signal?: AbortSignal) => request<Explanation>("/explain", { ...json(body), signal }),
 

@@ -48,7 +48,7 @@ export function listChunks(idx: number[]): string {
 }
 
 export function choicesFor(ch: LearnChallenge): [string, string] {
-  return ch.id === "overlap" ? ["Yes, in one chunk", "No, still cut"] : ["It stays whole", "It gets cut"]
+  return ch.id === "overlap" ? ["Yes, in one chunk", "No, still cut"] : ["Yes, it stays whole", "No, it gets cut"]
 }
 
 export function challengePrompt(ch: LearnChallenge, data: LearnChunking): string {

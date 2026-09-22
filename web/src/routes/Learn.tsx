@@ -4,6 +4,7 @@ import { api } from "@/api/client"
 import type { Registry, Source } from "@/api/types"
 import { useRegistry } from "@/api/useRegistry"
 import { ChunkingLesson } from "@/components/learn/ChunkingLesson"
+import { DocumentPanel } from "@/components/learn/DocumentPanel"
 import { CitationsLesson } from "@/components/learn/CitationsLesson"
 import { EndToEndLesson } from "@/components/learn/EndToEndLesson"
 import { chatSampleGraph, e2eSampleGraph, storeGraph, type PipelineGraph } from "@/state/graph"
@@ -64,6 +65,7 @@ export function Learn() {
             The sample document could not be loaded, so the lessons cannot run. {sampleError}
           </p>
         ) : null}
+        <DocumentPanel sha={sample?.sha ?? null} />
         {topic === "end-to-end" ? (
           <EndToEndLesson onRun={build(e2eSampleGraph)} onChat={build(chatSampleGraph)} />
         ) : topic === "chunking" ? (

@@ -85,6 +85,47 @@ def test_redact_walks_nested_values():
     assert credentials.redact(e, None) == e
 
 
+def test_a_key_in_the_query_string_is_not_read(kclient):
+    """The key travels in a header only. A query string is read by proxies and
+    kept in browser history, so the server must ignore one that holds a key."""
+    r = kclient.post(
+        f"/api/runs?x_anthropic_api_key={FAKE_KEY}&api_key={FAKE_KEY}",
+        json={"graph": keyed_graph()},
+    )
+    assert r.status_code == 202, r.text
+    raw_stream(kclient, r.json()["run_id"])
+    assert SEEN and all("credentials" not in s for s in SEEN)
+
+
+def test_uvicorn_access_log_records_the_request_line_not_headers():
+    """uvicorn's access line is built from five values, none of them a header."""
+    import logging
+    import re
+
+    from uvicorn.config import LOGGING_CONFIG
+    from uvicorn.logging import AccessFormatter
+
+    fmt = LOGGING_CONFIG["formatters"]["access"]["fmt"]
+    assert set(re.findall(r"%\((\w+)\)", fmt)) == {
+        "levelprefix",
+        "client_addr",
+        "request_line",
+        "status_code",
+    }
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:51000", "POST", "/api/runs", "1.1", 202),
+        None,
+    )
+    line = AccessFormatter(fmt, use_colors=False).formatMessage(record)
+    assert "POST /api/runs HTTP/1.1" in line and "202" in line
+    assert FAKE_KEY not in line
+
+
 def test_env_example_is_a_template_with_no_value():
     text = (credentials.REPO_ROOT / ".env.example").read_text(encoding="utf-8")
     assert "ANTHROPIC_API_KEY=\n" in text or text.rstrip().endswith("ANTHROPIC_API_KEY=")

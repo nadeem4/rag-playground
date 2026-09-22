@@ -535,6 +535,14 @@ export interface LearnChunking {
   challenges: LearnChallenge[]
 }
 
+/** `GET /api/learn/document`: the sample document every lesson works on. */
+export interface LearnDocument {
+  filename: string
+  page_count: number
+  /** The parsed text the steps work on, as the chunkers see it. */
+  text: string
+}
+
 /** `POST /api/explain`: what a transform will do with THESE settings. */
 export interface Explanation {
   settings: string

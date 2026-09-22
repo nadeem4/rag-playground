@@ -1,9 +1,10 @@
 import { useEffect, useId, useMemo, useState } from "react"
 
 import { api } from "@/api/client"
-import type { LearnChunking, Registry } from "@/api/types"
+import type { ChunkSet, LearnChunking, Registry } from "@/api/types"
 import { useStages } from "@/api/useExplain"
 import { CONTROL } from "@/components/fields/types"
+import { ChunkSetInspector } from "@/components/inspectors/ChunkSetInspector"
 import { Button } from "@/components/ui/button"
 import { challengePrompt, choicesFor, FIELDS, labLines, outcomeText, sizeAndOverlap, unitOf } from "@/learn/challenges"
 import { analyzeChunks, type ChunkAnalysis } from "@/learn/chunks"
@@ -40,6 +41,8 @@ type Run =
 
 interface Done {
   settings: Settings
+  /** The real chunk set, kept so the boundary view can draw it on the document. */
+  set: ChunkSet
   analysis: ChunkAnalysis
 }
 
@@ -51,6 +54,12 @@ interface Answer {
 }
 
 const keyOf = (s: Settings) => JSON.stringify([s.strategy, s.config])
+
+/** How the lesson works, said before the first question is asked. */
+const HOW_IT_WORKS = [
+  "This lesson asks you to predict what a setting will do to one sentence, then runs the real chunker on the sample so you can see the answer.",
+  "Getting a prediction wrong is fine, and is the point. The surprise is what shows you where the boundaries fall.",
+]
 
 export function ChunkingLesson({ registry, sha, pollMs, debounceMs = 250 }: ChunkingLessonProps) {
   const [data, setData] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: LearnChunking }>({
@@ -73,7 +82,7 @@ export function ChunkingLesson({ registry, sha, pollMs, debounceMs = 250 }: Chun
     <article className="flex min-w-0 flex-col gap-6">
       <header className="flex max-w-[68ch] flex-col gap-2">
         <h1 className="text-xl font-semibold">Chunking</h1>
-        {lead.map((p) => (
+        {[...lead, ...HOW_IT_WORKS].map((p) => (
           <p key={p} className="m-0 text-base leading-[1.65]">
             {p}
           </p>
@@ -118,7 +127,7 @@ function Lab({ registry, sha, data, pollMs, debounceMs }: { registry: Registry; 
     const t = window.setTimeout(() => {
       setRun((r) => ({ key, kind: "loading", last: r?.kind === "ready" ? r : r?.kind === "loading" ? r.last : undefined }))
       runChunksOnce({ registry, sha, parse: data.parse, strategy: settings.strategy, config: settings.config, pollMs }).then(
-        (set) => on && setRun({ key, kind: "ready", settings: current, analysis: analyzeChunks(set, data.answer_sentence) }),
+        (set) => on && setRun({ key, kind: "ready", settings: current, set, analysis: analyzeChunks(set, data.answer_sentence) }),
         (e: unknown) => on && setRun({ key, kind: "error", message: e instanceof Error ? e.message : String(e) }),
       )
     }, settings.delay)
@@ -296,9 +305,9 @@ function Challenge({
   return (
     <section aria-label="Challenge" aria-live="polite" className="flex min-w-0 flex-col gap-3 rounded-panel border border-hairline bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="m-0 text-lg font-semibold">{ch.title}</h2>
+        <h2 className="m-0 text-lg font-semibold">Your turn: predict</h2>
         <span className="text-xs text-fg-muted">
-          Challenge {index + 1} of {data.challenges.length}
+          Challenge {index + 1} of {data.challenges.length}: {ch.title}
         </span>
       </div>
       <p className="m-0 max-w-[68ch] text-base leading-[1.65]">{challengePrompt(ch, data)}</p>
@@ -339,8 +348,16 @@ function Challenge({
   )
 }
 
+type ResultView = "cards" | "document"
+
+const VIEWS: { id: ResultView; label: string }[] = [
+  { id: "cards", label: "Chunk cards" },
+  { id: "document", label: "Document with boundaries" },
+]
+
 function Result({ done, data, loading }: { done: Done; data: LearnChunking; loading: boolean }) {
   const lines = useMemo(() => labLines(done.settings.config, done.analysis, data), [done, data])
+  const [view, setView] = useState<ResultView>("cards")
   return (
     <div className={cn("flex min-w-0 flex-col gap-4", loading && "opacity-60")} aria-busy={loading || undefined}>
       <section aria-label="What you are seeing" className="flex flex-col gap-2">
@@ -351,23 +368,48 @@ function Result({ done, data, loading }: { done: Done; data: LearnChunking; load
           ))}
         </ul>
       </section>
+      <div role="tablist" aria-label="Views of the result" className="flex flex-wrap gap-2">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="tab"
+            aria-selected={view === v.id}
+            onClick={() => setView(v.id)}
+            className={cn(
+              "h-control rounded-control border px-2 text-xs",
+              view === v.id ? "border-fg bg-fg text-surface" : "border-hairline bg-surface text-fg-muted hover:text-fg",
+            )}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
       <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
         <span>
           <span className="underline decoration-fg decoration-2 underline-offset-[3px]">Underlined</span> text is the sentence that answers &ldquo;
           {data.question}&rdquo;.
         </span>
-        <span className="flex items-center gap-1">
-          <span
-            aria-hidden
-            className="inline-block h-[12px] w-[24px] border border-hairline"
-            style={{
-              background: "repeating-linear-gradient(135deg, color-mix(in oklch, var(--text-secondary) 24%, transparent) 0 2px, transparent 2px 6px)",
-            }}
-          />
-          Hatched text is repeated from the chunk before.
-        </span>
+        {view === "cards" ? (
+          <span className="flex items-center gap-1">
+            <span
+              aria-hidden
+              className="inline-block h-[12px] w-[24px] border border-hairline"
+              style={{
+                background: "repeating-linear-gradient(135deg, color-mix(in oklch, var(--text-secondary) 24%, transparent) 0 2px, transparent 2px 6px)",
+              }}
+            />
+            Hatched text is repeated from the chunk before.
+          </span>
+        ) : (
+          <span>Each colour is one chunk, and the bands on the left show where it starts and ends.</span>
+        )}
       </p>
-      <ChunkCards key={keyOf(done.settings)} analysis={done.analysis} unit={unitOf(done.settings.config)} />
+      {view === "cards" ? (
+        <ChunkCards key={keyOf(done.settings)} analysis={done.analysis} unit={unitOf(done.settings.config)} />
+      ) : (
+        <ChunkSetInspector chunkSet={done.set} showDetail={false} mark={done.analysis.answerAt} />
+      )}
     </div>
   )
 }

@@ -24,6 +24,13 @@ def body(client) -> dict:
     return r.json()
 
 
+@pytest.fixture
+def document(client) -> dict:
+    r = client.get("/api/learn/document")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 def _parse(body: dict, tmp_path: Path) -> dict:
     parse = body["parse"]
     cls = registry.get(Stage.PARSE, parse["transform"])
@@ -90,3 +97,15 @@ def test_every_challenge_outcome_holds_on_the_real_chunkers(body, tmp_path):
         ).chunks
         whole = any(body["answer_sentence"] in c.text for c in chunks)
         assert whole is challenge["expect_whole"], challenge["id"]
+
+
+def test_learn_document_is_the_sample_the_lessons_use(document):
+    assert set(document) == {"filename", "page_count", "text"}
+    assert document["filename"] == "chunking-primer.pdf"
+    assert document["page_count"] == 3
+
+
+def test_learn_document_text_is_what_the_chunkers_cut(document, body, tmp_path):
+    """The Text view must show the same text the chunk steps work on."""
+    assert document["text"] == DocView.of(_parse(body, tmp_path)).text
+    assert body["answer_sentence"] in document["text"]

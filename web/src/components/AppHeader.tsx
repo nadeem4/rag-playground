@@ -1,6 +1,7 @@
-import { ChevronDown } from "lucide-react"
-import { DropdownMenu } from "radix-ui"
+import { ChevronDown, Info } from "lucide-react"
+import { DropdownMenu, Popover } from "radix-ui"
 
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { setLearnMode, useLearnMode } from "@/state/learnMode"
 
@@ -87,21 +88,52 @@ function DevMenu({ path }: { path: string }) {
   )
 }
 
-/** Learn mode: stage lessons and setting hints on Build. On for a first visit. */
+/**
+ * Learn mode: stage lessons and setting hints on the Build cards, and the
+ * "What you are seeing" summary under the Chunk output. It changes nothing
+ * anywhere else, so it is shown on Build and nowhere else. On for a first
+ * visit, and the stored choice is the same one it always was.
+ */
 function LearnModeSwitch() {
   const on = useLearnMode()
   return (
-    <label className="flex items-center gap-2 text-xs whitespace-nowrap text-fg select-none">
-      <input
-        type="checkbox"
-        role="switch"
-        checked={on}
-        aria-checked={on}
-        onChange={(e) => setLearnMode(e.target.checked)}
-        className="size-[14px] [accent-color:var(--text-primary)]"
-      />
-      Learn mode
-    </label>
+    <div className="flex items-center gap-1">
+      <label className="flex items-center gap-2 text-xs whitespace-nowrap text-fg select-none">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={on}
+          aria-checked={on}
+          onChange={(e) => setLearnMode(e.target.checked)}
+          className="size-[14px] [accent-color:var(--text-primary)]"
+        />
+        Learn mode
+      </label>
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <Button variant="ghost" size="icon" aria-label="What Learn mode does" title="What Learn mode does">
+            <Info aria-hidden strokeWidth={1.75} className="size-[16px]" />
+          </Button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            side="bottom"
+            align="end"
+            sideOffset={8}
+            collisionPadding={16}
+            aria-label="About Learn mode"
+            className="z-10 flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-panel border border-fg-muted bg-surface p-3 text-fg"
+          >
+            <h3 className="m-0 text-sm font-semibold">Learn mode</h3>
+            <p className="m-0 text-sm leading-[1.55] text-fg-muted">
+              Learn mode adds a short explanation under every setting on this page, and a summary of what each step did. Turn it off for a clean
+              workbench.
+            </p>
+            <p className="m-0 text-sm leading-[1.55] text-fg-muted">It changes this page only. The lessons read the same either way.</p>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    </div>
   )
 }
 
@@ -123,7 +155,7 @@ export function AppHeader({ path }: { path: string }) {
         <DevMenu path={path} />
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        <LearnModeSwitch />
+        {path === "/build" ? <LearnModeSwitch /> : null}
         <ApiKeyControl />
         <ThemeToggle />
       </div>

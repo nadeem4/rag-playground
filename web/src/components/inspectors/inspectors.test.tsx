@@ -97,6 +97,25 @@ describe("ChunkSetInspector", () => {
     expect(covered.textContent).toBe("Heading\n\nBody text.")
   })
 
+  it("marks one range of the source, across the chunk boundary that cuts it", () => {
+    const source = "Heading\n\nA boundary falls here. Next paragraph."
+    const at = source.indexOf("A boundary")
+    const set: ChunkSet = {
+      source_text: source,
+      chunks: [
+        { ...makeChunk(0, 0, at + 12), text: source.slice(0, at + 12) },
+        { ...makeChunk(1, at + 12, source.length), text: source.slice(at + 12) },
+      ],
+      doc_id: "d",
+      chunker_meta: {},
+    }
+    const { container } = render(<ChunkSetInspector chunkSet={set} mark={[at, at + "A boundary falls here.".length]} />)
+    const marked = [...container.querySelectorAll("[data-answer]")]
+    expect(marked.map((m) => m.textContent).join("")).toBe("A boundary falls here.")
+    // The cut runs through it, so it is marked in both chunks.
+    expect(marked).toHaveLength(2)
+  })
+
   it("cycles chunk colours past the eighth chunk", () => {
     const { container } = render(<ChunkSetInspector chunkSet={tenChunks()} />)
     const slots = segs(container).map((s) => s.dataset.slot)

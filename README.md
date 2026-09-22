@@ -25,6 +25,7 @@ support and no scaling story.
 - [API keys for chat answers](#api-keys-for-chat-answers)
 - [How it works](#how-it-works)
 - [Adding a strategy](#adding-a-strategy)
+- [Releases](#releases)
 - [Development](#development)
 - [Where your data goes](#where-your-data-goes)
 
@@ -343,6 +344,20 @@ a new strategy needs no frontend change.
      dashes.
 
 Look at `plugins/clean/drop_matching.py` for a small, complete example.
+
+## Releases
+
+The tests run on every push and pull request to `main`. The hosted demo moves only when a
+version tag is pushed:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+That republishes the Hugging Face Space from the tagged code. It needs a repository secret
+named `HF_TOKEN`, a Hugging Face token with write access. You can also publish by hand with
+`uv run python scripts/publish_space.py --repo <user>/rag-playground`.
 
 ## Development
 

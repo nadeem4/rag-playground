@@ -1,10 +1,12 @@
 name: Publish the Hugging Face Space
 
-# Every push to main republishes the demo Space from the committed tree.
+# The demo Space moves only on a version tag, so main stays free for work in
+# progress. Tag a release with, for example:
+#   git tag v0.1.0 && git push origin v0.1.0
 # It needs one repository secret, HF_TOKEN, a Hugging Face token with write access.
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 jobs:

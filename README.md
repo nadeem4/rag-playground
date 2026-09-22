@@ -95,10 +95,17 @@ The server starts on http://127.0.0.1:8000 and opens your browser. Options:
 ## Stages and supported strategies
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'fontFamily': 'monospace'}}}%%
-flowchart LR
-    source --> parse --> clean["clean *"] --> chunk --> enrich["enrich *"] --> index --> retrieve --> rerank["rerank *"] --> use_case
-    query --> qt["query_transform *"] --> retrieve
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#888888', 'clusterBkg': 'transparent', 'clusterBorder': '#888888', 'titleColor': '#888888', 'fontFamily': 'monospace'}}}%%
+flowchart TB
+    subgraph ingest["Indexing: once per document"]
+        direction LR
+        source --> parse --> clean["clean *"] --> chunk --> enrich["enrich *"] --> index
+    end
+    subgraph ask["Asking: once per question, searching the index"]
+        direction LR
+        query --> qt["query_transform *"] --> retrieve --> rerank["rerank *"] --> use_case
+    end
+    ingest --> ask
 ```
 
 `*` marks a stackable stage: its input and output have the same type, so you can add it

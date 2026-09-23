@@ -20,6 +20,7 @@ support and no scaling story.
 - [Quick start](#quick-start)
 - [Run with Docker](#run-with-docker)
 - [What you can do](#what-you-can-do)
+- [Lessons](#lessons)
 - [Stages and supported strategies](#stages-and-supported-strategies)
 - [Models and downloads](#models-and-downloads)
 - [API keys for chat answers](#api-keys-for-chat-answers)
@@ -81,6 +82,10 @@ document, open **Build** (`/build`):
    - The end-to-end lesson reads `web/src/learn/e2e-run.json`. To record it again after a
      change to the pipeline, run `uv run python scripts/record_e2e_lesson.py` (it needs the
      Docling and Qwen3 models).
+   - `uv run python scripts/record_chunking_comparison.py` measures how the three chunkers
+     compare on the sample: where each one cuts, and how each scores against
+     `samples/questions.json`. It writes `web/src/learn/chunking-strategies.json`, which a
+     lesson being written will use.
 2. Pick a parser and press **Run** on the Parse card. The inspector shows the text and the
    elements the parser found.
 3. Add a cleaner, pick a chunker and run again. The chunk view draws every chunk boundary
@@ -170,6 +175,24 @@ unsafe to share:
   - Clicking a citation opens the original PDF page with the sentence highlighted.
 - **Show in PDF without a key.** Any chunk or search hit can open its PDF page with its
   source paragraphs outlined.
+
+## Lessons
+
+The playground opens on **Lessons**. Each one is a few short steps, with the sample document
+beside you the whole time, and ends with a recap.
+
+| Lesson | What you do |
+|---|---|
+| **How RAG works, end to end** | Follow one question from the answer back to the PDF, one pipeline step at a time, through a recorded real run |
+| **Chunking** | Predict what a setting will do to one sentence, then watch the real chunker prove you right or wrong |
+| **How citations work** | Step through how any model can point at the exact sentence it used, and how an invented citation is caught |
+
+Your progress is kept in your browser, so finished lessons are marked and the page offers the
+next one.
+
+**Learn mode**, the switch in the header, changes the **Build** page only. With it on, every
+setting carries a short explanation, and each step says what it just did. Turn it off for a
+clean workbench.
 
 ## Stages and supported strategies
 
@@ -341,7 +364,9 @@ core/        the engine: artifacts, transforms, graph, executor, content-address
 providers/   embedding models and the embedding cache
 plugins/     one module per strategy, grouped by stage
 api/         FastAPI server: registry, sources, runs (streamed as server-sent events), artifacts
-web/         React UI: Lessons, Build, Compare, inspectors
+web/         React UI: Lessons, Build, Compare, Evaluate, inspectors
+samples/     the sample PDF and the question set the Evaluate page scores against
+scripts/     regenerate the sample, record a lesson, publish the demo Space
 tests/       pytest: unit, plugin contract, API and integration tests
 ```
 
@@ -406,6 +431,8 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 - Every colour, size and radius is a token in `web/src/styles/tokens.css`. Tailwind's
   default scales are cleared, so values that are not tokens do not compile.
 - The **Dev** menu in the header opens the component inspectors and a token specimen page.
+- The two typefaces, Atkinson Hyperlegible Next for reading and Martian Mono for data, are
+  self-hosted from npm. No font is fetched from the network at run time.
 - The UI tests use JSON fixtures generated from the real engine. Regenerate them with
   `uv run python web/scripts/export_fixtures.py`.
 
@@ -417,6 +444,10 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 | Cached results | `artifacts/` | `RAG_PLAYGROUND_ARTIFACTS` |
 | Embedding cache | `artifacts/.embcache/` | `RAG_PLAYGROUND_EMBED_CACHE` |
 | Models | `~/.cache/huggingface` | Hugging Face's `HF_HOME` |
+
+Your browser also keeps three small things of its own: which lessons you have finished, the
+Learn mode switch, and the last Evaluate score of the tab. Clearing your browser data removes
+them, and they never leave your machine.
 
 A key typed into the app is in none of these places. It stays in the browser tab's memory
 and is gone when the tab closes. See

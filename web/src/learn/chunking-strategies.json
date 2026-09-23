@@ -1,0 +1,476 @@
+{
+ "doc_text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find.\n\n## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match.\n\nA useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem.\n\n## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply.\n\nThere is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\n## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked.",
+ "passage": {
+  "start": 2057,
+  "end": 2365
+ },
+ "questions": [
+  {
+   "id": "two-steps",
+   "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
+   "gold_answer": "Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone."
+  },
+  {
+   "id": "split-explanation",
+   "question": "What goes wrong when a chunk boundary falls in the middle of an explanation?",
+   "gold_answer": "When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own."
+  },
+  {
+   "id": "lost-context",
+   "question": "Why does separating a table from its caption hurt?",
+   "gold_answer": "A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful."
+  },
+  {
+   "id": "rule-of-thumb",
+   "question": "How much should a single chunk cover?",
+   "gold_answer": "A useful rule of thumb: a chunk should answer one question well."
+  },
+  {
+   "id": "hidden-symptom",
+   "question": "Why can a fluent reply hide a retrieval problem?",
+   "gold_answer": "Bad boundaries are hard to see from the final answer."
+  },
+  {
+   "id": "small-chunks",
+   "question": "Why do small chunks match a question closely?",
+   "gold_answer": "Small chunks match a question closely, because every sentence in them is about the same thing."
+  },
+  {
+   "id": "context-budget",
+   "question": "What has to fit in the context window besides the retrieved pieces?",
+   "gold_answer": "Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer."
+  },
+  {
+   "id": "overlap-size",
+   "question": "How much overlap is a reasonable starting point?",
+   "gold_answer": "A common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent."
+  },
+  {
+   "id": "overlap-too-large",
+   "question": "What happens if the overlap is as large as the chunk itself?",
+   "gold_answer": "When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run."
+  },
+  {
+   "id": "heading-sections",
+   "question": "Why is a heading a good place to start a new piece?",
+   "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."
+  }
+ ],
+ "index": {
+  "recursive_character": {
+   "embedder": "qwen3-embedding-0.6b",
+   "dim": 1024,
+   "doc_count": 5
+  },
+  "markdown_header": {
+   "embedder": "qwen3-embedding-0.6b",
+   "dim": 1024,
+   "doc_count": 5
+  },
+  "token_based": {
+   "embedder": "qwen3-embedding-0.6b",
+   "dim": 1024,
+   "doc_count": 2
+  }
+ },
+ "strategies": {
+  "recursive_character": {
+   "settings": {
+    "chunk_size": 1000,
+    "chunk_overlap": 200
+   },
+   "chunks": [
+    {
+     "id": "885f22105b932286",
+     "ordinal": 0,
+     "start": 0,
+     "end": 976,
+     "page_span": [
+      1,
+      1
+     ],
+     "token_count": 189,
+     "text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find.\n\n## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match."
+    },
+    {
+     "id": "d49fe3d660ed178a",
+     "ordinal": 1,
+     "start": 978,
+     "end": 1744,
+     "page_span": [
+      1,
+      2
+     ],
+     "token_count": 152,
+     "text": "A useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem.\n\n## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply."
+    },
+    {
+     "id": "cb78408f09e79230",
+     "ordinal": 2,
+     "start": 1746,
+     "end": 2663,
+     "page_span": [
+      2,
+      2
+     ],
+     "token_count": 186,
+     "text": "There is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports."
+    },
+    {
+     "id": "2dbf1ae9bccaefa2",
+     "ordinal": 3,
+     "start": 2665,
+     "end": 3431,
+     "page_span": [
+      2,
+      3
+     ],
+     "token_count": 153,
+     "text": "Overlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\n## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks."
+    },
+    {
+     "id": "db741506aa938036",
+     "ordinal": 4,
+     "start": 3433,
+     "end": 3971,
+     "page_span": [
+      3,
+      3
+     ],
+     "token_count": 104,
+     "text": "A structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked."
+    }
+   ],
+   "evaluation": {
+    "hits": 10,
+    "asked": 10,
+    "hit_rate": 1.0,
+    "questions": [
+     {
+      "id": "two-steps",
+      "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "split-explanation",
+      "question": "What goes wrong when a chunk boundary falls in the middle of an explanation?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "lost-context",
+      "question": "Why does separating a table from its caption hurt?",
+      "hit": true,
+      "rank": 2,
+      "match": "exact"
+     },
+     {
+      "id": "rule-of-thumb",
+      "question": "How much should a single chunk cover?",
+      "hit": true,
+      "rank": 2,
+      "match": "exact"
+     },
+     {
+      "id": "hidden-symptom",
+      "question": "Why can a fluent reply hide a retrieval problem?",
+      "hit": true,
+      "rank": 2,
+      "match": "exact"
+     },
+     {
+      "id": "small-chunks",
+      "question": "Why do small chunks match a question closely?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "context-budget",
+      "question": "What has to fit in the context window besides the retrieved pieces?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "overlap-size",
+      "question": "How much overlap is a reasonable starting point?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "overlap-too-large",
+      "question": "What happens if the overlap is as large as the chunk itself?",
+      "hit": true,
+      "rank": 3,
+      "match": "exact"
+     },
+     {
+      "id": "heading-sections",
+      "question": "Why is a heading a good place to start a new piece?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     }
+    ]
+   }
+  },
+  "markdown_header": {
+   "settings": {
+    "max_tokens": 512
+   },
+   "chunks": [
+    {
+     "id": "3643a979855ff9b8",
+     "ordinal": 0,
+     "start": 0,
+     "end": 371,
+     "page_span": [
+      1,
+      1
+     ],
+     "token_count": 69,
+     "text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find."
+    },
+    {
+     "id": "931363e893e68adc",
+     "ordinal": 1,
+     "start": 373,
+     "end": 1440,
+     "page_span": [
+      1,
+      1
+     ],
+     "token_count": 217,
+     "text": "## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match.\n\nA useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem."
+    },
+    {
+     "id": "2de86d313f1ff952",
+     "ordinal": 2,
+     "start": 1442,
+     "end": 2827,
+     "page_span": [
+      2,
+      2
+     ],
+     "token_count": 274,
+     "text": "## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply.\n\nThere is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run."
+    },
+    {
+     "id": "1d355451492056a0",
+     "ordinal": 3,
+     "start": 2829,
+     "end": 3670,
+     "page_span": [
+      3,
+      3
+     ],
+     "token_count": 165,
+     "text": "## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from."
+    },
+    {
+     "id": "7427e04034618d32",
+     "ordinal": 4,
+     "start": 3672,
+     "end": 3971,
+     "page_span": [
+      3,
+      3
+     ],
+     "token_count": 59,
+     "text": "## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked."
+    }
+   ],
+   "evaluation": {
+    "hits": 10,
+    "asked": 10,
+    "hit_rate": 1.0,
+    "questions": [
+     {
+      "id": "two-steps",
+      "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "split-explanation",
+      "question": "What goes wrong when a chunk boundary falls in the middle of an explanation?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "lost-context",
+      "question": "Why does separating a table from its caption hurt?",
+      "hit": true,
+      "rank": 2,
+      "match": "exact"
+     },
+     {
+      "id": "rule-of-thumb",
+      "question": "How much should a single chunk cover?",
+      "hit": true,
+      "rank": 2,
+      "match": "exact"
+     },
+     {
+      "id": "hidden-symptom",
+      "question": "Why can a fluent reply hide a retrieval problem?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "small-chunks",
+      "question": "Why do small chunks match a question closely?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "context-budget",
+      "question": "What has to fit in the context window besides the retrieved pieces?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "overlap-size",
+      "question": "How much overlap is a reasonable starting point?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "overlap-too-large",
+      "question": "What happens if the overlap is as large as the chunk itself?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "heading-sections",
+      "question": "Why is a heading a good place to start a new piece?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     }
+    ]
+   }
+  },
+  "token_based": {
+   "settings": {
+    "max_tokens": 512,
+    "overlap": 64
+   },
+   "chunks": [
+    {
+     "id": "233a12d072c46ec3",
+     "ordinal": 0,
+     "start": 0,
+     "end": 2583,
+     "page_span": [
+      1,
+      2
+     ],
+     "token_count": 512,
+     "text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find.\n\n## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match.\n\nA useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem.\n\n## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply.\n\nThere is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a"
+    },
+    {
+     "id": "3ea3869e126650c2",
+     "ordinal": 1,
+     "start": 2277,
+     "end": 3971,
+     "page_span": [
+      2,
+      3
+     ],
+     "token_count": 336,
+     "text": "cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\n## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked."
+    }
+   ],
+   "evaluation": {
+    "hits": 10,
+    "asked": 10,
+    "hit_rate": 1.0,
+    "questions": [
+     {
+      "id": "two-steps",
+      "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "split-explanation",
+      "question": "What goes wrong when a chunk boundary falls in the middle of an explanation?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "lost-context",
+      "question": "Why does separating a table from its caption hurt?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "rule-of-thumb",
+      "question": "How much should a single chunk cover?",
+      "hit": true,
+      "rank": 2,
+      "match": "exact"
+     },
+     {
+      "id": "hidden-symptom",
+      "question": "Why can a fluent reply hide a retrieval problem?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "small-chunks",
+      "question": "Why do small chunks match a question closely?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "context-budget",
+      "question": "What has to fit in the context window besides the retrieved pieces?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "overlap-size",
+      "question": "How much overlap is a reasonable starting point?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     },
+     {
+      "id": "overlap-too-large",
+      "question": "What happens if the overlap is as large as the chunk itself?",
+      "hit": true,
+      "rank": 2,
+      "match": "exact"
+     },
+     {
+      "id": "heading-sections",
+      "question": "Why is a heading a good place to start a new piece?",
+      "hit": true,
+      "rank": 1,
+      "match": "exact"
+     }
+    ]
+   }
+  }
+ }
+}

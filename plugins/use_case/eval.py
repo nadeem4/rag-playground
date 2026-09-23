@@ -16,6 +16,12 @@ it was, so a run is never flattered by a loose rule you cannot see.
 `top_k` is what the reader would actually have looked at. A gold sentence that
 sits below it is a miss, not a hit, and `considered` says how many pieces were
 checked, so a miss can be told apart from a short list.
+
+A question may carry several gold passages (I-32), because a document often
+answers the same question in more than one place. Any one of them counts as
+found: `hit`, `rank` and `match` speak for the first retrieved piece that holds
+any of them, and `golds_found` out of `golds_total` says how many were covered,
+which is what a recall-at-k number is made of.
 """
 
 from __future__ import annotations
@@ -36,8 +42,8 @@ _LINE_HYPHEN = re.compile(r"-\s*\n\s*")
 
 NO_GOLD = (
     "This question has no gold answer, so there is nothing to look for. Set "
-    "gold_answer on the query node (the question step) to the sentence in the "
-    "document that answers it."
+    "gold_answer (or gold_answers) on the query node (the question step) to the "
+    "sentence in the document that answers it."
 )
 
 
@@ -112,7 +118,9 @@ class EvalUseCase(Transform[EvalConfig]):
         settings = (
             f"Looks for the question's gold answer in the top {k} of the pieces "
             "it receives, and says whether it was found, at which rank, and in "
-            "which piece. The sentence has to be there word for word, allowing "
+            "which piece. A question with several gold answers counts as found "
+            "when any one of them is there, and the report says how many of "
+            "them were. The sentence has to be there word for word, allowing "
             "only for different spacing, a word broken across a line and "
             "capital letters. The report says which of those two kinds of match "
             "it was. No language model and no API key."
@@ -140,36 +148,50 @@ class EvalUseCase(Transform[EvalConfig]):
     ) -> dict[str, Any]:
         result = RetrievalResult.model_validate(inputs["result"])
         query = Query.model_validate(inputs["query"])
-        gold = query.gold_answer.strip()
-        if not gold:
+        golds = query.golds
+        if not golds:
             raise ValueError(NO_GOLD)
 
         considered = result.hits[: max(config.top_k, 0)]
-        normalised_gold = _normalise(gold)
+        normalised = [_normalise(gold) for gold in golds]
+        found: set[int] = set()
         rank: int | None = None
         matched_chunk_id = ""
         match = "none"
 
         for hit in considered:
             text = hit.chunk.text
-            if gold in text:
-                kind = "exact"
-            elif normalised_gold in _normalise(text):
-                kind = "normalized"
-            else:
-                continue
-            rank, matched_chunk_id, match = hit.rank, hit.chunk.id, kind
-            break
+            normalised_text: str | None = None
+            for n, gold in enumerate(golds):
+                if n in found:
+                    continue
+                if gold in text:
+                    kind = "exact"
+                else:
+                    if normalised_text is None:
+                        normalised_text = _normalise(text)
+                    if normalised[n] not in normalised_text:
+                        continue
+                    kind = "normalized"
+                found.add(n)
+                if rank is None:
+                    # The first piece the reader would have reached that holds
+                    # any of the gold passages.
+                    rank, matched_chunk_id, match = hit.rank, hit.chunk.id, kind
+            if len(found) == len(golds):
+                break
 
         return Output(
             kind="eval",
             payload={
                 "question": query.text,
-                "gold_answer": gold,
+                "gold_answer": golds[0],
                 "hit": match != "none",
                 "rank": rank,
                 "matched_chunk_id": matched_chunk_id,
                 "match": match,
+                "golds_total": len(golds),
+                "golds_found": len(found),
                 "considered": len(considered),
                 "total_candidates": result.total_candidates,
             },

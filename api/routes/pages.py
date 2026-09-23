@@ -35,7 +35,8 @@ CACHE_CONTROL = "public, max-age=31536000, immutable"
 _SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}
 
 
-def _source_path(request: Request, sha: str) -> Path:
+def source_path(request: Request, sha: str) -> Path:
+    """The stored file for this sha, or 404. Also the gold-set routes' guard."""
     sources: Path = request.app.state.deps.sources_dir
     if _SHA.match(sha) and demo.readable(sha) and sources.is_dir():
         for p in sorted(sources.glob(f"{sha}*")):
@@ -46,7 +47,7 @@ def _source_path(request: Request, sha: str) -> Path:
 
 @contextmanager
 def _open(request: Request, sha: str) -> Iterator[pdfium.PdfDocument]:
-    data = _source_path(request, sha).read_bytes()
+    data = source_path(request, sha).read_bytes()
     try:
         doc = pdfium.PdfDocument(data)
     except pdfium.PdfiumError as exc:

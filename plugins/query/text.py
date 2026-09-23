@@ -26,6 +26,11 @@ class TextQueryConfig(BaseModel):
     #: means "not an evaluation question", and nothing else behaves differently.
     gold_answer: str = ""
 
+    #: Further sentences that would also answer it (I-32); any of them counts as
+    #: found. `gold_answer` on its own behaves exactly as it always did; when
+    #: both are set the resolved list holds the single one first.
+    gold_answers: list[str] = []
+
 
 @register
 class TextQuery(Transform[TextQueryConfig]):
@@ -53,14 +58,20 @@ class TextQuery(Transform[TextQueryConfig]):
                 ),
             )
         shown = text if len(text) <= 120 else text[:119] + "…"
-        gold = config.gold_answer.strip()
-        graded = (
-            " It also carries a gold answer: the sentence in the document that "
-            "answers it, which the evaluation step looks for among the retrieved "
-            "pieces."
-            if gold
-            else ""
-        )
+        golds = _query(config).golds
+        graded = ""
+        if len(golds) == 1:
+            graded = (
+                " It also carries a gold answer: the sentence in the document that "
+                "answers it, which the evaluation step looks for among the retrieved "
+                "pieces."
+            )
+        elif golds:
+            graded = (
+                f" It also carries {len(golds)} gold answers: the sentences in the "
+                "document that answer it, any one of which the evaluation step "
+                "counts as found."
+            )
         return Explanation(
             settings=(
                 f'Asks "{shown}". Vector search turns it into a vector marked as a '
@@ -76,6 +87,12 @@ class TextQuery(Transform[TextQueryConfig]):
     def apply(
         self, inputs: Mapping[str, Any], config: TextQueryConfig, ctx: RunContext
     ) -> dict[str, Any]:
-        return Query(
-            text=config.text, gold_answer=config.gold_answer
-        ).model_dump(mode="json")
+        return _query(config).model_dump(mode="json")
+
+
+def _query(config: TextQueryConfig) -> Query:
+    return Query(
+        text=config.text,
+        gold_answer=config.gold_answer,
+        gold_answers=config.gold_answers,
+    )

@@ -39,6 +39,7 @@ def run(
     *hits: Hit,
     question: str = "How does a retriever score a chunk?",
     gold: str = GOLD,
+    golds: list[str] | None = None,
     total_candidates: int | None = None,
     **config,
 ) -> Output:
@@ -48,11 +49,9 @@ def run(
         fetch_k=len(hits),
         total_candidates=len(hits) if total_candidates is None else total_candidates,
     ).model_dump(mode="json")
+    query = Query(text=question, gold_answer=gold, gold_answers=golds or [])
     out = EvalUseCase().apply(
-        {
-            "result": result,
-            "query": Query(text=question, gold_answer=gold).model_dump(mode="json"),
-        },
+        {"result": result, "query": query.model_dump(mode="json")},
         EvalConfig(**config),
         None,
     )
@@ -102,6 +101,9 @@ def test_the_payload_has_the_i24_shape():
         "match",
         "considered",
         "total_candidates",
+        # I-32
+        "golds_total",
+        "golds_found",
     }
     assert json.loads(json.dumps(payload)) == payload
 
@@ -271,6 +273,82 @@ def test_a_missing_gold_answer_fails_the_node_naming_the_query_node():
 def test_a_blank_gold_answer_fails_too():
     with pytest.raises(ValueError):
         run(hit(GOLD), gold="   \n ")
+
+
+# --------------------------------------------------------------------------
+# I-32: several gold passages, any of which counts
+# --------------------------------------------------------------------------
+
+OTHER = "Scoring happens once per chunk."
+
+
+def test_one_gold_answer_counts_one_gold():
+    payload = run(hit(GOLD)).payload
+    assert (payload["golds_total"], payload["golds_found"]) == (1, 1)
+    assert run(hit("nothing like it")).payload["golds_found"] == 0
+
+
+def test_several_golds_are_counted_and_any_of_them_is_a_hit():
+    payload = run(hit(OTHER), gold="", golds=[GOLD, OTHER]).payload
+    assert payload["golds_total"] == 2
+    assert payload["golds_found"] == 1
+    assert payload["hit"] is True
+    assert payload["rank"] == 1
+
+
+def test_golds_found_counts_every_gold_that_appeared():
+    payload = run(
+        hit(GOLD, rank=1), hit(OTHER, rank=2), gold="", golds=[GOLD, OTHER]
+    ).payload
+    assert (payload["golds_total"], payload["golds_found"]) == (2, 2)
+
+
+def test_a_gold_below_top_k_does_not_count_as_found():
+    hits = [hit(f"passage {r}", rank=r) for r in range(1, 5)] + [
+        hit(GOLD, rank=5),
+        hit(OTHER, rank=6),
+    ]
+    payload = run(*hits, gold="", golds=[GOLD, OTHER], top_k=5).payload
+    assert (payload["golds_total"], payload["golds_found"]) == (2, 1)
+    assert payload["rank"] == 5
+
+
+def test_rank_is_the_earliest_hit_whichever_gold_it_holds():
+    payload = run(
+        hit(OTHER, rank=1), hit(GOLD, rank=2), gold="", golds=[GOLD, OTHER]
+    ).payload
+    assert payload["rank"] == 1
+    assert payload["matched_chunk_id"] == "chunk-1"
+
+
+def test_the_single_gold_answer_joins_the_list_and_is_reported_first():
+    payload = run(hit(OTHER), gold=GOLD, golds=[OTHER]).payload
+    assert payload["gold_answer"] == GOLD
+    assert (payload["golds_total"], payload["golds_found"]) == (2, 1)
+
+
+def test_a_repeated_gold_is_counted_once():
+    payload = run(hit(GOLD), gold=GOLD, golds=[GOLD]).payload
+    assert (payload["golds_total"], payload["golds_found"]) == (1, 1)
+
+
+def test_golds_alone_with_no_single_gold_answer_is_enough():
+    payload = run(hit(GOLD), gold="", golds=[GOLD]).payload
+    assert payload["hit"] is True
+    assert payload["gold_answer"] == GOLD
+
+
+def test_an_empty_list_and_an_empty_gold_answer_still_fails_the_node():
+    with pytest.raises(ValueError):
+        run(hit(GOLD), gold="", golds=["  "])
+
+
+def test_a_normalised_match_counts_as_found_for_its_own_gold():
+    payload = run(
+        hit("Scoring   happens once per chunk."), gold="", golds=[GOLD, OTHER]
+    ).payload
+    assert payload["golds_found"] == 1
+    assert payload["match"] == "normalized"
 
 
 # --------------------------------------------------------------------------

@@ -156,6 +156,17 @@ unsafe to share:
   sentence. A row opens to show the chunks that came back, so a miss can be understood. The
   previous score of the tab is kept, so after changing one setting the page reads "4 of 10,
   was 10 of 10" and marks the questions that changed. It needs no API key.
+- **Bring your own questions.** The bundled question set is about the bundled sample, so
+  scoring your own PDF against it would be meaningless. Download the template
+  ([`GET /api/questions/template?format=json`](http://127.0.0.1:8000/api/questions/template?format=json),
+  or `format=csv` for a spreadsheet), fill in your questions with the sentences from your
+  document that answer them, and upload the file on the Evaluate page. It is stored against
+  that document's fingerprint, so a set can never be scored against the wrong document. Each
+  gold passage must be **copied from the document, not retyped**: the upload check looks for
+  every one of them in the document's own text and tells you which were not there, with the
+  closest passage it did find, so a stray curly quote or a typo shows up at once instead of
+  looking like a retrieval failure. A question may carry several gold passages when the
+  document answers it in more than one place; any of them counts.
 - **Learn as you go.** Each card has an info button that explains what the step is for,
   how the chosen strategy works, and what it will do with your current settings, including
   the trade-off. Settings that make no sense show a warning and disable Run. After a run,
@@ -220,7 +231,7 @@ several times, for example two cleaners in a row.
 | Stage | What it is for | Strategies |
 |---|---|---|
 | **source** | The document you work on | `upload` |
-| **query** | The question you ask, and optionally the sentence in the document that answers it | `text` |
+| **query** | The question you ask, and optionally the sentence or sentences in the document that answer it | `text` |
 | **parse** | Turns the PDF into text elements (headings, paragraphs, lists, tables) with their pages and positions | `pdfium`, `docling` |
 | **clean** \* | Removes text that would pollute retrieval, such as page numbers and repeated boilerplate | `header_footer_strip`, `dedupe_blocks`, `drop_matching` |
 | **chunk** | Cuts the text into the pieces that get indexed and retrieved | `recursive_character`, `markdown_header`, `token_based` |
@@ -270,7 +281,7 @@ several times, for example two cleaners in a row.
 |---|---|---|
 | `search` | Shows the top 5 chunks as a ranked list with scores and pages, and how many candidates there were. | No |
 | `chat` | A chat model (Claude, OpenAI, or a custom OpenAI-compatible endpoint) answers from the top 5 retrieved chunks only, and every claim points at the sentences it relied on. `citation_method` is `auto` (Claude's own citations for a Claude model, sentence ids for any other) or `sentence_ids`. With sentence ids, `support_threshold` (0.55) decides when a claim counts as cited rather than weak. | Yes, for the chosen provider; optional for a custom endpoint |
-| `eval` | Checks whether the top 5 retrieved chunks contain the sentence that answers the question, and reports hit or miss, the rank it was found at, and which chunk it was in. The question carries that sentence as its `gold_answer`, so one sweep over a set of questions scores a whole configuration. | No |
+| `eval` | Checks whether the top 5 retrieved chunks contain the sentence that answers the question, and reports hit or miss, the rank it was found at, and which chunk it was in. The question carries that sentence as its `gold_answer`, so one sweep over a set of questions scores a whole configuration. A question may also carry several sentences in `gold_answers`, any of which counts, and the report says how many of them were found. | No |
 
 ## Models and downloads
 
@@ -441,6 +452,7 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 | What | Where | Change it with |
 |---|---|---|
 | Uploaded files | `sources/` | `RAG_PLAYGROUND_SOURCES` |
+| Question sets you upload | `sources/questions/<fingerprint>.json` | `RAG_PLAYGROUND_SOURCES` |
 | Cached results | `artifacts/` | `RAG_PLAYGROUND_ARTIFACTS` |
 | Embedding cache | `artifacts/.embcache/` | `RAG_PLAYGROUND_EMBED_CACHE` |
 | Models | `~/.cache/huggingface` | Hugging Face's `HF_HOME` |

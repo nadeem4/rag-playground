@@ -254,6 +254,14 @@
             "default": "",
             "title": "Gold Answer",
             "type": "string"
+          },
+          "gold_answers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Gold Answers",
+            "type": "array"
           }
         },
         "title": "TextQueryConfig",

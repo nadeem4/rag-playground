@@ -122,6 +122,31 @@ def test_hit_and_qaitem_defaults():
     assert (q.gold_chunk_ids, q.gold_answer) == ([], None)
 
 
+# --- I-32: several gold passages per question --------------------------------
+
+
+def test_a_query_with_no_gold_has_no_golds():
+    assert Query(text="q?").golds == []
+    assert Query(text="q?", gold_answer="   ").golds == []
+
+
+def test_the_single_gold_answer_is_the_whole_list_when_it_is_alone():
+    assert Query(gold_answer="  One sentence.  ").golds == ["One sentence."]
+
+
+def test_the_list_wins_and_includes_the_single_one():
+    q = Query(gold_answer="A.", gold_answers=["B.", "C."])
+    assert q.golds == ["A.", "B.", "C."]
+
+
+def test_a_gold_repeated_in_both_fields_appears_once():
+    assert Query(gold_answer="A.", gold_answers=["A.", "B."]).golds == ["A.", "B."]
+
+
+def test_blank_entries_in_the_list_are_dropped():
+    assert Query(gold_answers=["A.", "  ", ""]).golds == ["A."]
+
+
 # --- rendering rules ---------------------------------------------------------
 
 

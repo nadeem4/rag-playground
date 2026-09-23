@@ -162,11 +162,30 @@ class Query(BaseModel):
     #: one (I-23). Empty means "not an evaluation question". It travels with the
     #: question so that sweeping the query node varies both together.
     gold_answer: str = ""
+    #: Further sentences that would also answer it (I-32); any of them counts.
+    #: `gold_answer` alone still works exactly as it did, so a set written
+    #: before this field stays valid.
+    gold_answers: list[str] = []
     variants: list[str] = []
     embed_text: str | None = None
     filters: dict | None = None
     history: list[dict] = []
     transform_trace: list[dict] = []
+
+    @property
+    def golds(self) -> list[str]:
+        """Every gold passage for this question, the single one first.
+
+        Trimmed, blanks dropped, repeats dropped, order kept. One place decides
+        what "the gold passages" means, so the query node, the eval step and
+        anything later can never disagree about it.
+        """
+        out: list[str] = []
+        for gold in (self.gold_answer, *self.gold_answers):
+            gold = gold.strip()
+            if gold and gold not in out:
+                out.append(gold)
+        return out
 
 
 class Hit(BaseModel):

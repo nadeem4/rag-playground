@@ -70,3 +70,39 @@ def test_explain_mentions_a_gold_answer_only_when_there_is_one():
     graded = cls().explain(cls.config_model(text="a question?", gold_answer="A line."))
     assert "gold" not in plain.settings.lower()
     assert "gold" in graded.settings.lower()
+
+
+# --------------------------------------------------------------------------
+# I-32: several gold answers
+# --------------------------------------------------------------------------
+
+
+def test_gold_answers_defaults_to_empty_and_changes_nothing():
+    assert run("q?")["gold_answers"] == []
+    assert run("q?") == Query(text="q?").model_dump(mode="json")
+
+
+def test_gold_answers_are_carried_into_the_payload():
+    out = run("q?", gold_answers=["One.", "Two."])
+    assert out["gold_answers"] == ["One.", "Two."]
+    assert Query(**out).golds == ["One.", "Two."]
+
+
+def test_the_single_gold_answer_still_works_alone():
+    out = run("q?", gold_answer="One.")
+    assert Query(**out).golds == ["One."]
+
+
+def test_the_list_wins_and_includes_the_single_one():
+    out = run("q?", gold_answer="One.", gold_answers=["Two."])
+    assert Query(**out).golds == ["One.", "Two."]
+
+
+def test_the_gold_answers_vary_the_artifact_too():
+    assert run("a", gold_answers=["one"]) != run("a", gold_answers=["two"])
+
+
+def test_explain_mentions_gold_when_only_the_list_is_set():
+    cls = registry.get(Stage.QUERY, "text")
+    exp = cls().explain(cls.config_model(text="a question?", gold_answers=["A line."]))
+    assert "gold" in exp.settings.lower()

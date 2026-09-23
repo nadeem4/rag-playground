@@ -1,11 +1,11 @@
-import { useEffect, useId, useMemo, useState, type CSSProperties } from "react"
+import { useId, useMemo, useState, type CSSProperties } from "react"
 import { Plus } from "lucide-react"
 
 import { useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState, VariantState } from "@/api/runState"
 import type { GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
-import { loadPayload } from "@/api/useArtifact"
+import { usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { EmptyState } from "@/components/EmptyState"
@@ -72,31 +72,6 @@ export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Va
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-
-/** Payloads by artifact id, loaded once each. Artifacts are immutable, so nothing is refetched. */
-function usePayloads(ids: (string | undefined)[]): (id: string | undefined) => { status: InspectorStatus; data?: unknown } {
-  const [data, setData] = useState<Record<string, unknown>>({})
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const key = ids.filter(Boolean).join(",")
-  useEffect(() => {
-    let live = true
-    for (const id of new Set(key.split(",").filter(Boolean))) {
-      loadPayload(id).then(
-        (d) => live && setData((m) => (id in m ? m : { ...m, [id]: d })),
-        (e: unknown) => live && setErrors((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) })),
-      )
-    }
-    return () => {
-      live = false
-    }
-  }, [key])
-  return (id) => {
-    if (!id) return { status: { kind: "ready" } }
-    if (id in data) return { status: { kind: "ready" }, data: data[id] }
-    if (id in errors) return { status: { kind: "error", message: errors[id] } }
-    return { status: { kind: "loading" } }
-  }
-}
 
 const finished = (n?: NodeState) => n !== undefined && (n.status === "done" || n.status === "cached")
 

@@ -22,6 +22,7 @@ import type {
   RunCreated,
   RunRequest,
   RunSnapshot,
+  SampleQuestion,
   Source,
   StageInfo,
   SweepRequest,
@@ -117,6 +118,8 @@ export const api = {
   },
   /** Plan I-14: registers the bundled sample PDF like an upload. Idempotent. */
   sampleSource: () => request<Source>("/sources/sample", { method: "POST" }),
+  /** Plan I-25: the committed question set for the sample, a bare array. */
+  sampleQuestions: () => request<SampleQuestion[]>("/samples/questions"),
 
   /** 400 on an invalid graph; 422 `{detail: {node_id, errors}}` on a bad config. */
   createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.keys))),

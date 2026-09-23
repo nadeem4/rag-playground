@@ -144,6 +144,13 @@ unsafe to share:
   chunker never re-parses the PDF.
 - **Compare strategies.** Sweep a stage over several strategies or settings and see the
   results side by side, including how many steps were reused from the cache.
+- **Score a pipeline instead of guessing.** The Evaluate page takes the pipeline you built,
+  asks it every question in the bundled question set, and says how many of them found their
+  answer, at what rank, and in which chunk. Each question carries the sentence in the
+  document that answers it, so a run counts as a hit when a retrieved chunk contains that
+  sentence. A row opens to show the chunks that came back, so a miss can be understood. The
+  previous score of the tab is kept, so after changing one setting the page reads "4 of 10,
+  was 10 of 10" and marks the questions that changed. It needs no API key.
 - **Learn as you go.** Each card has an info button that explains what the step is for,
   how the chosen strategy works, and what it will do with your current settings, including
   the trade-off. Settings that make no sense show a warning and disable Run. After a run,

@@ -16,12 +16,13 @@ import { ArtifactInspector } from "@/components/inspectors/registry"
 import { sampleGraph, storeGraph } from "@/state/graph"
 
 import { Compare } from "./Compare"
+import { Evaluate } from "./Evaluate"
 import { Shell } from "./Shell"
 
 /**
  * Contract §10: zero em-dashes and en-dashes in any visible string. This
- * renders the main Build and Compare views, and the inspectors they show,
- * against the live registry and stage text, and fails on either character.
+ * renders the main Build, Compare and Evaluate views, and the inspectors they
+ * show, against the live registry and stage text, and fails on either character.
  */
 
 const DASH = /[–—]/
@@ -44,6 +45,7 @@ function serve(sources: Source[]) {
       if (url === "/api/stages") return ok(liveStages)
       if (url === "/api/sources") return ok(sources)
       if (url === "/api/explain") return ok({ settings: "Splits on paragraphs first.", blocking: false })
+      if (url === "/api/samples/questions") return ok([{ id: "a", question: "How big is a chunk?", gold_answer: "One question well." }])
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )
@@ -98,6 +100,15 @@ describe("no em-dashes or en-dashes in visible text", () => {
     serve([])
     render(<Compare />)
     await waitFor(() => expect(visibleText()).toMatch(/No pipeline to compare/))
+    expect(visibleText()).not.toMatch(DASH)
+  })
+
+  it("Evaluate, before a run", async () => {
+    storeGraph(sampleGraph(registry, SOURCE))
+    serve([SOURCE])
+    render(<Evaluate />)
+    await waitFor(() => expect(visibleText()).toMatch(/questions? ready/))
+    expect(visibleText()).toMatch(/Nothing scored yet/)
     expect(visibleText()).not.toMatch(DASH)
   })
 

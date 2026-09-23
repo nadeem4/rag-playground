@@ -543,6 +543,37 @@ export interface LearnDocument {
   text: string
 }
 
+// ------------------------------------------------------------------- eval --
+// Plan I-24 and I-25: the question set and the `use_case/eval` output.
+
+/** One entry of `GET /api/samples/questions`, which returns a bare array. */
+export interface SampleQuestion {
+  id: string
+  question: string
+  gold_answer: string
+}
+
+export type MatchKind = "exact" | "normalized" | "none"
+
+export interface EvalPayload {
+  question: string
+  gold_answer: string
+  /** The gold sentence was inside one of the top `top_k` hits. */
+  hit: boolean
+  /** 1-based rank of the first hit that contained it; null on a miss. */
+  rank: number | null
+  matched_chunk_id: string
+  match: MatchKind
+  /** How many hits were checked: `min(top_k, hits)`. */
+  considered: number
+  total_candidates: number
+}
+
+export interface EvalOutput {
+  kind: "eval"
+  payload: EvalPayload
+}
+
 /** `POST /api/explain`: what a transform will do with THESE settings. */
 export interface Explanation {
   settings: string

@@ -12,6 +12,7 @@ const PRIMARY = [
   { href: "/", label: "Lessons" },
   { href: "/build", label: "Build" },
   { href: "/compare", label: "Compare" },
+  { href: "/evaluate", label: "Evaluate" },
 ]
 
 const REPO = "https://github.com/nadeem4/rag-playground"

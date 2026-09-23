@@ -37,12 +37,18 @@ function header(path = "/") {
 const devButton = () => screen.getByRole("button", { name: "Dev" })
 
 describe("AppHeader", () => {
-  it("shows Lessons, Build, Compare and GitHub as primary navigation", () => {
+  it("shows Lessons, Build, Compare, Evaluate and GitHub as primary navigation", () => {
     header()
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Lessons", "Build", "Compare", "GitHub"])
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/build", "/compare", "https://github.com/nadeem4/rag-playground"])
+    expect(links.map((l) => l.textContent)).toEqual(["Lessons", "Build", "Compare", "Evaluate", "GitHub"])
+    expect(links.map((l) => l.getAttribute("href"))).toEqual([
+      "/",
+      "/build",
+      "/compare",
+      "/evaluate",
+      "https://github.com/nadeem4/rag-playground",
+    ])
     expect(screen.queryByText("Forms")).toBeNull()
     expect(screen.queryByText("Tokens")).toBeNull()
   })

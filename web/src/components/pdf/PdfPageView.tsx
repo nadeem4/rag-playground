@@ -130,7 +130,7 @@ export function PdfPageView({ sha, initialPage, highlights, slot = null, title, 
   const onPage = highlights.filter((h) => h.page === n).length
 
   return (
-    <section aria-label="PDF page" data-pdf-view="" className="flex min-w-0 flex-col bg-surface">
+    <section aria-label="PDF page" data-pdf-view="" className="flex flex-col bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="text-sm font-semibold">{title}</span>

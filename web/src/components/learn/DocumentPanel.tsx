@@ -87,7 +87,7 @@ export function DocumentPanel({ sha, highlight = null }: { sha: string | null; h
   const rects = found.kind === "ready" ? found.data.rects : []
 
   return (
-    <section aria-label="The document" className="flex min-w-0 flex-col rounded-panel border border-hairline bg-surface">
+    <section aria-label="The document" className="flex flex-col rounded-panel border border-hairline bg-surface">
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2">
         <span className="text-sm font-semibold">The document</span>
         <span className="text-sm text-fg-muted">

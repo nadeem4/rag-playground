@@ -177,7 +177,8 @@ function Sweep({
       <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
         <div className="flex min-w-0 items-baseline gap-3">
           <h1 className="text-xl font-semibold">Compare</h1>
-          <p className="truncate text-sm text-fg-muted">
+          {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
+          <p className="text-sm text-fg-muted">
             The {verb} step over <span className="font-mono">{filename}</span>
             {upstream.length ? (
               <>

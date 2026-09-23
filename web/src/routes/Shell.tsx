@@ -370,7 +370,9 @@ function InspectorPanel({
 
   return (
     <section aria-label="Inspector" className="flex min-h-0 min-w-0 flex-col bg-surface">
-      <div className="flex h-[40px] shrink-0 items-center justify-between gap-3 border-b border-hairline px-3">
+      {/* Wraps rather than squeezing: at phone width the title and the artifact
+          metadata each take a row, as on Compare and Evaluate. */}
+      <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
         <div className="flex min-w-0 items-baseline gap-2">
           <h2 className="text-xl font-semibold">{node ? verb : "Inspector"}</h2>
           {node ? <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span> : null}

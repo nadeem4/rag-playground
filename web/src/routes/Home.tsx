@@ -16,7 +16,7 @@ const REPO = "https://github.com/nadeem4/rag-playground"
 function Preview() {
   const kept = new Set(RUN.mmr)
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <div className="chunk-map h-[64px]" aria-hidden>
         {RUN.chunks.map((c) => (
           <span

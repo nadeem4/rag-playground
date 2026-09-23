@@ -104,7 +104,8 @@ describe("theme blocks", () => {
   it("clears Tailwind's default scales so off-contract values cannot compile", () => {
     expect(css).toMatch(/@theme \{\s*--\*: initial;/)
     const spacing = [...css.matchAll(/--spacing-(\d+): (\d+)px/g)].map((m) => +m[2])
-    expect(spacing).toEqual([4, 8, 12, 16, 24])
+    // 0 is the zero step (see zeroSpacing.test.ts); the scale itself caps at 24.
+    expect(spacing).toEqual([0, 4, 8, 12, 16, 24])
     const sizes = [...css.matchAll(/--text-(2xs|xs|sm|base|lg|xl): (\d+)px/g)].map((m) => +m[2])
     expect(sizes).toEqual([11, 12, 13, 14, 16, 20])
   })

@@ -107,6 +107,37 @@ describe("supported types", () => {
     expect(last()).toEqual({ k: 12 })
   })
 
+  it("a list of strings gets one input per entry, not a JSON textarea", () => {
+    const schema = obj({ golds: { type: "array", items: { type: "string" }, default: ["one", "two"], title: "Golds" } })
+    const { container, last } = renderForm(schema)
+    expect(describeField(schema.properties!.golds, schema).kind).toBe("strings")
+    expect(container.querySelector('[data-field-kind="json"]')).toBeNull()
+    const inputs = screen.getAllByLabelText(/^Golds/) as HTMLInputElement[]
+    expect(inputs.map((i) => i.value)).toEqual(["one", "two"])
+    fireEvent.change(inputs[1], { target: { value: "second" } })
+    expect(last()).toEqual({ golds: ["one", "second"] })
+  })
+
+  it("adds and removes entries in a list of strings", () => {
+    const { last } = renderForm(obj({ golds: { type: "array", items: { type: "string" }, default: ["one"], title: "Golds" } }))
+    fireEvent.click(screen.getByRole("button", { name: "Add to Golds" }))
+    expect(last()).toEqual({ golds: ["one", ""] })
+    fireEvent.change(screen.getAllByLabelText(/^Golds/)[1], { target: { value: "two" } })
+    expect(last()).toEqual({ golds: ["one", "two"] })
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove from Golds" })[0])
+    expect(last()).toEqual({ golds: ["two"] })
+  })
+
+  it("shows an empty list as one empty input, so there is somewhere to type", () => {
+    renderForm(obj({ golds: { type: "array", items: { type: "string" }, default: [], title: "Golds" } }))
+    expect((screen.getAllByLabelText(/^Golds/) as HTMLInputElement[]).map((i) => i.value)).toEqual([""])
+  })
+
+  it("a list of anything else is still raw JSON", () => {
+    expect(describeField({ type: "array", items: { type: "integer" } }, {}).kind).toBe("json")
+    expect(describeField({ type: "array" }, {}).kind).toBe("json")
+  })
+
   it("integer rejects a fraction", () => {
     renderForm(obj({ k: { type: "integer", default: 5, title: "Top K" } }))
     fireEvent.change(screen.getByLabelText("Top K"), { target: { value: "1.5" } })
@@ -289,8 +320,9 @@ describe("numeric constraints", () => {
 })
 
 describe("JSON fallback", () => {
+  // A list of numbers has no form control, unlike a list of plain strings.
   const schema = obj({
-    tags: { type: "array", items: { type: "string" }, default: ["a"], title: "Tags" },
+    tags: { type: "array", items: { type: "integer" }, default: [1], title: "Tags" },
   })
 
   it("renders unsupported shapes as a labelled raw JSON textarea", () => {
@@ -300,16 +332,16 @@ describe("JSON fallback", () => {
     expect(within(field).getByText(/raw json/i)).toBeTruthy()
     const area = screen.getByLabelText("Tags") as HTMLTextAreaElement
     expect(area.tagName).toBe("TEXTAREA")
-    expect(JSON.parse(area.value)).toEqual(["a"])
+    expect(JSON.parse(area.value)).toEqual([1])
 
-    fireEvent.change(area, { target: { value: '["a", "b"]' } })
-    expect(last()).toEqual({ tags: ["a", "b"] })
+    fireEvent.change(area, { target: { value: "[1, 2]" } })
+    expect(last()).toEqual({ tags: [1, 2] })
   })
 
   it("keeps the last good value and says so on invalid JSON", () => {
     const { last } = renderForm(schema)
-    fireEvent.change(screen.getByLabelText("Tags"), { target: { value: '["a",' } })
-    expect(last()).toEqual({ tags: ["a"] })
+    fireEvent.change(screen.getByLabelText("Tags"), { target: { value: "[1," } })
+    expect(last()).toEqual({ tags: [1] })
     expect(screen.getByText(/not valid json/i)).toBeTruthy()
   })
 

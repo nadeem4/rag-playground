@@ -2,6 +2,7 @@ import type { EvalOutput, EvalPayload, GraphNode, Registry, SampleQuestion, Stag
 import type { HitRowData } from "@/components/inspectors/hits"
 
 import { columnOrder, setConfig, setTransform, titleFor, type PipelineGraph } from "./graph"
+import type { Question } from "./goldSet"
 
 /**
  * The arithmetic behind the Evaluate screen, kept pure so it is testable
@@ -41,11 +42,16 @@ export function evalGraph(g: PipelineGraph, registry: Registry, topK: number): P
   return setConfig(swapped, use.id, { ...node.config, top_k: topK })
 }
 
-/** One variant per question, each setting the question and its gold answer. */
-export function questionVariants(query: Pick<GraphNode, "transform" | "config">, questions: readonly SampleQuestion[]): Variant[] {
+/**
+ * One variant per question, each setting the question and its gold passages.
+ * Both fields go out: `gold_answers` is the list a question may have several of
+ * (plan I-32), and `gold_answer` still carries the first, so a server that has
+ * only the older field still scores the run.
+ */
+export function questionVariants(query: Pick<GraphNode, "transform" | "config">, questions: readonly Question[]): Variant[] {
   return questions.map((q) => ({
     transform: query.transform,
-    config: { ...query.config, text: q.question, gold_answer: q.gold_answer },
+    config: { ...query.config, text: q.question, gold_answer: q.gold_answers[0] ?? "", gold_answers: q.gold_answers },
   }))
 }
 
@@ -83,6 +89,109 @@ export function summarize(payloads: readonly (EvalPayload | undefined)[]): EvalS
 export function summaryLine(now: EvalSummary, before?: EvalSummary | null): string {
   const head = `${now.hits} of ${now.total} found the answer`
   return before ? `${head}, was ${before.hits} of ${before.total}` : head
+}
+
+// ------------------------------------------------------------- the metrics --
+
+/** How many questions found the answer at each rank. */
+export interface Spread {
+  rank: number
+  count: number
+}
+
+/**
+ * Everything the page can say about a run, computed from the per-question
+ * payloads. `hitRate` is the headline; the rest is there for whoever wants it.
+ * Every rate is over the questions that have finished, so a half-done run reads
+ * as what it has, not as a pile of misses.
+ */
+export interface EvalMetrics {
+  /** Questions asked, finished or not. */
+  total: number
+  /** Questions that have a payload. */
+  scored: number
+  hits: number
+  /** Hit rate at k: hits over scored. Null before anything finishes. */
+  hitRate: number | null
+  /** Mean reciprocal rank over the scored questions. A miss contributes zero. */
+  mrr: number | null
+  /** Gold passages the questions have, over the payloads that count them. */
+  goldsTotal: number
+  goldsFound: number
+  /** Some question has more than one gold passage, so recall says something. */
+  multiGold: boolean
+  /** Recall at k, or null when every question has one gold passage. */
+  recall: number | null
+  meanRank: number | null
+  medianRank: number | null
+  spread: Spread[]
+}
+
+function median(sorted: readonly number[]): number | null {
+  if (sorted.length === 0) return null
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+export function metrics(payloads: readonly (EvalPayload | undefined)[]): EvalMetrics {
+  const scored = payloads.filter((p): p is EvalPayload => p !== undefined)
+  const ranks = scored.filter((p) => p.hit).map((p) => p.rank).filter((r): r is number => typeof r === "number")
+  const sorted = [...ranks].sort((a, b) => a - b)
+
+  let goldsTotal = 0
+  let goldsFound = 0
+  let multiGold = false
+  for (const p of scored) {
+    if (typeof p.golds_total !== "number") continue
+    goldsTotal += p.golds_total
+    goldsFound += p.golds_found ?? 0
+    if (p.golds_total > 1) multiGold = true
+  }
+
+  const spread: Spread[] = []
+  for (const r of sorted) {
+    const last = spread[spread.length - 1]
+    if (last && last.rank === r) last.count += 1
+    else spread.push({ rank: r, count: 1 })
+  }
+
+  return {
+    total: payloads.length,
+    scored: scored.length,
+    hits: scored.filter((p) => p.hit).length,
+    hitRate: scored.length ? scored.filter((p) => p.hit).length / scored.length : null,
+    mrr: scored.length ? scored.reduce((sum, p) => sum + (p.hit && p.rank ? 1 / p.rank : 0), 0) / scored.length : null,
+    goldsTotal,
+    goldsFound,
+    multiGold,
+    recall: multiGold && goldsTotal > 0 ? goldsFound / goldsTotal : null,
+    meanRank: ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length : null,
+    medianRank: median(sorted),
+    spread,
+  }
+}
+
+export interface TagMetrics {
+  tag: string
+  metrics: EvalMetrics
+}
+
+/** The same numbers per tag. Empty when no question carries one. */
+export function metricsByTag(items: readonly { tags: readonly string[]; payload?: EvalPayload }[]): TagMetrics[] {
+  const byTag = new Map<string, (EvalPayload | undefined)[]>()
+  for (const item of items) {
+    for (const tag of item.tags) {
+      const list = byTag.get(tag) ?? []
+      list.push(item.payload)
+      byTag.set(tag, list)
+    }
+  }
+  return [...byTag.keys()].sort().map((tag) => ({ tag, metrics: metrics(byTag.get(tag)!) }))
+}
+
+/** A rate as a whole percentage. Null stays null, so the page can leave it out. */
+export function percent(x: number | null): string | null {
+  return x === null ? null : `${Math.round(x * 100)}%`
 }
 
 /** The finished evaluation the next one is compared against. */

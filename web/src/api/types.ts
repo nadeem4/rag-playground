@@ -567,11 +567,80 @@ export interface EvalPayload {
   /** How many hits were checked: `min(top_k, hits)`. */
   considered: number
   total_candidates: number
+  /** Plan I-32: how many gold passages this question has. Absent on I-25 payloads. */
+  golds_total?: number
+  /** Plan I-32: how many of them appeared within `top_k`. Absent on I-25 payloads. */
+  golds_found?: number
 }
 
 export interface EvalOutput {
   kind: "eval"
   payload: EvalPayload
+}
+
+// -------------------------------------------------------- your own gold set --
+// Plan I-30 and I-31. A question set is uploaded as JSON or CSV and stored
+// against the document's fingerprint, so it can never be applied to the wrong
+// document by accident.
+
+/** One question of a set. Every field is present, empty where it was not given. */
+export interface GoldQuestion {
+  id: string
+  question: string
+  gold_answers: string[]
+  answer: string
+  tags: string[]
+  /** Accepted and stored now, ignored while the pipeline takes one document. */
+  document: string
+}
+
+/**
+ * The upload check for one gold passage, against the document as `pdfium`
+ * reads it. `found_normalized` carries the document's own wording so the file
+ * can be fixed; `not_found` carries the closest sentence so a typo is obvious.
+ * Both are empty strings when there is nothing to show.
+ */
+export type GoldCheckStatus = "found" | "found_normalized" | "not_found"
+
+export interface GoldCheck {
+  /** The passage as the file writes it. */
+  gold: string
+  status: GoldCheckStatus
+  document_text: string
+  closest: string
+}
+
+/** `status` is the worst of the question's passages. */
+export interface GoldQuestionCheck {
+  index: number
+  id: string
+  question: string
+  status: GoldCheckStatus
+  golds: GoldCheck[]
+}
+
+/** `GET /api/sources/{sha}/questions`: the record the server keeps. */
+export interface StoredQuestionSet {
+  /** The document fingerprint this set is stored against. */
+  sha: string
+  /** The name of the file that was uploaded. */
+  filename: string
+  format: "json" | "csv"
+  /** Questions read from the file. */
+  count: number
+  set: { version: number; document: string; questions: GoldQuestion[] }
+}
+
+/** `POST /api/sources/{sha}/questions`: the record, plus the check it ran. */
+export interface QuestionSetUpload extends StoredQuestionSet {
+  /** False when the server would not keep it, as a hosted demo will not. */
+  stored: boolean
+  /** The parser the check read the document with, `pdfium` today. */
+  parser: string
+  parser_note: string
+  summary: { questions: number; found: number; found_normalized: number; not_found: number }
+  /** The check, one row per question. Not the questions themselves: those are `set.questions`. */
+  questions: GoldQuestionCheck[]
 }
 
 /** `POST /api/explain`: what a transform will do with THESE settings. */

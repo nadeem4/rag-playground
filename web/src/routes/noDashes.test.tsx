@@ -81,6 +81,10 @@ describe("no em-dashes or en-dashes in visible text", () => {
   })
 
   it("Build, on a first visit", async () => {
+    // The page before this one can still write its graph back as a request it
+    // started settles, which lands after `beforeEach` has cleared storage. The
+    // slate is wiped here instead, right before the page that needs it empty.
+    window.localStorage.clear()
     serve([])
     render(<Shell />)
     await waitFor(() => expect(visibleText()).toMatch(/Try the sample document/))

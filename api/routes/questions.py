@@ -46,9 +46,11 @@ PARSER_NOTE = (
     "passage found here can still miss there, and the other way round."
 )
 
+#: A hosted demo checks a set and hands the result back, but keeps nothing, so
+#: one visitor's questions never reach another's browser.
 NO_STORING = (
-    "question sets are not stored in this hosted demo; run the playground "
-    "locally to keep your own set"
+    "this hosted demo checked your questions but did not keep them, so they "
+    "live in this browser tab only; run the playground locally to keep a set"
 )
 
 #: Where a set lives, under the configured sources directory.
@@ -129,10 +131,7 @@ def get_template(format: str = Query("json", pattern="^(json|csv)$")) -> Respons
 
 @router.post("/sources/{sha}/questions")
 async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict[str, Any]:
-    """Store a set against this document, after checking every gold passage."""
-    if demo.enabled():
-        raise HTTPException(status_code=403, detail=NO_STORING)
-
+    """Check every gold passage, and store the set unless this is a hosted demo."""
     path = source_path(request, sha)
     try:
         parsed = parse_question_set(await file.read(), file.filename or "")
@@ -151,13 +150,16 @@ async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict
             "questions": parsed["questions"],
         },
     }
-    stored = _store(request, sha)
-    stored.parent.mkdir(parents=True, exist_ok=True)
-    stored.write_text(json.dumps(record), encoding="utf-8")
+    keep = not demo.enabled()
+    if keep:
+        stored = _store(request, sha)
+        stored.parent.mkdir(parents=True, exist_ok=True)
+        stored.write_text(json.dumps(record), encoding="utf-8")
 
     return {
         **record,
-        "stored": True,
+        "stored": keep,
+        "note": "" if keep else NO_STORING,
         "parser": PARSER,
         "parser_note": PARSER_NOTE,
         "summary": {

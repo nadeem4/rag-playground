@@ -4,9 +4,13 @@ import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 import type { EvalPayload, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
 import { usePayloads } from "@/api/usePayloads"
+import { useQuestionSet } from "@/api/useQuestionSet"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
+import { useSampleSha } from "@/api/useSampleSha"
 import { EmptyState } from "@/components/EmptyState"
+import { EvalMetricsDetail } from "@/components/evaluate/EvalMetrics"
+import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { CONTROL } from "@/components/fields/types"
 import { rowsFromResult } from "@/components/inspectors/hits"
 import { RetrievalResultInspector } from "@/components/inspectors/RetrievalResultInspector"
@@ -19,6 +23,9 @@ import {
   evalGraph,
   hasRetriever,
   isEvalOutput,
+  metrics,
+  metricsByTag,
+  percent,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
@@ -30,6 +37,7 @@ import {
   type PreviousEvaluation,
   type RowChange,
 } from "@/state/evaluate"
+import { inUse, questionsFromSample, questionsFromSet, type Question } from "@/state/goldSet"
 import { readStoredGraph, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 
@@ -52,10 +60,11 @@ export function Evaluate() {
   const reg = useRegistry()
   if (reg.kind !== "ready") return <RegistryScreen state={reg} />
   const graph = readStoredGraph(reg.registry)
-  const loaded = graph?.nodes.some((n) => n.stage === "source" && n.config.sha)
+  const source = graph?.nodes.find((n) => n.stage === "source")
+  const sourceSha = String(source?.config.sha ?? "")
   const query = graph?.nodes.find((n) => n.stage === "query")
   const useCase = graph?.nodes.find((n) => n.stage === "use_case")
-  if (!graph || !loaded || !query || !useCase) {
+  if (!graph || !sourceSha || !query || !useCase) {
     return (
       <Blocked title="No pipeline to evaluate">Build a pipeline with a file first, then come back here to score what it finds.</Blocked>
     )
@@ -70,7 +79,7 @@ export function Evaluate() {
   if (!reg.registry.use_case?.eval) {
     return <Blocked title="This server has no eval step">Update the server, or run it from this repository, to score a pipeline here.</Blocked>
   }
-  return <Evaluation registry={reg.registry} graph={graph} queryId={query.id} useCaseId={useCase.id} />
+  return <Evaluation registry={reg.registry} graph={graph} queryId={query.id} useCaseId={useCase.id} sourceSha={sourceSha} />
 }
 
 function Blocked({ title, children }: { title: string; children: ReactNode }) {
@@ -90,7 +99,7 @@ const finished = (n?: NodeState) => n !== undefined && (n.status === "done" || n
 
 /** One question, and everything this page knows about how it did. */
 interface Row {
-  question: SampleQuestion
+  question: Question
   payload?: EvalPayload
   result?: RetrievalResult
   resultStatus: InspectorStatus
@@ -103,11 +112,13 @@ function Evaluation({
   graph,
   queryId,
   useCaseId,
+  sourceSha,
 }: {
   registry: Registry
   graph: PipelineGraph
   queryId: string
   useCaseId: string
+  sourceSha: string
 }) {
   const topKId = useId()
   const query = graph.nodes.find((n) => n.id === queryId)!
@@ -115,9 +126,9 @@ function Evaluation({
   const resultNode = upstreamOfStage(graph, useCaseId, ["rerank", "retrieve"])
   const defaultTopK = Number(registry.use_case?.eval?.config_schema?.properties?.top_k?.default ?? 5)
   const [topK, setTopK] = useState(defaultTopK)
-  const [questions, setQuestions] = useState<SampleQuestion[] | null>(null)
+  const [sample, setSample] = useState<SampleQuestion[] | null>(null)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
-  const [asked, setAsked] = useState<SampleQuestion[]>([])
+  const [asked, setAsked] = useState<Question[]>([])
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -125,10 +136,22 @@ function Evaluation({
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
 
+  // Which set is in use, and whether it belongs to the document on Build.
+  const uploaded = useQuestionSet(sourceSha)
+  const sampleSha = useSampleSha()
+  const which = inUse(sourceSha, sampleSha, uploaded.set)
+  const questions: Question[] | null = uploaded.set
+    ? questionsFromSet(uploaded.set)
+    : uploaded.loading
+      ? null
+      : sample
+        ? questionsFromSample(sample)
+        : null
+
   useEffect(() => {
     let live = true
     api.sampleQuestions().then(
-      (qs) => live && setQuestions(qs),
+      (qs) => live && setSample(qs),
       (err: unknown) => live && setQuestionsError(err instanceof Error ? err.message : String(err)),
     )
     return () => {
@@ -160,6 +183,8 @@ function Evaluation({
   })
 
   const summary = summarize(rows.map((r) => r.payload))
+  const scores = metrics(rows.map((r) => r.payload))
+  const byTag = metricsByTag(rows.map((r) => ({ tags: r.question.tags, payload: r.payload })))
   const effect = graph.nodes.some((n) => n.stage === "rerank")
     ? rerankEffect(rows.map((r) => ({ payload: r.payload, rows: r.result ? rowsFromResult(r.result) : undefined })))
     : null
@@ -246,6 +271,20 @@ function Evaluation({
         </div>
       </div>
 
+      <QuestionSetPanel
+        inUse={which}
+        set={uploaded.set}
+        count={questions?.length ?? null}
+        filename={filename}
+        report={uploaded.report}
+        tabOnly={uploaded.tabOnly}
+        error={uploaded.error}
+        busy={uploaded.busy}
+        disabled={busy}
+        onUpload={(file) => void uploaded.upload(file)}
+        onRemove={() => void uploaded.remove()}
+      />
+
       <p className="shrink-0 border-b border-hairline px-3 py-1 text-xs text-fg-muted">
         Evaluating{" "}
         {steps.map((s, i) => (
@@ -284,14 +323,9 @@ function Evaluation({
             <p data-testid="summary" className="font-mono text-sm font-medium text-fg">
               {summaryLine(summary, previous?.summary)}
             </p>
-            <p data-testid="average-rank" className="text-sm text-fg-muted">
-              {summary.averageRank === null ? "No average rank yet" : `Average rank of the first hit ${summary.averageRank.toFixed(1)}`}
+            <p data-testid="hit-rate" className="text-sm text-fg-muted">
+              Hit rate at {topK} <span className="font-mono font-medium text-fg tabular-nums">{percent(scores.hitRate) ?? "not yet"}</span>
             </p>
-            {rerankText ? (
-              <p data-testid="rerank-effect" className="text-sm text-fg-muted">
-                {rerankText}
-              </p>
-            ) : null}
             <p className="text-xs text-fg-muted">
               {busy ? `Question ${Math.min(settled + 1, asked.length)} of ${asked.length}.` : `${asked.length} questions, one run each.`}
             </p>
@@ -299,6 +333,8 @@ function Evaluation({
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
       </div>
+
+      {runId === null ? null : <EvalMetricsDetail metrics={scores} byTag={byTag} topK={topK} rerank={rerankText} />}
 
       {firstFailure ? (
         <p role="alert" className="shrink-0 border-b border-hairline px-3 py-2 font-mono text-xs break-words text-danger">

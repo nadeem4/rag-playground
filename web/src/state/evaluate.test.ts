@@ -8,6 +8,9 @@ import {
   changeText,
   evalGraph,
   hasRetriever,
+  metrics,
+  metricsByTag,
+  percent,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
@@ -17,8 +20,8 @@ import {
   summarize,
   summaryLine,
   type EvalPayload,
-  type SampleQuestion,
 } from "./evaluate"
+import type { Question } from "./goldSet"
 import { e2eSampleGraph, removeNode, sampleGraph } from "./graph"
 import { TEST_REGISTRY } from "./testRegistry"
 
@@ -84,17 +87,109 @@ describe("the graph an evaluation runs", () => {
 })
 
 describe("one sweep variant per question", () => {
-  const questions: SampleQuestion[] = [
-    { id: "a", question: "What are the two steps?", gold_answer: "It answers in two steps." },
-    { id: "b", question: "How big is a chunk?", gold_answer: "A chunk should answer one question well." },
+  const questions: Question[] = [
+    { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [] },
+    { id: "b", question: "How big is a chunk?", gold_answers: ["One well.", "Or the other."], tags: ["size"] },
   ]
 
-  it("sets the question and its gold answer together, and keeps the rest of the config", () => {
+  it("sets the question and its gold passages together, and keeps the rest of the config", () => {
     const query = { id: "query", stage: "query" as const, transform: "text", config: { text: "old", gold_answer: "", extra: 1 } }
     expect(questionVariants(query, questions)).toEqual([
-      { transform: "text", config: { text: "What are the two steps?", gold_answer: "It answers in two steps.", extra: 1 } },
-      { transform: "text", config: { text: "How big is a chunk?", gold_answer: "A chunk should answer one question well.", extra: 1 } },
+      {
+        transform: "text",
+        config: { text: "What are the two steps?", gold_answer: "It answers in two steps.", gold_answers: ["It answers in two steps."], extra: 1 },
+      },
+      {
+        transform: "text",
+        config: { text: "How big is a chunk?", gold_answer: "One well.", gold_answers: ["One well.", "Or the other."], extra: 1 },
+      },
     ])
+  })
+
+  it("sends the single gold answer as well, so a server that has only that field still scores the run", () => {
+    const query = { id: "query", stage: "query" as const, transform: "text", config: {} }
+    const [first] = questionVariants(query, [{ id: "a", question: "Q", gold_answers: [], tags: [] }])
+    expect(first.config).toEqual({ text: "Q", gold_answer: "", gold_answers: [] })
+  })
+})
+
+describe("the metrics", () => {
+  it("is empty before anything has been scored", () => {
+    expect(metrics([undefined, undefined])).toMatchObject({ total: 2, scored: 0, hits: 0, hitRate: null, mrr: null, spread: [] })
+  })
+
+  it("has hit rate at k as the headline, over the questions that have finished", () => {
+    const m = metrics([payload({ rank: 1 }), payload({ rank: 2 }), miss(), undefined])
+    expect(m.total).toBe(4)
+    expect(m.scored).toBe(3)
+    expect(m.hits).toBe(2)
+    expect(m.hitRate).toBeCloseTo(2 / 3)
+  })
+
+  it("averages the reciprocal rank, so finding it first beats finding it fifth, and a miss scores nothing", () => {
+    expect(metrics([payload({ rank: 1 }), payload({ rank: 5 }), miss()]).mrr).toBeCloseTo((1 + 0.2 + 0) / 3)
+    expect(metrics([payload({ rank: 1 }), payload({ rank: 1 })]).mrr).toBe(1)
+  })
+
+  it("reports recall at k only when some question has more than one gold passage", () => {
+    const single = metrics([payload({ golds_total: 1, golds_found: 1 }), miss({ golds_total: 1, golds_found: 0 })])
+    expect(single).toMatchObject({ multiGold: false, recall: null })
+    const several = metrics([payload({ golds_total: 3, golds_found: 2 }), payload({ golds_total: 1, golds_found: 1 })])
+    expect(several.multiGold).toBe(true)
+    expect(several.recall).toBeCloseTo(3 / 4)
+  })
+
+  it("reports no recall at all when the server sent no gold counts", () => {
+    expect(metrics([payload(), payload()])).toMatchObject({ multiGold: false, recall: null })
+  })
+
+  it("gives the rank of the first hit, its middle and its spread, counting only the questions that hit", () => {
+    const m = metrics([payload({ rank: 1 }), payload({ rank: 1 }), payload({ rank: 4 }), miss()])
+    expect(m.meanRank).toBe(2)
+    expect(m.medianRank).toBe(1)
+    expect(m.spread).toEqual([
+      { rank: 1, count: 2 },
+      { rank: 4, count: 1 },
+    ])
+  })
+
+  it("takes the middle of two middle ranks", () => {
+    expect(metrics([payload({ rank: 2 }), payload({ rank: 5 })]).medianRank).toBe(3.5)
+  })
+
+  it("has no rank at all when nothing was found", () => {
+    expect(metrics([miss(), miss()])).toMatchObject({ meanRank: null, medianRank: null, spread: [] })
+  })
+
+  it("reads a rate as a whole percentage, and says nothing when there is no rate", () => {
+    expect(percent(0.9)).toBe("90%")
+    expect(percent(2 / 3)).toBe("67%")
+    expect(percent(null)).toBeNull()
+  })
+})
+
+describe("the metrics per tag", () => {
+  const tagged = (tags: string[], p?: EvalPayload) => ({ tags, payload: p })
+
+  it("is empty when no question carries a tag, so the page shows nothing", () => {
+    expect(metricsByTag([tagged([], payload()), tagged([], miss())])).toEqual([])
+  })
+
+  it("scores each tag over its own questions, and counts a question under every tag it carries", () => {
+    const rows = [
+      tagged(["policy"], payload({ rank: 1 })),
+      tagged(["policy", "refunds"], miss()),
+      tagged(["refunds"], payload({ rank: 2 })),
+    ]
+    const byTag = metricsByTag(rows)
+    expect(byTag.map((t) => t.tag)).toEqual(["policy", "refunds"])
+    expect(byTag[0].metrics).toMatchObject({ total: 2, hits: 1, hitRate: 0.5 })
+    expect(byTag[1].metrics).toMatchObject({ total: 2, hits: 1, hitRate: 0.5 })
+  })
+
+  it("names the tags in the same order every run", () => {
+    const rows = [tagged(["zeta"], payload()), tagged(["alpha"], payload()), tagged(["mid"], miss())]
+    expect(metricsByTag(rows).map((t) => t.tag)).toEqual(["alpha", "mid", "zeta"])
   })
 })
 

@@ -18,7 +18,9 @@ import type {
   LlmProvider,
   LlmSettings,
   PdfPageSize,
+  QuestionSetUpload,
   Registry,
+  StoredQuestionSet,
   RunCreated,
   RunRequest,
   RunSnapshot,
@@ -120,6 +122,18 @@ export const api = {
   sampleSource: () => request<Source>("/sources/sample", { method: "POST" }),
   /** Plan I-25: the committed question set for the sample, a bare array. */
   sampleQuestions: () => request<SampleQuestion[]>("/samples/questions"),
+
+  /** Plan I-31: a filled-in example set to start from. */
+  questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,
+  /** Plan I-31: the set stored against this document. 404 when there is none. */
+  questionSet: (source: string) => request<StoredQuestionSet>(`/sources/${sha(source)}/questions`),
+  /** Plan I-31: store a set against this document, and check every gold passage against its text. 403 in demo mode. */
+  uploadQuestionSet: (source: string, file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return request<QuestionSetUpload>(`/sources/${sha(source)}/questions`, { method: "POST", body: form })
+  },
+  deleteQuestionSet: (source: string) => request<unknown>(`/sources/${sha(source)}/questions`, { method: "DELETE" }),
 
   /** 400 on an invalid graph; 422 `{detail: {node_id, errors}}` on a bad config. */
   createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.keys))),

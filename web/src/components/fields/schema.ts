@@ -8,7 +8,7 @@ import type { JsonSchema } from "@/api/types"
  * documented raw-JSON escape hatch.
  */
 
-export type FieldKind = "string" | "integer" | "number" | "boolean" | "enum" | "object" | "json"
+export type FieldKind = "string" | "integer" | "number" | "boolean" | "enum" | "strings" | "object" | "json"
 
 export interface FieldInfo {
   kind: FieldKind
@@ -108,6 +108,12 @@ export function describeField(node: JsonSchema, root: JsonSchema): FieldInfo {
     case "number":
     case "boolean":
       return { kind: s.type, schema: s, nullable, options: [] }
+    case "array": {
+      // A list of plain strings is the one list shape with a real control.
+      const items = resolveRef(s.items ?? {}, root)
+      const plain = items?.type === "string" && !items.enum && !("const" in items)
+      return plain ? { kind: "strings", schema: s, nullable, options: [] } : json(s, nullable)
+    }
     case "object":
       return s.properties ? { kind: "object", schema: s, nullable, options: [] } : json(s, nullable)
     default:
@@ -144,6 +150,8 @@ export function seedValue(f: FieldInfo, root: JsonSchema): unknown {
       return false
     case "enum":
       return f.options[0]
+    case "strings":
+      return []
     case "object":
       return defaultsFor(f.schema, root)
     default:

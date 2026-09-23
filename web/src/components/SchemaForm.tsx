@@ -18,6 +18,7 @@ import {
   type FieldErrors,
   type FieldKind,
 } from "@/components/fields/schema"
+import { StringListField } from "@/components/fields/StringListField"
 import { TextField } from "@/components/fields/TextField"
 import { LearnHint } from "@/components/learn/LearnHint"
 import type { ControlProps } from "@/components/fields/types"
@@ -52,6 +53,7 @@ const CONTROLS: Partial<Record<FieldKind, ComponentType<ControlProps>>> = {
   integer: NumberField,
   number: NumberField,
   enum: EnumField,
+  strings: StringListField,
   json: JsonField,
 }
 

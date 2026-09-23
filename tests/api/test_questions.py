@@ -336,16 +336,25 @@ def test_an_unreadable_file_is_a_400_naming_the_row(client):
     assert client.get(f"/api/sources/{sha}/questions").status_code == 404
 
 
-def test_demo_mode_refuses_to_store(client, dirs, monkeypatch):
+def test_demo_mode_checks_a_set_but_keeps_nothing(client, dirs, monkeypatch):
+    """A visitor can try their own questions; the server just does not keep them."""
     client.post("/api/sources/sample")
     from api import demo
 
     sha = demo.sample_sha()
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     r = post_set(client, sha, one_json(BOUNDARY))
-    assert r.status_code == 403
-    assert "demo" in r.json()["detail"].lower()
+    assert r.status_code == 200
+    body = r.json()
+    assert body["stored"] is False
+    assert "demo" in body["note"].lower()
+    # The check still ran, so the visitor learns whether their passages are real.
+    # This passage belongs to another document, so honestly it is not found.
+    assert body["summary"] == {"questions": 1, "found": 0, "found_normalized": 0, "not_found": 1}
+    assert body["questions"][0]["status"] == "not_found"
     assert not (dirs["sources"] / "questions").exists()
+    # And nothing is served back afterwards.
+    assert client.get(f"/api/sources/{sha}/questions").status_code == 404
 
 
 def test_demo_mode_serves_no_set_for_another_document(client, monkeypatch):

@@ -99,7 +99,7 @@ docker compose up --build
 Then open http://localhost:8000.
 
 - **It takes a while the first time.** The build installs PyTorch (CPU only) and builds the
-  UI, and the image is about 3.5 GB. The first run of each model also downloads it, which
+  UI, and the image is about 3.6 GB. The first run of each model also downloads it, which
   is another 1 to 2 GB.
 - **Your models and uploads live in a named volume**, mounted at `/data` in the container.
   They survive `docker compose down` and rebuilds. To delete them, run
@@ -190,7 +190,7 @@ several times, for example two cleaners in a row.
 | Stage | What it is for | Strategies |
 |---|---|---|
 | **source** | The document you work on | `upload` |
-| **query** | The question you ask | `text` |
+| **query** | The question you ask, and optionally the sentence in the document that answers it | `text` |
 | **parse** | Turns the PDF into text elements (headings, paragraphs, lists, tables) with their pages and positions | `pdfium`, `docling` |
 | **clean** \* | Removes text that would pollute retrieval, such as page numbers and repeated boilerplate | `header_footer_strip`, `dedupe_blocks`, `drop_matching` |
 | **chunk** | Cuts the text into the pieces that get indexed and retrieved | `recursive_character`, `markdown_header`, `token_based` |
@@ -199,7 +199,7 @@ several times, for example two cleaners in a row.
 | **query_transform** \* | Rewrites the question before retrieval | planned |
 | **retrieve** | Finds the chunks most relevant to the question and hands on a pool of candidates (20 by default) | `dense`, `bm25`, `hybrid_rrf` |
 | **rerank** \* | Picks the best few from the retrieved candidates | `mmr` |
-| **use_case** | What the user finally gets | `search`, `chat` |
+| **use_case** | What the user finally gets | `search`, `chat`, `eval` |
 
 ### Parse
 
@@ -240,6 +240,7 @@ several times, for example two cleaners in a row.
 |---|---|---|
 | `search` | Shows the top 5 chunks as a ranked list with scores and pages, and how many candidates there were. | No |
 | `chat` | A chat model (Claude, OpenAI, or a custom OpenAI-compatible endpoint) answers from the top 5 retrieved chunks only, and every claim points at the sentences it relied on. `citation_method` is `auto` (Claude's own citations for a Claude model, sentence ids for any other) or `sentence_ids`. With sentence ids, `support_threshold` (0.55) decides when a claim counts as cited rather than weak. | Yes, for the chosen provider; optional for a custom endpoint |
+| `eval` | Checks whether the top 5 retrieved chunks contain the sentence that answers the question, and reports hit or miss, the rank it was found at, and which chunk it was in. The question carries that sentence as its `gold_answer`, so one sweep over a set of questions scores a whole configuration. | No |
 
 ## Models and downloads
 
@@ -249,6 +250,7 @@ first time they are used, so the first run of a step is slow and later runs are 
 | Model | Used by | Download | Notes |
 |---|---|---|---|
 | Docling layout models | `docling` parser | about 0.5 GB | About a second per page after the first run |
+| RapidOCR PP-OCRv6 | `docling` parser with `do_ocr` on | none | The ONNX checkpoints ship inside the `rapidocr` package, so OCR downloads nothing. Several seconds per page |
 | `Qwen/Qwen3-Embedding-0.6B` | index (default embedder) | about 1.2 GB | 1024 dimensions. Supports Matryoshka truncation to 512, 256, 128 or 64 through `truncate_dim`. |
 | `BAAI/bge-small-en-v1.5` | index (baseline embedder) | about 130 MB | 384 dimensions, no truncation |
 | `fake-deterministic` | tests | none | A hashing embedder with no download, for tests and quick experiments |

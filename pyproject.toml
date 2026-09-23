@@ -8,6 +8,10 @@ dependencies = [
     "docling>=2.129.0",
     "fastapi>=0.141.1",
     "lancedb>=0.38,<0.39",
+    # Docling's OCR engine. RapidOCR's ONNX checkpoints ship inside its wheel,
+    # so OCR downloads nothing; without onnxruntime Docling falls back to
+    # RapidOCR's torch backend, which fetches .pth files into site-packages.
+    "onnxruntime>=1.30.0",
     "openai>=3.17.0",
     "pillow>=12.3.0",
     "pydantic>=2.9",

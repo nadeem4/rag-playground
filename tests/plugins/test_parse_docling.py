@@ -11,6 +11,7 @@ marked `models`, runs real conversions.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -68,6 +69,22 @@ def test_fingerprint_names_the_installed_model_packages():
     fp = inst.fingerprint()
     assert "docling=" in fp and "docling-ibm-models=" in fp
     assert fp == inst.fingerprint(inst.config_model())
+
+
+def test_onnxruntime_is_declared_so_ocr_never_writes_into_site_packages():
+    """With `do_ocr` on, Docling picks RapidOCR, and RapidOCR's ONNX
+    checkpoints ship inside the `rapidocr` wheel. Without `onnxruntime`
+    installed, Docling's automatic engine choice falls through to RapidOCR's
+    torch backend instead, whose `.pth` checkpoints are *not* in the wheel:
+    RapidOCR downloads them into its own package directory, which fails with
+    a PermissionError in the container, where the venv belongs to root and the
+    server runs as `app`. The dependency has to be in the lock too, because
+    the image installs with `uv sync --frozen`.
+    """
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(r'^\s*"onnxruntime[>=~]', pyproject, re.M), pyproject
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    assert '\nname = "onnxruntime"\n' in lock
 
 
 def test_importing_the_plugin_does_not_import_torch_or_docling():

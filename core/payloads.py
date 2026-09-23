@@ -158,6 +158,10 @@ class ChunkSet(BaseModel):
 
 class Query(BaseModel):
     text: str = ""
+    #: The sentence in the document that answers this question, when there is
+    #: one (I-23). Empty means "not an evaluation question". It travels with the
+    #: question so that sweeping the query node varies both together.
+    gold_answer: str = ""
     variants: list[str] = []
     embed_text: str | None = None
     filters: dict | None = None

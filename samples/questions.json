@@ -1,0 +1,52 @@
+[
+  {
+    "id": "two-steps",
+    "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
+    "gold_answer": "Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone."
+  },
+  {
+    "id": "split-explanation",
+    "question": "What goes wrong when a chunk boundary falls in the middle of an explanation?",
+    "gold_answer": "When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own."
+  },
+  {
+    "id": "lost-context",
+    "question": "Why does separating a table from its caption hurt?",
+    "gold_answer": "A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful."
+  },
+  {
+    "id": "rule-of-thumb",
+    "question": "How much should a single chunk cover?",
+    "gold_answer": "A useful rule of thumb: a chunk should answer one question well."
+  },
+  {
+    "id": "hidden-symptom",
+    "question": "Why can a fluent reply hide a retrieval problem?",
+    "gold_answer": "Bad boundaries are hard to see from the final answer."
+  },
+  {
+    "id": "small-chunks",
+    "question": "Why do small chunks match a question closely?",
+    "gold_answer": "Small chunks match a question closely, because every sentence in them is about the same thing."
+  },
+  {
+    "id": "context-budget",
+    "question": "What has to fit in the context window besides the retrieved pieces?",
+    "gold_answer": "Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer."
+  },
+  {
+    "id": "overlap-size",
+    "question": "How much overlap is a reasonable starting point?",
+    "gold_answer": "A common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent."
+  },
+  {
+    "id": "overlap-too-large",
+    "question": "What happens if the overlap is as large as the chunk itself?",
+    "gold_answer": "When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run."
+  },
+  {
+    "id": "heading-sections",
+    "question": "Why is a heading a good place to start a new piece?",
+    "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."
+  }
+]

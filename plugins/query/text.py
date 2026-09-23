@@ -22,6 +22,10 @@ from core.transform import Explanation, Transform
 class TextQueryConfig(BaseModel):
     text: str = ""
 
+    #: The sentence in the document that answers this question (I-23). Empty
+    #: means "not an evaluation question", and nothing else behaves differently.
+    gold_answer: str = ""
+
 
 @register
 class TextQuery(Transform[TextQueryConfig]):
@@ -49,11 +53,19 @@ class TextQuery(Transform[TextQueryConfig]):
                 ),
             )
         shown = text if len(text) <= 120 else text[:119] + "…"
+        gold = config.gold_answer.strip()
+        graded = (
+            " It also carries a gold answer: the sentence in the document that "
+            "answers it, which the evaluation step looks for among the retrieved "
+            "pieces."
+            if gold
+            else ""
+        )
         return Explanation(
             settings=(
                 f'Asks "{shown}". Vector search turns it into a vector marked as a '
                 "question, as the model was trained to expect, and keyword search "
-                "matches its words as typed."
+                f"matches its words as typed.{graded}"
             ),
             tradeoff=(
                 "Using the document's own terms helps keyword search most; "
@@ -64,4 +76,6 @@ class TextQuery(Transform[TextQueryConfig]):
     def apply(
         self, inputs: Mapping[str, Any], config: TextQueryConfig, ctx: RunContext
     ) -> dict[str, Any]:
-        return Query(text=config.text).model_dump(mode="json")
+        return Query(
+            text=config.text, gold_answer=config.gold_answer
+        ).model_dump(mode="json")

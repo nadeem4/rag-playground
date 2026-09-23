@@ -39,6 +39,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.rerank.mmr",
     "plugins.use_case.search",
     "plugins.use_case.chat",
+    "plugins.use_case.eval",
 )
 
 _discovered = False

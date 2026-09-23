@@ -174,6 +174,60 @@
         "type": "object"
       },
       "learn": {}
+    },
+    "eval": {
+      "name": "eval",
+      "version": "1",
+      "summary": "Checks whether the retrieved pieces contain the sentence that answers the question, and reports where it was found. No language model, no API key and no cost: it compares text with text.",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "EvalConfig",
+        "type": "object"
+      },
+      "learn": {
+        "_strategy": {
+          "hint": "This step marks one question right or wrong by looking for its answer sentence in the retrieved pieces.",
+          "more": [
+            "Every question carries the sentence in the document that answers it. A piece that contains that sentence is a hit, and the rank of the first such piece says how far down the reader would have had to look.",
+            "The answer is a sentence rather than a piece number on purpose. Piece numbers change the moment you change how the document is cut, so a score built on them could never compare two settings. A sentence stays the same sentence.",
+            "The comparison is strict. The sentence has to be there, give or take spacing, a word broken across a line and capital letters. Something that merely looks close counts as a miss, which is what keeps the number honest."
+          ]
+        },
+        "top_k": {
+          "hint": "Only this many of the retrieved pieces are checked, because that is what the reader would have looked at.",
+          "more": [
+            "An answer that sits below this line is reported as a miss. That is the point: a piece nobody reads cannot help.",
+            "Raising it makes more questions count as hits, and makes the score say less about how well the pieces were ordered. Lowering it is a harder test of the ranking."
+          ]
+        }
+      }
     }
   },
   "query": {
@@ -194,6 +248,11 @@
           "text": {
             "default": "",
             "title": "Text",
+            "type": "string"
+          },
+          "gold_answer": {
+            "default": "",
+            "title": "Gold Answer",
             "type": "string"
           }
         },

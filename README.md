@@ -2,6 +2,8 @@
 
 [Try the live demo](https://huggingface.co/spaces/nadeem4nk/rag-playground) | [Run your own copy](https://huggingface.co/spaces/nadeem4nk/rag-playground?duplicate=true) | [Run it locally](#quick-start)
 
+![RAG Playground: learn how RAG works by running it](assets/banner.png)
+
 A local bench for learning how retrieval-augmented generation (RAG) works by trying it on
 your own documents. Each stage of a RAG pipeline (parsing, cleaning, chunking, indexing,
 retrieval, reranking and the final answer) is a strategy you can swap, run on its own and

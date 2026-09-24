@@ -1,0 +1,63 @@
+<title>Banner</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+  html,body{margin:0;padding:0;background:#3a3a3e}
+  .banner{
+    width:1200px;height:630px;box-sizing:border-box;position:relative;overflow:hidden;
+    background:#0B0B0C;color:#F4F4F5;
+    font-family:"Atkinson Hyperlegible Next","Atkinson Hyperlegible",system-ui,sans-serif;
+    padding:48px 60px 44px;display:grid;grid-template-rows:auto 1fr auto;gap:20px;
+  }
+  .mono{font-family:"Martian Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-stretch:87.5%}
+  .top{display:flex;justify-content:space-between;align-items:baseline;gap:24px}
+  .name{font-size:23px;font-weight:600;letter-spacing:-0.01em}
+  .where{font-size:15px;color:#8A8A93}
+  h1{margin:0;font-size:58px;line-height:1.08;font-weight:600;letter-spacing:-0.025em;max-width:20ch;text-wrap:balance}
+  h1 em{font-style:normal;color:#60A5FA}
+  .sub{margin:20px 0 0;font-size:22px;line-height:1.45;color:#B4B4BC;max-width:46ch}
+  .mid{display:grid;grid-template-columns:1fr 500px;gap:44px;align-items:center}
+  /* the real chunk view, drawn the way the app draws it */
+  .card{border:1px solid #27272A;border-radius:10px;background:#131316;padding:16px;display:grid;gap:10px}
+  .cardhead{display:flex;justify-content:space-between;font-size:13.5px;color:#8A8A93}
+  .doc{font-size:14.5px;line-height:1.95;white-space:pre-wrap}
+  .c1{background:oklch(0.36 0.05 250)} .c2{background:oklch(0.36 0.05 150)} .c3{background:oklch(0.36 0.05 60)}
+  .ans{box-shadow:inset 0 -2px 0 oklch(0.75 0.15 25)}
+  .pipe{display:flex;gap:0;align-items:stretch;border:1px solid #27272A;border-radius:8px;overflow:hidden}
+  .pipe div{flex:1;padding:11px 6px;text-align:center;font-size:13px;color:#B4B4BC;border-right:1px solid #27272A}
+  .pipe div:last-child{border-right:0}
+  .pipe div.on{background:#1B1B1F;color:#F4F4F5}
+  .bottom{display:flex;justify-content:space-between;align-items:center;gap:32px;font-size:14.5px;color:#8A8A93;flex-wrap:nowrap}
+  .tags{display:flex;gap:10px;flex-wrap:nowrap}
+  .tag{border:1px solid #27272A;border-radius:999px;padding:5px 14px;font-size:14px;color:#B4B4BC}
+</style>
+<div class="banner">
+  <div class="top">
+    <span class="name">RAG Playground</span>
+    <span class="where mono">open source, MIT</span>
+  </div>
+
+  <div class="mid">
+    <div>
+      <h1>Learn how RAG works<br>by <em>running it</em>.</h1>
+      <p class="sub">Every stage on a real PDF: parse, chunk, index, retrieve, answer. Change one setting and see what it did.</p>
+    </div>
+
+    <div class="card">
+      <div class="cardhead mono"><span>chunk recursive_character</span><span>14 chunks</span></div>
+      <div class="doc mono"><span class="c1">A retriever scores each chunk as a whole. </span><span class="c1 ans">When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other.</span><span class="c2"> The model then receives a passage that mentions the topic but never resolves it.</span><span class="c3"> Boundaries also decide what travels together.</span></div>
+      <div class="pipe mono">
+        <div>parse</div><div>clean</div><div class="on">chunk</div><div>index</div><div>retrieve</div><div>answer</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="tags">
+      <span class="tag">Predict, then see</span>
+      <span class="tag">Citations checked on the page</span>
+      <span class="tag">Score a change</span>
+    </div>
+    <span class="mono" style="font-size:15px;color:#B4B4BC;white-space:nowrap">hf.co/spaces/nadeem4nk/rag-playground</span>
+  </div>
+</div>

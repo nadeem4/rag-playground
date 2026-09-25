@@ -17,6 +17,8 @@ def test_readme_starts_with_space_header_and_keeps_the_body():
     assert "sdk: docker" in header
     assert "app_port: 8000" in header
     assert "license: mit" in header
+    # The share preview uses our own banner, not a generated card.
+    assert "thumbnail: https://huggingface.co/spaces/" in header and "banner.png" in header
     assert body.lstrip("\n") == "# RAG Playground\n\nBody.\n"
 
 

@@ -32,6 +32,7 @@ sdk: docker
 app_port: 8000
 license: mit
 short_description: Try each stage of a RAG pipeline on a sample document
+thumbnail: https://huggingface.co/spaces/nadeem4nk/rag-playground/resolve/main/assets/banner.png
 ---
 
 """

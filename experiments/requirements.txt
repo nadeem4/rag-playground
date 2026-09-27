@@ -1,0 +1,6 @@
+# Extra packages the experiments need, on top of the playground itself.
+# Install with pip, not uv: this repository pins CPU-only torch on Linux for the
+# Docker image, and a GPU notebook needs the CUDA build that pip resolves.
+datasets>=3.2
+pandas>=2.2
+matplotlib>=3.9

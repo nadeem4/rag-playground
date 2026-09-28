@@ -11,6 +11,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {},
       "config_schema": {
         "properties": {
@@ -43,6 +45,8 @@
       "cacheable": false,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "result": {
           "type": "retrieval_result",
@@ -149,6 +153,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "result": {
           "type": "retrieval_result",
@@ -186,6 +192,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "result": {
           "type": "retrieval_result",
@@ -242,6 +250,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {},
       "config_schema": {
         "properties": {
@@ -282,6 +292,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "file": {
           "type": "raw_file",
@@ -319,7 +331,13 @@
       "deterministic": true,
       "cacheable": true,
       "requires": {},
-      "provides": {},
+      "provides": {
+        "structure": [
+          "headings"
+        ]
+      },
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "file": {
           "type": "raw_file",
@@ -371,6 +389,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "doc": {
           "type": "parsed_doc",
@@ -412,6 +432,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "doc": {
           "type": "parsed_doc",
@@ -457,6 +479,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "doc": {
           "type": "parsed_doc",
@@ -508,6 +532,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "doc": {
           "type": "parsed_doc",
@@ -571,6 +597,14 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {
+        "doc": {
+          "structure": [
+            "headings"
+          ]
+        }
+      },
+      "fallback": "The whole document is treated as one section and cut by size.",
       "inputs": {
         "doc": {
           "type": "parsed_doc",
@@ -620,6 +654,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "doc": {
           "type": "parsed_doc",
@@ -688,6 +724,8 @@
           "fts"
         ]
       },
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "chunks": {
           "type": "chunk_set",
@@ -759,6 +797,8 @@
         }
       },
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "index": {
           "type": "index",
@@ -803,6 +843,8 @@
         }
       },
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "index": {
           "type": "index",
@@ -848,6 +890,8 @@
         }
       },
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "index": {
           "type": "index",
@@ -893,6 +937,8 @@
       "cacheable": true,
       "requires": {},
       "provides": {},
+      "prefers": {},
+      "fallback": "",
       "inputs": {
         "result": {
           "type": "retrieval_result",

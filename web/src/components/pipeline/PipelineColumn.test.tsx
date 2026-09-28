@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/api/client"
-import { addCleaner, addReranker, columnOrder, initialGraph } from "@/state/graph"
+import { addCleaner, addReranker, columnOrder, initialGraph, setTransform } from "@/state/graph"
 import { routeRunError } from "@/state/pipeline"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
@@ -229,5 +229,43 @@ describe("PipelineColumn", () => {
       unmount()
       expect(vi.getTimerCount()).toBe(0)
     })
+  })
+})
+
+describe("locked transforms", () => {
+  it("shows nothing extra on a transform that asks nothing of its upstream", () => {
+    setup()
+    const chunk = within(card("chunk"))
+    expect(chunk.getByRole("option", { name: "recursive_character" })).toBeTruthy()
+    expect(chunk.queryByRole("status")).toBeNull()
+    expect(chunk.queryByRole("alert")).toBeNull()
+  })
+
+  it("tags a soft lock in the dropdown and says why, but keeps it selectable and runnable", () => {
+    setup({ graph: setTransform(initialGraph(R), "chunk", "markdown_header", R) })
+    const chunk = within(card("chunk"))
+    const option = chunk.getByRole("option", { name: "markdown_header · falls back" }) as HTMLOptionElement
+    expect(option.disabled).toBe(false)
+    expect(chunk.getByRole("status").textContent).toBe(
+      "Needs headings from the parse step. pdfium does not find any, so the whole document is treated as one section and cut by size.",
+    )
+    expect(chunk.getByRole("button", { name: "Run" }).hasAttribute("disabled")).toBe(false)
+  })
+
+  it("greys a hard lock in the dropdown, and blocks Run with the reason when it is selected", () => {
+    setup({ graph: setTransform(initialGraph(R), "retrieve", "bm25", R) })
+    const retrieve = within(card("retrieve"))
+    const option = retrieve.getByRole("option", { name: "bm25 · locked" }) as HTMLOptionElement
+    expect(option.disabled).toBe(true)
+    expect(retrieve.getByRole("alert").textContent).toBe("Needs text search from the index step. lancedb does not provide it, so this cannot run.")
+    expect(retrieve.getByRole("button", { name: "Run" }).hasAttribute("disabled")).toBe(true)
+    expect(retrieve.getByText("Locked. Pick another transform to run.")).toBeTruthy()
+  })
+
+  it("a hard lock upstream blocks the cards below it too", () => {
+    setup({ graph: setTransform(initialGraph(R), "retrieve", "bm25", R) })
+    const search = within(card("use_case"))
+    expect(search.getByRole("button", { name: "Run" }).hasAttribute("disabled")).toBe(true)
+    expect(search.getByText("Fix the Retrieve settings to run.")).toBeTruthy()
   })
 })

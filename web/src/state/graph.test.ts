@@ -18,6 +18,7 @@ import {
   setTransform,
   signature,
   titleFor,
+  upstreamFor,
   upstreamOfStage,
   type PipelineGraph,
 } from "./graph"
@@ -273,5 +274,25 @@ describe("end-to-end sample graph (Learn > How RAG works > Run it yourself)", ()
     expect(edgeSet(g)).toContain("retrieve->rerank_1:result")
     expect(edgeSet(g)).toContain("rerank_1->use_case:result")
     expect(g.nodes.find((n) => n.stage === "rerank")!.config).toEqual(defaultConfig(LIVE.rerank!.mmr))
+  })
+})
+
+describe("upstreamFor", () => {
+  it("maps each input port of a node to the transform feeding it", () => {
+    const g = initialGraph(R)
+    expect(upstreamFor(g, R, "chunk").doc?.name).toBe("pdfium")
+    expect(upstreamFor(g, R, "retrieve").index?.name).toBe("lancedb")
+    expect(upstreamFor(g, R, "parse").file?.name).toBe("upload")
+  })
+
+  it("resolves an ambient port from the column, the way the server binds it", () => {
+    const g = initialGraph(R)
+    expect(upstreamFor(g, R, "retrieve").query?.name).toBe("text")
+  })
+
+  it("leaves a port out when nothing feeds it", () => {
+    const g = initialGraph(R)
+    expect(upstreamFor(g, R, "source")).toEqual({})
+    expect(upstreamFor(g, R, "nope")).toEqual({})
   })
 })

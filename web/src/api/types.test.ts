@@ -16,7 +16,7 @@ const keys = (o: object) => Object.keys(o).sort()
 
 const TRANSFORM_KEYS: (keyof TransformInfo)[] = [
   "cacheable", "config_schema", "deterministic", "inputs", "name", "output",
-  "provides", "requires", "stackable", "stage", "version",
+  "prefers", "fallback", "provides", "requires", "stackable", "stage", "version",
 ]
 const ELEMENT_KEYS: (keyof Element)[] = [
   "bbox", "id", "level", "md_end", "md_start", "order", "page", "parent_id", "text", "type",

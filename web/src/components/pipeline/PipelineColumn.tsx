@@ -7,7 +7,8 @@ import { useStages, type ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { Button } from "@/components/ui/button"
 import { useLearnMode } from "@/state/learnMode"
-import { ancestors, columnOrder, COLUMN_STAGES, infoFor, terminalNode, titleFor, transformsFor, type PipelineGraph } from "@/state/graph"
+import { compatibility } from "@/state/compat"
+import { ancestors, columnOrder, COLUMN_STAGES, infoFor, terminalNode, titleFor, transformsFor, upstreamFor, type PipelineGraph } from "@/state/graph"
 import type { RunHistory } from "@/state/pipeline"
 
 import { NodeCard } from "./NodeCard"
@@ -60,12 +61,17 @@ export function blockingNode(
   explanations: Record<string, ExplainState> | undefined,
   id: string,
 ): GraphNode | undefined {
-  if (!explanations) return undefined
-  const blocking = (nid: string) => explanations[nid]?.data?.blocking === true
+  // A hard lock (a `requires` the upstream cannot meet) blocks exactly like a
+  // blocking explanation: the run would fail at that card.
+  const locked = (n: GraphNode) => {
+    const info = infoFor(registry, n)
+    return info ? compatibility(info, upstreamFor(graph, registry, n.id)).kind === "hard" : false
+  }
+  const blocking = (n: GraphNode) => explanations?.[n.id]?.data?.blocking === true || locked(n)
   const self = graph.nodes.find((n) => n.id === id)
-  if (self && blocking(id)) return self
+  if (self && blocking(self)) return self
   const up = ancestors(graph, id, registry)
-  return columnOrder(graph).filter((n) => up.has(n.id) && blocking(n.id)).pop()
+  return columnOrder(graph).filter((n) => up.has(n.id) && blocking(n)).pop()
 }
 
 /** Cards whose variants are worth comparing side by side. */
@@ -103,6 +109,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
               node={node}
               title={title}
               transforms={transformsFor(p.registry, node.stage)}
+              upstream={upstreamFor(p.graph, p.registry, node.id)}
               result={p.results[node.id]}
               stale={p.stale.has(node.id)}
               selected={p.selected === node.id}

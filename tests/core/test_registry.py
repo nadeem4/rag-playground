@@ -300,3 +300,11 @@ def test_register_decorator_writes_to_the_module_registry():
 
     assert DecoratorProbe.name == "decorator_probe"
     assert module_registry.get(Stage.CHUNK, "decorator_probe") is DecoratorProbe
+
+
+def test_export_schema_carries_prefers_and_fallback(reg):
+    """The frontend locks and explains from these two fields (soft mismatches)."""
+    reg.register(FixedChunker)
+    entry = reg.export_schema()["chunk"]["fixed"]
+    assert entry["prefers"] == {}
+    assert entry["fallback"] == ""

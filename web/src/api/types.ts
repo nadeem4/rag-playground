@@ -73,6 +73,10 @@ export interface TransformInfo {
   cacheable: boolean
   requires: Record<string, Record<string, unknown>>
   provides: Record<string, unknown>
+  /** The soft twin of `requires`: unmet, the transform still runs but falls back. */
+  prefers: Record<string, Record<string, unknown>>
+  /** One sentence saying what that fallback is. Empty unless `prefers` is set. */
+  fallback: string
   inputs: Record<string, PortSchema>
   config_schema: JsonSchema
   /** Plan I-11: how this strategy works, in plain language. Optional while older servers omit it. */

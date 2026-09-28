@@ -254,3 +254,10 @@ def test_hyphenation_is_repaired_only_at_a_real_word_break(
     path = tmp_path / "hyphen.pdf"
     path.write_bytes(build_paragraph_pdf([[lines]]))
     assert [e.text for e in parse(path).elements] == [joined]
+
+
+def test_pdfium_provides_no_structure():
+    """pdfium finds no headings, so it claims none: heading chunking then falls back."""
+    from plugins.parse.pdfium import PdfiumParse
+
+    assert PdfiumParse.provides == {}

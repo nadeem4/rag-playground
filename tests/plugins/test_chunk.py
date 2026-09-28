@@ -470,3 +470,21 @@ def test_token_based_overlap_larger_than_budget_still_terminates():
     assert len(result.chunks) > 1
     for chunk in result.chunks:
         assert result.source_text[chunk.start_char : chunk.end_char] == chunk.text
+
+
+def test_markdown_header_prefers_headings_and_names_its_fallback():
+    """The UI shows a soft lock, and this sentence, when the parser finds no headings."""
+    from plugins.chunk.markdown_header import MarkdownHeaderChunker
+
+    assert MarkdownHeaderChunker.prefers == {"doc": {"structure": ["headings"]}}
+    assert MarkdownHeaderChunker.fallback == (
+        "The whole document is treated as one section and cut by size."
+    )
+
+
+def test_size_chunkers_prefer_nothing():
+    from plugins.chunk.recursive_character import RecursiveCharacterChunker
+    from plugins.chunk.token_based import TokenBasedChunker
+
+    assert RecursiveCharacterChunker.prefers == {}
+    assert TokenBasedChunker.prefers == {}

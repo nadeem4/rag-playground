@@ -99,6 +99,10 @@ class MarkdownHeaderChunker(Transform[MarkdownHeaderConfig]):
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.CHUNK_SET
     config_model = MarkdownHeaderConfig
+    # Soft: without headings `apply` still runs and packs by size (see the
+    # note it sets), so the UI shows this sentence before the run, not a lock.
+    prefers = {"doc": {"structure": ["headings"]}}
+    fallback = "The whole document is treated as one section and cut by size."
     summary = (
         "Cuts at headings, so each piece is one section: a heading and "
         "everything under it, up to the next heading. A section too long for one "

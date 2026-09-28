@@ -178,6 +178,8 @@ class DoclingParse(Transform[DoclingConfig]):
     """`raw_file -> parsed_doc`, with a vision layout model."""
 
     name = "docling"
+    #: Headings come out as heading elements, which `markdown_header` prefers.
+    provides = {"structure": ["headings"]}
     version = "1"
     stage = Stage.PARSE
     inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}

@@ -171,8 +171,12 @@ unsafe to share:
   document answers it in more than one place; any of them counts.
 - **Learn as you go.** Each card has an info button that explains what the step is for,
   how the chosen strategy works, and what it will do with your current settings, including
-  the trade-off. Settings that make no sense show a warning and disable Run. After a run,
-  the card says what the step did compared with the previous run.
+  the trade-off. Settings that make no sense show a warning and disable Run. A strategy
+  that does not fit the step above it is marked in the dropdown before you pick it: one
+  that would still run but fall back is tagged "falls back" and the card says why in
+  grey, and one that could not run at all is greyed out, tagged "locked", and blocks Run
+  with the reason in red. After a run, the card says what the step did compared with the
+  previous run.
 - **Get answers with checked citations, from any model.** The chat step asks Claude, an
   OpenAI model, or any OpenAI-compatible server to answer from the retrieved chunks only.
   - Every claim cites the exact passage it relied on. Claude can use its own citations
@@ -264,7 +268,7 @@ several times, for example two cleaners in a row.
 | Strategy | How it works |
 |---|---|
 | `recursive_character` | Cuts at paragraph breaks first, then at line breaks, sentence ends and spaces, and packs the parts up to the chunk size, with optional overlap. |
-| `markdown_header` | One chunk per section: a heading and everything under it. Long sections are split between blocks. Needs a parser that detects headings. |
+| `markdown_header` | One chunk per section: a heading and everything under it. Long sections are split between blocks. Prefers a parser that detects headings: with `pdfium`, which finds none, it treats the whole document as one section and cuts by size, and the card says so before you run. |
 | `token_based` | Cuts every N tokens wherever that falls. A deliberately naive baseline. |
 
 ### Index, retrieve and rerank
@@ -393,7 +397,14 @@ a new strategy needs no frontend change.
    - a `summary` of how the strategy works;
    - an `explain(config)` that describes what these settings will do;
    - for a chunk strategy, `learn`: a one-sentence `hint` and more paragraphs for the
-     strategy itself (the key `_strategy`) and for every setting. Learn mode shows them.
+     strategy itself (the key `_strategy`) and for every setting. Learn mode shows them;
+   - if it needs something from the step above it, `requires`, keyed by input port, for
+     example `{"index": {"backends": ["fts"]}}`, and `provides` on the producer, for
+     example `{"backends": ["dense", "fts"]}`. An unmet requirement is a hard lock: the
+     graph is rejected, and the UI greys the option out and blocks Run;
+   - if it runs without something but degrades, `prefers`, same shape, with a one-sentence
+     `fallback` saying what happens instead. That is a soft lock: the option stays
+     selectable, tagged "falls back", and the sentence shows under the dropdown.
 2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py`. A test fails if a plugin
    module exists but is not listed.
 3. Run `uv run pytest`. The contract suite checks every plugin automatically, including:

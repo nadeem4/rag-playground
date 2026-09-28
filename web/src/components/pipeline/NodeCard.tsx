@@ -14,6 +14,7 @@ import { LearnHint, StageLesson } from "@/components/learn/LearnHint"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { compatibility, optionLabel, type Compat } from "@/state/compat"
 import { errorHeadline } from "@/state/pipeline"
 
 import { ExplainPanel } from "./ExplainPanel"
@@ -66,6 +67,8 @@ export interface NodeCardProps {
   learn?: boolean
   /** Plan I-22: this stage's lesson paragraphs, when the server has them. */
   lesson?: string[]
+  /** The transform wired into each of this node's input ports, for lock states. */
+  upstream?: Record<string, TransformInfo | undefined>
 }
 
 /** The heading of a stage's lesson. Stages without one here get a plain question. */
@@ -124,6 +127,11 @@ export function useElapsed(startedAt: number | undefined): number | undefined {
 export function NodeCard(p: NodeCardProps) {
   const id = useId()
   const info = p.transforms.find((t) => t.name === p.node.transform)
+  // Every option is judged against the same upstream, so the dropdown can tag
+  // the ones that would fall back (soft) or could not run (hard) before they
+  // are picked, and the reason for the current pick shows under it.
+  const compat: Record<string, Compat> = Object.fromEntries(p.transforms.map((t) => [t.name, compatibility(t, p.upstream ?? {})]))
+  const lock: Compat = compat[p.node.transform] ?? { kind: "ok" }
   const shown = describeResult(p.result, p.stale)
   const failed = p.result?.status === "failed" && !p.stale ? p.result.error : undefined
   const hasOutput = shown.rule === "solid" || shown.rule === "dotted"
@@ -134,7 +142,9 @@ export function NodeCard(p: NodeCardProps) {
   const completed = (p.result?.status === "done" || p.result?.status === "cached") && p.result.artifact_id ? p.result.artifact_id : undefined
   const runNote = p.blockedBy
     ? p.blockedBy === p.title
-      ? "Fix the settings to run."
+      ? lock.kind === "hard"
+        ? "Locked. Pick another transform to run."
+        : "Fix the settings to run."
       : `Fix the ${p.blockedBy} settings to run.`
     : completed && p.stale
       ? "Settings changed since the last run."
@@ -216,12 +226,21 @@ export function NodeCard(p: NodeCardProps) {
         ) : (
           <select id={`${id}-transform`} className={CONTROL} value={p.node.transform} onChange={(e) => p.onTransform(e.target.value)}>
             {p.transforms.map((t) => (
-              <option key={t.name} value={t.name}>
-                {t.name}
+              <option key={t.name} value={t.name} disabled={compat[t.name]?.kind === "hard"}>
+                {optionLabel(t.name, compat[t.name] ?? { kind: "ok" })}
               </option>
             ))}
           </select>
         )}
+        {lock.kind === "soft" ? (
+          <p role="status" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-fg-muted">
+            {lock.reason}
+          </p>
+        ) : lock.kind === "hard" ? (
+          <p role="alert" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-danger">
+            {lock.reason}
+          </p>
+        ) : null}
         {p.learn && info?.learn?._strategy ? <LearnHint lesson={info.learn._strategy} /> : null}
       </div>
 

@@ -68,6 +68,8 @@ class Registry:
                     "cacheable": cls.cacheable,
                     "requires": cls.requires,
                     "provides": cls.provides,
+                    "prefers": cls.prefers,
+                    "fallback": cls.fallback,
                     "inputs": {
                         port_name: {
                             "type": str(port.type),

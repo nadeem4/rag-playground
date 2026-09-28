@@ -89,6 +89,18 @@ class Transform(ABC, Generic[C]):
     #: Capability claims on the output, matched against a consumer's `requires`.
     provides: dict[str, Any] = {}
 
+    #: The soft twin of `requires`, same shape, checked nowhere on the server.
+    #: A transform that runs without these capabilities but degrades declares
+    #: them here, so the UI can say so *before* the run instead of after it.
+    #: A heading chunker prefers {"doc": {"structure": ["headings"]}}: on a
+    #: parser that finds none it still runs, and falls back to cutting by size.
+    prefers: dict[str, dict[str, Any]] = {}
+
+    #: One plain sentence saying what happens when `prefers` is not met, for
+    #: the learner: "The whole document is treated as one section and cut by
+    #: size." Required whenever `prefers` is non-empty.
+    fallback: str = ""
+
     #: How this strategy works, in one or two plain sentences. Required: a
     #: learning playground whose steps cannot explain themselves teaches nothing.
     summary: str
@@ -147,6 +159,25 @@ class Transform(ABC, Generic[C]):
             raise TransformDefinitionError(
                 f"{cls.__name__}: `provides` must be a dict, got "
                 f"{type(cls.provides).__name__}"
+            )
+
+        # `prefers` is validated like `requires`: a typo'd port would silently
+        # mean "no preference", and the UI would never show the fallback.
+        for port_name, wanted in cls.prefers.items():
+            if port_name not in cls.inputs:
+                raise TransformDefinitionError(
+                    f"{cls.__name__}: prefers['{port_name}'] names no declared "
+                    f"input port. Valid ports: {sorted(cls.inputs) or 'none'}"
+                )
+            if not isinstance(wanted, dict):
+                raise TransformDefinitionError(
+                    f"{cls.__name__}: prefers['{port_name}'] must be a dict of "
+                    f"capabilities, got {type(wanted).__name__}"
+                )
+        if cls.prefers and not (isinstance(cls.fallback, str) and cls.fallback.strip()):
+            raise TransformDefinitionError(
+                f"{cls.__name__} declares `prefers` but no `fallback` sentence "
+                "saying what happens when the preference is not met"
             )
 
         for field_name, field_info in cls.config_model.model_fields.items():

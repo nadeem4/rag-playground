@@ -28,6 +28,8 @@ function t(
     cacheable: true,
     requires: {},
     provides: {},
+    prefers: {},
+    fallback: "",
     inputs,
     config_schema: { type: "object", title: `${name}Config`, properties },
     summary: `Summary of ${name}.`,
@@ -50,7 +52,12 @@ export const TEST_REGISTRY: Registry = {
       chunk_size: { type: "integer", default: 1000, minimum: 1, title: "Chunk Size" },
       chunk_overlap: { type: "integer", default: 200, minimum: 0, title: "Chunk Overlap" },
     }),
-    markdown_header: t("chunk", "markdown_header", "chunk_set", { doc: port("parsed_doc") }, { max_tokens: { type: "integer", default: 512, title: "Max Tokens" } }),
+    markdown_header: {
+      ...t("chunk", "markdown_header", "chunk_set", { doc: port("parsed_doc") }, { max_tokens: { type: "integer", default: 512, title: "Max Tokens" } }),
+      // A soft lock behind pdfium, which provides no headings.
+      prefers: { doc: { structure: ["headings"] } },
+      fallback: "The whole document is treated as one section and cut by size.",
+    },
     token_based: t("chunk", "token_based", "chunk_set", { doc: port("parsed_doc") }, {
       max_tokens: { type: "integer", default: 256, title: "Max Tokens" },
       overlap: { type: "integer", default: 32, title: "Overlap" },
@@ -68,6 +75,11 @@ export const TEST_REGISTRY: Registry = {
   retrieve: {
     dense: t("retrieve", "dense", "retrieval_result", { index: port("index"), query: ambient("query") }, { top_k: { type: "integer", default: 5, title: "Top K" } }),
     hybrid_rrf: t("retrieve", "hybrid_rrf", "retrieval_result", { index: port("index"), query: ambient("query") }, { top_k: { type: "integer", default: 5, title: "Top K" } }),
+    bm25: {
+      ...t("retrieve", "bm25", "retrieval_result", { index: port("index"), query: ambient("query") }, { top_k: { type: "integer", default: 5, title: "Top K" } }),
+      // A hard lock: the test lancedb provides no backends at all.
+      requires: { index: { backends: ["fts"] } },
+    },
   },
   rerank: {
     mmr: t("rerank", "mmr", "retrieval_result", { result: port("retrieval_result"), query: ambient("query"), index: ambient("index") }, { lambda_mult: { type: "number", default: 0.5, title: "Lambda Mult" } }, true),

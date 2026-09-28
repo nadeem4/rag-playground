@@ -1,4 +1,4 @@
-import type { Graph, GraphEdge, GraphNode, Registry, Stage, TransformInfo } from "@/api/types"
+import type { Graph, GraphEdge, GraphNode, PortSchema, Registry, Stage, TransformInfo } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
 
 /**
@@ -313,23 +313,54 @@ export function setConfig(g: PipelineGraph, id: string, config: Record<string, u
 export function ambientSources(g: PipelineGraph, registry: Registry, id: string): string[] {
   const node = g.nodes.find((n) => n.id === id)
   const inputs = node ? (infoFor(registry, node)?.inputs ?? {}) : {}
-  const blocked = new Set([id])
+  const blocked = selfAndDescendants(g, id)
+  const out: string[] = []
+  for (const [port, spec] of Object.entries(inputs)) {
+    if (!spec.ambient || g.edges.some((e) => e.dst === id && e.port === port)) continue
+    const src = ambientSourceFor(g, registry, spec, blocked)
+    if (src) out.push(src)
+  }
+  return out
+}
+
+function selfAndDescendants(g: PipelineGraph, id: string): Set<string> {
+  const seen = new Set([id])
   const stack = [id]
   while (stack.length) {
     const cur = stack.pop()!
     for (const e of g.edges) {
-      if (e.src === cur && !blocked.has(e.dst)) {
-        blocked.add(e.dst)
+      if (e.src === cur && !seen.has(e.dst)) {
+        seen.add(e.dst)
         stack.push(e.dst)
       }
     }
   }
-  const out: string[] = []
+  return seen
+}
+
+/** The node the server would bind one unwired ambient port to, if exactly one qualifies. */
+function ambientSourceFor(g: PipelineGraph, registry: Registry, spec: PortSchema, blocked: Set<string>): string | undefined {
+  const candidates = new Set(g.nodes.filter((n) => !blocked.has(n.id) && infoFor(registry, n)?.output === spec.type).map((n) => n.id))
+  const terminal = [...candidates].filter((c) => !g.edges.some((e) => e.src === c && candidates.has(e.dst)))
+  return terminal.length === 1 ? terminal[0] : undefined
+}
+
+/**
+ * The transform feeding each input port of `id`: by its edge, or, for an
+ * ambient port with none, by the binding the server would make. A port that
+ * nothing feeds is left out. This is what the lock states are judged against.
+ */
+export function upstreamFor(g: PipelineGraph, registry: Registry, id: string): Record<string, TransformInfo | undefined> {
+  const node = g.nodes.find((n) => n.id === id)
+  if (!node) return {}
+  const inputs = infoFor(registry, node)?.inputs ?? {}
+  const blocked = selfAndDescendants(g, id)
+  const out: Record<string, TransformInfo | undefined> = {}
   for (const [port, spec] of Object.entries(inputs)) {
-    if (!spec.ambient || g.edges.some((e) => e.dst === id && e.port === port)) continue
-    const candidates = new Set(g.nodes.filter((n) => !blocked.has(n.id) && infoFor(registry, n)?.output === spec.type).map((n) => n.id))
-    const terminal = [...candidates].filter((c) => !g.edges.some((e) => e.src === c && candidates.has(e.dst)))
-    if (terminal.length === 1) out.push(terminal[0])
+    const edge = g.edges.find((e) => e.dst === id && e.port === port)
+    const src = edge ? edge.src : spec.ambient ? ambientSourceFor(g, registry, spec, blocked) : undefined
+    const srcNode = src ? g.nodes.find((n) => n.id === src) : undefined
+    if (srcNode) out[port] = infoFor(registry, srcNode)
   }
   return out
 }

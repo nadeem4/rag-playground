@@ -208,3 +208,65 @@ def test_apply_receives_typed_config(tmp_path):
     ctx = RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path)
     out = make_valid()().apply({}, DummyConfig(size=256), ctx)
     assert out["size"] == 256
+
+
+def test_prefers_naming_an_undeclared_port_raises():
+    """`prefers` is checked like `requires`: a typo'd port is not 'no preference'."""
+    with pytest.raises(TransformDefinitionError) as exc:
+
+        class TypoPrefers(Transform[DummyConfig]):
+            summary = "A test transform."
+            name = "typo_prefers"
+            stage = Stage.CHUNK
+            inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+            output = ArtifactType.CHUNK_SET
+            config_model = DummyConfig
+            prefers = {"document": {"structure": ["headings"]}}
+            fallback = "The whole document is one section."
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+    message = str(exc.value)
+    assert "document" in message
+    assert "doc" in message
+
+
+def test_prefers_without_a_fallback_sentence_raises():
+    """A soft preference the UI cannot explain teaches nothing."""
+    with pytest.raises(TransformDefinitionError, match="fallback"):
+
+        class NoFallback(Transform[DummyConfig]):
+            summary = "A test transform."
+            name = "no_fallback"
+            stage = Stage.CHUNK
+            inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+            output = ArtifactType.CHUNK_SET
+            config_model = DummyConfig
+            prefers = {"doc": {"structure": ["headings"]}}
+
+            def apply(self, inputs, config, ctx):
+                return None
+
+
+def test_well_formed_prefers_with_fallback_is_accepted():
+    class Soft(Transform[DummyConfig]):
+        summary = "A test transform."
+        name = "soft"
+        stage = Stage.CHUNK
+        inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+        output = ArtifactType.CHUNK_SET
+        config_model = DummyConfig
+        prefers = {"doc": {"structure": ["headings"]}}
+        fallback = "The whole document is treated as one section and cut by size."
+
+        def apply(self, inputs, config, ctx):
+            return None
+
+    assert Soft.prefers == {"doc": {"structure": ["headings"]}}
+    assert Soft.fallback.endswith(".")
+
+
+def test_empty_prefers_needs_no_fallback():
+    assert make_valid().prefers == {}
+    assert make_valid().fallback == ""

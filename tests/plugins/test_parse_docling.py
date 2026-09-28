@@ -340,3 +340,10 @@ def test_job_posting_recovers_the_structure_pdfium_misses():
     for page in range(1, doc.page_count + 1):
         on_page = [e for e in doc.elements if e.page == page]
         assert not on_page[0].text.startswith("We are proud"), page
+
+
+def test_docling_provides_headings():
+    """The heading chunker prefers this; the UI reads it to lock softly elsewhere."""
+    from plugins.parse.docling import DoclingParse
+
+    assert DoclingParse.provides == {"structure": ["headings"]}

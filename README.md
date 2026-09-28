@@ -149,8 +149,10 @@ unsafe to share:
   - ranked retrieval hits.
 - **Change one setting and rerun cheaply.** Results are cached by recipe, so changing the
   chunker never re-parses the PDF.
-- **Compare strategies.** Sweep a stage over several strategies or settings and see the
-  results side by side, including how many steps were reused from the cache.
+- **Compare strategies.** On the Compare page you pick a stage (Parse or Chunk for now),
+  and it lists that stage's strategies side by side with what each one produced. The Sweep
+  button on a Build card opens Compare on that card. The page also says how many steps were
+  reused from the cache.
 - **Score a pipeline instead of guessing.** The Evaluate page takes the pipeline you built,
   asks it every question in the bundled question set, and says how many of them found their
   answer, at what rank, and in which chunk. Each question carries the sentence in the

@@ -42,10 +42,11 @@ import { RegistryScreen } from "./Shell"
  */
 export function Compare() {
   const reg = useRegistry()
+  // The node under comparison: from the URL on arrival, then from the picker.
+  const [wanted, setWanted] = useState<string | null>(() => new URLSearchParams(window.location.search).get("node"))
   if (reg.kind !== "ready") return <RegistryScreen state={reg} />
   const params = new URLSearchParams(window.location.search)
   const graph = readStoredGraph(reg.registry)
-  const wanted = params.get("node")
   const target = graph?.nodes.find((n) => n.id === wanted) ?? graph?.nodes.find((n) => n.stage === "chunk")
   if (!graph || !target || !graph.nodes.some((n) => n.stage === "source" && n.config.sha)) {
     return (
@@ -61,7 +62,18 @@ export function Compare() {
   }
   const native = Number(params.get("native")) || undefined
   const preset = params.get("preset") === "matryoshka" && target.stage === "index" ? "matryoshka" : undefined
-  return <Sweep registry={reg.registry} graph={graph} target={target} preset={preset} native={native} />
+  // What the picker offers: Parse and Chunk, plus the target when it is another stage
+  // (Build's Sweep button opens Index or Retrieve here), so it always shows the target.
+  const choices = graph.nodes.filter((n) => n.stage === "parse" || n.stage === "chunk")
+  if (!choices.includes(target)) choices.push(target)
+  const choose = (id: string) => {
+    const q = new URLSearchParams(window.location.search)
+    q.set("node", id)
+    window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`)
+    setWanted(id)
+  }
+  // Keyed on the target: a new node means fresh variants, no results and `through` back at the node itself.
+  return <Sweep key={target.id} registry={reg.registry} graph={graph} target={target} choices={choices} onChoose={choose} preset={preset} native={native} />
 }
 
 /** The node's own variant first, then every other transform of its stage on defaults. */
@@ -79,15 +91,21 @@ function Sweep({
   registry,
   graph,
   target,
+  choices,
+  onChoose,
   preset,
   native,
 }: {
   registry: Registry
   graph: PipelineGraph
   target: GraphNode
+  /** The nodes the stage picker offers; always includes `target`. */
+  choices: GraphNode[]
+  onChoose: (id: string) => void
   preset?: "matryoshka"
   native?: number
 }) {
+  const stageId = useId()
   const throughId = useId()
   const transforms = transformsFor(registry, target.stage)
   const order = useMemo(() => columnOrder(graph), [graph])
@@ -189,10 +207,23 @@ function Sweep({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {downstream.length > 1 ? (
+          <div className="flex items-center gap-2">
+            <label htmlFor={stageId} className="text-sm text-fg-muted">
+              Compare
+            </label>
+            <select id={stageId} className={`${CONTROL} w-auto`} value={target.id} disabled={busy} onChange={(e) => onChoose(e.target.value)}>
+              {choices.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {titleFor(n)}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Parse and Chunk columns show their own output; only a later stage has a choice of where to stop. */}
+          {downstream.length > 1 && target.stage !== "parse" && target.stage !== "chunk" ? (
             <div className="flex items-center gap-2">
               <label htmlFor={throughId} className="text-sm text-fg-muted">
-                Show
+                Show through
               </label>
               <select id={throughId} className={`${CONTROL} w-auto`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
                 {downstream.map((n) => (

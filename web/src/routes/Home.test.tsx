@@ -65,3 +65,12 @@ describe("Home", () => {
     expect(document.body.textContent).not.toMatch(/[–—]/)
   })
 })
+
+describe("Home footer", () => {
+  it("names the author, so the page has a person behind it", () => {
+    render(<Home />)
+    const footer = screen.getByRole("contentinfo")
+    expect(within(footer).getByText(/Made by/)).toBeTruthy()
+    expect(within(footer).getByRole("link", { name: "Nadeem Khan" }).getAttribute("href")).toBe("https://github.com/nadeem4")
+  })
+})

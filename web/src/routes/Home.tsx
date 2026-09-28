@@ -11,6 +11,7 @@ import "@/components/learn/learn.css"
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
+const AUTHOR = "https://github.com/nadeem4"
 
 /** The recorded run's chunks as bars; the top pick and the reranker's picks stand out. */
 function Preview() {
@@ -116,7 +117,13 @@ export function Home() {
         </section>
 
         <footer className="flex flex-wrap justify-between gap-4 border-t border-hairline py-6 text-sm text-fg-muted">
-          <span>Open source under the MIT license.</span>
+          <span>
+            Made by{" "}
+            <a href={AUTHOR} className="text-fg no-underline hover:underline">
+              Nadeem Khan
+            </a>
+            . Open source under the MIT license.
+          </span>
           <a href={REPO} className="text-fg-muted no-underline hover:text-fg">
             github.com/nadeem4/rag-playground
           </a>

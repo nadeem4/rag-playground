@@ -110,3 +110,29 @@ describe("theme blocks", () => {
     expect(sizes).toEqual([11, 12, 13, 14, 16, 20])
   })
 })
+
+describe("the one accent (Channel A)", () => {
+  it.each([
+    ["light", light],
+    ["dark toggle", darkToggle],
+  ])("%s: the accent reads on panels, and its foreground reads on it", (_, tokens) => {
+    const accent = tokens.get("--accent")!
+    expect(inGamut(parse(accent)!), "accent in sRGB gamut").toBe(true)
+    expect(contrast(accent, tokens.get("--surface-elevated")!), "accent on elevated").toBeGreaterThanOrEqual(4.5)
+    expect(contrast(accent, tokens.get("--accent-fg")!), "accent-fg on accent").toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe("the accent hue", () => {
+  it.each([
+    ["light", light],
+    ["dark toggle", darkToggle],
+  ])("%s: sits in the widest gap of the data hue wheel, off the indigo band", (_, tokens) => {
+    const h = parse(tokens.get("--accent")!)!.h
+    // Between chunk-7 (144) and chunk-4 (189), so it never reads as a chunk
+    // colour, and outside 255..280, the hue band that reads as generated UI.
+    expect(h).toBeGreaterThan(150)
+    expect(h).toBeLessThan(185)
+    expect(parse(tokens.get("--selection")!)!.h).toBe(h)
+  })
+})

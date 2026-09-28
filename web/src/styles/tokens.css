@@ -36,9 +36,9 @@
   --hairline: #e4e4e7; /* zinc-200 */
   --text-primary: #18181b; /* zinc-900, 16.1:1 on elevated */
   --text-secondary: #52525b; /* zinc-600, 7.0:1 on elevated */
-  --accent: oklch(0.52 0.17 262); /* the one accent, 5.2:1 on elevated */
+  --accent: oklch(0.48 0.095 166); /* the one accent, 5.7:1 on elevated; hue 166 is the gap between chunk-7 and chunk-4 */
   --accent-fg: #fafaf9; /* 5.4:1 on accent */
-  --selection: oklch(0.93 0.04 262);
+  --selection: oklch(0.93 0.04 166);
   --danger: oklch(0.52 0.17 25); /* error text, always with a label, 5.5:1 */
 
   /* Form fields: contrast-verified once here, so a schema renderer cannot emit
@@ -90,9 +90,9 @@
   --hairline: #27272a;
   --text-primary: #fafaf9;
   --text-secondary: #a1a1aa;
-  --accent: oklch(0.72 0.14 262);
+  --accent: oklch(0.72 0.14 166);
   --accent-fg: #0b0b0c;
-  --selection: oklch(0.3 0.06 262);
+  --selection: oklch(0.3 0.06 166);
   --danger: oklch(0.72 0.13 25);
   --field-border: #71717a;
   --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
@@ -125,9 +125,9 @@
     --hairline: #27272a;
     --text-primary: #fafaf9;
     --text-secondary: #a1a1aa;
-    --accent: oklch(0.72 0.14 262);
+    --accent: oklch(0.72 0.14 166);
     --accent-fg: #0b0b0c;
-    --selection: oklch(0.3 0.06 262);
+    --selection: oklch(0.3 0.06 166);
     --danger: oklch(0.72 0.13 25);
     --field-border: #71717a;
     --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);

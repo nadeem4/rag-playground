@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- A chunk map, the app's own mark: three chunks of the sample document on the off-black surface.
+       Fills are chunk-1, chunk-2 and chunk-3 from tokens.css at their dark-theme lightness. -->
+  <rect width="32" height="32" rx="7" fill="#0b0b0c"/>
+  <rect x="7" y="8" width="18" height="4" rx="1" fill="#c56e7e"/>
+  <rect x="7" y="14" width="11" height="4" rx="1" fill="#3a97c5"/>
+  <rect x="7" y="20" width="15" height="4" rx="1" fill="#c07948"/>
+</svg>

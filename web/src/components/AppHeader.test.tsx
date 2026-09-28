@@ -6,7 +6,6 @@ import { canonicalPath, pageFor } from "@/App"
 import { Home } from "@/routes/Home"
 import { Inspect } from "@/routes/Inspect"
 import { Learn, topicFor } from "@/routes/Learn"
-import { readLearnMode, resetLearnModeForTests } from "@/state/learnMode"
 import { Shell } from "@/routes/Shell"
 import { Specimen } from "@/routes/Specimen"
 
@@ -14,7 +13,6 @@ import { AppHeader } from "./AppHeader"
 
 beforeEach(() => {
   window.localStorage.clear()
-  resetLearnModeForTests()
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response(JSON.stringify({ source: "none" }), { status: 200 })),
@@ -95,30 +93,10 @@ describe("AppHeader", () => {
     expect(screen.getByRole("link", { name: "Lessons" }).getAttribute("aria-current")).toBe("page")
   })
 
-  it("keeps the Learn mode switch off Home and the lessons, where it does nothing", () => {
-    header("/")
-    expect(screen.queryByRole("switch", { name: "Learn mode" })).toBeNull()
-    cleanup()
-    header("/learn/chunking")
-    expect(screen.queryByRole("switch", { name: "Learn mode" })).toBeNull()
-  })
-
-  it("explains what Learn mode does, beside the switch", async () => {
+  it("has no Learn mode switch and no pop-over on Build: the lessons are always shown", () => {
     header("/build")
-    fireEvent.click(screen.getByRole("button", { name: "What Learn mode does" }))
-    const about = await screen.findByRole("dialog", { name: "About Learn mode" })
-    expect(within(about).getByText(/adds a short explanation under every setting/)).toBeTruthy()
-    expect(within(about).getByText(/Turn it off for a clean workbench\./)).toBeTruthy()
-  })
-
-  it("has a Learn mode switch on Build, on for a first visit, remembered when turned off", () => {
-    header("/build")
-    const sw = screen.getByRole("switch", { name: "Learn mode" }) as HTMLInputElement
-    expect(sw.checked).toBe(true)
-    fireEvent.click(sw)
-    expect(sw.checked).toBe(false)
-    resetLearnModeForTests()
-    expect(readLearnMode()).toBe(false)
+    expect(screen.queryByRole("switch", { name: "Learn mode" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "What Learn mode does" })).toBeNull()
   })
 
   it("marks the Dev button as current on a dev page", () => {

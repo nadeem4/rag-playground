@@ -41,7 +41,7 @@ export interface SchemaFormProps {
   onChange: (value: Record<string, unknown>) => void
   errors?: FieldErrors
   /**
-   * Learn mode (plan I-22): lessons keyed by field path. A field with one
+   * Lessons (plan I-22), keyed by field path. A field with one
    * shows its hint and a "Read more" under it. Any plugin that ships `learn`
    * gets this; absent, the form is unchanged.
    */

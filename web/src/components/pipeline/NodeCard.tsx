@@ -63,8 +63,6 @@ export interface NodeCardProps {
   blockedBy?: string
   /** This card's previous run's artifact, for "(was N)". */
   previousArtifactId?: string
-  /** Learn mode is on: show the stage lesson and the plugin's hints (plan I-22). */
-  learn?: boolean
   /** Plan I-22: this stage's lesson paragraphs, when the server has them. */
   lesson?: string[]
   /** The transform wired into each of this node's input ports, for lock states. */
@@ -210,7 +208,7 @@ export function NodeCard(p: NodeCardProps) {
         </div>
       </header>
 
-      {p.learn && p.lesson?.length ? (
+      {p.lesson?.length ? (
         <StageLesson title={LESSON_TITLE[p.node.stage] ?? `What does ${p.title} do?`} paragraphs={p.lesson} />
       ) : null}
 
@@ -241,7 +239,7 @@ export function NodeCard(p: NodeCardProps) {
             {lock.reason}
           </p>
         ) : null}
-        {p.learn && info?.learn?._strategy ? <LearnHint lesson={info.learn._strategy} /> : null}
+        {info?.learn?._strategy ? <LearnHint lesson={info.learn._strategy} /> : null}
       </div>
 
       {p.body ??
@@ -252,7 +250,7 @@ export function NodeCard(p: NodeCardProps) {
             value={p.node.config}
             onChange={p.onConfig}
             errors={p.fieldErrors}
-            learn={p.learn ? info.learn : undefined}
+            learn={info.learn}
           />
         ) : null)}
 

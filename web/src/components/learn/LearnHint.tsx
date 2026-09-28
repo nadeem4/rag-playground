@@ -1,7 +1,7 @@
 import type { Lesson } from "@/api/types"
 
 /**
- * Learn mode, under a field or a strategy: the plugin's one-sentence hint, and
+ * Under a field or a strategy on Build: the plugin's one-sentence hint, and
  * a "Read more" that opens its longer paragraphs (plan I-22).
  */
 export function LearnHint({ lesson }: { lesson: Lesson }) {

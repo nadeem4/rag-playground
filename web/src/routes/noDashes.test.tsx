@@ -65,7 +65,7 @@ afterEach(() => {
 })
 
 describe("no em-dashes or en-dashes in visible text", () => {
-  it("Build, with a file loaded, Learn mode on and an explanation open", async () => {
+  it("Build, with a file loaded and an explanation open", async () => {
     storeGraph(sampleGraph(registry, SOURCE))
     serve([SOURCE])
     render(<Shell />)

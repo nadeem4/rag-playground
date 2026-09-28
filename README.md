@@ -207,9 +207,9 @@ beside you the whole time, and ends with a recap.
 Your progress is kept in your browser, so finished lessons are marked and the page offers the
 next one.
 
-**Learn mode**, the switch in the header, changes the **Build** page only. With it on, every
-setting carries a short explanation, and each step says what it just did. Turn it off for a
-clean workbench.
+The **Build** page always explains itself. Each card shows what the step is for and what the
+chosen strategy does, and every setting has a one-sentence hint under it, with "Read more"
+behind each.
 
 ## Stages and supported strategies
 
@@ -397,7 +397,7 @@ a new strategy needs no frontend change.
    - a `summary` of how the strategy works;
    - an `explain(config)` that describes what these settings will do;
    - for a chunk strategy, `learn`: a one-sentence `hint` and more paragraphs for the
-     strategy itself (the key `_strategy`) and for every setting. Learn mode shows them;
+     strategy itself (the key `_strategy`) and for every setting. Build shows them;
    - if it needs something from the step above it, `requires`, keyed by input port, for
      example `{"index": {"backends": ["fts"]}}`, and `provides` on the producer, for
      example `{"backends": ["dense", "fts"]}`. An unmet requirement is a hard lock: the
@@ -470,8 +470,8 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 | Embedding cache | `artifacts/.embcache/` | `RAG_PLAYGROUND_EMBED_CACHE` |
 | Models | `~/.cache/huggingface` | Hugging Face's `HF_HOME` |
 
-Your browser also keeps three small things of its own: which lessons you have finished, the
-Learn mode switch, and the last Evaluate score of the tab. Clearing your browser data removes
+Your browser also keeps two small things of its own: which lessons you have finished, and
+the last Evaluate score of the tab. Clearing your browser data removes
 them, and they never leave your machine.
 
 A key typed into the app is in none of these places. It stays in the browser tab's memory

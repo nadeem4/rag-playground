@@ -11,7 +11,8 @@ import { CONTROL } from "@/components/fields/types"
 /**
  * The Load card's body: upload a file (`POST /api/sources`) or pick one
  * already uploaded (`GET /api/sources`). Emits the source node's config,
- * `{sha, filename}`. A hosted demo has no Upload: the server refuses it.
+ * `{sha, filename}`. A hosted demo also offers Upload, bounded and private to
+ * the browser.
  */
 
 export interface SourceConfig {
@@ -177,28 +178,26 @@ export function SourcePicker({
         </div>
       ) : null}
 
-      {demo ? null : (
-        <div className="flex min-w-0 items-center gap-2">
-          <input
-            ref={fileRef}
-            id={`${id}-file`}
-            type="file"
-            accept=".pdf,application/pdf"
-            className="sr-only"
-            aria-label="Upload a file"
-            onChange={(e) => void onFile(e.target.files?.[0])}
-          />
-          <Button variant="outline" size="sm" disabled={Boolean(upload && !upload.error)} onClick={() => fileRef.current?.click()}>
-            <Upload aria-hidden strokeWidth={1.75} />
-            Upload
-          </Button>
-          {upload && !upload.error ? (
-            <span role="status" className="truncate text-xs text-fg-muted">
-              Uploading {upload.name}
-            </span>
-          ) : null}
-        </div>
-      )}
+      <div className="flex min-w-0 items-center gap-2">
+        <input
+          ref={fileRef}
+          id={`${id}-file`}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="sr-only"
+          aria-label="Upload a file"
+          onChange={(e) => void onFile(e.target.files?.[0])}
+        />
+        <Button variant="outline" size="sm" disabled={Boolean(upload && !upload.error)} onClick={() => fileRef.current?.click()}>
+          <Upload aria-hidden strokeWidth={1.75} />
+          Upload
+        </Button>
+        {upload && !upload.error ? (
+          <span role="status" className="truncate text-xs text-fg-muted">
+            Uploading {upload.name}
+          </span>
+        ) : null}
+      </div>
       {upload?.error ? (
         <p role="alert" className="text-xs text-danger">
           Upload of {upload.name} failed: {upload.error}

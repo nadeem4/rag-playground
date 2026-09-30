@@ -32,9 +32,10 @@ support and no scaling story.
 - [Development](#development)
 - [Where your data goes](#where-your-data-goes)
 
-The live demo runs in demo mode: it uses the bundled samples, uploads are turned off, and
-it never uses a key of ours, so chat answers need your own key typed into the app. Duplicate the Space
-or run it locally to use your own PDFs.
+The live demo runs in demo mode: the bundled samples are there for everyone, a PDF you upload
+stays private to your browser and is deleted after a day (up to 10 MB and 20 pages), and it
+never uses a key of ours, so chat answers need your own key typed into the app. Run it locally
+for larger files or to keep your uploads.
 
 ## Quick start
 
@@ -128,9 +129,11 @@ For a public host that strangers share, such as a Hugging Face Space, set
 `RAG_PLAYGROUND_DEMO=1`. The playground has no login, so demo mode switches off what is
 unsafe to share:
 
-- **No uploads.** `POST /api/sources` is refused, and the UI hides Upload. Visitors work with
-  the bundled samples only, and no route lists or reads any other file, so nobody sees
-  another visitor's document.
+- **Private, bounded uploads.** The server gives each browser an anonymous `rag_visitor`
+  cookie. An upload belongs to that browser: no other visitor can list it, see its pages or run
+  on it. Uploads are limited to 10 MB, 20 pages and 3 live files per browser, PDFs only, and are
+  deleted a day after upload. The bundled samples stay public. Clearing cookies loses access to
+  your uploads.
 - **No server API keys.** Every key, for every provider, comes only from the request
   header, that is, a key the visitor types in the UI. `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY` and `OPENAI_COMPATIBLE_API_KEY` in the environment or in `.env` are
@@ -139,7 +142,7 @@ unsafe to share:
   refused with 403, and so is checking a custom endpoint: the server would otherwise send
   a request to any URL a visitor chose.
 
-`GET /api/settings/app` returns `{"demo": true}` so the UI can say so.
+`GET /api/settings/app` returns `{"demo": true, "limits": {...}}` so the UI can say so and state the limits.
 
 ## What you can do
 
@@ -485,6 +488,10 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 | Cached results | `artifacts/` | `RAG_PLAYGROUND_ARTIFACTS` |
 | Embedding cache | `artifacts/.embcache/` | `RAG_PLAYGROUND_EMBED_CACHE` |
 | Models | `~/.cache/huggingface` | Hugging Face's `HF_HOME` |
+
+On the hosted demo, an uploaded file is tied to the `rag_visitor` cookie in your browser and is
+deleted a day after upload. Results derived from it are cached by content hash and are not
+listed anywhere.
 
 Your browser also keeps two small things of its own: which lessons you have finished, and
 the last Evaluate score of the tab. Clearing your browser data removes

@@ -47,7 +47,7 @@ beforeEach(() => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/settings/app") {
         appCalls += 1
-        return ok({ demo })
+        return ok(demo ? { demo, limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, ttl_hours: 24 } } : { demo })
       }
       if (url === "/api/sources") return ok([SAMPLE])
       if (url === "/api/samples") return ok(SAMPLES)
@@ -66,7 +66,7 @@ afterEach(() => {
 })
 
 const uploadButton = () => screen.queryByRole("button", { name: "Upload" })
-const NOTE = "This is a hosted demo with sample documents. To use your own PDFs, run it locally."
+const NOTE = "This is a hosted demo. A PDF you upload stays private to this browser and is deleted after a day. Files up to 10 MB and 20 pages. For anything larger, run it locally."
 
 describe("SourcePicker", () => {
   it("offers Upload outside demo mode", async () => {
@@ -76,14 +76,12 @@ describe("SourcePicker", () => {
     expect(uploadButton()).not.toBeNull()
   })
 
-  it("hides Upload in demo mode, and still lists the sample", async () => {
+  it("offers Upload in demo mode too", async () => {
     demo = true
     render(<SourcePicker value={{}} onChange={() => {}} />)
-    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
-    expect([...pick.options].map((o) => o.textContent)).toContain("chunking-primer.pdf")
+    await screen.findByLabelText("File")
     await waitFor(() => expect(appCalls).toBe(1))
-    expect(uploadButton()).toBeNull()
-    expect(screen.queryByLabelText("Upload a file")).toBeNull()
+    expect(uploadButton()).not.toBeNull()
   })
 
   it("keeps Upload when the app settings cannot be read", async () => {
@@ -174,12 +172,13 @@ describe("FirstRun", () => {
     await waitFor(() => expect(uploadButton()).not.toBeNull())
   })
 
-  it("in demo mode: no Upload, the samples stay, and one line points to running it locally", async () => {
+  it("in demo mode: Upload stays, the samples stay, and the note states the limits", async () => {
     demo = true
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
     const note = await screen.findByTestId("demo-note")
     expect(note.textContent).toBe(NOTE)
-    expect(uploadButton()).toBeNull()
+    expect(screen.getByRole("link", { name: "run it locally" })).toBeTruthy()
+    await waitFor(() => expect(uploadButton()).not.toBeNull())
     expect(await screen.findAllByRole("listitem")).toHaveLength(2)
   })
 })

@@ -2,7 +2,7 @@ import { useState } from "react"
 
 import { loadSample, useSamples } from "@/api/samples"
 import type { Source } from "@/api/types"
-import { useDemo } from "@/api/useDemo"
+import { useAppSettings } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 
 import { SourcePicker, type SourceConfig } from "./SourcePicker"
@@ -11,8 +11,8 @@ import { SourcePicker, type SourceConfig } from "./SourcePicker"
  * The Load card on a first visit (plan I-15): nothing uploaded and no file
  * selected. Upload your own through the usual picker, or load one of the
  * bundled samples (`GET /api/samples`, then `POST /api/sources/sample`).
- * Nothing runs until the user presses Run. A hosted demo has no Upload, and
- * says so in one line.
+ * Nothing runs until the user presses Run. A hosted demo still offers
+ * Upload, and states its limits in a note above the picker.
  *
  * The embedded `SourcePicker` hides its own sample select (F2): this card
  * already lists every sample, and offering the same choice twice, through two
@@ -24,7 +24,9 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
   const { samples, error: samplesError } = useSamples()
   const [busy, setBusy] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const demo = useDemo()
+  const settings = useAppSettings()
+  const demo = settings?.demo === true
+  const limits = settings?.limits
 
   async function load(name: string, title: string, question: string) {
     setBusy(name)
@@ -43,17 +45,18 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
       <h3 className="text-sm font-semibold">Load</h3>
       {demo ? (
         <p data-testid="demo-note" className="text-sm text-fg-muted">
-          This is a hosted demo with sample documents. To use your own PDFs,{" "}
+          This is a hosted demo. A PDF you upload stays private to this browser and is deleted after{" "}
+          {limits?.ttl_hours === 24 ? "a day" : `${limits?.ttl_hours ?? 24} hours`}. Files up to{" "}
+          {Math.round((limits?.max_bytes ?? 10485760) / 1048576)} MB and {limits?.max_pages ?? 20} pages. For anything larger,{" "}
           <a href={REPO} target="_blank" rel="noreferrer" className="underline underline-offset-2">
             run it locally
           </a>
           .
         </p>
-      ) : (
-        <div className="rounded-panel border border-dashed border-field-border p-3">
-          <SourcePicker value={{}} onChange={onSource} samples={false} />
-        </div>
-      )}
+      ) : null}
+      <div className="rounded-panel border border-dashed border-field-border p-3">
+        <SourcePicker value={{}} onChange={onSource} samples={false} />
+      </div>
       <div className="flex min-w-0 flex-col gap-2">
         <h4 className="m-0 text-sm font-medium">Try a sample document</h4>
         {samplesError ? (

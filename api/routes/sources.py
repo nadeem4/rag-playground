@@ -11,6 +11,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,13 +25,28 @@ router = APIRouter()
 
 META_DIR = ".meta"
 
+#: A stored sha is always a sha256 hex digest. Checked before a sha reaches a
+#: filesystem path, so a crafted value like `../../x` can never escape
+#: `META_DIR` or the sources directory. Shared with `pages.py`.
+SHA = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _read_sidecar(path: Path) -> dict[str, Any]:
+    """A sidecar's parsed JSON, or `{}` when it is missing, unreadable, or not an object."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
 
 def owners(sources: Path, sha: str) -> dict[str, str]:
-    """Visitor ids that uploaded this sha, each with its upload time. Empty for a sample."""
-    meta = sources / META_DIR / f"{sha}.json"
-    if not meta.is_file():
+    """Visitor ids that uploaded this sha, each with its upload time. Empty for a
+    sample, an unknown sha, or a sha that is not a valid sha256 hex digest."""
+    if not SHA.match(sha):
         return {}
-    return dict(json.loads(meta.read_text(encoding="utf-8")).get("visitors") or {})
+    sidecar = _read_sidecar(sources / META_DIR / f"{sha}.json")
+    return dict(sidecar.get("visitors") or {})
 
 
 @router.get("/sources")
@@ -39,8 +55,8 @@ def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
     meta_dir = request.app.state.deps.sources_dir / META_DIR
     if not meta_dir.is_dir():
         return []
-    items = [json.loads(p.read_text(encoding="utf-8")) for p in meta_dir.glob("*.json")]
-    items = [m for m in items if demo.readable(m["sha"], request)]
+    items = [_read_sidecar(p) for p in meta_dir.glob("*.json")]
+    items = [m for m in items if m.get("sha") and demo.readable(m["sha"], request)]
     return sorted(
         ({k: v for k, v in m.items() if k != "visitors"} for m in items),
         key=lambda m: m["filename"].lower(),
@@ -106,7 +122,7 @@ def _store(
     meta_dir = sources / META_DIR
     meta_dir.mkdir(exist_ok=True)
     meta_path = meta_dir / f"{sha}.json"
-    previous = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
+    previous = _read_sidecar(meta_path)
     visitors = dict(previous.get("visitors") or {})
     if visitor:
         visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")

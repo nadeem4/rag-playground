@@ -12,7 +12,6 @@ size from `/pages`.
 from __future__ import annotations
 
 import io
-import re
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -23,10 +22,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from api import demo
+from api.routes.sources import SHA
 
 router = APIRouter()
-
-_SHA = re.compile(r"^[0-9a-f]{64}$")
 
 #: A page render is a pure function of the source's bytes, which the sha names.
 CACHE_CONTROL = "public, max-age=31536000, immutable"
@@ -38,7 +36,7 @@ _SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}
 def source_path(request: Request, sha: str) -> Path:
     """The stored file for this sha, or 404. Also the gold-set routes' guard."""
     sources: Path = request.app.state.deps.sources_dir
-    if _SHA.match(sha) and demo.readable(sha, request) and sources.is_dir():
+    if SHA.match(sha) and demo.readable(sha, request) and sources.is_dir():
         for p in sorted(sources.glob(f"{sha}*")):
             if p.is_file() and not p.name.endswith(".part"):
                 return p

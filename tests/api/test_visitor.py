@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from api import visitor
+from api.routes.sources import META_DIR, owners
 from tests.api.conftest import ingest_graph, make_client, upload_pdf
 
 
@@ -85,3 +86,31 @@ def test_outside_demo_mode_every_client_sees_every_upload(dirs):
         sha = upload_pdf(a)["sha"]
         assert any(s["sha"] == sha for s in b.get("/api/sources").json())
         assert b.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
+
+
+# --- a crafted sha must never reach a filesystem path -------------------------
+
+
+def test_a_crafted_sha_in_a_run_graph_is_refused_not_500(dirs, monkeypatch):
+    demo_on(monkeypatch)
+    with make_client(dirs) as c:
+        graph = ingest_graph("../../etc/passwd", "x.pdf")
+        r = c.post("/api/runs", json={"graph": graph})
+        assert r.status_code == 403
+
+
+def test_owners_rejects_a_sha_that_is_not_a_valid_digest(tmp_path):
+    assert owners(tmp_path, "../x") == {}
+
+
+# --- a corrupted sidecar must never turn into a 500 ----------------------------
+
+
+def test_a_corrupted_sidecar_is_skipped_not_500(client, dirs):
+    sha = upload_pdf(client)["sha"]
+    sidecar = dirs["sources"] / META_DIR / f"{sha}.json"
+    sidecar.write_text("not json", encoding="utf-8")
+    assert owners(dirs["sources"], sha) == {}
+    r = client.get("/api/sources")
+    assert r.status_code == 200
+    assert r.json() == []

@@ -21,7 +21,7 @@ _MAX_AGE = 365 * 24 * 3600
 def visitor_id(request: Request) -> str | None:
     """The request's visitor id, or None when the cookie is absent or malformed."""
     value = request.cookies.get(COOKIE)
-    return value if value and _VALID.match(value) else None
+    return value if value and _VALID.fullmatch(value) else None
 
 
 def ensure_visitor(request: Request, response: Response) -> str:

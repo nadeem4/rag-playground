@@ -56,3 +56,31 @@ def test_a_malformed_timestamp_counts_as_expired(tmp_path):
 
 def test_sweep_on_a_missing_folder_is_a_no_op(tmp_path):
     assert expiry.sweep(tmp_path / "nowhere", NOW) == 0
+
+
+def test_an_invalid_sha_deletes_no_files_but_the_sidecar_is_removed(tmp_path):
+    meta_dir = tmp_path / META_DIR
+    meta_dir.mkdir(parents=True)
+    meta = meta_dir / "bad.json"
+    outside = tmp_path.parent / "evil-secret.pdf"
+    outside.write_text("do not delete me", encoding="utf-8")
+    try:
+        meta.write_text(
+            json.dumps(
+                {
+                    "sha": "../evil-secret",
+                    "filename": "x.pdf",
+                    "size": 1,
+                    "content_type": "application/pdf",
+                    "visitors": {
+                        "a": (NOW - demo.UPLOAD_TTL - timedelta(minutes=1)).isoformat(timespec="seconds"),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert expiry.sweep(tmp_path, NOW) == 0
+        assert not meta.exists()
+        assert outside.exists()
+    finally:
+        outside.unlink(missing_ok=True)

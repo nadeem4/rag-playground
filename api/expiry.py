@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from api import demo
-from api.routes.sources import META_DIR, _read_sidecar
+from api.routes.sources import META_DIR, SHA, _read_sidecar
 
 log = logging.getLogger(__name__)
 
@@ -44,12 +44,13 @@ def sweep(sources: Path, now: datetime) -> int:
                 meta.write_text(json.dumps({**body, "visitors": kept}), encoding="utf-8")
             continue
         sha = body.get("sha")
-        if not sha:
-            continue
-        for p in sources.glob(f"{sha}*"):
-            if p.is_file() and not p.name.endswith(".part"):
-                p.unlink()
-                deleted += 1
+        if isinstance(sha, str) and SHA.match(sha):
+            for p in sources.glob(f"{sha}*"):
+                if p.is_file() and not p.name.endswith(".part"):
+                    p.unlink()
+                    deleted += 1
+        # a missing or invalid sha still gets its sidecar removed, so a
+        # malformed record self-heals instead of being retried forever
         meta.unlink()
     return deleted
 

@@ -98,14 +98,15 @@ export function updatePipeline(id: string, graph: PipelineGraph): boolean {
 
 export function renamePipeline(id: string, name: string): boolean {
   const clean = cleanName(name)
+  if (!clean) return false
   const list = readPipelines()
-  if (!clean || !list.some((p) => p.id === id)) return false
+  if (!list.some((p) => p.id === id)) return false
   return persist(list.map((p) => (p.id === id ? { ...p, name: clean } : p)))
 }
 
 export function deletePipeline(id: string): void {
-  persist(readPipelines().filter((p) => p.id !== id))
-  if (readCurrentId() === id) setCurrentId(null)
+  const ok = persist(readPipelines().filter((p) => p.id !== id))
+  if (ok && readCurrentId() === id) setCurrentId(null)
 }
 
 export function readCurrentId(): string | null {

@@ -76,8 +76,15 @@ describe("saved pipelines", () => {
   it("ignores junk in storage", () => {
     window.localStorage.setItem("rag-playground:pipelines:v1", "{not json")
     expect(readPipelines()).toEqual([])
-    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([{ id: 1, name: null }]))
-    expect(readPipelines()).toEqual([])
+    resetPipelinesForTests()
+    window.localStorage.setItem(
+      "rag-playground:pipelines:v1",
+      JSON.stringify([
+        { id: 1, name: null },
+        { id: "ok123456", name: "Kept", graph: { nodes: [], edges: [] }, savedAt: "2026-09-30T00:00:00Z" },
+      ]),
+    )
+    expect(readPipelines().map((p) => p.name)).toEqual(["Kept"])
   })
 
   it("notifies subscribers", () => {

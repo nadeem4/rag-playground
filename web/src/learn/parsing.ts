@@ -129,7 +129,7 @@ export function rules(b: LabCase, t: LabCase, c: LabCase, s: LabCase): string[] 
     tie(b)
       ? `Digital-born, one column, mostly prose: Fast text. On the primer it answered ${b.parsers.pdfium.hits} of ${b.questions}, the same as Layout, at a fraction of the cost.`
       : `Digital-born, one column, mostly prose: Fast text. On the primer it answered ${b.parsers.pdfium.hits} of ${b.questions} against Layout's ${b.parsers.docling.hits}, at a fraction of the cost.`,
-    `Columns: Layout. It costs ${ratio(c)} times more per page here, and it is the difference between finding the answer and not.`,
+    `Columns: Layout. It costs ${ratio(c)} times more per page here, and it is the difference between finding every answer and finding ${c.parsers.pdfium.hits} of ${c.questions}.`,
     tie(t)
       ? `Simple ruled tables: Fast text keeps the rows in reading order and answered ${t.parsers.pdfium.hits} of ${t.questions}, the same as Layout. Layout keeps the table as a table, which starts to matter when tables are wide or a chunk cutter needs their edges.`
       : `Tables: Layout. Fast text answered ${t.parsers.pdfium.hits} of ${t.questions} here and Layout answered ${t.parsers.docling.hits}.`,

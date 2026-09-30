@@ -104,7 +104,7 @@ describe("the rules", () => {
     expect(RULES).toEqual(rules(b, t, col, s))
     expect(RULES).toHaveLength(4)
     expect(RULES[1]).toBe(
-      `Columns: Layout. It costs ${ratio(col)} times more per page here, and it is the difference between finding the answer and not.`,
+      `Columns: Layout. It costs ${ratio(col)} times more per page here, and it is the difference between finding every answer and finding ${col.parsers.pdfium.hits} of ${col.questions}.`,
     )
     expect(RULES[3]).toBe(`Scans: Layout with OCR, and budget for it. On this sample Layout with OCR took ${perPage(s.parsers.docling, s.pages)} seconds per page.`)
   })

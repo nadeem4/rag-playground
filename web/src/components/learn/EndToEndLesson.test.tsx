@@ -139,7 +139,7 @@ describe("How RAG works, end to end", () => {
     expect(panel.textContent).not.toContain("now has its own list")
   })
 
-  it("recaps what the lesson showed, then Mark as done and Next: Chunking", () => {
+  it("recaps what the lesson showed, then Mark as done and Next: Choosing a parser", () => {
     lesson()
     const panel = open("Recap")
     for (const line of [
@@ -149,7 +149,7 @@ describe("How RAG works, end to end", () => {
     ])
       expect(within(panel).getByText(line)).toBeTruthy()
     expect(within(panel).getAllByRole("listitem")).toHaveLength(3)
-    expect(within(panel).getByRole("link", { name: "Next: Chunking" }).getAttribute("href")).toBe("/learn/chunking")
+    expect(within(panel).getByRole("link", { name: "Next: Choosing a parser" }).getAttribute("href")).toBe("/learn/parsing")
     fireEvent.click(within(panel).getByRole("link", { name: "Mark as done" }))
     expect(readProgress()).toEqual({ "end-to-end": true })
   })

@@ -9,22 +9,26 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe("the lesson path", () => {
-  it("is end to end, then chunking, then citations, each at its own route", () => {
-    expect(LESSONS.map((l) => l.href)).toEqual(["/learn/end-to-end", "/learn/chunking", "/learn/citations"])
-    expect(LESSONS.map((l) => l.title)).toEqual(["How RAG works, end to end", "Chunking", "How citations work"])
+  it("is end to end, then parsing, then chunking, then citations, each at its own route", () => {
+    expect(LESSONS.map((l) => l.href)).toEqual(["/learn/end-to-end", "/learn/parsing", "/learn/chunking", "/learn/citations"])
+    expect(LESSONS.map((l) => l.title)).toEqual(["How RAG works, end to end", "Choosing a parser", "Chunking", "How citations work"])
   })
 
   it("states each lesson's real length", () => {
     // The end-to-end steps live inline in components/learn/EndToEndLesson.tsx: answer, rerank, retrieve, index, chunk, clean, parse.
     expect(LESSONS[0].size).toBe("7 steps to scroll through")
+    // The parsing cases come from learn/parsing-lab.json, three of them.
+    expect(LESSONS[1].size).toBe("3 decisions")
+    expect(LESSONS[1].steps).toEqual(["Parse"])
     // The chunking challenges come from the server's lesson data, four of them.
-    expect(LESSONS[1].size).toBe("4 challenges")
+    expect(LESSONS[2].size).toBe("4 challenges")
     // The citations steps live inline in components/learn/CitationsLesson.tsx (STEPS, six of them).
-    expect(LESSONS[2].size).toBe("6 short steps")
+    expect(LESSONS[3].size).toBe("6 short steps")
   })
 
   it("names the next lesson after each one, and none after the last", () => {
-    expect(nextLesson("end-to-end")?.slug).toBe("chunking")
+    expect(nextLesson("end-to-end")?.slug).toBe("parsing")
+    expect(nextLesson("parsing")?.slug).toBe("chunking")
     expect(nextLesson("chunking")?.slug).toBe("citations")
     expect(nextLesson("citations")).toBeNull()
   })
@@ -64,12 +68,13 @@ describe("the Continue button", () => {
   })
 
   it("continues with the first lesson not done", () => {
-    expect(continueAction({ "end-to-end": true })).toEqual({ label: "Continue: Chunking", href: "/learn/chunking" })
-    expect(continueAction({ "end-to-end": true, chunking: true })).toEqual({ label: "Continue: How citations work", href: "/learn/citations" })
+    expect(continueAction({ "end-to-end": true })).toEqual({ label: "Continue: Choosing a parser", href: "/learn/parsing" })
+    expect(continueAction({ "end-to-end": true, parsing: true })).toEqual({ label: "Continue: Chunking", href: "/learn/chunking" })
+    expect(continueAction({ "end-to-end": true, parsing: true, chunking: true })).toEqual({ label: "Continue: How citations work", href: "/learn/citations" })
   })
 
   it("offers the first lesson again when every lesson is done", () => {
-    expect(continueAction({ "end-to-end": true, chunking: true, citations: true })).toEqual({
+    expect(continueAction({ "end-to-end": true, parsing: true, chunking: true, citations: true })).toEqual({
       label: "Open the first lesson again",
       href: "/learn/end-to-end",
     })

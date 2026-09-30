@@ -36,18 +36,21 @@ describe("Home", () => {
     expect(go.getAttribute("href")).toBe("/learn/end-to-end")
   })
 
-  it("lists the three lessons in order, with their steps and size", () => {
+  it("lists the four lessons in order, with their steps and size", () => {
     render(<Home />)
     expect(lessons().map((a) => within(a).getByRole("heading").textContent)).toEqual([
       "How RAG works, end to end",
+      "Choosing a parser",
       "Chunking",
       "How citations work",
     ])
     const first = within(lessons()[0])
     for (const s of ["Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer", "7 steps to scroll through"]) expect(first.getByText(s)).toBeTruthy()
-    expect(within(lessons()[1]).getByText("4 challenges")).toBeTruthy()
-    expect(within(lessons()[2]).getByText("6 short steps")).toBeTruthy()
-    expect(within(lessons()[1]).getByRole("link", { name: "Start" }).getAttribute("href")).toBe("/learn/chunking")
+    expect(within(lessons()[1]).getByText("3 decisions")).toBeTruthy()
+    expect(within(lessons()[2]).getByText("4 challenges")).toBeTruthy()
+    expect(within(lessons()[3]).getByText("6 short steps")).toBeTruthy()
+    expect(within(lessons()[1]).getByRole("link", { name: "Start" }).getAttribute("href")).toBe("/learn/parsing")
+    expect(within(lessons()[2]).getByRole("link", { name: "Start" }).getAttribute("href")).toBe("/learn/chunking")
   })
 
   it("previews the first lesson with the recorded chunk map", () => {
@@ -64,7 +67,7 @@ describe("Home", () => {
     expect(within(lessons()[0]).getByText("Done")).toBeTruthy()
     expect(within(lessons()[0]).getByRole("link", { name: "Open again" })).toBeTruthy()
     expect(within(lessons()[1]).queryByText("Done")).toBeNull()
-    expect(screen.getByRole("link", { name: "Continue: Chunking" }).getAttribute("href")).toBe("/learn/chunking")
+    expect(screen.getByRole("link", { name: "Continue: Choosing a parser" }).getAttribute("href")).toBe("/learn/parsing")
   })
 
   it("points your own PDF at Build, Compare and Evaluate", () => {

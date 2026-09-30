@@ -7,7 +7,7 @@ import { useSyncExternalStore } from "react"
  */
 
 export interface Lesson {
-  slug: "end-to-end" | "chunking" | "citations"
+  slug: "end-to-end" | "parsing" | "chunking" | "citations"
   href: string
   title: string
   /** One sentence: what you do in the lesson. */
@@ -26,6 +26,14 @@ export const LESSONS: Lesson[] = [
     what: "Follow one question from the answer back to the PDF, and see what every step of the pipeline did.",
     steps: ["Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer"],
     size: "7 steps to scroll through",
+  },
+  {
+    slug: "parsing",
+    href: "/learn/parsing",
+    title: "Choosing a parser",
+    what: "Pick a parser for three kinds of PDF, then see what each parser really did on them, measured.",
+    steps: ["Parse"],
+    size: "3 decisions",
   },
   {
     slug: "chunking",

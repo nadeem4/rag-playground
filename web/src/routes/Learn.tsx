@@ -6,6 +6,7 @@ import { useRegistry } from "@/api/useRegistry"
 import { ChunkingLesson } from "@/components/learn/ChunkingLesson"
 import { CitationsLesson } from "@/components/learn/CitationsLesson"
 import { EndToEndLesson } from "@/components/learn/EndToEndLesson"
+import { ParsingLesson } from "@/components/learn/ParsingLesson"
 import { chatSampleGraph, e2eSampleGraph, storeGraph, type PipelineGraph } from "@/state/graph"
 import { LESSONS, type Lesson } from "@/state/lessons"
 
@@ -66,6 +67,8 @@ export function Learn() {
         ) : null}
         {topic === "end-to-end" ? (
           <EndToEndLesson sha={sample?.sha ?? null} onRun={build(e2eSampleGraph)} onChat={build(chatSampleGraph)} />
+        ) : topic === "parsing" ? (
+          <ParsingLesson registry={registry} />
         ) : topic === "chunking" ? (
           <ChunkingLesson registry={registry} sha={sample?.sha ?? null} />
         ) : (

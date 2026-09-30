@@ -72,7 +72,7 @@ no auth, so only do that on a network you trust.
 
 **First steps in the UI:**
 
-The playground opens on **Lessons** (`/`): three short lessons on the sample PDF, in order.
+The playground opens on **Lessons** (`/`): four short lessons on the sample PDFs, in order.
 The first one follows one question through a recorded real run of the pipeline, from the
 answer back to the PDF. Your progress is kept in your browser. To work on your own
 document, open **Build** (`/build`):
@@ -226,6 +226,7 @@ beside you the whole time, and ends with a recap.
 | Lesson | What you do |
 |---|---|
 | **How RAG works, end to end** | Follow one question from the answer back to the PDF, one pipeline step at a time, through a recorded real run |
+| **Choosing a parser** | Pick a parser for a two-column report, a table of figures and a scan, then see what each parser really did on them, measured, and open either run on Build |
 | **Chunking** | Predict what a setting will do to one sentence, then watch the real chunker prove you right or wrong |
 | **How citations work** | Step through how any model can point at the exact sentence it used, and how an invented citation is caught |
 

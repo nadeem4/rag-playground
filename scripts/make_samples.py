@@ -15,9 +15,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.samplegen import chunking_primer, scanned_notes, two_column_report  # noqa: E402
+from scripts.samplegen import (  # noqa: E402
+    chunking_primer,
+    scanned_notes,
+    table_of_figures,
+    two_column_report,
+)
 
-GENERATORS = [chunking_primer, scanned_notes, two_column_report]
+GENERATORS = [chunking_primer, scanned_notes, two_column_report, table_of_figures]
 
 
 def main() -> None:

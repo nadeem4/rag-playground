@@ -1,0 +1,8 @@
+[
+  {"id": "lost-place-row", "question": "How many readers lost their place before and after the reset?", "gold_answer": "| Readers who lost their place | 41 | 16 | -61% |"},
+  {"id": "reading-time-row", "question": "What was the reading time per page before and after?", "gold_answer": "| Reading time per page | 84 s | 61 s | -27% |"},
+  {"id": "satisfaction-row", "question": "How did the satisfaction score change?", "gold_answer": "| Satisfaction score | 6.1 | 8.3 | +2.2 |"},
+  {"id": "how-many-readers", "question": "How many readers took part in the study?", "gold_answer": "Two hundred readers read the same twelve documents twice"},
+  {"id": "largest-change", "question": "Which measure changed the most?", "gold_answer": "The largest change was in readers who lost their place, which fell by more than half."},
+  {"id": "caveat", "question": "What is a table a poor home for?", "gold_answer": "A table is a good home for a number and a poor home for a caveat."}
+]

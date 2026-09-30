@@ -164,3 +164,19 @@ def test_two_column_gold_answers_all_hit_under_docling(tmp_path):
     text = _parse_text(ROOT / "samples" / "two-column-report" / "two-column-report.pdf", "docling", tmp_path)
     for q in _questions_of("two-column-report"):
         assert " ".join(q["gold_answer"].split()) in text, q["id"]
+
+
+def test_table_prose_controls_hit_under_pdfium_and_the_rows_miss(tmp_path):
+    text = _parse_text(ROOT / "samples" / "table-of-figures" / "table-of-figures.pdf", "pdfium", tmp_path)
+    hits = {q["id"]: " ".join(q["gold_answer"].split()) in text for q in _questions_of("table-of-figures")}
+    assert hits == {
+        "lost-place-row": False, "reading-time-row": False, "satisfaction-row": False,
+        "how-many-readers": True, "largest-change": True, "caveat": True,
+    }
+
+
+@pytest.mark.models
+def test_table_rows_are_markdown_rows_under_docling(tmp_path):
+    text = _parse_text(ROOT / "samples" / "table-of-figures" / "table-of-figures.pdf", "docling", tmp_path)
+    for q in _questions_of("table-of-figures"):
+        assert " ".join(q["gold_answer"].split()) in text, q["id"]

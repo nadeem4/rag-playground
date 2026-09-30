@@ -88,3 +88,18 @@ def test_two_column_report_interleaves_under_pdfium():
     left_first = tc.LEFT[0][0].split(" ")[:3]
     right_first = tc.RIGHT[0][0].split(" ")[:3]
     assert text.index(" ".join(right_first)) < text.index(tc.LEFT_SECOND_LINE_START)
+
+
+def test_table_of_figures_cells_are_all_present_under_pdfium():
+    import pypdfium2 as pdfium
+    from scripts.samplegen import table_of_figures as tf
+
+    doc = pdfium.PdfDocument(tf.build())
+    try:
+        assert len(doc) == 2
+        text = doc[0].get_textpage().get_text_range()
+    finally:
+        doc.close()
+    for row in tf.ROWS:
+        for cell in row:
+            assert cell in text

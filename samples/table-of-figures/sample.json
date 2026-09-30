@@ -1,0 +1,9 @@
+{
+  "name": "table-of-figures",
+  "title": "Table of figures",
+  "blurb": "A short study whose results sit in a ruled table, with prose around it.",
+  "shows": "A plain text parser turns the table into loose words. A layout parser keeps each row together, and the heading chunker keeps the table whole.",
+  "stresses": "parse",
+  "pages": 2,
+  "default": false
+}

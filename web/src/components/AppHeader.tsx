@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react"
 import { DropdownMenu } from "radix-ui"
 
+import { useDemo } from "@/api/useDemo"
 import { cn } from "@/lib/utils"
 
 import { ApiKeyControl } from "./ApiKeyControl"
@@ -88,6 +89,8 @@ function DevMenu({ path }: { path: string }) {
 }
 
 export function AppHeader({ path }: { path: string }) {
+  // The dev pages are for working on the app, not for demo visitors.
+  const demo = useDemo()
   return (
     // Wraps to a second row on a phone, so the page itself never scrolls sideways.
     <header className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1">
@@ -103,7 +106,7 @@ export function AppHeader({ path }: { path: string }) {
             GitHub
           </a>
         </nav>
-        <DevMenu path={path} />
+        {demo ? null : <DevMenu path={path} />}
       </div>
       <div className="flex shrink-0 items-center gap-3">
         <ApiKeyControl />

@@ -1,16 +1,28 @@
-import { cleanup, render, screen, within } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { numberWord, RUN } from "@/learn/e2e"
 import { markDone, resetProgressForTests } from "@/state/lessons"
 
 import { Home } from "./Home"
 
+let app: unknown = { demo: false }
+
 beforeEach(() => {
   window.localStorage.clear()
   resetProgressForTests()
+  app = { demo: false }
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      url === "/api/settings/app" ? new Response(JSON.stringify(app), { status: 200 }) : new Response("{}", { status: 404 }),
+    ),
+  )
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 const lessons = () => screen.getAllByRole("article")
 
@@ -30,7 +42,7 @@ describe("Home", () => {
       "How citations work",
     ])
     const first = within(lessons()[0])
-    for (const s of ["Parse", "Clean", "Chunk", "Retrieve", "Rerank", "Answer", "5 steps to scroll through"]) expect(first.getByText(s)).toBeTruthy()
+    for (const s of ["Parse", "Clean", "Chunk", "Retrieve", "Rerank", "Answer", "6 steps to scroll through"]) expect(first.getByText(s)).toBeTruthy()
     expect(within(lessons()[1]).getByText("4 challenges")).toBeTruthy()
     expect(within(lessons()[2]).getByText("6 short steps")).toBeTruthy()
     expect(within(lessons()[1]).getByRole("link", { name: "Start" }).getAttribute("href")).toBe("/learn/chunking")
@@ -53,11 +65,30 @@ describe("Home", () => {
     expect(screen.getByRole("link", { name: "Continue: Chunking" }).getAttribute("href")).toBe("/learn/chunking")
   })
 
-  it("points your own PDF at Build and Compare", () => {
+  it("points your own PDF at Build, Compare and Evaluate", () => {
     render(<Home />)
     const own = screen.getByRole("region", { name: "Use your own PDF" })
     expect(within(own).getByRole("link", { name: "Open Build" }).getAttribute("href")).toBe("/build")
     expect(within(own).getByRole("link", { name: "Compare" }).getAttribute("href")).toBe("/compare")
+    expect(within(own).getByRole("link", { name: "Evaluate" }).getAttribute("href")).toBe("/evaluate")
+    expect(within(own).getByText(/Evaluate scores a pipeline against a sample's questions\./)).toBeTruthy()
+  })
+
+  it("states the upload limits on the demo, and that only a written answer needs a key", async () => {
+    app = { demo: true, limits: { max_bytes: 10 * 1048576, max_pages: 20, max_files: 5, max_total_bytes: 50 * 1048576, ttl_hours: 24 } }
+    render(<Home />)
+    await waitFor(() =>
+      expect(screen.getByTestId("own-pdf-note").textContent).toBe(
+        "Your own PDF can be up to 10 MB and 20 pages. Everything works without a key, except a written answer.",
+      ),
+    )
+  })
+
+  it("says only that a written answer needs a key when running locally", async () => {
+    render(<Home />)
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => c[0] === "/api/settings/app")).toBe(true))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.getByTestId("own-pdf-note").textContent).toBe("Everything works without a key, except a written answer.")
   })
 
   it("has no em-dashes or en-dashes", () => {

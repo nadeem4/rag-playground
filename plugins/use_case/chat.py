@@ -117,16 +117,19 @@ _CLAUDE_COST: dict[str, str] = {
 
 _KEY_WORDS: dict[str, str] = {
     "anthropic": (
-        "It needs an Anthropic API key (API key, top right, or ANTHROPIC_API_KEY "
-        "in .env), and every run is a new paid request, never a cached answer."
+        "It needs an Anthropic API key, added with the API key button at the top "
+        "right or set as ANTHROPIC_API_KEY on the server, and every run is a new "
+        "paid request, never a cached answer."
     ),
     "openai": (
-        "It needs an OpenAI API key (API key, top right, or OPENAI_API_KEY in "
-        ".env), and every run is a new paid request, never a cached answer."
+        "It needs an OpenAI API key, added with the API key button at the top "
+        "right or set as OPENAI_API_KEY on the server, and every run is a new "
+        "paid request, never a cached answer."
     ),
     "openai_compatible": (
-        "A key is optional (API key, top right, or OPENAI_COMPATIBLE_API_KEY in "
-        ".env); a local server usually needs none. Every run is a new request, "
+        "A key is optional, added with the API key button at the top right or "
+        "set as OPENAI_COMPATIBLE_API_KEY on the server, and a local server "
+        "usually needs none. Every run is a new request, "
         "never a cached answer. Custom endpoints are turned off in the hosted demo."
     ),
 }

@@ -1,3 +1,4 @@
+import { useAppSettings } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { barHeight, previewCaption, RUN } from "@/learn/e2e"
 import { cn } from "@/lib/utils"
@@ -73,7 +74,16 @@ function LessonRow({ lesson, n, done }: { lesson: Lesson; n: number; done: boole
   )
 }
 
+/** What your own PDF may be on the demo, and what needs a key anywhere. */
+function ownPdfNote(settings: ReturnType<typeof useAppSettings>): string {
+  const keyNote = "Everything works without a key, except a written answer."
+  const limits = settings?.demo ? settings.limits : undefined
+  if (!limits) return keyNote
+  return `Your own PDF can be up to ${Math.round(limits.max_bytes / 1048576)} MB and ${limits.max_pages} pages. ${keyNote}`
+}
+
 export function Home() {
+  const settings = useAppSettings()
   const done = useProgress()
   const go = continueAction(done)
   return (
@@ -104,6 +114,10 @@ export function Home() {
             </h2>
             <p className="m-0 max-w-[56ch] text-lg text-fg-muted">
               Build lets you run every step on your own document and change any setting. Compare runs two strategies side by side.
+              Evaluate scores a pipeline against a sample's questions.
+            </p>
+            <p className="m-0 max-w-[56ch] text-base text-fg-muted" data-testid="own-pdf-note">
+              {ownPdfNote(settings)}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -112,6 +126,9 @@ export function Home() {
             </Button>
             <Button asChild variant="outline">
               <a href="/compare">Compare</a>
+            </Button>
+            <Button asChild variant="outline">
+              <a href="/evaluate">Evaluate</a>
             </Button>
           </div>
         </section>

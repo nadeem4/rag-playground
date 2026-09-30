@@ -105,6 +105,53 @@ describe("AppHeader", () => {
   })
 })
 
+function serve(app: { demo: boolean }, keys: Record<string, string> = { anthropic: "none", openai: "none", custom: "none" }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/settings/app") return new Response(JSON.stringify(app), { status: 200 })
+      if (url === "/api/settings/llm") return new Response(JSON.stringify(keys), { status: 200 })
+      return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+    }),
+  )
+}
+
+describe("AppHeader on the demo", () => {
+  it("hides the Dev menu on the hosted demo", async () => {
+    serve({ demo: true })
+    header()
+    await waitFor(() => expect(screen.queryByText("Dev")).toBeNull())
+  })
+
+  it("shows the Dev menu when running locally", async () => {
+    serve({ demo: false })
+    header()
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => c[0] === "/api/settings/app")).toBe(true))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.getByText("Dev")).toBeTruthy()
+  })
+})
+
+describe("the key button", () => {
+  it("offers a key for chat answers, as an option, when no key is set", async () => {
+    serve({ demo: true })
+    header()
+    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toBe("Add a key for chat answers (optional)"))
+  })
+
+  it("stays API key with a count when a key is set in this tab", async () => {
+    serve({ demo: true })
+    header()
+    fireEvent.click(screen.getByTestId("api-key-button"))
+    const panel = await screen.findByRole("dialog", { name: "API keys" })
+    const row = within(panel).getByRole("group", { name: "Anthropic" })
+    fireEvent.change(within(row).getByLabelText("Anthropic API key"), { target: { value: "sk-ant-test-0000" } })
+    fireEvent.click(within(row).getByRole("button", { name: "Apply" }))
+    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toContain("1 set"))
+    expect(screen.getByTestId("api-key-button").textContent).toContain("API key")
+  })
+})
+
 describe("routes", () => {
   it("renders the design page at /design and at the old /specimen", () => {
     expect(pageFor("/design")).toBe(Specimen)

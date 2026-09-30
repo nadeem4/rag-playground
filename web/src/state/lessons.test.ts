@@ -14,6 +14,15 @@ describe("the lesson path", () => {
     expect(LESSONS.map((l) => l.title)).toEqual(["How RAG works, end to end", "Chunking", "How citations work"])
   })
 
+  it("states each lesson's real length", () => {
+    // The end-to-end steps live inline in components/learn/EndToEndLesson.tsx: answer, rerank, retrieve, chunk, clean, parse.
+    expect(LESSONS[0].size).toBe("6 steps to scroll through")
+    // The chunking challenges come from the server's lesson data, four of them.
+    expect(LESSONS[1].size).toBe("4 challenges")
+    // The citations steps live inline in components/learn/CitationsLesson.tsx (STEPS, six of them).
+    expect(LESSONS[2].size).toBe("6 short steps")
+  })
+
   it("names the next lesson after each one, and none after the last", () => {
     expect(nextLesson("end-to-end")?.slug).toBe("chunking")
     expect(nextLesson("chunking")?.slug).toBe("citations")

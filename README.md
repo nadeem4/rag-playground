@@ -34,8 +34,8 @@ support and no scaling story.
 
 The live demo runs in demo mode: the bundled samples are there for everyone, a PDF you upload
 stays private to your browser and is deleted after a day (up to 10 MB and 20 pages), and it
-never uses a key of ours, so chat answers need your own key typed into the app. Run it locally
-for larger files or to keep your uploads.
+never uses a key of ours, so chat answers need your own key typed into the app. Everything
+else works without a key. Run it locally for larger files or to keep your uploads.
 
 ## Quick start
 
@@ -348,7 +348,8 @@ the chat node with a message naming the key.
 For each provider, the server looks for its key in three places and uses the first it
 finds:
 
-1. **Typed in the UI.** Open **API key** at the top right. The panel has one row per
+1. **Typed in the UI.** Open the key button at the top right. It reads **Add a key for chat
+   answers (optional)** until a key is set, then **API key**. The panel has one row per
    provider: Anthropic, OpenAI, and Custom endpoint (optional, since a local server may
    need no key). Paste a key into its row and choose Apply. The browser keeps each key in
    memory for that tab only. It is never saved, and reloading the page clears it. The
@@ -480,6 +481,7 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 - Every colour, size and radius is a token in `web/src/styles/tokens.css`. Tailwind's
   default scales are cleared, so values that are not tokens do not compile.
 - The **Dev** menu in the header opens the component inspectors and a token specimen page.
+  It is hidden in demo mode.
 - The two typefaces, Atkinson Hyperlegible Next for reading and Martian Mono for data, are
   self-hosted from npm. No font is fetched from the network at run time.
 - The UI tests use JSON fixtures generated from the real engine. Regenerate them with

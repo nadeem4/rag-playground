@@ -43,13 +43,21 @@ export function ApiKeyControl() {
   }, [panelOpen])
 
   const short = keyShortLabel(server, keys)
+  const keysSet = short !== "" && short !== "not set"
 
   return (
     <Popover.Root open={panelOpen} onOpenChange={setPanelOpen}>
       <Popover.Trigger asChild>
         <Button variant="outline" size="sm" data-testid="api-key-button">
-          API key
-          {short ? <span className={cn("font-mono text-2xs", short === "not set" ? "text-fg-muted" : "text-fg")}>{short}</span> : null}
+          {keysSet ? (
+            <>
+              API key
+              <span className="font-mono text-2xs text-fg">{short}</span>
+            </>
+          ) : (
+            // A key is only needed for a written answer, so no key is not a problem.
+            "Add a key for chat answers (optional)"
+          )}
         </Button>
       </Popover.Trigger>
       <Popover.Portal>

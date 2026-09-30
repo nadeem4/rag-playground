@@ -456,3 +456,10 @@ def test_live_api_round_trip(pipeline):
     out = run(pipeline, context=ctx(key), model="claude-haiku-4-5")
     assert out.payload["stop_reason"] in {"end_turn", "refusal", "max_tokens"}
     assert key not in json.dumps(out.model_dump(mode="json"))
+
+
+def test_key_help_points_to_the_button_and_the_server_not_to_dotenv() -> None:
+    for provider, words in chat_module._KEY_WORDS.items():
+        assert ".env" not in words, provider
+        assert "API key button at the top right" in words, provider
+        assert "on the server" in words, provider

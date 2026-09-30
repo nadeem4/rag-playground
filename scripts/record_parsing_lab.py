@@ -41,6 +41,10 @@ OCR_CASES = {"scanned-notes"}
 CHUNKER = {"chunker": "recursive_character", "chunk_size": 400, "chunk_overlap": 80}
 TOP_K = 5
 WINDOW = 160
+#: Parsed once per configuration before any timing, so a case's parse time is
+#: not its models loading. Not one of the cases, so their parses really run.
+WARM_UP = "chunking-primer"
+WARM_UP_CONFIGS = [("pdfium", {}), ("docling", {}), ("docling", {"do_ocr": True})]
 
 
 def parse_config(parser: str, case: str) -> dict:
@@ -68,6 +72,27 @@ def build_graph(sha: str, filename: str, parser: str, parse_cfg: dict, question:
         Edge("retrieve", "eval", "result"),
     ]
     return Graph(nodes=nodes, edges=edges)
+
+
+def seconds(duration_ms: float) -> float:
+    """Parse time in seconds, one decimal, never shown as 0."""
+    return max(0.1, round(duration_ms / 1000, 1))
+
+
+def warm_up(sample, store, registry, run) -> None:
+    """Parse the warm-up sample once with every configuration; discard the results."""
+    for parser, cfg in WARM_UP_CONFIGS:
+        graph = Graph(
+            nodes=[
+                Node("src", Stage.SOURCE, "upload", {"sha": sample.sha, "filename": sample.pdf.name}),
+                Node("parse", Stage.PARSE, parser, cfg),
+            ],
+            edges=[Edge("src", "parse", "file")],
+        )
+        result = run(graph, registry, store)
+        if not result.ok:
+            failures = {nid: r.error for nid, r in result.nodes.items() if r.error}
+            raise SystemExit(f"warm-up {parser} {cfg} failed: {failures}")
 
 
 def excerpt(text: str, gold: str) -> str | None:
@@ -105,7 +130,7 @@ def _measure(sample, parser: str, store, registry, run) -> dict:
             parse = result.nodes["parse"]
             doc = store.load(parse.artifact.id, ArtifactType.PARSED_DOC)
             text = DocView.of(doc).text
-            entry["seconds"] = round(parse.duration_ms / 1000, 1)
+            entry["seconds"] = seconds(parse.duration_ms)
             entry["chars"] = len(text)
         output = store.load(result.nodes["eval"].artifact.id, ArtifactType.OUTPUT)
         hits += bool(output["payload"]["hit"])
@@ -135,6 +160,9 @@ def record(out: Path = OUT) -> dict:
         upload.SOURCES_DIR = sources
         try:
             store = Store(root / "store")
+            warm = samples[WARM_UP]
+            (sources / f"{warm.sha}.pdf").write_bytes(warm.pdf.read_bytes())
+            warm_up(warm, store, registry, run)
             for name in CASES:
                 sample = samples[name]
                 (sources / f"{sample.sha}.pdf").write_bytes(sample.pdf.read_bytes())

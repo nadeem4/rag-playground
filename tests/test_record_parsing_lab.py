@@ -61,3 +61,18 @@ def test_a_fresh_run_matches_the_committed_json(tmp_path):
         for parser in c["parsers"]:
             assert f["parsers"][parser].get("hits") == c["parsers"][parser].get("hits")
     assert json.loads(out.read_text(encoding="utf-8")) == fresh
+
+
+def test_seconds_are_one_decimal_and_never_zero():
+    seconds = _script().seconds
+    assert seconds(12) == 0.1
+    assert seconds(0) == 0.1
+    assert seconds(2345) == 2.3
+
+
+def test_the_warm_up_covers_every_parse_config_on_a_sample_that_is_not_a_case():
+    script = _script()
+    assert script.WARM_UP not in script.CASES
+    configs = {(p, tuple(sorted(script.parse_config(p, c).items()))) for c in script.CASES for p in script.PARSERS}
+    warmed = {(p, tuple(sorted(cfg.items()))) for p, cfg in script.WARM_UP_CONFIGS}
+    assert configs <= warmed

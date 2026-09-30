@@ -159,7 +159,7 @@ export const api = {
   artifactPayload: <T = unknown>(id: string) =>
     request<T>(`/artifacts/${encodeURIComponent(id)}/payload`),
 
-  /** `demo`: hosted demo mode, no uploads. */
+  /** `demo`: hosted demo mode, uploads private to the browser and bounded, key from the UI only. */
   appSettings: () => request<AppSettings>("/settings/app"),
   /** Which key source the SERVER can supply. Never a value. */
   llmSettings: () => request<LlmSettings>("/settings/llm"),

@@ -400,8 +400,8 @@ export type RunEvent =
 
 /**
  * `GET /api/settings/app`. `demo`: a public host (`RAG_PLAYGROUND_DEMO=1`).
- * Uploads are refused, only the bundled sample is listed, and only a key
- * typed in the UI is used.
+ * Uploads are private to the browser and bounded, and only a key typed in the
+ * UI is used.
  */
 export interface AppSettings {
   demo: boolean

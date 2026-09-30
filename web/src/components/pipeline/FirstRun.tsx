@@ -27,6 +27,7 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
   const settings = useAppSettings()
   const demo = settings?.demo === true
   const limits = settings?.limits
+  const ttlHours = limits?.ttl_hours ?? 24
 
   async function load(name: string, title: string, question: string) {
     setBusy(name)
@@ -46,7 +47,7 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
       {demo ? (
         <p data-testid="demo-note" className="text-sm text-fg-muted">
           This is a hosted demo. A PDF you upload stays private to this browser and is deleted after{" "}
-          {limits?.ttl_hours === 24 ? "a day" : `${limits?.ttl_hours ?? 24} hours`}. Files up to{" "}
+          {ttlHours === 24 ? "a day" : `${ttlHours} hours`}. Files up to{" "}
           {Math.round((limits?.max_bytes ?? 10485760) / 1048576)} MB and {limits?.max_pages ?? 20} pages. For anything larger,{" "}
           <a href={REPO} target="_blank" rel="noreferrer" className="underline underline-offset-2">
             run it locally

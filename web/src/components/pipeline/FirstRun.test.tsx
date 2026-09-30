@@ -181,4 +181,20 @@ describe("FirstRun", () => {
     await waitFor(() => expect(uploadButton()).not.toBeNull())
     expect(await screen.findAllByRole("listitem")).toHaveLength(2)
   })
+
+  it("in demo mode without limits, the note still says a day, 10 MB and 20 pages", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+        if (url === "/api/settings/app") return ok({ demo: true })
+        if (url === "/api/sources") return ok([SAMPLE])
+        if (url === "/api/samples") return ok(SAMPLES)
+        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+      }),
+    )
+    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    const note = await screen.findByTestId("demo-note")
+    expect(note.textContent).toBe(NOTE)
+  })
 })

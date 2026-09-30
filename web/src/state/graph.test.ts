@@ -232,6 +232,11 @@ describe("sample graph (plan I-15)", () => {
     const retrieve = g.nodes.find((n) => n.stage === "retrieve")!
     expect(retrieve.config).toEqual(defaultConfig(LIVE.retrieve!.hybrid_rrf))
   })
+
+  it("seeds the given question instead of the primer's, when one is passed (F6)", () => {
+    const g = sampleGraph(LIVE, SRC, "What does a scanner actually do to a page?")
+    expect(g.nodes.find((n) => n.stage === "query")!.config.text).toBe("What does a scanner actually do to a page?")
+  })
 })
 
 describe("chat sample graph (Learn > How citations work > Try it yourself)", () => {

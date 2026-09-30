@@ -131,6 +131,7 @@ describe("First run (plan I-15)", () => {
     default: true,
     filename: SAMPLE.filename,
     sha: SAMPLE.sha,
+    question: "Why do chunk boundaries matter?",
   }
   let sampleCalls = 0
   let sourceExplains = 0

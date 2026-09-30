@@ -17,6 +17,7 @@ const SAMPLES = [
     default: true,
     filename: "chunking-primer.pdf",
     sha: "cd".repeat(32),
+    question: "What are the two steps?",
   },
   {
     name: "scanned-notes",
@@ -28,6 +29,7 @@ const SAMPLES = [
     default: false,
     filename: "scanned-notes.pdf",
     sha: "ef".repeat(32),
+    question: "What does a scanner actually do to a page?",
   },
 ]
 
@@ -64,7 +66,7 @@ afterEach(() => {
 })
 
 const uploadButton = () => screen.queryByRole("button", { name: "Upload" })
-const NOTE = "This is a hosted demo with a sample document. To use your own PDFs, run it locally."
+const NOTE = "This is a hosted demo with sample documents. To use your own PDFs, run it locally."
 
 describe("SourcePicker", () => {
   it("offers Upload outside demo mode", async () => {
@@ -103,6 +105,42 @@ describe("SourcePicker", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
     expect(posted).toEqual(["scanned-notes"])
   })
+
+  it("hides its own sample select when told samples are offered elsewhere (F2)", async () => {
+    render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={() => {}} samples={false} />)
+    await screen.findByLabelText("File")
+    expect(screen.queryByLabelText("Load a sample")).toBeNull()
+  })
+
+  it("names the sample in a failed load, disables the select meanwhile, and clears the message on a later success", async () => {
+    const onChange = vi.fn()
+    let fail = true
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+        if (url === "/api/sources") return ok([SAMPLE])
+        if (url === "/api/samples") return ok(SAMPLES)
+        if (url === "/api/sources/sample") {
+          posted.push(init?.body ? JSON.parse(String(init.body)).name : null)
+          return fail ? new Response(JSON.stringify({ detail: "boom" }), { status: 500 }) : ok(SAMPLE)
+        }
+        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+      }),
+    )
+    render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={onChange} />)
+    const pick = (await screen.findByLabelText("Load a sample")) as HTMLSelectElement
+    fireEvent.change(pick, { target: { value: "scanned-notes" } })
+    expect(pick.disabled).toBe(true)
+    const err = await screen.findByRole("alert")
+    expect(err.textContent).toBe("Could not load Scanned notes: 500 /sources/sample: boom")
+    await waitFor(() => expect(pick.disabled).toBe(false))
+
+    fail = false
+    fireEvent.change(pick, { target: { value: "scanned-notes" } })
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull())
+  })
 })
 
 describe("FirstRun", () => {
@@ -114,13 +152,19 @@ describe("FirstRun", () => {
     expect(within(rows[1]).getByText("parse")).toBeTruthy()
   })
 
-  it("Load posts the sample's name and hands the source back", async () => {
+  it("Load posts the sample's name and hands the source back, with the sample's own question (F6)", async () => {
     const onSample = vi.fn()
     render(<FirstRun onSource={() => {}} onSample={onSample} />)
     const rows = await screen.findAllByRole("listitem")
     fireEvent.click(within(rows[1]).getByRole("button", { name: "Load" }))
-    await waitFor(() => expect(onSample).toHaveBeenCalledWith(SAMPLE))
+    await waitFor(() => expect(onSample).toHaveBeenCalledWith(SAMPLE, "What does a scanner actually do to a page?"))
     expect(posted).toEqual(["scanned-notes"])
+  })
+
+  it("does not also offer the file picker's own sample select (F2)", async () => {
+    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    await screen.findAllByRole("listitem")
+    expect(screen.queryByLabelText("Load a sample")).toBeNull()
   })
 
   it("says so, and still shows Upload, when the sample list cannot be read", async () => {

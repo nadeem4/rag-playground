@@ -169,8 +169,8 @@ function Build({ registry }: { registry: Registry }) {
         }
       : undefined
 
-  function loadSample(src: Source) {
-    edit(sampleGraph(registry, src))
+  function loadSample(src: Source, question: string) {
+    edit(sampleGraph(registry, src, question))
     setUploaded((u) => [...(u ?? []), src])
     setSelected(null)
     setSampleLoaded(true)

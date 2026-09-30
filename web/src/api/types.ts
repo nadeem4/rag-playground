@@ -282,6 +282,8 @@ export interface SampleCard {
   default: boolean
   filename: string
   sha: string
+  /** The sample's own first question (F6), so loading it asks about itself. */
+  question: string
 }
 
 export interface ArtifactMeta {

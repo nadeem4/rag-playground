@@ -2,7 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { Upload } from "lucide-react"
 
 import { api } from "@/api/client"
-import type { SampleCard, Source } from "@/api/types"
+import { loadSample as loadSampleApi, useSamples } from "@/api/samples"
+import type { Source } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { CONTROL } from "@/components/fields/types"
@@ -27,35 +28,43 @@ export function SourcePicker({
   value,
   onChange,
   errors,
+  samples: showSamples = true,
 }: {
   value: SourceConfig
   onChange: (v: SourceConfig) => void
   errors?: string[]
+  /** Show the "Load a sample" select. False on the Load card (plan I-15, F2), which already lists every sample of its own. */
+  samples?: boolean
 }) {
   const id = useId()
   const demo = useDemo()
   const fileRef = useRef<HTMLInputElement>(null)
   const [list, setList] = useState<ListState>({ kind: "loading" })
   const [upload, setUpload] = useState<{ name: string; error?: string } | null>(null)
-  const [samples, setSamples] = useState<SampleCard[]>([])
+  const { samples } = useSamples()
+  const [sampleBusy, setSampleBusy] = useState(false)
+  const [sampleError, setSampleError] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
     api.sources().then(
       (items) => setList({ kind: "ready", items }),
       (err: unknown) => setList({ kind: "error", message: err instanceof Error ? err.message : String(err) }),
     )
-    api.samples().then(setSamples, () => setSamples([]))
   }, [])
 
   useEffect(refresh, [refresh])
 
-  async function loadSample(name: string) {
+  async function loadSample(name: string, title: string) {
+    setSampleBusy(true)
     try {
-      const src = await api.sampleSource(name)
+      const src = await loadSampleApi(name)
+      setSampleError(null)
       onChange({ sha: src.sha, filename: src.filename })
       refresh()
     } catch (err) {
-      setUpload({ name, error: err instanceof Error ? err.message : String(err) })
+      setSampleError(`Could not load ${title}: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSampleBusy(false)
     }
   }
 
@@ -77,7 +86,7 @@ export function SourcePicker({
   const items = list.kind === "ready" ? list.items : []
   const current = items.find((s) => s.sha === value.sha)
   const invalid = Boolean(errors?.length)
-  const remaining = samples.filter((s) => !items.some((i) => i.sha === s.sha))
+  const remaining = (samples ?? []).filter((s) => !items.some((i) => i.sha === s.sha))
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -138,7 +147,7 @@ export function SourcePicker({
         ) : null}
       </div>
 
-      {remaining.length ? (
+      {showSamples && remaining.length ? (
         <div className="flex min-w-0 flex-col gap-1">
           <label htmlFor={`${id}-sample`} className="text-sm font-medium">
             Load a sample
@@ -147,8 +156,10 @@ export function SourcePicker({
             id={`${id}-sample`}
             className={CONTROL}
             value=""
+            disabled={sampleBusy}
             onChange={(e) => {
-              if (e.target.value) void loadSample(e.target.value)
+              const picked = remaining.find((s) => s.name === e.target.value)
+              if (picked) void loadSample(picked.name, picked.title)
             }}
           >
             <option value="">Pick one</option>
@@ -158,6 +169,11 @@ export function SourcePicker({
               </option>
             ))}
           </select>
+          {sampleError ? (
+            <p role="alert" className="text-xs text-danger">
+              {sampleError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

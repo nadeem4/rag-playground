@@ -20,9 +20,15 @@ def test_the_committed_set_lists_the_primer_first_then_by_name():
 
 def test_a_card_has_the_frontend_fields_and_the_sha():
     card = sample_set.get_sample("scanned-notes").card()
-    assert set(card) == {"name", "title", "blurb", "shows", "stresses", "pages", "default", "filename", "sha"}
+    assert set(card) == {"name", "title", "blurb", "shows", "stresses", "pages", "default", "filename", "sha", "question"}
     assert card["filename"] == "scanned-notes.pdf"
     assert len(card["sha"]) == 64
+
+
+def test_a_card_carries_its_first_question():
+    sample = sample_set.get_sample("scanned-notes")
+    card = sample.card()
+    assert card["question"] == sample.questions()[0]["question"]
 
 
 def test_unknown_name_raises_key_error():
@@ -68,3 +74,21 @@ def test_a_folder_without_a_card_is_an_error(tmp_path):
     (tmp_path / "b" / "b.pdf").write_bytes(b"%PDF-1.4\n")
     with pytest.raises(sample_set.SampleSetError, match="b"):
         sample_set.all_samples(tmp_path)
+
+
+def test_a_malformed_card_names_the_file_it_could_not_parse(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / f"a.pdf").write_bytes(b"%PDF-1.4\n")
+    (tmp_path / "a" / "questions.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "a" / "sample.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(sample_set.SampleSetError, match="a/sample.json"):
+        sample_set.all_samples(tmp_path)
+
+
+def test_a_dotfile_or_underscore_folder_is_skipped(tmp_path):
+    _write(tmp_path, "a", _card("a", True))
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / "_scratch").mkdir()
+    (tmp_path / "_scratch" / "notes.txt").write_text("wip", encoding="utf-8")
+    names = [s.name for s in sample_set.all_samples(tmp_path)]
+    assert names == ["a"]

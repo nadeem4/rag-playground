@@ -3,11 +3,11 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 import type { EvalPayload, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
+import { useSamples } from "@/api/samples"
 import { usePayloads } from "@/api/usePayloads"
 import { useQuestionSet } from "@/api/useQuestionSet"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
-import { useSamples } from "@/api/useSamples"
 import { EmptyState } from "@/components/EmptyState"
 import { EvalMetricsDetail } from "@/components/evaluate/EvalMetrics"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
@@ -132,13 +132,13 @@ function Evaluation({
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [previous, setPrevious] = useState<PreviousEvaluation | null>(readPreviousEvaluation)
+  const [previous, setPrevious] = useState<PreviousEvaluation | null>(() => readPreviousEvaluation(sourceSha))
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
 
   // Which set is in use, and whether it belongs to the document on Build.
   const uploaded = useQuestionSet(sourceSha)
-  const samples = useSamples()
+  const { samples, error: samplesError } = useSamples()
   const matched = sampleFor(sourceSha, samples)
   const which = inUse(sourceSha, samples, uploaded.set)
   const noBundledSet = samples !== null && !matched && !uploaded.set && !uploaded.loading
@@ -205,7 +205,7 @@ function Evaluation({
   // setting means a trip to Build and a fresh page.
   const done = runId !== null && run.closed && rows.length > 0 && rows.every((r) => r.payload !== undefined)
   const finishedRun: PreviousEvaluation | null = done
-    ? { byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary }
+    ? { sourceSha, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary }
     : null
   const fingerprint = finishedRun ? JSON.stringify(finishedRun.summary) + rows.map((r) => r.payload!.rank).join(",") : ""
   const latest = useRef<PreviousEvaluation | null>(null)
@@ -308,9 +308,9 @@ function Evaluation({
       </p>
 
       <div className="flex min-h-[40px] shrink-0 flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-hairline px-3 py-2" aria-live="polite">
-        {error || questionsError ? (
+        {error || questionsError || samplesError ? (
           <p role="alert" className="font-mono text-xs break-words text-danger">
-            {error ?? questionsError}
+            {error ?? questionsError ?? samplesError}
           </p>
         ) : runId === null ? (
           <>

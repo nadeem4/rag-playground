@@ -68,11 +68,14 @@ def test_list_shows_only_the_sample(client, monkeypatch):
     assert client.get("/api/sources").json() == [body]
 
 
-def test_every_sample_is_readable_in_demo_mode(client, monkeypatch):
+@pytest.mark.parametrize("name", [s.name for s in sample_set.all_samples()])
+def test_every_sample_is_readable_in_demo_mode(client, monkeypatch, name):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    shas = [client.post("/api/sources/sample", json={"name": n}).json()["sha"] for n in ("chunking-primer", "scanned-notes")]
+    sha = client.post("/api/sources/sample", json={"name": name}).json()["sha"]
     listed = {s["sha"] for s in client.get("/api/sources").json()}
-    assert set(shas) <= listed
+    assert sha in listed
+    # The real pages route (api/routes/pages.py), not just the source listing.
+    assert client.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
 
 
 def test_pages_serve_only_the_sample(client, monkeypatch):

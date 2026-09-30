@@ -140,7 +140,13 @@ const SAMPLE_TRANSFORMS: Partial<Record<Stage, string>> = {
  * and the question filled in. Every other setting is its schema default. A
  * transform the registry lacks keeps the stage's default.
  */
-export function sampleGraph(registry: Registry, source: { sha: string; filename: string }): PipelineGraph {
+/**
+ * `question` is the sample's own first question (F6): every sample loaded
+ * from the Load card should ask about itself, not always the primer's. Falls
+ * back to the primer's constant when the caller has none to pass (an older
+ * server, or a call site that predates F6).
+ */
+export function sampleGraph(registry: Registry, source: { sha: string; filename: string }, question?: string): PipelineGraph {
   let g = addCleaner(initialGraph(registry), registry)
   for (const n of g.nodes) {
     const t = SAMPLE_TRANSFORMS[n.stage]
@@ -151,7 +157,7 @@ export function sampleGraph(registry: Registry, source: { sha: string; filename:
     // Smaller chunks, so the 3-page sample gives retrieval a pool larger than search shows.
     chunk: { chunk_size: 400, chunk_overlap: 80 },
     index: { embedder: "qwen3-embedding-0.6b" },
-    query: { text: SAMPLE_QUESTION },
+    query: { text: question ?? SAMPLE_QUESTION },
   }
   return { ...g, nodes: g.nodes.map((n) => (extra[n.stage] ? { ...n, config: { ...n.config, ...extra[n.stage] } } : n)) }
 }

@@ -35,10 +35,14 @@ class Sample:
     sha: str
 
     def card(self) -> dict[str, Any]:
+        # The Load card's "question" (F6): the first entry of this sample's own
+        # question set, so loading a sample asks about that document instead of
+        # always seeding the primer's question.
         return {
             **{f: getattr(self, f) for f in FIELDS},
             "filename": self.pdf.name,
             "sha": self.sha,
+            "question": self.questions()[0]["question"],
         }
 
     def questions(self) -> list[dict[str, Any]]:
@@ -50,7 +54,10 @@ def _load(folder: Path) -> Sample:
     rel = f"{folder.name}/sample.json"
     if not card_file.is_file():
         raise SampleSetError(f"{folder.name}: no sample.json")
-    card = json.loads(card_file.read_text(encoding="utf-8"))
+    try:
+        card = json.loads(card_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SampleSetError(f"{rel} is not valid JSON: {exc}") from exc
     missing = [f for f in FIELDS if f not in card]
     if missing:
         raise SampleSetError(f"{rel} is missing {', '.join(missing)}")
@@ -66,7 +73,9 @@ def _load(folder: Path) -> Sample:
 
 @cache
 def all_samples(root: Path = SAMPLES_DIR) -> list[Sample]:
-    folders = sorted(p for p in root.iterdir() if p.is_dir())
+    # A dotfile or underscore-prefixed folder (`.hidden`, `_scratch`) is
+    # scratch space, not a sample, and should not have to look like one.
+    folders = sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith((".", "_")))
     samples = [_load(f) for f in folders]
     defaults = [s.name for s in samples if s.default]
     if len(defaults) != 1:

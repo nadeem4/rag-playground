@@ -112,6 +112,7 @@ function serve({
                 default: true,
                 filename: "chunking-primer.pdf",
                 sha: sampleSha,
+                question: "What are the two steps?",
               },
             ])
           : missing()
@@ -186,6 +187,23 @@ describe("Evaluate", () => {
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
     expect(document.body.textContent).not.toMatch(/[–—]/)
   })
+
+  it("shows an error, not a stuck loading line, when the sample list cannot be read (F3)", async () => {
+    storeGraph(sampleGraph(registry, SOURCE))
+    const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/registry") return ok(liveRegistry)
+        if (url === "/api/settings/app") return ok({ demo: false })
+        if (url === "/api/samples") return new Response(JSON.stringify({ detail: "down" }), { status: 500 })
+        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+      }),
+    )
+    render(<Evaluate />)
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/down/))
+    expect(document.body.textContent).not.toMatch(/Loading the questions/)
+  })
 })
 
 describe("the question set panel", () => {
@@ -195,6 +213,8 @@ describe("the question set panel", () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
     await waitFor(() => expect(screen.getByTestId("question-set").textContent).toMatch(/2 questions/))
+    // F4: the title is capitalised, so it does not sit mid-sentence after "Scoring".
+    expect(screen.getByTestId("question-set").textContent).toMatch(/Scoring the questions for A primer on chunking, 2 questions\./)
     expect(screen.getByRole("link", { name: "JSON" }).getAttribute("href")).toBe("/api/questions/template?format=json")
     expect(screen.getByRole("link", { name: "CSV" }).getAttribute("href")).toBe("/api/questions/template?format=csv")
     expect(screen.getByLabelText("Upload a question set")).toBeTruthy()
@@ -213,6 +233,8 @@ describe("the question set panel", () => {
     render(<Evaluate />)
     expect(await screen.findByText(/No question set for this document/)).toBeTruthy()
     expect(screen.queryByTestId("set-mismatch")).toBeNull()
+    // F4: the panel must not contradict that line by claiming a built-in set is in play.
+    await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("No question set yet"))
   })
 
   it("uses the set stored against the document, and asks its questions instead of the sample's", async () => {

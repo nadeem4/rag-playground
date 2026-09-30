@@ -46,6 +46,7 @@ const SAMPLE_CARD = {
   default: true,
   filename: SOURCE.filename,
   sha: SOURCE.sha,
+  question: "How big is a chunk?",
 }
 
 function serve(sources: Source[]) {
@@ -58,7 +59,6 @@ function serve(sources: Source[]) {
       if (url === "/api/sources") return ok(sources)
       if (url === "/api/explain") return ok({ settings: "Splits on paragraphs first.", blocking: false })
       if (url === "/api/samples") return ok([SAMPLE_CARD])
-      if (url === "/api/samples/questions") return ok([{ id: "a", question: "How big is a chunk?", gold_answer: "One question well." }])
       if (url === "/api/samples/chunking-primer/questions") return ok([{ id: "a", question: "How big is a chunk?", gold_answer: "One question well." }])
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),

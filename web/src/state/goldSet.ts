@@ -53,14 +53,13 @@ export interface Mismatch {
   fix: "upload" | "remove"
 }
 
+/**
+ * The caller (`QuestionSetPanel`) only ever asks this about an uploaded set:
+ * the "no bundled sample matches this document" case has its own plain
+ * sentence elsewhere on the page, without alarm, so it is not a mismatch.
+ */
 export function mismatch(u: InUse, filename: string): Mismatch | null {
   if (u.belongs !== false) return null
-  if (u.kind === "sample") {
-    return {
-      text: `These questions were written for the bundled samples, not for ${filename}. Upload a question set for this document.`,
-      fix: "upload",
-    }
-  }
   return {
     text: `This question set was uploaded for a different document, so it does not describe ${filename}. Remove it, or upload a set written for this document.`,
     fix: "remove",

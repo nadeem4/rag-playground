@@ -120,13 +120,6 @@ describe("the warning when the set does not belong to the loaded document", () =
     expect(mismatch({ kind: "uploaded", belongs: true }, "handbook.pdf")).toBeNull()
   })
 
-  it("names the loaded document and offers the upload when it matches no bundled sample", () => {
-    const m = mismatch({ kind: "sample", belongs: false }, "handbook.pdf")!
-    expect(m.fix).toBe("upload")
-    expect(m.text).toContain("handbook.pdf")
-    expect(m.text).toMatch(/bundled samples/)
-  })
-
   it("offers to remove an uploaded set that was written for another document", () => {
     const m = mismatch({ kind: "uploaded", belongs: false }, "handbook.pdf")!
     expect(m.fix).toBe("remove")
@@ -134,9 +127,7 @@ describe("the warning when the set does not belong to the loaded document", () =
   })
 
   it("never uses an em-dash or an en-dash", () => {
-    for (const u of [{ kind: "sample" as const, belongs: false }, { kind: "uploaded" as const, belongs: false }]) {
-      expect(mismatch(u, "handbook.pdf")!.text).not.toMatch(/[–—]/)
-    }
+    expect(mismatch({ kind: "uploaded", belongs: false }, "handbook.pdf")!.text).not.toMatch(/[–—]/)
   })
 })
 

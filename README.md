@@ -76,7 +76,7 @@ The first one follows one question through a recorded real run of the pipeline, 
 answer back to the PDF. Your progress is kept in your browser. To work on your own
 document, open **Build** (`/build`):
 
-1. On **Build**, choose **Try the sample document** or upload a PDF.
+1. On **Build**, upload a PDF, or press Load on one of the samples the Load card lists.
    - The sample, `samples/chunking-primer/chunking-primer.pdf`, is three pages of notes on
      chunking. It comes with a ready pipeline and a question, so pressing **Run all** shows
      every step working.

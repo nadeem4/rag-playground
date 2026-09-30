@@ -62,6 +62,10 @@ export function QuestionSetPanel({
   // already says so, without alarm, elsewhere on the page.
   const warning = uploaded ? mismatch(inUse, filename) : null
   const locked = busy || disabled
+  // No sample matches and nothing is uploaded: there is no set at all, which
+  // Evaluate already says elsewhere on the page (F4). This panel must not
+  // contradict that by claiming a built-in set is scoring the document.
+  const noSet = !(uploaded && set) && sampleName === null
 
   const pick = (
     <>
@@ -89,11 +93,22 @@ export function QuestionSetPanel({
     <section aria-label="Question set" data-testid="question-set" className="flex shrink-0 flex-col gap-2 border-b border-hairline px-3 py-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <p className="text-sm text-fg-muted">
-          Scoring{" "}
-          <span data-testid="set-name" className="font-medium text-fg">
-            {uploaded && set ? set.filename : (sampleName ?? "the built-in sample question set")}
-          </span>
-          {count === null ? "" : `, ${count} ${count === 1 ? "question" : "questions"}`}.
+          {noSet ? (
+            <>
+              <span data-testid="set-name" className="font-medium text-fg">
+                No question set yet
+              </span>
+              .
+            </>
+          ) : (
+            <>
+              Scoring {uploaded && set ? "" : "the questions for "}
+              <span data-testid="set-name" className="font-medium text-fg">
+                {uploaded && set ? set.filename : sampleName}
+              </span>
+              {count === null ? "" : `, ${count} ${count === 1 ? "question" : "questions"}`}.
+            </>
+          )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {pick}

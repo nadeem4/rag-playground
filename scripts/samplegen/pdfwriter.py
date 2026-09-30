@@ -7,6 +7,7 @@ machine and every run. PDF 1.4, US Letter, Helvetica and Helvetica-Bold only.
 from __future__ import annotations
 
 import textwrap
+import zlib
 
 PAGE_W, PAGE_H = 612, 792
 
@@ -16,6 +17,10 @@ Style = tuple[str, int, int, int]
 
 def _escape(text: str) -> bytes:
     return text.replace("\\", "\\\\").replace("(", r"\(").replace(")", r"\)").encode("ascii")
+
+
+def _num(v: float) -> bytes:
+    return (f"{v:g}").encode("ascii")
 
 
 class Page:
@@ -35,6 +40,37 @@ class Page:
             self.text(font, size, x, y, line)
             y -= leading
         return y
+
+    def rule(self, x1: float, y1: float, x2: float, y2: float, width: float = 0.75) -> None:
+        self._parts.append(
+            b"q %s w %d %d m %d %d l S Q" % (_num(width), round(x1), round(y1), round(x2), round(y2))
+        )
+
+    def cell_grid(self, x, top, col_widths, row_height, rows, style, header_style) -> float:
+        total = sum(col_widths)
+        y = top
+        for r, row in enumerate(rows):
+            font, size, _, _ = header_style if r == 0 else style
+            cx = x
+            for width, cell in zip(col_widths, row):
+                self.text(font, size, cx + 4, y - row_height + 5, cell)
+                cx += width
+            y -= row_height
+        for r in range(len(rows) + 1):
+            self.rule(x, top - r * row_height, x + total, top - r * row_height)
+        cx = x
+        for width in [*col_widths, 0]:
+            self.rule(cx, top, cx, y)
+            cx += width
+        return y
+
+    def image(self, name, x, y, w, h, pixels, width, height) -> None:
+        if len(pixels) != width * height:
+            raise ValueError("pixels must be width * height bytes of 8 bit gray")
+        self.images.append((name, width, height, zlib.compress(pixels, 9)))
+        self._parts.append(
+            b"q %d 0 0 %d %d %d cm /%s Do Q" % (round(w), round(h), round(x), round(y), name.encode())
+        )
 
     def stream(self) -> bytes:
         return b"\n".join(self._parts)

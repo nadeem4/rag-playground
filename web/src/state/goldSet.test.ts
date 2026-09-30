@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
-import type { GoldQuestion, QuestionSetUpload, SampleQuestion } from "@/api/types"
+import type { GoldQuestion, QuestionSetUpload, SampleCard, SampleQuestion, StoredQuestionSet } from "@/api/types"
 
 import {
   clearTabSet,
@@ -11,6 +11,7 @@ import {
   readTabSet,
   report,
   reportLines,
+  sampleFor,
   storeTabSet,
 } from "./goldSet"
 
@@ -88,19 +89,27 @@ describe("the questions the page asks", () => {
   })
 })
 
-describe("which set is in use, and whether it belongs to the loaded document", () => {
-  it("is the uploaded set when there is one, and it belongs when the fingerprints agree", () => {
-    expect(inUse(SHA, OTHER, set())).toEqual({ kind: "uploaded", belongs: true })
-    expect(inUse(OTHER, OTHER, set())).toEqual({ kind: "uploaded", belongs: false })
-  })
+const PRIMER = { name: "chunking-primer", sha: "cd".repeat(32) } as SampleCard
+const SCANNED = { name: "scanned-notes", sha: "ef".repeat(32) } as SampleCard
 
-  it("is the built-in sample set otherwise, which belongs only to the sample document", () => {
-    expect(inUse(SHA, SHA, null)).toEqual({ kind: "sample", belongs: true })
-    expect(inUse(OTHER, SHA, null)).toEqual({ kind: "sample", belongs: false })
+describe("inUse", () => {
+  it("is undecided about the sample while the list has not arrived", () => {
+    expect(inUse("ab".repeat(32), null, null)).toEqual({ kind: "sample", belongs: null })
   })
+  it("belongs when the loaded document is any bundled sample", () => {
+    expect(inUse(SCANNED.sha, [PRIMER, SCANNED], null)).toEqual({ kind: "sample", belongs: true })
+    expect(inUse("ab".repeat(32), [PRIMER, SCANNED], null)).toEqual({ kind: "sample", belongs: false })
+  })
+  it("an uploaded set wins, and belongs by its own sha", () => {
+    expect(inUse(PRIMER.sha, [PRIMER], { sha: PRIMER.sha } as StoredQuestionSet)).toEqual({ kind: "uploaded", belongs: true })
+  })
+})
 
-  it("does not judge the sample set before the sample's fingerprint is known", () => {
-    expect(inUse(SHA, null, null)).toEqual({ kind: "sample", belongs: null })
+describe("sampleFor", () => {
+  it("finds the sample whose sha is loaded", () => {
+    expect(sampleFor(SCANNED.sha, [PRIMER, SCANNED])?.name).toBe("scanned-notes")
+    expect(sampleFor("ab".repeat(32), [PRIMER, SCANNED])).toBeUndefined()
+    expect(sampleFor(PRIMER.sha, null)).toBeUndefined()
   })
 })
 
@@ -111,11 +120,11 @@ describe("the warning when the set does not belong to the loaded document", () =
     expect(mismatch({ kind: "uploaded", belongs: true }, "handbook.pdf")).toBeNull()
   })
 
-  it("names the loaded document and offers the upload when the sample questions are the wrong ones", () => {
+  it("names the loaded document and offers the upload when it matches no bundled sample", () => {
     const m = mismatch({ kind: "sample", belongs: false }, "handbook.pdf")!
     expect(m.fix).toBe("upload")
     expect(m.text).toContain("handbook.pdf")
-    expect(m.text).toMatch(/sample document/)
+    expect(m.text).toMatch(/bundled samples/)
   })
 
   it("offers to remove an uploaded set that was written for another document", () => {

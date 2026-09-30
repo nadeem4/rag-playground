@@ -44,8 +44,8 @@ const SAMPLE_CARD = {
   stresses: "chunk",
   pages: 3,
   default: true,
-  filename: "chunking-primer.pdf",
-  sha: "cd".repeat(32),
+  filename: SOURCE.filename,
+  sha: SOURCE.sha,
 }
 
 function serve(sources: Source[]) {

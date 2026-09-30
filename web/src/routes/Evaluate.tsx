@@ -7,7 +7,7 @@ import { usePayloads } from "@/api/usePayloads"
 import { useQuestionSet } from "@/api/useQuestionSet"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
-import { useSampleSha } from "@/api/useSampleSha"
+import { useSamples } from "@/api/useSamples"
 import { EmptyState } from "@/components/EmptyState"
 import { EvalMetricsDetail } from "@/components/evaluate/EvalMetrics"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
@@ -37,7 +37,7 @@ import {
   type PreviousEvaluation,
   type RowChange,
 } from "@/state/evaluate"
-import { inUse, questionsFromSample, questionsFromSet, type Question } from "@/state/goldSet"
+import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
 import { readStoredGraph, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 
@@ -138,8 +138,10 @@ function Evaluation({
 
   // Which set is in use, and whether it belongs to the document on Build.
   const uploaded = useQuestionSet(sourceSha)
-  const sampleSha = useSampleSha()
-  const which = inUse(sourceSha, sampleSha, uploaded.set)
+  const samples = useSamples()
+  const matched = sampleFor(sourceSha, samples)
+  const which = inUse(sourceSha, samples, uploaded.set)
+  const noBundledSet = samples !== null && !matched && !uploaded.set && !uploaded.loading
   const questions: Question[] | null = uploaded.set
     ? questionsFromSet(uploaded.set)
     : uploaded.loading
@@ -149,15 +151,19 @@ function Evaluation({
         : null
 
   useEffect(() => {
+    if (!matched) {
+      setSample(null)
+      return
+    }
     let live = true
-    api.sampleQuestions().then(
+    api.sampleQuestions(matched.name).then(
       (qs) => live && setSample(qs),
       (err: unknown) => live && setQuestionsError(err instanceof Error ? err.message : String(err)),
     )
     return () => {
       live = false
     }
-  }, [])
+  }, [matched?.name])
 
   const stateOf = (i: number) => run.variants.find((s) => s.index === i)
   const artifactOf = (i: number, id: string | undefined) => {
@@ -310,7 +316,9 @@ function Evaluation({
             <p className="text-sm text-fg-muted">
               {questions
                 ? `${questions.length} ${questions.length === 1 ? "question" : "questions"} ready. Press Run evaluation to score this pipeline.`
-                : "Loading the questions"}
+                : noBundledSet
+                  ? "No question set for this document. Upload one to evaluate it."
+                  : "Loading the questions"}
             </p>
             {previous ? (
               <p data-testid="previous" className="text-sm text-fg-muted">

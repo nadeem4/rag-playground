@@ -74,8 +74,9 @@ class SilentEventSource {
 }
 
 /**
- * `sampleSha` is what `POST /api/sources/sample` answers, which is how the page
- * knows whether the built-in question set describes the loaded document.
+ * `sampleSha` is the sha the one bundled sample (`chunking-primer`) is served
+ * with, which is how the page knows whether that sample's question set
+ * describes the loaded document. `null` means the sample list cannot be read.
  * `stored` is what `GET /api/sources/{sha}/questions` has, null for no set.
  */
 function serve({
@@ -98,8 +99,23 @@ function serve({
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/registry") return ok(reg)
       if (url === "/api/settings/app") return ok({ demo })
-      if (url === "/api/samples/questions") return ok(QUESTIONS)
-      if (url === "/api/sources/sample") return sampleSha ? ok({ sha: sampleSha, filename: "chunking-primer.pdf", size: 1, content_type: "application/pdf" }) : missing()
+      if (url === "/api/samples")
+        return sampleSha
+          ? ok([
+              {
+                name: "chunking-primer",
+                title: "A primer on chunking",
+                blurb: "",
+                shows: "",
+                stresses: "chunk",
+                pages: 3,
+                default: true,
+                filename: "chunking-primer.pdf",
+                sha: sampleSha,
+              },
+            ])
+          : missing()
+      if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)
       if (url.endsWith("/questions")) {
         if (init?.method === "POST") {
           if (!upload) return missing()
@@ -191,13 +207,11 @@ describe("the question set panel", () => {
     expect(screen.queryByTestId("set-mismatch")).toBeNull()
   })
 
-  it("warns, and offers the upload, when the sample questions were not written for the loaded document", async () => {
-    serve({ sampleSha: OTHER_SHA })
+  it("has no bundled set for an uploaded document, and says so without a mismatch warning", async () => {
+    storeGraph(sampleGraph(registry, { sha: OTHER_SHA, filename: "report.pdf" }))
+    serve({ sampleSha: SOURCE.sha })
     render(<Evaluate />)
-    const warning = await screen.findByTestId("set-mismatch", {}, { timeout: 4000 })
-    expect(warning.textContent).toMatch(/not for chunking-primer.pdf/)
-    expect(warning.textContent).toMatch(/measures nothing/)
-    expect(warning.querySelector("button")!.textContent).toBe("Upload a question set")
+    expect(await screen.findByText(/No question set for this document/)).toBeTruthy()
   })
 
   it("uses the set stored against the document, and asks its questions instead of the sample's", async () => {

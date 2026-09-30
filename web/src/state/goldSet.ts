@@ -1,14 +1,14 @@
-import type { GoldQuestionCheck, QuestionSetUpload, SampleQuestion, StoredQuestionSet } from "@/api/types"
+import type { GoldQuestionCheck, QuestionSetUpload, SampleCard, SampleQuestion, StoredQuestionSet } from "@/api/types"
 
 /**
  * Your own gold set (plan I-30, I-31, I-33), kept pure so the arithmetic and
  * the wording are testable without a browser.
  *
  * A set is stored against the document's fingerprint, so "does this set belong
- * to the document on Build?" is a comparison of two shas. The built-in sample
- * set belongs to the bundled sample document and to nothing else, which is the
- * case this whole phase exists for: uploading a PDF and pressing Evaluate used
- * to score the sample's questions against it.
+ * to the document on Build?" is a comparison of two shas. Each bundled sample
+ * carries its own question set and belongs only to its own document, which is
+ * the case this whole phase exists for: uploading a PDF and pressing Evaluate
+ * used to score the wrong sample's questions against it.
  */
 
 /** One question, however it reached the page. */
@@ -34,12 +34,17 @@ export function questionsFromSet(stored: StoredQuestionSet): Question[] {
 
 // ------------------------------------------------- which set, whose document --
 
-/** `belongs` is null while the sample document's fingerprint is still unknown. */
+/** The bundled sample whose fingerprint matches the loaded document, if any. */
+export function sampleFor(sourceSha: string, samples: SampleCard[] | null): SampleCard | undefined {
+  return samples?.find((s) => s.sha === sourceSha)
+}
+
+/** `belongs` is null while the list of bundled samples has not arrived yet. */
 export type InUse = { kind: "sample"; belongs: boolean | null } | { kind: "uploaded"; belongs: boolean }
 
-export function inUse(sourceSha: string, sampleSha: string | null, set: StoredQuestionSet | null): InUse {
+export function inUse(sourceSha: string, samples: SampleCard[] | null, set: StoredQuestionSet | null): InUse {
   if (set) return { kind: "uploaded", belongs: set.sha === sourceSha }
-  return { kind: "sample", belongs: sampleSha === null ? null : sampleSha === sourceSha }
+  return { kind: "sample", belongs: samples === null ? null : sampleFor(sourceSha, samples) !== undefined }
 }
 
 /** The warning, and the one action that fixes it. */
@@ -52,7 +57,7 @@ export function mismatch(u: InUse, filename: string): Mismatch | null {
   if (u.belongs !== false) return null
   if (u.kind === "sample") {
     return {
-      text: `These questions were written for the sample document, not for ${filename}. Scoring them against it measures nothing. Upload a question set written for this document.`,
+      text: `These questions were written for the bundled samples, not for ${filename}. Upload a question set for this document.`,
       fix: "upload",
     }
   }

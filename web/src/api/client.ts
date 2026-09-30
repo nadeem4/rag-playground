@@ -127,13 +127,8 @@ export const api = {
       "/sources/sample",
       name ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) } : { method: "POST" },
     ),
-  /**
-   * The committed question set for a sample, a bare array. `name` is required;
-   * it is optional here only as a bridge while `Evaluate.tsx` still calls it
-   * without one.
-   */
-  sampleQuestions: (name?: string) =>
-    request<SampleQuestion[]>(name ? `/samples/${encodeURIComponent(name)}/questions` : "/samples/questions"),
+  /** Plan I-25: the committed question set for a sample, a bare array. */
+  sampleQuestions: (name: string) => request<SampleQuestion[]>(`/samples/${encodeURIComponent(name)}/questions`),
 
   /** Plan I-31: a filled-in example set to start from. */
   questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,

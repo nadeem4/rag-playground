@@ -1,0 +1,86 @@
+{
+ "recorded_on": "2026-09-30",
+ "chunker": {
+  "chunker": "recursive_character",
+  "chunk_size": 400,
+  "chunk_overlap": 80
+ },
+ "top_k": 5,
+ "cases": [
+  {
+   "name": "two-column-report",
+   "title": "Two-column report",
+   "sha": "03201d6dc9cb9c13840e7c96ca62a468eadf61c035cd82edb4b47bddb7b9cd8a",
+   "filename": "two-column-report.pdf",
+   "pages": 2,
+   "questions": 5,
+   "question": "How long did the survey run?",
+   "parsers": {
+    "pdfium": {
+     "seconds": 0.1,
+     "chars": 1682,
+     "hits": 3,
+     "ocr": false,
+     "excerpt": "Reading order in two-column reports The survey ran for six weeks. Two hundred Errors followed the same pattern. When a readers took part, and each read the same"
+    },
+    "docling": {
+     "seconds": 11.1,
+     "chars": 1675,
+     "hits": 5,
+     "ocr": false,
+     "excerpt": "## Reading order in two-column reports The survey ran for six weeks. Two hundred readers took part, and each read the same twelve documents in a fixed order. Ha"
+    }
+   }
+  },
+  {
+   "name": "table-of-figures",
+   "title": "Table of figures",
+   "sha": "93d2c8423b6c823d468ceefec86ca965100668b7ece8fe08fb1911742727072d",
+   "filename": "table-of-figures.pdf",
+   "pages": 2,
+   "questions": 6,
+   "question": "How many readers lost their place before and after the reset?",
+   "parsers": {
+    "pdfium": {
+     "seconds": 0.1,
+     "chars": 1492,
+     "hits": 3,
+     "ocr": false,
+     "excerpt": null
+    },
+    "docling": {
+     "seconds": 2.3,
+     "chars": 1792,
+     "hits": 6,
+     "ocr": false,
+     "excerpt": "--------|----------| | Reading time per page | 84 s | 61 s | -27% | | Readers who lost their place | 41 | 16 | -61% | | Questions answered correctly | 72% | 88%"
+    }
+   }
+  },
+  {
+   "name": "scanned-notes",
+   "title": "Scanned notes",
+   "sha": "0e62d3293e546273b1d66044e16bc5d1e02deebd4e3768021d06de311a923c52",
+   "filename": "scanned-notes.pdf",
+   "pages": 2,
+   "questions": 5,
+   "question": "What does a scanner actually do to a page?",
+   "parsers": {
+    "pdfium": {
+     "seconds": 0.1,
+     "chars": 0,
+     "hits": 0,
+     "ocr": false,
+     "excerpt": null
+    },
+    "docling": {
+     "seconds": 11.7,
+     "chars": 1772,
+     "hits": 5,
+     "ocr": true,
+     "excerpt": "## Notes on scanned documents A scanner does not read a page. It photographs it. The result is a grid of gray dots, and a PDF made from a scan is a container fo"
+    }
+   }
+  }
+ ]
+}

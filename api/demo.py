@@ -10,14 +10,30 @@ sees another visitor's file and never spends the host's key.
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 
 from fastapi import Request
 
 ENV_VAR = "RAG_PLAYGROUND_DEMO"
 
+#: Demo-mode upload limits: the Space has two CPUs and a shared disk.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_PAGES = 20
+MAX_UPLOADS_PER_VISITOR = 3
+UPLOAD_TTL = timedelta(hours=24)
+
 
 def enabled() -> bool:
     return os.environ.get(ENV_VAR) == "1"
+
+
+def limits() -> dict[str, int]:
+    return {
+        "max_bytes": MAX_UPLOAD_BYTES,
+        "max_pages": MAX_UPLOAD_PAGES,
+        "max_files": MAX_UPLOADS_PER_VISITOR,
+        "ttl_hours": int(UPLOAD_TTL.total_seconds() // 3600),
+    }
 
 
 def readable(sha: str | None, request: Request) -> bool:

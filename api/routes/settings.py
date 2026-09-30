@@ -45,7 +45,7 @@ def get_app_settings(request: Request, response: Response) -> dict[str, Any]:
     """`demo`: only a key typed in the UI is used, and uploads are private and bounded.
     Also the moment every page load first talks to the server, so the visitor cookie is minted here."""
     visitor.ensure_visitor(request, response)
-    return {"demo": demo.enabled()}
+    return {"demo": True, "limits": demo.limits()} if demo.enabled() else {"demo": False}
 
 
 @router.get("/settings/llm")

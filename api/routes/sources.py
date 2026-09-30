@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel
 
@@ -49,6 +50,54 @@ def owners(sources: Path, sha: str) -> dict[str, str]:
     return dict(sidecar.get("visitors") or {})
 
 
+def page_count(data: bytes) -> int | None:
+    """Pages in a PDF, or None when pdfium cannot open the bytes."""
+    try:
+        doc = pdfium.PdfDocument(data)
+    except Exception:
+        return None
+    try:
+        return len(doc)
+    finally:
+        doc.close()
+
+
+def live_uploads(sources: Path, me: str) -> int:
+    meta_dir = sources / META_DIR
+    if not meta_dir.is_dir():
+        return 0
+    return sum(1 for p in meta_dir.glob("*.json") if me in (json.loads(p.read_text(encoding="utf-8")).get("visitors") or {}))
+
+
+def _fmt_mb(n: int) -> str:
+    return f"{n / (1024 * 1024):.1f} MB"
+
+
+def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
+    if len(data) > demo.MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            413,
+            f"This file is {_fmt_mb(len(data))}. The hosted demo takes files up to "
+            f"{demo.MAX_UPLOAD_BYTES // (1024 * 1024)} MB. Run the playground locally for larger files.",
+        )
+    pages = page_count(data)
+    if pages is None:
+        raise HTTPException(415, "The hosted demo takes PDF files only.")
+    if pages > demo.MAX_UPLOAD_PAGES:
+        raise HTTPException(
+            413,
+            f"This PDF has {pages} pages. The hosted demo takes up to "
+            f"{demo.MAX_UPLOAD_PAGES} pages. Run the playground locally for longer documents.",
+        )
+    sha = hashlib.sha256(data).hexdigest()
+    if me not in owners(sources, sha) and live_uploads(sources, me) >= demo.MAX_UPLOADS_PER_VISITOR:
+        raise HTTPException(
+            429,
+            f"This browser already has {demo.MAX_UPLOADS_PER_VISITOR} uploads. "
+            f"Wait for one to expire, or run the playground locally.",
+        )
+
+
 @router.get("/sources")
 def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
     visitor.ensure_visitor(request, response)
@@ -69,6 +118,8 @@ async def upload_source(request: Request, response: Response, file: UploadFile) 
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
+    if demo.enabled():
+        _check_demo_limits(request.app.state.deps.sources_dir, me, data)
     return _store(
         request.app.state.deps.sources_dir,
         Path(file.filename or "upload").name,

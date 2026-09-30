@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from api import credentials, sample_set
-from tests.api.conftest import ingest_graph, make_client, read_sse, upload_pdf
+from tests.api.conftest import build_pdf, ingest_graph, make_client, read_sse, upload_pdf
 from tests.api.test_credentials import (
     DOTENV_KEY,
     ENV_KEY,
@@ -46,7 +46,7 @@ def test_only_1_turns_demo_on(client, monkeypatch, value):
 
 def test_app_settings_report_demo_on(client, monkeypatch):
     demo_on(monkeypatch)
-    assert client.get("/api/settings/app").json() == {"demo": True}
+    assert client.get("/api/settings/app").json()["demo"] is True
 
 
 # --- sources ------------------------------------------------------------------
@@ -239,3 +239,62 @@ def test_a_custom_chat_variant_is_refused_in_sweeps(client, monkeypatch):
 def test_outside_demo_a_custom_chat_node_is_not_refused(client):
     r = client.post("/api/runs", json={"graph": chat_graph("custom")})
     assert r.status_code != 403  # the one-node graph is invalid for other reasons
+
+
+# --- upload limits --------------------------------------------------------------
+
+
+def _pdf_with_pages(n: int) -> bytes:
+    return build_pdf([f"Page {i}" for i in range(1, n + 1)])
+
+
+def test_demo_settings_report_the_limits(client, monkeypatch):
+    demo_on(monkeypatch)
+    assert client.get("/api/settings/app").json() == {
+        "demo": True,
+        "limits": {"max_bytes": 10 * 1024 * 1024, "max_pages": 20, "max_files": 3, "ttl_hours": 24},
+    }
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    assert client.get("/api/settings/app").json() == {"demo": False}
+
+
+def test_demo_refuses_a_file_over_10_mb(client, monkeypatch):
+    demo_on(monkeypatch)
+    big = b"%PDF-1.4\n" + b"0" * (10 * 1024 * 1024)
+    r = client.post("/api/sources", files={"file": ("big.pdf", big, "application/pdf")})
+    assert r.status_code == 413
+    assert r.json()["detail"] == "This file is 10.0 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files."
+
+
+def test_demo_refuses_a_non_pdf(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post("/api/sources", files={"file": ("notes.txt", b"just text", "text/plain")})
+    assert r.status_code == 415
+    assert r.json()["detail"] == "The hosted demo takes PDF files only."
+
+
+def test_demo_refuses_more_than_20_pages(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post("/api/sources", files={"file": ("long.pdf", _pdf_with_pages(21), "application/pdf")})
+    assert r.status_code == 413
+    assert r.json()["detail"] == "This PDF has 21 pages. The hosted demo takes up to 20 pages. Run the playground locally for longer documents."
+    ok = client.post("/api/sources", files={"file": ("fine.pdf", _pdf_with_pages(20), "application/pdf")})
+    assert ok.status_code == 200
+
+
+def test_demo_caps_live_uploads_per_visitor_and_a_reupload_does_not_count(client, monkeypatch):
+    demo_on(monkeypatch)
+    for i in range(3):
+        assert client.post("/api/sources", files={"file": (f"f{i}.pdf", _pdf_with_pages(i + 1), "application/pdf")}).status_code == 200
+    again = client.post("/api/sources", files={"file": ("f0-again.pdf", _pdf_with_pages(1), "application/pdf")})
+    assert again.status_code == 200
+    r = client.post("/api/sources", files={"file": ("f3.pdf", _pdf_with_pages(4), "application/pdf")})
+    assert r.status_code == 429
+    assert r.json()["detail"] == "This browser already has 3 uploads. Wait for one to expire, or run the playground locally."
+
+
+def test_outside_demo_mode_nothing_is_capped(client):
+    r = client.post("/api/sources", files={"file": ("long.pdf", _pdf_with_pages(25), "application/pdf")})
+    assert r.status_code == 200
+    r = client.post("/api/sources", files={"file": ("notes.txt", b"just text", "text/plain")})
+    assert r.status_code == 200

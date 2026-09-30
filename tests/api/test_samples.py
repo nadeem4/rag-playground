@@ -19,8 +19,8 @@ from core.registry import registry
 from plugins.chunk import DocView
 
 ROOT = Path(__file__).resolve().parents[2]
-QUESTIONS = ROOT / "samples" / "questions.json"
-SAMPLE = ROOT / "samples" / "chunking-primer.pdf"
+QUESTIONS = ROOT / "samples" / "chunking-primer" / "questions.json"
+SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
 
 #: Words too common to count as shared wording between a question and its answer.
 STOPWORDS = frozenset(

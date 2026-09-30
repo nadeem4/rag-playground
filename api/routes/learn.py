@@ -1,7 +1,7 @@
 """Learn pages: the Chunking lab and its predict-then-see challenges (I-22).
 
 The challenge settings were chosen by running the real chunkers on the pdfium
-parse of `samples/chunking-primer.pdf`, and `tests/api/test_learn.py` re-runs
+parse of `samples/chunking-primer/chunking-primer.pdf`, and `tests/api/test_learn.py` re-runs
 them to prove every `expect_whole`. Change the sample or a chunker and that
 test says which challenge no longer tells the story.
 """

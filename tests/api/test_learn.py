@@ -14,7 +14,7 @@ from core.ports import RunContext, Stage
 from core.registry import registry
 from plugins.chunk import DocView, count_tokens
 
-SAMPLE = Path(__file__).resolve().parents[2] / "samples" / "chunking-primer.pdf"
+SAMPLE = Path(__file__).resolve().parents[2] / "samples" / "chunking-primer" / "chunking-primer.pdf"
 
 
 @pytest.fixture

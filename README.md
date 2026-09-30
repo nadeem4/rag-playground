@@ -77,17 +77,18 @@ answer back to the PDF. Your progress is kept in your browser. To work on your o
 document, open **Build** (`/build`):
 
 1. On **Build**, choose **Try the sample document** or upload a PDF.
-   - The sample, `samples/chunking-primer.pdf`, is three pages of notes on chunking. It comes
-     with a ready pipeline and a question, so pressing **Run all** shows every step working.
+   - The sample, `samples/chunking-primer/chunking-primer.pdf`, is three pages of notes on
+     chunking. It comes with a ready pipeline and a question, so pressing **Run all** shows
+     every step working.
    - Choosing it also starts loading the Docling and Qwen3 models in the background.
-   - To regenerate the sample, run `uv run python scripts/make_sample_pdf.py`.
+   - To regenerate the sample set, run `uv run python scripts/make_samples.py`.
    - The end-to-end lesson reads `web/src/learn/e2e-run.json`. To record it again after a
      change to the pipeline, run `uv run python scripts/record_e2e_lesson.py` (it needs the
      Docling and Qwen3 models).
    - `uv run python scripts/record_chunking_comparison.py` measures how the three chunkers
      compare on the sample: where each one cuts, and how each scores against
-     `samples/questions.json`. It writes `web/src/learn/chunking-strategies.json`, which a
-     lesson being written will use.
+     `samples/chunking-primer/questions.json`. It writes
+     `web/src/learn/chunking-strategies.json`, which a lesson being written will use.
 2. Pick a parser and press **Run** on the Parse card. The inspector shows the text and the
    elements the parser found.
 3. Add a cleaner, pick a chunker and run again. The chunk view draws every chunk boundary

@@ -1,23 +1,19 @@
-"""The committed sample PDF: generated deterministically by `scripts/make_sample_pdf.py`."""
+"""The committed sample PDF: generated deterministically by `scripts/samplegen/chunking_primer.py`."""
 
 from __future__ import annotations
 
-import importlib.util
+import sys
 from pathlib import Path
 
 import pypdfium2 as pdfium
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLE = ROOT / "samples" / "chunking-primer.pdf"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
+from scripts.samplegen import chunking_primer as sample  # noqa: E402
 
-def _script():
-    spec = importlib.util.spec_from_file_location(
-        "make_sample_pdf", ROOT / "scripts" / "make_sample_pdf.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
 
 
 def _page_texts(data: bytes) -> list[str]:
@@ -29,16 +25,15 @@ def _page_texts(data: bytes) -> list[str]:
 
 
 def test_build_is_deterministic():
-    script = _script()
-    assert script.build() == script.build()
+    assert sample.build() == sample.build()
 
 
 def test_committed_sample_matches_the_generator():
-    assert SAMPLE.read_bytes() == _script().build()
+    assert SAMPLE.read_bytes() == sample.build()
 
 
 def test_sample_has_three_pages_each_with_a_footer():
-    pages = _page_texts(_script().build())
+    pages = _page_texts(sample.build())
     assert len(pages) == 3
     for n, text in enumerate(pages, start=1):
         assert "RAG Playground sample" in text
@@ -46,14 +41,13 @@ def test_sample_has_three_pages_each_with_a_footer():
 
 
 def test_sample_repeats_one_paragraph_on_two_pages():
-    script = _script()
-    key = " ".join(script.REPEATED.split())[:60]
-    pages = _page_texts(script.build())
+    key = " ".join(sample.REPEATED.split())[:60]
+    pages = _page_texts(sample.build())
     assert sum(key in text for text in pages) == 2
 
 
 def test_sample_covers_the_three_topics():
-    text = " ".join(_page_texts(_script().build()))
+    text = " ".join(_page_texts(sample.build()))
     for heading in (
         "Why chunk boundaries matter",
         "Chunk size and overlap",

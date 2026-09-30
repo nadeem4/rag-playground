@@ -1,0 +1,9 @@
+{
+  "name": "chunking-primer",
+  "title": "A primer on chunking",
+  "blurb": "Three pages of notes on chunking, written for this playground.",
+  "shows": "Headings, a running footer and a repeated paragraph, so every step has something to show.",
+  "stresses": "chunk",
+  "pages": 3,
+  "default": true
+}

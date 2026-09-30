@@ -58,8 +58,8 @@ QUESTIONS_DIR = "questions"
 
 #: Two real questions about the bundled sample, with every optional field
 #: filled in, so nobody has to read a spec. The gold passages are copied out of
-#: `samples/questions.json`, and `tests/api/test_questions.py` checks they
-#: still are.
+#: `samples/chunking-primer/questions.json`, and `tests/api/test_questions.py`
+#: checks they still are.
 TEMPLATE: dict[str, Any] = {
     "version": 1,
     "document": "chunking-primer.pdf",

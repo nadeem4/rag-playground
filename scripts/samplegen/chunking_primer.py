@@ -1,4 +1,4 @@
-"""Generate `samples/chunking-primer.pdf`, the first-run sample document.
+"""`chunking-primer`: the first-run sample. Three pages of prose about chunking.
 
 Three pages of original prose about chunking in RAG. The layout is built to
 exercise the default pipeline:
@@ -10,21 +10,14 @@ exercise the default pipeline:
   would never count as repeated;
 * one paragraph repeated verbatim on pages 1 and 3, which `dedupe_blocks`
   should remove.
-
-The PDF is written by hand with the standard Helvetica fonts, so there is no
-dependency and no timestamp: the same script always writes the same bytes.
-
-    uv run python scripts/make_sample_pdf.py
 """
 
 from __future__ import annotations
 
-import textwrap
-from pathlib import Path
+from scripts.samplegen.pdfwriter import PAGE_W, Document, Page
 
-OUT = Path(__file__).resolve().parents[1] / "samples" / "chunking-primer.pdf"
+NAME = "chunking-primer"
 
-PAGE_W, PAGE_H = 612, 792
 MARGIN = 72
 TOP = 720
 
@@ -155,85 +148,21 @@ PAGES: list[list[tuple[tuple, str]]] = [
 ]
 
 
-def _escape(text: str) -> bytes:
-    return (
-        text.replace("\\", "\\\\").replace("(", r"\(").replace(")", r"\)")
-    ).encode("ascii")
-
-
-def _text_at(font: str, size: int, x: float, y: float, text: str) -> bytes:
-    return b"BT /%s %d Tf %d %d Td (%s) Tj ET" % (
-        font.encode(), size, round(x), round(y), _escape(text)
-    )
-
-
-def _page_stream(blocks: list[tuple[tuple, str]], number: int) -> bytes:
-    parts: list[bytes] = []
+def _page(blocks: list[tuple[tuple, str]], number: int) -> Page:
+    page = Page()
     y = TOP
-    for (font, size, leading, width), text in blocks:
-        if font == "F2" and y != TOP:
+    for style, text in blocks:
+        if style[0] == "F2" and y != TOP:
             y -= 10  # extra space above a heading
-        for line in textwrap.wrap(text, width):
-            parts.append(_text_at(font, size, MARGIN, y, line))
-            y -= leading
+        y = page.wrap(style, text, MARGIN, y)
         y -= 9  # paragraph gap
     if y < 90:
         raise ValueError(f"page {number} overflows into the footer")
     font, size, _, _ = FOOTER
-    parts.append(_text_at(font, size, MARGIN, 40, FOOTER_TEXT))
-    parts.append(_text_at(font, size, PAGE_W - MARGIN - 30, 760, f"Page {number}"))
-    return b"\n".join(parts)
+    page.text(font, size, MARGIN, 40, FOOTER_TEXT)
+    page.text(font, size, PAGE_W - MARGIN - 30, 760, f"Page {number}")
+    return page
 
 
 def build() -> bytes:
-    objects: list[bytes] = []
-
-    def add(body: bytes) -> int:
-        objects.append(body)
-        return len(objects)
-
-    regular = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-    bold = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
-    streams = [_page_stream(blocks, n) for n, blocks in enumerate(PAGES, start=1)]
-    content_ids = [
-        add(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(s), s)) for s in streams
-    ]
-    # Page objects name their parent, which is allocated right after them.
-    pages_id = len(objects) + len(streams) + 1
-    page_ids = [
-        add(
-            b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %d %d] "
-            b"/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >> /Contents %d 0 R >>"
-            % (pages_id, PAGE_W, PAGE_H, regular, bold, cid)
-        )
-        for cid in content_ids
-    ]
-    kids = b" ".join(b"%d 0 R" % pid for pid in page_ids)
-    add(b"<< /Type /Pages /Kids [%s] /Count %d >>" % (kids, len(page_ids)))
-    catalog = add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages_id)
-
-    out = bytearray(b"%PDF-1.4\n")
-    offsets = []
-    for n, body in enumerate(objects, start=1):
-        offsets.append(len(out))
-        out += b"%d 0 obj\n%s\nendobj\n" % (n, body)
-    xref = len(out)
-    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
-    for offset in offsets:
-        out += b"%010d 00000 n \n" % offset
-    out += b"trailer\n<< /Size %d /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (
-        len(objects) + 1,
-        catalog,
-        xref,
-    )
-    return bytes(out)
-
-
-def main() -> None:
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_bytes(build())
-    print(f"wrote {OUT} ({OUT.stat().st_size} bytes)")
-
-
-if __name__ == "__main__":
-    main()
+    return Document([_page(blocks, n) for n, blocks in enumerate(PAGES, start=1)]).build()

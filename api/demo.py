@@ -17,8 +17,8 @@ from pathlib import Path
 ENV_VAR = "RAG_PLAYGROUND_DEMO"
 
 #: The first-run sample, committed to the repo and made by
-#: `scripts/make_sample_pdf.py`.
-SAMPLE_PDF = Path(__file__).resolve().parents[1] / "samples" / "chunking-primer.pdf"
+#: `scripts/make_samples.py`.
+SAMPLE_PDF = Path(__file__).resolve().parents[1] / "samples" / "chunking-primer" / "chunking-primer.pdf"
 
 NO_UPLOADS = (
     "uploads are disabled in this hosted demo; run the playground locally "

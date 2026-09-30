@@ -259,9 +259,12 @@ def test_the_template_examples_are_about_the_bundled_sample(client):
     """Real questions with real gold sentences, so the file is worth copying."""
     body = json.loads(client.get("/api/questions/template", params={"format": "json"}).text)
     committed = json.loads(
-        (Path(__file__).resolve().parents[2] / "samples" / "questions.json").read_text(
-            encoding="utf-8"
-        )
+        (
+            Path(__file__).resolve().parents[2]
+            / "samples"
+            / "chunking-primer"
+            / "questions.json"
+        ).read_text(encoding="utf-8")
     )
     golds = {item["gold_answer"] for item in committed}
     for question in body["questions"]:

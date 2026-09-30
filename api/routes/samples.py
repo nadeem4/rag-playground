@@ -1,6 +1,6 @@
 """The committed sample question set (I-25).
 
-The questions live in `samples/questions.json` next to the sample PDF, so they
+The questions live in `samples/chunking-primer/questions.json` next to the sample PDF, so they
 are reviewed and versioned like the document they are about. Each gold answer is
 a sentence copied word for word out of that document, and
 `tests/api/test_samples.py` checks every one of them against the real parse, so
@@ -21,7 +21,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-QUESTIONS_FILE = Path(__file__).resolve().parents[2] / "samples" / "questions.json"
+QUESTIONS_FILE = Path(__file__).resolve().parents[2] / "samples" / "chunking-primer" / "questions.json"
 
 
 @cache

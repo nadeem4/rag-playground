@@ -94,7 +94,9 @@ class SweepIn(BaseModel):
     force: bool = False
 
 
-def _check(graph: Graph, registry: Registry, overrides: dict | None = None) -> None:
+def _check(
+    graph: Graph, registry: Registry, request: Request, overrides: dict | None = None
+) -> None:
     """Raise the HTTP error a run would otherwise hit in its worker thread."""
     overrides = overrides or {}
     if demo.enabled():
@@ -108,9 +110,10 @@ def _check(graph: Graph, registry: Registry, overrides: dict | None = None) -> N
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     for nd in graph.nodes:
         cfg = overrides.get(nd.id, nd.config)
-        if nd.stage == Stage.SOURCE and cfg.get("sha") and not demo.readable(cfg["sha"]):
+        if nd.stage == Stage.SOURCE and cfg.get("sha") and not demo.readable(cfg["sha"], request):
             raise HTTPException(
-                status_code=403, detail="this hosted demo reads only the sample document"
+                status_code=403,
+                detail="this hosted demo reads only the bundled samples and your own uploads",
             )
         cls = registry.get(nd.stage, nd.transform)
         try:
@@ -163,7 +166,7 @@ async def create_run(
 ) -> dict[str, str]:
     deps = request.app.state.deps
     graph = body.graph.to_graph()
-    _check(graph, deps.registry, body.overrides)
+    _check(graph, deps.registry, request, body.overrides)
     _unknown(graph, body.targets or [], "target")
     keys, extras = _credentials(x_anthropic_api_key, x_openai_api_key, x_custom_api_key)
 
@@ -228,7 +231,7 @@ async def create_sweep(
             ],
             edges=graph.edges,
         )
-        _check(variant_graph, deps.registry)
+        _check(variant_graph, deps.registry, request)
     variants = [{"transform": v.transform, "config": v.config} for v in body.variants]
     keys, extras = _credentials(x_anthropic_api_key, x_openai_api_key, x_custom_api_key)
 

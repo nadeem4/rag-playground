@@ -11,33 +11,45 @@ import hashlib
 import json
 import mimetypes
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel
 
-from api import demo, sample_set, warmup
+from api import demo, sample_set, visitor, warmup
 
 router = APIRouter()
 
 META_DIR = ".meta"
 
 
+def owners(sources: Path, sha: str) -> dict[str, str]:
+    """Visitor ids that uploaded this sha, each with its upload time. Empty for a sample."""
+    meta = sources / META_DIR / f"{sha}.json"
+    if not meta.is_file():
+        return {}
+    return dict(json.loads(meta.read_text(encoding="utf-8")).get("visitors") or {})
+
+
 @router.get("/sources")
-def list_sources(request: Request) -> list[dict[str, Any]]:
+def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
+    visitor.ensure_visitor(request, response)
     meta_dir = request.app.state.deps.sources_dir / META_DIR
     if not meta_dir.is_dir():
         return []
     items = [json.loads(p.read_text(encoding="utf-8")) for p in meta_dir.glob("*.json")]
-    items = [m for m in items if demo.readable(m["sha"])]
-    return sorted(items, key=lambda m: m["filename"].lower())
+    items = [m for m in items if demo.readable(m["sha"], request)]
+    return sorted(
+        ({k: v for k, v in m.items() if k != "visitors"} for m in items),
+        key=lambda m: m["filename"].lower(),
+    )
 
 
 @router.post("/sources")
-async def upload_source(request: Request, file: UploadFile) -> dict[str, Any]:
-    if demo.enabled():
-        raise HTTPException(status_code=403, detail=demo.NO_UPLOADS)
+async def upload_source(request: Request, response: Response, file: UploadFile) -> dict[str, Any]:
+    me = visitor.ensure_visitor(request, response)
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
@@ -46,6 +58,7 @@ async def upload_source(request: Request, file: UploadFile) -> dict[str, Any]:
         Path(file.filename or "upload").name,
         data,
         file.content_type,
+        visitor=me,
     )
 
 
@@ -67,7 +80,11 @@ def sample_source(request: Request, body: SampleRequest | None = None) -> dict[s
 
 
 def _store(
-    sources: Path, filename: str, data: bytes, content_type: str | None
+    sources: Path,
+    filename: str,
+    data: bytes,
+    content_type: str | None,
+    visitor: str | None = None,
 ) -> dict[str, Any]:
     sha = hashlib.sha256(data).hexdigest()
     dest = sources / f"{sha}{Path(filename).suffix}"
@@ -88,5 +105,11 @@ def _store(
     }
     meta_dir = sources / META_DIR
     meta_dir.mkdir(exist_ok=True)
-    (meta_dir / f"{sha}.json").write_text(json.dumps(body), encoding="utf-8")
+    meta_path = meta_dir / f"{sha}.json"
+    previous = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
+    visitors = dict(previous.get("visitors") or {})
+    if visitor:
+        visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    stored = {**body, **({"visitors": visitors} if visitors else {})}
+    meta_path.write_text(json.dumps(stored), encoding="utf-8")
     return body

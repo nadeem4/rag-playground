@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from api.questions import QuestionSetError, parse_question_set
+from tests.api.conftest import make_client
 from tests.plugins.conftest import build_pdf
 
 # The fixture document. Page one carries an apostrophe, which the PDF's own
@@ -360,11 +361,15 @@ def test_demo_mode_checks_a_set_but_keeps_nothing(client, dirs, monkeypatch):
     assert client.get(f"/api/sources/{sha}/questions").status_code == 404
 
 
-def test_demo_mode_serves_no_set_for_another_document(client, monkeypatch):
-    sha = upload_doc(client)["sha"]
-    post_set(client, sha, one_json(BOUNDARY))
+def test_demo_mode_serves_no_set_for_another_document(dirs, monkeypatch):
+    # An upload's owner keeps access to it in demo mode, so this checks a
+    # visitor who did not make the upload, not the uploader itself.
+    with make_client(dirs) as owner:
+        sha = upload_doc(owner)["sha"]
+        post_set(owner, sha, one_json(BOUNDARY))
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    assert client.get(f"/api/sources/{sha}/questions").status_code == 404
+    with make_client(dirs) as someone_else:
+        assert someone_else.get(f"/api/sources/{sha}/questions").status_code == 404
 
 
 # ---------------------------------------------------------------------------

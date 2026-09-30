@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from api import demo
+from api import demo, visitor
 from api.credentials import PROVIDERS, redact, resolve_key, server_source
 from providers.llm import NO_KEY_PLACEHOLDER
 
@@ -41,8 +41,10 @@ class CheckIn(BaseModel):
 
 
 @router.get("/settings/app")
-def get_app_settings() -> dict[str, bool]:
-    """`demo`: uploads are off and only a key typed in the UI is used."""
+def get_app_settings(request: Request, response: Response) -> dict[str, Any]:
+    """`demo`: only a key typed in the UI is used, and uploads are private and bounded.
+    Also the moment every page load first talks to the server, so the visitor cookie is minted here."""
+    visitor.ensure_visitor(request, response)
     return {"demo": demo.enabled()}
 
 

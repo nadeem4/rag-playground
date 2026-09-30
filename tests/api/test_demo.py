@@ -1,7 +1,8 @@
 """Demo mode (`RAG_PLAYGROUND_DEMO=1`): a public host shared by strangers.
 
-No uploads, only the bundled sample is visible or readable, and the Anthropic
-key comes only from the request header, never from the host's env or `.env`.
+Uploads are allowed but private to the browser that made them; the bundled
+samples stay visible and readable to everyone. The Anthropic key comes only
+from the request header, never from the host's env or `.env`.
 """
 
 from __future__ import annotations
@@ -51,21 +52,15 @@ def test_app_settings_report_demo_on(client, monkeypatch):
 # --- sources ------------------------------------------------------------------
 
 
-def test_upload_is_refused(client, dirs, monkeypatch):
+def test_list_shows_the_samples_and_only_your_own_uploads(dirs, monkeypatch):
+    with make_client(dirs) as someone_else:
+        upload_pdf(someone_else, "someone-elses.pdf")
     demo_on(monkeypatch)
-    r = client.post("/api/sources", files={"file": ("a.pdf", b"%PDF-1", "application/pdf")})
-    assert r.status_code == 403
-    assert "demo" in r.json()["detail"].lower()
-    assert not dirs["sources"].exists()
-
-
-def test_list_shows_only_the_sample(client, monkeypatch):
-    upload_pdf(client, "someone-elses.pdf")  # e.g. left over from before demo mode
-    demo_on(monkeypatch)
-    assert client.get("/api/sources").json() == []
-    body = client.post("/api/sources/sample").json()
-    assert body["sha"] == SAMPLE_SHA
-    assert client.get("/api/sources").json() == [body]
+    with make_client(dirs) as me:
+        assert me.get("/api/sources").json() == []
+        body = me.post("/api/sources/sample").json()
+        assert body["sha"] == SAMPLE_SHA
+        assert me.get("/api/sources").json() == [body]
 
 
 @pytest.mark.parametrize("name", [s.name for s in sample_set.all_samples()])
@@ -78,8 +73,9 @@ def test_every_sample_is_readable_in_demo_mode(client, monkeypatch, name):
     assert client.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
 
 
-def test_pages_serve_only_the_sample(client, monkeypatch):
-    other = upload_pdf(client)["sha"]
+def test_pages_serve_only_the_sample(client, dirs, monkeypatch):
+    with make_client(dirs) as someone_else:
+        other = upload_pdf(someone_else)["sha"]
     demo_on(monkeypatch)
     client.post("/api/sources/sample")
     assert client.get(f"/api/sources/{SAMPLE_SHA}/pages").status_code == 200
@@ -92,8 +88,9 @@ def test_pages_serve_only_the_sample(client, monkeypatch):
     assert r.status_code == 404
 
 
-def test_runs_and_sweeps_read_only_the_sample(client, monkeypatch):
-    other = upload_pdf(client)
+def test_runs_and_sweeps_read_only_the_sample(client, dirs, monkeypatch):
+    with make_client(dirs) as someone_else:
+        other = upload_pdf(someone_else)
     demo_on(monkeypatch)
     graph = ingest_graph(other["sha"], other["filename"])
     assert client.post("/api/runs", json={"graph": graph}).status_code == 403

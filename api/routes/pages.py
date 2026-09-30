@@ -38,7 +38,7 @@ _SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}
 def source_path(request: Request, sha: str) -> Path:
     """The stored file for this sha, or 404. Also the gold-set routes' guard."""
     sources: Path = request.app.state.deps.sources_dir
-    if _SHA.match(sha) and demo.readable(sha) and sources.is_dir():
+    if _SHA.match(sha) and demo.readable(sha, request) and sources.is_dir():
         for p in sorted(sources.glob(f"{sha}*")):
             if p.is_file() and not p.name.endswith(".part"):
                 return p

@@ -4,7 +4,7 @@ import { Upload } from "lucide-react"
 import { api, ApiError } from "@/api/client"
 import { loadSample as loadSampleApi, useSamples } from "@/api/samples"
 import type { Source } from "@/api/types"
-import { useDemo } from "@/api/useDemo"
+import { useAppSettings } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { CONTROL } from "@/components/fields/types"
 
@@ -43,7 +43,10 @@ export function SourcePicker({
   reassure?: boolean
 }) {
   const id = useId()
-  const demo = useDemo()
+  const settings = useAppSettings()
+  const demo = settings?.demo === true
+  const limits = demo ? settings?.limits : undefined
+  const mb = limits ? Math.round(limits.max_bytes / 1048576) : 0
   const fileRef = useRef<HTMLInputElement>(null)
   const [list, setList] = useState<ListState>({ kind: "loading" })
   const [upload, setUpload] = useState<{ name: string; error?: string } | null>(null)
@@ -76,6 +79,20 @@ export function SourcePicker({
 
   async function onFile(file: File | undefined) {
     if (!file) return
+    const refuse = (error: string) => {
+      setUpload({ name: file.name, error })
+      if (fileRef.current) fileRef.current.value = ""
+    }
+    if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
+      refuse("Only PDF files can be uploaded.")
+      return
+    }
+    if (limits && file.size > limits.max_bytes) {
+      refuse(
+        `This file is ${(file.size / 1048576).toFixed(1)} MB. The hosted demo takes files up to ${mb} MB. Or split out the pages you need and upload those.`,
+      )
+      return
+    }
     setUpload({ name: file.name })
     try {
       const src = await api.uploadSource(file)
@@ -204,6 +221,9 @@ export function SourcePicker({
           </span>
         ) : null}
       </div>
+      <p className="text-xs text-fg-muted" data-testid="upload-limits">
+        {limits ? `PDF only, up to ${mb} MB and ${limits.max_pages} pages.` : "PDF only."}
+      </p>
       {upload?.error ? (
         <p role="alert" className="text-xs text-danger">
           Upload of {upload.name} failed: {upload.error}

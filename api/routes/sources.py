@@ -100,7 +100,9 @@ def _too_big(size: int | None) -> HTTPException:
     cap = f"{demo.MAX_UPLOAD_BYTES // (1024 * 1024)} MB"
     said = f"This file is {_fmt_mb(size)}." if size is not None else f"This file is more than {cap}."
     return HTTPException(
-        413, f"{said} The hosted demo takes files up to {cap}. Run the playground locally for larger files."
+        413,
+        f"{said} The hosted demo takes files up to {cap}. Run the playground locally for larger files. "
+        "Or split out the pages you need and upload those.",
     )
 
 
@@ -112,7 +114,8 @@ def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
         raise HTTPException(
             413,
             f"This PDF has {pages} pages. The hosted demo takes up to "
-            f"{demo.MAX_UPLOAD_PAGES} pages. Run the playground locally for longer documents.",
+            f"{demo.MAX_UPLOAD_PAGES} pages. Run the playground locally for longer documents. "
+            "Or split out the pages you need and upload those.",
         )
     sha = hashlib.sha256(data).hexdigest()
     if sha in sample_set.readable_shas():

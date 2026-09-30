@@ -145,7 +145,7 @@ describe("SourcePicker", () => {
   })
 
   it("shows the server's own sentence when an upload is refused, without the status and path", async () => {
-    const said = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files."
+    const said = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files. Or split out the pages you need and upload those."
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {

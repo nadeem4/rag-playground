@@ -275,7 +275,7 @@ def test_demo_refuses_a_file_over_10_mb(client, monkeypatch):
     big = b"%PDF-1.4\n" + b"0" * (10 * 1024 * 1024)
     r = client.post("/api/sources", files={"file": ("big.pdf", big, "application/pdf")})
     assert r.status_code == 413
-    assert r.json()["detail"] == "This file is 10.0 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files."
+    assert r.json()["detail"] == "This file is 10.0 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files. Or split out the pages you need and upload those."
 
 
 def test_demo_refuses_a_non_pdf(client, monkeypatch):
@@ -291,7 +291,7 @@ def test_demo_refuses_more_than_20_pages(client, monkeypatch):
     client.get("/api/settings/app")
     r = client.post("/api/sources", files={"file": ("long.pdf", _pdf_with_pages(21), "application/pdf")})
     assert r.status_code == 413
-    assert r.json()["detail"] == "This PDF has 21 pages. The hosted demo takes up to 20 pages. Run the playground locally for longer documents."
+    assert r.json()["detail"] == "This PDF has 21 pages. The hosted demo takes up to 20 pages. Run the playground locally for longer documents. Or split out the pages you need and upload those."
     ok = client.post("/api/sources", files={"file": ("fine.pdf", _pdf_with_pages(20), "application/pdf")})
     assert ok.status_code == 200
 

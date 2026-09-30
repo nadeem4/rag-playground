@@ -20,6 +20,8 @@ import { SourcePicker, type SourceConfig } from "./SourcePicker"
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+const count = (n: number) => WORDS[n] ?? String(n)
 export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) => void; onSample: (s: Source, question: string) => void }) {
   const { samples, error: samplesError } = useSamples()
   const [busy, setBusy] = useState<string | null>(null)
@@ -28,6 +30,9 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
   const demo = settings?.demo === true
   const limits = settings?.limits
   const ttlHours = limits?.ttl_hours ?? 24
+  // Inside the Hugging Face Space page the app is a cross-site iframe, where a
+  // browser that blocks third-party cookies loses the visitor cookie.
+  const framed = window.self !== window.top
 
   async function load(name: string, title: string, question: string) {
     setBusy(name)
@@ -48,11 +53,22 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
         <p data-testid="demo-note" className="text-sm text-fg-muted">
           This is a hosted demo. A PDF you upload stays private to this browser and is deleted after{" "}
           {ttlHours === 24 ? "a day" : `${ttlHours} hours`}. Files up to{" "}
-          {Math.round((limits?.max_bytes ?? 10485760) / 1048576)} MB and {limits?.max_pages ?? 20} pages. For anything larger,{" "}
+          {Math.round((limits?.max_bytes ?? 10485760) / 1048576)} MB and {limits?.max_pages ?? 20} pages,{" "}
+          {count(limits?.max_files ?? 3)} at a time. Clearing cookies loses access to your uploads. For anything larger,{" "}
           <a href={REPO} target="_blank" rel="noreferrer" className="underline underline-offset-2">
             run it locally
           </a>
           .
+          {framed ? (
+            <>
+              {" "}
+              Uploads need cookies. If your browser blocks them here,{" "}
+              <a href={window.location.href} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                open the demo in its own tab
+              </a>
+              .
+            </>
+          ) : null}
         </p>
       ) : null}
       <div className="rounded-panel border border-dashed border-field-border p-3">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { Upload } from "lucide-react"
 
-import { api } from "@/api/client"
+import { api, ApiError } from "@/api/client"
 import { loadSample as loadSampleApi, useSamples } from "@/api/samples"
 import type { Source } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
@@ -24,6 +24,10 @@ type ListState = { kind: "loading" } | { kind: "error"; message: string } | { ki
 
 const fmtBytes = (n: number) =>
   n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
+
+/** The server's own sentence when it sent one, so a visitor reads why without the status and path in front. */
+const reason = (err: unknown) =>
+  err instanceof ApiError && typeof err.detail === "string" ? err.detail : err instanceof Error ? err.message : String(err)
 
 export function SourcePicker({
   value,
@@ -63,7 +67,7 @@ export function SourcePicker({
       onChange({ sha: src.sha, filename: src.filename })
       refresh()
     } catch (err) {
-      setSampleError(`Could not load ${title}: ${err instanceof Error ? err.message : String(err)}`)
+      setSampleError(`Could not load ${title}: ${reason(err)}`)
     } finally {
       setSampleBusy(false)
     }
@@ -78,7 +82,7 @@ export function SourcePicker({
       onChange({ sha: src.sha, filename: src.filename })
       refresh()
     } catch (err) {
-      setUpload({ name: file.name, error: err instanceof Error ? err.message : String(err) })
+      setUpload({ name: file.name, error: reason(err) })
     } finally {
       if (fileRef.current) fileRef.current.value = ""
     }
@@ -108,7 +112,7 @@ export function SourcePicker({
             </Button>
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-fg-muted">{demo ? "No files yet." : "No files uploaded yet. Upload a PDF to start."}</p>
+          <p className="text-sm text-fg-muted">{demo ? "No files yet. Upload a PDF, or load a sample." : "No files uploaded yet. Upload a PDF to start."}</p>
         ) : (
           <select
             id={`${id}-pick`}

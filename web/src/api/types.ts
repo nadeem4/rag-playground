@@ -406,7 +406,7 @@ export type RunEvent =
 export interface AppSettings {
   demo: boolean
   /** Demo mode only: the upload limits the server enforces, so the UI can state them. */
-  limits?: { max_bytes: number; max_pages: number; max_files: number; ttl_hours: number }
+  limits?: { max_bytes: number; max_pages: number; max_files: number; max_total_bytes: number; ttl_hours: number }
 }
 
 // ------------------------------------------------------------ credentials --

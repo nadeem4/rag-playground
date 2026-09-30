@@ -66,7 +66,9 @@ afterEach(() => {
 })
 
 const uploadButton = () => screen.queryByRole("button", { name: "Upload" })
-const NOTE = "This is a hosted demo. A PDF you upload stays private to this browser and is deleted after a day. Files up to 10 MB and 20 pages. For anything larger, run it locally."
+const NOTE =
+  "This is a hosted demo. A PDF you upload stays private to this browser and is deleted after a day. Files up to 10 MB and 20 pages, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
+const IN_A_FRAME = " Uploads need cookies. If your browser blocks them here, open the demo in its own tab."
 
 describe("SourcePicker", () => {
   it("offers Upload outside demo mode", async () => {
@@ -131,13 +133,44 @@ describe("SourcePicker", () => {
     fireEvent.change(pick, { target: { value: "scanned-notes" } })
     expect(pick.disabled).toBe(true)
     const err = await screen.findByRole("alert")
-    expect(err.textContent).toBe("Could not load Scanned notes: 500 /sources/sample: boom")
+    expect(err.textContent).toBe("Could not load Scanned notes: boom")
     await waitFor(() => expect(pick.disabled).toBe(false))
 
     fail = false
     fireEvent.change(pick, { target: { value: "scanned-notes" } })
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull())
+  })
+
+  it("shows the server's own sentence when an upload is refused, without the status and path", async () => {
+    const said = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files."
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/sources" && init?.method === "POST") return new Response(JSON.stringify({ detail: said }), { status: 413 })
+        return new Response(JSON.stringify(url === "/api/sources" ? [SAMPLE] : { detail: "x" }), { status: url === "/api/sources" ? 200 : 404 })
+      }),
+    )
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    await screen.findByLabelText("File")
+    const file = new File(["%PDF"], "big.pdf", { type: "application/pdf" })
+    fireEvent.change(screen.getByLabelText("Upload a file"), { target: { files: [file] } })
+    expect((await screen.findByRole("alert")).textContent).toBe(`Upload of big.pdf failed: ${said}`)
+  })
+
+  it("in demo mode, an empty list says how to add a file", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+        if (url === "/api/settings/app") return ok({ demo: true })
+        if (url === "/api/sources") return ok([])
+        if (url === "/api/samples") return ok(SAMPLES)
+        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+      }),
+    )
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    expect(await screen.findByText("No files yet. Upload a PDF, or load a sample.")).toBeTruthy()
   })
 })
 
@@ -196,5 +229,22 @@ describe("FirstRun", () => {
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
     const note = await screen.findByTestId("demo-note")
     expect(note.textContent).toBe(NOTE)
+  })
+
+  it("inside an iframe, the note says uploads need cookies and links to the demo in its own tab", async () => {
+    demo = true
+    const real = Object.getOwnPropertyDescriptor(window, "top")
+    Object.defineProperty(window, "top", { configurable: true, get: () => ({}) })
+    try {
+      render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+      const note = await screen.findByTestId("demo-note")
+      expect(note.textContent).toBe(NOTE + IN_A_FRAME)
+      const link = screen.getByRole("link", { name: "open the demo in its own tab" })
+      expect(link.getAttribute("href")).toBe(window.location.href)
+      expect(link.getAttribute("target")).toBe("_blank")
+      expect(link.getAttribute("rel")).toBe("noreferrer")
+    } finally {
+      if (real) Object.defineProperty(window, "top", real)
+    }
   })
 })

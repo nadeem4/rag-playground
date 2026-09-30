@@ -56,13 +56,12 @@ def test_distinct_bytes_distinct_sha(client):
 
 import threading  # noqa: E402
 
-from api import warmup  # noqa: E402
-from api.routes import sources as sources_route  # noqa: E402
+from api import sample_set, warmup  # noqa: E402
 
 
 def test_sample_registers_like_an_upload(client, dirs):
     body = client.post("/api/sources/sample").json()
-    data = sources_route.SAMPLE_PDF.read_bytes()
+    data = sample_set.default_sample().pdf.read_bytes()
     assert body == {
         "sha": hashlib.sha256(data).hexdigest(),
         "filename": "chunking-primer.pdf",
@@ -78,6 +77,17 @@ def test_sample_is_idempotent(client, dirs):
     b = client.post("/api/sources/sample").json()
     assert a == b
     assert len([p for p in dirs["sources"].iterdir() if p.is_file()]) == 1
+
+
+def test_sample_by_name_registers_that_sample(client, dirs):
+    body = client.post("/api/sources/sample", json={"name": "scanned-notes"}).json()
+    assert body["filename"] == "scanned-notes.pdf"
+    assert (dirs["sources"] / f"{body['sha']}.pdf").exists()
+
+
+def test_sample_with_an_unknown_name_is_404(client):
+    r = client.post("/api/sources/sample", json={"name": "nope"})
+    assert r.status_code == 404 and "nope" in r.json()["detail"]
 
 
 def test_sample_starts_the_warm_up_once_without_waiting(client, monkeypatch):

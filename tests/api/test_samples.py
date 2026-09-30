@@ -118,6 +118,24 @@ def test_most_questions_do_share_wording_so_the_set_is_not_all_hard(questions):
     assert shared >= len(questions) // 2
 
 
+def test_the_list_route_serves_every_card_default_first(client):
+    r = client.get("/api/samples")
+    assert r.status_code == 200
+    names = [c["name"] for c in r.json()]
+    assert names[0] == "chunking-primer"
+    assert set(names) == {"chunking-primer", "scanned-notes", "two-column-report", "table-of-figures"}
+    assert all({"title", "blurb", "shows", "stresses", "pages", "sha", "filename"} <= set(c) for c in r.json())
+
+
+def test_per_name_questions_and_the_default_alias(client):
+    by_name = client.get("/api/samples/chunking-primer/questions").json()
+    assert by_name == client.get("/api/samples/questions").json()
+    scanned = client.get("/api/samples/scanned-notes/questions")
+    assert scanned.status_code == 200 and scanned.json()[0]["id"] == "what-a-scanner-does"
+    r = client.get("/api/samples/nope/questions")
+    assert r.status_code == 404 and "nope" in r.json()["detail"]
+
+
 @pytest.mark.models
 def test_scanned_notes_gold_answers_survive_ocr(tmp_path):
     """The set only works with OCR on: every gold passage must come back from it."""

@@ -15,14 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
-from api import demo, warmup
+from api import demo, sample_set, warmup
 
 router = APIRouter()
 
 META_DIR = ".meta"
-
-SAMPLE_PDF = demo.SAMPLE_PDF
 
 
 @router.get("/sources")
@@ -50,18 +49,21 @@ async def upload_source(request: Request, file: UploadFile) -> dict[str, Any]:
     )
 
 
+class SampleRequest(BaseModel):
+    name: str | None = None
+
+
 @router.post("/sources/sample")
-def sample_source(request: Request) -> dict[str, Any]:
-    """Register the sample PDF exactly like an upload, and start warming up
-    the models its default graph uses. The response never waits for them."""
-    body = _store(
-        request.app.state.deps.sources_dir,
-        SAMPLE_PDF.name,
-        SAMPLE_PDF.read_bytes(),
-        "application/pdf",
-    )
+def sample_source(request: Request, body: SampleRequest | None = None) -> dict[str, Any]:
+    """Register a bundled sample exactly like an upload (the default one when no
+    name is given), and start warming up the models. The response never waits."""
+    try:
+        sample = sample_set.get_sample(body.name) if body and body.name else sample_set.default_sample()
+    except KeyError:
+        raise HTTPException(404, f"no sample named '{body.name}'") from None
+    stored = _store(request.app.state.deps.sources_dir, sample.pdf.name, sample.pdf.read_bytes(), "application/pdf")
     warmup.start()
-    return body
+    return stored
 
 
 def _store(

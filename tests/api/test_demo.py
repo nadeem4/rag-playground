@@ -6,12 +6,9 @@ key comes only from the request header, never from the host's env or `.env`.
 
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
-from api import credentials
-from api.routes import sources as sources_route
+from api import credentials, sample_set
 from tests.api.conftest import ingest_graph, make_client, read_sse, upload_pdf
 from tests.api.test_credentials import (
     DOTENV_KEY,
@@ -26,7 +23,7 @@ from tests.api.test_credentials import (
     write_dotenv,
 )
 
-SAMPLE_SHA = hashlib.sha256(sources_route.SAMPLE_PDF.read_bytes()).hexdigest()
+SAMPLE_SHA = sample_set.default_sample().sha
 
 
 def demo_on(monkeypatch) -> None:
@@ -69,6 +66,13 @@ def test_list_shows_only_the_sample(client, monkeypatch):
     body = client.post("/api/sources/sample").json()
     assert body["sha"] == SAMPLE_SHA
     assert client.get("/api/sources").json() == [body]
+
+
+def test_every_sample_is_readable_in_demo_mode(client, monkeypatch):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    shas = [client.post("/api/sources/sample", json={"name": n}).json()["sha"] for n in ("chunking-primer", "scanned-notes")]
+    listed = {s["sha"] for s in client.get("/api/sources").json()}
+    assert set(shas) <= listed
 
 
 def test_pages_serve_only_the_sample(client, monkeypatch):

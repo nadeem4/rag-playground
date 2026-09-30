@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from api import demo
+from api import sample_set
 from core.ports import RunContext, Stage
 from core.registry import registry
 from plugins.chunk import DocView, count_tokens
@@ -86,7 +86,7 @@ def _parsed_sample() -> tuple[str, int]:
     shows exactly what the steps work on. Parsed once per process.
     """
     cls = registry.get(Stage.PARSE, PARSE["transform"])
-    sample = demo.SAMPLE_PDF
+    sample = sample_set.default_sample().pdf
     with TemporaryDirectory() as tmp:
         ctx = RunContext(output_dir=Path(tmp), emit=lambda event: None, tmp=Path(tmp))
         doc = cls().apply(
@@ -103,7 +103,7 @@ def get_lesson_document() -> dict[str, Any]:
     """The sample document every lesson works on, as parsed text."""
     text, page_count = _parsed_sample()
     return {
-        "filename": demo.SAMPLE_PDF.name,
+        "filename": sample_set.default_sample().pdf.name,
         "page_count": page_count,
         "text": text,
     }

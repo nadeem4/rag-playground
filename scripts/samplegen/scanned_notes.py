@@ -60,8 +60,13 @@ def render_page(paragraphs: list[str], number: int) -> bytes:
 
     image = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(image)
-    body = ImageFont.load_default(size=FONT_SIZE)
-    title = ImageFont.load_default(size=FONT_SIZE + 10)
+    # Pillow picks the Raqm layout engine when it is available (the Linux
+    # wheels CI runs on) and Basic otherwise (this machine). Raqm kerns
+    # differently, which changes the pixels and so the zlib stream, and would
+    # fail the byte-for-byte comparison against the committed PDF. Forcing
+    # Basic here keeps the render identical on every platform.
+    body = ImageFont.load_default(size=FONT_SIZE).font_variant(layout_engine=ImageFont.Layout.BASIC)
+    title = ImageFont.load_default(size=FONT_SIZE + 10).font_variant(layout_engine=ImageFont.Layout.BASIC)
     y = MARGIN
     for i, paragraph in enumerate(paragraphs):
         font = title if i == 0 else body

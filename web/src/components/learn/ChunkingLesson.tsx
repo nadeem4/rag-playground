@@ -6,7 +6,7 @@ import { useStages } from "@/api/useExplain"
 import { CONTROL } from "@/components/fields/types"
 import { ChunkSetInspector } from "@/components/inspectors/ChunkSetInspector"
 import { Button } from "@/components/ui/button"
-import { challengePrompt, choicesFor, FIELDS, labLines, outcomeText, sizeAndOverlap, unitOf } from "@/learn/challenges"
+import { challengePrompt, choicesFor, FIELDS, labLines, outcomeText, sizeAndOverlap, strategyLabel, unitOf } from "@/learn/challenges"
 import { analyzeChunks, type ChunkAnalysis } from "@/learn/chunks"
 import { runChunksOnce } from "@/learn/runChunks"
 import { cn } from "@/lib/utils"
@@ -58,6 +58,10 @@ interface Answer {
 }
 
 const keyOf = (s: Settings) => JSON.stringify([s.strategy, s.config])
+
+/** Which parser the lesson uses, said last in the intro. */
+const PARSER_NOTE =
+  "This lesson uses the fast parser, so page footers stay in the text. The first lesson used the layout parser, which drops them. Both are on Build."
 
 /** How the lesson works, said before the first question is asked. */
 const HOW_IT_WORKS = [
@@ -258,6 +262,7 @@ function Lab({
           <p className="m-0 text-base leading-[1.65]">
             The sentence that answers &ldquo;{data.question}&rdquo; is marked in the document beside this step. Every challenge asks what happens to it.
           </p>
+          <p className="m-0 text-base leading-[1.65]">{PARSER_NOTE}</p>
         </div>
       ),
     },
@@ -330,7 +335,7 @@ function Controls({
         <select id={`${id}-strategy`} className={CONTROL} value={settings.strategy} onChange={(e) => onStrategy(e.target.value)}>
           {strategies.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {strategyLabel(s)}
             </option>
           ))}
         </select>

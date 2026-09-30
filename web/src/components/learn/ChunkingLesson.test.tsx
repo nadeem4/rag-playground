@@ -140,15 +140,34 @@ describe("Chunking lesson", () => {
     expect(screen.getByText(/predict what a setting will do/)).toBeTruthy()
     expect(screen.getByText(/Getting a prediction wrong is fine, and is the point\./)).toBeTruthy()
     expect(screen.getByRole("region", { name: "The document" })).toBeTruthy()
+    // It says which parser it uses, and how that differs from the first lesson.
+    expect(
+      screen.getByText(
+        "This lesson uses the fast parser, so page footers stay in the text. The first lesson used the layout parser, which drops them. Both are on Build.",
+      ),
+    ).toBeTruthy()
+  })
+
+  it("names strategies in plain words and never shows a raw strategy id", async () => {
+    const ch = await open()
+    fireEvent.click(within(ch).getByRole("button", { name: "No, it gets cut" }))
+    await waitFor(() => expect(within(ch).getByText("You were right.")).toBeTruthy())
+    result()
+    const select = screen.getByLabelText("Strategy") as HTMLSelectElement
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Recursive (natural breaks)", "Fixed token count"])
+    // The settings sent to the server keep the ids.
+    expect([...select.options].map((o) => o.value)).toEqual(["recursive_character", "token_based"])
+    expect(document.body.textContent).not.toMatch(/recursive_character|token_based/)
   })
 
   it("asks challenge 1 as a question, under a label that says it is the reader's turn", async () => {
     const ch = await open()
     expect(within(ch).getByRole("heading", { name: "Your turn: predict" })).toBeTruthy()
     expect(within(ch).getByText(/Challenge 1 of 4: Shrink the chunks/)).toBeTruthy()
-    const question = within(ch).getByText(new RegExp(`${ANSWER.length} characters long`))
+    const question = within(ch).getByText(/Each chunk can hold 60 characters\./)
     expect(question.textContent?.trim().endsWith("?")).toBe(true)
-    expect(within(ch).getByText(/only 60 characters/)).toBeTruthy()
+    // The question never gives the answer away by stating the sentence's length.
+    expect(ch.textContent).not.toMatch(/characters long|tokens long/)
     // The buttons read as answers to that question.
     expect(within(ch).getByRole("button", { name: "Yes, it stays whole" })).toBeTruthy()
     expect(within(ch).getByRole("button", { name: "No, it gets cut" })).toBeTruthy()

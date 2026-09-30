@@ -51,24 +51,31 @@ export function choicesFor(ch: LearnChallenge): [string, string] {
   return ch.id === "overlap" ? ["Yes, in one chunk", "No, still cut"] : ["Yes, it stays whole", "No, it gets cut"]
 }
 
+const STRATEGY_LABELS: Record<string, string> = {
+  recursive_character: "Recursive (natural breaks)",
+  token_based: "Fixed token count",
+}
+
+/** A strategy's name for the reader. Settings sent to the server keep the id. */
+export function strategyLabel(id: string): string {
+  return STRATEGY_LABELS[id] ?? id
+}
+
+/** The question for a challenge. It never states the sentence's length: that would give the answer away. */
 export function challengePrompt(ch: LearnChallenge, data: LearnChunking): string {
   const c = ch.config
-  const chars = data.sentence_chars
-  const tokens = data.sentence_tokens
   switch (ch.id) {
     case "shrink":
-      return `The answer sentence is ${chars} characters long. If each chunk can hold only ${num(c.chunk_size)} characters, will the answer sentence stay whole?`
-    case "room": {
-      const size = num(c.chunk_size)
-      return `Now each chunk can hold ${size} characters, which is ${size > chars ? "more" : "less"} than the sentence. The recursive strategy cuts between sentences when it can. Will the answer sentence stay whole?`
-    }
+      return `Each chunk can hold ${num(c.chunk_size)} characters. Will the answer sentence, marked in the document, stay whole?`
+    case "room":
+      return `Now each chunk can hold ${num(c.chunk_size)} characters. Will the answer sentence stay whole?`
     case "naive":
-      return `Now switch to token_based, which cuts every time it counts a fixed number of tokens, wherever that is. The answer sentence is ${tokens} tokens long. With ${num(c.max_tokens)} tokens per chunk, will it stay whole?`
+      return `Now switch to Fixed token count, which cuts every time it counts ${num(c.max_tokens)} tokens, wherever that falls. A token is a word or a punctuation mark. Will the answer sentence stay whole?`
     case "overlap":
-      return `Keep token_based, but repeat the last ${num(c.overlap)} tokens of each chunk at the start of the next. The answer sentence is ${tokens} tokens long. Will it now appear whole in at least one chunk?`
+      return `Keep Fixed token count, but repeat the last ${num(c.overlap)} tokens of each chunk at the start of the next. Will the answer sentence now appear whole in at least one chunk?`
     default: {
       const unit = unitOf(c)
-      return `The answer sentence is ${lengthIn(unit, data)} ${unit} long. With ${ch.strategy} and these settings, will it stay whole?`
+      return `The answer sentence is ${lengthIn(unit, data)} ${unit} long. With ${strategyLabel(ch.strategy)} and these settings, will it stay whole?`
     }
   }
 }
@@ -99,7 +106,7 @@ export function outcomeText(strategy: string, config: Record<string, unknown>, a
   } else if (tokenBased) {
     why = "The chunk ends after a fixed number of tokens, and that point falls inside the sentence. This strategy never looks at where sentences end."
   } else if (sizeValue < lengthIn(unit, data)) {
-    why = "The sentence is longer than a whole chunk, so even this careful strategy has to cut it between words. Look for the note in the chunks below."
+    why = "The sentence is longer than a whole chunk, so even this careful strategy has to cut it between words. The chunks on the next step show where the cut fell."
   } else {
     why = "Neither piece holds the whole idea, so neither may match the question well."
   }

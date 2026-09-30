@@ -159,6 +159,14 @@ describe("the inline warning", () => {
     expect((within(card("parse")).getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it("a missing file asks calmly for a sample, not for an Upload settings fix", () => {
+    setup({ explanations: { source: explained("x", { warning: "Choose a file.", blocking: true }) } })
+    const note = within(card("chunk")).getByTestId("run-note")
+    expect(note.textContent).toBe("Load a sample to start.")
+    expect(note.className).toContain("text-fg-muted")
+    expect(note.className).not.toContain("text-danger")
+  })
+
   it("a warning that does not block leaves Run enabled", () => {
     setup({ explanations: { chunk: explained("x", { warning: "Very small pieces." }) } })
     expect(within(card("chunk")).getByTestId("explain-warning")).toBeTruthy()

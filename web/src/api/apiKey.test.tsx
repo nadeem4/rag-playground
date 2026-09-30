@@ -105,9 +105,19 @@ async function page() {
       <Shell />
     </ApiKeyProvider>,
   )
+  // With no file the pipeline shows the first-visit card; its picker lists the
+  // uploads. A remount keeps the stored file, so the column shows straight away.
+  const first = await waitFor(() => {
+    const el = card("parse") ?? document.querySelector('[aria-label="Upload"]')
+    if (!el) throw new Error("no pipeline yet")
+    return el as HTMLElement
+  })
+  if (!card("parse")) {
+    const pick = await waitFor(() => within(first).getByLabelText("File") as HTMLSelectElement)
+    await waitFor(() => expect(within(pick).getByRole("option", { name: /report\.pdf/ })).toBeTruthy())
+    fireEvent.change(pick, { target: { value: SOURCE.sha } })
+  }
   await waitFor(() => expect(card("parse")).toBeTruthy())
-  const pick = await waitFor(() => within(card("source")).getByLabelText("File") as HTMLSelectElement)
-  fireEvent.change(pick, { target: { value: SOURCE.sha } })
 }
 
 function openPanel() {

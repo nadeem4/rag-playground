@@ -72,10 +72,10 @@ export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry
 
 /**
  * Why Run all is disabled: the Upload card just needs a file, not a settings
- * fix, so it gets its own plain sentence instead of naming a "Upload" setting.
+ * fix, so it gets its own calm sentence instead of naming a "Upload" setting.
  */
 function blockedTitle(blocker: GraphNode): string {
-  return blocker.stage === "source" ? "Choose a file to run the pipeline." : `Fix the ${titleFor(blocker)} settings to run the pipeline.`
+  return blocker.stage === "source" ? "Load a sample to start." : `Fix the ${titleFor(blocker)} settings to run the pipeline.`
 }
 
 function Build({ registry }: { registry: Registry }) {
@@ -231,9 +231,10 @@ function Build({ registry }: { registry: Registry }) {
     window.location.assign(`/compare?${q.toString()}`)
   }
 
-  // Plan I-15: the first-run screen, while nothing is uploaded and no file is selected.
+  // Plan I-15: the first-run screen, whenever no file is selected. Its picker
+  // lists this browser's uploads, so a returning visitor can pick one there.
   const sourceNode = graph.nodes.find((n) => n.stage === "source")
-  const firstRun = uploaded?.length === 0 && sourceNode !== undefined && !sourceNode.config.sha
+  const firstRun = sourceNode !== undefined && !sourceNode.config.sha
 
   // The working copy's document may not exist in this browser (opened from a
   // share link, or a different machine): null, so no notice, until sources
@@ -293,6 +294,7 @@ function Build({ registry }: { registry: Registry }) {
             // Errors from the last run belong to the graph being replaced (M4).
             setErrors({})
             setColumnError(null)
+            setKeyNotice(null)
             edit(g)
           }}
           notice={barNotice}

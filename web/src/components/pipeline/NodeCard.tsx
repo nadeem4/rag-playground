@@ -15,6 +15,7 @@ import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { compatibility, optionLabel, type Compat } from "@/state/compat"
+import { STAGE_VERB } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
 import { ExplainPanel } from "./ExplainPanel"
@@ -141,12 +142,16 @@ export function NodeCard(p: NodeCardProps) {
   const cardRef = useRef<HTMLElement>(null)
   const warning = p.explain?.data?.warning
   const completed = (p.result?.status === "done" || p.result?.status === "cached") && p.result.artifact_id ? p.result.artifact_id : undefined
+  // A missing file is the first step, not a mistake: say it calmly (muted).
+  const needsFile = p.blockedBy === STAGE_VERB.source
   const runNote = p.blockedBy
-    ? p.blockedBy === p.title
-      ? lock.kind === "hard"
-        ? "Locked. Pick another transform to run."
-        : "Fix the settings to run."
-      : `Fix the ${p.blockedBy} settings to run.`
+    ? needsFile
+      ? "Load a sample to start."
+      : p.blockedBy === p.title
+        ? lock.kind === "hard"
+          ? "Locked. Pick another transform to run."
+          : "Fix the settings to run."
+        : `Fix the ${p.blockedBy} settings to run.`
     : completed && p.stale
       ? "Settings changed since the last run."
       : null
@@ -318,7 +323,7 @@ export function NodeCard(p: NodeCardProps) {
           </Button>
         ) : null}
         {runNote ? (
-          <span data-testid="run-note" className={cn("text-xs", p.blockedBy ? "text-danger" : "text-fg-muted")}>
+          <span data-testid="run-note" className={cn("text-xs", p.blockedBy && !needsFile ? "text-danger" : "text-fg-muted")}>
             {runNote}
           </span>
         ) : null}

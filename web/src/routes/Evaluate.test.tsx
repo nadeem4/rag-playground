@@ -299,6 +299,7 @@ describe("the question set panel", () => {
     serve({ upload: goldSet({ stored: false }) })
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
     const note = await screen.findByTestId("tab-only", {}, { timeout: 4000 })
     expect(note.textContent).toMatch(/this browser tab only/)
@@ -322,6 +323,7 @@ describe("the question set panel", () => {
     serve({ upload: { status: 403 } })
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
     chooseFile(screen.getByLabelText("Upload a question set"), "mine.csv")
     const err = await screen.findByTestId("set-error", {}, { timeout: 4000 })
     expect(err.textContent).toMatch(/does not store question sets/)
@@ -335,6 +337,7 @@ describe("the upload report", () => {
     serve({ upload: goldSet() })
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
 
     const report = await screen.findByTestId("upload-report", {}, { timeout: 4000 })
@@ -351,6 +354,7 @@ describe("the upload report", () => {
     serve({ upload: goldSet() })
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
     await screen.findByTestId("upload-report", {}, { timeout: 4000 })
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
@@ -530,12 +534,41 @@ describe("while and after scoring", () => {
     expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")
   })
 
+  it("keeps saying the k that was scored when the Top k input changes after the run", async () => {
+    const pieces = Array.from({ length: 7 }, (_, i) => ({ id: `p${i}` }))
+    const es = await start({
+      c7: { chunks: pieces },
+      o0: evalOut({}),
+      o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }),
+    })
+    const useCase = idOf("use_case")
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: idOf("chunk"), artifact_id: "c7", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "node_finished", node_id: useCase, artifact_id: "o0", cache_hit: false, duration_ms: 1 })
+    es.emit(4, { event: "variant_started", index: 1, variant: {} })
+    es.emit(5, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
+    es.emit(6, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+    await waitFor(() => expect(document.body.textContent).toContain("Found at rank 7, below the top 5."))
+    await screen.findByTestId("pieces-warning")
+
+    fireEvent.change(screen.getByLabelText("Top k"), { target: { value: "10" } })
+    expect((screen.getByLabelText("Top k") as HTMLInputElement).value).toBe("10")
+
+    expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")
+    expect(document.body.textContent).not.toContain("below the top 10")
+    expect(screen.getByTestId("hit-rate").textContent).toMatch(/^Hit rate at 5 /)
+    expect(screen.getByTestId("pieces-warning").textContent).toBe(
+      "This pipeline makes only 7 pieces and the top 5 are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.",
+    )
+  })
+
   it("warns that the score says nothing when the pipeline makes fewer pieces than the top k", async () => {
     const es = await start({ c0: { chunks: [{ id: "a" }, { id: "b" }, { id: "c" }] } })
     es.emit(1, { event: "variant_started", index: 0, variant: {} })
     es.emit(2, { event: "node_finished", node_id: idOf("chunk"), artifact_id: "c0", cache_hit: false, duration_ms: 1 })
     const warning = await screen.findByTestId("pieces-warning")
-    expect(warning.textContent).toBe("This pipeline makes only 3 pieces, so every question finds it. The score says nothing here.")
+    expect(warning.textContent).toBe("This pipeline makes only 3 pieces, so every question finds its answer. The score says nothing here.")
     expect(warning.getAttribute("role")).toBe("status")
   })
 })

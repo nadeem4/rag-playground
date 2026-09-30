@@ -239,6 +239,10 @@ function Evaluation({
   const [sample, setSample] = useState<SampleQuestion[] | null>(null)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
   const [asked, setAsked] = useState<Question[]>([])
+  // The k the shown run was scored at. Changing the input afterwards must not
+  // rewrite what the rows of that run say.
+  const [scoredK, setScoredK] = useState<number | null>(null)
+  const shownK = scoredK ?? topK
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -308,7 +312,7 @@ function Evaluation({
       live = false
     }
   }, [chunkArtifact])
-  const warning = piecesWarning(pieces, topK)
+  const warning = piecesWarning(pieces, shownK)
   const payload = usePayloads(ids.flatMap((x) => [x.out, x.result]))
 
   const rows: Row[] = asked.map((question, i) => {
@@ -368,6 +372,7 @@ function Evaluation({
       })
       if (before) setPrevious(before)
       setAsked(questions)
+      setScoredK(topK)
       setRunId(run_id)
     } catch (err) {
       const routed = routeRunError(err, graph)
@@ -473,7 +478,7 @@ function Evaluation({
               {summaryLine(summary, previous?.summary)}
             </p>
             <p data-testid="hit-rate" className="text-sm text-fg-muted">
-              Hit rate at {topK} <span className="font-mono font-medium text-fg tabular-nums">{percent(scores.hitRate) ?? "not yet"}</span>
+              Hit rate at {shownK} <span className="font-mono font-medium text-fg tabular-nums">{percent(scores.hitRate) ?? "not yet"}</span>
             </p>
             <p className="text-xs text-fg-muted">{`${asked.length} questions, one run each.`}</p>
           </>
@@ -487,7 +492,7 @@ function Evaluation({
         </p>
       ) : null}
 
-      {runId === null ? null : <EvalMetricsDetail metrics={scores} byTag={byTag} topK={topK} rerank={rerankText} />}
+      {runId === null ? null : <EvalMetricsDetail metrics={scores} byTag={byTag} topK={shownK} rerank={rerankText} />}
 
       {firstFailure ? (
         <p role="alert" className="shrink-0 border-b border-hairline px-3 py-2 font-mono text-xs break-words text-danger">
@@ -509,7 +514,7 @@ function Evaluation({
               <span className="meta">question</span>
             </div>
             {rows.map((row) => (
-              <QuestionRow key={row.question.id} row={row} before={previous?.byId[row.question.id]} topK={topK} />
+              <QuestionRow key={row.question.id} row={row} before={previous?.byId[row.question.id]} topK={shownK} />
             ))}
           </div>
         )}

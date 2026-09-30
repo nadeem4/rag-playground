@@ -201,8 +201,8 @@ describe("the warning about too few pieces", () => {
   })
 
   it("says the score means nothing when every piece is checked", () => {
-    expect(piecesWarning(1, 5)).toBe("This pipeline makes only 1 piece, so every question finds it. The score says nothing here.")
-    expect(piecesWarning(5, 5)).toBe("This pipeline makes only 5 pieces, so every question finds it. The score says nothing here.")
+    expect(piecesWarning(1, 5)).toBe("This pipeline makes only 1 piece, so every question finds its answer. The score says nothing here.")
+    expect(piecesWarning(5, 5)).toBe("This pipeline makes only 5 pieces, so every question finds its answer. The score says nothing here.")
   })
 
   it("says most questions find the answer by chance when the pieces are few", () => {
@@ -222,13 +222,14 @@ describe("the reason for a miss", () => {
     expect(missText(payload({ hit: false, rank: null, found_at: 7 }), 5)).toBe("Found at rank 7, below the top 5.")
   })
 
-  it("says the answer was nowhere when no piece held it", () => {
-    expect(missText(payload({ hit: false, rank: null, found_at: null, total_candidates: 12 }), 5)).toBe(
-      "Not in any of the 12 pieces the retriever returned.",
+  it("says the answer was in none of the pieces that came back, counting what was returned", () => {
+    expect(missText(payload({ hit: false, rank: null, found_at: null, returned: 5, total_candidates: 12 }), 5)).toBe(
+      "Not in any of the 5 pieces that came back.",
     )
-    expect(missText(payload({ hit: false, rank: null, total_candidates: 12 }), 5)).toBe(
-      "Not in any of the 12 pieces the retriever returned.",
-    )
+  })
+
+  it("falls back to what was checked on an older payload without the returned count", () => {
+    expect(missText(payload({ hit: false, rank: null, considered: 5, total_candidates: 12 }), 5)).toBe("5 of 12 checked")
   })
 })
 

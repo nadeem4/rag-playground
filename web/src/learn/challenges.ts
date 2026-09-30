@@ -61,7 +61,11 @@ export function strategyLabel(id: string): string {
   return STRATEGY_LABELS[id] ?? id
 }
 
-/** The question for a challenge. It never states the sentence's length: that would give the answer away. */
+/**
+ * The question for a challenge. The four named challenges (shrink, room, naive
+ * and overlap) never state the sentence's length, because that would give the
+ * answer away. Any other challenge states it, so it can be reasoned about.
+ */
 export function challengePrompt(ch: LearnChallenge, data: LearnChunking): string {
   const c = ch.config
   switch (ch.id) {

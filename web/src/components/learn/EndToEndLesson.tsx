@@ -8,6 +8,7 @@ import {
   cleanStep,
   hitMeta,
   indexStep,
+  numberWord,
   parseStep,
   quoteSource,
   rerankRows,
@@ -315,9 +316,11 @@ function PipelineStep({ step, links, children }: { step: StepWords; links?: Reac
   )
 }
 
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
 const RECAP = [
   "You can now predict what a parser finds on a page: blocks of text, each with its page and position, which is what a citation later points at.",
-  "You can predict where a chunk boundary will fall for a given size and overlap, and why a cut in the wrong place hides an answer.",
+  "You can predict what a chunk size and an overlap do to a passage, and why a cut in the wrong place hides an answer.",
   "You can predict what a reranker for variety will do: keep the top pick, and trade a near-duplicate for a different point.",
 ]
 
@@ -363,9 +366,7 @@ export function EndToEndLesson({ sha, onRun, onChat }: EndToEndLessonProps) {
       title: indexStep(RUN).title,
       body: (
         <PipelineStep step={indexStep(RUN)}>
-          <p className="m-0 text-sm text-fg-muted">
-            Each of the {RUN.index.doc_count} chunks now has its own list of {RUN.index.dim} numbers, made by {RUN.index.model}.
-          </p>
+          <p className="m-0 text-sm text-fg-muted">{capitalise(`${numberWord(RUN.index.doc_count)} chunks in, ${numberWord(RUN.index.doc_count)} lists of numbers out.`)}</p>
         </PipelineStep>
       ),
     },

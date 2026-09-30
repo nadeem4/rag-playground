@@ -17,7 +17,9 @@ it was, so a run is never flattered by a loose rule you cannot see.
 sits below it is a miss, not a hit, and `considered` says how many pieces were
 checked, so a miss can be told apart from a short list. On a miss, `found_at`
 is the rank of the first piece below the top k that holds a gold passage, or
-None when no piece the retriever returned holds one.
+None when no piece the retriever returned holds one. `returned` is how many
+pieces came back at all, which is not the same as `total_candidates`, the size
+of the pool they were picked from.
 
 A question may carry several gold passages (I-32), because a document often
 answers the same question in more than one place. Any one of them counts as
@@ -72,6 +74,9 @@ class EvalUseCase(Transform[EvalConfig]):
     #: Arithmetic over its inputs, with nothing to re-roll.
     cacheable = True
     deterministic = True
+    #: 2: the report carries `found_at` and `returned`, so a report cached
+    #: before them is not served again.
+    version = "2"
 
     summary = (
         "Checks whether the retrieved pieces contain the sentence that answers "
@@ -210,6 +215,7 @@ class EvalUseCase(Transform[EvalConfig]):
                 "considered": len(considered),
                 "total_candidates": result.total_candidates,
                 "found_at": found_at,
+                "returned": len(result.hits),
             },
         ).model_dump(mode="json")
 

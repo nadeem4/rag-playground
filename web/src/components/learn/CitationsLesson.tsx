@@ -266,6 +266,7 @@ const STEPS: Step[] = [
     words: [
       "A number alone is not proof. We compare the meaning of each claim with the meaning of the sentence it points at, and get a score between 0 and 1.",
       "If the score is above the pass line, the claim is cited. If it is below, the citation is marked weak support, and you should read it yourself.",
+      "A claim that points at nothing gets the closest sentence we can find. Above the pass line that is a similarity match, and below it the claim is not grounded.",
     ],
     visual: () => <Scores />,
   },

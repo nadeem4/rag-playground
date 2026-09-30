@@ -44,7 +44,8 @@ const TINY: E2ERun = {
 describe("words and numbers", () => {
   it("spells small counts and joins lists in plain English", () => {
     expect(numberWord(5)).toBe("five")
-    expect(numberWord(14)).toBe("14")
+    expect(numberWord(14)).toBe("fourteen")
+    expect(numberWord(21)).toBe("21")
     expect(listJoin(["#3"])).toBe("#3")
     expect(listJoin(["#3", "#6"])).toBe("#3 and #6")
     expect(listJoin(["#3", "#6", "#7"])).toBe("#3, #6 and #7")
@@ -96,7 +97,8 @@ describe("the recorded run", () => {
     expect(dense).toHaveLength(4)
     expect(dense[0].dense).toBe(Math.max(...RUN.pool.map((p) => p.dense ?? -Infinity)))
     const words = retrieveStep(RUN).words
-    expect(words).toContain("The meaning search turned the question into the same kind of list and looked for the closest chunks.")
+    expect(words).toContain("The meaning search turned the question into a list of numbers too, and looked for the chunks whose lists are closest.")
+    expect(words.join(" ")).not.toContain("the same kind of list")
     expect(words.join(" ")).not.toContain("the index had turned each of the")
   })
 
@@ -129,8 +131,9 @@ describe("the recorded run", () => {
   })
 
   it("says what the variety rerank costs, only when it passed something over", () => {
-    const cost = "Variety has a cost: the passages it passed over were relevant too, and the one it reached down for may be further from the answer."
-    expect(rerankStep(RUN).skipped.length).toBeGreaterThan(0)
+    const cost = "Variety has a cost: #3, which it passed over, speaks to the question directly, and #10 is further from it."
+    expect(rerankStep(RUN).skipped[0].rank).toBe(3)
+    expect(rerankStep(RUN).reached?.rank).toBe(10)
     expect(rerankStep(RUN).words).toContain(cost)
     const top5 = [...RUN.pool].sort((a, b) => a.rank - b.rank).slice(0, 5).map((p) => p.id)
     const inOrder = { ...RUN, mmr: top5 }

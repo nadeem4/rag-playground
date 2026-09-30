@@ -74,7 +74,7 @@ export function pipelineSteps(g: PipelineGraph): { label: string; transform: str
 export function piecesWarning(pieces: number | null, topK: number): string | null {
   if (pieces === null) return null
   if (pieces <= topK) {
-    return `This pipeline makes only ${pieces} ${pieces === 1 ? "piece" : "pieces"}, so every question finds it. The score says nothing here.`
+    return `This pipeline makes only ${pieces} ${pieces === 1 ? "piece" : "pieces"}, so every question finds its answer. The score says nothing here.`
   }
   if (pieces <= 2 * topK) {
     return `This pipeline makes only ${pieces} pieces and the top ${topK} are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.`
@@ -82,11 +82,14 @@ export function piecesWarning(pieces: number | null, topK: number): string | nul
   return null
 }
 
-/** Why a question missed: ranked too low, or never retrieved at all. */
+/**
+ * Why a question missed: ranked too low, or not among the pieces that came
+ * back at all. An older payload has no `returned`, so it says what was checked.
+ */
 export function missText(p: EvalPayload, topK: number): string {
-  return typeof p.found_at === "number"
-    ? `Found at rank ${p.found_at}, below the top ${topK}.`
-    : `Not in any of the ${p.total_candidates} pieces the retriever returned.`
+  if (typeof p.found_at === "number") return `Found at rank ${p.found_at}, below the top ${topK}.`
+  if (typeof p.returned === "number") return `Not in any of the ${p.returned} pieces that came back.`
+  return `${p.considered} of ${p.total_candidates} checked`
 }
 
 // ------------------------------------------------------------- the summary --

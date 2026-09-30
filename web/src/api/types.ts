@@ -598,6 +598,11 @@ export interface EvalPayload {
    * Absent on older payloads.
    */
   found_at?: number | null
+  /**
+   * How many pieces the retriever handed to the eval step. Not the same as
+   * `total_candidates`, the pool they were picked from. Absent on older payloads.
+   */
+  returned?: number
 }
 
 export interface EvalOutput {

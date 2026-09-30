@@ -132,12 +132,19 @@ describe("How RAG works, end to end", () => {
     expect(within(open(parseStep(RUN).title)).getAllByTestId("block")).toHaveLength(RUN.elements.filter((e) => e.page === 1).length)
   })
 
+  it("sums up the index step from the run, without repeating its first sentence", () => {
+    lesson()
+    const panel = open(indexStep(RUN).title)
+    expect(within(panel).getByText("Fourteen chunks in, fourteen lists of numbers out.")).toBeTruthy()
+    expect(panel.textContent).not.toContain("now has its own list")
+  })
+
   it("recaps what the lesson showed, then Mark as done and Next: Chunking", () => {
     lesson()
     const panel = open("Recap")
     for (const line of [
       "You can now predict what a parser finds on a page: blocks of text, each with its page and position, which is what a citation later points at.",
-      "You can predict where a chunk boundary will fall for a given size and overlap, and why a cut in the wrong place hides an answer.",
+      "You can predict what a chunk size and an overlap do to a passage, and why a cut in the wrong place hides an answer.",
       "You can predict what a reranker for variety will do: keep the top pick, and trade a near-duplicate for a different point.",
     ])
       expect(within(panel).getByText(line)).toBeTruthy()

@@ -43,7 +43,10 @@ export interface StepWords {
   words: string[]
 }
 
-const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+const WORDS = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+]
 
 /** Small counts read better as words. */
 export const numberWord = (n: number) => WORDS[n] ?? String(n)
@@ -102,7 +105,7 @@ export function rerankStep(run: E2ERun): StepWords & { skipped: PoolEntry[]; rea
   words.push(
     `The reranker then chose ${count} that are relevant but different from each other.`,
     `It passed over ${listJoin(skipped.map((p) => `#${p.rank}`))}, which are close in meaning to chunks it had already picked, and reached down to #${deepest.rank} instead because it adds a different point.`,
-    "Variety has a cost: the passages it passed over were relevant too, and the one it reached down for may be further from the answer.",
+    `Variety has a cost: #${skipped[0].rank}, which it passed over, speaks to the question directly, and #${deepest.rank} is further from it.`,
   )
   return { title: `Rerank picked a varied ${count}`, words, skipped, reached: deepest }
 }
@@ -151,7 +154,7 @@ export function retrieveStep(run: E2ERun): StepWords {
       agree
         ? "The top chunk came first in both lists. It shares the most words with the question, and it is also the closest in meaning."
         : "The two searches put different chunks first, and the merge decided between them.",
-      "The meaning search turned the question into the same kind of list and looked for the closest chunks.",
+      "The meaning search turned the question into a list of numbers too, and looked for the chunks whose lists are closest.",
     ],
   }
 }

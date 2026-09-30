@@ -80,6 +80,9 @@ describe("How citations work", () => {
       "If the score is above the pass line, the claim is cited. If it is below, the citation is marked weak support, and you should read it yourself.",
     )
     expect(within(panel()).getByText(/the closest sentence we found scored 0.31/)).toBeTruthy()
+    expect(panel().textContent).toContain(
+      "A claim that points at nothing gets the closest sentence we can find. Above the pass line that is a similarity match, and below it the claim is not grounded.",
+    )
   })
 
   it.each([3, 5])("step %i shows every label at least once", (n) => {

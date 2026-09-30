@@ -76,6 +76,10 @@ def test_declares_an_explicit_result_port_and_an_ambient_query():
     assert EvalUseCase.inputs["query"].ambient is True
 
 
+def test_version_is_2_so_reports_without_found_at_and_returned_are_not_served():
+    assert EvalUseCase.version == "2"
+
+
 def test_is_cacheable_and_deterministic():
     """Pure arithmetic over its inputs, so the cache key is sound."""
     assert EvalUseCase.cacheable is True
@@ -105,6 +109,7 @@ def test_the_payload_has_the_i24_shape():
         "golds_total",
         "golds_found",
         "found_at",
+        "returned",
     }
     assert json.loads(json.dumps(payload)) == payload
 
@@ -231,6 +236,13 @@ def test_total_candidates_is_the_whole_pool_not_what_was_considered():
     hits = [hit(f"passage {r}", rank=r) for r in range(1, 11)]
     payload = run(*hits, top_k=3, total_candidates=200).payload
     assert payload["considered"] == 3
+    assert payload["total_candidates"] == 200
+
+
+def test_returned_is_how_many_hits_came_back_not_the_pool():
+    hits = [hit(f"passage {r}", rank=r) for r in range(1, 6)]
+    payload = run(*hits, top_k=5, total_candidates=200).payload
+    assert payload["returned"] == 5
     assert payload["total_candidates"] == 200
 
 

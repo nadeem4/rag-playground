@@ -282,6 +282,7 @@ function Evaluation({
         set={uploaded.set}
         count={questions?.length ?? null}
         filename={filename}
+        sampleName={matched?.title ?? null}
         report={uploaded.report}
         tabOnly={uploaded.tabOnly}
         error={uploaded.error}

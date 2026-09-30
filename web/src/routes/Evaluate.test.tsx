@@ -191,9 +191,9 @@ describe("Evaluate", () => {
 describe("the question set panel", () => {
   beforeEach(() => storeGraph(sampleGraph(registry, SOURCE)))
 
-  it("names the built-in sample set, counts it, and links to a template in both formats", async () => {
+  it("names the matched sample, counts it, and links to a template in both formats", async () => {
     render(<Evaluate />)
-    await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("the built-in sample question set"))
+    await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
     await waitFor(() => expect(screen.getByTestId("question-set").textContent).toMatch(/2 questions/))
     expect(screen.getByRole("link", { name: "JSON" }).getAttribute("href")).toBe("/api/questions/template?format=json")
     expect(screen.getByRole("link", { name: "CSV" }).getAttribute("href")).toBe("/api/questions/template?format=csv")
@@ -212,6 +212,7 @@ describe("the question set panel", () => {
     serve({ sampleSha: SOURCE.sha })
     render(<Evaluate />)
     expect(await screen.findByText(/No question set for this document/)).toBeTruthy()
+    expect(screen.queryByTestId("set-mismatch")).toBeNull()
   })
 
   it("uses the set stored against the document, and asks its questions instead of the sample's", async () => {
@@ -236,7 +237,7 @@ describe("the question set panel", () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("refunds.csv"))
     fireEvent.click(screen.getByRole("button", { name: "Remove this set" }))
-    await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("the built-in sample question set"))
+    await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
   })
 
   it("says an uploaded set lives in this browser tab when the server would not keep it", async () => {

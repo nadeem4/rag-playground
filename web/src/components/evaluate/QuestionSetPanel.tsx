@@ -10,13 +10,14 @@ import { mismatch, reportLines, type InUse, type Report } from "@/state/goldSet"
 /**
  * Which question set this page is about to score, and everything you can do
  * about it (plan I-33): upload your own, start from the template, or go back to
- * the built-in sample set.
+ * a bundled sample's own set.
  *
- * The warning is the point of the panel. A set is stored against one document's
- * fingerprint, so a set uploaded for another document, and the built-in sample
- * set in front of a document that is not the sample, both score nothing useful.
- * Rather than say so quietly, the page says it and offers the one action that
- * fixes it.
+ * The warning is the point of the panel, and it is only ever about a set that
+ * IS in play but was written for a different document: a set uploaded for
+ * another document scores nothing useful. A document that matches no bundled
+ * sample and has nothing uploaded is a different situation (there is simply no
+ * set to score with), and Evaluate says that plainly elsewhere without this
+ * warning, which is why the sample branch never renders here.
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
@@ -26,6 +27,7 @@ export function QuestionSetPanel({
   set,
   count,
   filename,
+  sampleName,
   report,
   tabOnly,
   error,
@@ -40,6 +42,8 @@ export function QuestionSetPanel({
   count: number | null
   /** The document loaded on Build. */
   filename: string
+  /** The title of the bundled sample matching the loaded document, if any. */
+  sampleName: string | null
   report: Report | null
   tabOnly: boolean
   error: string | null
@@ -52,8 +56,11 @@ export function QuestionSetPanel({
   const id = useId()
   const demo = useDemo()
   const fileRef = useRef<HTMLInputElement>(null)
-  const warning = mismatch(inUse, filename)
   const uploaded = inUse.kind === "uploaded"
+  // A "sample" mismatch only ever means "no bundled set matches this
+  // document", which is not a warning about a wrong set in play: Evaluate
+  // already says so, without alarm, elsewhere on the page.
+  const warning = uploaded ? mismatch(inUse, filename) : null
   const locked = busy || disabled
 
   const pick = (
@@ -84,7 +91,7 @@ export function QuestionSetPanel({
         <p className="text-sm text-fg-muted">
           Scoring{" "}
           <span data-testid="set-name" className="font-medium text-fg">
-            {uploaded && set ? set.filename : "the built-in sample question set"}
+            {uploaded && set ? set.filename : (sampleName ?? "the built-in sample question set")}
           </span>
           {count === null ? "" : `, ${count} ${count === 1 ? "question" : "questions"}`}.
         </p>

@@ -572,6 +572,8 @@ export interface SampleQuestion {
   id: string
   question: string
   gold_answer: string
+  /** Further passages that also answer it, such as a table row as plain text. */
+  gold_answers?: string[]
 }
 
 export type MatchKind = "exact" | "normalized" | "none"

@@ -20,7 +20,7 @@ export interface Question {
 }
 
 export function questionsFromSample(sample: readonly SampleQuestion[]): Question[] {
-  return sample.map((q) => ({ id: q.id, question: q.question, gold_answers: [q.gold_answer], tags: [] }))
+  return sample.map((q) => ({ id: q.id, question: q.question, gold_answers: [q.gold_answer, ...(q.gold_answers ?? [])], tags: [] }))
 }
 
 export function questionsFromSet(stored: StoredQuestionSet): Question[] {

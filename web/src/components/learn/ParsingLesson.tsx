@@ -1,17 +1,22 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+
+import { loadSample } from "@/api/samples"
 
 import type { Registry } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import {
+  BASELINE_LABEL,
   CLOSING,
+  FEATURED,
+  INTRO,
   LAB,
   missingExcerpt,
   PARSER_LABEL,
   PARSERS,
-  perPage,
   RECAP,
   RULES,
   runLink,
+  secondsPerPage,
   SITUATION,
   verdict,
   type LabCase,
@@ -25,15 +30,16 @@ import { LessonShell, type LessonStep } from "./LessonShell"
  * Learn > Choosing a parser: three kinds of PDF, one step each. The learner
  * picks a parser, then sees what both parsers really did on the bundled
  * sample, as recorded in `learn/parsing-lab.json`. There is no wrong answer,
- * only a measured trade-off. A fourth step puts the three cases side by side.
+ * only a measured trade-off. A fourth step puts the three cases side by side,
+ * with the chunking primer as a baseline.
+ *
+ * On a fresh server the case samples are not loaded yet, so the lesson loads
+ * them once on mount: the document panel's pages and the Build links need them.
  */
 
 export interface ParsingLessonProps {
   registry: Registry
 }
-
-/** Seconds per page as the tables show it. */
-const seconds = (n: number) => (n === 0 ? "under 0.1" : String(n))
 
 const TH = "border-b border-hairline px-2 py-1 text-left font-medium"
 const TD = "border-b border-hairline px-2 py-1"
@@ -41,6 +47,10 @@ const TD = "border-b border-hairline px-2 py-1"
 export function ParsingLesson({ registry }: ParsingLessonProps) {
   const [step, setStep] = useState(0)
   const [picks, setPicks] = useState<Partial<Record<string, ParserId>>>({})
+
+  useEffect(() => {
+    for (const c of LAB.cases) loadSample(c.name).catch(() => {})
+  }, [])
 
   const steps: LessonStep[] = [
     ...LAB.cases.map((c) => ({
@@ -51,13 +61,17 @@ export function ParsingLesson({ registry }: ParsingLessonProps) {
     { id: "which", title: "When to choose which", body: <Which /> },
   ]
 
-  // The document beside a case step is that case's sample; after the cases, the first one.
-  const shown = LAB.cases[step < LAB.cases.length ? step : 0]
-  const document = { filename: shown.filename, pages: shown.pages, caption: `${shown.title}, ${shown.pages} pages. Pick a parser, then see what each one read.` }
+  // The document beside a case step is that case's sample; after the cases, the two-column one.
+  const onCase = step < LAB.cases.length
+  const shown = onCase ? LAB.cases[step] : FEATURED
+  const document = onCase
+    ? { filename: shown.filename, pages: shown.pages, caption: `${shown.title}, ${shown.pages} pages. Pick a parser, then see what each one read.` }
+    : { filename: shown.filename, pages: shown.pages, caption: "Three samples, measured. The links on each step open them on Build." }
 
   return (
     <LessonShell
       title="Choosing a parser"
+      intro={<p className="m-0 text-base leading-[1.65]">{INTRO}</p>}
       slug="parsing"
       sha={shown.sha}
       document={document}
@@ -144,7 +158,7 @@ function MeasuredTable({ c }: { c: LabCase }) {
         {PARSERS.map((p) => (
           <tr key={p}>
             <td className={TD}>{PARSER_LABEL[p]}</td>
-            <td className={cn(TD, "font-mono")}>{seconds(perPage(c.parsers[p], c.pages))}</td>
+            <td className={cn(TD, "font-mono")}>{secondsPerPage(c.parsers[p], c.pages)}</td>
             <td className={cn(TD, "font-mono")}>{c.parsers[p].chars}</td>
             <td className={cn(TD, "font-mono")}>{`${c.parsers[p].hits} of ${c.questions}`}</td>
           </tr>
@@ -158,7 +172,7 @@ function Which() {
   return (
     <>
       <table className="w-full max-w-[68ch] border-collapse text-sm">
-        <caption className="pb-1 text-left text-xs text-fg-muted">The three samples, side by side</caption>
+        <caption className="pb-1 text-left text-xs text-fg-muted">The three samples and the primer, side by side</caption>
         <thead>
           <tr>
             <th className={TH}>Sample</th>
@@ -168,15 +182,15 @@ function Which() {
           </tr>
         </thead>
         <tbody>
-          {LAB.cases.flatMap((c) =>
+          {[...LAB.cases, LAB.baseline].flatMap((c) =>
             PARSERS.map((p) => (
               <tr key={`${c.name}-${p}`}>
-                <td className={TD}>{c.title}</td>
+                <td className={TD}>{c === LAB.baseline ? BASELINE_LABEL : c.title}</td>
                 <td className={TD}>
                   {PARSER_LABEL[p]}
                   {c.parsers[p].ocr ? <span className="text-fg-muted"> with OCR</span> : null}
                 </td>
-                <td className={cn(TD, "font-mono")}>{seconds(perPage(c.parsers[p], c.pages))}</td>
+                <td className={cn(TD, "font-mono")}>{secondsPerPage(c.parsers[p], c.pages)}</td>
                 <td className={cn(TD, "font-mono")}>{`${c.parsers[p].hits} of ${c.questions}`}</td>
               </tr>
             )),

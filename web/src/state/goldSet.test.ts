@@ -77,6 +77,11 @@ describe("the questions the page asks", () => {
     ])
   })
 
+  it("keeps a sample question's further gold passages after the single one", () => {
+    const sample: SampleQuestion[] = [{ id: "row", question: "How many?", gold_answer: "| A | 41 |", gold_answers: ["A 41"] }]
+    expect(questionsFromSample(sample)).toEqual([{ id: "row", question: "How many?", gold_answers: ["| A | 41 |", "A 41"], tags: [] }])
+  })
+
   it("reads an uploaded set, and numbers the questions that brought no id of their own", () => {
     expect(questionsFromSet(set())).toEqual([
       { id: "refunds", question: "How long do refunds take?", gold_answers: ["Within ten working days."], tags: ["policy"] },

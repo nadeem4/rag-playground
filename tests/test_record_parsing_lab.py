@@ -16,6 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 RECORDED = ROOT / "web" / "src" / "learn" / "parsing-lab.json"
 CASES = ["two-column-report", "table-of-figures", "scanned-notes"]
+BASELINE = "chunking-primer"
 
 
 def _script():
@@ -28,14 +29,44 @@ def _script():
 
 
 def test_committed_recording_matches_the_samples():
+    """Every case and the baseline match the sample as it is now, questions included."""
     from api.sample_set import all_samples
 
     data = json.loads(RECORDED.read_text(encoding="utf-8"))
     assert [c["name"] for c in data["cases"]] == CASES
-    shas = {s.name: s.sha for s in all_samples()}
-    for case in data["cases"]:
+    assert data["baseline"]["name"] == BASELINE
+    samples = {s.name: s for s in all_samples()}
+    for case in [*data["cases"], data["baseline"]]:
+        sample = samples[case["name"]]
         assert set(case["parsers"]) == {"pdfium", "docling"}
-        assert case["sha"] == shas[case["name"]]
+        assert case["sha"] == sample.sha
+        assert case["questions"] == len(sample.questions())
+        assert case["question"] == sample.questions()[0]["question"]
+        for run in case["parsers"].values():
+            assert "seconds" not in run
+            assert isinstance(run["ms"], int) and run["ms"] >= 0
+
+
+def test_golds_are_the_single_answer_then_the_list():
+    golds = _script().golds
+    assert golds({"gold_answer": "A b."}) == ["A b."]
+    assert golds({"gold_answer": "| A | 1 |", "gold_answers": ["A 1"]}) == ["| A | 1 |", "A 1"]
+
+
+def test_the_excerpt_tries_every_gold_passage_in_order():
+    first_excerpt = _script().first_excerpt
+    filler = " ".join(f"word{i}" for i in range(80))
+    text = f"{filler} Readers who lost their place 41 16 -61% {filler}"
+    out = first_excerpt(text, ["| Readers who lost their place | 41 | 16 | -61% |", "Readers who lost their place 41 16 -61%"])
+    assert out is not None and "Readers who lost their place 41 16" in out
+    assert out == out.strip()
+    assert first_excerpt(text, ["Nothing like this sentence is here."]) is None
+
+
+def test_the_query_node_carries_every_gold_passage():
+    graph = _script().build_graph("sha", "f.pdf", "pdfium", {}, "q?", ["| A | 1 |", "A 1"])
+    ask = next(n for n in graph.nodes if n.id == "ask")
+    assert ask.config == {"text": "q?", "gold_answer": "| A | 1 |", "gold_answers": ["| A | 1 |", "A 1"]}
 
 
 def test_excerpt_window():
@@ -56,18 +87,19 @@ def test_a_fresh_run_matches_the_committed_json(tmp_path):
     fresh = _script().record(out)
     committed = json.loads(RECORDED.read_text(encoding="utf-8"))
     assert [c["name"] for c in fresh["cases"]] == [c["name"] for c in committed["cases"]]
-    for f, c in zip(fresh["cases"], committed["cases"]):
+    assert fresh["baseline"]["name"] == committed["baseline"]["name"]
+    for f, c in zip([*fresh["cases"], fresh["baseline"]], [*committed["cases"], committed["baseline"]]):
         assert list(f["parsers"]) == list(c["parsers"])
         for parser in c["parsers"]:
             assert f["parsers"][parser].get("hits") == c["parsers"][parser].get("hits")
     assert json.loads(out.read_text(encoding="utf-8")) == fresh
 
 
-def test_seconds_are_one_decimal_and_never_zero():
-    seconds = _script().seconds
-    assert seconds(12) == 0.1
-    assert seconds(0) == 0.1
-    assert seconds(2345) == 2.3
+def test_parse_time_is_whole_milliseconds():
+    ms = _script().ms
+    assert ms(12.4) == 12
+    assert ms(0.2) == 0
+    assert ms(2345.6) == 2346
 
 
 def test_the_warm_up_covers_every_parse_config_on_a_sample_that_is_not_a_case():

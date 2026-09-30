@@ -17,14 +17,14 @@
    "question": "How long did the survey run?",
    "parsers": {
     "pdfium": {
-     "seconds": 0.1,
+     "ms": 21,
      "chars": 1682,
      "hits": 3,
      "ocr": false,
      "excerpt": "Reading order in two-column reports The survey ran for six weeks. Two hundred Errors followed the same pattern. When a readers took part, and each read the same"
     },
     "docling": {
-     "seconds": 1.8,
+     "ms": 2822,
      "chars": 1675,
      "hits": 5,
      "ocr": false,
@@ -42,14 +42,14 @@
    "question": "How many readers lost their place before and after the reset?",
    "parsers": {
     "pdfium": {
-     "seconds": 0.1,
+     "ms": 24,
      "chars": 1492,
-     "hits": 3,
+     "hits": 6,
      "ocr": false,
-     "excerpt": null
+     "excerpt": "Measure Before After Change Reading time per page 84 s 61 s -27% Readers who lost their place 41 16 -61% Questions answered correctly 72% 88% +16 pts Pages rer"
     },
     "docling": {
-     "seconds": 2.3,
+     "ms": 2266,
      "chars": 1792,
      "hits": 6,
      "ocr": false,
@@ -67,14 +67,14 @@
    "question": "What does a scanner actually do to a page?",
    "parsers": {
     "pdfium": {
-     "seconds": 0.1,
+     "ms": 50,
      "chars": 0,
      "hits": 0,
      "ocr": false,
      "excerpt": null
     },
     "docling": {
-     "seconds": 9.9,
+     "ms": 8912,
      "chars": 1772,
      "hits": 5,
      "ocr": true,
@@ -82,5 +82,30 @@
     }
    }
   }
- ]
+ ],
+ "baseline": {
+  "name": "chunking-primer",
+  "title": "A primer on chunking",
+  "sha": "19155c4d2e6d0a0785261fa742afcceede437bd532dc0b51c7affc38532d7aab",
+  "filename": "chunking-primer.pdf",
+  "pages": 3,
+  "questions": 10,
+  "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
+  "parsers": {
+   "pdfium": {
+    "ms": 27,
+    "chars": 4331,
+    "hits": 10,
+    "ocr": false,
+    "excerpt": "Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it a"
+   },
+   "docling": {
+    "ms": 2570,
+    "chars": 4187,
+    "hits": 10,
+    "ocr": false,
+    "excerpt": "## Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then i"
+   }
+  }
+ }
 }

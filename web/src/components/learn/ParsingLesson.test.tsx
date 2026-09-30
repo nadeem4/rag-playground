@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { clearPdfCaches } from "@/api/usePdf"
-import { LAB, layoutRatio, PARSER_LABEL, perPage, RECAP, RULES, SITUATION, verdict } from "@/learn/parsing"
+import { BASELINE_LABEL, INTRO, LAB, PARSER_LABEL, RECAP, RULES, secondsPerPage, SITUATION, verdict } from "@/learn/parsing"
 import { readProgress } from "@/state/lessons"
 
 import { ParsingLesson } from "./ParsingLesson"
@@ -51,7 +51,23 @@ describe("Choosing a parser", () => {
     expect(within(doc()).getByText(/^Table of figures, 2 pages\./)).toBeTruthy()
     expect(within(doc()).queryByRole("tab", { name: "Text" })).toBeNull()
     fireEvent.click(steps()[3])
-    expect(within(doc()).getByText(/^Two-column report, 2 pages\./)).toBeTruthy()
+    expect(within(doc()).getByText("Three samples, measured. The links on each step open them on Build.")).toBeTruthy()
+    fireEvent.click(steps()[4])
+    expect(within(doc()).getByText("Three samples, measured. The links on each step open them on Build.")).toBeTruthy()
+  })
+
+  it("introduces the two parsers above the first step", () => {
+    render(<ParsingLesson registry={registry} />)
+    expect(screen.getByText(INTRO)).toBeTruthy()
+  })
+
+  it("loads each case's sample on the server once, so its pages and Build links work on a fresh server", () => {
+    render(<ParsingLesson registry={registry} />)
+    const posts = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url, init]) => String(url) === "/api/sources/sample" && init?.method === "POST")
+      .map(([, init]) => JSON.parse(String(init!.body)).name)
+    expect(posts).toEqual(LAB.cases.map((c) => c.name))
   })
 
   it("reveals both parsers' measurements, the excerpts and the verdict after a pick", () => {
@@ -64,18 +80,19 @@ describe("Choosing a parser", () => {
     expect(rows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual(["Fast text", "Layout"])
     expect(within(rows[1]).getByText(`${c.parsers.docling.hits} of ${c.questions}`)).toBeTruthy()
     expect(within(rows[1]).getByText(String(c.parsers.docling.chars))).toBeTruthy()
-    expect(within(rows[1]).getByText(String(perPage(c.parsers.docling, c.pages)))).toBeTruthy()
+    expect(within(rows[1]).getByText(secondsPerPage(c.parsers.docling, c.pages))).toBeTruthy()
     expect(within(panel()).getByText(c.parsers.pdfium.excerpt!)).toBeTruthy()
     expect(within(panel()).getByText(c.parsers.docling.excerpt!)).toBeTruthy()
     expect(within(panel()).getByText(verdict(c, "docling"))).toBeTruthy()
     expect(within(panel()).getByRole("button", { name: "Layout" }).getAttribute("aria-pressed")).toBe("true")
   })
 
-  it("says why an excerpt is missing: scattered words, or nothing read at all", () => {
+  it("shows the table row as each parser kept it, and says so when nothing was read", () => {
     render(<ParsingLesson registry={registry} />)
     fireEvent.click(steps()[1])
     pick("Fast text")
-    expect(within(panel()).getByText("The answer's words do not appear together in this text.")).toBeTruthy()
+    expect(within(panel()).getByText(LAB.cases[1].parsers.pdfium.excerpt!)).toBeTruthy()
+    expect(within(panel()).getByText(LAB.cases[1].parsers.docling.excerpt!)).toBeTruthy()
     fireEvent.click(steps()[2])
     pick("Fast text")
     expect(within(panel()).getByText("Nothing was read.")).toBeTruthy()
@@ -100,16 +117,19 @@ describe("Choosing a parser", () => {
     }
   })
 
-  it("ends with the trade-off across the cases and three rules carrying the recorded numbers", () => {
+  it("ends with the trade-off across the cases and the primer, and four rules carrying the recorded numbers", () => {
     render(<ParsingLesson registry={registry} />)
     fireEvent.click(steps()[3])
     const rows = within(within(panel()).getByRole("table")).getAllByRole("row").slice(1)
-    expect(rows).toHaveLength(LAB.cases.length * 2)
+    expect(rows).toHaveLength((LAB.cases.length + 1) * 2)
+    const b = LAB.baseline
+    const last = rows.slice(-2)
+    for (const [i, p] of (["pdfium", "docling"] as const).entries()) {
+      const cells = within(last[i]).getAllByRole("cell").map((c) => c.textContent)
+      expect(cells).toEqual([BASELINE_LABEL, PARSER_LABEL[p], secondsPerPage(b.parsers[p], b.pages), `${b.parsers[p].hits} of ${b.questions}`])
+    }
+    expect(RULES).toHaveLength(4)
     for (const r of RULES) expect(within(panel()).getByText(r)).toBeTruthy()
-    const digital = LAB.cases.filter((c) => c.name !== "scanned-notes")
-    const scan = LAB.cases[2]
-    expect(within(panel()).getByText(new RegExp(`It costs ${layoutRatio(digital)} times more per page here`))).toBeTruthy()
-    expect(within(panel()).getByText(new RegExp(`OCR cost ${perPage(scan.parsers.docling, scan.pages)} seconds per page`))).toBeTruthy()
     expect(within(panel()).getByText("These numbers were measured on one machine. Yours will differ. The ratios are what to carry with you.")).toBeTruthy()
   })
 

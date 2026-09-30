@@ -298,3 +298,13 @@ def test_outside_demo_mode_nothing_is_capped(client):
     assert r.status_code == 200
     r = client.post("/api/sources", files={"file": ("notes.txt", b"just text", "text/plain")})
     assert r.status_code == 200
+
+
+def test_demo_upload_tolerates_a_corrupt_sidecar(dirs, monkeypatch):
+    demo_on(monkeypatch)
+    meta_dir = dirs["sources"] / ".meta"
+    meta_dir.mkdir(parents=True)
+    (meta_dir / "deadbeef.json").write_text("not json", encoding="utf-8")
+    with make_client(dirs) as client:
+        r = client.post("/api/sources", files={"file": ("small.pdf", _pdf_with_pages(1), "application/pdf")})
+        assert r.status_code == 200

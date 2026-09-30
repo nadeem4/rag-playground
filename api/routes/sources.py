@@ -62,11 +62,11 @@ def page_count(data: bytes) -> int | None:
         doc.close()
 
 
-def live_uploads(sources: Path, me: str) -> int:
+def live_uploads(sources: Path, visitor: str) -> int:
     meta_dir = sources / META_DIR
     if not meta_dir.is_dir():
         return 0
-    return sum(1 for p in meta_dir.glob("*.json") if me in (json.loads(p.read_text(encoding="utf-8")).get("visitors") or {}))
+    return sum(1 for p in meta_dir.glob("*.json") if visitor in (_read_sidecar(p).get("visitors") or {}))
 
 
 def _fmt_mb(n: int) -> str:
@@ -94,7 +94,7 @@ def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
         raise HTTPException(
             429,
             f"This browser already has {demo.MAX_UPLOADS_PER_VISITOR} uploads. "
-            f"Wait for one to expire, or run the playground locally.",
+            "Wait for one to expire, or run the playground locally.",
         )
 
 

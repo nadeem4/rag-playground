@@ -53,7 +53,7 @@ const CLAIMS: { text: string; points: string; label: Label; score: number | null
   { text: "If a cut splits an explanation, neither half scores well", points: "[1.2]", label: "cited", score: 0.86, id: "1.2" },
   { text: "A table can lose its caption", points: "[2.2]", label: "cited", score: 0.79, id: "2.2" },
   { text: "Overlap should be about a fifth of the chunk", points: "[2.1]", label: "weak", score: 0.41, id: "2.1" },
-  { text: "Chunks are cut before anything is indexed", points: "nothing", label: "similarity", score: 0.72, id: "1.1" },
+  { text: "The retriever scores a whole chunk at once", points: "nothing", label: "similarity", score: 0.72, id: "1.1" },
   { text: "Smaller chunks are also cheaper", points: "[9.9], which does not exist", label: "none", score: null, id: null },
   { text: "Most teams use 500 tokens", points: "nothing", label: "none", score: 0.31, id: null },
 ]
@@ -120,7 +120,7 @@ function Answer() {
     <div className="flex flex-col gap-2">
       <p className="m-0 rounded-panel bg-surface-elevated p-3 text-sm leading-[1.8]">
         If a cut splits an explanation, neither half scores well <Marker id="1.2" />. A table can lose its caption <Marker id="2.2" />. Overlap should be
-        about a fifth of the chunk <Marker id="2.1" />. Chunks are cut before anything is indexed. Smaller chunks are also cheaper <Marker id="9.9" bad />.
+        about a fifth of the chunk <Marker id="2.1" />. The retriever scores a whole chunk at once. Smaller chunks are also cheaper <Marker id="9.9" bad />.
         Most teams use 500 tokens.
       </p>
       <p className="m-0 text-sm text-fg-muted">Six claims. Three point at real sentences, one points at a sentence that does not exist, and two point at nothing.</p>

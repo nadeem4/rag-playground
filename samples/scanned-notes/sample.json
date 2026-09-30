@@ -1,0 +1,9 @@
+{
+  "name": "scanned-notes",
+  "title": "Scanned notes",
+  "blurb": "Two pages that are pictures of text. There is no text layer to read.",
+  "shows": "Without OCR the parse returns nothing, so nothing can be found. Turn OCR on in the Parse step to recover it.",
+  "stresses": "parse",
+  "pages": 2,
+  "default": false
+}

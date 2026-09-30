@@ -116,3 +116,23 @@ def test_most_questions_do_share_wording_so_the_set_is_not_all_hard(questions):
         for item in questions
     )
     assert shared >= len(questions) // 2
+
+
+@pytest.mark.models
+def test_scanned_notes_gold_answers_survive_ocr(tmp_path):
+    """The set only works with OCR on: every gold passage must come back from it."""
+    from api.routes.learn import PARSE  # noqa: F401  (kept for symmetry with sample_text)
+
+    folder = ROOT / "samples" / "scanned-notes"
+    questions = json.loads((folder / "questions.json").read_text(encoding="utf-8"))
+    cls = registry.get(Stage.PARSE, "docling")
+    ctx = RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path)
+    pdf = folder / "scanned-notes.pdf"
+    doc = cls().apply(
+        {"file": {"path": str(pdf), "sha": "scanned", "filename": pdf.name}},
+        cls.config_model(do_ocr=True),
+        ctx,
+    )
+    text = " ".join(DocView.of(doc).text.split())
+    for item in questions:
+        assert " ".join(item["gold_answer"].split()) in text, item["id"]

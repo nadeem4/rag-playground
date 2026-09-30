@@ -1,0 +1,7 @@
+[
+  {"id": "what-a-scanner-does", "question": "What does a scanner actually do to a page?", "gold_answer": "A scanner does not read a page. It photographs it."},
+  {"id": "text-layer", "question": "What is the text layer of a PDF?", "gold_answer": "A text layer is the part of a PDF that holds real characters."},
+  {"id": "what-ocr-does", "question": "What does an OCR engine do?", "gold_answer": "An OCR engine looks at the picture, guesses which shapes are letters, and writes the guesses back as text."},
+  {"id": "empty-page", "question": "What does an empty page in the parse mean?", "gold_answer": "An empty page in the parse means the file had no text layer for that page."},
+  {"id": "ocr-speed", "question": "Why leave OCR off for documents that already have text?", "gold_answer": "Reading text from an image takes seconds per page, where reading a text layer takes milliseconds."}
+]

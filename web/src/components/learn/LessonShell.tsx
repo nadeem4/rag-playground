@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { Lesson } from "@/state/lessons"
 
-import { DocumentPanel } from "./DocumentPanel"
+import { DocumentPanel, type GivenDocument } from "./DocumentPanel"
 import { LessonEnd } from "./LessonEnd"
 
 /**
@@ -42,12 +42,14 @@ export interface LessonShellProps {
   recap: string[]
   /** Shown under the title, before the first step. */
   intro?: ReactNode
+  /** The document beside the steps, when it is not the primer. */
+  document?: GivenDocument
 }
 
 type Pane = "lesson" | "document"
 const PANES: Pane[] = ["lesson", "document"]
 
-export function LessonShell({ title, slug, sha, steps, step, onStep, recap, intro }: LessonShellProps) {
+export function LessonShell({ title, slug, sha, steps, step, onStep, recap, intro, document }: LessonShellProps) {
   const [pane, setPane] = useState<Pane>("lesson")
 
   const all: LessonStep[] = [
@@ -140,7 +142,7 @@ export function LessonShell({ title, slug, sha, steps, step, onStep, recap, intr
         </section>
 
         <div className="lesson-doc min-w-0">
-          <DocumentPanel sha={sha} highlight={current.sentence ?? null} />
+          <DocumentPanel sha={sha} highlight={current.sentence ?? null} document={document} />
         </div>
       </div>
     </article>

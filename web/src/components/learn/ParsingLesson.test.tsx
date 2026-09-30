@@ -43,6 +43,17 @@ describe("Choosing a parser", () => {
     expect(within(panel()).queryByRole("table")).toBeNull()
   })
 
+  it("shows the case's own document beside each case step, not the primer", () => {
+    render(<ParsingLesson registry={registry} />)
+    const doc = () => screen.getByRole("region", { name: "The document" })
+    expect(within(doc()).getByText(/^Two-column report, 2 pages\./)).toBeTruthy()
+    fireEvent.click(steps()[1])
+    expect(within(doc()).getByText(/^Table of figures, 2 pages\./)).toBeTruthy()
+    expect(within(doc()).queryByRole("tab", { name: "Text" })).toBeNull()
+    fireEvent.click(steps()[3])
+    expect(within(doc()).getByText(/^Two-column report, 2 pages\./)).toBeTruthy()
+  })
+
   it("reveals both parsers' measurements, the excerpts and the verdict after a pick", () => {
     render(<ParsingLesson registry={registry} />)
     pick("Layout")

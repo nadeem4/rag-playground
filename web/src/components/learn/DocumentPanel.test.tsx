@@ -41,6 +41,15 @@ afterEach(() => {
 const panel = () => screen.getByRole("region", { name: "The document" })
 
 describe("The document panel", () => {
+  it("describes a given document instead of the primer: its caption, only its pages, and no request for the primer", async () => {
+    render(<DocumentPanel sha={SHA} document={{ filename: "two-column-report.pdf", pages: 2, caption: "Two-column report, 2 pages. Pick a parser." }} />)
+    expect(within(panel()).getByText("Two-column report, 2 pages. Pick a parser.")).toBeTruthy()
+    expect(within(panel()).queryByRole("tab", { name: "Text" })).toBeNull()
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u) === `/api/sources/${SHA}/pages`)).toBe(true))
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u) === "/api/learn/document")).toBe(false)
+    expect(within(panel()).queryByText(/chunking-primer/)).toBeNull()
+  })
+
   it("names the sample and how long it is, from the server", async () => {
     render(<DocumentPanel sha={SHA} />)
     await waitFor(() => expect(within(panel()).getByText(/chunking-primer\.pdf, 3 pages/)).toBeTruthy())

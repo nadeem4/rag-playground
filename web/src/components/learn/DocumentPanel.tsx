@@ -68,11 +68,25 @@ function ParsedText({ text, sentence }: { text: string; sentence: string | null 
   )
 }
 
-export function DocumentPanel({ sha, highlight = null }: { sha: string | null; highlight?: string | null }) {
-  const [state, setState] = useState<State>({ kind: "loading" })
-  const [view, setView] = useState<View>("pages")
+/**
+ * A lesson about another document than the primer names it here: the panel
+ * then shows its caption and its pages only, and does not ask for the primer.
+ */
+export interface GivenDocument {
+  filename: string
+  pages: number
+  caption: string
+}
+
+export function DocumentPanel({ sha, highlight = null, document }: { sha: string | null; highlight?: string | null; document?: GivenDocument }) {
+  const [fetched, setState] = useState<State>({ kind: "loading" })
+  const [chosen, setView] = useState<View>("pages")
+  const given = document !== undefined
+  const state: State = document ? { kind: "ready", doc: { filename: document.filename, page_count: document.pages, text: "" } } : fetched
+  const view: View = document ? "pages" : chosen
 
   useEffect(() => {
+    if (given) return
     let live = true
     api.learnDocument().then(
       (doc) => live && setState({ kind: "ready", doc }),
@@ -81,7 +95,7 @@ export function DocumentPanel({ sha, highlight = null }: { sha: string | null; h
     return () => {
       live = false
     }
-  }, [])
+  }, [given])
 
   const found = useFind(sha ?? "", sha && highlight ? SENTENCE_PAGE : null, highlight)
   const rects = found.kind === "ready" ? found.data.rects : []
@@ -91,7 +105,7 @@ export function DocumentPanel({ sha, highlight = null }: { sha: string | null; h
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2">
         <span className="text-sm font-semibold">The document</span>
         <span className="text-sm text-fg-muted">
-          {state.kind === "ready" ? caption(state.doc) : state.kind === "loading" ? "Loading the sample document" : "The sample document could not be loaded."}
+          {document ? document.caption : state.kind === "ready" ? caption(state.doc) : state.kind === "loading" ? "Loading the sample document" : "The sample document could not be loaded."}
         </span>
       </div>
       <div className="flex min-w-0 flex-col gap-3 border-t border-hairline p-3">
@@ -106,23 +120,25 @@ export function DocumentPanel({ sha, highlight = null }: { sha: string | null; h
           </p>
         ) : (
           <>
-            <div role="tablist" aria-label="Views of the document" className="flex flex-wrap gap-2">
-              {(["pages", "text"] as View[]).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  role="tab"
-                  aria-selected={view === v}
-                  onClick={() => setView(v)}
-                  className={cn(
-                    "h-control rounded-control border px-2 text-xs",
-                    view === v ? "border-fg bg-fg text-surface" : "border-hairline bg-surface text-fg-muted hover:text-fg",
-                  )}
-                >
-                  {v === "pages" ? "Pages" : "Text"}
-                </button>
-              ))}
-            </div>
+            {document ? null : (
+              <div role="tablist" aria-label="Views of the document" className="flex flex-wrap gap-2">
+                {(["pages", "text"] as View[]).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === v}
+                    onClick={() => setView(v)}
+                    className={cn(
+                      "h-control rounded-control border px-2 text-xs",
+                      view === v ? "border-fg bg-fg text-surface" : "border-hairline bg-surface text-fg-muted hover:text-fg",
+                    )}
+                  >
+                    {v === "pages" ? "Pages" : "Text"}
+                  </button>
+                ))}
+              </div>
+            )}
             <p className="m-0 max-w-[68ch] text-xs text-fg-muted">
               {highlight
                 ? "The sentence this step is about is marked. The steps work on the parsed text, not on the picture of the page."

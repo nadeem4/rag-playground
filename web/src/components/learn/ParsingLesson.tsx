@@ -51,10 +51,22 @@ export function ParsingLesson({ registry }: ParsingLessonProps) {
     { id: "which", title: "When to choose which", body: <Which /> },
   ]
 
-  // The document beside a case step is that case's sample; after the cases, the last one stays.
-  const shown = LAB.cases[Math.min(step, LAB.cases.length - 1)]
+  // The document beside a case step is that case's sample; after the cases, the first one.
+  const shown = LAB.cases[step < LAB.cases.length ? step : 0]
+  const document = { filename: shown.filename, pages: shown.pages, caption: `${shown.title}, ${shown.pages} pages. Pick a parser, then see what each one read.` }
 
-  return <LessonShell title="Choosing a parser" slug="parsing" sha={shown?.sha ?? null} steps={steps} step={step} onStep={setStep} recap={RECAP} />
+  return (
+    <LessonShell
+      title="Choosing a parser"
+      slug="parsing"
+      sha={shown.sha}
+      document={document}
+      steps={steps}
+      step={step}
+      onStep={setStep}
+      recap={RECAP}
+    />
+  )
 }
 
 function Case({ c, registry, pick, onPick }: { c: LabCase; registry: Registry; pick: ParserId | null; onPick: (p: ParserId) => void }) {

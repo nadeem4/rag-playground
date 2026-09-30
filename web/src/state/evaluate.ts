@@ -196,6 +196,8 @@ export function percent(x: number | null): string | null {
 
 /** The finished evaluation the next one is compared against. */
 export interface PreviousEvaluation {
+  /** The document it was scored against (F5), so a later document never borrows its numbers. */
+  sourceSha: string
   byId: Record<string, EvalPayload>
   summary: EvalSummary
 }
@@ -207,14 +209,23 @@ const PREVIOUS_KEY = "rag-playground:evaluation:previous"
  * because changing a setting means going to Build and coming back, which is a
  * fresh page. Session storage is per tab and goes when the tab closes, so
  * nothing survives between sessions.
+ *
+ * `sourceSha` is the document on screen now. A stored result for a different
+ * document (score the primer, load Scanned notes) is not a "previous run" of
+ * this one, so it is treated as if there were none (F5).
  */
-export function readPreviousEvaluation(): PreviousEvaluation | null {
+export function readPreviousEvaluation(sourceSha: string): PreviousEvaluation | null {
   try {
     const raw = window.sessionStorage.getItem(PREVIOUS_KEY)
     if (!raw) return null
     const p = JSON.parse(raw) as PreviousEvaluation
-    const ok = typeof p?.byId === "object" && p.byId !== null && !Array.isArray(p.byId) && typeof p?.summary?.total === "number"
-    return ok ? p : null
+    const ok =
+      typeof p?.sourceSha === "string" &&
+      typeof p?.byId === "object" &&
+      p.byId !== null &&
+      !Array.isArray(p.byId) &&
+      typeof p?.summary?.total === "number"
+    return ok && p.sourceSha === sourceSha ? p : null
   } catch {
     // Blocked storage, or something else wrote the key: compare nothing.
     return null

@@ -241,23 +241,34 @@ describe("the change since the previous evaluation", () => {
 })
 
 describe("the previous evaluation of the session", () => {
+  const SHA = "cd".repeat(32)
+  const OTHER_SHA = "ab".repeat(32)
+
   beforeEach(() => window.sessionStorage.clear())
 
   it("is nothing before the first run", () => {
-    expect(readPreviousEvaluation()).toBeNull()
+    expect(readPreviousEvaluation(SHA)).toBeNull()
   })
 
-  it("comes back as it went in, so a trip to Build and back keeps it", () => {
-    const before = { byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+  it("comes back as it went in, so a trip to Build and back keeps it, for the same document", () => {
+    const before = { sourceSha: SHA, byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
     storePreviousEvaluation(before)
-    expect(readPreviousEvaluation()).toEqual(before)
+    expect(readPreviousEvaluation(SHA)).toEqual(before)
+  })
+
+  it("is ignored when it was recorded against a different document (F5)", () => {
+    // Score the primer, load Scanned notes, evaluate: the primer's "10 of 10"
+    // must not be compared against Scanned notes' own run.
+    const before = { sourceSha: SHA, byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+    storePreviousEvaluation(before)
+    expect(readPreviousEvaluation(OTHER_SHA)).toBeNull()
   })
 
   it("is nothing when the stored value is not an evaluation", () => {
     window.sessionStorage.setItem("rag-playground:evaluation:previous", "{oops")
-    expect(readPreviousEvaluation()).toBeNull()
+    expect(readPreviousEvaluation(SHA)).toBeNull()
     window.sessionStorage.setItem("rag-playground:evaluation:previous", JSON.stringify({ byId: 7 }))
-    expect(readPreviousEvaluation()).toBeNull()
+    expect(readPreviousEvaluation(SHA)).toBeNull()
   })
 })
 

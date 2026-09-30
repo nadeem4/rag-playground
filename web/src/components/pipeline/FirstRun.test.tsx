@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { resetAppSettingsForTests } from "@/api/useDemo"
+
 import { FirstRun } from "./FirstRun"
 import { SourcePicker } from "./SourcePicker"
 
@@ -38,6 +40,7 @@ let appCalls = 0
 let posted: (string | null)[] = []
 
 beforeEach(() => {
+  resetAppSettingsForTests()
   demo = false
   appCalls = 0
   posted = []
@@ -223,6 +226,14 @@ describe("FirstRun", () => {
     expect(await screen.findAllByRole("listitem")).toHaveLength(2)
     // The embedded picker does not repeat its own short reassurance sentence.
     expect(screen.queryByText("Your file is private to this browser, is not shared with anyone, and is deleted after a day.")).toBeNull()
+  })
+
+  it("in demo mode, the limits are not repeated under its Upload button", async () => {
+    demo = true
+    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    await screen.findByTestId("demo-note")
+    await waitFor(() => expect(uploadButton()).not.toBeNull())
+    expect(screen.queryByTestId("upload-limits")).toBeNull()
   })
 
   it("in demo mode without limits, the note still says a day, 10 MB and 20 pages", async () => {

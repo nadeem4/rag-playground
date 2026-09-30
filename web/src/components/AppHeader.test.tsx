@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { resetAppSettingsForTests } from "@/api/useDemo"
 import { ApiKeyProvider } from "@/api/apiKey"
 import { canonicalPath, pageFor } from "@/App"
 import { Home } from "@/routes/Home"
@@ -12,6 +13,7 @@ import { Specimen } from "@/routes/Specimen"
 import { AppHeader } from "./AppHeader"
 
 beforeEach(() => {
+  resetAppSettingsForTests()
   window.localStorage.clear()
   vi.stubGlobal(
     "fetch",

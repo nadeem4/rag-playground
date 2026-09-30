@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { resetAppSettingsForTests } from "@/api/useDemo"
+
 import { SourcePicker } from "./SourcePicker"
 
 const SAMPLE = { sha: "cd".repeat(32), filename: "report.pdf", size: 100, content_type: "application/pdf" }
@@ -10,6 +12,7 @@ let settings: unknown = { demo: false }
 let posts = 0
 
 beforeEach(() => {
+  resetAppSettingsForTests()
   settings = { demo: false }
   posts = 0
   vi.stubGlobal(

@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { resetAppSettingsForTests } from "@/api/useDemo"
 import { numberWord, RUN } from "@/learn/e2e"
 import { markDone, resetProgressForTests } from "@/state/lessons"
 
@@ -9,6 +10,7 @@ import { Home } from "./Home"
 let app: unknown = { demo: false }
 
 beforeEach(() => {
+  resetAppSettingsForTests()
   window.localStorage.clear()
   resetProgressForTests()
   app = { demo: false }

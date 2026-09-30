@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { resetAppSettingsForTests } from "@/api/useDemo"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { GoldQuestion, QuestionSetUpload, Registry, SampleQuestion } from "@/api/types"
 import type { EvalSummary } from "@/state/evaluate"
@@ -163,6 +164,7 @@ function chooseFile(input: HTMLElement, name: string) {
 }
 
 beforeEach(() => {
+  resetAppSettingsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
   resetPipelinesForTests()

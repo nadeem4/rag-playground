@@ -32,6 +32,7 @@ export function SourcePicker({
   errors,
   samples: showSamples = true,
   reassure = true,
+  limits: showLimits = true,
 }: {
   value: SourceConfig
   onChange: (v: SourceConfig) => void
@@ -41,6 +42,9 @@ export function SourcePicker({
   /** Show the "your files never leave/are not shared" sentence under the file select. False on the first-run
    * card (`FirstRun`), which already says this itself, above the embedded picker. */
   reassure?: boolean
+  /** Show the "PDF only, up to ..." line under Upload. False on the first-run card (`FirstRun`), whose
+   * demo note already states the limits. */
+  limits?: boolean
 }) {
   const id = useId()
   const settings = useAppSettings()
@@ -221,9 +225,11 @@ export function SourcePicker({
           </span>
         ) : null}
       </div>
-      <p className="text-xs text-fg-muted" data-testid="upload-limits">
-        {limits ? `PDF only, up to ${mb} MB and ${limits.max_pages} pages.` : "PDF only."}
-      </p>
+      {showLimits ? (
+        <p className="text-xs text-fg-muted" data-testid="upload-limits">
+          {limits ? `PDF only, up to ${mb} MB and ${limits.max_pages} pages.` : "PDF only."}
+        </p>
+      ) : null}
       {upload?.error ? (
         <p role="alert" className="text-xs text-danger">
           Upload of {upload.name} failed: {upload.error}

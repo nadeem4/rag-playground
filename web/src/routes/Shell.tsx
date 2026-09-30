@@ -304,12 +304,14 @@ function Build({ registry }: { registry: Registry }) {
             This pipeline was built on {sourceName}. Load a sample, or upload that file, to run it.
           </p>
         ) : null}
-        {blocker && !firstRun ? (
+        {/* A source blocker is the no-file case, which the first-visit card covers. Right after a
+            sample loads, the Upload card's old explanation can linger for a moment; no red flash. */}
+        {blocker && !firstRun && blocker.stage !== "source" ? (
           <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
             {blockedTitle(blocker)}
           </p>
         ) : null}
-        {keyNotice ? (
+        {keyNotice && !busy && !run.error && !failedNode ? (
           // A div, not a p: KeyHint is itself a p, and a p cannot hold one.
           <div role="status" data-testid="key-notice" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
             <p>{keyNotice}</p>

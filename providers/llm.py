@@ -67,11 +67,11 @@ class Completion:
 
 NO_KEY: dict[str, str] = {
     "anthropic": (
-        "No Anthropic API key. Add one with the API key button at the top right, "
+        "No Anthropic API key. Add one with the key button at the top right, "
         "or set ANTHROPIC_API_KEY on the server."
     ),
     "openai": (
-        "No OpenAI API key. Add one with the API key button at the top right, "
+        "No OpenAI API key. Add one with the key button at the top right, "
         "or set OPENAI_API_KEY on the server."
     ),
 }

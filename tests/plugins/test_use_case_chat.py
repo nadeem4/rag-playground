@@ -371,7 +371,7 @@ def test_missing_key_is_a_readable_error(fake, pipeline, extras):
     with pytest.raises(ValueError) as info:
         run(pipeline, context=context)
     assert str(info.value) == (
-        "No Anthropic API key. Add one with the API key button at the top right, "
+        "No Anthropic API key. Add one with the key button at the top right, "
         "or set ANTHROPIC_API_KEY on the server."
     )
     assert fake.client is None
@@ -461,5 +461,6 @@ def test_live_api_round_trip(pipeline):
 def test_key_help_points_to_the_button_and_the_server_not_to_dotenv() -> None:
     for provider, words in chat_module._KEY_WORDS.items():
         assert ".env" not in words, provider
-        assert "API key button at the top right" in words, provider
+        assert "the key button at the top right" in words, provider
+        assert "API key button" not in words, provider
         assert "on the server" in words, provider

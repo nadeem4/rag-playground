@@ -114,9 +114,29 @@ describe("Build page", () => {
 describe("Run all with a chat card and no API key", () => {
   const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none" }
   let settings: Record<string, string>
+  let streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[]
+
+  class OpenEventSource {
+    onmessage = null
+    onerror = null
+    onopen = null
+    constructor() {
+      streams.push(this)
+    }
+    close() {}
+  }
+
+  /** Ends the run over its event stream, as the server does when it finishes. */
+  async function endRun() {
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    const data = JSON.stringify({ event: "stream_end", status: "finished", ok: true })
+    act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data, lastEventId: "1" })))
+  }
 
   beforeEach(() => {
     settings = NO_SERVER_KEYS
+    streams = []
+    vi.stubGlobal("EventSource", OpenEventSource)
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
@@ -165,9 +185,20 @@ describe("Run all with a chat card and no API key", () => {
   it("keyless Run all stops before Chat", async () => {
     const body = await runAll()
     expect(body.targets).toEqual([chatUpstream()])
+    await endRun()
     const notice = await screen.findByTestId("key-notice")
     expect(notice.textContent!.startsWith("Search results are ready. Add a key to get a written answer.")).toBe(true)
     expect(within(notice).getByTestId("key-hint")).toBeTruthy()
+  })
+
+  it("the key notice waits until the keyless run has finished", async () => {
+    await runAll()
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    await act(async () => {})
+    expect(screen.getByRole("button", { name: "Running" })).toBeTruthy()
+    expect(screen.queryByTestId("key-notice")).toBeNull()
+    await endRun()
+    expect(await screen.findByTestId("key-notice")).toBeTruthy()
   })
 
   it("a UI key runs all the way", async () => {
@@ -445,6 +476,7 @@ describe("saved pipelines on Build", () => {
     window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("From a friend", graph)}`)
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
+    await waitFor(() => expect(readPipelines()).toHaveLength(1))
     expect(readPipelines()[0].name).toBe("From a friend")
     expect(picker().selectedOptions[0].textContent).toBe("From a friend")
     expect(chunkTransform()).toBe("token_based")
@@ -499,6 +531,7 @@ describe("saved pipelines on Build", () => {
     window.history.replaceState(null, "", `/build?pipeline=${encodePipeline(`  ${"x".repeat(70)}  `, withFile())}`)
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
+    await waitFor(() => expect(readPipelines()).toHaveLength(1))
     expect(readPipelines()[0].name).toBe("x".repeat(60))
     expect(picker().selectedOptions[0].textContent).toBe("x".repeat(60))
   })

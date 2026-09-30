@@ -1,16 +1,39 @@
 import { useEffect, useId, useState } from "react"
 
+import type { Registry } from "@/api/types"
 import type { PipelineGraph } from "@/state/graph"
 import { CONTROL } from "@/components/fields/types"
 import { Button } from "@/components/ui/button"
-import { deletePipeline, encodePipeline, renamePipeline, sameGraph, savePipeline, setCurrentId, updatePipeline, usePipelines } from "@/state/pipelines"
+import {
+  deletePipeline,
+  droppedText,
+  encodePipeline,
+  renamePipeline,
+  sameGraph,
+  savePipeline,
+  setCurrentId,
+  updatePipeline,
+  usableGraph,
+  usePipelines,
+} from "@/state/pipelines"
 
 /**
  * Saved pipelines: the select picks one into the working copy, and the buttons
  * save the working copy back. "Working copy" is whatever is on screen; picking
- * it never changes the graph, only the selection.
+ * it never changes the graph, only the selection. A saved pipeline this
+ * server cannot run is listed, disabled, and never loaded (M7).
  */
-export function PipelineBar({ graph, onLoad, notice }: { graph: PipelineGraph; onLoad: (g: PipelineGraph) => void; notice?: string | null }) {
+export function PipelineBar({
+  graph,
+  registry,
+  onLoad,
+  notice,
+}: {
+  graph: PipelineGraph
+  registry: Registry
+  onLoad: (g: PipelineGraph) => void
+  notice?: string | null
+}) {
   const id = useId()
   const { pipelines, currentId } = usePipelines()
   const current = pipelines.find((p) => p.id === currentId) ?? null
@@ -21,6 +44,14 @@ export function PipelineBar({ graph, onLoad, notice }: { graph: PipelineGraph; o
   const [flash, setFlash] = useState<string | null>(null)
   const [linkText, setLinkText] = useState<string | null>(null)
 
+  // A half-typed name or a share link belongs to the pipeline it was for (M5).
+  useEffect(() => {
+    setNaming(null)
+    setName("")
+    setNameError(null)
+    setLinkText(null)
+  }, [currentId])
+
   useEffect(() => {
     if (!flash) return
     const t = window.setTimeout(() => setFlash(null), 3000)
@@ -28,11 +59,13 @@ export function PipelineBar({ graph, onLoad, notice }: { graph: PipelineGraph; o
   }, [flash])
 
   function commitName() {
-    const ok = naming === "rename" && current ? renamePipeline(current.id, name) : savePipeline(name, graph) !== null
+    const saved = naming === "rename" && current ? null : savePipeline(name, graph)
+    const ok = naming === "rename" && current ? renamePipeline(current.id, name) : saved !== null
     if (!ok) {
       setNameError(name.trim() ? "The pipeline could not be saved in this browser." : "Give the pipeline a name.")
       return
     }
+    if (saved?.dropped) setFlash(droppedText(saved.dropped))
     setNaming(null)
     setName("")
     setNameError(null)
@@ -59,23 +92,34 @@ export function PipelineBar({ graph, onLoad, notice }: { graph: PipelineGraph; o
           value={currentId ?? ""}
           onChange={(e) => {
             const picked = pipelines.find((p) => p.id === e.target.value) ?? null
+            const loaded = picked ? usableGraph(picked, registry) : null
+            if (picked && !loaded) return
             setCurrentId(picked?.id ?? null)
-            if (picked) onLoad(structuredClone(picked.graph))
+            if (loaded) onLoad(loaded)
           }}
         >
           <option value="">Working copy</option>
-          {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {pipelines.map((p) => {
+            const usable = usableGraph(p, registry) !== null
+            return (
+              <option key={p.id} value={p.id} disabled={!usable}>
+                {usable ? p.name : `${p.name} (not usable here)`}
+              </option>
+            )
+          })}
         </select>
         {edited ? <span className="meta">edited</span> : null}
         {current ? (
-          <Button size="sm" variant="outline" disabled={!edited} onClick={() => { if (updatePipeline(current.id, graph)) setFlash("Saved") }}>Save changes</Button>
+          <Button size="sm" variant="outline" disabled={!edited} onClick={() => setFlash(updatePipeline(current.id, graph) ? "Saved" : "The pipeline could not be saved in this browser.")}>Save changes</Button>
         ) : null}
         <Button size="sm" variant="outline" onClick={() => { setNaming("save"); setName(""); setNameError(null) }}>Save as</Button>
         {current ? (
           <>
             <Button size="sm" variant="ghost" onClick={() => { setNaming("rename"); setName(current.name); setNameError(null) }}>Rename</Button>
             <Button size="sm" variant="ghost" onClick={() => deletePipeline(current.id)}>Delete</Button>
-            <Button size="sm" variant="ghost" onClick={() => void copyLink()}>Copy link</Button>
+            <Button size="sm" variant="ghost" disabled={edited} title={edited ? "Save changes first" : undefined} onClick={() => void copyLink()}>
+              Copy link
+            </Button>
           </>
         ) : null}
         {flash ? <span role="status" className="text-xs text-fg-muted">{flash}</span> : null}

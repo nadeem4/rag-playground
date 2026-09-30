@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
@@ -47,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 const card = (id: string) => document.querySelector(`[data-node-id="${id}"]`) as HTMLElement
@@ -290,7 +291,7 @@ describe("saved pipelines on Build", () => {
   })
 
   it("switching pipelines loads the saved graph, editing shows edited, and Save changes writes it back", async () => {
-    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!
+    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!.saved
     setCurrentId(null)
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
@@ -307,7 +308,7 @@ describe("saved pipelines on Build", () => {
   })
 
   it("Delete returns to the working copy and keeps the graph on screen", async () => {
-    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!
+    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!.saved
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
     expect(picker().value).toBe(saved.id)
@@ -318,7 +319,7 @@ describe("saved pipelines on Build", () => {
   })
 
   it("Rename changes the name in place", async () => {
-    const saved = savePipeline("Old", initialGraph(TEST_REGISTRY))!
+    const saved = savePipeline("Old", initialGraph(TEST_REGISTRY))!.saved
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
     fireEvent.click(within(bar()).getByRole("button", { name: "Rename" }))
@@ -329,7 +330,7 @@ describe("saved pipelines on Build", () => {
   })
 
   it("Copy link puts the share URL on the clipboard and says so", async () => {
-    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!
+    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!.saved
     const writeText = vi.fn(async (_url: string) => {})
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } })
     setup()
@@ -369,5 +370,142 @@ describe("saved pipelines on Build", () => {
     storeGraph(foreign)
     setup()
     expect(await screen.findByText("This pipeline was built on report.pdf. Load a sample, or upload that file, to run it.")).toBeTruthy()
+  })
+  const blockWrites = () =>
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked")
+    })
+  const fill = (n: number) => {
+    for (let i = 1; i <= n; i++) savePipeline(`P${i}`, initialGraph(TEST_REGISTRY))
+  }
+  const DROPPED = "Saved. P1, the oldest pipeline, was removed to keep 20."
+
+  it("Save as says which pipeline was dropped to keep twenty (I3)", async () => {
+    fill(20)
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save as" }))
+    fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "One more" } })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
+    expect(within(bar()).getByText(DROPPED)).toBeTruthy()
+  })
+
+  it("a share link says which pipeline was dropped to keep twenty (I3)", async () => {
+    fill(20)
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("From a friend", initialGraph(TEST_REGISTRY))}`)
+    setup()
+    expect(await within(await screen.findByRole("group", { name: "Saved pipelines" })).findByText(DROPPED)).toBeTruthy()
+  })
+
+  it("a share link with an overlong name is saved under the first 60 characters (M2)", async () => {
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline(`  ${"x".repeat(70)}  `, initialGraph(TEST_REGISTRY))}`)
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect(readPipelines()[0].name).toBe("x".repeat(60))
+    expect(picker().selectedOptions[0].textContent).toBe("x".repeat(60))
+  })
+
+  it("a share link that cannot be saved loads as the working copy, never over the current pipeline (M2)", async () => {
+    savePipeline("Mine", initialGraph(TEST_REGISTRY))
+    const graph = setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY)
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("From a friend", graph)}`)
+    blockWrites()
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect(within(bar()).getByText("The shared pipeline could not be saved in this browser. It is loaded as the working copy.")).toBeTruthy()
+    expect(picker().value).toBe("")
+    expect(chunkTransform()).toBe("token_based")
+  })
+
+  it("says so when storage refuses Save as or Save changes (M3)", async () => {
+    savePipeline("Mine", initialGraph(TEST_REGISTRY))
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    blockWrites()
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save as" }))
+    fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "Another" } })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
+    expect(within(bar()).getByText("The pipeline could not be saved in this browser.")).toBeTruthy()
+    fireEvent.click(within(bar()).getByRole("button", { name: "Cancel" }))
+    fireEvent.change(within(card("chunk")).getByRole("combobox", { name: "Transform" }), { target: { value: "token_based" } })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save changes" }))
+    expect(within(bar()).getByText("The pipeline could not be saved in this browser.")).toBeTruthy()
+  })
+
+  it("Copy link waits for Save changes while the pipeline is edited (M6)", async () => {
+    savePipeline("Mine", initialGraph(TEST_REGISTRY))
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect((within(bar()).getByRole("button", { name: "Copy link" }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.change(within(card("chunk")).getByRole("combobox", { name: "Transform" }), { target: { value: "token_based" } })
+    const copy = within(bar()).getByRole("button", { name: "Copy link" }) as HTMLButtonElement
+    expect(copy.disabled).toBe(true)
+    expect(copy.title).toBe("Save changes first")
+  })
+
+  it("switching pipelines closes an open name box (M5)", async () => {
+    const a = savePipeline("A", initialGraph(TEST_REGISTRY))!.saved
+    savePipeline("B", initialGraph(TEST_REGISTRY))
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Rename" }))
+    expect(within(bar()).getByRole("textbox", { name: "Pipeline name" })).toBeTruthy()
+    fireEvent.change(picker(), { target: { value: a.id } })
+    expect(within(bar()).queryByRole("textbox", { name: "Pipeline name" })).toBeNull()
+  })
+
+  it("lists a saved pipeline this server cannot run as not usable, and it cannot be chosen (M7)", async () => {
+    const graph = initialGraph(TEST_REGISTRY)
+    const foreign = { ...graph, nodes: graph.nodes.map((n) => (n.stage === "chunk" ? { ...n, transform: "semantic" } : n)) }
+    savePipeline("Semantic", foreign)
+    setCurrentId(null)
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    const option = [...picker().options].find((o) => o.textContent === "Semantic (not usable here)")
+    expect(option).toBeTruthy()
+    expect(option!.disabled).toBe(true)
+  })
+
+  describe("the missing document notice while samples load (M1)", () => {
+    let settle: { resolve: (r: Response) => void; reject: (e: Error) => void }
+    const SAMPLE_SHA = "cd".repeat(32)
+
+    beforeEach(() => {
+      const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((url: string, init?: RequestInit) =>
+          url === "/api/samples" ? new Promise<Response>((resolve, reject) => (settle = { resolve, reject })) : base(url, init),
+        ),
+      )
+    })
+
+    const stored = (sha: string) => {
+      const graph = initialGraph(TEST_REGISTRY)
+      const src = graph.nodes.find((n) => n.stage === "source")!
+      storeGraph(setConfig(graph, src.id, { sha, filename: "chunking-primer.pdf" }))
+    }
+    const notice = () => screen.queryByTestId("missing-document")
+    const sample = { name: "chunking-primer", sha: SAMPLE_SHA, filename: "chunking-primer.pdf" }
+
+    it("shows nothing until samples answer, and nothing for a sample once they do", async () => {
+      stored(SAMPLE_SHA)
+      setup()
+      await screen.findByRole("group", { name: "Saved pipelines" })
+      await act(async () => {})
+      expect(notice()).toBeNull()
+      await act(async () => settle.resolve(new Response(JSON.stringify([sample]), { status: 200 })))
+      expect(notice()).toBeNull()
+    })
+
+    it("shows the notice for an unknown document once samples fail", async () => {
+      stored("ef".repeat(32))
+      setup()
+      await screen.findByRole("group", { name: "Saved pipelines" })
+      await act(async () => {})
+      expect(notice()).toBeNull()
+      await act(async () => settle.reject(new Error("down")))
+      await waitFor(() => expect(notice()).toBeTruthy())
+    })
   })
 })

@@ -37,7 +37,7 @@ import {
   type PipelineGraph,
 } from "@/state/graph"
 import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
-import { decodePipeline, readCurrentId, readPipelines, sameGraph, savePipeline, setCurrentId } from "@/state/pipelines"
+import { decodePipeline, droppedText, readCurrentId, readPipelines, sameGraph, savePipeline, setCurrentId, usableGraph } from "@/state/pipelines"
 
 /**
  * Build: the pipeline column on the left, the selected card's output on the
@@ -78,7 +78,7 @@ function Build({ registry }: { registry: Registry }) {
   const [graph, setGraph] = useState<PipelineGraph>(() => {
     const currentId = readCurrentId()
     const current = currentId ? readPipelines().find((p) => p.id === currentId) : undefined
-    return readStoredGraph(registry) ?? (current ? structuredClone(current.graph) : undefined) ?? initialGraph(registry)
+    return readStoredGraph(registry) ?? (current ? usableGraph(current, registry) : null) ?? initialGraph(registry)
   })
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -131,9 +131,20 @@ function Build({ registry }: { registry: Registry }) {
     if (!decoded) {
       setBarNotice("This pipeline link could not be read.")
     } else {
-      const existing = readPipelines().find((p) => p.name === decoded.name && sameGraph(p.graph, decoded.graph))
-      const saved = existing ?? savePipeline(decoded.name, decoded.graph)
-      if (saved) setCurrentId(saved.id)
+      // A link can carry any name; clamp it to what Save as accepts (M2).
+      const name = decoded.name.trim().slice(0, 60).trim() || "Shared pipeline"
+      const existing = readPipelines().find((p) => p.name === name && sameGraph(p.graph, decoded.graph))
+      if (existing) {
+        setCurrentId(existing.id)
+      } else {
+        const result = savePipeline(name, decoded.graph)
+        if (result?.dropped) setBarNotice(droppedText(result.dropped))
+        if (!result) {
+          // Keeping the old selection would let "Save changes" overwrite it with this graph.
+          setCurrentId(null)
+          setBarNotice("The shared pipeline could not be saved in this browser. It is loaded as the working copy.")
+        }
+      }
       edit(decoded.graph)
     }
     params.delete("pipeline")
@@ -193,12 +204,16 @@ function Build({ registry }: { registry: Registry }) {
   const firstRun = uploaded?.length === 0 && sourceNode !== undefined && !sourceNode.config.sha
 
   // The working copy's document may not exist in this browser (opened from a
-  // share link, or a different machine): null until both sources and samples
-  // have answered (a failed samples fetch counts as answered).
-  const { samples } = useSamples()
+  // share link, or a different machine): null, so no notice, until sources
+  // have answered and samples have answered or failed (M1). A failed samples
+  // fetch counts as answered, with no samples.
+  const { samples, error: samplesError } = useSamples()
   const sourceSha = String(sourceNode?.config.sha ?? "")
   const sourceName = String(sourceNode?.config.filename ?? "")
-  const known = uploaded === null ? null : uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
+  const known =
+    uploaded === null || (samples === null && !samplesError)
+      ? null
+      : uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
   const missing = Boolean(sourceSha) && known === false
   const intro = firstRun
     ? { title: "Nothing to show yet", body: "Load a PDF, or try the sample document. Then press Run all, and select any step to see what it did." }
@@ -239,7 +254,17 @@ function Build({ registry }: { registry: Registry }) {
             </Button>
           </div>
         </div>
-        <PipelineBar graph={graph} onLoad={(g) => edit(g)} notice={barNotice} />
+        <PipelineBar
+          graph={graph}
+          registry={registry}
+          onLoad={(g) => {
+            // Errors from the last run belong to the graph being replaced (M4).
+            setErrors({})
+            setColumnError(null)
+            edit(g)
+          }}
+          notice={barNotice}
+        />
         {missing ? (
           <p role="status" data-testid="missing-document" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
             This pipeline was built on {sourceName}. Load a sample, or upload that file, to run it.

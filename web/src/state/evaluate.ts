@@ -218,28 +218,51 @@ const PREVIOUS_KEY = "rag-playground:evaluation:previous"
  * notes) or a different pipeline is not a "previous run" of this one, so it
  * is treated as if there were none (F5).
  */
-export function readPreviousEvaluation(sourceSha: string, pipelineKey: string): PreviousEvaluation | null {
+const MAX_PREVIOUS = 40
+
+const isPrevious = (p: unknown): p is PreviousEvaluation => {
+  const e = p as PreviousEvaluation | null
+  return (
+    typeof e?.sourceSha === "string" &&
+    typeof e?.pipelineKey === "string" &&
+    typeof e?.byId === "object" &&
+    e.byId !== null &&
+    !Array.isArray(e.byId) &&
+    typeof e?.summary?.total === "number"
+  )
+}
+
+/**
+ * Every stored score, keyed by `${sourceSha}|${pipelineKey}` (I2), so scoring
+ * A, then B, then A again still compares A against A. Anything that is not an
+ * entry of that shape is dropped, which is how the old single-slot value (one
+ * evaluation, not a map) reads as none.
+ */
+function readPreviousMap(): Record<string, PreviousEvaluation> {
   try {
     const raw = window.sessionStorage.getItem(PREVIOUS_KEY)
-    if (!raw) return null
-    const p = JSON.parse(raw) as PreviousEvaluation
-    const ok =
-      typeof p?.sourceSha === "string" &&
-      typeof p?.pipelineKey === "string" &&
-      typeof p?.byId === "object" &&
-      p.byId !== null &&
-      !Array.isArray(p.byId) &&
-      typeof p?.summary?.total === "number"
-    return ok && p.sourceSha === sourceSha && p.pipelineKey === pipelineKey ? p : null
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {}
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([k, v]) => isPrevious(v) && k === `${v.sourceSha}|${v.pipelineKey}`),
+    )
   } catch {
     // Blocked storage, or something else wrote the key: compare nothing.
-    return null
+    return {}
   }
 }
 
+export function readPreviousEvaluation(sourceSha: string, pipelineKey: string): PreviousEvaluation | null {
+  return readPreviousMap()[`${sourceSha}|${pipelineKey}`] ?? null
+}
+
+/** Writes this score and keeps the others, up to 40; the oldest written goes first. */
 export function storePreviousEvaluation(p: PreviousEvaluation): void {
+  const key = `${p.sourceSha}|${p.pipelineKey}`
+  const rest = Object.entries(readPreviousMap()).filter(([k]) => k !== key)
+  const next = Object.fromEntries([...rest, [key, p] as const].slice(-MAX_PREVIOUS))
   try {
-    window.sessionStorage.setItem(PREVIOUS_KEY, JSON.stringify(p))
+    window.sessionStorage.setItem(PREVIOUS_KEY, JSON.stringify(next))
   } catch {
     // Private window or blocked storage: the page still works, it just forgets.
   }

@@ -29,8 +29,8 @@ const g = () => initialGraph(R)
 
 describe("saved pipelines", () => {
   it("saves under a trimmed name, newest first, and makes it current", () => {
-    const a = savePipeline("  First  ", g())!
-    const b = savePipeline("Second", setTransform(g(), "chunk", "token_based", R))!
+    const a = savePipeline("  First  ", g())!.saved
+    const b = savePipeline("Second", setTransform(g(), "chunk", "token_based", R))!.saved
     expect(readPipelines().map((p) => p.name)).toEqual(["Second", "First"])
     expect(a.name).toBe("First")
     expect(a.id).toMatch(/^[A-Za-z0-9_-]{8}$/)
@@ -44,8 +44,9 @@ describe("saved pipelines", () => {
     expect(readPipelines()).toEqual([])
   })
 
-  it("keeps at most the newest twenty", () => {
-    for (let i = 1; i <= MAX_PIPELINES + 1; i++) savePipeline(`P${i}`, g())
+  it("keeps at most the newest twenty, and says which one it dropped", () => {
+    for (let i = 1; i <= MAX_PIPELINES; i++) expect(savePipeline(`P${i}`, g())!.dropped).toBeNull()
+    expect(savePipeline(`P${MAX_PIPELINES + 1}`, g())!.dropped?.name).toBe("P1")
     const names = readPipelines().map((p) => p.name)
     expect(names).toHaveLength(MAX_PIPELINES)
     expect(names[0]).toBe(`P${MAX_PIPELINES + 1}`)
@@ -53,7 +54,7 @@ describe("saved pipelines", () => {
   })
 
   it("updates, renames and deletes by id, and deleting the current one clears the selection", () => {
-    const p = savePipeline("Mine", g())!
+    const p = savePipeline("Mine", g())!.saved
     expect(updatePipeline(p.id, setTransform(g(), "chunk", "markdown_header", R))).toBe(true)
     expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("markdown_header")
     expect(renamePipeline(p.id, "Renamed")).toBe(true)
@@ -95,6 +96,30 @@ describe("saved pipelines", () => {
     expect(result.current.currentId).toBe(result.current.pipelines[0].id)
     act(() => setCurrentId(null))
     expect(result.current.currentId).toBeNull()
+  })
+
+  it("follows another tab's writes, and a save here keeps the other tab's entry (I4)", () => {
+    const { result } = renderHook(() => usePipelines())
+    act(() => { savePipeline("Here", g()) })
+    // Another tab saves a pipeline: it writes storage and the browser fires a storage event here.
+    const theirs = { id: "other123", name: "Theirs", graph: g(), savedAt: "2026-09-30T00:00:00Z" }
+    const key = "rag-playground:pipelines:v1"
+    const value = JSON.stringify([theirs, ...readPipelines()])
+    window.localStorage.setItem(key, value)
+    act(() => { window.dispatchEvent(new StorageEvent("storage", { key, newValue: value })) })
+    expect(result.current.pipelines.map((p) => p.name)).toEqual(["Theirs", "Here"])
+    act(() => { savePipeline("Mine too", g()) })
+    expect(result.current.pipelines.map((p) => p.name)).toEqual(["Mine too", "Theirs", "Here"])
+  })
+
+  it("re-reads storage before writing, so a stale list here never overwrites another tab", () => {
+    savePipeline("Here", g())
+    const key = "rag-playground:pipelines:v1"
+    const theirs = { id: "other123", name: "Theirs", graph: g(), savedAt: "2026-09-30T00:00:00Z" }
+    // No storage event: the in-memory list is stale when this tab saves.
+    window.localStorage.setItem(key, JSON.stringify([theirs, ...readPipelines()]))
+    savePipeline("Mine too", g())
+    expect(JSON.parse(window.localStorage.getItem(key)!).map((p: { name: string }) => p.name)).toEqual(["Mine too", "Theirs", "Here"])
   })
 })
 

@@ -61,6 +61,16 @@ export function readPipelines(): SavedPipeline[] {
   return cache
 }
 
+/**
+ * The list as storage holds it now, not as this tab last saw it. Another tab
+ * may have saved since (I4), so every change starts from this and never from
+ * the cached list.
+ */
+function freshPipelines(): SavedPipeline[] {
+  cache = null
+  return readPipelines()
+}
+
 function persist(next: SavedPipeline[]): boolean {
   const ok = write(LIST_KEY, JSON.stringify(next))
   if (ok) {
@@ -81,17 +91,32 @@ function newId(): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").slice(0, 8)
 }
 
-export function savePipeline(name: string, graph: PipelineGraph): SavedPipeline | null {
+/** The new pipeline, and the oldest one if keeping twenty meant dropping it (I3), so the page can say so. */
+export function savePipeline(name: string, graph: PipelineGraph): { saved: SavedPipeline; dropped: SavedPipeline | null } | null {
   const clean = cleanName(name)
   if (!clean) return null
   const p: SavedPipeline = { id: newId(), name: clean, graph: structuredClone(graph), savedAt: new Date().toISOString() }
-  if (!persist([p, ...readPipelines()].slice(0, MAX_PIPELINES))) return null
+  const next = [p, ...freshPipelines()]
+  if (!persist(next.slice(0, MAX_PIPELINES))) return null
   setCurrentId(p.id)
-  return p
+  return { saved: p, dropped: next[MAX_PIPELINES] ?? null }
+}
+
+/** The line that says a save pushed the oldest pipeline out (I3). */
+export const droppedText = (dropped: SavedPipeline) =>
+  `Saved. ${dropped.name}, the oldest pipeline, was removed to keep ${MAX_PIPELINES}.`
+
+/**
+ * A saved graph as this server can run it, or null. Storage is per browser but
+ * the registry is per server, so a pipeline saved against another server's
+ * transforms (M7) is listed but never loaded.
+ */
+export function usableGraph(p: SavedPipeline, registry: Registry): PipelineGraph | null {
+  return loadGraph(JSON.stringify(p.graph), registry)
 }
 
 export function updatePipeline(id: string, graph: PipelineGraph): boolean {
-  const list = readPipelines()
+  const list = freshPipelines()
   if (!list.some((p) => p.id === id)) return false
   return persist(list.map((p) => (p.id === id ? { ...p, graph: structuredClone(graph), savedAt: new Date().toISOString() } : p)))
 }
@@ -99,13 +124,13 @@ export function updatePipeline(id: string, graph: PipelineGraph): boolean {
 export function renamePipeline(id: string, name: string): boolean {
   const clean = cleanName(name)
   if (!clean) return false
-  const list = readPipelines()
+  const list = freshPipelines()
   if (!list.some((p) => p.id === id)) return false
   return persist(list.map((p) => (p.id === id ? { ...p, name: clean } : p)))
 }
 
 export function deletePipeline(id: string): void {
-  const ok = persist(readPipelines().filter((p) => p.id !== id))
+  const ok = persist(freshPipelines().filter((p) => p.id !== id))
   if (ok && readCurrentId() === id) setCurrentId(null)
 }
 
@@ -120,9 +145,21 @@ export function setCurrentId(id: string | null): void {
   notify()
 }
 
+/** Another tab changed the list or the selection: drop what this tab cached and re-read (I4). */
+function onStorage(e: StorageEvent): void {
+  if (e.key !== null && e.key !== LIST_KEY && e.key !== CURRENT_KEY) return
+  cache = null
+  currentCache = undefined
+  notify()
+}
+
 function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0) window.addEventListener("storage", onStorage)
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) window.removeEventListener("storage", onStorage)
+  }
 }
 
 let snapshot: { pipelines: SavedPipeline[]; currentId: string | null } | null = null

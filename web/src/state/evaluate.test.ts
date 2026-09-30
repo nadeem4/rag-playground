@@ -277,6 +277,29 @@ describe("the previous evaluation of the session", () => {
     expect(readPreviousEvaluation(SHA, "working")).toBeNull()
   })
 
+  it("keeps one previous score per pipeline, so scoring A, then B, then A again still finds A's (I2)", () => {
+    const a = { sourceSha: SHA, pipelineKey: "A", byId: { a: payload({ rank: 1 }) }, summary: summarize([payload()]) }
+    const b = { sourceSha: SHA, pipelineKey: "B", byId: { a: payload({ rank: 4 }) }, summary: summarize([miss()]) }
+    storePreviousEvaluation(a)
+    storePreviousEvaluation(b)
+    expect(readPreviousEvaluation(SHA, "A")).toEqual(a)
+    expect(readPreviousEvaluation(SHA, "B")).toEqual(b)
+  })
+
+  it("treats the old single-slot shape as none, even for its own document and pipeline", () => {
+    const old = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload()]) }
+    window.sessionStorage.setItem("rag-playground:evaluation:previous", JSON.stringify(old))
+    expect(readPreviousEvaluation(SHA, "working")).toBeNull()
+  })
+
+  it("keeps at most 40 scores, dropping the oldest", () => {
+    const one = (k: string) => ({ sourceSha: SHA, pipelineKey: k, byId: {}, summary: summarize([]) })
+    for (let i = 0; i < 41; i++) storePreviousEvaluation(one(`p${i}`))
+    expect(readPreviousEvaluation(SHA, "p0")).toBeNull()
+    expect(readPreviousEvaluation(SHA, "p1")).not.toBeNull()
+    expect(readPreviousEvaluation(SHA, "p40")).not.toBeNull()
+  })
+
   it("is nothing when the stored value is not an evaluation", () => {
     window.sessionStorage.setItem("rag-playground:evaluation:previous", "{oops")
     expect(readPreviousEvaluation(SHA, "working")).toBeNull()

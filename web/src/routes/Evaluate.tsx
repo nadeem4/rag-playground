@@ -40,60 +40,88 @@ import {
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
 import { readStoredGraph, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
-import { readCurrentId, readPipelines, usePipelines } from "@/state/pipelines"
+import { sameGraph, usableGraph, usePipelines } from "@/state/pipelines"
 
 import { RegistryScreen } from "./Shell"
 
 /**
  * Evaluate: score a pipeline against the sample question set, so "did that
- * change help?" has a number behind it. The default is the pipeline current
- * on Build, and a picker lets you score any saved pipeline instead.
+ * change help?" has a number behind it. The default is what Build shows: its
+ * current saved pipeline while unedited, else Build's working copy. A picker
+ * lets you score any saved pipeline instead.
  *
  * It takes the chosen graph, swaps the use case for `eval`, and sweeps the
  * question node over every question, each variant carrying the question and
  * the sentence that answers it. Only the use case changes, so parsing,
  * chunking and indexing come straight from the cache on the second run.
  *
- * The previous evaluation of the session is kept in memory, keyed by document
- * and pipeline, and every row says how it changed. Nothing is stored between
- * sessions.
+ * The previous evaluation of each pipeline is kept in session storage, keyed
+ * by document and pipeline, and every row says how it changed. Nothing is
+ * stored between sessions.
  */
 
 export function Evaluate() {
   const reg = useRegistry()
-  const { pipelines } = usePipelines()
+  const { pipelines, currentId } = usePipelines()
   const pickerId = useId()
-  const [choice, setChoice] = useState<string>(() =>
-    readCurrentId() && readPipelines().some((p) => p.id === readCurrentId()) ? readCurrentId()! : "",
-  )
+  // null until the picker is used: the default follows Build (I1).
+  const [choice, setChoice] = useState<string | null>(null)
+  // True while an evaluation runs, so the pipeline under it cannot change (M8).
+  const [busy, setBusy] = useState(false)
   if (reg.kind !== "ready") return <RegistryScreen state={reg} />
-  const chosen = pipelines.find((p) => p.id === choice) ?? null
-  const graph = chosen ? chosen.graph : readStoredGraph(reg.registry)
-  const pipelineKey = chosen ? chosen.id : "working"
-  const pipelineName = chosen ? chosen.name : "The pipeline on Build"
-  const picker = (
-    <div className="flex items-center gap-2">
-      <label htmlFor={pickerId} className="text-sm text-fg-muted">
-        Pipeline
-      </label>
-      <select
-        id={pickerId}
-        aria-label="Pipeline"
-        className={cn(CONTROL, "w-auto")}
-        value={choice}
-        onChange={(e) => setChoice(e.target.value)}
-      >
-        <option value="">The pipeline on Build</option>
-        {pipelines.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
+  const registry = reg.registry
+  // A saved pipeline this server cannot run is listed but treated as absent (M7).
+  const usable = new Map(pipelines.map((p) => [p.id, usableGraph(p, registry)]))
+  const working = readStoredGraph(registry)
+  const current = pipelines.find((p) => p.id === currentId) ?? null
+  const currentGraph = current ? usable.get(current.id) : null
+  // The current saved pipeline is the default only while Build shows it unedited;
+  // otherwise Build's working copy is what "the pipeline on Build" means (I1).
+  const unedited = Boolean(currentGraph && working && sameGraph(currentGraph, working))
+  const chosenId = choice ?? (unedited ? currentId! : "")
+  const chosen = pipelines.find((p) => p.id === chosenId && usable.get(p.id)) ?? null
+  const graph = chosen ? usable.get(chosen.id)! : working
+  // The working copy of saved pipeline A is scored under A's key, so editing A
+  // and scoring it compares against A's last score.
+  const pipelineKey = chosen ? chosen.id : (currentId ?? "working")
+  const pipelineName = chosen
+    ? chosen.name
+    : current && currentGraph && !unedited
+      ? `${current.name} (edited)`
+      : "The pipeline on Build"
   return (
-    <EvaluateBody key={pipelineKey} graph={graph} pipelineKey={pipelineKey} pipelineName={pipelineName} picker={picker} registry={reg.registry} />
+    <main className="flex min-h-0 flex-1 flex-col bg-surface">
+      {/* Outside the keyed body, so switching pipelines keeps this select, and its focus (F5). */}
+      <div className="flex min-h-[40px] shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-3 py-1">
+        <label htmlFor={pickerId} className="text-sm text-fg-muted">
+          Pipeline
+        </label>
+        <select
+          id={pickerId}
+          aria-label="Pipeline"
+          className={cn(CONTROL, "w-auto")}
+          value={chosen ? chosen.id : ""}
+          disabled={busy}
+          onChange={(e) => setChoice(e.target.value)}
+        >
+          <option value="">The pipeline on Build</option>
+          {pipelines.map((p) => (
+            <option key={p.id} value={p.id} disabled={!usable.get(p.id)}>
+              {usable.get(p.id) ? p.name : `${p.name} (not usable here)`}
+            </option>
+          ))}
+        </select>
+      </div>
+      {/* Keyed by what is scored, not by the score key: an edited A and A share a key but not a graph. */}
+      <EvaluateBody
+        key={chosen ? chosen.id : "working"}
+        graph={graph}
+        pipelineKey={pipelineKey}
+        pipelineName={pipelineName}
+        registry={registry}
+        onBusy={setBusy}
+      />
+    </main>
   )
 }
 
@@ -107,14 +135,14 @@ function EvaluateBody({
   graph,
   pipelineKey,
   pipelineName,
-  picker,
   registry,
+  onBusy,
 }: {
   graph: PipelineGraph | null
   pipelineKey: string
   pipelineName: string
-  picker: ReactNode
   registry: Registry
+  onBusy: (busy: boolean) => void
 }) {
   const source = graph?.nodes.find((n) => n.stage === "source")
   const sourceSha = String(source?.config.sha ?? "")
@@ -122,21 +150,21 @@ function EvaluateBody({
   const useCase = graph?.nodes.find((n) => n.stage === "use_case")
   if (!graph || !sourceSha || !query || !useCase) {
     return (
-      <Blocked title="No pipeline to evaluate" picker={picker}>
+      <Blocked title="No pipeline to evaluate">
         Build a pipeline with a file first, then come back here to score what it finds.
       </Blocked>
     )
   }
   if (!hasRetriever(graph)) {
     return (
-      <Blocked title="This pipeline has no retriever" picker={picker}>
+      <Blocked title="This pipeline has no retriever">
         An evaluation scores what retrieval found, so the pipeline needs a Retrieve step. Check the pipeline on Build.
       </Blocked>
     )
   }
   if (!registry.use_case?.eval) {
     return (
-      <Blocked title="This server has no eval step" picker={picker}>
+      <Blocked title="This server has no eval step">
         Update the server, or run it from this repository, to score a pipeline here.
       </Blocked>
     )
@@ -150,24 +178,21 @@ function EvaluateBody({
       sourceSha={sourceSha}
       pipelineKey={pipelineKey}
       pipelineName={pipelineName}
-      picker={picker}
+      onBusy={onBusy}
     />
   )
 }
 
-function Blocked({ title, picker, children }: { title: string; picker?: ReactNode; children: ReactNode }) {
+function Blocked({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <main className="flex min-h-0 flex-1 flex-col bg-surface">
-      {picker ? (
-        <div className="flex min-h-[40px] shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-3 py-1">{picker}</div>
-      ) : null}
+    <div className="flex min-h-0 flex-1 flex-col">
       <EmptyState title={title}>
         {children}{" "}
         <a href="/build" className="text-fg underline">
           Go to Build
         </a>
       </EmptyState>
-    </main>
+    </div>
   )
 }
 
@@ -191,7 +216,7 @@ function Evaluation({
   sourceSha,
   pipelineKey,
   pipelineName,
-  picker,
+  onBusy,
 }: {
   registry: Registry
   graph: PipelineGraph
@@ -200,7 +225,7 @@ function Evaluation({
   sourceSha: string
   pipelineKey: string
   pipelineName: string
-  picker: ReactNode
+  onBusy: (busy: boolean) => void
 }) {
   const topKId = useId()
   const query = graph.nodes.find((n) => n.id === queryId)!
@@ -217,6 +242,10 @@ function Evaluation({
   const [previous, setPrevious] = useState<PreviousEvaluation | null>(() => readPreviousEvaluation(sourceSha, pipelineKey))
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
+  useEffect(() => {
+    onBusy(busy)
+    return () => onBusy(false)
+  }, [busy, onBusy])
 
   // Which set is in use, and whether it belongs to the document on Build.
   const uploaded = useQuestionSet(sourceSha)
@@ -326,7 +355,7 @@ function Evaluation({
   }
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col bg-surface">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
         <div className="flex items-baseline gap-3">
           <h1 className="text-xl font-semibold">Evaluate</h1>
@@ -336,7 +365,6 @@ function Evaluation({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {picker}
           <label htmlFor={topKId} className="text-sm text-fg-muted">
             Top k
           </label>
@@ -453,7 +481,7 @@ function Evaluation({
           </div>
         )}
       </div>
-    </main>
+    </div>
   )
 }
 

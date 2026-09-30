@@ -20,6 +20,9 @@ ENV_VAR = "RAG_PLAYGROUND_DEMO"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_UPLOAD_PAGES = 20
 MAX_UPLOADS_PER_VISITOR = 3
+#: All live uploads together, so a client that keeps getting new visitor ids
+#: still cannot fill the shared disk.
+MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024
 UPLOAD_TTL = timedelta(hours=24)
 
 
@@ -32,6 +35,7 @@ def limits() -> dict[str, int]:
         "max_bytes": MAX_UPLOAD_BYTES,
         "max_pages": MAX_UPLOAD_PAGES,
         "max_files": MAX_UPLOADS_PER_VISITOR,
+        "max_total_bytes": MAX_TOTAL_UPLOAD_BYTES,
         "ttl_hours": int(UPLOAD_TTL.total_seconds() // 3600),
     }
 

@@ -93,7 +93,12 @@ def test_runs_and_sweeps_read_only_the_sample(client, dirs, monkeypatch):
         other = upload_pdf(someone_else)
     demo_on(monkeypatch)
     graph = ingest_graph(other["sha"], other["filename"])
-    assert client.post("/api/runs", json={"graph": graph}).status_code == 403
+    r = client.post("/api/runs", json={"graph": graph})
+    assert r.status_code == 403
+    assert r.json()["detail"] == (
+        "This document is not available to this browser. It may be an upload that has expired, "
+        "or one made from another browser. Load a sample or upload the file again."
+    )
     # an override cannot swap the sha back in either
     sample = client.post("/api/sources/sample").json()
     ok_graph = ingest_graph(sample["sha"], sample["filename"])
@@ -252,7 +257,13 @@ def test_demo_settings_report_the_limits(client, monkeypatch):
     demo_on(monkeypatch)
     assert client.get("/api/settings/app").json() == {
         "demo": True,
-        "limits": {"max_bytes": 10 * 1024 * 1024, "max_pages": 20, "max_files": 3, "ttl_hours": 24},
+        "limits": {
+            "max_bytes": 10 * 1024 * 1024,
+            "max_pages": 20,
+            "max_files": 3,
+            "max_total_bytes": 200 * 1024 * 1024,
+            "ttl_hours": 24,
+        },
     }
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
     assert client.get("/api/settings/app").json() == {"demo": False}
@@ -260,6 +271,7 @@ def test_demo_settings_report_the_limits(client, monkeypatch):
 
 def test_demo_refuses_a_file_over_10_mb(client, monkeypatch):
     demo_on(monkeypatch)
+    client.get("/api/settings/app")  # a demo upload needs the visitor cookie first
     big = b"%PDF-1.4\n" + b"0" * (10 * 1024 * 1024)
     r = client.post("/api/sources", files={"file": ("big.pdf", big, "application/pdf")})
     assert r.status_code == 413
@@ -268,6 +280,7 @@ def test_demo_refuses_a_file_over_10_mb(client, monkeypatch):
 
 def test_demo_refuses_a_non_pdf(client, monkeypatch):
     demo_on(monkeypatch)
+    client.get("/api/settings/app")
     r = client.post("/api/sources", files={"file": ("notes.txt", b"just text", "text/plain")})
     assert r.status_code == 415
     assert r.json()["detail"] == "The hosted demo takes PDF files only."
@@ -275,6 +288,7 @@ def test_demo_refuses_a_non_pdf(client, monkeypatch):
 
 def test_demo_refuses_more_than_20_pages(client, monkeypatch):
     demo_on(monkeypatch)
+    client.get("/api/settings/app")
     r = client.post("/api/sources", files={"file": ("long.pdf", _pdf_with_pages(21), "application/pdf")})
     assert r.status_code == 413
     assert r.json()["detail"] == "This PDF has 21 pages. The hosted demo takes up to 20 pages. Run the playground locally for longer documents."
@@ -284,6 +298,7 @@ def test_demo_refuses_more_than_20_pages(client, monkeypatch):
 
 def test_demo_caps_live_uploads_per_visitor_and_a_reupload_does_not_count(client, monkeypatch):
     demo_on(monkeypatch)
+    client.get("/api/settings/app")
     for i in range(3):
         assert client.post("/api/sources", files={"file": (f"f{i}.pdf", _pdf_with_pages(i + 1), "application/pdf")}).status_code == 200
     again = client.post("/api/sources", files={"file": ("f0-again.pdf", _pdf_with_pages(1), "application/pdf")})
@@ -306,6 +321,7 @@ def test_demo_upload_tolerates_a_corrupt_sidecar(dirs, monkeypatch):
     meta_dir.mkdir(parents=True)
     (meta_dir / "deadbeef.json").write_text("not json", encoding="utf-8")
     with make_client(dirs) as client:
+        client.get("/api/settings/app")
         r = client.post("/api/sources", files={"file": ("small.pdf", _pdf_with_pages(1), "application/pdf")})
         assert r.status_code == 200
 
@@ -329,3 +345,60 @@ def test_the_sweeper_runs_only_in_demo_mode(dirs, monkeypatch):
 async def _never():
     import asyncio
     await asyncio.Event().wait()
+
+
+# --- final review: memory, disk and the samples ---------------------------------
+
+
+def test_demo_never_reads_more_than_the_cap_plus_one_byte(client, dirs, monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    demo_on(monkeypatch)
+    client.get("/api/settings/app")
+    asked: list[int] = []
+    real_read = UploadFile.read
+
+    async def recording_read(self, size: int = -1) -> bytes:
+        asked.append(size)
+        return await real_read(self, size)
+
+    monkeypatch.setattr(UploadFile, "read", recording_read)
+    big = b"%PDF-1.4\n" + b"0" * (10 * 1024 * 1024 - 8)  # the cap plus one byte
+    r = client.post("/api/sources", files={"file": ("big.pdf", big, "application/pdf")})
+    assert r.status_code == 413
+    assert all(0 <= n <= 10 * 1024 * 1024 + 1 for n in asked)
+    assert not (dirs["sources"] / ".meta").exists()
+
+
+def test_the_demo_refuses_uploads_past_its_total_budget(dirs, monkeypatch):
+    from api import demo
+
+    demo_on(monkeypatch)
+    first, second = _pdf_with_pages(1), _pdf_with_pages(2)
+    monkeypatch.setattr(demo, "MAX_TOTAL_UPLOAD_BYTES", len(first) + 1)
+    with make_client(dirs) as a, make_client(dirs) as b:
+        a.get("/api/settings/app")
+        b.get("/api/settings/app")
+        sha = a.post("/api/sources", files={"file": ("one.pdf", first, "application/pdf")}).json()["sha"]
+        r = b.post("/api/sources", files={"file": ("two.pdf", second, "application/pdf")})
+        assert r.status_code == 503
+        assert r.json()["detail"] == "The demo is full right now. Try again later, or run the playground locally."
+        # the same bytes again add nothing to the disk, so they still fit
+        assert b.post("/api/sources", files={"file": ("one.pdf", first, "application/pdf")}).status_code == 200
+        assert a.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
+
+
+def test_demo_limits_report_the_total_budget(client, monkeypatch):
+    demo_on(monkeypatch)
+    assert client.get("/api/settings/app").json()["limits"]["max_total_bytes"] == 200 * 1024 * 1024
+
+
+def test_uploading_a_samples_bytes_does_not_count_toward_the_cap(client, monkeypatch):
+    demo_on(monkeypatch)
+    client.get("/api/settings/app")
+    sample = sample_set.default_sample()
+    r = client.post("/api/sources", files={"file": (sample.pdf.name, sample.pdf.read_bytes(), "application/pdf")})
+    assert r.status_code == 200 and r.json()["sha"] == SAMPLE_SHA
+    for i in range(3):
+        f = (f"f{i}.pdf", _pdf_with_pages(i + 1), "application/pdf")
+        assert client.post("/api/sources", files={"file": f}).status_code == 200

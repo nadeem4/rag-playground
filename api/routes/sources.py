@@ -12,6 +12,7 @@ import json
 import mimetypes
 import os
 import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,13 @@ META_DIR = ".meta"
 #: filesystem path, so a crafted value like `../../x` can never escape
 #: `META_DIR` or the sources directory. Shared with `pages.py`.
 SHA = re.compile(r"^[0-9a-f]{64}$")
+
+#: Held around every sidecar read-modify-write, here and in `expiry.sweep`, so
+#: two uploads of the same bytes, or an upload racing the sweep, never lose an owner.
+SIDECAR_LOCK = threading.Lock()
+
+NO_VISITOR = "This browser sent no visitor id. Open the demo in its own tab or enable cookies, then try again."
+DEMO_FULL = "The demo is full right now. Try again later, or run the playground locally."
 
 
 def _read_sidecar(path: Path) -> dict[str, Any]:
@@ -69,17 +77,34 @@ def live_uploads(sources: Path, visitor: str) -> int:
     return sum(1 for p in meta_dir.glob("*.json") if visitor in (_read_sidecar(p).get("visitors") or {}))
 
 
+def live_upload_bytes(sources: Path) -> int:
+    """Bytes held by every live upload: sidecars with owners, by their stored size."""
+    meta_dir = sources / META_DIR
+    if not meta_dir.is_dir():
+        return 0
+    total = 0
+    for p in meta_dir.glob("*.json"):
+        body = _read_sidecar(p)
+        size = body.get("size")
+        if body.get("visitors") and isinstance(size, int):
+            total += size
+    return total
+
+
 def _fmt_mb(n: int) -> str:
     return f"{n / (1024 * 1024):.1f} MB"
 
 
+def _too_big(size: int | None) -> HTTPException:
+    """413 for a file over the cap, naming its size when the size is known."""
+    cap = f"{demo.MAX_UPLOAD_BYTES // (1024 * 1024)} MB"
+    said = f"This file is {_fmt_mb(size)}." if size is not None else f"This file is more than {cap}."
+    return HTTPException(
+        413, f"{said} The hosted demo takes files up to {cap}. Run the playground locally for larger files."
+    )
+
+
 def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
-    if len(data) > demo.MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            413,
-            f"This file is {_fmt_mb(len(data))}. The hosted demo takes files up to "
-            f"{demo.MAX_UPLOAD_BYTES // (1024 * 1024)} MB. Run the playground locally for larger files.",
-        )
     pages = page_count(data)
     if pages is None:
         raise HTTPException(415, "The hosted demo takes PDF files only.")
@@ -90,12 +115,18 @@ def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
             f"{demo.MAX_UPLOAD_PAGES} pages. Run the playground locally for longer documents.",
         )
     sha = hashlib.sha256(data).hexdigest()
-    if me not in owners(sources, sha) and live_uploads(sources, me) >= demo.MAX_UPLOADS_PER_VISITOR:
+    if sha in sample_set.readable_shas():
+        return  # a sample's bytes store nothing new and stay public (see `_store`)
+    current = owners(sources, sha)
+    if me not in current and live_uploads(sources, me) >= demo.MAX_UPLOADS_PER_VISITOR:
         raise HTTPException(
             429,
             f"This browser already has {demo.MAX_UPLOADS_PER_VISITOR} uploads. "
             "Wait for one to expire, or run the playground locally.",
         )
+    # bytes someone already uploaded take no more disk
+    if not current and live_upload_bytes(sources) + len(data) > demo.MAX_TOTAL_UPLOAD_BYTES:
+        raise HTTPException(503, DEMO_FULL)
 
 
 @router.get("/sources")
@@ -105,7 +136,14 @@ def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
     if not meta_dir.is_dir():
         return []
     items = [_read_sidecar(p) for p in meta_dir.glob("*.json")]
-    items = [m for m in items if m.get("sha") and demo.readable(m["sha"], request)]
+    # a hand-edited sidecar without a string sha and filename is skipped, not a 500
+    items = [
+        m
+        for m in items
+        if isinstance(m.get("sha"), str)
+        and isinstance(m.get("filename"), str)
+        and demo.readable(m["sha"], request)
+    ]
     return sorted(
         ({k: v for k, v in m.items() if k != "visitors"} for m in items),
         key=lambda m: m["filename"].lower(),
@@ -114,8 +152,27 @@ def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
 
 @router.post("/sources")
 async def upload_source(request: Request, response: Response, file: UploadFile) -> dict[str, Any]:
-    me = visitor.ensure_visitor(request, response)
-    data = await file.read()
+    if not demo.enabled():
+        me = visitor.ensure_visitor(request, response)
+        data = await file.read()
+    else:
+        # Never mint here: a client that drops cookies would get a fresh id, and
+        # so a fresh upload cap, on every request.
+        me = visitor.visitor_id(request)
+        if me is None:
+            raise HTTPException(400, NO_VISITOR)
+        # Refuse on the declared size before reading, and never read more than
+        # one byte past the cap, so a huge body never lands in memory. The
+        # request's Content-Length also counts the multipart framing, so it is
+        # the check only when the file's own size is unknown.
+        if file.size is not None and file.size > demo.MAX_UPLOAD_BYTES:
+            raise _too_big(file.size)
+        length = request.headers.get("content-length", "")
+        if file.size is None and length.isdigit() and int(length) > demo.MAX_UPLOAD_BYTES:
+            raise _too_big(None)
+        data = await file.read(demo.MAX_UPLOAD_BYTES + 1)
+        if len(data) > demo.MAX_UPLOAD_BYTES:
+            raise _too_big(None)
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
     if demo.enabled():
@@ -154,6 +211,12 @@ def _store(
     visitor: str | None = None,
 ) -> dict[str, Any]:
     sha = hashlib.sha256(data).hexdigest()
+    sample = next((s for s in sample_set.all_samples() if s.sha == sha), None)
+    if sample is not None:
+        # A sample's bytes stay public under the sample's own name: no owner, so
+        # the sweep never deletes the shared file and no cap counts it, and one
+        # visitor's filename never renames the sample for everyone.
+        filename, visitor = sample.pdf.name, None
     dest = sources / f"{sha}{Path(filename).suffix}"
 
     sources.mkdir(parents=True, exist_ok=True)
@@ -173,10 +236,11 @@ def _store(
     meta_dir = sources / META_DIR
     meta_dir.mkdir(exist_ok=True)
     meta_path = meta_dir / f"{sha}.json"
-    previous = _read_sidecar(meta_path)
-    visitors = dict(previous.get("visitors") or {})
-    if visitor:
-        visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    stored = {**body, **({"visitors": visitors} if visitors else {})}
-    meta_path.write_text(json.dumps(stored), encoding="utf-8")
+    with SIDECAR_LOCK:
+        previous = _read_sidecar(meta_path)
+        visitors = dict(previous.get("visitors") or {})
+        if visitor:
+            visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        stored = {**body, **({"visitors": visitors} if visitors else {})}
+        meta_path.write_text(json.dumps(stored), encoding="utf-8")
     return body

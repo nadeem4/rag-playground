@@ -84,3 +84,39 @@ def test_an_invalid_sha_deletes_no_files_but_the_sidecar_is_removed(tmp_path):
         assert outside.exists()
     finally:
         outside.unlink(missing_ok=True)
+
+
+def test_uploading_a_samples_bytes_never_makes_the_sample_expire(tmp_path, monkeypatch):
+    from api import sample_set
+    from tests.api.conftest import make_client
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    monkeypatch.setattr(expiry, "run_forever", _no_sweeper)
+    dirs = {"artifacts": tmp_path / "artifacts", "sources": tmp_path / "sources", "web": tmp_path / "web"}
+    sample = sample_set.default_sample()
+    with make_client(dirs) as a, make_client(dirs) as b:
+        sha = a.post("/api/sources/sample").json()["sha"]
+        b.get("/api/settings/app")
+        r = b.post("/api/sources", files={"file": (sample.pdf.name, sample.pdf.read_bytes(), "application/pdf")})
+        assert r.status_code == 200 and r.json()["sha"] == sha
+        assert expiry.sweep(dirs["sources"], datetime.now(timezone.utc) + timedelta(days=2)) == 0
+        assert a.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
+
+
+def test_the_sweep_skips_a_sample_even_when_its_sidecar_has_visitors(tmp_path):
+    from api import sample_set
+
+    sample = sample_set.default_sample()
+    body = _store(tmp_path, sample.pdf.name, sample.pdf.read_bytes(), "application/pdf")
+    meta = tmp_path / META_DIR / f"{body['sha']}.json"
+    data = json.loads(meta.read_text(encoding="utf-8"))
+    data["visitors"] = {"a": (NOW - timedelta(days=2)).isoformat(timespec="seconds")}
+    meta.write_text(json.dumps(data), encoding="utf-8")
+    assert expiry.sweep(tmp_path, NOW) == 0
+    assert (tmp_path / f"{body['sha']}.pdf").exists()
+
+
+async def _no_sweeper(sources, interval_s=3600):
+    import asyncio
+
+    await asyncio.Event().wait()

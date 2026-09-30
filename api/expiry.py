@@ -1,7 +1,8 @@
 """Demo uploads expire: a day after upload the file and its record go.
 
 Only sidecars with a `visitors` map are uploads; a sample's sidecar has none
-and is never touched. A sha two visitors uploaded lives until the last of them
+and is never touched, nor is a sample's sha even when an older sidecar names
+owners for it. A sha two visitors uploaded lives until the last of them
 expires. Derived artifacts are content addressed and unlisted, and are left to
 the artifact store.
 """
@@ -14,8 +15,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from api import demo
-from api.routes.sources import META_DIR, SHA, _read_sidecar
+from api import demo, sample_set
+from api.routes.sources import META_DIR, SHA, SIDECAR_LOCK, _read_sidecar
 
 log = logging.getLogger(__name__)
 
@@ -33,25 +34,33 @@ def sweep(sources: Path, now: datetime) -> int:
     if not meta_dir.is_dir():
         return 0
     deleted = 0
+    samples = sample_set.readable_shas()
     for meta in meta_dir.glob("*.json"):
-        body = _read_sidecar(meta)
-        visitors = body.get("visitors")
-        if not visitors:
-            continue
-        kept = {v: t for v, t in visitors.items() if not _expired(t, now)}
-        if kept:
-            if kept != visitors:
-                meta.write_text(json.dumps({**body, "visitors": kept}), encoding="utf-8")
-            continue
-        sha = body.get("sha")
-        if isinstance(sha, str) and SHA.match(sha):
-            for p in sources.glob(f"{sha}*"):
-                if p.is_file() and not p.name.endswith(".part"):
-                    p.unlink()
-                    deleted += 1
-        # a missing or invalid sha still gets its sidecar removed, so a
-        # malformed record self-heals instead of being retried forever
-        meta.unlink()
+        with SIDECAR_LOCK:  # an upload of the same sha must not add an owner mid-sweep
+            deleted += _sweep_one(sources, meta, now, samples)
+    return deleted
+
+
+def _sweep_one(sources: Path, meta: Path, now: datetime, samples: frozenset[str]) -> int:
+    body = _read_sidecar(meta)
+    visitors = body.get("visitors")
+    sha = body.get("sha")
+    if not visitors or (isinstance(sha, str) and sha in samples):
+        return 0
+    kept = {v: t for v, t in visitors.items() if not _expired(t, now)}
+    if kept:
+        if kept != visitors:
+            meta.write_text(json.dumps({**body, "visitors": kept}), encoding="utf-8")
+        return 0
+    deleted = 0
+    if isinstance(sha, str) and SHA.match(sha):
+        for p in sources.glob(f"{sha}*"):
+            if p.is_file() and not p.name.endswith(".part"):
+                p.unlink()
+                deleted += 1
+    # a missing or invalid sha still gets its sidecar removed, so a
+    # malformed record self-heals instead of being retried forever
+    meta.unlink()
     return deleted
 
 

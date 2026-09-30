@@ -6,7 +6,8 @@ import re
 
 from api import visitor
 from api.routes.sources import META_DIR, owners
-from tests.api.conftest import ingest_graph, make_client, upload_pdf
+from tests.api.conftest import build_pdf, ingest_graph, make_client, upload_pdf
+from tests.plugins.conftest import SAMPLE_PAGES
 
 
 def demo_on(monkeypatch) -> None:
@@ -40,6 +41,7 @@ def test_upload_mints_a_cookie_too(client):
 def test_in_demo_mode_an_upload_is_private_to_its_browser(dirs, monkeypatch):
     demo_on(monkeypatch)
     with make_client(dirs) as mine, make_client(dirs) as theirs:
+        mine.get("/api/settings/app")  # a demo upload needs the visitor cookie first
         body = upload_pdf(mine, "mine.pdf")
         sha = body["sha"]
         assert any(s["sha"] == sha for s in mine.get("/api/sources").json())
@@ -63,6 +65,8 @@ def test_the_samples_stay_public_in_demo_mode(dirs, monkeypatch):
 def test_the_same_bytes_uploaded_by_two_visitors_belong_to_both(dirs, monkeypatch):
     demo_on(monkeypatch)
     with make_client(dirs) as a, make_client(dirs) as b:
+        a.get("/api/settings/app")
+        b.get("/api/settings/app")
         sha = upload_pdf(a)["sha"]
         assert upload_pdf(b)["sha"] == sha
         for c in (a, b):
@@ -72,6 +76,7 @@ def test_the_same_bytes_uploaded_by_two_visitors_belong_to_both(dirs, monkeypatc
 def test_clearing_the_cookie_loses_access_and_gets_a_fresh_id(dirs, monkeypatch):
     demo_on(monkeypatch)
     with make_client(dirs) as c:
+        c.get("/api/settings/app")
         sha = upload_pdf(c)["sha"]
         old = c.cookies.get(visitor.COOKIE)
         c.cookies.clear()
@@ -111,6 +116,54 @@ def test_a_corrupted_sidecar_is_skipped_not_500(client, dirs):
     sidecar = dirs["sources"] / META_DIR / f"{sha}.json"
     sidecar.write_text("not json", encoding="utf-8")
     assert owners(dirs["sources"], sha) == {}
+    r = client.get("/api/sources")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+# --- the cookie must survive the Hugging Face Space's cross-site iframe -------
+
+
+def test_over_https_the_cookie_is_sent_in_a_cross_site_iframe(client):
+    r = client.get("/api/settings/app", headers={"x-forwarded-proto": "https"})
+    set_cookie = r.headers["set-cookie"].lower()
+    assert "samesite=none" in set_cookie
+    assert "secure" in set_cookie
+    assert "partitioned" in set_cookie
+    assert "httponly" in set_cookie and "path=/" in set_cookie and "max-age=31536000" in set_cookie
+
+
+def test_over_plain_http_the_cookie_stays_lax_and_not_secure(client):
+    set_cookie = client.get("/api/settings/app").headers["set-cookie"].lower()
+    assert "samesite=lax" in set_cookie
+    assert "secure" not in set_cookie
+    assert "partitioned" not in set_cookie
+
+
+# --- in demo mode an upload never mints; it needs a cookie from an earlier visit
+
+
+def test_in_demo_mode_an_upload_without_a_cookie_is_refused_and_mints_nothing(dirs, monkeypatch):
+    demo_on(monkeypatch)
+    with make_client(dirs) as c:
+        c.cookies.clear()
+        data = build_pdf(SAMPLE_PAGES)
+        r = c.post("/api/sources", files={"file": ("a.pdf", data, "application/pdf")})
+        assert r.status_code == 400
+        assert r.json()["detail"] == (
+            "This browser sent no visitor id. Open the demo in its own tab or enable cookies, then try again."
+        )
+        assert "set-cookie" not in r.headers
+        assert not (dirs["sources"] / META_DIR).exists()
+        c.get("/api/settings/app")
+        assert upload_pdf(c)["sha"]
+
+
+def test_a_sidecar_without_a_filename_is_skipped_not_500(client, dirs):
+    sha = upload_pdf(client)["sha"]
+    sidecar = dirs["sources"] / META_DIR / f"{sha}.json"
+    sidecar.write_text('{"sha": "%s", "size": 1}' % sha, encoding="utf-8")
+    (dirs["sources"] / META_DIR / "odd.json").write_text('{"sha": 5, "filename": "x.pdf"}', encoding="utf-8")
     r = client.get("/api/sources")
     assert r.status_code == 200
     assert r.json() == []

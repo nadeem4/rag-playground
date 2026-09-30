@@ -113,7 +113,10 @@ def _check(
         if nd.stage == Stage.SOURCE and cfg.get("sha") and not demo.readable(cfg["sha"], request):
             raise HTTPException(
                 status_code=403,
-                detail="this hosted demo reads only the bundled samples and your own uploads",
+                detail=(
+                    "This document is not available to this browser. It may be an upload that has "
+                    "expired, or one made from another browser. Load a sample or upload the file again."
+                ),
             )
         cls = registry.get(nd.stage, nd.transform)
         try:

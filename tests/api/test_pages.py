@@ -161,3 +161,46 @@ def test_non_pdf_source_is_415(client):
     r = client.post("/api/sources", files={"file": ("a.txt", b"hello", "text/plain")})
     sha = r.json()["sha"]
     assert client.get(f"/api/sources/{sha}/pages").status_code == 415
+
+
+def _big_page_pdf(side: int) -> bytes:
+    """One empty page `side` points square, with a correct xref table."""
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] >>" % (side, side),
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n%s\nendobj\n" % (i, body)
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % o for o in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    return bytes(out)
+
+
+def test_a_huge_page_at_scale_8_is_clamped_to_25_megapixels(client):
+    sha = upload_bytes(client, _big_page_pdf(5000), "huge.pdf")
+    r = client.get(f"/api/sources/{sha}/pages/1.png", params={"scale": 8})
+    assert r.status_code == 200
+    w, h = png_size(r.content)
+    assert w <= 5000 and h <= 5000
+
+
+def test_in_demo_mode_an_uploads_pages_are_cached_privately(dirs, monkeypatch):
+    from tests.api.conftest import make_client
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    with make_client(dirs) as c:
+        c.get("/api/settings/app")
+        sha = upload_pdf(c)["sha"]
+        sample = c.post("/api/sources/sample").json()["sha"]
+        assert c.get(f"/api/sources/{sha}/pages/1.png").headers["cache-control"] == (
+            "private, max-age=31536000, immutable"
+        )
+        assert c.get(f"/api/sources/{sample}/pages/1.png").headers["cache-control"] == (
+            "public, max-age=31536000, immutable"
+        )

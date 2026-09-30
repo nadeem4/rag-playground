@@ -30,5 +30,21 @@ def ensure_visitor(request: Request, response: Response) -> str:
     if existing:
         return existing
     minted = secrets.token_urlsafe(24)  # 32 URL-safe characters
-    response.set_cookie(COOKIE, minted, max_age=_MAX_AGE, path="/", samesite="lax", httponly=True)
+    if _secure(request):
+        # The Hugging Face Space page shows the app in a cross-site iframe, where
+        # a Lax cookie is never sent. None needs Secure; Partitioned keeps it in
+        # browsers that block third-party cookies. Starlette's `partitioned`
+        # needs Python 3.14, so the header is written by hand.
+        response.headers.append(
+            "set-cookie",
+            f"{COOKIE}={minted}; HttpOnly; Max-Age={_MAX_AGE}; Path=/; SameSite=None; Secure; Partitioned",
+        )
+    else:
+        # Plain http (local runs, tests): a Secure cookie would never come back.
+        response.set_cookie(COOKIE, minted, max_age=_MAX_AGE, path="/", samesite="lax", httponly=True)
     return minted
+
+
+def _secure(request: Request) -> bool:
+    """Did the browser reach us over https? The Space's proxy ends TLS and says so."""
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"

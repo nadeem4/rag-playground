@@ -12,6 +12,7 @@ size from `/pages`.
 from __future__ import annotations
 
 import io
+import math
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -21,13 +22,18 @@ import pypdfium2.raw as pdfium_c
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from api import demo
+from api import demo, sample_set
 from api.routes.sources import SHA
 
 router = APIRouter()
 
 #: A page render is a pure function of the source's bytes, which the sha names.
 CACHE_CONTROL = "public, max-age=31536000, immutable"
+PRIVATE_CACHE_CONTROL = "private, max-age=31536000, immutable"
+
+#: The largest page bitmap a render may allocate, and the smallest scale it clamps to.
+MAX_PIXELS = 25_000_000
+MIN_SCALE = 0.25
 
 #: Characters pdfium reports for a hyphen it decided was a soft line-end break.
 _SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}
@@ -77,12 +83,27 @@ def render_page(
     sha: str, n: int, request: Request, scale: float = Query(1.0, gt=0, le=8)
 ) -> Response:
     with _open(request, sha) as doc:
-        image = _page(doc, n).render(scale=scale).to_pil()
+        page = _page(doc, n)
+        image = page.render(scale=_clamp(scale, *page.get_size())).to_pil()
     buf = io.BytesIO()
     image.save(buf, format="PNG")
+    # In demo mode an upload is one browser's own: no shared cache may keep it.
+    private = demo.enabled() and sha not in sample_set.readable_shas()
     return Response(
-        buf.getvalue(), media_type="image/png", headers={"Cache-Control": CACHE_CONTROL}
+        buf.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": PRIVATE_CACHE_CONTROL if private else CACHE_CONTROL},
     )
+
+
+def _clamp(scale: float, width: float, height: float) -> float:
+    """Lower the scale so the bitmap stays within MAX_PIXELS: an uploaded PDF
+    can declare a page of any size, and scale 8 on a huge page would ask for
+    gigabytes. Never below MIN_SCALE."""
+    area = width * height
+    if area <= 0:
+        return scale
+    return max(MIN_SCALE, min(scale, math.sqrt(MAX_PIXELS / area)))
 
 
 def normalize(chars: list[str]) -> tuple[str, list[int]]:

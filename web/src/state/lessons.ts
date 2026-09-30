@@ -24,8 +24,8 @@ export const LESSONS: Lesson[] = [
     href: "/learn/end-to-end",
     title: "How RAG works, end to end",
     what: "Follow one question from the answer back to the PDF, and see what every step of the pipeline did.",
-    steps: ["Parse", "Clean", "Chunk", "Retrieve", "Rerank", "Answer"],
-    size: "6 steps to scroll through",
+    steps: ["Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer"],
+    size: "7 steps to scroll through",
   },
   {
     slug: "chunking",

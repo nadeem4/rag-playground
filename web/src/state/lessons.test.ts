@@ -15,8 +15,8 @@ describe("the lesson path", () => {
   })
 
   it("states each lesson's real length", () => {
-    // The end-to-end steps live inline in components/learn/EndToEndLesson.tsx: answer, rerank, retrieve, chunk, clean, parse.
-    expect(LESSONS[0].size).toBe("6 steps to scroll through")
+    // The end-to-end steps live inline in components/learn/EndToEndLesson.tsx: answer, rerank, retrieve, index, chunk, clean, parse.
+    expect(LESSONS[0].size).toBe("7 steps to scroll through")
     // The chunking challenges come from the server's lesson data, four of them.
     expect(LESSONS[1].size).toBe("4 challenges")
     // The citations steps live inline in components/learn/CitationsLesson.tsx (STEPS, six of them).

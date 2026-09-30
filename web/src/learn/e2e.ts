@@ -102,6 +102,7 @@ export function rerankStep(run: E2ERun): StepWords & { skipped: PoolEntry[]; rea
   words.push(
     `The reranker then chose ${count} that are relevant but different from each other.`,
     `It passed over ${listJoin(skipped.map((p) => `#${p.rank}`))}, which are close in meaning to chunks it had already picked, and reached down to #${deepest.rank} instead because it adds a different point.`,
+    "Variety has a cost: the passages it passed over were relevant too, and the one it reached down for may be further from the answer.",
   )
   return { title: `Rerank picked a varied ${count}`, words, skipped, reached: deepest }
 }
@@ -150,7 +151,17 @@ export function retrieveStep(run: E2ERun): StepWords {
       agree
         ? "The top chunk came first in both lists. It shares the most words with the question, and it is also the closest in meaning."
         : "The two searches put different chunks first, and the merge decided between them.",
-      `For the meaning search, the index had turned each of the ${run.index.doc_count} chunks into a list of ${run.index.dim} numbers with ${run.index.model}.`,
+      "The meaning search turned the question into the same kind of list and looked for the closest chunks.",
+    ],
+  }
+}
+
+export function indexStep(run: E2ERun): StepWords {
+  return {
+    title: `Index turned each chunk into ${run.index.dim} numbers`,
+    words: [
+      `The index asked ${run.index.model} to turn each of the ${run.index.doc_count} chunks into a list of ${run.index.dim} numbers that stands for its meaning.`,
+      "Chunks that say similar things get lists that are close to each other. That closeness is what the meaning search compares.",
     ],
   }
 }
@@ -165,6 +176,12 @@ export function chunkStep(run: E2ERun): StepWords {
 }
 
 export function cleanStep(run: E2ERun): StepWords {
+  if (run.removed.length === 0) {
+    return {
+      title: "Clean found nothing to remove",
+      words: ["The duplicate cleaner looks for the same paragraph on more than one page.", "This run had none, so nothing was removed."],
+    }
+  }
   const r = run.removed[0]
   return {
     title: "Clean removed a repeated paragraph",
@@ -182,7 +199,7 @@ export function parseStep(run: E2ERun): StepWords {
   return {
     title: "Parse read the PDF",
     words: [
-      `Docling read ${plural(run.page_count, "page")} and found ${run.elements.length} blocks of text: ${listJoin(kinds)}.`,
+      `Docling, the parser that looks at page layout, read ${plural(run.page_count, "page")} and found ${run.elements.length} blocks of text: ${listJoin(kinds)}.`,
       "It also recognised the page numbers and the footer on each page, and left them out.",
     ],
   }

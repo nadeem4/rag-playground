@@ -5,6 +5,7 @@ import {
   chunkStep,
   cleanStep,
   hitMeta,
+  indexStep,
   listJoin,
   numberWord,
   parseStep,
@@ -94,10 +95,9 @@ describe("the recorded run", () => {
     const dense = topBy(RUN, "dense", 4)
     expect(dense).toHaveLength(4)
     expect(dense[0].dense).toBe(Math.max(...RUN.pool.map((p) => p.dense ?? -Infinity)))
-    const words = retrieveStep(RUN).words.join(" ")
-    expect(words).toContain(`${RUN.index.dim} numbers`)
-    expect(words).toContain(RUN.index.model)
-    expect(words).toContain(`${RUN.index.doc_count} chunks`)
+    const words = retrieveStep(RUN).words
+    expect(words).toContain("The meaning search turned the question into the same kind of list and looked for the closest chunks.")
+    expect(words.join(" ")).not.toContain("the index had turned each of the")
   })
 
   it("names the chunk count and the chunker's settings", () => {
@@ -111,10 +111,38 @@ describe("the recorded run", () => {
     expect(cleanStep(RUN).words[0]).toBe(`The same paragraph appears on page ${r.duplicate_of_page} and again on page ${r.page}.`)
   })
 
+  it("says so when clean found nothing to remove", () => {
+    expect(cleanStep(TINY)).toEqual({
+      title: "Clean found nothing to remove",
+      words: ["The duplicate cleaner looks for the same paragraph on more than one page.", "This run had none, so nothing was removed."],
+    })
+  })
+
+  it("explains the index with the model, the chunk count and the size of each list", () => {
+    const step = indexStep(RUN)
+    expect(step.title).toContain("1024 numbers")
+    expect(step.title).toBe(`Index turned each chunk into ${RUN.index.dim} numbers`)
+    expect(step.words[0]).toBe(
+      `The index asked ${RUN.index.model} to turn each of the ${RUN.index.doc_count} chunks into a list of ${RUN.index.dim} numbers that stands for its meaning.`,
+    )
+    expect(step.words[1]).toBe("Chunks that say similar things get lists that are close to each other. That closeness is what the meaning search compares.")
+  })
+
+  it("says what the variety rerank costs, only when it passed something over", () => {
+    const cost = "Variety has a cost: the passages it passed over were relevant too, and the one it reached down for may be further from the answer."
+    expect(rerankStep(RUN).skipped.length).toBeGreaterThan(0)
+    expect(rerankStep(RUN).words).toContain(cost)
+    const top5 = [...RUN.pool].sort((a, b) => a.rank - b.rank).slice(0, 5).map((p) => p.id)
+    const inOrder = { ...RUN, mmr: top5 }
+    expect(rerankStep(inOrder).skipped).toHaveLength(0)
+    expect(rerankStep(inOrder).words).not.toContain(cost)
+  })
+
   it("counts pages and blocks by type", () => {
     const headings = RUN.elements.filter((e) => e.type === "heading").length
     const words = parseStep(RUN).words[0]
-    expect(words).toContain(`Docling read ${RUN.page_count} pages and found ${RUN.elements.length} blocks of text`)
+    expect(words.startsWith("Docling, the parser that looks at page layout, read")).toBe(true)
+    expect(words).toContain(`Docling, the parser that looks at page layout, read ${RUN.page_count} pages and found ${RUN.elements.length} blocks of text: `)
     expect(words).toContain(`${headings} headings`)
   })
 

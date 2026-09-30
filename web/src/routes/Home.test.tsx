@@ -44,7 +44,7 @@ describe("Home", () => {
       "How citations work",
     ])
     const first = within(lessons()[0])
-    for (const s of ["Parse", "Clean", "Chunk", "Retrieve", "Rerank", "Answer", "6 steps to scroll through"]) expect(first.getByText(s)).toBeTruthy()
+    for (const s of ["Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer", "7 steps to scroll through"]) expect(first.getByText(s)).toBeTruthy()
     expect(within(lessons()[1]).getByText("4 challenges")).toBeTruthy()
     expect(within(lessons()[2]).getByText("6 short steps")).toBeTruthy()
     expect(within(lessons()[1]).getByRole("link", { name: "Start" }).getAttribute("href")).toBe("/learn/chunking")

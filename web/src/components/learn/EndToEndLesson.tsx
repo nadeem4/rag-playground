@@ -7,6 +7,7 @@ import {
   chunkStep,
   cleanStep,
   hitMeta,
+  indexStep,
   parseStep,
   quoteSource,
   rerankRows,
@@ -315,10 +316,9 @@ function PipelineStep({ step, links, children }: { step: StepWords; links?: Reac
 }
 
 const RECAP = [
-  "One question travelled through parse, clean, chunk, retrieve and rerank before any model saw it.",
-  "Search on its own already returns the passages that answer the question, and it costs nothing to run.",
-  "Every view in this lesson was drawn from a recorded run of this playground, not from a picture of one.",
-  "Every number in the answer points back to a real sentence on a page of the PDF.",
+  "You can now predict what a parser finds on a page: blocks of text, each with its page and position, which is what a citation later points at.",
+  "You can predict where a chunk boundary will fall for a given size and overlap, and why a cut in the wrong place hides an answer.",
+  "You can predict what a reranker for variety will do: keep the top pick, and trade a near-duplicate for a different point.",
 ]
 
 export function EndToEndLesson({ sha, onRun, onChat }: EndToEndLessonProps) {
@@ -355,6 +355,17 @@ export function EndToEndLesson({ sha, onRun, onChat }: EndToEndLessonProps) {
       body: (
         <PipelineStep step={retrieveStep(RUN)}>
           <RetrieveView />
+        </PipelineStep>
+      ),
+    },
+    {
+      id: "index",
+      title: indexStep(RUN).title,
+      body: (
+        <PipelineStep step={indexStep(RUN)}>
+          <p className="m-0 text-sm text-fg-muted">
+            Each of the {RUN.index.doc_count} chunks now has its own list of {RUN.index.dim} numbers, made by {RUN.index.model}.
+          </p>
         </PipelineStep>
       ),
     },
@@ -415,6 +426,10 @@ export function EndToEndLesson({ sha, onRun, onChat }: EndToEndLessonProps) {
               Run it yourself
             </Button>
           </div>
+          <p data-testid="recording-note" className="m-0 max-w-[68ch] text-sm text-fg-muted">
+            This lesson shows a run recorded on one machine. On the hosted demo the same settings can give slightly different blocks, because the
+            parser's layout model does not behave exactly the same on every machine. The steps and the ideas stay the same.
+          </p>
         </>
       }
     />

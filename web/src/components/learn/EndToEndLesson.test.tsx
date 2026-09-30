@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { clearPdfCaches } from "@/api/usePdf"
-import { chunkById, chunkStep, cleanStep, parseStep, quoteSource, rerankStep, retrieveStep, RUN } from "@/learn/e2e"
+import { chunkById, chunkStep, cleanStep, indexStep, parseStep, quoteSource, rerankStep, retrieveStep, RUN } from "@/learn/e2e"
 import { readProgress, resetProgressForTests } from "@/state/lessons"
 
 import { EndToEndLesson } from "./EndToEndLesson"
@@ -57,6 +57,13 @@ describe("How RAG works, end to end", () => {
     expect(screen.getByText(`asked of ${RUN.filename}, ${RUN.page_count} pages`)).toBeTruthy()
   })
 
+  it("says why a live run may give slightly different blocks", () => {
+    lesson()
+    expect(screen.getByTestId("recording-note").textContent).toBe(
+      "This lesson shows a run recorded on one machine. On the hosted demo the same settings can give slightly different blocks, because the parser's layout model does not behave exactly the same on every machine. The steps and the ideas stay the same.",
+    )
+  })
+
   it("opens on what search found: the reranker's picks with their retriever rank", () => {
     lesson()
     const panel = screen.getByRole("tabpanel")
@@ -85,12 +92,15 @@ describe("How RAG works, end to end", () => {
       `1What came back`,
       `2${rerankStep(RUN).title}`,
       `3${retrieveStep(RUN).title}`,
-      `4${chunkStep(RUN).title}`,
-      `5${cleanStep(RUN).title}`,
-      `6${parseStep(RUN).title}`,
-      `7Recap`,
+      `4${indexStep(RUN).title}`,
+      `5${chunkStep(RUN).title}`,
+      `6${cleanStep(RUN).title}`,
+      `7${parseStep(RUN).title}`,
+      `8Recap`,
     ])
-    for (const step of [rerankStep(RUN), cleanStep(RUN), parseStep(RUN)]) {
+    expect(steps().filter((b) => !b.textContent!.endsWith("Recap"))).toHaveLength(7)
+    expect(indexStep(RUN).title).toBe("Index turned each chunk into 1024 numbers")
+    for (const step of [rerankStep(RUN), indexStep(RUN), cleanStep(RUN), parseStep(RUN)]) {
       const panel = open(step.title)
       expect(within(panel).getByRole("heading", { level: 2, name: step.title })).toBeTruthy()
       for (const w of step.words) expect(within(panel).getByText(w)).toBeTruthy()
@@ -125,7 +135,13 @@ describe("How RAG works, end to end", () => {
   it("recaps what the lesson showed, then Mark as done and Next: Chunking", () => {
     lesson()
     const panel = open("Recap")
-    expect(within(panel).getByText(/One question travelled through parse, clean, chunk, retrieve and rerank/)).toBeTruthy()
+    for (const line of [
+      "You can now predict what a parser finds on a page: blocks of text, each with its page and position, which is what a citation later points at.",
+      "You can predict where a chunk boundary will fall for a given size and overlap, and why a cut in the wrong place hides an answer.",
+      "You can predict what a reranker for variety will do: keep the top pick, and trade a near-duplicate for a different point.",
+    ])
+      expect(within(panel).getByText(line)).toBeTruthy()
+    expect(within(panel).getAllByRole("listitem")).toHaveLength(3)
     expect(within(panel).getByRole("link", { name: "Next: Chunking" }).getAttribute("href")).toBe("/learn/chunking")
     fireEvent.click(within(panel).getByRole("link", { name: "Mark as done" }))
     expect(readProgress()).toEqual({ "end-to-end": true })

@@ -69,6 +69,16 @@ export function keyShortLabel(server: LlmSettings | null, keys: Keys): string {
   return server === null ? "" : "not set"
 }
 
+/**
+ * Is any key set anywhere, in this tab or on the server? Null while the server
+ * has not answered and no key is set in this tab, since then nobody knows.
+ */
+export function hasAnyKey(server: LlmSettings | null, keys: Keys): boolean | null {
+  if (PROVIDERS.some((p) => keys[p] !== null)) return true
+  if (server === null) return null
+  return PROVIDERS.some((p) => server[p] !== "none")
+}
+
 export function checkMessage(provider: LlmProvider, check: LlmCheck): { ok: boolean; text: string } {
   const checked = {
     header: "the key entered here",

@@ -1,8 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { useEffect } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import liveRegistry from "@/api/fixtures/registry.json"
-import { initialGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
+import { chatSampleGraph, initialGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -111,6 +113,79 @@ describe("Build page", () => {
     await waitFor(() => expect(document.querySelector("[data-testid=run-all-blocked]")).toBeTruthy())
     expect(document.querySelector("[data-testid=run-all-blocked]")!.textContent).toBe("Choose a file to run the pipeline.")
     expect(screen.getByRole("button", { name: "Run all" }).getAttribute("title")).toBe("Choose a file to run the pipeline.")
+  })
+})
+
+describe("Run all with a chat card and no API key", () => {
+  const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none" }
+  let settings: Record<string, string>
+
+  beforeEach(() => {
+    settings = NO_SERVER_KEYS
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
+        if (url === "/api/settings/llm") return new Response(JSON.stringify(settings), { status: 200 })
+        if (url === "/api/runs" && init?.method === "POST") {
+          posts.push({ path: url, body: JSON.parse(String(init.body)) })
+          return new Response(JSON.stringify({ run_id: "r1" }), { status: 202 })
+        }
+        return base(url, init)
+      }),
+    )
+    storeGraph(chatSampleGraph(liveRegistry as never, SOURCE))
+  })
+
+  const chatUpstream = () => {
+    const g = chatSampleGraph(liveRegistry as never, SOURCE)
+    const chat = g.nodes.find((n) => n.stage === "use_case")!
+    return g.edges.find((e) => e.dst === chat.id)!.src
+  }
+
+  function WithKey() {
+    const { setKey } = useApiKey()
+    useEffect(() => setKey("anthropic", "sk-ant-FAKE-test-key-0000"), [setKey])
+    return null
+  }
+
+  async function runAll(withKey = false) {
+    render(
+      <ApiKeyProvider>
+        {withKey ? <WithKey /> : null}
+        <Shell />
+      </ApiKeyProvider>,
+    )
+    const button = await screen.findByRole("button", { name: "Run all" })
+    // Let the settings answer land before pressing.
+    await act(async () => {})
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(button)
+    await waitFor(() => expect(posts).toHaveLength(1))
+    return posts[0].body as { targets?: string[] }
+  }
+
+  it("keyless Run all stops before Chat", async () => {
+    const body = await runAll()
+    expect(body.targets).toEqual([chatUpstream()])
+    const notice = await screen.findByTestId("key-notice")
+    expect(notice.textContent!.startsWith("Search results are ready. Add a key to get a written answer.")).toBe(true)
+    expect(within(notice).getByTestId("key-hint")).toBeTruthy()
+  })
+
+  it("a UI key runs all the way", async () => {
+    const body = await runAll(true)
+    expect(body.targets).toBeUndefined()
+    expect(screen.queryByTestId("key-notice")).toBeNull()
+  })
+
+  it("a server .env key runs all the way", async () => {
+    settings = { ...NO_SERVER_KEYS, anthropic: "dotenv" }
+    const body = await runAll()
+    expect(body.targets).toBeUndefined()
+    expect(screen.queryByTestId("key-notice")).toBeNull()
   })
 })
 

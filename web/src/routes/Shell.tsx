@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 
-import { needsKey, useApiKey } from "@/api/apiKey"
+import { hasAnyKey, needsKey, useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { GraphNode, Registry, Source } from "@/api/types"
+import type { GraphNode, LlmSettings, Registry, Source } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
@@ -106,6 +106,17 @@ function Build({ registry }: { registry: Registry }) {
     api.sources().then(setUploaded, () => undefined)
   }, [])
 
+  // Which keys the server has. Null until it answers, and if it fails: then
+  // Run all is left alone.
+  const [server, setServer] = useState<LlmSettings | null>(null)
+  useEffect(() => {
+    api.llmSettings().then(setServer, () => setServer(null))
+  }, [])
+
+  // Set when a keyless Run all stopped before Chat. A new key clears it.
+  const [keyNotice, setKeyNotice] = useState<string | null>(null)
+  useEffect(() => setKeyNotice(null), [keys])
+
   useEffect(() => storeGraph(graph), [graph])
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
   const explanations = useExplanations(graph.nodes)
@@ -168,11 +179,24 @@ function Build({ registry }: { registry: Registry }) {
       setSelected(source.id)
       return
     }
+    setKeyNotice(null)
+    // A Run all with no key anywhere would end in a chat traceback. Stop at
+    // the card that feeds Chat instead, and say so in one sentence.
+    let notice: string | null = null
+    if (target === undefined && hasAnyKey(server, keys) === false) {
+      const chat = graph.nodes.find((n) => n.stage === "use_case" && n.transform === "chat")
+      const upstream = chat && chat.config.model !== "custom" ? graph.edges.find((e) => e.dst === chat.id)?.src : undefined
+      if (upstream) {
+        target = upstream
+        notice = "Search results are ready. Add a key to get a written answer."
+      }
+    }
     setErrors({})
     setColumnError(null)
     setSubmitting(true)
     try {
       const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }), { keys })
+      setKeyNotice(notice)
       const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       setSelected(target ?? order[order.length - 1]?.id ?? null)
@@ -282,6 +306,13 @@ function Build({ registry }: { registry: Registry }) {
           <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
             {blockedTitle(blocker)}
           </p>
+        ) : null}
+        {keyNotice ? (
+          // A div, not a p: KeyHint is itself a p, and a p cannot hold one.
+          <div role="status" data-testid="key-notice" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
+            <p>{keyNotice}</p>
+            <KeyHint />
+          </div>
         ) : null}
         {columnError || run.error ? (
           <div role="alert" className="flex flex-col gap-1 border-b border-hairline p-3">

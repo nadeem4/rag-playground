@@ -6,7 +6,7 @@ import { NodeCard } from "@/components/pipeline/NodeCard"
 import { Shell } from "@/routes/Shell"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
-import { ApiKeyProvider, checkMessage, keyShortLabel, keySourceLabel, needsKey } from "./apiKey"
+import { ApiKeyProvider, checkMessage, hasAnyKey, keyShortLabel, keySourceLabel, needsKey } from "./apiKey"
 import { api, KEY_HEADERS, keyHeaders } from "./client"
 import type { LlmProvider } from "./types"
 
@@ -200,6 +200,23 @@ describe("key source words", () => {
     expect(keyShortLabel({ ...allNone, anthropic: "dotenv" }, none)).toBe("1 set")
     expect(keyShortLabel({ ...allNone, anthropic: "dotenv" }, { ...none, anthropic: FAKE.anthropic, openai: FAKE.openai })).toBe("2 set")
     expect(keyShortLabel(null, { ...none, custom: FAKE.custom })).toBe("1 set")
+  })
+
+  describe("hasAnyKey", () => {
+    const none = { anthropic: "none", openai: "none", custom: "none" } as const
+    const noKeys = { anthropic: null, openai: null, custom: null }
+    it("is null while the server has not answered", () => {
+      expect(hasAnyKey(null, noKeys)).toBeNull()
+    })
+    it("is false when nothing is set anywhere", () => {
+      expect(hasAnyKey(none, noKeys)).toBe(false)
+    })
+    it("is true with a UI key", () => {
+      expect(hasAnyKey(none, { ...noKeys, anthropic: "sk-x" })).toBe(true)
+    })
+    it("is true with a server key from .env", () => {
+      expect(hasAnyKey({ ...none, openai: "dotenv" }, noKeys)).toBe(true)
+    })
   })
 
   it("says what a check found", () => {

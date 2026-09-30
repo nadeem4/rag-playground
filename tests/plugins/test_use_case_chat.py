@@ -371,8 +371,8 @@ def test_missing_key_is_a_readable_error(fake, pipeline, extras):
     with pytest.raises(ValueError) as info:
         run(pipeline, context=context)
     assert str(info.value) == (
-        "No Anthropic API key. Add one in the UI (API key, top right) "
-        "or put ANTHROPIC_API_KEY in .env."
+        "No Anthropic API key. Add one with the API key button at the top right, "
+        "or set ANTHROPIC_API_KEY on the server."
     )
     assert fake.client is None
 

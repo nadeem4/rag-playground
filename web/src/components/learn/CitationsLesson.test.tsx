@@ -61,9 +61,31 @@ describe("How citations work", () => {
     render(<CitationsLesson sha={SHA} onTry={() => {}} />)
     fireEvent.click(steps()[3])
     expect(within(panel()).getByText("0.86")).toBeTruthy()
-    expect(within(panel()).getAllByText(/above the pass line of 0.55/).length).toBe(2)
-    expect(within(panel()).getByText(/below the pass line of 0.55/)).toBeTruthy()
+    expect(within(panel()).getAllByText(/above the pass line of 0.55/).length).toBe(3)
+    expect(within(panel()).getAllByText(/below the pass line of 0.55/).length).toBe(2)
     expect(within(panel()).queryByRole("progressbar")).toBeNull()
+  })
+
+  it("says Claude's API can return citations, without claiming only Claude can", () => {
+    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    const text = document.body.textContent ?? ""
+    expect(text).toContain("Claude's API can return citations for us. For other models, the model points, and we quote.")
+    expect(text).not.toContain("Only Claude")
+  })
+
+  it("the scores step says a low score is marked weak support, and says what a claim that points at nothing scored", () => {
+    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    fireEvent.click(steps()[3])
+    expect(panel().textContent).toContain(
+      "If the score is above the pass line, the claim is cited. If it is below, the citation is marked weak support, and you should read it yourself.",
+    )
+    expect(within(panel()).getByText(/the closest sentence we found scored 0.31/)).toBeTruthy()
+  })
+
+  it.each([3, 5])("step %i shows every label at least once", (n) => {
+    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    fireEvent.click(steps()[n])
+    for (const l of ["Cited", "Weak support", "Similarity match", "Not grounded"]) expect(within(panel()).getAllByText(l).length).toBeGreaterThanOrEqual(1)
   })
 
   it("clicking a claim finds its real sentence on the sample page and boxes it", async () => {

@@ -52,6 +52,8 @@ const LABEL: Record<Label, string> = { cited: "Cited", weak: "Weak support", sim
 const CLAIMS: { text: string; points: string; label: Label; score: number | null; id: string | null }[] = [
   { text: "If a cut splits an explanation, neither half scores well", points: "[1.2]", label: "cited", score: 0.86, id: "1.2" },
   { text: "A table can lose its caption", points: "[2.2]", label: "cited", score: 0.79, id: "2.2" },
+  { text: "Overlap should be about a fifth of the chunk", points: "[2.1]", label: "weak", score: 0.41, id: "2.1" },
+  { text: "Chunks are cut before anything is indexed", points: "nothing", label: "similarity", score: 0.72, id: "1.1" },
   { text: "Smaller chunks are also cheaper", points: "[9.9], which does not exist", label: "none", score: null, id: null },
   { text: "Most teams use 500 tokens", points: "nothing", label: "none", score: 0.31, id: null },
 ]
@@ -75,11 +77,11 @@ function Marker({ id, bad }: { id: string; bad?: boolean }) {
 }
 
 /** The score, and a small mark against the pass line on a hairline. No filled track. */
-function ScoreMark({ score }: { score: number }) {
+function ScoreMark({ score, closest }: { score: number; closest?: boolean }) {
   const above = score >= PASS
   return (
     <span className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-      <span className="font-mono text-fg">{score.toFixed(2)}</span>
+      {closest ? <span>the closest sentence we found scored {score.toFixed(2)}</span> : <span className="font-mono text-fg">{score.toFixed(2)}</span>}
       <span aria-hidden className="relative inline-block h-[12px] w-[72px] border-b border-fg-muted">
         <span className="absolute bottom-0 h-[12px] w-px bg-danger" style={{ left: `${PASS * 100}%` }} />
         <span className="absolute bottom-0 h-[8px] w-[3px] bg-fg" style={{ left: `calc(${score * 100}% - 1px)` }} />
@@ -117,10 +119,11 @@ function Answer() {
   return (
     <div className="flex flex-col gap-2">
       <p className="m-0 rounded-panel bg-surface-elevated p-3 text-sm leading-[1.8]">
-        If a cut splits an explanation, neither half scores well <Marker id="1.2" />. A table can lose its caption <Marker id="2.2" />. Smaller chunks are
-        also cheaper <Marker id="9.9" bad />. Most teams use 500 tokens.
+        If a cut splits an explanation, neither half scores well <Marker id="1.2" />. A table can lose its caption <Marker id="2.2" />. Overlap should be
+        about a fifth of the chunk <Marker id="2.1" />. Chunks are cut before anything is indexed. Smaller chunks are also cheaper <Marker id="9.9" bad />.
+        Most teams use 500 tokens.
       </p>
-      <p className="m-0 text-sm text-fg-muted">Four claims. Two point at real sentences, one points at a sentence that does not exist, and one points at nothing.</p>
+      <p className="m-0 text-sm text-fg-muted">Six claims. Three point at real sentences, one points at a sentence that does not exist, and two point at nothing.</p>
     </div>
   )
 }
@@ -136,7 +139,7 @@ function Scores() {
               <span className="text-xs text-fg-muted">
                 Points at <span className="font-mono">{c.points}</span>
               </span>
-              {c.score !== null ? <ScoreMark score={c.score} /> : null}
+              {c.score !== null ? <ScoreMark score={c.score} closest={c.points === "nothing"} /> : null}
             </div>
             <Chip label={c.label} />
           </li>
@@ -262,7 +265,7 @@ const STEPS: Step[] = [
     title: "We check that each sentence supports its claim",
     words: [
       "A number alone is not proof. We compare the meaning of each claim with the meaning of the sentence it points at, and get a score between 0 and 1.",
-      "If the score is above the pass line, the claim is cited. If it is not, the citation is marked weak, and you should read it yourself.",
+      "If the score is above the pass line, the claim is cited. If it is below, the citation is marked weak support, and you should read it yourself.",
     ],
     visual: () => <Scores />,
   },
@@ -328,7 +331,7 @@ export function CitationsLesson(p: CitationsLessonProps) {
             instead of trusting it.
           </p>
           <p className="m-0 text-base leading-[1.65]">
-            Only Claude can return citations on its own. For every other model, we use one simple idea: the model points, and we quote.
+            Claude's API can return citations for us. For other models, the model points, and we quote.
           </p>
         </>
       }

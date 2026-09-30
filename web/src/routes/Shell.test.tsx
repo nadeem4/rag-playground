@@ -1,7 +1,9 @@
-import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
+import { initialGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
+import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
 import { Shell } from "./Shell"
@@ -20,6 +22,8 @@ let posts: { path: string; body: unknown }[] = []
 beforeEach(() => {
   posts = []
   window.localStorage.clear()
+  resetPipelinesForTests()
+  window.history.replaceState(null, "", "/build")
   vi.stubGlobal("EventSource", SilentEventSource)
   vi.stubGlobal(
     "fetch",
@@ -52,6 +56,11 @@ async function ready() {
   await waitFor(() => expect(card("parse")).toBeTruthy())
   const pick = await waitFor(() => within(card("source")).getByLabelText("File") as HTMLSelectElement)
   fireEvent.change(pick, { target: { value: SOURCE.sha } })
+}
+
+/** Renders Shell with the default fetch/EventSource stubs, with nothing selected yet. */
+function setup() {
+  render(<Shell />)
 }
 
 describe("Build page", () => {
@@ -252,5 +261,113 @@ describe("First run (plan I-15)", () => {
     expect(alert.textContent).toContain("sample missing")
     expect((await sampleButton()).disabled).toBe(false)
     expect(card("parse")).toBeNull()
+  })
+})
+
+describe("saved pipelines on Build", () => {
+  const bar = () => screen.getByRole("group", { name: "Saved pipelines" })
+  const picker = () => within(bar()).getByRole("combobox", { name: "Pipeline" }) as HTMLSelectElement
+  const chunkTransform = () => (within(card("chunk")).getByRole("combobox", { name: "Transform" }) as HTMLSelectElement).value
+
+  it("starts on the working copy with nothing saved", async () => {
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect([...picker().options].map((o) => o.textContent)).toEqual(["Working copy"])
+    expect(within(bar()).queryByRole("button", { name: "Save changes" })).toBeNull()
+  })
+
+  it("Save as names the working copy, selects it, and refuses an empty name", async () => {
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save as" }))
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
+    expect(within(bar()).getByText("Give the pipeline a name.")).toBeTruthy()
+    fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "Recursive chunks" } })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
+    expect([...picker().options].map((o) => o.textContent)).toEqual(["Working copy", "Recursive chunks"])
+    expect(picker().selectedOptions[0].textContent).toBe("Recursive chunks")
+    expect(readPipelines()[0].name).toBe("Recursive chunks")
+  })
+
+  it("switching pipelines loads the saved graph, editing shows edited, and Save changes writes it back", async () => {
+    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!
+    setCurrentId(null)
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect(chunkTransform()).toBe("recursive_character")
+    fireEvent.change(picker(), { target: { value: saved.id } })
+    expect(chunkTransform()).toBe("token_based")
+    expect(within(bar()).queryByText("edited")).toBeNull()
+    fireEvent.change(within(card("chunk")).getByRole("combobox", { name: "Transform" }), { target: { value: "markdown_header" } })
+    expect(within(bar()).getByText("edited")).toBeTruthy()
+    expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("token_based")
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save changes" }))
+    expect(within(bar()).queryByText("edited")).toBeNull()
+    expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("markdown_header")
+  })
+
+  it("Delete returns to the working copy and keeps the graph on screen", async () => {
+    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect(picker().value).toBe(saved.id)
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }))
+    expect(picker().value).toBe("")
+    expect([...picker().options].map((o) => o.textContent)).toEqual(["Working copy"])
+    expect(chunkTransform()).toBe("token_based")
+  })
+
+  it("Rename changes the name in place", async () => {
+    const saved = savePipeline("Old", initialGraph(TEST_REGISTRY))!
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Rename" }))
+    fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "New" } })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
+    expect(readPipelines().find((p) => p.id === saved.id)?.name).toBe("New")
+    expect(picker().selectedOptions[0].textContent).toBe("New")
+  })
+
+  it("Copy link puts the share URL on the clipboard and says so", async () => {
+    const saved = savePipeline("Token chunks", setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY))!
+    const writeText = vi.fn(async (_url: string) => {})
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } })
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Copy link" }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const url = new URL(writeText.mock.calls[0][0] as string)
+    expect(url.pathname).toBe("/build")
+    expect(decodePipeline(url.searchParams.get("pipeline")!, TEST_REGISTRY)).toEqual({ name: "Token chunks", graph: saved.graph })
+    expect(await within(bar()).findByText("Link copied")).toBeTruthy()
+  })
+
+  it("opening a share link saves, selects and loads the pipeline, and strips the parameter", async () => {
+    const graph = setTransform(initialGraph(TEST_REGISTRY), "chunk", "token_based", TEST_REGISTRY)
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("From a friend", graph)}`)
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect(readPipelines()[0].name).toBe("From a friend")
+    expect(picker().selectedOptions[0].textContent).toBe("From a friend")
+    expect(chunkTransform()).toBe("token_based")
+    expect(window.location.search).toBe("")
+  })
+
+  it("a bad share link is refused with one line and the page stays as it was", async () => {
+    window.history.replaceState(null, "", "/build?pipeline=not-a-pipeline")
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    expect(within(bar()).getByText("This pipeline link could not be read.")).toBeTruthy()
+    expect(readPipelines()).toEqual([])
+    expect(chunkTransform()).toBe("recursive_character")
+  })
+
+  it("says which document a pipeline needs when this browser does not have it", async () => {
+    const graph = initialGraph(TEST_REGISTRY)
+    const src = graph.nodes.find((n) => n.stage === "source")!
+    const foreign = setConfig(graph, src.id, { sha: "ef".repeat(32), filename: "report.pdf" })
+    storeGraph(foreign)
+    setup()
+    expect(await screen.findByText("This pipeline was built on report.pdf. Load a sample, or upload that file, to run it.")).toBeTruthy()
   })
 })

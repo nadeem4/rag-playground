@@ -8,6 +8,7 @@ import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { useExplanations } from "@/api/useExplain"
+import { useSamples } from "@/api/samples"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
@@ -15,6 +16,7 @@ import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
+import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { Button } from "@/components/ui/button"
 import {
   addCleaner,
@@ -35,6 +37,7 @@ import {
   type PipelineGraph,
 } from "@/state/graph"
 import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
+import { decodePipeline, readCurrentId, readPipelines, sameGraph, savePipeline, setCurrentId } from "@/state/pipelines"
 
 /**
  * Build: the pipeline column on the left, the selected card's output on the
@@ -68,7 +71,15 @@ export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry
 }
 
 function Build({ registry }: { registry: Registry }) {
-  const [graph, setGraph] = useState<PipelineGraph>(() => readStoredGraph(registry) ?? initialGraph(registry))
+  // The working copy: whatever was last stored under its own key, else the
+  // graph of whichever saved pipeline is selected (a session that starts with
+  // a selection already made but no working-copy storage of its own yet),
+  // else the default graph.
+  const [graph, setGraph] = useState<PipelineGraph>(() => {
+    const currentId = readCurrentId()
+    const current = currentId ? readPipelines().find((p) => p.id === currentId) : undefined
+    return readStoredGraph(registry) ?? (current ? structuredClone(current.graph) : undefined) ?? initialGraph(registry)
+  })
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [tracked, setTracked] = useState<Tracked>({ results: {}, history: {} })
@@ -110,6 +121,26 @@ function Build({ registry }: { registry: Registry }) {
       })
     }
   }, [])
+
+  const [barNotice, setBarNotice] = useState<string | null>(null)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get("pipeline")
+    if (!code) return
+    const decoded = decodePipeline(code, registry)
+    if (!decoded) {
+      setBarNotice("This pipeline link could not be read.")
+    } else {
+      const existing = readPipelines().find((p) => p.name === decoded.name && sameGraph(p.graph, decoded.graph))
+      const saved = existing ?? savePipeline(decoded.name, decoded.graph)
+      if (saved) setCurrentId(saved.id)
+      edit(decoded.graph)
+    }
+    params.delete("pipeline")
+    const rest = params.toString()
+    window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount by design
+  }, [registry])
 
   async function start(target: string | undefined, force: boolean) {
     const source = graph.nodes.find((n) => n.stage === "source")
@@ -160,6 +191,15 @@ function Build({ registry }: { registry: Registry }) {
   // Plan I-15: the first-run screen, while nothing is uploaded and no file is selected.
   const sourceNode = graph.nodes.find((n) => n.stage === "source")
   const firstRun = uploaded?.length === 0 && sourceNode !== undefined && !sourceNode.config.sha
+
+  // The working copy's document may not exist in this browser (opened from a
+  // share link, or a different machine): null until both sources and samples
+  // have answered (a failed samples fetch counts as answered).
+  const { samples } = useSamples()
+  const sourceSha = String(sourceNode?.config.sha ?? "")
+  const sourceName = String(sourceNode?.config.filename ?? "")
+  const known = uploaded === null ? null : uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
+  const missing = Boolean(sourceSha) && known === false
   const intro = firstRun
     ? { title: "Nothing to show yet", body: "Load a PDF, or try the sample document. Then press Run all, and select any step to see what it did." }
     : sampleLoaded && Object.keys(results).length === 0
@@ -199,6 +239,12 @@ function Build({ registry }: { registry: Registry }) {
             </Button>
           </div>
         </div>
+        <PipelineBar graph={graph} onLoad={(g) => edit(g)} notice={barNotice} />
+        {missing ? (
+          <p role="status" data-testid="missing-document" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
+            This pipeline was built on {sourceName}. Load a sample, or upload that file, to run it.
+          </p>
+        ) : null}
         {blocker && !firstRun ? (
           <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
             Fix the {titleFor(blocker)} settings to run the pipeline.

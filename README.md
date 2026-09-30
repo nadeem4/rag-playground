@@ -491,7 +491,8 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 
 On the hosted demo, an uploaded file is tied to the `rag_visitor` cookie in your browser and is
 deleted a day after upload. Results derived from it are cached by content hash and are not
-listed anywhere.
+listed anywhere. Files uploaded before uploads had owners have none, so they are hidden from
+every visitor and the daily sweep leaves them in place.
 
 Your browser also keeps two small things of its own: which lessons you have finished, and
 the last Evaluate score of the tab. Clearing your browser data removes

@@ -64,6 +64,31 @@ export function pipelineSteps(g: PipelineGraph): { label: string; transform: str
     .map((n) => ({ label: titleFor(n), transform: n.transform }))
 }
 
+// ------------------------------------------------- too few pieces, a miss --
+
+/**
+ * A score over a handful of pieces is flattered: when the top k is most of
+ * the pieces, the answer is found by chance. Null when the count is unknown
+ * or there are enough pieces for the score to mean something.
+ */
+export function piecesWarning(pieces: number | null, topK: number): string | null {
+  if (pieces === null) return null
+  if (pieces <= topK) {
+    return `This pipeline makes only ${pieces} ${pieces === 1 ? "piece" : "pieces"}, so every question finds it. The score says nothing here.`
+  }
+  if (pieces <= 2 * topK) {
+    return `This pipeline makes only ${pieces} pieces and the top ${topK} are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.`
+  }
+  return null
+}
+
+/** Why a question missed: ranked too low, or never retrieved at all. */
+export function missText(p: EvalPayload, topK: number): string {
+  return typeof p.found_at === "number"
+    ? `Found at rank ${p.found_at}, below the top ${topK}.`
+    : `Not in any of the ${p.total_candidates} pieces the retriever returned.`
+}
+
 // ------------------------------------------------------------- the summary --
 
 export interface EvalSummary {

@@ -4,6 +4,7 @@ import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 import type { EvalPayload, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
 import { useSamples } from "@/api/samples"
+import { loadPayload } from "@/api/useArtifact"
 import { usePayloads } from "@/api/usePayloads"
 import { useQuestionSet } from "@/api/useQuestionSet"
 import { useRegistry } from "@/api/useRegistry"
@@ -25,7 +26,9 @@ import {
   isEvalOutput,
   metrics,
   metricsByTag,
+  missText,
   percent,
+  piecesWarning,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
@@ -282,6 +285,30 @@ function Evaluation({
     return id && finished(s?.nodes[id]) ? s!.nodes[id].artifact_id : undefined
   }
   const ids = asked.map((_, i) => ({ out: artifactOf(i, useCaseId), result: artifactOf(i, resultNode?.id) }))
+
+  // How many pieces the pipeline made, read once from the chunk step of the
+  // first variant that finished it. Every variant shares that step.
+  const chunkId = graph.nodes.find((n) => n.stage === "chunk")?.id
+  const chunkArtifact = asked.map((_, i) => artifactOf(i, chunkId)).find((id) => id !== undefined)
+  const [pieces, setPieces] = useState<number | null>(null)
+  useEffect(() => {
+    if (!chunkArtifact) {
+      setPieces(null)
+      return
+    }
+    let live = true
+    loadPayload(chunkArtifact).then(
+      (d) => {
+        const chunks = (d as { chunks?: unknown } | null)?.chunks
+        if (live) setPieces(Array.isArray(chunks) ? chunks.length : null)
+      },
+      () => live && setPieces(null),
+    )
+    return () => {
+      live = false
+    }
+  }, [chunkArtifact])
+  const warning = piecesWarning(pieces, topK)
   const payload = usePayloads(ids.flatMap((x) => [x.out, x.result]))
 
   const rows: Row[] = asked.map((question, i) => {
@@ -438,6 +465,8 @@ function Evaluation({
               </p>
             ) : null}
           </>
+        ) : busy ? (
+          <p className="font-mono text-sm font-medium text-fg">{`Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}</p>
         ) : (
           <>
             <p data-testid="summary" className="font-mono text-sm font-medium text-fg">
@@ -446,13 +475,17 @@ function Evaluation({
             <p data-testid="hit-rate" className="text-sm text-fg-muted">
               Hit rate at {topK} <span className="font-mono font-medium text-fg tabular-nums">{percent(scores.hitRate) ?? "not yet"}</span>
             </p>
-            <p className="text-xs text-fg-muted">
-              {busy ? `Question ${Math.min(settled + 1, asked.length)} of ${asked.length}.` : `${asked.length} questions, one run each.`}
-            </p>
+            <p className="text-xs text-fg-muted">{`${asked.length} questions, one run each.`}</p>
           </>
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
       </div>
+
+      {warning ? (
+        <p role="status" data-testid="pieces-warning" className="shrink-0 border-b border-hairline px-3 py-1 text-xs text-fg-muted">
+          {warning}
+        </p>
+      ) : null}
 
       {runId === null ? null : <EvalMetricsDetail metrics={scores} byTag={byTag} topK={topK} rerank={rerankText} />}
 
@@ -476,7 +509,7 @@ function Evaluation({
               <span className="meta">question</span>
             </div>
             {rows.map((row) => (
-              <QuestionRow key={row.question.id} row={row} before={previous?.byId[row.question.id]} />
+              <QuestionRow key={row.question.id} row={row} before={previous?.byId[row.question.id]} topK={topK} />
             ))}
           </div>
         )}
@@ -494,7 +527,7 @@ const CHANGE_RULE: Record<RowChange, string> = {
   down: "border-l-2 border-removed-mark",
 }
 
-function QuestionRow({ row, before }: { row: Row; before?: EvalPayload }) {
+function QuestionRow({ row, before, topK }: { row: Row; before?: EvalPayload; topK: number }) {
   const p = row.payload
   const change = changeFor(p, before)
   const moved = changeText(change, before)
@@ -523,6 +556,7 @@ function QuestionRow({ row, before }: { row: Row; before?: EvalPayload }) {
                 {p.considered} of {p.total_candidates} checked
               </span>
             ) : null}
+            {p && !p.hit ? <span>{missText(p, topK)}</span> : null}
             {moved ? <span className="font-medium text-fg">{moved}</span> : null}
             {row.failed ? <span className="text-danger">{errorHeadline(row.failed.error ?? "Failed")}</span> : null}
           </span>

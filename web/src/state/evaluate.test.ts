@@ -10,7 +10,9 @@ import {
   hasRetriever,
   metrics,
   metricsByTag,
+  missText,
   percent,
+  piecesWarning,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
@@ -190,6 +192,43 @@ describe("the metrics per tag", () => {
   it("names the tags in the same order every run", () => {
     const rows = [tagged(["zeta"], payload()), tagged(["alpha"], payload()), tagged(["mid"], miss())]
     expect(metricsByTag(rows).map((t) => t.tag)).toEqual(["alpha", "mid", "zeta"])
+  })
+})
+
+describe("the warning about too few pieces", () => {
+  it("says nothing when the number of pieces is not known", () => {
+    expect(piecesWarning(null, 5)).toBeNull()
+  })
+
+  it("says the score means nothing when every piece is checked", () => {
+    expect(piecesWarning(1, 5)).toBe("This pipeline makes only 1 piece, so every question finds it. The score says nothing here.")
+    expect(piecesWarning(5, 5)).toBe("This pipeline makes only 5 pieces, so every question finds it. The score says nothing here.")
+  })
+
+  it("says most questions find the answer by chance when the pieces are few", () => {
+    expect(piecesWarning(7, 5)).toBe(
+      "This pipeline makes only 7 pieces and the top 5 are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.",
+    )
+    expect(piecesWarning(10, 5)).not.toBeNull()
+  })
+
+  it("says nothing when there are enough pieces", () => {
+    expect(piecesWarning(11, 5)).toBeNull()
+  })
+})
+
+describe("the reason for a miss", () => {
+  it("names the rank when the answer was found below the top k", () => {
+    expect(missText(payload({ hit: false, rank: null, found_at: 7 }), 5)).toBe("Found at rank 7, below the top 5.")
+  })
+
+  it("says the answer was nowhere when no piece held it", () => {
+    expect(missText(payload({ hit: false, rank: null, found_at: null, total_candidates: 12 }), 5)).toBe(
+      "Not in any of the 12 pieces the retriever returned.",
+    )
+    expect(missText(payload({ hit: false, rank: null, total_candidates: 12 }), 5)).toBe(
+      "Not in any of the 12 pieces the retriever returned.",
+    )
   })
 })
 

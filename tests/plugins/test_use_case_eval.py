@@ -104,8 +104,42 @@ def test_the_payload_has_the_i24_shape():
         # I-32
         "golds_total",
         "golds_found",
+        "found_at",
     }
     assert json.loads(json.dumps(payload)) == payload
+
+
+# --------------------------------------------------------------------------
+# found_at: where a missed answer sat below the top k
+# --------------------------------------------------------------------------
+
+
+def test_a_miss_whose_gold_sits_below_top_k_reports_where_it_was_found():
+    hits = [hit("unrelated text", rank=r) for r in range(1, 11)]
+    hits[6] = hit(GOLD, rank=7)
+    payload = run(*hits, top_k=5).payload
+    assert payload["hit"] is False
+    assert payload["found_at"] == 7
+
+
+def test_a_miss_whose_gold_is_nowhere_has_no_found_at():
+    hits = [hit("unrelated text", rank=r) for r in range(1, 11)]
+    assert run(*hits, top_k=5).payload["found_at"] is None
+
+
+def test_a_hit_has_no_found_at():
+    hits = [hit("unrelated text", rank=r) for r in range(1, 11)]
+    hits[1] = hit(GOLD, rank=2)
+    hits[6] = hit(GOLD, rank=7)
+    payload = run(*hits, top_k=5).payload
+    assert payload["hit"] is True
+    assert payload["found_at"] is None
+
+
+def test_found_at_uses_the_normalised_match_too():
+    hits = [hit("unrelated text", rank=r) for r in range(1, 5)]
+    hits.append(hit(GOLD.upper(), rank=5))
+    assert run(*hits, top_k=2).payload["found_at"] == 5
 
 
 # --------------------------------------------------------------------------

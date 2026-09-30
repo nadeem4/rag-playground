@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
@@ -97,12 +97,15 @@ function serve({
   stored = null,
   upload,
   demo = false,
+  artifacts = {},
 }: {
   reg?: unknown
   sampleSha?: string | null
   stored?: QuestionSetUpload | null
   upload?: QuestionSetUpload | { status: number }
   demo?: boolean
+  /** Artifact payloads by id, served at `/api/artifacts/{id}/payload`. */
+  artifacts?: Record<string, unknown>
 } = {}): { sweeps: RecordedSweep[] } {
   const sweeps: RecordedSweep[] = []
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
@@ -114,6 +117,8 @@ function serve({
         sweeps.push(JSON.parse(String(init.body)) as RecordedSweep)
         return ok({ run_id: "r1" })
       }
+      const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
       if (url === "/api/registry") return ok(reg)
       if (url === "/api/settings/app") return ok({ demo })
       if (url === "/api/samples")
@@ -447,5 +452,90 @@ describe("Evaluate picks a pipeline", () => {
     await waitFor(() => expect((screen.getByRole("button", { name: "Run evaluation" }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }))
     await waitFor(() => expect(picker().disabled).toBe(true))
+  })
+})
+
+/** An event stream the test drives, one per run. */
+class DrivenEventSource {
+  static instances: DrivenEventSource[] = []
+  onmessage: ((ev: MessageEvent) => void) | null = null
+  onerror = null
+  onopen = null
+  constructor() {
+    DrivenEventSource.instances.push(this)
+  }
+  close() {}
+  emit(seq: number, event: Record<string, unknown>) {
+    act(() => {
+      this.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ ts: seq, ...event }), lastEventId: String(seq) }))
+    })
+  }
+}
+
+describe("while and after scoring", () => {
+  const graph = sampleGraph(registry, SOURCE)
+  const idOf = (stage: string) => graph.nodes.find((n) => n.stage === stage)!.id
+  const evalOut = (over: Record<string, unknown>) => ({
+    kind: "eval",
+    payload: {
+      question: "q",
+      gold_answer: "g",
+      hit: true,
+      rank: 1,
+      matched_chunk_id: "c1",
+      match: "exact",
+      considered: 3,
+      total_candidates: 3,
+      golds_total: 1,
+      golds_found: 1,
+      found_at: null,
+      ...over,
+    },
+  })
+
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  async function start(artifacts: Record<string, unknown>) {
+    serve({ artifacts })
+    storeGraph(graph)
+    render(<Evaluate />)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Run evaluation" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    return DrivenEventSource.instances[0]
+  }
+
+  it("says which question it is scoring while busy, and shows the summary once done", async () => {
+    const es = await start({
+      o0: evalOut({}),
+      o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }),
+    })
+    await waitFor(() => expect(document.body.textContent).toContain("Scoring question 1 of 2."))
+    expect(screen.queryByTestId("summary")).toBeNull()
+    expect(screen.queryByTestId("hit-rate")).toBeNull()
+
+    const useCase = idOf("use_case")
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: "o0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "variant_started", index: 1, variant: {} })
+    es.emit(4, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
+    es.emit(5, { event: "stream_end", status: "finished", ok: true })
+
+    await screen.findByTestId("summary")
+    expect(screen.getByTestId("hit-rate")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("Scoring question")
+    expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")
+  })
+
+  it("warns that the score says nothing when the pipeline makes fewer pieces than the top k", async () => {
+    const es = await start({ c0: { chunks: [{ id: "a" }, { id: "b" }, { id: "c" }] } })
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: idOf("chunk"), artifact_id: "c0", cache_hit: false, duration_ms: 1 })
+    const warning = await screen.findByTestId("pieces-warning")
+    expect(warning.textContent).toBe("This pipeline makes only 3 pieces, so every question finds it. The score says nothing here.")
+    expect(warning.getAttribute("role")).toBe("status")
   })
 })

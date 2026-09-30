@@ -592,6 +592,12 @@ export interface EvalPayload {
   golds_total?: number
   /** Plan I-32: how many of them appeared within `top_k`. Absent on I-25 payloads. */
   golds_found?: number
+  /**
+   * On a miss, the 1-based rank of the first piece below the top k that holds
+   * a gold passage; null when none of the returned pieces does, and on a hit.
+   * Absent on older payloads.
+   */
+  found_at?: number | null
 }
 
 export interface EvalOutput {

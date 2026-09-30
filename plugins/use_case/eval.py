@@ -15,7 +15,9 @@ it was, so a run is never flattered by a loose rule you cannot see.
 
 `top_k` is what the reader would actually have looked at. A gold sentence that
 sits below it is a miss, not a hit, and `considered` says how many pieces were
-checked, so a miss can be told apart from a short list.
+checked, so a miss can be told apart from a short list. On a miss, `found_at`
+is the rank of the first piece below the top k that holds a gold passage, or
+None when no piece the retriever returned holds one.
 
 A question may carry several gold passages (I-32), because a document often
 answers the same question in more than one place. Any one of them counts as
@@ -181,6 +183,19 @@ class EvalUseCase(Transform[EvalConfig]):
             if len(found) == len(golds):
                 break
 
+        # For a miss, say whether the answer was there at all, just lower down,
+        # so a learner can tell "ranked too low" from "never retrieved".
+        found_at: int | None = None
+        if match == "none":
+            for hit in result.hits[len(considered) :]:
+                normalised_text = _normalise(hit.chunk.text)
+                if any(
+                    gold in hit.chunk.text or normalised[n] in normalised_text
+                    for n, gold in enumerate(golds)
+                ):
+                    found_at = hit.rank
+                    break
+
         return Output(
             kind="eval",
             payload={
@@ -194,6 +209,7 @@ class EvalUseCase(Transform[EvalConfig]):
                 "golds_found": len(found),
                 "considered": len(considered),
                 "total_candidates": result.total_candidates,
+                "found_at": found_at,
             },
         ).model_dump(mode="json")
 

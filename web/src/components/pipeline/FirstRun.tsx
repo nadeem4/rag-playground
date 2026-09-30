@@ -1,36 +1,52 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { api } from "@/api/client"
-import type { Source } from "@/api/types"
+import type { SampleCard, Source } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 
 import { SourcePicker, type SourceConfig } from "./SourcePicker"
 
-type SampleState = { kind: "idle" } | { kind: "loading" } | { kind: "error"; message: string }
+type SampleState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: SampleCard[] }
 
 /**
  * The Load card on a first visit (plan I-15): nothing uploaded and no file
- * selected. Upload your own through the usual picker, or register the bundled
- * sample (`POST /api/sources/sample`). Nothing runs until the user presses Run.
- * A hosted demo has no Upload, and says so in one line.
+ * selected. Upload your own through the usual picker, or load one of the
+ * bundled samples (`GET /api/samples`, then `POST /api/sources/sample`).
+ * Nothing runs until the user presses Run. A hosted demo has no Upload, and
+ * says so in one line.
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
 export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) => void; onSample: (s: Source) => void }) {
-  const [state, setState] = useState<SampleState>({ kind: "idle" })
+  const [samples, setSamples] = useState<SampleState>({ kind: "loading" })
+  const [busy, setBusy] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const demo = useDemo()
 
-  async function loadSample() {
-    setState({ kind: "loading" })
+  useEffect(() => {
+    let live = true
+    api.samples().then(
+      (items) => live && setSamples({ kind: "ready", items }),
+      (err: unknown) => live && setSamples({ kind: "error", message: err instanceof Error ? err.message : String(err) }),
+    )
+    return () => {
+      live = false
+    }
+  }, [])
+
+  async function load(name: string) {
+    setBusy(name)
+    setLoadError(null)
     try {
-      onSample(await api.sampleSource())
+      onSample(await api.sampleSource(name))
     } catch (err) {
-      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) })
+      setLoadError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
     }
   }
 
-  const loading = state.kind === "loading"
   return (
     <section aria-label="Load" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
       <h3 className="text-sm font-semibold">Load</h3>
@@ -47,17 +63,42 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
           <SourcePicker value={{}} onChange={onSource} />
         </div>
       )}
-      <div className="flex min-w-0 flex-col gap-1">
-        <Button data-testid="try-sample" className="self-start" disabled={loading} onClick={() => void loadSample()}>
-          {loading ? "Loading the sample" : "Try the sample document"}
-        </Button>
-        <p className="text-xs text-fg-muted">
-          Three pages of notes on chunking, written for this playground. It has headings, a running footer and a repeated paragraph,
-          so every step has something to show.
-        </p>
-        {state.kind === "error" ? (
+      <div className="flex min-w-0 flex-col gap-2">
+        <h4 className="m-0 text-sm font-medium">Try a sample document</h4>
+        {samples.kind === "loading" ? (
+          <p role="status" className="text-xs text-fg-muted">
+            Loading the samples
+          </p>
+        ) : samples.kind === "error" ? (
+          <p role="alert" className="text-xs break-words text-danger">
+            Could not list the samples: {samples.message}
+          </p>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {samples.items.map((s) => (
+              <li key={s.name} className="flex min-w-0 flex-col gap-1 rounded-panel border border-hairline p-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h5 className="m-0 text-sm font-semibold">{s.title}</h5>
+                  <span className="meta">{s.stresses}</span>
+                </div>
+                <p className="m-0 text-xs text-fg-muted">{s.blurb}</p>
+                <p className="m-0 text-xs text-fg-muted">{s.shows}</p>
+                <Button
+                  size="sm"
+                  variant={s.default ? "default" : "outline"}
+                  className="self-start"
+                  disabled={busy !== null}
+                  onClick={() => void load(s.name)}
+                >
+                  {busy === s.name ? "Loading" : "Load"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {loadError ? (
           <p role="alert" data-testid="sample-error" className="text-xs break-words text-danger">
-            Could not load the sample: {state.message}
+            Could not load the sample: {loadError}
           </p>
         ) : null}
       </div>

@@ -271,6 +271,19 @@ export interface Source {
   content_type: string
 }
 
+/** One entry of `GET /api/samples`: a bundled sample document offered on the Load card. */
+export interface SampleCard {
+  name: string
+  title: string
+  blurb: string
+  shows: string
+  stresses: Stage
+  pages: number
+  default: boolean
+  filename: string
+  sha: string
+}
+
 export interface ArtifactMeta {
   id: string
   type: ArtifactType

@@ -24,6 +24,7 @@ import type {
   RunCreated,
   RunRequest,
   RunSnapshot,
+  SampleCard,
   SampleQuestion,
   Source,
   StageInfo,
@@ -118,10 +119,21 @@ export const api = {
     form.append("file", file)
     return request<Source>("/sources", { method: "POST", body: form })
   },
-  /** Plan I-14: registers the bundled sample PDF like an upload. Idempotent. */
-  sampleSource: () => request<Source>("/sources/sample", { method: "POST" }),
-  /** Plan I-25: the committed question set for the sample, a bare array. */
-  sampleQuestions: () => request<SampleQuestion[]>("/samples/questions"),
+  /** The bundled sample cards offered on the Load card, default first. */
+  samples: () => request<SampleCard[]>("/samples"),
+  /** Plan I-14: registers a bundled sample PDF like an upload. Idempotent. Omit `name` for the default sample. */
+  sampleSource: (name?: string) =>
+    request<Source>(
+      "/sources/sample",
+      name ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) } : { method: "POST" },
+    ),
+  /**
+   * The committed question set for a sample, a bare array. `name` is required;
+   * it is optional here only as a bridge while `Evaluate.tsx` still calls it
+   * without one.
+   */
+  sampleQuestions: (name?: string) =>
+    request<SampleQuestion[]>(name ? `/samples/${encodeURIComponent(name)}/questions` : "/samples/questions"),
 
   /** Plan I-31: a filled-in example set to start from. */
   questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,

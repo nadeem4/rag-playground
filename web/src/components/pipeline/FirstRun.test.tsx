@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { FirstRun } from "./FirstRun"
@@ -6,21 +6,53 @@ import { SourcePicker } from "./SourcePicker"
 
 const SAMPLE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf", size: 4096, content_type: "application/pdf" }
 
+const SAMPLES = [
+  {
+    name: "chunking-primer",
+    title: "A primer on chunking",
+    blurb: "Three pages of notes on chunking.",
+    shows: "Headings, a footer and a repeated paragraph.",
+    stresses: "chunk",
+    pages: 3,
+    default: true,
+    filename: "chunking-primer.pdf",
+    sha: "cd".repeat(32),
+  },
+  {
+    name: "scanned-notes",
+    title: "Scanned notes",
+    blurb: "Two pages that are pictures of text.",
+    shows: "Without OCR the parse returns nothing.",
+    stresses: "parse",
+    pages: 2,
+    default: false,
+    filename: "scanned-notes.pdf",
+    sha: "ef".repeat(32),
+  },
+]
+
 let demo = false
 let appCalls = 0
+let posted: (string | null)[] = []
 
 beforeEach(() => {
   demo = false
   appCalls = 0
+  posted = []
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/settings/app") {
         appCalls += 1
         return ok({ demo })
       }
       if (url === "/api/sources") return ok([SAMPLE])
+      if (url === "/api/samples") return ok(SAMPLES)
+      if (url === "/api/sources/sample") {
+        posted.push(init?.body ? JSON.parse(String(init.body)).name : null)
+        return ok(SAMPLE)
+      }
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )
@@ -61,25 +93,49 @@ describe("SourcePicker", () => {
     await screen.findByLabelText("File")
     expect(uploadButton()).not.toBeNull()
   })
+
+  it("offers the samples not yet loaded under the file list, and loads one", async () => {
+    const onChange = vi.fn()
+    render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={onChange} />)
+    const pick = (await screen.findByLabelText("Load a sample")) as HTMLSelectElement
+    expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick one", "Scanned notes"])
+    fireEvent.change(pick, { target: { value: "scanned-notes" } })
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
+    expect(posted).toEqual(["scanned-notes"])
+  })
 })
 
 describe("FirstRun", () => {
-  it("outside demo mode: Upload and the sample, no demo note", async () => {
+  it("lists every sample, the default first, with its title, blurb and the stage it stresses", async () => {
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
-    await waitFor(() => expect(appCalls).toBeGreaterThan(0))
-    await waitFor(() => expect(uploadButton()).not.toBeNull())
-    expect(screen.getByTestId("try-sample").textContent).toBe("Try the sample document")
-    expect(document.body.textContent).not.toContain("hosted demo")
+    const rows = await screen.findAllByRole("listitem")
+    expect(rows.map((r) => within(r).getByRole("heading").textContent)).toEqual(["A primer on chunking", "Scanned notes"])
+    expect(within(rows[1]).getByText("Two pages that are pictures of text.")).toBeTruthy()
+    expect(within(rows[1]).getByText("parse")).toBeTruthy()
   })
 
-  it("in demo mode: no Upload, the sample stays, and one line points to running it locally", async () => {
+  it("Load posts the sample's name and hands the source back", async () => {
+    const onSample = vi.fn()
+    render(<FirstRun onSource={() => {}} onSample={onSample} />)
+    const rows = await screen.findAllByRole("listitem")
+    fireEvent.click(within(rows[1]).getByRole("button", { name: "Load" }))
+    await waitFor(() => expect(onSample).toHaveBeenCalledWith(SAMPLE))
+    expect(posted).toEqual(["scanned-notes"])
+  })
+
+  it("says so, and still shows Upload, when the sample list cannot be read", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/sources" ? [] : { detail: "down" }), { status: url === "/api/sources" ? 200 : 500 })))
+    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Could not list the samples/)
+    await waitFor(() => expect(uploadButton()).not.toBeNull())
+  })
+
+  it("in demo mode: no Upload, the samples stay, and one line points to running it locally", async () => {
     demo = true
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
     const note = await screen.findByTestId("demo-note")
     expect(note.textContent).toBe(NOTE)
-    const link = screen.getByRole("link", { name: "run it locally" }) as HTMLAnchorElement
-    expect(link.href).toBe("https://github.com/nadeem4/rag-playground")
     expect(uploadButton()).toBeNull()
-    expect(screen.getByTestId("try-sample").textContent).toBe("Try the sample document")
+    expect(await screen.findAllByRole("listitem")).toHaveLength(2)
   })
 })

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { Upload } from "lucide-react"
 
 import { api } from "@/api/client"
-import type { Source } from "@/api/types"
+import type { SampleCard, Source } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { CONTROL } from "@/components/fields/types"
@@ -37,15 +37,27 @@ export function SourcePicker({
   const fileRef = useRef<HTMLInputElement>(null)
   const [list, setList] = useState<ListState>({ kind: "loading" })
   const [upload, setUpload] = useState<{ name: string; error?: string } | null>(null)
+  const [samples, setSamples] = useState<SampleCard[]>([])
 
   const refresh = useCallback(() => {
     api.sources().then(
       (items) => setList({ kind: "ready", items }),
       (err: unknown) => setList({ kind: "error", message: err instanceof Error ? err.message : String(err) }),
     )
+    api.samples().then(setSamples, () => setSamples([]))
   }, [])
 
   useEffect(refresh, [refresh])
+
+  async function loadSample(name: string) {
+    try {
+      const src = await api.sampleSource(name)
+      onChange({ sha: src.sha, filename: src.filename })
+      refresh()
+    } catch (err) {
+      setUpload({ name, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
 
   async function onFile(file: File | undefined) {
     if (!file) return
@@ -65,6 +77,7 @@ export function SourcePicker({
   const items = list.kind === "ready" ? list.items : []
   const current = items.find((s) => s.sha === value.sha)
   const invalid = Boolean(errors?.length)
+  const remaining = samples.filter((s) => !items.some((i) => i.sha === s.sha))
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -124,6 +137,29 @@ export function SourcePicker({
           </div>
         ) : null}
       </div>
+
+      {remaining.length ? (
+        <div className="flex min-w-0 flex-col gap-1">
+          <label htmlFor={`${id}-sample`} className="text-sm font-medium">
+            Load a sample
+          </label>
+          <select
+            id={`${id}-sample`}
+            className={CONTROL}
+            value=""
+            onChange={(e) => {
+              if (e.target.value) void loadSample(e.target.value)
+            }}
+          >
+            <option value="">Pick one</option>
+            {remaining.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.title}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {demo ? null : (
         <div className="flex min-w-0 items-center gap-2">

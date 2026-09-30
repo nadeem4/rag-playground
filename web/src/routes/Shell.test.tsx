@@ -121,6 +121,17 @@ describe("Build page explanations", () => {
 
 describe("First run (plan I-15)", () => {
   const SAMPLE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf", size: 4096, content_type: "application/pdf" }
+  const SAMPLE_CARD = {
+    name: "chunking-primer",
+    title: "A primer on chunking",
+    blurb: "Three pages of notes on chunking.",
+    shows: "Headings, a footer and a repeated paragraph.",
+    stresses: "chunk",
+    pages: 3,
+    default: true,
+    filename: SAMPLE.filename,
+    sha: SAMPLE.sha,
+  }
   let sampleCalls = 0
   let sourceExplains = 0
   let sampleReply: () => Promise<Response>
@@ -135,6 +146,7 @@ describe("First run (plan I-15)", () => {
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
         if (url === "/api/sources") return new Response(JSON.stringify(sampleCalls ? [SAMPLE] : []), { status: 200 })
+        if (url === "/api/samples") return new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })
         if (url === "/api/explain") {
           const body = JSON.parse(String(init?.body))
           const noFile = body.stage === "source" && !body.config.sha
@@ -156,11 +168,11 @@ describe("First run (plan I-15)", () => {
       if (!el) throw new Error(`no ${sel}`)
       return el as unknown as T
     })
-  const sampleButton = () => found<HTMLButtonElement>("button[data-testid=try-sample]")
+  const sampleButton = () => found<HTMLButtonElement>('[aria-label="Load"] li button')
 
   it("shows when no source is selected and nothing is uploaded", async () => {
     render(<Shell />)
-    expect((await sampleButton()).textContent).toBe("Try the sample document")
+    expect((await sampleButton()).textContent).toBe("Load")
     expect(document.body.textContent).toContain("Nothing to show yet")
     expect(card("parse")).toBeNull()
     // The empty Load card blocks the run, but a first visit is not an error.
@@ -172,11 +184,15 @@ describe("First run (plan I-15)", () => {
   it("does not show when files are already uploaded", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/registry" ? liveRegistry : url === "/api/sources" ? [SOURCE] : {}), { status: 200 })),
+      vi.fn(async (url: string) =>
+        new Response(JSON.stringify(url === "/api/registry" ? liveRegistry : url === "/api/sources" ? [SOURCE] : url === "/api/samples" ? [] : {}), {
+          status: 200,
+        }),
+      ),
     )
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(document.querySelector("[data-testid=try-sample]")).toBeNull()
+    expect(document.querySelector('[aria-label="Load"]')).toBeNull()
   })
 
   it("does not show when the stored graph already has a source", async () => {
@@ -186,7 +202,7 @@ describe("First run (plan I-15)", () => {
     )
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(document.querySelector("[data-testid=try-sample]")).toBeNull()
+    expect(document.querySelector('[aria-label="Load"]')).toBeNull()
   })
 
   it("the sample loads the source and sets the default graph, without running anything", async () => {
@@ -221,7 +237,7 @@ describe("First run (plan I-15)", () => {
     const btn = await sampleButton()
     fireEvent.click(btn)
     await waitFor(() => expect(btn.disabled).toBe(true))
-    expect(btn.textContent).toBe("Loading the sample")
+    expect(btn.textContent).toBe("Loading")
     release()
     await waitFor(() => expect(card("parse")).toBeTruthy())
   })

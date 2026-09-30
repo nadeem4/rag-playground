@@ -36,6 +36,18 @@ class SilentEventSource {
   close() {}
 }
 
+const SAMPLE_CARD = {
+  name: "chunking-primer",
+  title: "A primer on chunking",
+  blurb: "Three pages of notes on chunking.",
+  shows: "Headings, a footer and a repeated paragraph.",
+  stresses: "chunk",
+  pages: 3,
+  default: true,
+  filename: "chunking-primer.pdf",
+  sha: "cd".repeat(32),
+}
+
 function serve(sources: Source[]) {
   vi.stubGlobal(
     "fetch",
@@ -45,7 +57,9 @@ function serve(sources: Source[]) {
       if (url === "/api/stages") return ok(liveStages)
       if (url === "/api/sources") return ok(sources)
       if (url === "/api/explain") return ok({ settings: "Splits on paragraphs first.", blocking: false })
+      if (url === "/api/samples") return ok([SAMPLE_CARD])
       if (url === "/api/samples/questions") return ok([{ id: "a", question: "How big is a chunk?", gold_answer: "One question well." }])
+      if (url === "/api/samples/chunking-primer/questions") return ok([{ id: "a", question: "How big is a chunk?", gold_answer: "One question well." }])
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )
@@ -87,7 +101,7 @@ describe("no em-dashes or en-dashes in visible text", () => {
     window.localStorage.clear()
     serve([])
     render(<Shell />)
-    await waitFor(() => expect(visibleText()).toMatch(/Try the sample document/))
+    await waitFor(() => expect(visibleText()).toMatch(/Try a sample document/))
     expect(visibleText()).not.toMatch(DASH)
   })
 

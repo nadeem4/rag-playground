@@ -1,0 +1,173 @@
+import { useSyncExternalStore } from "react"
+
+import type { Registry } from "@/api/types"
+
+import { loadGraph, type PipelineGraph } from "./graph"
+
+/**
+ * Saved pipelines: named copies of the Build graph, kept in this browser.
+ * The working copy the Build page edits stays in its own key; choosing a saved
+ * pipeline copies it into the working copy, and "Save changes" copies it back.
+ * Results are cached by recipe on the server, so switching costs nothing.
+ */
+
+export interface SavedPipeline {
+  id: string
+  name: string
+  graph: PipelineGraph
+  savedAt: string
+}
+
+export const MAX_PIPELINES = 20
+const LIST_KEY = "rag-playground:pipelines:v1"
+const CURRENT_KEY = "rag-playground:pipelines:current"
+const MAX_NAME = 60
+
+let cache: SavedPipeline[] | null = null
+let currentCache: string | null | undefined
+const listeners = new Set<() => void>()
+const notify = () => listeners.forEach((l) => l())
+
+function read<T>(key: string, parse: (raw: string) => T | null): T | null {
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function write(key: string, value: string | null): boolean {
+  try {
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const isPipeline = (p: unknown): p is SavedPipeline =>
+  typeof p === "object" && p !== null &&
+  typeof (p as SavedPipeline).id === "string" && typeof (p as SavedPipeline).name === "string" &&
+  typeof (p as SavedPipeline).savedAt === "string" &&
+  Array.isArray((p as SavedPipeline).graph?.nodes) && Array.isArray((p as SavedPipeline).graph?.edges)
+
+export function readPipelines(): SavedPipeline[] {
+  if (cache === null) {
+    const parsed = read(LIST_KEY, (raw) => JSON.parse(raw) as unknown)
+    cache = Array.isArray(parsed) ? parsed.filter(isPipeline) : []
+  }
+  return cache
+}
+
+function persist(next: SavedPipeline[]): boolean {
+  const ok = write(LIST_KEY, JSON.stringify(next))
+  if (ok) {
+    cache = next
+    notify()
+  }
+  return ok
+}
+
+function cleanName(name: string): string | null {
+  const trimmed = name.trim()
+  return trimmed.length >= 1 && trimmed.length <= MAX_NAME ? trimmed : null
+}
+
+function newId(): string {
+  const bytes = new Uint8Array(6)
+  crypto.getRandomValues(bytes)
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").slice(0, 8)
+}
+
+export function savePipeline(name: string, graph: PipelineGraph): SavedPipeline | null {
+  const clean = cleanName(name)
+  if (!clean) return null
+  const p: SavedPipeline = { id: newId(), name: clean, graph: structuredClone(graph), savedAt: new Date().toISOString() }
+  if (!persist([p, ...readPipelines()].slice(0, MAX_PIPELINES))) return null
+  setCurrentId(p.id)
+  return p
+}
+
+export function updatePipeline(id: string, graph: PipelineGraph): boolean {
+  const list = readPipelines()
+  if (!list.some((p) => p.id === id)) return false
+  return persist(list.map((p) => (p.id === id ? { ...p, graph: structuredClone(graph), savedAt: new Date().toISOString() } : p)))
+}
+
+export function renamePipeline(id: string, name: string): boolean {
+  const clean = cleanName(name)
+  const list = readPipelines()
+  if (!clean || !list.some((p) => p.id === id)) return false
+  return persist(list.map((p) => (p.id === id ? { ...p, name: clean } : p)))
+}
+
+export function deletePipeline(id: string): void {
+  persist(readPipelines().filter((p) => p.id !== id))
+  if (readCurrentId() === id) setCurrentId(null)
+}
+
+export function readCurrentId(): string | null {
+  if (currentCache === undefined) currentCache = read(CURRENT_KEY, (raw) => raw)
+  return currentCache
+}
+
+export function setCurrentId(id: string | null): void {
+  currentCache = id
+  write(CURRENT_KEY, id)
+  notify()
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+let snapshot: { pipelines: SavedPipeline[]; currentId: string | null } | null = null
+function getSnapshot() {
+  const pipelines = readPipelines()
+  const currentId = readCurrentId()
+  if (!snapshot || snapshot.pipelines !== pipelines || snapshot.currentId !== currentId) snapshot = { pipelines, currentId }
+  return snapshot
+}
+
+export function usePipelines(): { pipelines: SavedPipeline[]; currentId: string | null } {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+const byId = <T extends { id: string }>(xs: T[]) => [...xs].sort((a, b) => a.id.localeCompare(b.id))
+
+export function sameGraph(a: PipelineGraph, b: PipelineGraph): boolean {
+  const edges = (g: PipelineGraph) => [...g.edges].map((e) => `${e.src}>${e.dst}:${e.port}`).sort()
+  return JSON.stringify(byId(a.nodes)) === JSON.stringify(byId(b.nodes)) && JSON.stringify(edges(a)) === JSON.stringify(edges(b))
+}
+
+const toBase64Url = (s: string) =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+const fromBase64Url = (s: string) => {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4)
+  return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
+}
+
+export function encodePipeline(name: string, graph: PipelineGraph): string {
+  return toBase64Url(JSON.stringify({ v: 1, name, graph }))
+}
+
+/** null unless the code is well formed, version 1, and every node names a transform this registry has. */
+export function decodePipeline(code: string, registry: Registry): { name: string; graph: PipelineGraph } | null {
+  try {
+    const parsed = JSON.parse(fromBase64Url(code)) as { v?: unknown; name?: unknown; graph?: unknown }
+    if (parsed.v !== 1 || typeof parsed.name !== "string") return null
+    const graph = loadGraph(JSON.stringify(parsed.graph), registry)
+    return graph ? { name: parsed.name, graph } : null
+  } catch {
+    return null
+  }
+}
+
+export function resetPipelinesForTests(): void {
+  cache = null
+  currentCache = undefined
+  snapshot = null
+}

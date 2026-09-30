@@ -136,3 +136,31 @@ def test_scanned_notes_gold_answers_survive_ocr(tmp_path):
     text = " ".join(DocView.of(doc).text.split())
     for item in questions:
         assert " ".join(item["gold_answer"].split()) in text, item["id"]
+
+
+def _parse_text(pdf: Path, transform: str, tmp_path: Path, **config) -> str:
+    cls = registry.get(Stage.PARSE, transform)
+    ctx = RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path)
+    doc = cls().apply(
+        {"file": {"path": str(pdf), "sha": pdf.stem, "filename": pdf.name}},
+        cls.config_model(**config),
+        ctx,
+    )
+    return " ".join(DocView.of(doc).text.split())
+
+
+def _questions_of(name: str) -> list[dict]:
+    return json.loads((ROOT / "samples" / name / "questions.json").read_text(encoding="utf-8"))
+
+
+def test_two_column_controls_hit_under_pdfium_and_the_straddlers_miss(tmp_path):
+    text = _parse_text(ROOT / "samples" / "two-column-report" / "two-column-report.pdf", "pdfium", tmp_path)
+    hits = {q["id"]: " ".join(q["gold_answer"].split()) in text for q in _questions_of("two-column-report")}
+    assert hits == {"how-long": True, "faster": True, "lost-place": False, "extractor-error": False, "layout-never": True}
+
+
+@pytest.mark.models
+def test_two_column_gold_answers_all_hit_under_docling(tmp_path):
+    text = _parse_text(ROOT / "samples" / "two-column-report" / "two-column-report.pdf", "docling", tmp_path)
+    for q in _questions_of("two-column-report"):
+        assert " ".join(q["gold_answer"].split()) in text, q["id"]

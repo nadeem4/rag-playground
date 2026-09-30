@@ -1,0 +1,90 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 1620 >>
+stream
+BT /F2 18 Tf 60 740 Td (Reading order in two-column reports) Tj ET
+BT /F1 10 Tf 60 700 Td (The survey ran for six weeks. Two hundred) Tj ET
+BT /F1 10 Tf 318 700 Td (Errors followed the same pattern. When a) Tj ET
+BT /F1 10 Tf 60 686 Td (readers took part, and each read the same) Tj ET
+BT /F1 10 Tf 318 686 Td (reader lost the thread, the cause was almost) Tj ET
+BT /F1 10 Tf 60 672 Td (twelve documents in a fixed order. Half the) Tj ET
+BT /F1 10 Tf 318 672 Td (always the jump from the bottom of one) Tj ET
+BT /F1 10 Tf 60 658 Td (documents were laid out in one column and) Tj ET
+BT /F1 10 Tf 318 658 Td (column to the top of the next, and never the) Tj ET
+BT /F1 10 Tf 60 644 Td (half in two, so the layout was the only) Tj ET
+BT /F1 10 Tf 318 644 Td (text itself.) Tj ET
+BT /F1 10 Tf 60 630 Td (thing that changed.) Tj ET
+BT /F1 10 Tf 318 616 Td (The lesson for authors is modest. Use two) Tj ET
+BT /F1 10 Tf 60 602 Td (Readers were faster on one column. The) Tj ET
+BT /F1 10 Tf 318 602 Td (columns when the page is short, and one when) Tj ET
+BT /F1 10 Tf 60 588 Td (average time per page fell by a fifth, and) Tj ET
+BT /F1 10 Tf 318 588 Td (the argument is long. A reader who has to) Tj ET
+BT /F1 10 Tf 60 574 Td (the number of readers who lost their place) Tj ET
+BT /F1 10 Tf 318 574 Td (hunt for the next line has already stopped) Tj ET
+BT /F1 10 Tf 60 560 Td (halfway down a page fell by more than half.) Tj ET
+BT /F1 10 Tf 318 560 Td (reading.) Tj ET
+BT /F1 10 Tf 60 546 Td (Two columns looked tidier, but tidy is not) Tj ET
+BT /F1 10 Tf 60 532 Td (the same as clear.) Tj ET
+BT /F1 9 Tf 512 40 Td (Page 1) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Length 1469 >>
+stream
+BT /F1 10 Tf 60 700 Td (The second study used the same documents.) Tj ET
+BT /F1 10 Tf 318 700 Td (The layout model made a different mistake.) Tj ET
+BT /F1 10 Tf 60 686 Td (This time the readers were programs. A plain) Tj ET
+BT /F1 10 Tf 318 686 Td (It sometimes read a caption as a heading,) Tj ET
+BT /F1 10 Tf 60 672 Td (text extractor and a layout model each read) Tj ET
+BT /F1 10 Tf 318 672 Td (and once it read a footer as the last line.) Tj ET
+BT /F1 10 Tf 60 658 Td (every page, and their output was compared) Tj ET
+BT /F1 10 Tf 318 658 Td (It never joined two columns into one line.) Tj ET
+BT /F1 10 Tf 60 644 Td (with the text the authors had written.) Tj ET
+BT /F1 10 Tf 318 630 Td (For retrieval the difference is stark. A) Tj ET
+BT /F1 10 Tf 60 616 Td (The plain extractor did well on one column.) Tj ET
+BT /F1 10 Tf 318 616 Td (passage that was cut in half by a misread) Tj ET
+BT /F1 10 Tf 60 602 Td (On two columns it joined the halves of) Tj ET
+BT /F1 10 Tf 318 602 Td (column is a passage no question can match,) Tj ET
+BT /F1 10 Tf 60 588 Td (different sentences whenever a line of the) Tj ET
+BT /F1 10 Tf 318 588 Td (because the words that belong together are) Tj ET
+BT /F1 10 Tf 60 574 Td (left column sat at the same height as a line) Tj ET
+BT /F1 10 Tf 318 574 Td (no longer next to each other.) Tj ET
+BT /F1 10 Tf 60 560 Td (of the right, which on a full page is every) Tj ET
+BT /F1 10 Tf 60 546 Td (line.) Tj ET
+BT /F1 9 Tf 512 40 Td (Page 2) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+7 0 obj
+<< /Type /Pages /Kids [5 0 R 6 0 R] /Count 2 >>
+endobj
+8 0 obj
+<< /Type /Catalog /Pages 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000000154 00000 n 
+0000001826 00000 n 
+0000003347 00000 n 
+0000003483 00000 n 
+0000003619 00000 n 
+0000003682 00000 n 
+trailer
+<< /Size 9 /Root 8 0 R >>
+startxref
+3731
+%%EOF

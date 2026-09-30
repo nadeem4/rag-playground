@@ -1,0 +1,9 @@
+{
+  "name": "two-column-report",
+  "title": "Two-column report",
+  "blurb": "Two pages set in two columns, drawn row by row as many exporters do.",
+  "shows": "A plain text parser joins the halves of different sentences. A layout parser reads each column in turn.",
+  "stresses": "parse",
+  "pages": 2,
+  "default": false
+}

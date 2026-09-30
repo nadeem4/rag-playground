@@ -71,3 +71,20 @@ def test_scanned_notes_pages_are_mostly_white_with_dark_ink():
     dark = sum(1 for p in pixels if p < 64)
     assert white > 0.8 * len(pixels)
     assert dark > 0.005 * len(pixels)
+
+
+def test_two_column_report_interleaves_under_pdfium():
+    """Drawn row by row across both columns, as many exporters do."""
+    import pypdfium2 as pdfium
+    from scripts.samplegen import two_column_report as tc
+
+    doc = pdfium.PdfDocument(tc.build())
+    try:
+        assert len(doc) == 2
+        text = doc[0].get_textpage().get_text_range()
+    finally:
+        doc.close()
+    # The first line of each column, in drawing order, before the second line of the left one.
+    left_first = tc.LEFT[0][0].split(" ")[:3]
+    right_first = tc.RIGHT[0][0].split(" ")[:3]
+    assert text.index(" ".join(right_first)) < text.index(tc.LEFT_SECOND_LINE_START)

@@ -6,11 +6,14 @@ do) does not rebind `upload.SOURCES_DIR` to the default directory.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
 
+from api import demo, expiry
 from api.deps import Deps, build_deps
 from api.routes import (
     artifacts,
@@ -32,8 +35,19 @@ def create_app(deps: Deps | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        await manager.shutdown()
+        sweeper = (
+            asyncio.create_task(expiry.run_forever(app.state.deps.sources_dir))
+            if demo.enabled()
+            else None
+        )
+        try:
+            yield
+        finally:
+            if sweeper:
+                sweeper.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await sweeper
+            await manager.shutdown()
 
     app = FastAPI(title="RAG Playground", lifespan=lifespan)
     app.state.deps = deps or build_deps()

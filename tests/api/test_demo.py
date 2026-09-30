@@ -308,3 +308,24 @@ def test_demo_upload_tolerates_a_corrupt_sidecar(dirs, monkeypatch):
     with make_client(dirs) as client:
         r = client.post("/api/sources", files={"file": ("small.pdf", _pdf_with_pages(1), "application/pdf")})
         assert r.status_code == 200
+
+
+# --- the expiry sweeper ---------------------------------------------------------
+
+
+def test_the_sweeper_runs_only_in_demo_mode(dirs, monkeypatch):
+    from api import expiry
+    started: list = []
+    monkeypatch.setattr(expiry, "run_forever", lambda sources, interval_s=3600: started.append(sources) or _never())
+    with make_client(dirs):
+        pass
+    assert started == []
+    demo_on(monkeypatch)
+    with make_client(dirs):
+        pass
+    assert started == [dirs["sources"]]
+
+
+async def _never():
+    import asyncio
+    await asyncio.Event().wait()

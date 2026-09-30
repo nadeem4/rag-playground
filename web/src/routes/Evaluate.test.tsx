@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { GoldQuestion, QuestionSetUpload, Registry, SampleQuestion } from "@/api/types"
-import { sampleGraph, storeGraph } from "@/state/graph"
+import type { EvalSummary } from "@/state/evaluate"
+import { storePreviousEvaluation } from "@/state/evaluate"
+import { sampleGraph, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
+import { readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 
 import { Evaluate } from "./Evaluate"
 
@@ -79,6 +82,14 @@ class SilentEventSource {
  * describes the loaded document. `null` means the sample list cannot be read.
  * `stored` is what `GET /api/sources/{sha}/questions` has, null for no set.
  */
+/** One `POST /api/sweeps` body, as the test needs to inspect it. */
+interface RecordedSweep {
+  graph: PipelineGraph
+  node_id: string
+  variants: unknown[]
+  through: string
+}
+
 function serve({
   reg = liveRegistry,
   sampleSha = SOURCE.sha,
@@ -91,12 +102,17 @@ function serve({
   stored?: QuestionSetUpload | null
   upload?: QuestionSetUpload | { status: number }
   demo?: boolean
-} = {}) {
+} = {}): { sweeps: RecordedSweep[] } {
+  const sweeps: RecordedSweep[] = []
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
   const missing = () => new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/sweeps" && init?.method === "POST") {
+        sweeps.push(JSON.parse(String(init.body)) as RecordedSweep)
+        return ok({ run_id: "r1" })
+      }
       if (url === "/api/registry") return ok(reg)
       if (url === "/api/settings/app") return ok({ demo })
       if (url === "/api/samples")
@@ -128,6 +144,15 @@ function serve({
       return missing()
     }),
   )
+  return { sweeps }
+}
+
+/** Serves the default registry, stores the sample graph for `SOURCE`, and renders Evaluate. */
+function setup(): { sweeps: RecordedSweep[] } {
+  const { sweeps } = serve()
+  storeGraph(sampleGraph(registry, SOURCE))
+  render(<Evaluate />)
+  return { sweeps }
 }
 
 /** A file dropped into the hidden input, which jsdom will not build for us. */
@@ -140,6 +165,7 @@ function chooseFile(input: HTMLElement, name: string) {
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
+  resetPipelinesForTests()
   vi.stubGlobal("EventSource", SilentEventSource)
   serve()
 })
@@ -323,5 +349,43 @@ describe("the upload report", () => {
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
     expect(screen.getByTestId("upload-report")).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/[–—]/)
+  })
+})
+
+describe("Evaluate picks a pipeline", () => {
+  const picker = () => screen.getByRole("combobox", { name: "Pipeline" }) as HTMLSelectElement
+
+  it("lists the pipeline on Build and every saved pipeline, defaulting to the one current on Build", async () => {
+    const saved = savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))!
+    setup()
+    await screen.findByRole("combobox", { name: "Pipeline" })
+    expect([...picker().options].map((o) => o.textContent)).toEqual(["The pipeline on Build", "Token chunks"])
+    expect(picker().value).toBe(saved.id)
+    // The name and the filename sit in separate nodes (the filename in its own <span>), so this
+    // reads the whole line rather than getByText, which cannot match text split across elements.
+    expect(document.body.textContent).toMatch(/Token chunks, over chunking-primer\.pdf/)
+  })
+
+  it("scores the chosen pipeline's graph", async () => {
+    savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))!
+    setCurrentId(null)
+    const p = setup()
+    await screen.findByRole("combobox", { name: "Pipeline" })
+    expect(picker().value).toBe("")
+    fireEvent.change(picker(), { target: { value: readPipelines()[0].id } })
+    await waitFor(() => expect((screen.getByRole("button", { name: "Run evaluation" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }))
+    await waitFor(() => expect(p.sweeps.length).toBe(1))
+    const chunk = p.sweeps[0].graph.nodes.find((n) => n.stage === "chunk")
+    expect(chunk?.transform).toBe("token_based")
+  })
+
+  it("does not borrow a previous score from another pipeline", async () => {
+    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: "working", byId: {}, summary: { total: 10, hits: 10, averageRank: null } as EvalSummary })
+    const saved = savePipeline("Token chunks", sampleGraph(registry, SOURCE))!
+    setup()
+    await screen.findByRole("combobox", { name: "Pipeline" })
+    expect(picker().value).toBe(saved.id)
+    expect(screen.queryByTestId("previous")).toBeNull()
   })
 })

@@ -198,6 +198,8 @@ export function percent(x: number | null): string | null {
 export interface PreviousEvaluation {
   /** The document it was scored against (F5), so a later document never borrows its numbers. */
   sourceSha: string
+  /** The pipeline it was scored with: a saved pipeline's id, or "working" for the pipeline on Build. */
+  pipelineKey: string
   byId: Record<string, EvalPayload>
   summary: EvalSummary
 }
@@ -210,22 +212,25 @@ const PREVIOUS_KEY = "rag-playground:evaluation:previous"
  * fresh page. Session storage is per tab and goes when the tab closes, so
  * nothing survives between sessions.
  *
- * `sourceSha` is the document on screen now. A stored result for a different
- * document (score the primer, load Scanned notes) is not a "previous run" of
- * this one, so it is treated as if there were none (F5).
+ * A result belongs to one document and one pipeline. `sourceSha` is the
+ * document on screen now and `pipelineKey` is the pipeline chosen now. A
+ * stored result for a different document (score the primer, load Scanned
+ * notes) or a different pipeline is not a "previous run" of this one, so it
+ * is treated as if there were none (F5).
  */
-export function readPreviousEvaluation(sourceSha: string): PreviousEvaluation | null {
+export function readPreviousEvaluation(sourceSha: string, pipelineKey: string): PreviousEvaluation | null {
   try {
     const raw = window.sessionStorage.getItem(PREVIOUS_KEY)
     if (!raw) return null
     const p = JSON.parse(raw) as PreviousEvaluation
     const ok =
       typeof p?.sourceSha === "string" &&
+      typeof p?.pipelineKey === "string" &&
       typeof p?.byId === "object" &&
       p.byId !== null &&
       !Array.isArray(p.byId) &&
       typeof p?.summary?.total === "number"
-    return ok && p.sourceSha === sourceSha ? p : null
+    return ok && p.sourceSha === sourceSha && p.pipelineKey === pipelineKey ? p : null
   } catch {
     // Blocked storage, or something else wrote the key: compare nothing.
     return null

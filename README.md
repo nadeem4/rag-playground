@@ -170,13 +170,19 @@ unsafe to share:
   and it lists that stage's strategies side by side with what each one produced. The Sweep
   button on a Build card opens Compare on that card. The page also says how many steps were
   reused from the cache.
-- **Score a pipeline instead of guessing.** The Evaluate page takes the pipeline you built,
-  asks it every question in the loaded sample's question set, and says how many of them found their
-  answer, at what rank, and in which chunk. Each question carries the sentence in the
-  document that answers it, so a run counts as a hit when a retrieved chunk contains that
-  sentence. A row opens to show the chunks that came back, so a miss can be understood. The
-  previous score of the tab is kept, so after changing one setting the page reads "4 of 10,
-  was 10 of 10" and marks the questions that changed. It needs no API key.
+- **Save and share pipelines.** Name the pipeline on Build and keep it; switch between saved
+  pipelines from the bar under the column, and edit any of them. Copy link puts the whole
+  configuration in a URL: whoever opens it gets the pipeline on their Build page, and if it was
+  built on a bundled sample, Run all works at once. Your own uploads do not travel with the
+  link; the page says which file to load. Pipelines live in your browser.
+- **Score a pipeline instead of guessing.** The Evaluate page takes the pipeline on Build, or
+  any saved pipeline you pick, asks it every question in the loaded sample's question set, and
+  says how many of them found their answer, at what rank, and in which chunk. Each question
+  carries the sentence in the document that answers it, so a run counts as a hit when a
+  retrieved chunk contains that sentence. A row opens to show the chunks that came back, so a
+  miss can be understood. The previous score of the tab is kept, so after changing one setting
+  the page reads "4 of 10, was 10 of 10" and marks the questions that changed. It needs no API
+  key.
 - **Bring your own questions.** The bundled question sets are about the bundled samples, so
   scoring your own PDF against one of them would be meaningless. Download the template
   ([`GET /api/questions/template?format=json`](http://127.0.0.1:8000/api/questions/template?format=json),
@@ -494,8 +500,8 @@ deleted a day after upload. Results derived from it are cached by content hash a
 listed anywhere. Files uploaded before uploads had owners have none, so they are hidden from
 every visitor and the daily sweep leaves them in place.
 
-Your browser also keeps two small things of its own: which lessons you have finished, and
-the last Evaluate score of the tab. Clearing your browser data removes
+Your browser also keeps three small things of its own: which lessons you have finished, your
+saved pipelines, and the last Evaluate score of the tab. Clearing your browser data removes
 them, and they never leave your machine.
 
 A key typed into the app is in none of these places. It stays in the browser tab's memory

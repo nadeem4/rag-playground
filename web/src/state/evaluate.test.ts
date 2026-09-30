@@ -247,28 +247,41 @@ describe("the previous evaluation of the session", () => {
   beforeEach(() => window.sessionStorage.clear())
 
   it("is nothing before the first run", () => {
-    expect(readPreviousEvaluation(SHA)).toBeNull()
+    expect(readPreviousEvaluation(SHA, "working")).toBeNull()
   })
 
-  it("comes back as it went in, so a trip to Build and back keeps it, for the same document", () => {
-    const before = { sourceSha: SHA, byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+  it("comes back as it went in, so a trip to Build and back keeps it, for the same document and pipeline", () => {
+    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
     storePreviousEvaluation(before)
-    expect(readPreviousEvaluation(SHA)).toEqual(before)
+    expect(readPreviousEvaluation(SHA, "working")).toEqual(before)
   })
 
   it("is ignored when it was recorded against a different document (F5)", () => {
     // Score the primer, load Scanned notes, evaluate: the primer's "10 of 10"
     // must not be compared against Scanned notes' own run.
-    const before = { sourceSha: SHA, byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
     storePreviousEvaluation(before)
-    expect(readPreviousEvaluation(OTHER_SHA)).toBeNull()
+    expect(readPreviousEvaluation(OTHER_SHA, "working")).toBeNull()
+  })
+
+  it("is ignored when it was recorded against a different pipeline", () => {
+    // Stored for the saved pipeline "working" carries a run scored with a
+    // different pipeline: the score under "abc" must not borrow it.
+    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+    storePreviousEvaluation(before)
+    expect(readPreviousEvaluation(SHA, "abc")).toBeNull()
+  })
+
+  it("treats a stored result with no pipelineKey (old shape) as none", () => {
+    window.sessionStorage.setItem("rag-playground:evaluation:previous", JSON.stringify({ sourceSha: SHA, byId: {}, summary: summarize([]) }))
+    expect(readPreviousEvaluation(SHA, "working")).toBeNull()
   })
 
   it("is nothing when the stored value is not an evaluation", () => {
     window.sessionStorage.setItem("rag-playground:evaluation:previous", "{oops")
-    expect(readPreviousEvaluation(SHA)).toBeNull()
+    expect(readPreviousEvaluation(SHA, "working")).toBeNull()
     window.sessionStorage.setItem("rag-playground:evaluation:previous", JSON.stringify({ byId: 7 }))
-    expect(readPreviousEvaluation(SHA)).toBeNull()
+    expect(readPreviousEvaluation(SHA, "working")).toBeNull()
   })
 })
 

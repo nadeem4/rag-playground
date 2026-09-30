@@ -124,6 +124,9 @@ export function useElapsed(startedAt: number | undefined): number | undefined {
 
 export function NodeCard(p: NodeCardProps) {
   const id = useId()
+  // The Upload card is deliberately plain: no run status, no explain button,
+  // no transform picker and no footer. It is just "pick or upload a file".
+  const isSource = p.node.stage === "source"
   const info = p.transforms.find((t) => t.name === p.node.transform)
   // Every option is judged against the same upstream, so the dropdown can tag
   // the ones that would fall back (soft) or could not run (hard) before they
@@ -171,25 +174,29 @@ export function NodeCard(p: NodeCardProps) {
           {p.showId ? <span className="truncate font-mono text-xs text-fg-muted">{p.node.id}</span> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2" aria-live="polite">
-          <span className="meta">{shown.label}</span>
-          {elapsed !== undefined ? (
-            <span className="font-mono text-xs text-fg" title="Elapsed since this node started">
-              {elapsed} s
-            </span>
-          ) : null}
-          {shown.duration !== undefined ? <span className="font-mono text-xs text-fg">{fmtMs(shown.duration)}</span> : null}
-          <Popover.Trigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={`Explain the ${p.title} step`}
-              title={`Explain the ${p.title} step`}
-              className={cn(p.explainOpen && "border-fg-muted bg-surface-elevated")}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Info aria-hidden strokeWidth={1.75} className="size-[16px]" />
-            </Button>
-          </Popover.Trigger>
+          {isSource ? null : (
+            <>
+              <span className="meta">{shown.label}</span>
+              {elapsed !== undefined ? (
+                <span className="font-mono text-xs text-fg" title="Elapsed since this node started">
+                  {elapsed} s
+                </span>
+              ) : null}
+              {shown.duration !== undefined ? <span className="font-mono text-xs text-fg">{fmtMs(shown.duration)}</span> : null}
+              <Popover.Trigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label={`Explain the ${p.title} step`}
+                  title={`Explain the ${p.title} step`}
+                  className={cn(p.explainOpen && "border-fg-muted bg-surface-elevated")}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Info aria-hidden strokeWidth={1.75} className="size-[16px]" />
+                </Button>
+              </Popover.Trigger>
+            </>
+          )}
           {p.onRemove ? (
             <Button
               variant="ghost"
@@ -212,6 +219,7 @@ export function NodeCard(p: NodeCardProps) {
         <StageLesson title={LESSON_TITLE[p.node.stage] ?? `What does ${p.title} do?`} paragraphs={p.lesson} />
       ) : null}
 
+      {isSource ? null : (
       <div className="flex min-w-0 flex-col gap-1">
         <label htmlFor={`${id}-transform`} className="text-sm font-medium">
           Transform
@@ -241,6 +249,7 @@ export function NodeCard(p: NodeCardProps) {
         ) : null}
         {info?.learn?._strategy ? <LearnHint lesson={info.learn._strategy} /> : null}
       </div>
+      )}
 
       {p.body ??
         (info ? (
@@ -279,6 +288,7 @@ export function NodeCard(p: NodeCardProps) {
         </div>
       ) : null}
 
+      {isSource ? null : (
       <div className="-mx-3 flex flex-col gap-2 border-t border-hairline px-3 pt-3">
       <footer className="flex flex-wrap items-center gap-2">
         <Button
@@ -318,6 +328,7 @@ export function NodeCard(p: NodeCardProps) {
         <WhatItDid stage={p.node.stage} type={info?.output} artifactId={completed} previousId={p.previousArtifactId} stale={p.stale} />
       ) : null}
       </div>
+      )}
     </article>
     </Popover.Anchor>
     <ExplainPanel

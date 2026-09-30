@@ -46,7 +46,20 @@ describe("PipelineColumn", () => {
   it("titles cards with plain verbs, in graph order", () => {
     setup()
     const titles = [...document.querySelectorAll("article h3")].map((h) => h.textContent)
-    expect(titles).toEqual(["Load", "Parse", "Clean", "Chunk", "Index", "Ask", "Retrieve", "Search"])
+    expect(titles).toEqual(["Upload", "Parse", "Clean", "Chunk", "Index", "Ask", "Retrieve", "Search"])
+  })
+
+  it("the Upload card is plain: no explain button, no Transform, no Run; Parse keeps all three", () => {
+    setup()
+    const upload = within(card("source"))
+    expect(upload.queryByRole("button", { name: "Explain the Upload step" })).toBeNull()
+    expect(upload.queryByText("Transform")).toBeNull()
+    expect(upload.queryByRole("button", { name: "Run" })).toBeNull()
+
+    const parse = within(card("parse"))
+    expect(parse.getByRole("button", { name: "Explain the Parse step" })).toBeTruthy()
+    expect(parse.getByText("Transform")).toBeTruthy()
+    expect(parse.getByRole("button", { name: "Run" })).toBeTruthy()
   })
 
   it("Run on a card runs that node", () => {
@@ -155,8 +168,9 @@ describe("PipelineColumn", () => {
 
   it("a stage with one transform shows its name as text, not a one-option picker", () => {
     setup()
-    // Load has only `upload` and Parse only `pdfium` in the test registry.
-    for (const [id, name] of [["source", "upload"], ["parse", "pdfium"]]) {
+    // Parse has only `pdfium` in the test registry. The Upload card shows no
+    // Transform at all (it is plain: pick or upload a file, nothing else).
+    for (const [id, name] of [["parse", "pdfium"]]) {
       const shown = within(card(id)).getByLabelText("Transform")
       expect(shown.tagName).toBe("OUTPUT")
       expect(shown.textContent).toBe(name)

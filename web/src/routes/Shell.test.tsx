@@ -90,6 +90,28 @@ describe("Build page", () => {
     expect(within(card("source")).getByText("Choose or upload a file first.")).toBeTruthy()
     expect(posts).toHaveLength(0)
   })
+
+  it("Run all's blocked note says to choose a file, not to fix Upload settings", async () => {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/explain") {
+          const body = JSON.parse(String(init?.body))
+          const noFile = body.stage === "source" && !body.config.sha
+          return new Response(JSON.stringify({ settings: "s", tradeoff: null, warning: noFile ? "Choose a file." : null, blocking: noFile }), {
+            status: 200,
+          })
+        }
+        return base(url, init)
+      }),
+    )
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    await waitFor(() => expect(document.querySelector("[data-testid=run-all-blocked]")).toBeTruthy())
+    expect(document.querySelector("[data-testid=run-all-blocked]")!.textContent).toBe("Choose a file to run the pipeline.")
+    expect(screen.getByRole("button", { name: "Run all" }).getAttribute("title")).toBe("Choose a file to run the pipeline.")
+  })
 })
 
 describe("Build page explanations", () => {
@@ -179,7 +201,7 @@ describe("First run (plan I-15)", () => {
       if (!el) throw new Error(`no ${sel}`)
       return el as unknown as T
     })
-  const sampleButton = () => found<HTMLButtonElement>('[aria-label="Load"] li button')
+  const sampleButton = () => found<HTMLButtonElement>('[aria-label="Upload"] li button')
 
   it("shows when no source is selected and nothing is uploaded", async () => {
     render(<Shell />)
@@ -203,7 +225,7 @@ describe("First run (plan I-15)", () => {
     )
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(document.querySelector('[aria-label="Load"]')).toBeNull()
+    expect(document.querySelector('[aria-label="Upload"]')).toBeNull()
   })
 
   it("does not show when the stored graph already has a source", async () => {
@@ -213,7 +235,7 @@ describe("First run (plan I-15)", () => {
     )
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(document.querySelector('[aria-label="Load"]')).toBeNull()
+    expect(document.querySelector('[aria-label="Upload"]')).toBeNull()
   })
 
   it("the sample loads the source and sets the default graph, without running anything", async () => {

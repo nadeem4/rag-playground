@@ -49,7 +49,7 @@ describe("graph state", () => {
 
   it("titles are plain verbs, and the use case card is named by its transform", () => {
     const titles = columnOrder(initialGraph(R)).map(titleFor)
-    expect(titles).toEqual(["Load", "Parse", "Chunk", "Index", "Ask", "Retrieve", "Search"])
+    expect(titles).toEqual(["Upload", "Parse", "Chunk", "Index", "Ask", "Retrieve", "Search"])
   })
 
   it("Retrieve prefers hybrid_rrf when the registry has it, and falls back to the first retriever", () => {

@@ -39,7 +39,7 @@ describe("sweep grouping", () => {
 })
 
 const COLUMN = [
-  { id: "source", title: "Load" },
+  { id: "source", title: "Upload" },
   { id: "parse", title: "Parse" },
   { id: "chunk", title: "Chunk" },
 ]
@@ -53,7 +53,7 @@ describe("tallySweep", () => {
     ]
     const t = tallySweep(reduceEvents(events).variants)
     expect(t).toEqual({ executed: { source: 1, parse: 1, chunk: 3 }, cacheHits: 4, variants: 3 })
-    expect(tallyLine(t, COLUMN)).toBe("Load ran 1 time, Parse ran 1 time, Chunk ran 3 times.")
+    expect(tallyLine(t, COLUMN)).toBe("Upload ran 1 time, Parse ran 1 time, Chunk ran 3 times.")
   })
 
   it("names a node that never ran as coming from the cache", () => {
@@ -63,7 +63,7 @@ describe("tallySweep", () => {
     expect(t).toEqual({ executed: { source: 0, parse: 0, chunk: 0 }, cacheHits: 6, variants: 2 })
     expect(tallyLine(t, COLUMN)).toBe("Nothing ran: every step came from the cache.")
     const some = { executed: { source: 0, parse: 0, chunk: 2 }, cacheHits: 4, variants: 2 }
-    expect(tallyLine(some, COLUMN)).toBe("Chunk ran 2 times. Load and Parse came from the cache.")
+    expect(tallyLine(some, COLUMN)).toBe("Chunk ran 2 times. Upload and Parse came from the cache.")
   })
 
   it("an Index sweep through Search: one parse, five indexes, five searches", () => {
@@ -77,9 +77,9 @@ describe("tallySweep", () => {
         events.push({ event: "node_finished", ts: 0, node_id: id, artifact_id: `${id}-${i}`, cache_hit: !fresh, duration_ms: 1 })
       }
     }
-    const column = nodes.map((id) => ({ id, title: { source: "Load", parse: "Parse", chunk: "Chunk", index: "Index", query: "Ask", retrieve: "Retrieve", use_case: "Search" }[id]! }))
+    const column = nodes.map((id) => ({ id, title: { source: "Upload", parse: "Parse", chunk: "Chunk", index: "Index", query: "Ask", retrieve: "Retrieve", use_case: "Search" }[id]! }))
     expect(tallyLine(tallySweep(reduceEvents(events).variants), column)).toBe(
-      "Load ran 1 time, Parse ran 1 time, Chunk ran 1 time, Index ran 5 times, Ask ran 1 time, Retrieve ran 5 times, Search ran 5 times.",
+      "Upload ran 1 time, Parse ran 1 time, Chunk ran 1 time, Index ran 5 times, Ask ran 1 time, Retrieve ran 5 times, Search ran 5 times.",
     )
   })
 

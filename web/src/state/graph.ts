@@ -22,7 +22,7 @@ export const COLUMN_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "ind
 export const DEFAULT_STAGES: Stage[] = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
 
 export const STAGE_VERB: Partial<Record<Stage, string>> = {
-  source: "Load",
+  source: "Upload",
   parse: "Parse",
   clean: "Clean",
   chunk: "Chunk",

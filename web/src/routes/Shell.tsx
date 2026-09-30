@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { needsKey, useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { Registry, Source } from "@/api/types"
+import type { GraphNode, Registry, Source } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
@@ -68,6 +68,14 @@ export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry
       ) : null}
     </main>
   )
+}
+
+/**
+ * Why Run all is disabled: the Upload card just needs a file, not a settings
+ * fix, so it gets its own plain sentence instead of naming a "Upload" setting.
+ */
+function blockedTitle(blocker: GraphNode): string {
+  return blocker.stage === "source" ? "Choose a file to run the pipeline." : `Fix the ${titleFor(blocker)} settings to run the pipeline.`
 }
 
 function Build({ registry }: { registry: Registry }) {
@@ -247,7 +255,7 @@ function Build({ registry }: { registry: Registry }) {
             <Button
               size="sm"
               disabled={busy || Boolean(blocker) || firstRun}
-              title={blocker ? `Fix the ${titleFor(blocker)} settings to run the pipeline` : undefined}
+              title={blocker ? blockedTitle(blocker) : undefined}
               onClick={() => void start(undefined, false)}
             >
               {busy ? "Running" : "Run all"}
@@ -272,7 +280,7 @@ function Build({ registry }: { registry: Registry }) {
         ) : null}
         {blocker && !firstRun ? (
           <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
-            Fix the {titleFor(blocker)} settings to run the pipeline.
+            {blockedTitle(blocker)}
           </p>
         ) : null}
         {columnError || run.error ? (

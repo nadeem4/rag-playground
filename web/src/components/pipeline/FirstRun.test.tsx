@@ -67,23 +67,25 @@ afterEach(() => {
 
 const uploadButton = () => screen.queryByRole("button", { name: "Upload" })
 const NOTE =
-  "This is a hosted demo. A PDF you upload stays private to this browser and is deleted after a day. Files up to 10 MB and 20 pages, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
+  "This is a hosted demo. A PDF you upload is private to this browser, is not shared with anyone, and is deleted after a day. Files up to 10 MB and 20 pages, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
 const IN_A_FRAME = " Uploads need cookies. If your browser blocks them here, open the demo in its own tab."
 
 describe("SourcePicker", () => {
-  it("offers Upload outside demo mode", async () => {
+  it("offers Upload outside demo mode, and says files never leave the machine", async () => {
     render(<SourcePicker value={{}} onChange={() => {}} />)
     await screen.findByLabelText("File")
     await waitFor(() => expect(appCalls).toBe(1))
     expect(uploadButton()).not.toBeNull()
+    expect(await screen.findByText("Your files stay on this machine and never leave it.")).toBeTruthy()
   })
 
-  it("offers Upload in demo mode too", async () => {
+  it("offers Upload in demo mode too, and says the file is not shared", async () => {
     demo = true
     render(<SourcePicker value={{}} onChange={() => {}} />)
     await screen.findByLabelText("File")
     await waitFor(() => expect(appCalls).toBe(1))
     expect(uploadButton()).not.toBeNull()
+    expect(await screen.findByText("Your file is private to this browser, is not shared with anyone, and is deleted after a day.")).toBeTruthy()
   })
 
   it("keeps Upload when the app settings cannot be read", async () => {
@@ -181,6 +183,12 @@ describe("FirstRun", () => {
     expect(rows.map((r) => within(r).getByRole("heading").textContent)).toEqual(["A primer on chunking", "Scanned notes"])
     expect(within(rows[1]).getByText("Two pages that are pictures of text.")).toBeTruthy()
     expect(within(rows[1]).getByText("parse")).toBeTruthy()
+  })
+
+  it("outside demo mode, says files stay on this machine", async () => {
+    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    await screen.findAllByRole("listitem")
+    expect(await screen.findAllByText("Your files stay on this machine and never leave it.")).toHaveLength(2)
   })
 
   it("Load posts the sample's name and hands the source back, with the sample's own question (F6)", async () => {

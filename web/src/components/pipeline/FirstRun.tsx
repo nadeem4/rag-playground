@@ -47,11 +47,11 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
   }
 
   return (
-    <section aria-label="Load" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
-      <h3 className="text-sm font-semibold">Load</h3>
+    <section aria-label="Upload" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
+      <h3 className="text-sm font-semibold">Upload</h3>
       {demo ? (
         <p data-testid="demo-note" className="text-sm text-fg-muted">
-          This is a hosted demo. A PDF you upload stays private to this browser and is deleted after{" "}
+          This is a hosted demo. A PDF you upload is private to this browser, is not shared with anyone, and is deleted after{" "}
           {ttlHours === 24 ? "a day" : `${ttlHours} hours`}. Files up to{" "}
           {Math.round((limits?.max_bytes ?? 10485760) / 1048576)} MB and {limits?.max_pages ?? 20} pages,{" "}
           {count(limits?.max_files ?? 3)} at a time. Clearing cookies loses access to your uploads. For anything larger,{" "}
@@ -70,7 +70,9 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
             </>
           ) : null}
         </p>
-      ) : null}
+      ) : (
+        <p className="text-sm text-fg-muted">Your files stay on this machine and never leave it.</p>
+      )}
       <div className="rounded-panel border border-dashed border-field-border p-3">
         <SourcePicker value={{}} onChange={onSource} samples={false} />
       </div>

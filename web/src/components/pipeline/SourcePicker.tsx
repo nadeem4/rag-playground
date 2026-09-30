@@ -22,9 +22,6 @@ export interface SourceConfig {
 
 type ListState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: Source[] }
 
-const fmtBytes = (n: number) =>
-  n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
-
 /** The server's own sentence when it sent one, so a visitor reads why without the status and path in front. */
 const reason = (err: unknown) =>
   err instanceof ApiError && typeof err.detail === "string" ? err.detail : err instanceof Error ? err.message : String(err)
@@ -137,12 +134,11 @@ export function SourcePicker({
             ))}
           </select>
         )}
-        {current ? (
-          <p className="font-mono text-xs text-fg-muted">
-            {fmtBytes(current.size)} <span className="px-1">sha</span>
-            {current.sha.slice(0, 12)}
-          </p>
-        ) : null}
+        <p className="text-xs text-fg-muted">
+          {demo
+            ? "Your file is private to this browser, is not shared with anyone, and is deleted after a day."
+            : "Your files stay on this machine and never leave it."}
+        </p>
         {invalid ? (
           <div id={`${id}-err`} className="flex flex-col text-xs text-danger">
             {errors!.map((e) => (

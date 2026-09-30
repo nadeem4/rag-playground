@@ -31,12 +31,16 @@ export function SourcePicker({
   onChange,
   errors,
   samples: showSamples = true,
+  reassure = true,
 }: {
   value: SourceConfig
   onChange: (v: SourceConfig) => void
   errors?: string[]
   /** Show the "Load a sample" select. False on the Load card (plan I-15, F2), which already lists every sample of its own. */
   samples?: boolean
+  /** Show the "your files never leave/are not shared" sentence under the file select. False on the first-run
+   * card (`FirstRun`), which already says this itself, above the embedded picker. */
+  reassure?: boolean
 }) {
   const id = useId()
   const demo = useDemo()
@@ -134,11 +138,13 @@ export function SourcePicker({
             ))}
           </select>
         )}
-        <p className="text-xs text-fg-muted">
-          {demo
-            ? "Your file is private to this browser, is not shared with anyone, and is deleted after a day."
-            : "Your files stay on this machine and never leave it."}
-        </p>
+        {reassure ? (
+          <p className="text-xs text-fg-muted">
+            {demo
+              ? "Your file is private to this browser, is not shared with anyone, and is deleted after a day."
+              : "Your files stay on this machine and never leave it."}
+          </p>
+        ) : null}
         {invalid ? (
           <div id={`${id}-err`} className="flex flex-col text-xs text-danger">
             {errors!.map((e) => (

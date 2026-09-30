@@ -138,3 +138,71 @@ No CRLF line endings and no em/en dashes found in any changed file (checked with
   listed as "keep" in the brief, but removing them would have broken the existing "Choose
   or upload a file first." validation test, and the brief only asked to strip status,
   info button, Transform, and footer).
+
+## Follow-up fix: the reassurance line showed twice on first visit
+
+The coordinator flagged that `FirstRun` renders its own reassurance line (the demo note,
+or "Your files stay on this machine and never leave it." outside demo mode) and also
+embeds `SourcePicker`, which independently renders its own reassurance sentence under the
+file select — so on the first-run card the message effectively duplicated.
+
+**Fix**: `web/src/components/pipeline/SourcePicker.tsx` gained a `reassure?: boolean`
+prop (default `true`) that gates the sentence under the file select.
+`web/src/components/pipeline/FirstRun.tsx` now passes `reassure={false}` on the
+`SourcePicker` it embeds, since the card already says this itself, above the picker.
+Every other caller of `SourcePicker` (notably `PipelineColumn`, which renders it directly
+as the Upload card's body after the first visit) keeps the default `true`, so the
+sentence still shows there once.
+
+### Tests: RED then GREEN
+
+Wrote the tests first in `FirstRun.test.tsx`:
+- Changed `"outside demo mode, says files stay on this machine"` (now "...exactly once")
+  to assert `getAllByText("Your files stay on this machine and never leave it.")` has
+  length **1** (was asserting length 2, matching the bug).
+- Extended `"in demo mode: Upload stays, the samples stay, and the note states the
+  limits"` (now "...said once") to assert `queryByText("Your file is private to this
+  browser, is not shared with anyone, and is deleted after a day.")` is **null** — the
+  embedded picker's own short sentence must not also render next to the long demo note.
+- "SourcePicker rendered alone still shows it" was already covered by the existing
+  `"offers Upload outside demo mode..."` and `"offers Upload in demo mode too..."` tests
+  in the `SourcePicker` describe block, which render `<SourcePicker>` directly (no
+  `reassure` prop passed, so the default `true` applies) and already assert the sentence
+  is present — left unchanged, still green.
+
+Confirmed RED by stashing just the two implementation files
+(`SourcePicker.tsx`, `FirstRun.tsx`) back to their pre-fix committed state and running
+`npx vitest run src/components/pipeline/FirstRun.test.tsx`:
+
+```
+ Test Files  1 failed (1)
+      Tests  2 failed | 14 passed (16)
+
+ FAIL  FirstRun > outside demo mode, says files stay on this machine exactly once
+   expected [ <p…>, <p…> ] to have a length of 1 but got 2
+ FAIL  FirstRun > in demo mode: ...said once
+   expected <p class="text-xs text-fg-muted">Your file is private...</p> to be null
+```
+
+Restored the fix (`git stash pop`) and reran the same file — GREEN:
+
+```
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+```
+
+### Suite summary (after the fix)
+
+```
+ Test Files  43 passed (43)
+      Tests  602 passed (602)
+```
+
+`node node_modules/typescript/bin/tsc -b` exit code: **0**. No CRLF or em/en dashes in
+the three changed files.
+
+### Files changed (this follow-up)
+
+- `web/src/components/pipeline/SourcePicker.tsx`
+- `web/src/components/pipeline/FirstRun.tsx`
+- `web/src/components/pipeline/FirstRun.test.tsx`

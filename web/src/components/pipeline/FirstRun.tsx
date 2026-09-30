@@ -17,6 +17,8 @@ import { SourcePicker, type SourceConfig } from "./SourcePicker"
  * The embedded `SourcePicker` hides its own sample select (F2): this card
  * already lists every sample, and offering the same choice twice, through two
  * different code paths, is how a sample used to load with the wrong question.
+ * It also hides its own reassurance sentence: this card already says, above
+ * the picker, that the file is private or never leaves the machine.
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
@@ -74,7 +76,7 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
         <p className="text-sm text-fg-muted">Your files stay on this machine and never leave it.</p>
       )}
       <div className="rounded-panel border border-dashed border-field-border p-3">
-        <SourcePicker value={{}} onChange={onSource} samples={false} />
+        <SourcePicker value={{}} onChange={onSource} samples={false} reassure={false} />
       </div>
       <div className="flex min-w-0 flex-col gap-2">
         <h4 className="m-0 text-sm font-medium">Try a sample document</h4>

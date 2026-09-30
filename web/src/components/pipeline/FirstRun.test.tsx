@@ -185,10 +185,10 @@ describe("FirstRun", () => {
     expect(within(rows[1]).getByText("parse")).toBeTruthy()
   })
 
-  it("outside demo mode, says files stay on this machine", async () => {
+  it("outside demo mode, says files stay on this machine exactly once", async () => {
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
     await screen.findAllByRole("listitem")
-    expect(await screen.findAllByText("Your files stay on this machine and never leave it.")).toHaveLength(2)
+    expect(await screen.findAllByText("Your files stay on this machine and never leave it.")).toHaveLength(1)
   })
 
   it("Load posts the sample's name and hands the source back, with the sample's own question (F6)", async () => {
@@ -213,7 +213,7 @@ describe("FirstRun", () => {
     await waitFor(() => expect(uploadButton()).not.toBeNull())
   })
 
-  it("in demo mode: Upload stays, the samples stay, and the note states the limits", async () => {
+  it("in demo mode: Upload stays, the samples stay, and the note states the limits, said once", async () => {
     demo = true
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
     const note = await screen.findByTestId("demo-note")
@@ -221,6 +221,8 @@ describe("FirstRun", () => {
     expect(screen.getByRole("link", { name: "run it locally" })).toBeTruthy()
     await waitFor(() => expect(uploadButton()).not.toBeNull())
     expect(await screen.findAllByRole("listitem")).toHaveLength(2)
+    // The embedded picker does not repeat its own short reassurance sentence.
+    expect(screen.queryByText("Your file is private to this browser, is not shared with anyone, and is deleted after a day.")).toBeNull()
   })
 
   it("in demo mode without limits, the note still says a day, 10 MB and 20 pages", async () => {

@@ -10,9 +10,9 @@ reads them in order and groups them in three steps.
 - *Pieces.* Units are packed in order up to `max_tokens`. A table unit that is
   too big stays whole when `keep_tables_whole` is on. Any other unit that is too
   big is cut at sentence ends, and only a single sentence that is itself too big
-  is cut on token boundaries. A heading is never a piece on its own, except a
-  last heading with nothing below it: it joins the piece below it, even when
-  that piece is a table kept whole.
+  is cut on token boundaries. A heading joins the piece below it, even when
+  that piece is a table kept whole, so a heading is never a piece on its own.
+  The one exception is a last heading with nothing below it.
 
 Every piece keeps its heading path. With `heading_context` on, the path is also
 put in front of the piece in `embed_text`, so retrieval sees the section's name,

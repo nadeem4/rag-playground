@@ -100,7 +100,7 @@ def test_text_is_an_exact_slice(name):
         assert cs.source_text[chunk.start_char : chunk.end_char] == chunk.text
 
 
-def test_a_heading_line_is_its_own_sentence():
+def test_a_heading_line_joins_the_sentence_after_it():
     doc = _doc(
         [
             ("heading", "Results", 1, 1),
@@ -108,7 +108,56 @@ def test_a_heading_line_is_its_own_sentence():
         ]
     )
     cs = run(SentenceWindowChunker, doc, sentences_per_chunk=1, overlap_sentences=0)
-    assert _texts(cs) == ["# Results", "Scores went up.", "Costs went down."]
+    assert _texts(cs) == ["# Results\n\nScores went up.", "Costs went down."]
+
+
+def test_a_heading_at_the_very_end_joins_the_sentence_before_it():
+    doc = _doc(
+        [
+            ("paragraph", "Scores went up. Costs went down.", None, 1),
+            ("heading", "Appendix", 1, 1),
+        ]
+    )
+    cs = run(SentenceWindowChunker, doc, sentences_per_chunk=1, overlap_sentences=0)
+    assert _texts(cs) == ["Scores went up.", "Costs went down.\n\n# Appendix"]
+
+
+def _sections_doc():
+    return _doc(
+        [
+            ("heading", "Intro", 1, 1),
+            ("paragraph", "One is here. Two is here. Three is here.", None, 1),
+            ("heading", "Method", 1, 1),
+            ("heading", "Setup", 2, 1),
+            ("paragraph", "Four is here. Five is here.", None, 1),
+            ("heading", "Results", 1, 1),
+            ("paragraph", "Six is here. Seven is here.", None, 1),
+        ]
+    )
+
+
+@pytest.mark.parametrize("n,overlap", [(1, 0), (2, 0), (2, 1), (3, 1), (4, 2)])
+def test_no_piece_ends_with_a_heading_line(n, overlap):
+    cs = run(
+        SentenceWindowChunker,
+        _sections_doc(),
+        sentences_per_chunk=n,
+        overlap_sentences=overlap,
+    )
+    for text in _texts(cs):
+        assert not text.splitlines()[-1].startswith("#"), text
+
+
+def test_a_piece_is_labelled_by_the_heading_it_starts_on():
+    cs = run(
+        SentenceWindowChunker, _sections_doc(), sentences_per_chunk=3, overlap_sentences=0
+    )
+    assert [c.text.splitlines()[0] for c in cs.chunks] == [
+        "# Intro",
+        "# Method",
+        "Seven is here.",
+    ]
+    assert [c.heading_path for c in cs.chunks] == [["Intro"], ["Method"], ["Results"]]
 
 
 def test_pieces_carry_their_heading_path():
@@ -119,7 +168,7 @@ def test_pieces_carry_their_heading_path():
         ]
     )
     cs = run(SentenceWindowChunker, doc, sentences_per_chunk=1, overlap_sentences=0)
-    assert [c.heading_path for c in cs.chunks] == [["Results"]] * 3
+    assert [c.heading_path for c in cs.chunks] == [["Results"]] * 2
 
 
 # --------------------------------------------------------------------------- #

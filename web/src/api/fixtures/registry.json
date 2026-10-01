@@ -586,6 +586,88 @@
         }
       }
     },
+    "layout_blocks": {
+      "name": "layout_blocks",
+      "version": "1",
+      "summary": "Cuts along the page's own blocks: headings, paragraphs, lists and tables. A table stays with its caption and its heading, and each section starts a new piece. Blocks are packed together up to the size limit, and a block is only cut when it is too long on its own.",
+      "stage": "chunk",
+      "output": "chunk_set",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "prefers": {
+        "doc": {
+          "structure": [
+            "headings"
+          ]
+        }
+      },
+      "fallback": "There are no headings to follow, so the text is cut by size.",
+      "inputs": {
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "max_tokens": {
+            "default": 400,
+            "minimum": 1,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "keep_tables_whole": {
+            "default": true,
+            "title": "Keep Tables Whole",
+            "type": "boolean"
+          },
+          "heading_context": {
+            "default": true,
+            "title": "Heading Context",
+            "type": "boolean"
+          }
+        },
+        "title": "LayoutBlocksConfig",
+        "type": "object"
+      },
+      "learn": {
+        "_strategy": {
+          "hint": "This strategy follows the blocks the parser found on the page.",
+          "more": [
+            "A table and its caption stay together in one piece, and every piece keeps the headings above it. So a question about a table finds the table, its caption and the name of its section.",
+            "The cost is that pieces vary in size, and a big table becomes one big piece.",
+            "It needs a parser that finds headings and tables, such as the Layout parser. Without them, the text is only cut by size."
+          ]
+        },
+        "max_tokens": {
+          "hint": "This is the largest a piece should be, counted in tokens.",
+          "more": [
+            "Here a token is one word or one punctuation mark.",
+            "Blocks are packed into a piece until the next one would not fit. A block that is too long on its own is cut at the end of a sentence. Only one sentence longer than the limit is cut inside it.",
+            "A piece can run a little over this when a heading joins the block below it."
+          ]
+        },
+        "keep_tables_whole": {
+          "hint": "When this is on, a table is never cut, even if it is too long.",
+          "more": [
+            "A table cut in half loses its column names in the second half, so its numbers no longer make sense. Keeping it whole avoids that, but the piece can be larger than the size limit.",
+            "When this is off, a long table is cut between its rows."
+          ]
+        },
+        "heading_context": {
+          "hint": "When this is on, the heading path is added to what gets searched.",
+          "more": [
+            "The headings above a piece are put in front of it before it is turned into a vector, for example Results > Scores. The piece itself, and what is shown and cited, does not change.",
+            "This helps a question that names a section find the pieces in it."
+          ]
+        }
+      }
+    },
     "markdown_header": {
       "name": "markdown_header",
       "version": "1",
@@ -706,92 +788,10 @@
         }
       }
     },
-    "layout_blocks": {
-      "name": "layout_blocks",
-      "version": "1",
-      "summary": "Cuts along the page's own blocks: headings, paragraphs, lists and tables. A table stays with its caption and its heading, and each section starts a new piece. Blocks are packed together up to the size limit, and a block is only cut when it is too long on its own.",
-      "stage": "chunk",
-      "output": "chunk_set",
-      "stackable": false,
-      "deterministic": true,
-      "cacheable": true,
-      "requires": {},
-      "provides": {},
-      "prefers": {
-        "doc": {
-          "structure": [
-            "headings"
-          ]
-        }
-      },
-      "fallback": "There are no headings to follow, so the text is cut by size.",
-      "inputs": {
-        "doc": {
-          "type": "parsed_doc",
-          "variadic": false,
-          "ambient": false,
-          "required": true
-        }
-      },
-      "config_schema": {
-        "properties": {
-          "max_tokens": {
-            "default": 400,
-            "minimum": 1,
-            "title": "Max Tokens",
-            "type": "integer"
-          },
-          "keep_tables_whole": {
-            "default": true,
-            "title": "Keep Tables Whole",
-            "type": "boolean"
-          },
-          "heading_context": {
-            "default": true,
-            "title": "Heading Context",
-            "type": "boolean"
-          }
-        },
-        "title": "LayoutBlocksConfig",
-        "type": "object"
-      },
-      "learn": {
-        "_strategy": {
-          "hint": "This strategy follows the blocks the parser found on the page.",
-          "more": [
-            "A table and its caption stay together in one piece, and every piece keeps the headings above it. So a question about a table finds the table, its caption and the name of its section.",
-            "The cost is that pieces vary in size, and a big table becomes one big piece.",
-            "It needs a parser that finds headings and tables, such as the Layout parser. Without them, the text is only cut by size."
-          ]
-        },
-        "max_tokens": {
-          "hint": "This is the largest a piece should be, counted in tokens.",
-          "more": [
-            "Here a token is one word or one punctuation mark.",
-            "Blocks are packed into a piece until the next one would not fit. A block that is too long on its own is cut at the end of a sentence, never in the middle of one.",
-            "A piece can run a little over this when a heading joins the block below it."
-          ]
-        },
-        "keep_tables_whole": {
-          "hint": "When this is on, a table is never cut, even if it is too long.",
-          "more": [
-            "A table cut in half loses its column names in the second half, so its numbers no longer make sense. Keeping it whole avoids that, but the piece can be larger than the size limit.",
-            "When this is off, a long table is cut between its rows."
-          ]
-        },
-        "heading_context": {
-          "hint": "When this is on, the heading path is added to what gets searched.",
-          "more": [
-            "The headings above a piece are put in front of it before it is turned into a vector, for example Results > Scores. The piece itself, and what is shown and cited, does not change.",
-            "This helps a question that names a section find the pieces in it."
-          ]
-        }
-      }
-    },
     "sentence_window": {
       "name": "sentence_window",
       "version": "1",
-      "summary": "Cuts only where a sentence ends, so an answer sentence is never cut in half. Each piece is a fixed number of sentences in a row, and neighbouring pieces can share a few sentences. A heading line counts as one sentence.",
+      "summary": "Cuts only where a sentence ends, so an answer sentence is never cut in half. Each piece is a fixed number of sentences in a row, and neighbouring pieces can share a few sentences. A heading line joins the sentence after it.",
       "stage": "chunk",
       "output": "chunk_set",
       "stackable": false,
@@ -831,7 +831,7 @@
         "_strategy": {
           "hint": "This strategy cuts the text only where a sentence ends.",
           "more": [
-            "Each piece holds the same number of sentences, so a sentence is never cut in the middle. A heading line, a list item and a table row each count as one sentence.",
+            "Each piece holds the same number of sentences, so a sentence is never cut in the middle. A list item and a table row each count as one sentence, and a heading line joins the sentence after it.",
             "The cost is that pieces vary in length, because sentences do. One long sentence makes one long piece.",
             "It works with any parser."
           ]

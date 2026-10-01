@@ -179,8 +179,26 @@ def test_oversized_table_is_kept_whole_and_the_note_says_so(tmp_path):
     [piece] = _holding(cs, "| row0 |")
     assert "| row29 |" in piece.text and "Table 1: Many rows" in piece.text
     assert piece.token_count > 20
-    assert "keeping 1 table whole" in note
+    assert note == (
+        "Cut 2 blocks into 1 piece along 1 heading, keeping 1 table whole "
+        "although it is over the size limit."
+    )
     assert cs.chunker_meta["tables_kept_whole"] == 1
+
+
+def test_the_note_names_tables_kept_whole_in_the_plural(tmp_path):
+    doc = _doc(
+        [
+            ("heading", "Data", 1, 1),
+            ("table", _table(30), None, 1),
+            ("paragraph", "Between the tables.", None, 1),
+            ("table", _table(30), None, 1),
+        ]
+    )
+    _, note = _apply(doc, tmp_path, max_tokens=20)
+    assert note.endswith(
+        ", keeping 2 tables whole although they are over the size limit."
+    )
 
 
 def test_oversized_table_is_split_when_keep_tables_whole_is_off(tmp_path):
@@ -193,7 +211,8 @@ def test_oversized_table_is_split_when_keep_tables_whole_is_off(tmp_path):
     cs, note = _apply(doc, tmp_path, max_tokens=20, keep_tables_whole=False)
     assert not any("| row0 |" in c.text and "| row29 |" in c.text for c in cs.chunks)
     assert all(c.token_count <= 20 for c in cs.chunks)
-    assert "keeping 0 tables whole" in note
+    assert "keeping" not in note
+    assert note.endswith("along 1 heading.")
     assert cs.chunker_meta["tables_kept_whole"] == 0
 
 
@@ -221,10 +240,38 @@ def test_a_single_sentence_over_the_limit_is_cut_on_tokens():
 # --------------------------------------------------------------------------- #
 
 
-def test_embed_text_carries_the_heading_path():
+def test_embed_text_carries_only_the_path_above_the_piece_own_heading():
     cs = run(LayoutBlocksChunker, DOCS["many_headings"]())
     gamma = cs.chunks[2]
-    assert gamma.embed_text == "Alpha > Beta > Gamma\n\n" + gamma.text
+    assert gamma.text.startswith("### Gamma")
+    assert gamma.embed_text == "Alpha > Beta\n\n" + gamma.text
+
+
+def test_embed_text_is_unset_when_the_piece_opens_with_its_whole_path():
+    cs = run(LayoutBlocksChunker, DOCS["many_headings"]())
+    alpha, delta = cs.chunks[0], cs.chunks[3]
+    assert alpha.text.startswith("# Alpha") and delta.text.startswith("# Delta")
+    assert alpha.embed_text is None and delta.embed_text is None
+
+
+def test_embed_text_is_unset_when_headings_in_a_row_open_the_piece():
+    doc = _doc(
+        [
+            ("heading", "Ch1", 1, 1),
+            ("heading", "Sec", 2, 1),
+            ("paragraph", "Body text under the section.", None, 1),
+        ]
+    )
+    [piece] = run(LayoutBlocksChunker, doc).chunks
+    assert piece.embed_text is None
+
+
+def test_embed_text_carries_the_whole_path_when_the_piece_has_no_heading():
+    doc = _doc([("heading", "Long", 1, 1), ("paragraph", _sentences(6), None, 1)])
+    cs = run(LayoutBlocksChunker, doc, max_tokens=8)
+    later = cs.chunks[1]
+    assert not later.text.startswith("#")
+    assert later.embed_text == "Long\n\n" + later.text
 
 
 def test_embed_text_is_unset_when_heading_context_is_off():
@@ -272,14 +319,14 @@ def test_the_note_counts_blocks_pieces_and_headings(tmp_path):
     )
     _, note = _apply(doc, tmp_path)
     assert note == (
-        "Cut 3 blocks into 1 piece along 1 heading, keeping 0 tables whole."
+        "Cut 3 blocks into 1 piece along 1 heading."
     )
 
 
 def test_the_note_uses_plurals(tmp_path):
     _, note = _apply(DOCS["many_headings"](), tmp_path)
     assert note == (
-        "Cut 9 blocks into 4 pieces along 4 headings, keeping 0 tables whole."
+        "Cut 9 blocks into 4 pieces along 4 headings."
     )
 
 
@@ -347,7 +394,7 @@ def test_headings_in_a_row_join_the_body_below_them():
 def test_a_small_table_is_not_counted_as_kept_whole(tmp_path):
     doc = _doc([("heading", "Data", 1, 1), ("table", _table(2), None, 1)])
     cs, note = _apply(doc, tmp_path, max_tokens=400)
-    assert "keeping 0 tables whole" in note
+    assert note == "Cut 2 blocks into 1 piece along 1 heading."
     assert cs.chunker_meta["tables_kept_whole"] == 0
 
 

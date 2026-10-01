@@ -1,8 +1,10 @@
 """Sentence windows: pieces are cut only where sentences end.
 
 The rendered text is split into sentences with exact offsets, by the same
-splitter sentence-id grounding uses, so a heading line, a list item and a table
-row each count as one sentence. A piece is `sentences_per_chunk` sentences in a
+splitter sentence-id grounding uses, so a list item and a table row each count
+as one sentence. A heading line is not a sentence of its own: it joins the
+sentence after it (or, at the very end, the one before it), so a piece never
+ends on a bare heading. A piece is `sentences_per_chunk` sentences in a
 row, and the next piece starts `sentences_per_chunk - overlap_sentences`
 sentences later, so every sentence lands in at least one piece and the last
 piece may be shorter.
@@ -40,6 +42,33 @@ class SentenceWindowConfig(BaseModel):
         return value
 
 
+def _attach_headings(view: DocView, sentences: list[Span]) -> list[Span]:
+    """Join each heading line to the sentence after it, as one unit.
+
+    A heading is not a sentence of its own, so a piece never ends on a bare
+    heading. Headings at the very end join the sentence before them.
+    """
+    headings = [e for e in view.rendered if e.type == "heading"]
+
+    def is_heading(span: Span) -> bool:
+        return any(h.md_start <= span[0] and span[1] <= h.md_end for h in headings)
+
+    units: list[Span] = []
+    pending: int | None = None  # start of the headings waiting for a sentence
+    for span in sentences:
+        if is_heading(span):
+            pending = span[0] if pending is None else pending
+            continue
+        units.append((span[0] if pending is None else pending, span[1]))
+        pending = None
+    if pending is not None:
+        if units:
+            units[-1] = (units[-1][0], sentences[-1][1])
+        else:
+            units.append((pending, sentences[-1][1]))
+    return units
+
+
 def _windows(sentences: list[Span], size: int, overlap: int) -> list[Span]:
     """`size` sentences per window, each window `size - overlap` after the last."""
     windows: list[Span] = []
@@ -66,16 +95,16 @@ class SentenceWindowChunker(Transform[SentenceWindowConfig]):
     summary = (
         "Cuts only where a sentence ends, so an answer sentence is never cut in "
         "half. Each piece is a fixed number of sentences in a row, and "
-        "neighbouring pieces can share a few sentences. A heading line counts as "
-        "one sentence."
+        "neighbouring pieces can share a few sentences. A heading line joins the "
+        "sentence after it."
     )
     learn = {
         "_strategy": {
             "hint": "This strategy cuts the text only where a sentence ends.",
             "more": [
                 "Each piece holds the same number of sentences, so a sentence is "
-                "never cut in the middle. A heading line, a list item and a table "
-                "row each count as one sentence.",
+                "never cut in the middle. A list item and a table row each count "
+                "as one sentence, and a heading line joins the sentence after it.",
                 "The cost is that pieces vary in length, because sentences do. "
                 "One long sentence makes one long piece.",
                 "It works with any parser.",
@@ -113,7 +142,7 @@ class SentenceWindowChunker(Transform[SentenceWindowConfig]):
             settings=(
                 f"Every {_count(size, 'sentence')} in a row become one piece, and "
                 f"a piece only ends where a sentence ends. {shared} A heading line "
-                "counts as one sentence."
+                "joins the sentence after it."
             ),
             tradeoff=(
                 "An answer sentence is never cut in half, but pieces vary in "
@@ -134,7 +163,9 @@ class SentenceWindowChunker(Transform[SentenceWindowConfig]):
         ctx: RunContext,
     ) -> ChunkSet:
         view = DocView.of(inputs["doc"])
-        sentences = normalize(view.text, split_sentences(view.text))
+        sentences = _attach_headings(
+            view, normalize(view.text, split_sentences(view.text))
+        )
         spans = (
             _windows(sentences, config.sentences_per_chunk, config.overlap_sentences)
             if sentences

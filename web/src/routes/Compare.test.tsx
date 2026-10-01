@@ -54,14 +54,14 @@ afterEach(() => {
 })
 
 describe("the Compare stage picker", () => {
-  it("lists Parse and Chunk, starts on Chunk, and seeds a column per chunker", async () => {
+  it("lists Parse and Chunk, starts on Chunk, and seeds three columns, the current chunker first", async () => {
     render(<Compare />)
     await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Compare" })).toBeTruthy())
     const options = Array.from(picker().options).map((o) => o.textContent)
     expect(options).toEqual(["Parse", "Chunk"])
     expect(picker().value).toBe("chunk")
     expect(text()).toMatch(/The Chunk step over chunking-primer\.pdf/)
-    expect(columns()).toEqual(["recursive_character", "markdown_header", "token_based", "layout_blocks", "sentence_window"])
+    expect(columns()).toEqual(["recursive_character", "layout_blocks", "markdown_header"])
   })
 
   it("moves the comparison to Parse: the parsers, the sentence and the URL follow", async () => {

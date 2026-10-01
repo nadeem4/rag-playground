@@ -14,8 +14,9 @@ reads them in order and groups them in three steps.
   that piece is a table kept whole, so a heading is never a piece on its own.
   The one exception is a last heading with nothing below it.
 
-Every piece keeps its heading path. With `heading_context` on, the path is also
-put in front of the piece in `embed_text`, so retrieval sees the section's name,
+Every piece keeps its heading path. With `heading_context` on, the part of the
+path above the piece's own leading headings is put in front of the piece in
+`embed_text`, so retrieval sees the section's name without a repeated heading,
 while `text` stays an exact slice of the source.
 """
 
@@ -170,18 +171,24 @@ def _section_pieces(
     return pieces
 
 
+def _leading_headings(view: DocView, span: Span) -> list[Element]:
+    """The heading elements the piece's text opens with, in order."""
+    leading: list[Element] = []
+    for element in view.elements_in(*span):
+        if element.type != "heading":
+            break
+        leading.append(element)
+    return leading
+
+
 def _path_of(view: DocView, span: Span) -> list[str]:
     """The heading path at the piece's last leading heading.
 
     A piece that opens with a chapter and then its section is about the
     section, so its path names both.
     """
-    offset = span[0]
-    for element in view.elements_in(*span):
-        if element.type != "heading":
-            break
-        offset = element.md_start
-    return view.heading_path_at(offset)
+    leading = _leading_headings(view, span)
+    return view.heading_path_at(leading[-1].md_start if leading else span[0])
 
 
 def _count(n: int, word: str) -> str:
@@ -224,7 +231,8 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
                 "Here a token is one word or one punctuation mark.",
                 "Blocks are packed into a piece until the next one would not fit. "
                 "A block that is too long on its own is cut at the end of a "
-                "sentence, never in the middle of one.",
+                "sentence. Only one sentence longer than the limit is cut "
+                "inside it.",
                 "A piece can run a little over this when a heading joins the "
                 "block below it.",
             ],
@@ -265,7 +273,7 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
         return Explanation(
             settings=(
                 f"Blocks are packed into pieces of up to {size} tokens, and a new "
-                "piece starts at every heading. A table keeps its caption. "
+                "piece starts at every section. A table keeps its caption. "
                 f"{tables}{context} This needs a parser that finds headings and "
                 "tables, such as the Layout parser."
             ),
@@ -325,20 +333,27 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
             },
         )
         if config.heading_context:
-            for chunk in chunk_set.chunks:
-                if chunk.heading_path:
-                    chunk.embed_text = (
-                        " > ".join(chunk.heading_path) + "\n\n" + chunk.text
-                    )
+            for chunk, span in zip(chunk_set.chunks, spans):
+                # The piece already shows its own leading headings, so only
+                # the part of the path above them goes in front.
+                k = len(_leading_headings(view, span))
+                above = chunk.heading_path[:-k] if k else chunk.heading_path
+                if above:
+                    chunk.embed_text = " > ".join(above) + "\n\n" + chunk.text
 
         if view.rendered and not headings:
             set_note(ctx, self.fallback)
         elif view.rendered:
+            kept = (
+                f", keeping {_count(tables_whole, 'table')} whole although "
+                f"{'it is' if tables_whole == 1 else 'they are'} over the size limit"
+                if tables_whole
+                else ""
+            )
             set_note(
                 ctx,
                 f"Cut {_count(len(units), 'block')} into "
                 f"{_count(len(spans), 'piece')} along "
-                f"{_count(headings, 'heading')}, keeping "
-                f"{_count(tables_whole, 'table')} whole.",
+                f"{_count(headings, 'heading')}{kept}.",
             )
         return chunk_set

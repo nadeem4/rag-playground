@@ -76,11 +76,11 @@ export function Compare() {
   return <Sweep key={target.id} registry={reg.registry} graph={graph} target={target} choices={choices} onChoose={choose} preset={preset} native={native} />
 }
 
-/** The node's own variant first, then every other transform of its stage on defaults. */
+/** At most three columns: the node's own variant first, then the next two transforms of its stage in registry order, on defaults. */
 export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Variant[] {
   const own: Variant = { transform: target.transform, config: target.config }
   const others = transforms.filter((t) => t.name !== target.transform).map((t) => ({ transform: t.name, config: defaultConfig(t) }))
-  return [own, ...others]
+  return [own, ...others].slice(0, 3)
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)

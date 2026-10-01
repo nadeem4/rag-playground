@@ -435,9 +435,14 @@ describe("picking a sample on the Upload card", () => {
     fireEvent.change(pick, { target: { value: "sample:two-column-report" } })
     await waitFor(() => expect((within(card("query")).getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?"))
     expect(sampled).toEqual(["two-column-report"])
-    const stored = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as { nodes: { id: string; config: Record<string, unknown> }[] }
+    type Stored = { nodes: { id: string; config: Record<string, unknown> }[] }
+    // The graph reaches storage through a passive effect, so wait for it.
+    const stored = await waitFor(() => {
+      const read = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as Stored
+      expect(read.nodes.find((n) => n.id === "source")?.config).toEqual({ sha: TWO_COL.sha, filename: TWO_COL.filename })
+      return read
+    })
     const byId = new Map(stored.nodes.map((n) => [n.id, n.config]))
-    expect(byId.get("source")).toEqual({ sha: TWO_COL.sha, filename: TWO_COL.filename })
     expect(byId.get("chunk")).toEqual({ ...chunk.config, chunk_size: 321 })
     expect(stored.nodes.map((n) => n.id)).toEqual(g.nodes.map((n) => n.id))
     expect(pick.value).toBe("sample:two-column-report")

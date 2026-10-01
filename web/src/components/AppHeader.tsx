@@ -3,6 +3,7 @@ import { DropdownMenu } from "radix-ui"
 
 import { useDemo } from "@/api/useDemo"
 import { cn } from "@/lib/utils"
+import { LESSONS_ENABLED } from "@/state/lessons"
 
 import { ApiKeyControl } from "./ApiKeyControl"
 import { ThemeToggle } from "./ThemeToggle"
@@ -88,18 +89,20 @@ function DevMenu({ path }: { path: string }) {
   )
 }
 
-export function AppHeader({ path }: { path: string }) {
+export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: string; lessonsEnabled?: boolean }) {
   // The dev pages are for working on the app, not for demo visitors.
   const demo = useDemo()
+  // With the lessons hidden, there is no Lessons link and the brand opens Build.
+  const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/")
   return (
     // Wraps to a second row on a phone, so the page itself never scrolls sideways.
     <header className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 md:gap-x-4">
-        <a href="/" className="text-sm font-semibold whitespace-nowrap text-fg no-underline">
+        <a href={lessonsEnabled ? "/" : "/build"} className="text-sm font-semibold whitespace-nowrap text-fg no-underline">
           RAG Playground
         </a>
         <nav className="flex items-center gap-1" aria-label="Main">
-          {PRIMARY.map((l) => (
+          {primary.map((l) => (
             <NavLink key={l.href} {...l} path={path} />
           ))}
           <a href={REPO} className="flex h-row-compact items-center rounded-control px-2 text-sm text-fg-muted hover:text-fg">

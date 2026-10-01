@@ -7,6 +7,7 @@ import { Inspect } from "@/routes/Inspect"
 import { Learn } from "@/routes/Learn"
 import { Shell } from "@/routes/Shell"
 import { Specimen } from "@/routes/Specimen"
+import { LESSONS_ENABLED } from "@/state/lessons"
 
 // A handful of routes does not justify a router. FastAPI's SPA fallback serves
 // index.html for any path, so a plain pathname switch is enough.
@@ -20,6 +21,9 @@ import { Specimen } from "@/routes/Specimen"
 // /inspect and /design are development pages, reached from the header's Dev
 // menu. /specimen is the design page's old path, kept so no old link breaks.
 // Any other path, including the removed /forms, falls through to Home.
+//
+// While LESSONS_ENABLED is false, "/", /learn and every lesson redirect to
+// /build, and an unknown path renders Build instead of Home.
 const ROUTES: Record<string, () => React.JSX.Element> = {
   "/": Home,
   "/build": Shell,
@@ -33,11 +37,21 @@ const ROUTES: Record<string, () => React.JSX.Element> = {
 /** Paths that are another path's old name. */
 const REDIRECTS: Record<string, string> = { "/learn": "/" }
 
-export function canonicalPath(path: string): string {
+/** The path to show for `path`, given whether the lessons are on. */
+export function routeFor(path: string, lessonsEnabled: boolean): string {
+  if (!lessonsEnabled && (path === "/" || path === "/learn" || path.startsWith("/learn/"))) return "/build"
   return REDIRECTS[path] ?? path
 }
 
-export function pageFor(path: string): () => React.JSX.Element {
+export function canonicalPath(path: string): string {
+  return routeFor(path, LESSONS_ENABLED)
+}
+
+export function pageFor(path: string, lessonsEnabled: boolean = LESSONS_ENABLED): () => React.JSX.Element {
+  if (!lessonsEnabled) {
+    const page = ROUTES[path]
+    return page && page !== Home ? page : Shell
+  }
   // Each lesson has its own page: /learn/end-to-end, /learn/chunking, /learn/citations.
   if (path.startsWith("/learn/")) return Learn
   return ROUTES[path] ?? Home

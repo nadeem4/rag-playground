@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
 import { ApiKeyProvider } from "@/api/apiKey"
-import { canonicalPath, pageFor } from "@/App"
+import { pageFor, routeFor } from "@/App"
 import { Home } from "@/routes/Home"
 import { Inspect } from "@/routes/Inspect"
 import { Learn, topicFor } from "@/routes/Learn"
@@ -26,10 +26,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function header(path = "/") {
+function header(path = "/", lessonsEnabled = true) {
   render(
     <ApiKeyProvider>
-      <AppHeader path={path} />
+      <AppHeader path={path} lessonsEnabled={lessonsEnabled} />
     </ApiKeyProvider>,
   )
 }
@@ -107,6 +107,26 @@ describe("AppHeader", () => {
   })
 })
 
+describe("AppHeader with the lessons hidden", () => {
+  it("shows Build, Compare, Evaluate and GitHub, with no Lessons", () => {
+    header("/build", false)
+    const main = screen.getByRole("navigation", { name: "Main" })
+    const links = within(main).getAllByRole("link")
+    expect(links.map((l) => l.textContent)).toEqual(["Build", "Compare", "Evaluate", "GitHub"])
+    expect(screen.queryByText("Lessons")).toBeNull()
+  })
+
+  it("links the brand to Build", () => {
+    header("/build", false)
+    expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/build")
+  })
+
+  it("marks Build as current on /build", () => {
+    header("/build", false)
+    expect(screen.getByRole("link", { name: "Build" }).getAttribute("aria-current")).toBe("page")
+  })
+})
+
 function serve(app: { demo: boolean }, keys: Record<string, string> = { anthropic: "none", openai: "none", custom: "none" }) {
   vi.stubGlobal(
     "fetch",
@@ -156,33 +176,33 @@ describe("the key button", () => {
 
 describe("routes", () => {
   it("renders the design page at /design and at the old /specimen", () => {
-    expect(pageFor("/design")).toBe(Specimen)
-    expect(pageFor("/specimen")).toBe(Specimen)
+    expect(pageFor("/design", true)).toBe(Specimen)
+    expect(pageFor("/specimen", true)).toBe(Specimen)
   })
 
   it("renders Home at /, Build at /build, and each lesson under /learn", () => {
-    expect(pageFor("/")).toBe(Home)
-    expect(pageFor("/build")).toBe(Shell)
-    expect(pageFor("/learn/end-to-end")).toBe(Learn)
-    expect(pageFor("/learn/chunking")).toBe(Learn)
-    expect(pageFor("/learn/citations")).toBe(Learn)
+    expect(pageFor("/", true)).toBe(Home)
+    expect(pageFor("/build", true)).toBe(Shell)
+    expect(pageFor("/learn/end-to-end", true)).toBe(Learn)
+    expect(pageFor("/learn/chunking", true)).toBe(Learn)
+    expect(pageFor("/learn/citations", true)).toBe(Learn)
     expect(topicFor("/learn/end-to-end")).toBe("end-to-end")
     expect(topicFor("/learn/citations")).toBe("citations")
     expect(topicFor("/learn/nope")).toBe("end-to-end")
   })
 
   it("redirects /learn to Home", () => {
-    expect(canonicalPath("/learn")).toBe("/")
-    expect(pageFor(canonicalPath("/learn"))).toBe(Home)
-    expect(canonicalPath("/build")).toBe("/build")
+    expect(routeFor("/learn", true)).toBe("/")
+    expect(pageFor(routeFor("/learn", true), true)).toBe(Home)
+    expect(routeFor("/build", true)).toBe("/build")
   })
 
   it("keeps /inspect", () => {
-    expect(pageFor("/inspect")).toBe(Inspect)
+    expect(pageFor("/inspect", true)).toBe(Inspect)
   })
 
   it("sends an unknown path, including the removed /forms, to Home", () => {
-    expect(pageFor("/forms")).toBe(Home)
-    expect(pageFor("/nope")).toBe(Home)
+    expect(pageFor("/forms", true)).toBe(Home)
+    expect(pageFor("/nope", true)).toBe(Home)
   })
 })

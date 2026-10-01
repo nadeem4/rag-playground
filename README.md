@@ -75,7 +75,8 @@ no auth, so only do that on a network you trust.
 The playground opens on **Lessons** (`/`): four short lessons on the sample PDFs, in order.
 The first one follows one question through a recorded real run of the pipeline, from the
 answer back to the PDF. Your progress is kept in your browser. To work on your own
-document, open **Build** (`/build`):
+document, open **Build** (`/build`). For now the lessons are hidden (see [Lessons](#lessons)),
+so the playground opens on **Build**:
 
 1. On **Build**, upload a PDF, or press Load on one of the samples the Upload card lists.
    - The sample, `samples/chunking-primer/chunking-primer.pdf`, is three pages of notes on
@@ -219,6 +220,9 @@ unsafe to share:
   source paragraphs outlined.
 
 ## Lessons
+
+The lessons are hidden on the demo for now while they are reworked, so the playground opens on
+**Build**. One switch, `LESSONS_ENABLED` in `web/src/state/lessons.ts`, brings them back.
 
 The playground opens on **Lessons**. Each one is a few short steps, with the sample document
 beside you the whole time, and ends with a recap.

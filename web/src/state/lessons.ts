@@ -6,6 +6,10 @@ import { useSyncExternalStore } from "react"
  * lasts for this page only.
  */
 
+// The lessons are hidden for now while they are rethought; nothing is deleted.
+// Set this to true to bring back the lesson pages, Home and the Lessons link.
+export const LESSONS_ENABLED = false
+
 export interface Lesson {
   slug: "end-to-end" | "parsing" | "chunking" | "citations"
   href: string

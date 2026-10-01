@@ -306,3 +306,24 @@ def test_user_facing_strings_have_no_dashes():
     texts += [exp.settings, exp.tradeoff]
     for text in texts:
         assert chr(0x2014) not in text and chr(0x2013) not in text
+
+
+def test_a_heading_joins_a_too_big_table_below_it():
+    doc = _doc(
+        [
+            ("heading", "Data", 1, 1),
+            ("table", _table(30), None, 1),
+            ("paragraph", "After the table.", None, 1),
+        ]
+    )
+    cs = run(LayoutBlocksChunker, doc, max_tokens=20)
+    assert cs.chunks[0].text.startswith("# Data")
+    assert "| row29 |" in cs.chunks[0].text
+    assert not any(c.text == "# Data" for c in cs.chunks)
+
+
+def test_a_heading_joins_the_first_piece_of_a_too_big_paragraph():
+    doc = _doc([("heading", "Long", 1, 1), ("paragraph", _sentences(6), None, 1)])
+    cs = run(LayoutBlocksChunker, doc, max_tokens=8)
+    assert cs.chunks[0].text.startswith("# Long\n\nSentence number 0")
+    assert not any(c.text == "# Long" for c in cs.chunks)

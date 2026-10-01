@@ -9,7 +9,8 @@ reads them in order and groups them in three steps.
 - *Pieces.* Units are packed in order up to `max_tokens`. A table unit that is
   too big stays whole when `keep_tables_whole` is on. Any other unit that is too
   big is cut at sentence ends, and only a single sentence that is itself too big
-  is cut on token boundaries.
+  is cut on token boundaries. A heading is never a piece on its own: it joins
+  the piece below it, even when that piece is a table kept whole.
 
 Every piece keeps its heading path. With `heading_context` on, the path is also
 put in front of the piece in `embed_text`, so retrieval sees the section's name,
@@ -123,26 +124,37 @@ def _section_pieces(
     """Pack a section's units into pieces of up to `max_tokens`."""
     pieces: list[Span] = []
     window: Span | None = None
+    # True while the open window holds only a heading: a heading is never a
+    # piece on its own, so whatever comes next joins it, however big.
+    bare_heading = False
 
-    def add(atom: Span) -> None:
-        nonlocal window
-        if window is not None and _tokens(view, (window[0], atom[1])) <= config.max_tokens:
+    def add(atom: Span, whole: bool = False) -> None:
+        nonlocal window, bare_heading
+        fits = (
+            window is not None
+            and _tokens(view, (window[0], atom[1])) <= config.max_tokens
+        )
+        if window is not None and (bare_heading or (fits and not whole)):
             window = (window[0], atom[1])
-            return
-        if window is not None:
+        else:
+            if window is not None:
+                pieces.append(window)
+            window = atom
+        bare_heading = False
+        if whole:
+            # Too big, but kept whole: nothing else joins this piece.
             pieces.append(window)
-        window = atom
+            window = None
 
     for unit in section:
         span = (unit[0].md_start, unit[-1].md_end)
-        if _tokens(view, span) <= config.max_tokens:
+        if unit[0].type == "heading":
+            add(span)
+            bare_heading = window == span
+        elif _tokens(view, span) <= config.max_tokens:
             add(span)
         elif config.keep_tables_whole and any(e.type == "table" for e in unit):
-            # Too big, but kept whole: a piece of its own.
-            if window is not None:
-                pieces.append(window)
-            pieces.append(span)
-            window = None
+            add(span, whole=True)
         else:
             for atom in _sentence_atoms(view, span, config.max_tokens):
                 add(atom)

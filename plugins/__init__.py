@@ -32,6 +32,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.chunk.recursive_character",
     "plugins.chunk.markdown_header",
     "plugins.chunk.token_based",
+    "plugins.chunk.layout_blocks",
     "plugins.index.lancedb_store",
     "plugins.retrieve.dense",
     "plugins.retrieve.bm25",

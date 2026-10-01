@@ -17,12 +17,18 @@ import pytest
 from core.artifacts import ArtifactType
 from core.payloads import Element, ParsedDoc
 from core.ports import PortSpec, Stage
+from plugins.chunk.layout_blocks import LayoutBlocksChunker
 from plugins.chunk.markdown_header import MarkdownHeaderChunker
 from plugins.chunk.recursive_character import RecursiveCharacterChunker
 from plugins.chunk.token_based import TokenBasedChunker
 from providers.tokenize import HeuristicTokenCounter
 
-CHUNKERS = [RecursiveCharacterChunker, MarkdownHeaderChunker, TokenBasedChunker]
+CHUNKERS = [
+    RecursiveCharacterChunker,
+    MarkdownHeaderChunker,
+    TokenBasedChunker,
+    LayoutBlocksChunker,
+]
 
 
 # --------------------------------------------------------------------------- #
@@ -162,6 +168,7 @@ def test_slice_back_holds_at_small_budgets(chunker, doc):
         "recursive_character": {"chunk_size": 40, "chunk_overlap": 10},
         "markdown_header": {"max_tokens": 8},
         "token_based": {"max_tokens": 8, "overlap": 3},
+        "layout_blocks": {"max_tokens": 8},
     }[chunker.name]
     result = run(chunker, doc, **tight)
     for chunk in result.chunks:

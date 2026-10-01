@@ -83,3 +83,11 @@ describe("types mirror the engine's real payloads", () => {
     expect(Object.keys(artifacts)).toContain("chunk_token")
   })
 })
+
+describe("the registry fixture", () => {
+  it("keeps every chunk strategy, the two structure chunkers included", () => {
+    expect(Object.keys(registry.chunk).sort()).toEqual([
+      "layout_blocks", "markdown_header", "recursive_character", "sentence_window", "token_based",
+    ])
+  })
+})

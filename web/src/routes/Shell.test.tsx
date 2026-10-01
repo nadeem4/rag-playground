@@ -737,4 +737,27 @@ describe("lock states behind a Clean step", () => {
     expect(chunk.getByRole("option", { name: "markdown_header" })).toBeTruthy()
     expect(chunk.queryByRole("option", { name: /markdown_header · falls back/ })).toBeNull()
   })
+
+  it.each([
+    ["pdfium", true],
+    ["docling", false],
+  ])("with Parse set to %s, By layout block falls back: %s; By sentence never does", async (parser, fallsBack) => {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
+        return base(url, init)
+      }),
+    )
+    const g = sampleGraph(liveRegistry as never, SOURCE)
+    const parse = g.nodes.find((n) => n.stage === "parse")!
+    storeGraph(setTransform(g, parse.id, parser, liveRegistry as never))
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    const chunk = within(card("chunk"))
+    expect(chunk.getByRole("option", { name: fallsBack ? "layout_blocks · falls back" : "layout_blocks" })).toBeTruthy()
+    expect(chunk.getByRole("option", { name: "sentence_window" })).toBeTruthy()
+  })
 })

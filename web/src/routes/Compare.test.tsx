@@ -61,7 +61,7 @@ describe("the Compare stage picker", () => {
     expect(options).toEqual(["Parse", "Chunk"])
     expect(picker().value).toBe("chunk")
     expect(text()).toMatch(/The Chunk step over chunking-primer\.pdf/)
-    expect(columns()).toEqual(["recursive_character", "markdown_header", "token_based"])
+    expect(columns()).toEqual(["recursive_character", "markdown_header", "token_based", "layout_blocks", "sentence_window"])
   })
 
   it("moves the comparison to Parse: the parsers, the sentence and the URL follow", async () => {

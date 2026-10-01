@@ -29,6 +29,11 @@ describe("strategyLabel", () => {
     expect(strategyLabel("token_based")).toBe("Fixed token count")
     expect(strategyLabel("semantic")).toBe("semantic")
   })
+
+  it("names the two structure chunkers in plain words", () => {
+    expect(strategyLabel("layout_blocks")).toBe("By layout block")
+    expect(strategyLabel("sentence_window")).toBe("By sentence")
+  })
 })
 
 describe("challengePrompt", () => {

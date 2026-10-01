@@ -54,6 +54,8 @@ export function choicesFor(ch: LearnChallenge): [string, string] {
 const STRATEGY_LABELS: Record<string, string> = {
   recursive_character: "Recursive (natural breaks)",
   token_based: "Fixed token count",
+  layout_blocks: "By layout block",
+  sentence_window: "By sentence",
 }
 
 /** A strategy's name for the reader. Settings sent to the server keep the id. */

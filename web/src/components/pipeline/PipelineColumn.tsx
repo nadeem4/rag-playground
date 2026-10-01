@@ -2,7 +2,7 @@ import { Fragment, useState } from "react"
 import { Plus } from "lucide-react"
 
 import type { NodeState } from "@/api/runState"
-import type { GraphNode, Registry, Stage } from "@/api/types"
+import type { GraphNode, Registry, Source, Stage } from "@/api/types"
 import { useStages, type ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { Button } from "@/components/ui/button"
@@ -39,6 +39,8 @@ export interface PipelineColumnProps {
   onSelect: (id: string) => void
   onTransform: (id: string, transform: string) => void
   onConfig: (id: string, config: Record<string, unknown>) => void
+  /** A sample picked on the Upload card: its source and its own question. */
+  onSample?: (src: Source, question: string) => void
   onRun: (id: string, force: boolean) => void
   onAddCleaner: () => void
   onAddReranker?: () => void
@@ -136,6 +138,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
                   <SourcePicker
                     value={node.config as SourceConfig}
                     onChange={(c) => p.onConfig(node.id, { ...c })}
+                    onSample={p.onSample}
                     errors={errs?.fields ? Object.entries(errs.fields).flatMap(([k, msgs]) => msgs.map((m) => (k ? `${k}: ${m}` : m))) : undefined}
                   />
                 ) : isQuestion ? (

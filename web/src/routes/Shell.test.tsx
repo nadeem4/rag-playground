@@ -390,6 +390,60 @@ describe("First run (plan I-15)", () => {
   })
 })
 
+describe("picking a sample on the Upload card", () => {
+  const TWO_COL = { sha: "11".repeat(32), filename: "two-column-report.pdf", size: 8192, content_type: "application/pdf" }
+  const CARD = {
+    name: "two-column-report",
+    title: "A two-column report",
+    blurb: "b",
+    shows: "s",
+    stresses: "parse",
+    pages: 2,
+    default: false,
+    filename: TWO_COL.filename,
+    sha: TWO_COL.sha,
+    question: "How long did the survey run?",
+  }
+  let sampled: string[] = []
+
+  beforeEach(() => {
+    sampled = []
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/samples") return new Response(JSON.stringify([CARD]), { status: 200 })
+        if (url === "/api/sources/sample" && init?.method === "POST") {
+          sampled.push(JSON.parse(String(init.body)).name)
+          return new Response(JSON.stringify(TWO_COL), { status: 201 })
+        }
+        return base(url, init)
+      }),
+    )
+  })
+
+  it("changes only the file and the question, keeping every other setting", async () => {
+    let g = setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename })
+    const chunk = g.nodes.find((n) => n.id === "chunk")!
+    g = setConfig(g, "chunk", { ...chunk.config, chunk_size: 321 })
+    g = setConfig(g, "query", { text: "old question" })
+    storeGraph(g)
+    render(<Shell />)
+    await waitFor(() => expect(card("source")).toBeTruthy())
+    const pick = await waitFor(() => within(card("source")).getByLabelText("File") as HTMLSelectElement)
+    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
+    fireEvent.change(pick, { target: { value: "sample:two-column-report" } })
+    await waitFor(() => expect((within(card("query")).getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?"))
+    expect(sampled).toEqual(["two-column-report"])
+    const stored = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as { nodes: { id: string; config: Record<string, unknown> }[] }
+    const byId = new Map(stored.nodes.map((n) => [n.id, n.config]))
+    expect(byId.get("source")).toEqual({ sha: TWO_COL.sha, filename: TWO_COL.filename })
+    expect(byId.get("chunk")).toEqual({ ...chunk.config, chunk_size: 321 })
+    expect(stored.nodes.map((n) => n.id)).toEqual(g.nodes.map((n) => n.id))
+    expect(pick.value).toBe("sample:two-column-report")
+  })
+})
+
 describe("saved pipelines on Build", () => {
   // A pipeline with no file shows the first-visit card, so these start with one.
   const withFile = () => setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename })

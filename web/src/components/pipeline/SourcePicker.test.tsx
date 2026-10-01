@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
@@ -104,5 +104,185 @@ describe("SourcePicker upload limits", () => {
     choose(sized("edge.pdf", 10485760))
     await waitFor(() => expect(posts).toBe(1))
     expect(screen.queryByRole("alert")).toBeNull()
+  })
+})
+
+describe("SourcePicker grouped file list", () => {
+  const PRIMER = { sha: "cd".repeat(32), filename: "chunking-primer.pdf", size: 4096, content_type: "application/pdf" }
+  const TWO_COL = { sha: "11".repeat(32), filename: "two-column-report.pdf", size: 8192, content_type: "application/pdf" }
+  const MINE = { sha: "ab".repeat(32), filename: "mine.pdf", size: 2048, content_type: "application/pdf" }
+  const card = (name: string, title: string, src: typeof PRIMER, question: string) => ({
+    name,
+    title,
+    blurb: "b",
+    shows: "s",
+    stresses: "chunk",
+    pages: 2,
+    default: false,
+    filename: src.filename,
+    sha: src.sha,
+    question,
+  })
+  const CARDS = [
+    card("chunking-primer", "A primer on chunking", PRIMER, "What are the two steps?"),
+    card("two-column-report", "A two-column report", TWO_COL, "How long did the survey run?"),
+  ]
+
+  let sources: unknown[] = []
+  let samplesReply: () => Promise<Response>
+  let sampleReply: () => Promise<Response>
+  let posted: string[] = []
+
+  beforeEach(() => {
+    sources = [PRIMER, MINE]
+    posted = []
+    const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+    samplesReply = async () => ok(CARDS)
+    sampleReply = async () => ok(TWO_COL)
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/settings/app") return ok({ demo: true })
+        if (url === "/api/sources") return ok(sources)
+        if (url === "/api/samples") return samplesReply()
+        if (url === "/api/sources/sample" && init?.method === "POST") {
+          posted.push(JSON.parse(String(init.body)).name)
+          return sampleReply()
+        }
+        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+      }),
+    )
+  })
+
+  const pick = () => screen.findByLabelText("File") as Promise<HTMLSelectElement>
+  const groups = (sel: HTMLSelectElement) =>
+    [...sel.querySelectorAll("optgroup")].map((g) => [g.label, [...g.querySelectorAll("option")].map((o) => o.textContent)])
+  const grouped = async () => {
+    const sel = await pick()
+    await waitFor(() => expect(sel.querySelectorAll("optgroup")).toHaveLength(2))
+    return sel
+  }
+
+  it("lists every sample under Samples and only this browser's files under Your uploads", async () => {
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    const sel = await grouped()
+    expect(groups(sel)).toEqual([
+      ["Samples", ["A primer on chunking", "A two-column report"]],
+      ["Your uploads", ["mine.pdf"]],
+    ])
+    const values = [...sel.querySelectorAll("optgroup option")].map((o) => (o as HTMLOptionElement).value)
+    expect(values).toEqual(["sample:chunking-primer", "sample:two-column-report", MINE.sha])
+    expect(screen.queryByLabelText("Load a sample")).toBeNull()
+  })
+
+  it("says No uploads yet when this browser has no files, even with no files listed at all", async () => {
+    sources = []
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    const sel = await grouped()
+    const none = within(sel.querySelectorAll("optgroup")[1] as HTMLElement).getByRole("option", { name: "No uploads yet" }) as HTMLOptionElement
+    expect(none.disabled).toBe(true)
+    expect(groups(sel)[0][1]).toEqual(["A primer on chunking", "A two-column report"])
+  })
+
+  it("loads a chosen sample, disabling the select meanwhile, and hands back the source with the sample's question", async () => {
+    let release!: () => void
+    sampleReply = () => new Promise((r) => (release = () => r(new Response(JSON.stringify(TWO_COL), { status: 200 }))))
+    const onSample = vi.fn()
+    const onChange = vi.fn()
+    render(<SourcePicker value={{}} onChange={onChange} onSample={onSample} />)
+    const sel = await grouped()
+    fireEvent.change(sel, { target: { value: "sample:two-column-report" } })
+    await waitFor(() => expect(sel.disabled).toBe(true))
+    release()
+    await waitFor(() => expect(onSample).toHaveBeenCalledWith(TWO_COL, "How long did the survey run?"))
+    expect(posted).toEqual(["two-column-report"])
+    expect(onChange).not.toHaveBeenCalled()
+    await waitFor(() => expect(sel.disabled).toBe(false))
+  })
+
+  it("without onSample, a chosen sample sets the file through onChange", async () => {
+    const onChange = vi.fn()
+    render(<SourcePicker value={{}} onChange={onChange} />)
+    fireEvent.change(await grouped(), { target: { value: "sample:two-column-report" } })
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: TWO_COL.sha, filename: TWO_COL.filename }))
+  })
+
+  it("choosing an upload sets that file", async () => {
+    const onChange = vi.fn()
+    render(<SourcePicker value={{}} onChange={onChange} />)
+    fireEvent.change(await grouped(), { target: { value: MINE.sha } })
+    expect(onChange).toHaveBeenCalledWith({ sha: MINE.sha, filename: MINE.filename })
+    expect(posted).toEqual([])
+  })
+
+  it("names the sample in a failed load", async () => {
+    sampleReply = async () => new Response(JSON.stringify({ detail: "boom" }), { status: 500 })
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    fireEvent.change(await grouped(), { target: { value: "sample:two-column-report" } })
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not load A two-column report: boom")
+  })
+
+  it("shows a pipeline's sample selected under Samples, not missing", async () => {
+    render(<SourcePicker value={{ sha: PRIMER.sha, filename: PRIMER.filename }} onChange={() => {}} />)
+    const sel = await grouped()
+    expect(sel.value).toBe("sample:chunking-primer")
+    expect(screen.queryByText(/\(missing\)/)).toBeNull()
+  })
+
+  it("shows a sample selected even when this browser has never loaded it", async () => {
+    sources = [MINE]
+    render(<SourcePicker value={{ sha: TWO_COL.sha, filename: TWO_COL.filename }} onChange={() => {}} />)
+    expect((await grouped()).value).toBe("sample:two-column-report")
+  })
+
+  it("shows an upload selected by its sha", async () => {
+    render(<SourcePicker value={{ sha: MINE.sha, filename: MINE.filename }} onChange={() => {}} />)
+    expect((await grouped()).value).toBe(MINE.sha)
+  })
+
+  it("shows a file this browser does not have as missing", async () => {
+    render(<SourcePicker value={{ sha: "99".repeat(32), filename: "gone.pdf" }} onChange={() => {}} />)
+    const sel = await grouped()
+    expect(sel.value).toBe("")
+    const missing = within(sel).getByRole("option", { name: "gone.pdf (missing)" }) as HTMLOptionElement
+    expect(missing.disabled).toBe(true)
+    expect(missing.selected).toBe(true)
+  })
+
+  it("says Pick a file when nothing is chosen", async () => {
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    const sel = await grouped()
+    const first = sel.options[0]
+    expect(first.textContent).toBe("Pick a file")
+    expect(first.disabled).toBe(true)
+    expect(sel.value).toBe("")
+  })
+
+  it("with samples off, lists the files with no groups and no sample select", async () => {
+    render(<SourcePicker value={{}} onChange={() => {}} samples={false} />)
+    const sel = await pick()
+    await waitFor(() => expect(sel.options.length).toBeGreaterThan(1))
+    expect(sel.querySelectorAll("optgroup")).toHaveLength(0)
+    expect([...sel.options].map((o) => o.textContent)).toEqual(["Pick a file", "chunking-primer.pdf", "mine.pdf"])
+    expect(screen.queryByLabelText("Load a sample")).toBeNull()
+  })
+
+  it("with samples off and no files, keeps the empty sentence", async () => {
+    sources = []
+    render(<SourcePicker value={{}} onChange={() => {}} samples={false} />)
+    expect(await screen.findByText("No files yet. Upload a PDF, or load a sample.")).toBeTruthy()
+    expect(document.querySelector("select")).toBeNull()
+  })
+
+  it("until the samples arrive, lists every file in one list, then groups them", async () => {
+    let settle!: () => void
+    samplesReply = () => new Promise((r) => (settle = () => r(new Response(JSON.stringify(CARDS), { status: 200 }))))
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    const sel = await pick()
+    await waitFor(() => expect(sel.options.length).toBe(3))
+    expect(sel.querySelectorAll("optgroup")).toHaveLength(0)
+    expect([...sel.options].map((o) => o.textContent)).toEqual(["Pick a file", "chunking-primer.pdf", "mine.pdf"])
+    settle()
+    await waitFor(() => expect(sel.querySelectorAll("optgroup")).toHaveLength(2))
   })
 })

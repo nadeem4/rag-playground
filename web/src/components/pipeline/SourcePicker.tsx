@@ -3,7 +3,7 @@ import { Upload } from "lucide-react"
 
 import { api, ApiError } from "@/api/client"
 import { loadSample as loadSampleApi, useSamples } from "@/api/samples"
-import type { Source } from "@/api/types"
+import type { SampleCard, Source } from "@/api/types"
 import { useAppSettings } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { CONTROL } from "@/components/fields/types"
@@ -13,6 +13,11 @@ import { CONTROL } from "@/components/fields/types"
  * already uploaded (`GET /api/sources`). Emits the source node's config,
  * `{sha, filename}`. A hosted demo also offers Upload, bounded and private to
  * the browser.
+ *
+ * The file list has two groups: Samples, every bundled sample whether or not
+ * anyone has loaded it, and Your uploads, the listed files that are not a
+ * sample. Samples are public on the server, so without the split a visitor
+ * would see every sample anyone loaded as if it were their own upload.
  */
 
 export interface SourceConfig {
@@ -29,6 +34,7 @@ const reason = (err: unknown) =>
 export function SourcePicker({
   value,
   onChange,
+  onSample,
   errors,
   samples: showSamples = true,
   reassure = true,
@@ -36,8 +42,11 @@ export function SourcePicker({
 }: {
   value: SourceConfig
   onChange: (v: SourceConfig) => void
+  /** Called with a picked sample's source and its own question, instead of `onChange`, when given. */
+  onSample?: (src: Source, question: string) => void
   errors?: string[]
-  /** Show the "Load a sample" select. False on the Load card (plan I-15, F2), which already lists every sample of its own. */
+  /** Group the file list into Samples and Your uploads. False on the first-visit card (plan I-15, F2), which
+   * already lists every sample of its own; its list then holds the files only. */
   samples?: boolean
   /** Show the "your files never leave/are not shared" sentence under the file select. False on the first-run
    * card (`FirstRun`), which already says this itself, above the embedded picker. */
@@ -57,6 +66,10 @@ export function SourcePicker({
   const { samples } = useSamples()
   const [sampleBusy, setSampleBusy] = useState(false)
   const [sampleError, setSampleError] = useState<string | null>(null)
+  // A sample loads asynchronously: answer through the latest callbacks, so an
+  // edit made elsewhere meanwhile is not lost.
+  const latest = useRef({ onChange, onSample })
+  latest.current = { onChange, onSample }
 
   const refresh = useCallback(() => {
     api.sources().then(
@@ -67,15 +80,17 @@ export function SourcePicker({
 
   useEffect(refresh, [refresh])
 
-  async function loadSample(name: string, title: string) {
+  async function loadSample(card: SampleCard) {
     setSampleBusy(true)
     try {
-      const src = await loadSampleApi(name)
+      const src = await loadSampleApi(card.name)
       setSampleError(null)
-      onChange({ sha: src.sha, filename: src.filename })
+      const { onChange, onSample } = latest.current
+      if (onSample) onSample(src, card.question)
+      else onChange({ sha: src.sha, filename: src.filename })
       refresh()
     } catch (err) {
-      setSampleError(`Could not load ${title}: ${reason(err)}`)
+      setSampleError(`Could not load ${card.title}: ${reason(err)}`)
     } finally {
       setSampleBusy(false)
     }
@@ -111,9 +126,17 @@ export function SourcePicker({
   }
 
   const items = list.kind === "ready" ? list.items : []
-  const current = items.find((s) => s.sha === value.sha)
   const invalid = Boolean(errors?.length)
-  const remaining = (samples ?? []).filter((s) => !items.some((i) => i.sha === s.sha))
+  // Until the samples arrive the groups are unknown: one plain list, as on the first-visit card.
+  const groups = showSamples && samples?.length ? samples : null
+  const uploads = groups ? items.filter((i) => !groups.some((s) => s.sha === i.sha)) : items
+  const currentSample = groups?.find((s) => s.sha === value.sha)
+  const selected = currentSample ? `sample:${currentSample.name}` : uploads.some((s) => s.sha === value.sha) ? value.sha! : ""
+  const uploadOptions = uploads.map((s) => (
+    <option key={s.sha} value={s.sha}>
+      {s.filename}
+    </option>
+  ))
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -133,32 +156,61 @@ export function SourcePicker({
               Retry
             </Button>
           </div>
-        ) : items.length === 0 ? (
+        ) : !groups && items.length === 0 ? (
           <p className="text-sm text-fg-muted">{demo ? "No files yet. Upload a PDF, or load a sample." : "No files uploaded yet. Upload a PDF to start."}</p>
         ) : (
           <select
             id={`${id}-pick`}
             className={CONTROL}
-            value={current ? current.sha : ""}
+            value={selected}
+            disabled={sampleBusy}
             aria-invalid={invalid || undefined}
             aria-describedby={invalid ? `${id}-err` : undefined}
             onChange={(e) => {
-              const s = items.find((x) => x.sha === e.target.value)
+              const v = e.target.value
+              const card = v.startsWith("sample:") ? groups?.find((s) => `sample:${s.name}` === v) : undefined
+              if (card) {
+                void loadSample(card)
+                return
+              }
+              const s = uploads.find((x) => x.sha === v)
               if (s) onChange({ sha: s.sha, filename: s.filename })
             }}
           >
-            {current ? null : (
+            {selected ? null : (
               <option value="" disabled>
-                {value.filename ? `${value.filename} (missing)` : "None selected"}
+                {value.filename ? `${value.filename} (missing)` : "Pick a file"}
               </option>
             )}
-            {items.map((s) => (
-              <option key={s.sha} value={s.sha}>
-                {s.filename}
-              </option>
-            ))}
+            {groups ? (
+              <>
+                <optgroup label="Samples">
+                  {groups.map((s) => (
+                    <option key={s.name} value={`sample:${s.name}`}>
+                      {s.title}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Your uploads">
+                  {uploads.length ? (
+                    uploadOptions
+                  ) : (
+                    <option value="none" disabled>
+                      No uploads yet
+                    </option>
+                  )}
+                </optgroup>
+              </>
+            ) : (
+              uploadOptions
+            )}
           </select>
         )}
+        {sampleError ? (
+          <p role="alert" className="text-xs text-danger">
+            {sampleError}
+          </p>
+        ) : null}
         {reassure ? (
           <p className="text-xs text-fg-muted">
             {demo
@@ -174,36 +226,6 @@ export function SourcePicker({
           </div>
         ) : null}
       </div>
-
-      {showSamples && remaining.length ? (
-        <div className="flex min-w-0 flex-col gap-1">
-          <label htmlFor={`${id}-sample`} className="text-sm font-medium">
-            Load a sample
-          </label>
-          <select
-            id={`${id}-sample`}
-            className={CONTROL}
-            value=""
-            disabled={sampleBusy}
-            onChange={(e) => {
-              const picked = remaining.find((s) => s.name === e.target.value)
-              if (picked) void loadSample(picked.name, picked.title)
-            }}
-          >
-            <option value="">Pick one</option>
-            {remaining.map((s) => (
-              <option key={s.name} value={s.name}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-          {sampleError ? (
-            <p role="alert" className="text-xs text-danger">
-              {sampleError}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
 
       <div className="flex min-w-0 items-center gap-2">
         <input

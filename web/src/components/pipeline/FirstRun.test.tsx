@@ -101,19 +101,23 @@ describe("SourcePicker", () => {
     expect(uploadButton()).not.toBeNull()
   })
 
-  it("offers the samples not yet loaded under the file list, and loads one", async () => {
+  it("offers every sample in the file list, and loads one", async () => {
     const onChange = vi.fn()
     render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={onChange} />)
-    const pick = (await screen.findByLabelText("Load a sample")) as HTMLSelectElement
-    expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick one", "Scanned notes"])
-    fireEvent.change(pick, { target: { value: "scanned-notes" } })
+    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
+    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
+    expect([...pick.querySelectorAll("optgroup")[0].querySelectorAll("option")].map((o) => o.textContent)).toEqual(["A primer on chunking", "Scanned notes"])
+    expect(screen.queryByLabelText("Load a sample")).toBeNull()
+    fireEvent.change(pick, { target: { value: "sample:scanned-notes" } })
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
     expect(posted).toEqual(["scanned-notes"])
   })
 
-  it("hides its own sample select when told samples are offered elsewhere (F2)", async () => {
+  it("has no Samples group when told samples are offered elsewhere (F2)", async () => {
     render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={() => {}} samples={false} />)
-    await screen.findByLabelText("File")
+    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
+    await waitFor(() => expect(pick.value).toBe(SAMPLE.sha))
+    expect(pick.querySelectorAll("optgroup")).toHaveLength(0)
     expect(screen.queryByLabelText("Load a sample")).toBeNull()
   })
 
@@ -134,15 +138,16 @@ describe("SourcePicker", () => {
       }),
     )
     render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={onChange} />)
-    const pick = (await screen.findByLabelText("Load a sample")) as HTMLSelectElement
-    fireEvent.change(pick, { target: { value: "scanned-notes" } })
+    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
+    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
+    fireEvent.change(pick, { target: { value: "sample:scanned-notes" } })
     expect(pick.disabled).toBe(true)
     const err = await screen.findByRole("alert")
     expect(err.textContent).toBe("Could not load Scanned notes: boom")
     await waitFor(() => expect(pick.disabled).toBe(false))
 
     fail = false
-    fireEvent.change(pick, { target: { value: "scanned-notes" } })
+    fireEvent.change(pick, { target: { value: "sample:scanned-notes" } })
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull())
   })
@@ -174,7 +179,7 @@ describe("SourcePicker", () => {
         return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
       }),
     )
-    render(<SourcePicker value={{}} onChange={() => {}} />)
+    render(<SourcePicker value={{}} onChange={() => {}} samples={false} />)
     expect(await screen.findByText("No files yet. Upload a PDF, or load a sample.")).toBeTruthy()
   })
 })
@@ -207,6 +212,15 @@ describe("FirstRun", () => {
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
     await screen.findAllByRole("listitem")
     expect(screen.queryByLabelText("Load a sample")).toBeNull()
+  })
+
+  it("its file list has no Samples group, only the files", async () => {
+    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    await screen.findAllByRole("listitem")
+    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
+    await waitFor(() => expect(pick.options.length).toBe(2))
+    expect(pick.querySelectorAll("optgroup")).toHaveLength(0)
+    expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick a file", "chunking-primer.pdf"])
   })
 
   it("says so, and still shows Upload, when the sample list cannot be read", async () => {

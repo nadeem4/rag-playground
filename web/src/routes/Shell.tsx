@@ -264,6 +264,15 @@ function Build({ registry }: { registry: Registry }) {
     setSampleLoaded(true)
   }
 
+  /** A sample picked on the Upload card: set its file and its question, and keep every other setting. */
+  function pickSample(src: Source, question: string) {
+    if (!sourceNode) return
+    let g = setConfig(graph, sourceNode.id, { sha: src.sha, filename: src.filename })
+    const query = g.nodes.find((n) => n.stage === "query")
+    if (query) g = setConfig(g, query.id, { ...query.config, text: question })
+    edit(g, sourceNode.id)
+  }
+
   const failedNode = order.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
 
   return (
@@ -351,6 +360,7 @@ function Build({ registry }: { registry: Registry }) {
                 onSelect={setSelected}
                 onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
                 onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
+                onSample={pickSample}
                 onRun={(id, force) => void start(id, force)}
                 onAddCleaner={() => edit(addCleaner(graph, registry))}
                 onAddReranker={() => edit(addReranker(graph, registry))}

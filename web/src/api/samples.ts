@@ -5,7 +5,7 @@ import type { SampleCard, Source } from "./types"
 
 /**
  * The bundled samples, shared by every place that lists or loads one (F2):
- * the Load card (`FirstRun`) and the file picker's "Load a sample" select
+ * the Load card (`FirstRun`) and the file picker's Samples group
  * (`SourcePicker`). One fetch, one error message, instead of three.
  */
 export interface SamplesState {

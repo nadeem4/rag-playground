@@ -14,7 +14,7 @@ import { SourcePicker, type SourceConfig } from "./SourcePicker"
  * Nothing runs until the user presses Run. A hosted demo still offers
  * Upload, and states its limits in a note above the picker.
  *
- * The embedded `SourcePicker` hides its own sample select (F2): this card
+ * The embedded `SourcePicker` leaves out its Samples group (F2): this card
  * already lists every sample, and offering the same choice twice, through two
  * different code paths, is how a sample used to load with the wrong question.
  * It also hides its own reassurance sentence: this card already says, above

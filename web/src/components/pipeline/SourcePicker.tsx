@@ -46,7 +46,7 @@ export function SourcePicker({
   onSample?: (src: Source, question: string) => void
   errors?: string[]
   /** Group the file list into Samples and Your uploads. False on the first-visit card (plan I-15, F2), which
-   * already lists every sample of its own; its list then holds the files only. */
+   * already lists every sample of its own; its list then holds your uploads only. */
   samples?: boolean
   /** Show the "your files never leave/are not shared" sentence under the file select. False on the first-run
    * card (`FirstRun`), which already says this itself, above the embedded picker. */
@@ -129,7 +129,8 @@ export function SourcePicker({
   const invalid = Boolean(errors?.length)
   // Until the samples arrive the groups are unknown: one plain list, as on the first-visit card.
   const groups = showSamples && samples?.length ? samples : null
-  const uploads = groups ? items.filter((i) => !groups.some((s) => s.sha === i.sha)) : items
+  // Once the samples are known, a listed file that is a sample is not this browser's upload.
+  const uploads = samples ? items.filter((i) => !samples.some((s) => s.sha === i.sha)) : items
   const currentSample = groups?.find((s) => s.sha === value.sha)
   const selected = currentSample ? `sample:${currentSample.name}` : uploads.some((s) => s.sha === value.sha) ? value.sha! : ""
   const uploadOptions = uploads.map((s) => (
@@ -156,7 +157,7 @@ export function SourcePicker({
               Retry
             </Button>
           </div>
-        ) : !groups && items.length === 0 ? (
+        ) : !groups && uploads.length === 0 ? (
           <p className="text-sm text-fg-muted">{demo ? "No files yet. Upload a PDF, or load a sample." : "No files uploaded yet. Upload a PDF to start."}</p>
         ) : (
           <select

@@ -113,11 +113,10 @@ describe("SourcePicker", () => {
     expect(posted).toEqual(["scanned-notes"])
   })
 
-  it("has no Samples group when told samples are offered elsewhere (F2)", async () => {
-    render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={() => {}} samples={false} />)
-    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
-    await waitFor(() => expect(pick.value).toBe(SAMPLE.sha))
-    expect(pick.querySelectorAll("optgroup")).toHaveLength(0)
+  it("has no Samples group and lists no sample file when told samples are offered elsewhere (F2)", async () => {
+    render(<SourcePicker value={{}} onChange={() => {}} samples={false} />)
+    expect(await screen.findByText("No files uploaded yet. Upload a PDF to start.")).toBeTruthy()
+    expect(document.querySelector("optgroup")).toBeNull()
     expect(screen.queryByLabelText("Load a sample")).toBeNull()
   })
 
@@ -214,13 +213,31 @@ describe("FirstRun", () => {
     expect(screen.queryByLabelText("Load a sample")).toBeNull()
   })
 
-  it("its file list has no Samples group, only the files", async () => {
+  it("its file list holds only your uploads, with no Samples group", async () => {
+    const SCANNED = { sha: "ef".repeat(32), filename: "scanned-notes.pdf", size: 2048, content_type: "application/pdf" }
+    const MINE = { sha: "ab".repeat(32), filename: "mine.pdf", size: 1024, content_type: "application/pdf" }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+        if (url === "/api/settings/app") return ok({ demo: true })
+        if (url === "/api/sources") return ok([SAMPLE, SCANNED, MINE])
+        if (url === "/api/samples") return ok(SAMPLES)
+        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+      }),
+    )
     render(<FirstRun onSource={() => {}} onSample={() => {}} />)
     await screen.findAllByRole("listitem")
     const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
-    await waitFor(() => expect(pick.options.length).toBe(2))
+    await waitFor(() => expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick a file", "mine.pdf"]))
     expect(pick.querySelectorAll("optgroup")).toHaveLength(0)
-    expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick a file", "chunking-primer.pdf"])
+  })
+
+  it("in demo mode, when every listed file is a sample, its picker says how to add a file", async () => {
+    demo = true
+    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    expect(await screen.findByText("No files yet. Upload a PDF, or load a sample.")).toBeTruthy()
+    expect(document.querySelector("select")).toBeNull()
   })
 
   it("says so, and still shows Upload, when the sample list cannot be read", async () => {

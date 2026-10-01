@@ -258,12 +258,11 @@ describe("SourcePicker grouped file list", () => {
     expect(sel.value).toBe("")
   })
 
-  it("with samples off, lists the files with no groups and no sample select", async () => {
+  it("with samples off, lists only your uploads once samples arrive, with no groups and no sample select", async () => {
     render(<SourcePicker value={{}} onChange={() => {}} samples={false} />)
     const sel = await pick()
-    await waitFor(() => expect(sel.options.length).toBeGreaterThan(1))
+    await waitFor(() => expect([...sel.options].map((o) => o.textContent)).toEqual(["Pick a file", "mine.pdf"]))
     expect(sel.querySelectorAll("optgroup")).toHaveLength(0)
-    expect([...sel.options].map((o) => o.textContent)).toEqual(["Pick a file", "chunking-primer.pdf", "mine.pdf"])
     expect(screen.queryByLabelText("Load a sample")).toBeNull()
   })
 

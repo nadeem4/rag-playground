@@ -442,6 +442,29 @@ describe("picking a sample on the Upload card", () => {
     expect(stored.nodes.map((n) => n.id)).toEqual(g.nodes.map((n) => n.id))
     expect(pick.value).toBe("sample:two-column-report")
   })
+
+  it("clears a field error on the Ask card", async () => {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/runs" && init?.method === "POST") {
+          return new Response(JSON.stringify({ detail: { node_id: "query", errors: [{ loc: ["text"], msg: "Text is required" }] } }), { status: 422 })
+        }
+        return base(url, init)
+      }),
+    )
+    storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename }))
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))
+    await waitFor(() => expect(within(card("query")).getAllByText("Text is required").length).toBeGreaterThan(0))
+    const pick = within(card("source")).getByLabelText("File") as HTMLSelectElement
+    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
+    fireEvent.change(pick, { target: { value: "sample:two-column-report" } })
+    await waitFor(() => expect((within(card("query")).getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?"))
+    expect(within(card("query")).queryByText("Text is required")).toBeNull()
+  })
 })
 
 describe("saved pipelines on Build", () => {

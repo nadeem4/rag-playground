@@ -273,15 +273,33 @@ describe("SourcePicker grouped file list", () => {
     expect(document.querySelector("select")).toBeNull()
   })
 
-  it("until the samples arrive, lists every file in one list, then groups them", async () => {
+  it("until the samples arrive, says it is loading and never shows a sample as an upload, then groups them", async () => {
     let settle!: () => void
     samplesReply = () => new Promise((r) => (settle = () => r(new Response(JSON.stringify(CARDS), { status: 200 }))))
+    let listed = 0
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/sources") listed += 1
+        return base(url, init)
+      }),
+    )
+    render(<SourcePicker value={{}} onChange={() => {}} />)
+    await waitFor(() => expect(listed).toBe(1))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(screen.getByRole("status").textContent).toBe("Loading uploaded files")
+    expect(document.querySelector("select")).toBeNull()
+    settle()
+    const sel = await grouped()
+    expect(groups(sel)[1]).toEqual(["Your uploads", ["mine.pdf"]])
+  })
+
+  it("when the samples cannot be read, lists every file in one list", async () => {
+    samplesReply = async () => new Response(JSON.stringify({ detail: "down" }), { status: 500 })
     render(<SourcePicker value={{}} onChange={() => {}} />)
     const sel = await pick()
-    await waitFor(() => expect(sel.options.length).toBe(3))
+    await waitFor(() => expect([...sel.options].map((o) => o.textContent)).toEqual(["Pick a file", "chunking-primer.pdf", "mine.pdf"]))
     expect(sel.querySelectorAll("optgroup")).toHaveLength(0)
-    expect([...sel.options].map((o) => o.textContent)).toEqual(["Pick a file", "chunking-primer.pdf", "mine.pdf"])
-    settle()
-    await waitFor(() => expect(sel.querySelectorAll("optgroup")).toHaveLength(2))
   })
 })

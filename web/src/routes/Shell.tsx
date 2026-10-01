@@ -130,12 +130,13 @@ function Build({ registry }: { registry: Registry }) {
     [results, sigs, graph, registry],
   )
 
-  const edit = useCallback((next: PipelineGraph, touched?: string) => {
+  const edit = useCallback((next: PipelineGraph, ...touched: string[]) => {
     setGraph(next)
-    if (touched) {
+    if (touched.length) {
       setErrors((e) => {
-        if (!e[touched]) return e
-        const { [touched]: _, ...rest } = e
+        if (!touched.some((id) => e[id])) return e
+        const rest = { ...e }
+        for (const id of touched) delete rest[id]
         return rest
       })
     }
@@ -270,7 +271,7 @@ function Build({ registry }: { registry: Registry }) {
     let g = setConfig(graph, sourceNode.id, { sha: src.sha, filename: src.filename })
     const query = g.nodes.find((n) => n.stage === "query")
     if (query) g = setConfig(g, query.id, { ...query.config, text: question })
-    edit(g, sourceNode.id)
+    edit(g, sourceNode.id, ...(query ? [query.id] : []))
   }
 
   const failedNode = order.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))

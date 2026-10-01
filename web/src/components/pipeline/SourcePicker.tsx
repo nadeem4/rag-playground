@@ -63,7 +63,7 @@ export function SourcePicker({
   const fileRef = useRef<HTMLInputElement>(null)
   const [list, setList] = useState<ListState>({ kind: "loading" })
   const [upload, setUpload] = useState<{ name: string; error?: string } | null>(null)
-  const { samples } = useSamples()
+  const { samples, error: samplesError } = useSamples()
   const [sampleBusy, setSampleBusy] = useState(false)
   const [sampleError, setSampleError] = useState<string | null>(null)
   // A sample loads asynchronously: answer through the latest callbacks, so an
@@ -145,7 +145,8 @@ export function SourcePicker({
         <label htmlFor={`${id}-pick`} className="text-sm font-medium">
           File
         </label>
-        {list.kind === "loading" ? (
+        {/* Until the samples answer, a listed sample cannot be told from an upload: wait, rather than flash it as one. */}
+        {list.kind === "loading" || (samples === null && !samplesError) ? (
           <p role="status" className="text-sm text-fg-muted">
             Loading uploaded files
           </p>

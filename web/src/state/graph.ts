@@ -366,9 +366,30 @@ export function upstreamFor(g: PipelineGraph, registry: Registry, id: string): R
     const edge = g.edges.find((e) => e.dst === id && e.port === port)
     const src = edge ? edge.src : spec.ambient ? ambientSourceFor(g, registry, spec, blocked) : undefined
     const srcNode = src ? g.nodes.find((n) => n.id === src) : undefined
-    if (srcNode) out[port] = infoFor(registry, srcNode)
+    const info = srcNode ? infoFor(registry, srcNode) : undefined
+    if (srcNode && info) out[port] = { ...info, provides: effectiveProvides(g, registry, srcNode.id) }
   }
   return out
+}
+
+/**
+ * What a node provides, counting what it passes through (core/graph.py
+ * `_effective_provides`). A step whose input port carries the same artifact
+ * type as its output (a Clean step: a parsed document in, a parsed document
+ * out) passes on what its upstream on that port provides. Its own `provides`
+ * win on a key.
+ */
+export function effectiveProvides(g: PipelineGraph, registry: Registry, id: string, seen: ReadonlySet<string> = new Set()): Record<string, unknown> {
+  const node = g.nodes.find((n) => n.id === id)
+  const info = node ? infoFor(registry, node) : undefined
+  if (!info || seen.has(id)) return {}
+  const path = new Set([...seen, id])
+  const out: Record<string, unknown> = {}
+  for (const e of g.edges) {
+    if (e.dst !== id || info.inputs[e.port]?.type !== info.output) continue
+    Object.assign(out, effectiveProvides(g, registry, e.src, path))
+  }
+  return { ...out, ...(info.provides ?? {}) }
 }
 
 /**

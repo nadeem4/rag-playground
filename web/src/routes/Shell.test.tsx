@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import liveRegistry from "@/api/fixtures/registry.json"
-import { chatSampleGraph, initialGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
+import { chatSampleGraph, initialGraph, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -715,5 +715,26 @@ describe("saved pipelines on Build", () => {
       await act(async () => settle.reject(new Error("down")))
       await waitFor(() => expect(notice()).toBeTruthy())
     })
+  })
+})
+
+describe("lock states behind a Clean step", () => {
+  it("Docling's headings reach Chunk through Clean, so Markdown header does not fall back", async () => {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
+        return base(url, init)
+      }),
+    )
+    // Upload -> Docling -> dedupe_blocks -> recursive_character, as the owner shared it.
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE))
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    const chunk = within(card("chunk"))
+    expect(chunk.getByRole("option", { name: "markdown_header" })).toBeTruthy()
+    expect(chunk.queryByRole("option", { name: /markdown_header · falls back/ })).toBeNull()
   })
 })

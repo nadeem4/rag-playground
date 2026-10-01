@@ -89,6 +89,33 @@ def _capabilities_satisfied(requires: dict[str, Any], provides: dict[str, Any]) 
     return True
 
 
+def _effective_provides(
+    spec_by_id: dict[str, type[Transform]],
+    edges: list[Edge],
+    nid: str,
+    _seen: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """What a node provides, counting what it passes through.
+
+    A step whose input port carries the same artifact type as its output (a
+    Clean step: a parsed document in, a parsed document out) passes on what
+    its upstream on that port provides. Its own `provides` win on a key.
+    """
+    if nid in _seen:
+        return {}
+    seen = _seen | {nid}
+    spec = spec_by_id[nid]
+    out: dict[str, Any] = {}
+    for e in edges:
+        if e.dst != nid or e.src not in spec_by_id:
+            continue
+        port = spec.inputs.get(e.port)
+        if port is not None and port.type == spec.output:
+            out.update(_effective_provides(spec_by_id, edges, e.src, seen))
+    out.update(spec.provides)
+    return out
+
+
 @dataclass
 class Graph:
     nodes: list[Node] = field(default_factory=list)
@@ -142,11 +169,12 @@ class Graph:
             # says nothing about the query port, and a port with no entry is
             # unconstrained.
             needed = specs[e.dst].requires.get(e.port, {})
-            if not _capabilities_satisfied(needed, specs[e.src].provides):
+            have = _effective_provides(specs, self.edges, e.src)
+            if not _capabilities_satisfied(needed, have):
                 raise GraphValidationError(
                     f"edge {e.src}->{e.dst}.{e.port}: capability mismatch: "
                     f"port '{e.port}' requires {needed}, "
-                    f"source provides {specs[e.src].provides}"
+                    f"source provides {have}"
                 )
 
             slot = bindings[e.dst]
@@ -228,11 +256,12 @@ class Graph:
                 # ambient and explicit wiring accept exactly the same graphs.
                 chosen = terminal[0]
                 needed = specs[nid].requires.get(pname, {})
-                if not _capabilities_satisfied(needed, specs[chosen].provides):
+                have = _effective_provides(specs, self.edges, chosen)
+                if not _capabilities_satisfied(needed, have):
                     raise GraphValidationError(
                         f"{nid}.{pname}: capability mismatch: ambient port "
                         f"'{pname}' requires {needed}, but its only producer "
-                        f"'{chosen}' provides {specs[chosen].provides}"
+                        f"'{chosen}' provides {have}"
                     )
                 bindings[nid][pname] = chosen
                 parents[nid].add(chosen)

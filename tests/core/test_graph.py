@@ -431,3 +431,88 @@ def test_ancestors_includes_the_targets_themselves(reg):
     assert r.ancestors({"c"}) == {"s", "p", "c"}
     assert "rr" not in r.ancestors({"r"})
     assert r.ancestors({"r"}) == {"s", "p", "c", "ix", "q", "r"}
+
+
+# --- capabilities pass through a step whose input type is its output type ---
+
+
+def _heading_reg(reg):
+    """Add a parser that finds headings and a chunker that needs them."""
+    from core.artifacts import ArtifactType
+    from core.ports import PortSpec
+    from tests.core.conftest import _make
+
+    reg.register(
+        _make(
+            "heading_parse",
+            Stage.PARSE,
+            {"file": PortSpec(ArtifactType.RAW_FILE)},
+            ArtifactType.PARSED_DOC,
+            provides={"structure": ["headings"]},
+        )
+    )
+    reg.register(
+        _make(
+            "by_heading",
+            Stage.CHUNK,
+            {"doc": PortSpec(ArtifactType.PARSED_DOC)},
+            ArtifactType.CHUNK_SET,
+            requires={"doc": {"structure": ["headings"]}},
+        )
+    )
+    return reg
+
+
+def _behind_clean(parser):
+    return Graph(
+        nodes=[
+            n("s", Stage.SOURCE, "upload"),
+            n("p", Stage.PARSE, parser),
+            n("c1", Stage.CLEAN, "strip"),
+            n("c2", Stage.CLEAN, "strip"),
+            n("ch", Stage.CHUNK, "by_heading"),
+        ],
+        edges=[
+            Edge("s", "p", "file"),
+            Edge("p", "c1", "doc"),
+            Edge("c1", "c2", "doc"),
+            Edge("c2", "ch", "doc"),
+        ],
+    )
+
+
+def test_capability_passes_through_clean_steps(reg):
+    """Clean declares no provides, but the headings it passes on still count."""
+    res = _behind_clean("heading_parse").validate(_heading_reg(reg))
+    assert res.bindings["ch"]["doc"] == "c2"
+
+
+def test_capability_behind_clean_is_still_checked(reg):
+    """A parser that finds no headings still fails, Clean or not."""
+    with pytest.raises(GraphValidationError, match="capability"):
+        _behind_clean("fake_parse").validate(_heading_reg(reg))
+
+
+def test_effective_provides_own_provides_win_on_a_key(reg):
+    from core.artifacts import ArtifactType
+    from core.graph import _effective_provides
+    from core.ports import PortSpec
+    from tests.core.conftest import _make
+
+    _heading_reg(reg)
+    reg.register(
+        _make(
+            "flatten",
+            Stage.CLEAN,
+            {"doc": PortSpec(ArtifactType.PARSED_DOC)},
+            ArtifactType.PARSED_DOC,
+            provides={"structure": []},
+        )
+    )
+    specs = {
+        "p": reg.get(Stage.PARSE, "heading_parse"),
+        "f": reg.get(Stage.CLEAN, "flatten"),
+    }
+    edges = [Edge("p", "f", "doc")]
+    assert _effective_provides(specs, edges, "f") == {"structure": []}
+    assert _effective_provides(specs, edges, "p") == {"structure": ["headings"]}

@@ -432,7 +432,10 @@ a new strategy needs no frontend change.
    - if it needs something from the step above it, `requires`, keyed by input port, for
      example `{"index": {"backends": ["fts"]}}`, and `provides` on the producer, for
      example `{"backends": ["dense", "fts"]}`. An unmet requirement is a hard lock: the
-     graph is rejected, and the UI greys the option out and blocks Run;
+     graph is rejected, and the UI greys the option out and blocks Run. A step whose
+     input and output are the same kind of artifact, such as a Clean step, passes on what
+     the step above it provides, so it does not need its own `provides` for that. Its own
+     `provides` win on the same key;
    - if it runs without something but degrades, `prefers`, same shape, with a one-sentence
      `fallback` saying what happens instead. That is a soft lock: the option stays
      selectable, tagged "falls back", and the sentence shows under the dropdown.

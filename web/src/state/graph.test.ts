@@ -7,6 +7,7 @@ import {
   columnOrder,
   completeGraph,
   defaultConfig,
+  effectiveProvides,
   SAMPLE_QUESTION,
   chatSampleGraph,
   e2eSampleGraph,
@@ -25,6 +26,7 @@ import {
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
+import { compatibility } from "./compat"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const edgeSet = (g: { edges: { src: string; dst: string; port: string }[] }) =>
@@ -299,5 +301,37 @@ describe("upstreamFor", () => {
     const g = initialGraph(R)
     expect(upstreamFor(g, R, "source")).toEqual({})
     expect(upstreamFor(g, R, "nope")).toEqual({})
+  })
+})
+
+describe("effective provides: capabilities pass through Clean", () => {
+  const LIVE = liveRegistry as unknown as Registry
+  const SRC = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
+  const headings = LIVE.chunk!.markdown_header
+
+  it("sees Docling's headings behind a Clean step", () => {
+    const g = sampleGraph(LIVE, SRC) // Docling -> dedupe_blocks -> Chunk
+    expect(upstreamFor(g, LIVE, "chunk").doc?.name).toBe("dedupe_blocks")
+    expect(effectiveProvides(g, LIVE, "clean_1")).toEqual({ structure: ["headings"] })
+    expect(compatibility(headings, upstreamFor(g, LIVE, "chunk"))).toEqual({ kind: "ok" })
+  })
+
+  it("still falls back behind pdfium and a Clean step", () => {
+    const g = setTransform(sampleGraph(LIVE, SRC), "parse", "pdfium", LIVE)
+    expect(compatibility(headings, upstreamFor(g, LIVE, "chunk")).kind).toBe("soft")
+  })
+
+  it("is still ok with Docling wired straight into Chunk", () => {
+    const g = setTransform(initialGraph(LIVE), "parse", "docling", LIVE)
+    expect(upstreamFor(g, LIVE, "chunk").doc?.name).toBe("docling")
+    expect(compatibility(headings, upstreamFor(g, LIVE, "chunk"))).toEqual({ kind: "ok" })
+  })
+
+  it("lets a step's own provides win over its upstream's on the same key", () => {
+    const dedupe = LIVE.clean!.dedupe_blocks
+    const reg: Registry = { ...LIVE, clean: { ...LIVE.clean, dedupe_blocks: { ...dedupe, provides: { structure: [] } } } }
+    const g = sampleGraph(reg, SRC)
+    expect(effectiveProvides(g, reg, "clean_1")).toEqual({ structure: [] })
+    expect(compatibility(headings, upstreamFor(g, reg, "chunk")).kind).toBe("soft")
   })
 })

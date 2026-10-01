@@ -270,7 +270,7 @@ several times, for example two cleaners in a row.
 | **query** | The question you ask, and optionally the sentence or sentences in the document that answer it | `text` |
 | **parse** | Turns the PDF into text elements (headings, paragraphs, lists, tables) with their pages and positions | `pdfium`, `docling` |
 | **clean** \* | Removes text that would pollute retrieval, such as page numbers and repeated boilerplate | `header_footer_strip`, `dedupe_blocks`, `drop_matching` |
-| **chunk** | Cuts the text into the pieces that get indexed and retrieved | `recursive_character`, `markdown_header`, `token_based`, `layout_blocks` |
+| **chunk** | Cuts the text into the pieces that get indexed and retrieved | `recursive_character`, `markdown_header`, `token_based`, `layout_blocks`, `sentence_window` |
 | **enrich** \* | Adds context to chunks before indexing | planned |
 | **index** | Embeds the chunks and stores them for vector and keyword search | `lancedb` |
 | **query_transform** \* | Rewrites the question before retrieval | planned |
@@ -301,6 +301,7 @@ several times, for example two cleaners in a row.
 | `markdown_header` | One chunk per section: a heading and everything under it. Long sections are split between blocks. Prefers a parser that detects headings: with `pdfium`, which finds none, it treats the whole document as one section and cuts by size, and the card says so before you run. |
 | `token_based` | Cuts every N tokens wherever that falls. A deliberately naive baseline. |
 | `layout_blocks` | By layout block. Follows the blocks the parser found: a table stays with its caption and its heading, a new piece starts at every heading, and blocks are packed up to `max_tokens`. A table too long for one piece stays whole unless `keep_tables_whole` is off; any other long block is cut at sentence ends. With `heading_context` on, the heading path is put in front of each piece in `embed_text`, so retrieval sees the section name while the cited text is unchanged. Prefers the Layout parser; without headings it cuts by size and says so. |
+| `sentence_window` | By sentence. Cuts only where a sentence ends: each piece is `sentences_per_chunk` sentences in a row, and neighbouring pieces share `overlap_sentences` of them, which must be fewer. A heading line, a list item and a table row each count as one sentence. Works with any parser. |
 
 ### Index, retrieve and rerank
 

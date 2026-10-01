@@ -20,6 +20,7 @@ from core.ports import PortSpec, Stage
 from plugins.chunk.layout_blocks import LayoutBlocksChunker
 from plugins.chunk.markdown_header import MarkdownHeaderChunker
 from plugins.chunk.recursive_character import RecursiveCharacterChunker
+from plugins.chunk.sentence_window import SentenceWindowChunker
 from plugins.chunk.token_based import TokenBasedChunker
 from providers.tokenize import HeuristicTokenCounter
 
@@ -28,6 +29,7 @@ CHUNKERS = [
     MarkdownHeaderChunker,
     TokenBasedChunker,
     LayoutBlocksChunker,
+    SentenceWindowChunker,
 ]
 
 
@@ -169,6 +171,7 @@ def test_slice_back_holds_at_small_budgets(chunker, doc):
         "markdown_header": {"max_tokens": 8},
         "token_based": {"max_tokens": 8, "overlap": 3},
         "layout_blocks": {"max_tokens": 8},
+        "sentence_window": {"sentences_per_chunk": 1, "overlap_sentences": 0},
     }[chunker.name]
     result = run(chunker, doc, **tight)
     for chunk in result.chunks:

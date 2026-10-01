@@ -70,7 +70,7 @@ def test_config_defaults():
 def test_prefers_headings_and_names_its_fallback():
     assert LayoutBlocksChunker.prefers == {"doc": {"structure": ["headings"]}}
     assert LayoutBlocksChunker.fallback == (
-        "There are no headings or tables to follow, so the text is cut by size."
+        "There are no headings to follow, so the text is cut by size."
     )
 
 
@@ -272,7 +272,7 @@ def test_the_note_counts_blocks_pieces_and_headings(tmp_path):
     )
     _, note = _apply(doc, tmp_path)
     assert note == (
-        "Cut 3 blocks into 1 piece along 1 heading, keeping 1 table whole."
+        "Cut 3 blocks into 1 piece along 1 heading, keeping 0 tables whole."
     )
 
 
@@ -292,7 +292,7 @@ def test_meta_fields():
         "heading_context": True,
         "blocks": 5,
         "headings": 1,
-        "tables_kept_whole": 1,
+        "tables_kept_whole": 0,
     }
 
 
@@ -327,3 +327,33 @@ def test_a_heading_joins_the_first_piece_of_a_too_big_paragraph():
     cs = run(LayoutBlocksChunker, doc, max_tokens=8)
     assert cs.chunks[0].text.startswith("# Long\n\nSentence number 0")
     assert not any(c.text == "# Long" for c in cs.chunks)
+
+
+def test_headings_in_a_row_join_the_body_below_them():
+    doc = _doc(
+        [
+            ("heading", "Ch1", 1, 1),
+            ("heading", "Sec", 2, 1),
+            ("paragraph", "Body text under the section.", None, 1),
+        ]
+    )
+    cs = run(LayoutBlocksChunker, doc)
+    assert not any(c.text == "# Ch1" for c in cs.chunks)
+    [piece] = cs.chunks
+    assert piece.text.startswith("# Ch1\n\n## Sec")
+    assert piece.heading_path == ["Ch1", "Sec"]
+
+
+def test_a_small_table_is_not_counted_as_kept_whole(tmp_path):
+    doc = _doc([("heading", "Data", 1, 1), ("table", _table(2), None, 1)])
+    cs, note = _apply(doc, tmp_path, max_tokens=400)
+    assert "keeping 0 tables whole" in note
+    assert cs.chunker_meta["tables_kept_whole"] == 0
+
+
+def test_without_headings_a_big_table_is_still_kept_whole(tmp_path):
+    doc = _doc([("paragraph", "Intro.", None, 1), ("table", _table(30), None, 1)])
+    cs, note = _apply(doc, tmp_path, max_tokens=20)
+    assert note == "There are no headings to follow, so the text is cut by size."
+    assert len(_holding(cs, "| row0 |")) == 1
+    assert "| row29 |" in _holding(cs, "| row0 |")[0].text

@@ -5,12 +5,14 @@ reads them in order and groups them in three steps.
 
 - *Units.* A table and the caption right before or after it are one unit, and
   so are a figure and its caption. Every other block is a unit of its own.
-- *Sections.* A new section starts at every heading, as in `markdown_header`.
+- *Sections.* A new section starts at every heading that follows a body, as in
+  `markdown_header`; headings in a row open one section together.
 - *Pieces.* Units are packed in order up to `max_tokens`. A table unit that is
   too big stays whole when `keep_tables_whole` is on. Any other unit that is too
   big is cut at sentence ends, and only a single sentence that is itself too big
-  is cut on token boundaries. A heading is never a piece on its own: it joins
-  the piece below it, even when that piece is a table kept whole.
+  is cut on token boundaries. A heading is never a piece on its own, except a
+  last heading with nothing below it: it joins the piece below it, even when
+  that piece is a table kept whole.
 
 Every piece keeps its heading path. With `heading_context` on, the path is also
 put in front of the piece in `embed_text`, so retrieval sees the section's name,
@@ -80,11 +82,15 @@ def _units(elements: Sequence[Element]) -> list[list[Element]]:
 
 
 def _sections(units: Sequence[list[Element]]) -> list[list[list[Element]]]:
-    """Break the unit stream at every heading."""
+    """Break the unit stream at every heading that follows a body.
+
+    Headings in a row (a chapter, then its first section) open one section
+    together, so they join the body below them.
+    """
     sections: list[list[list[Element]]] = []
     current: list[list[Element]] = []
     for unit in units:
-        if unit[0].type == "heading" and current:
+        if unit[0].type == "heading" and any(u[0].type != "heading" for u in current):
             sections.append(current)
             current = []
         current.append(unit)
@@ -150,7 +156,8 @@ def _section_pieces(
         span = (unit[0].md_start, unit[-1].md_end)
         if unit[0].type == "heading":
             add(span)
-            bare_heading = window == span
+            # Headings only open a section, so the window holds nothing else.
+            bare_heading = True
         elif _tokens(view, span) <= config.max_tokens:
             add(span)
         elif config.keep_tables_whole and any(e.type == "table" for e in unit):
@@ -161,6 +168,20 @@ def _section_pieces(
     if window is not None:
         pieces.append(window)
     return pieces
+
+
+def _path_of(view: DocView, span: Span) -> list[str]:
+    """The heading path at the piece's last leading heading.
+
+    A piece that opens with a chapter and then its section is about the
+    section, so its path names both.
+    """
+    offset = span[0]
+    for element in view.elements_in(*span):
+        if element.type != "heading":
+            break
+        offset = element.md_start
+    return view.heading_path_at(offset)
 
 
 def _count(n: int, word: str) -> str:
@@ -177,7 +198,7 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
     # Soft: without headings `apply` still runs and packs by size (see the
     # note it sets), so the UI shows this sentence before the run, not a lock.
     prefers = {"doc": {"structure": ["headings"]}}
-    fallback = "There are no headings or tables to follow, so the text is cut by size."
+    fallback = "There are no headings to follow, so the text is cut by size."
     summary = (
         "Cuts along the page's own blocks: headings, paragraphs, lists and "
         "tables. A table stays with its caption and its heading, and each "
@@ -204,6 +225,8 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
                 "Blocks are packed into a piece until the next one would not fit. "
                 "A block that is too long on its own is cut at the end of a "
                 "sentence, never in the middle of one.",
+                "A piece can run a little over this when a heading joins the "
+                "block below it.",
             ],
         },
         "keep_tables_whole": {
@@ -271,14 +294,20 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
                 trimmed = normalize(view.text, [piece])
                 if trimmed and (not spans or spans[-1] != trimmed[0]):
                     spans.append(trimmed[0])
-                    paths.append(view.heading_path_at(trimmed[0][0]))
+                    paths.append(_path_of(view, trimmed[0]))
 
         headings = sum(1 for e in view.rendered if e.type == "heading")
-        tables_whole = sum(
-            1
-            for unit in units
-            if any(e.type == "table" for e in unit)
-            and any(s <= unit[0].md_start and unit[-1].md_end <= e for s, e in spans)
+        # Only the tables that were over the limit and kept whole anyway.
+        tables_whole = (
+            sum(
+                1
+                for unit in units
+                if any(e.type == "table" for e in unit)
+                and _tokens(view, (unit[0].md_start, unit[-1].md_end))
+                > config.max_tokens
+            )
+            if config.keep_tables_whole
+            else 0
         )
 
         chunk_set = build_chunk_set(

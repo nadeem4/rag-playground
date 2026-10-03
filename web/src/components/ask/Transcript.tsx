@@ -1,5 +1,9 @@
+import type { Registry } from "@/api/types"
 import type { HitRowData } from "@/components/inspectors/hits"
 import { Button } from "@/components/ui/button"
+import { askNodes, signature, terminalNode, type PipelineGraph } from "@/state/graph"
+
+import { rerankLabel } from "./AskResults"
 
 /**
  * Earlier questions in this tab: one entry per finished Ask, newest first.
@@ -19,6 +23,36 @@ export interface TranscriptEntry {
   rows: { rank: number; text: string }[]
   /** The rank of the first piece holding the gold, when the question is the sample's. */
   found: number | null
+}
+
+/**
+ * What an Ask was asked with, taken when Ask is pressed: the entry's labels
+ * come from here, never from the settings when the run finishes.
+ */
+export interface AskSnapshot {
+  runId: string
+  question: string
+  pipeline: string
+  reranker: string
+  /** The question's path through the graph (`askSignature`) when Ask was pressed. */
+  signature: string
+}
+
+/** The use case's signature: its settings and those of every step above it, the question included. */
+export function askSignature(graph: PipelineGraph, registry: Registry): string {
+  const end = terminalNode(graph)
+  return end ? signature(graph, end.id, registry) : ""
+}
+
+/** The snapshot of the graph as Ask is pressed, without the run id the server will give. */
+export function askSnapshot(graph: PipelineGraph, registry: Registry, pipeline: string): Omit<AskSnapshot, "runId"> {
+  const { query, rerank } = askNodes(graph)
+  return {
+    question: String(query?.config.text ?? ""),
+    pipeline,
+    reranker: rerank ? rerankLabel(rerank.transform) : "no rerank",
+    signature: askSignature(graph, registry),
+  }
 }
 
 /**

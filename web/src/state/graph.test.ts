@@ -404,6 +404,21 @@ describe("ask panel helpers", () => {
     expect(edgeSet(g).some((e) => e.includes("rerank"))).toBe(false)
   })
 
+  it("an old pipeline with stacked rerankers: the panel edits the one feeding the use case, and None means none", () => {
+    const g = addReranker(addReranker(sampleGraph(LIVE, SRC), LIVE), LIVE)
+    const [, second] = columnOrder(g).filter((n) => n.stage === "rerank")
+    expect(askNodes(g).rerank!.id).toBe(second.id)
+    const none = setReranker(g, LIVE, null)
+    expect(none.nodes.filter((n) => n.stage === "rerank")).toHaveLength(0)
+    expect(edgeSet(none)).toContain("retrieve->use_case:result")
+    const one = setReranker(g, LIVE, "cross_encoder")
+    const left = one.nodes.filter((n) => n.stage === "rerank")
+    expect(left).toHaveLength(1)
+    expect(left[0].transform).toBe("cross_encoder")
+    expect(edgeSet(one)).toContain(`retrieve->${left[0].id}:result`)
+    expect(edgeSet(one)).toContain(`${left[0].id}->use_case:result`)
+  })
+
   it("setReranker(null) on a graph with no reranker changes nothing", () => {
     const g = sampleGraph(LIVE, SRC)
     expect(setReranker(g, LIVE, null)).toEqual(g)

@@ -221,7 +221,7 @@ describe("Ask with a chat card and no API key", () => {
     await ask()
     await waitFor(() => expect(streams).toHaveLength(2))
     await act(async () => {})
-    expect((panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement).disabled).toBe(true)
+    expect((panel().getByRole("button", { name: "Asking" }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByTestId("key-notice")).toBeNull()
     await endRun()
     expect(await waitFor(() => panel().getByTestId("key-notice"))).toBeTruthy()
@@ -953,10 +953,13 @@ describe("the Ask panel results on Build", () => {
   }
 
   let reply422: unknown = null
+  // Set to fail every run after the first (the Build the index run) with a column-level error.
+  let failAsk = false
 
   beforeEach(() => {
     streams = []
     reply422 = null
+    failAsk = false
     vi.stubGlobal("EventSource", OpenEventSource)
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
@@ -972,6 +975,7 @@ describe("the Ask panel results on Build", () => {
         if (url === "/api/runs" && init?.method === "POST") {
           posts.push({ path: url, body: JSON.parse(String(init.body)) })
           if (reply422) return ok(reply422, 422)
+          if (failAsk && posts.length > 1) return ok({ detail: "The server is out of disk space." }, 500)
           return ok({ run_id: `r${posts.length}` }, 202)
         }
         return base(url, init)
@@ -1042,6 +1046,49 @@ describe("the Ask panel results on Build", () => {
     fireEvent.click(panel().getByRole("button", { name: "Ask" }))
     await waitFor(() => expect(streams).toHaveLength(3))
     expect(await waitFor(() => panel().getByRole("button", { name: "Hide comparison" }))).toBeTruthy()
+  })
+
+/** Builds the index on the stored graph and leaves the panel ready to Ask. */
+  async function built() {
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    const askButton = panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    await waitFor(() => expect(askButton.disabled).toBe(false))
+    return askButton
+  }
+
+  it("a reranker changed while an Ask runs leaves no mislabelled transcript entry", async () => {
+    storeGraph(setReranker(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), liveRegistry as never, "cross_encoder"))
+    fireEvent.click(await built())
+    await waitFor(() => expect(streams).toHaveLength(2))
+    expect(panel().getByRole("button", { name: "Asking" })).toBeTruthy()
+    const stored = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as { nodes: { id: string; stage: string }[] }
+    const rerankId = stored.nodes.find((n) => n.stage === "rerank")!.id
+    emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
+    // None while the reranker is still working.
+    fireEvent.click(panel().getByRole("button", { name: "Change settings" }))
+    fireEvent.click(within(panel().getByRole("group", { name: "Reranker" })).getByRole("button", { name: "None" }))
+    emit({ event: "node_finished", node_id: rerankId, artifact_id: "rr1", cache_hit: false, duration_ms: 1 }, "2")
+    emit({ event: "node_finished", node_id: "use_case", artifact_id: "out1", cache_hit: false, duration_ms: 1 }, "3")
+    emit({ event: "stream_end", status: "finished", ok: true }, "4")
+    await waitFor(() => expect(panel().getByRole("button", { name: "Ask" })).toBeTruthy())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(panel().queryByText(/^Earlier questions in this tab/)).toBeNull()
+    expect(panel().queryByText(/no rerank/)).toBeNull()
+  })
+
+  it("an Ask that cannot start says so in the panel, pointing at the note above the cards", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    failAsk = true
+    fireEvent.click(await built())
+    expect((await waitFor(() => panel().getByTestId("ask-run-error"))).textContent).toBe("The run could not start. See the note above the cards.")
+    expect(screen.getByText("The pipeline cannot run")).toBeTruthy()
   })
 
   it("says reused from an earlier run, never cached, in the legend and the card's header", async () => {

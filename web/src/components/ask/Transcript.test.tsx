@@ -14,7 +14,7 @@ import { sampleGraph, setReranker, type PipelineGraph } from "@/state/graph"
 import { resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
-import { goldRank, logEntry, type TranscriptEntry } from "./Transcript"
+import { askSnapshot, goldRank, logEntry, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
 const LIVE = liveRegistry as unknown as Registry
 const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
@@ -98,7 +98,10 @@ function Harness(p: Omit<AskPanelProps, "transcript" | "onLog">) {
   return <AskPanel {...p} transcript={entries} onLog={(e) => setEntries((t) => logEntry(t, e))} />
 }
 
-function base(graph: PipelineGraph, results: Record<string, NodeState>, askRunId: string | null) {
+/** The snapshot Build takes when Ask is pressed on `graph`, for run `runId`. */
+const snap = (graph: PipelineGraph, runId: string, pipeline = "Working copy"): AskSnapshot => ({ ...askSnapshot(graph, LIVE, pipeline), runId })
+
+function base(graph: PipelineGraph, results: Record<string, NodeState>, asked: AskSnapshot | null) {
   return {
     graph,
     registry: LIVE,
@@ -110,7 +113,7 @@ function base(graph: PipelineGraph, results: Record<string, NodeState>, askRunId
     explanations: {},
     errors: {},
     keyNotice: null,
-    askRunId,
+    asked,
     comparisonHidden: null,
     onComparison: vi.fn(),
     onConfig: vi.fn(),
@@ -130,25 +133,25 @@ describe("the transcript", () => {
     const p = base(graph, RERANKED, null)
     const { rerender } = render(<Harness {...p} />)
     expect(summary()).toBeNull()
-    rerender(<Harness {...p} askRunId="r2" />)
+    rerender(<Harness {...p} asked={snap(graph, "r2")} />)
     await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (1)"))
     // The question set may answer after the run: the entry then gains its gold rank.
     expect(await screen.findByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
     const entry = screen.getByTestId("transcript-entry")
     expect(within(entry).getByText("What does overlap cost?")).toBeTruthy()
     // The same run is not logged twice.
-    rerender(<Harness {...p} askRunId="r2" busy={false} />)
+    rerender(<Harness {...p} asked={snap(graph, "r2")} busy={false} />)
     expect(summary()?.textContent).toBe("Earlier questions in this tab (1)")
     // Each Ask again names its question, so two entries never share an accessible name.
     fireEvent.click(within(entry).getByRole("button", { name: "Ask again: What does overlap cost?" }))
     expect(p.onConfig).toHaveBeenCalledWith("query", expect.objectContaining({ text: "What does overlap cost?" }))
-    rerender(<Harness {...p} askRunId="r3" />)
+    rerender(<Harness {...p} asked={snap(graph, "r3")} />)
     await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (2)"))
   })
 
   it("a finished entry keeps the settings its run used when the reranker changes afterwards", async () => {
     const graph = setReranker(sampleGraph(LIVE, SAMPLE, "What does overlap cost?"), LIVE, "cross_encoder")
-    const p = base(graph, RERANKED, "r2")
+    const p = base(graph, RERANKED, snap(graph, "r2"))
     const { rerender } = render(<Harness {...p} />)
     expect(await screen.findByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
     // None removes the rerank node; Retrieve and its result stay fresh, so the rows change.
@@ -163,8 +166,26 @@ describe("the transcript", () => {
   it("an upload has no gold, so the entry counts the pieces, and names the saved pipeline", async () => {
     const graph = sampleGraph(LIVE, UPLOAD, "Anything?")
     setCurrentId(savePipeline("Plain hybrid", graph)!.saved.id)
-    render(<Harness {...base(graph, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") }, "r9")} />)
+    render(<Harness {...base(graph, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") }, snap(graph, "r9", "Plain hybrid"))} />)
     await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (1)"))
     expect(screen.getByText("Plain hybrid, no rerank: 5 pieces")).toBeTruthy()
+  })
+
+  it("a run whose settings changed before it finished is not logged, so no entry carries the wrong labels", async () => {
+    const graph = setReranker(sampleGraph(LIVE, SAMPLE, "What does overlap cost?"), LIVE, "cross_encoder")
+    // Asked with the cross-encoder; None was chosen while the run was going.
+    const none = setReranker(graph, LIVE, null)
+    const p = base(none, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") }, snap(graph, "r4"))
+    render(<Harness {...p} />)
+    await waitFor(() => expect(screen.getByRole("heading", { name: /in search order$/ })).toBeTruthy())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(summary()).toBeNull()
+    expect(screen.queryByText(/no rerank/)).toBeNull()
+  })
+
+  it("the entry takes the snapshot's labels, not the ones on screen at the finish", async () => {
+    const graph = sampleGraph(LIVE, UPLOAD, "Anything?")
+    render(<Harness {...base(graph, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") }, snap(graph, "r5", "Named when asked"))} />)
+    expect(await screen.findByText("Named when asked, no rerank: 5 pieces")).toBeTruthy()
   })
 })

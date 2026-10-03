@@ -74,7 +74,7 @@ function props(graph: PipelineGraph, results: Record<string, NodeState>): AskPan
     explanations: {},
     errors: {},
     keyNotice: null,
-    askRunId: null,
+    asked: null,
     transcript: [],
     comparisonHidden: null,
     onComparison: vi.fn(),

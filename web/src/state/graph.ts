@@ -126,7 +126,7 @@ export function initialGraph(registry: Registry): PipelineGraph {
   return wire({ nodes, edges: [] }, registry)
 }
 
-/** The question the sample graph's Ask card starts with (plan I-15). */
+/** The question the sample graph starts with (plan I-15). */
 export const SAMPLE_QUESTION = "Why do chunk boundaries matter?"
 
 /** The transform each stage of the sample graph uses. Clean is added to the default column. */
@@ -442,7 +442,11 @@ export function indexNode(g: PipelineGraph): GraphNode | undefined {
 /** The Ask-stage nodes the Ask panel edits. */
 export function askNodes(g: PipelineGraph): { query?: GraphNode; retrieve?: GraphNode; rerank?: GraphNode; useCase?: GraphNode } {
   const find = (stage: Stage) => g.nodes.find((n) => n.stage === stage)
-  return { query: find("query"), retrieve: find("retrieve"), rerank: find("rerank"), useCase: find("use_case") }
+  // An old pipeline can stack rerankers; the one that feeds the use case is the last in column order.
+  const rerank = columnOrder(g)
+    .filter((n) => n.stage === "rerank")
+    .pop()
+  return { query: find("query"), retrieve: find("retrieve"), rerank, useCase: find("use_case") }
 }
 
 /** The reranker's transform name, or null when there is none. */
@@ -452,11 +456,17 @@ export function rerankerOf(g: PipelineGraph): string | null {
 
 /**
  * Set the reranker: null removes it (Retrieve then feeds the use case), a name
- * adds one if absent and sets its transform, which resets its config.
+ * adds one if absent and sets its transform, which resets its config. The
+ * panel shows one reranker, so an old stack is cut down to the last one (or
+ * to none) first.
  */
 export function setReranker(g: PipelineGraph, registry: Registry, transform: string | null): PipelineGraph {
+  const last = askNodes(g).rerank
+  for (const n of g.nodes) {
+    if (n.stage === "rerank" && (transform === null || n.id !== last?.id)) g = removeNode(g, n.id)
+  }
+  if (transform === null) return g
   const existing = askNodes(g).rerank
-  if (transform === null) return existing ? removeNode(g, existing.id) : g
   const withNode = existing ? g : addReranker(g, registry)
   const node = askNodes(withNode).rerank
   return node ? setTransform(withNode, node.id, transform, registry) : g

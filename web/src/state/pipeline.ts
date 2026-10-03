@@ -11,7 +11,7 @@ import type { PipelineGraph } from "./graph"
  * results of partial runs accumulate.
  */
 
-/** `target` present: that card's Run (the server adds its ancestors). Absent: Run all. */
+/** `target` present: that card's Run (the server adds its ancestors). No target: the whole graph (Ask). */
 export function buildRunRequest(graph: PipelineGraph, opts: { target?: string; force?: boolean }): RunRequest {
   const req: RunRequest = { graph, force: Boolean(opts.force) }
   if (opts.target) req.targets = [opts.target]

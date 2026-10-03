@@ -64,7 +64,7 @@ function setup(over: Partial<AskPanelProps> = {}) {
     explanations: {},
     errors: {},
     keyNotice: null,
-    askRunId: null,
+    asked: null,
     transcript: [],
     comparisonHidden: null,
     onComparison: vi.fn(),
@@ -125,9 +125,29 @@ describe("the question box", () => {
     expect(p.onAsk).toHaveBeenCalledTimes(2)
   })
 
-  it("Ask is disabled while a run is going", () => {
+  it("Ask reads Asking and is disabled while a run is going", () => {
     setup({ busy: true })
-    expect(askButton().disabled).toBe(true)
+    const button = screen.getByRole("button", { name: "Asking" }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.queryByRole("button", { name: "Ask" })).toBeNull()
+  })
+
+  it("says why the results are gone when the settings moved past them", () => {
+    setup({ results: { ...INDEX_DONE, use_case: { id: "use_case", status: "done", artifact_id: "out1" } }, stale: new Set(["use_case"]) })
+    expect(screen.getByTestId("stale-results").textContent).toBe("The settings changed since the last Ask. Press Ask to see the new results.")
+  })
+
+  it("says nothing about stale results when the results are fresh or there are none", () => {
+    setup({ results: { ...INDEX_DONE, use_case: { id: "use_case", status: "done", artifact_id: "out1" } } })
+    expect(screen.queryByTestId("stale-results")).toBeNull()
+    cleanup()
+    setup({ stale: new Set(["use_case"]) })
+    expect(screen.queryByTestId("stale-results")).toBeNull()
+  })
+
+  it("shows a run error from Build as one line in the panel", () => {
+    setup({ runError: "The run could not start. See the note above the cards." })
+    expect(screen.getByRole("alert").textContent).toBe("The run could not start. See the note above the cards.")
   })
 
   it("shows the sample's questions as chips, and a chip sets the text", async () => {
@@ -144,6 +164,8 @@ describe("the question box", () => {
     const chip = await screen.findByRole("button", { name: "Why overlap?" })
     expect(chip.className.split(/\s+/)).not.toContain("whitespace-nowrap")
     expect(chip.className.split(/\s+/)).not.toContain("shrink-0")
+    // A fixed height would let a wrapped second line spill over the chip below.
+    expect(chip.className.split(/\s+/).filter((c) => /^h-/.test(c))).toEqual([])
   })
 
   it("Ask sits on the row under the question box, beside the shortcut hint", () => {

@@ -345,6 +345,17 @@ describe("RetrievalResultInspector", () => {
     expect(container.querySelector<HTMLElement>('[data-hit-row="1"]')!.textContent).toContain("no meaning match")
   })
 
+  it("fits a narrow list: each score names its search, a miss stays on one line, and the stylesheet wraps the row", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const sixth = container.querySelector<HTMLElement>('[data-hit-row="6"]')!
+    expect([...sixth.querySelectorAll(".ri-key")].map((k) => k.textContent)).toEqual(["dense", "bm25"])
+    const miss = [...sixth.querySelectorAll("span")].find((el) => el.textContent === "bm25no keyword match")!
+    expect(miss.className).toContain("whitespace-nowrap")
+    expect(container.querySelector(".ri-head")).toBeTruthy()
+    // Below the full row's width the grid becomes a wrapping line and the header hides.
+    expect(css).toMatch(/@container \(max-width: 439px\)[\s\S]*\.ri-grid \{\s*display: flex;\s*flex-wrap: wrap;[\s\S]*\.ri-head \{\s*display: none;/)
+  })
+
   it("shows the section in a hit's where line only when its chunk has one", () => {
     const withSection = {
       ...hybrid,

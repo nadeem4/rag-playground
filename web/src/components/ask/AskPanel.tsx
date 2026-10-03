@@ -12,11 +12,10 @@ import { QuestionField } from "@/components/pipeline/QuestionField"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ASK_STAGES, askNodes, indexNode, infoFor, terminalNode, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
-import { usePipelines } from "@/state/pipelines"
 
 import { AskResults, finalRows, fresh, rerankLabel, useAskOutputs } from "./AskResults"
 import { AskSettings, RETRIEVAL_LABEL } from "./AskSettings"
-import { goldRank, Transcript, type TranscriptEntry } from "./Transcript"
+import { askSignature, goldRank, Transcript, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
 /**
  * The Ask panel: the right pane when no card is selected. It holds the
@@ -36,11 +35,16 @@ export interface AskPanelProps {
   errors: Record<string, NodeErrors>
   /** Set when a keyless ask stopped before Chat and the run has ended. */
   keyNotice: string | null
-  /** The Ask run that has just finished, once it has: its answer joins the transcript. */
-  askRunId: string | null
+  /**
+   * The Ask run that has just finished, once it has, with what it was asked
+   * with: its answer joins the transcript under those labels.
+   */
+  asked: AskSnapshot | null
   transcript: TranscriptEntry[]
   /** The rerank result whose comparison the reader hid. Build holds it, so it outlives the panel. */
   comparisonHidden: string | null
+  /** Set when an Ask could not start or its run crashed: the note above the cards has the detail. */
+  runError?: string | null
   onComparison: (hidden: string | null) => void
   onLog: (entry: TranscriptEntry) => void
   onConfig: (id: string, config: Record<string, unknown>) => void
@@ -101,8 +105,8 @@ export function AskPanel(p: AskPanelProps) {
   const askDisabled = p.busy || !indexId || Boolean(blocker)
 
   // Open on a pipeline whose question has not run yet; folded once it has.
-  const asked = p.graph.nodes.some((n) => ASK_STAGES.includes(n.stage) && n.stage !== "query" && p.results[n.id])
-  const [open, setOpen] = useState(!asked)
+  const answered = p.graph.nodes.some((n) => ASK_STAGES.includes(n.stage) && n.stage !== "query" && p.results[n.id])
+  const [open, setOpen] = useState(!answered)
   // A server error on a settings step must be seen, so it unfolds the settings.
   const settingsError = [retrieve, rerank, useCase].some((n) => n && p.errors[n.id])
   const shown = open || settingsError
@@ -121,33 +125,35 @@ export function AskPanel(p: AskPanelProps) {
     () => finalRows({ rerank: rerankOut, output, retrieve: retrieveOut }, reranked),
     [rerankOut, output, retrieveOut, reranked],
   )
-  const { pipelines, currentId } = usePipelines()
-  const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
-  const text = String(query?.config.text ?? "")
-  const rerankerName = rerank ? rerankLabel(rerank.transform) : "no rerank"
-  const { onLog, askRunId, transcript } = p
+  // The settings now, against the snapshot taken when Ask was pressed: a change in between
+  // means the rows on screen are not that run's, so the run is not logged at all.
+  const current = askSignature(p.graph, p.registry)
+  const { onLog, asked: snap, transcript } = p
   useEffect(() => {
-    if (!askRunId) return
+    if (!snap) return
     // A logged run is frozen: its own question and pieces are read again, never the current settings.
-    const logged = transcript.find((e) => e.runId === askRunId)
+    const logged = transcript.find((e) => e.runId === snap.runId)
     const entry: TranscriptEntry | null =
       logged ??
-      (rows
+      (rows && current === snap.signature
         ? {
-            runId: askRunId,
-            question: text,
-            pipeline: pipelineName,
-            reranker: rerankerName,
+            runId: snap.runId,
+            question: snap.question,
+            pipeline: snap.pipeline,
+            reranker: snap.reranker,
             rows: rows.map((r) => ({ rank: r.rank, text: r.text })),
             found: null,
           }
         : null)
     if (!entry || entry.found !== null) return
-    const asked = questions.find((q) => q.question.trim() === entry.question.trim())
-    const found = asked ? goldRank(entry.rows, [asked.gold_answer, ...(asked.gold_answers ?? [])]) : null
+    const sampleQ = questions.find((q) => q.question.trim() === entry.question.trim())
+    const found = sampleQ ? goldRank(entry.rows, [sampleQ.gold_answer, ...(sampleQ.gold_answers ?? [])]) : null
     if (logged && found === null) return
     onLog({ ...entry, found })
-  }, [askRunId, transcript, rows, questions, text, pipelineName, rerankerName, onLog])
+  }, [snap, transcript, rows, questions, current, onLog])
+
+  // A result on an Ask step that the settings have moved past: the lists are gone until the next Ask.
+  const askStale = !p.busy && [query, retrieve, rerank, useCase].some((n) => n !== undefined && p.results[n.id] !== undefined && p.stale.has(n.id))
 
   const queryErrors = query ? p.errors[query.id] : undefined
   const setText = (text: string) => {
@@ -183,13 +189,18 @@ export function AskPanel(p: AskPanelProps) {
             onSubmit={ask}
             action={
               <Button size="sm" disabled={askDisabled} onClick={ask}>
-                Ask
+                {p.busy ? "Asking" : "Ask"}
               </Button>
             }
           />
         ) : null}
         {queryErrors?.message ? <p className="text-xs break-words text-danger">{queryErrors.message}</p> : null}
         {indexId && blocker ? <p className="text-xs text-danger">Fix the {titleFor(blocker)} settings to ask.</p> : null}
+        {p.runError ? (
+          <p role="alert" data-testid="ask-run-error" className="text-xs text-danger">
+            {p.runError}
+          </p>
+        ) : null}
         {p.keyNotice ? (
           // A div, not a p: KeyHint is itself a p, and a p cannot hold one.
           <div role="status" data-testid="key-notice" className="text-xs text-fg-muted">
@@ -205,9 +216,11 @@ export function AskPanel(p: AskPanelProps) {
                 <Button
                   key={q.id}
                   variant="outline"
-                  size="sm"
+                  // No size: the sm size's fixed 24px height would win over h-auto, and a wrapped
+                  // question would spill over the chip below. The chip grows with its text instead.
+                  size={null}
                   // Wraps and shrinks, so a long question never pushes the pane sideways on a phone.
-                  className="h-auto max-w-full shrink py-1 text-left whitespace-normal"
+                  className="min-h-[24px] max-w-full shrink px-2 py-1 text-left text-xs whitespace-normal"
                   onClick={() => setText(q.question)}
                 >
                   {q.question}
@@ -255,6 +268,7 @@ export function AskPanel(p: AskPanelProps) {
           registry={p.registry}
           outputs={outputs}
           comparisonHidden={p.comparisonHidden}
+          stale={askStale}
           onComparison={p.onComparison}
         />
         <Transcript entries={p.transcript} onAskAgain={setText} />

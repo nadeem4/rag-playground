@@ -3,9 +3,9 @@ import { useId, type ReactNode } from "react"
 import { Errors } from "@/components/fields/FieldShell"
 
 /**
- * The Ask card's question. It is what a user changes most, so it is a real
- * multi-line box rather than a schema field, and Ctrl+Enter (Cmd+Enter on a
- * Mac) asks it: the same as the card's Run, straight through to the end.
+ * The Ask panel's question box. It is what a user changes most, so it is a
+ * real multi-line box rather than a schema field, and Ctrl+Enter (Cmd+Enter on
+ * a Mac) asks it: the same as pressing Ask.
  * `action` (the Ask button) sits right-aligned on the hint's row, so the box
  * and its action read as one group.
  */

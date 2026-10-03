@@ -270,8 +270,10 @@ function Summary({ children }: { children: ReactNode }) {
 function columns(bars: number): CSSProperties {
   // The widths hold the mono text they carry: a 4 letter tracked column label
   // in the rank column, and a bar plus a five decimal score in each bar column.
-  // Martian Mono is wider than a usual mono, so they were measured for it.
-  return { gridTemplateColumns: `32px 44px 64px repeat(${bars}, ${BAR + 48}px)` }
+  // Martian Mono is wider than a usual mono, so they were measured for it. A bar
+  // column grows to hold "no keyword match" on one line. In a narrow list the
+  // stylesheet turns the row into a wrapping line instead (inspectors.css).
+  return { gridTemplateColumns: `32px 44px 64px repeat(${bars}, minmax(${BAR + 48}px, max-content))` }
 }
 
 function HitList({
@@ -305,7 +307,7 @@ function HitList({
   const grid = columns(Math.max(1, keys.length))
   return (
     <div className="ri-list flex min-w-0 flex-col bg-surface" role="list" aria-label="Ranked hits">
-      <div className="ri-grid border-b border-hairline px-3 py-1" style={grid} aria-hidden>
+      <div className="ri-grid ri-head border-b border-hairline px-3 py-1" style={grid} aria-hidden>
         <span className="meta text-right">rank</span>
         <span />
         <span className="meta text-right">score</span>
@@ -350,7 +352,7 @@ function HitList({
               </span>
               <span className="text-right font-mono text-sm text-fg tabular-nums">{fmtScore(r.score)}</span>
               {keys.length ? (
-                keys.map((key) => <ScoreBar key={key} value={r.component_scores[key]} max={maxOf[key]} label={MISSED[key] ?? "no match"} />)
+                keys.map((key) => <ScoreBar key={key} name={key} value={r.component_scores[key]} max={maxOf[key]} label={MISSED[key] ?? "no match"} />)
               ) : (
                 <ScoreBar value={r.score} max={scoreMax} />
               )}
@@ -408,13 +410,21 @@ const MISSED: Record<string, string> = { bm25: "no keyword match", dense: "no me
  * §11), the value printed at its tip in text ink. Absent means the search did
  * not find the hit, which is different from scoring zero, so `label` says so.
  */
-function ScoreBar({ value, max, label }: { value: number | undefined; max: number; label?: string }) {
+function ScoreBar({ value, max, label, name }: { value: number | undefined; max: number; label?: string; name?: string }) {
   const w = barWidth(value, max, BAR)
+  // The component's name, shown only in a narrow list, where the header row is hidden.
+  const key = name ? <span className="ri-key font-mono text-2xs text-fg-muted">{name}</span> : null
   if (value === undefined) {
-    return <span className="font-mono text-2xs text-fg-muted">{label ?? ""}</span>
+    return (
+      <span className="flex min-w-0 items-center gap-1 font-mono text-2xs whitespace-nowrap text-fg-muted">
+        {key}
+        {label ?? ""}
+      </span>
+    )
   }
   return (
-    <span className="flex items-center gap-1" data-bar={w}>
+    <span className="flex min-w-0 items-center gap-1" data-bar={w}>
+      {key}
       <span aria-hidden className="flex items-center">
         <span className="block h-[12px] w-px shrink-0 bg-hairline" />
         <span className="block h-[6px] shrink-0" style={{ width: w, background: "var(--score-3)" }} />

@@ -88,9 +88,13 @@ export interface AskResultsProps {
   /** The rerank result whose comparison the reader hid, or null. Held by Build, so a card and Back to Ask keep it. */
   comparisonHidden: string | null
   onComparison: (hidden: string | null) => void
+  /** True when an Ask step's last result no longer matches the settings: the old results are gone, so say why. */
+  stale?: boolean
 }
 
-export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison }: AskResultsProps) {
+export const STALE_LINE = "The settings changed since the last Ask. Press Ask to see the new results."
+
+export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false }: AskResultsProps) {
   const { rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
   let lists: ReactNode = null
@@ -117,9 +121,14 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
       )
     }
   }
-  if (!o.failed && !chat && !lists) return null
+  if (!o.failed && !chat && !lists && !stale) return null
   return (
     <section aria-label="Results" className="flex flex-col gap-3 border-t border-hairline pt-3">
+      {stale ? (
+        <p data-testid="stale-results" className="text-xs text-fg-muted">
+          {STALE_LINE}
+        </p>
+      ) : null}
       {o.failed ? <Failed node={o.failed.node} error={o.failed.error} /> : null}
       {chat ? <ChatInspector payload={chat} chunkSet={o.chunkSet} /> : null}
       {lists}

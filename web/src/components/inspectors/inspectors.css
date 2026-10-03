@@ -172,6 +172,25 @@
   column-gap: 12px;
   align-items: center;
 }
+.ri-key {
+  display: none;
+}
+/* A list narrower than the full row (a phone): the scores wrap under the rank
+   on their own line, each named, instead of being cut off at the edge. */
+@container (max-width: 439px) {
+  .ri-grid {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+  .ri-head {
+    display: none;
+  }
+  .ri-key {
+    display: inline;
+  }
+}
 /* A piece the reranker kept, in the Ask panel's search order column. */
 .ri-row[data-kept] {
   border-left: 3px solid var(--kept-mark);

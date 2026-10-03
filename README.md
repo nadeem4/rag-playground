@@ -79,8 +79,8 @@ document, open **Build** (`/build`). For now the lessons are hidden (see [Lesson
 so the playground opens on **Build**.
 
 The column on the left of **Build** is the index pipeline: Upload, Parse, Clean, Chunk and
-Index, one card each with its own settings. **Build the index** runs those five steps, and selecting a card shows its output on the right, with
-**Back to Ask** to return.
+Index, one card each with its own settings. **Build the index** runs those five steps, and
+selecting a card shows its output on the right, with **Back to Ask** to return.
 
 The Ask panel on the right holds the question and the retrieval, rerank and answer
 settings, summed up in one recipe line. **Ask** runs the question against the index and
@@ -182,7 +182,7 @@ unsafe to share:
   button on a Build card opens Compare on that card. The page also says how many steps were
   reused from the cache.
 - **Save and share pipelines.** Name the pipeline on Build and keep it; switch between saved
-  pipelines from the bar under the Pipeline header of the column, and edit any of them. Once a
+  pipelines from the bar under the Index pipeline header of the column, and edit any of them. Once a
   pipeline is saved, Copy link puts the whole configuration in a URL: whoever opens it gets the pipeline on their Build page, and if it was
   built on a bundled sample, Build the index and Ask work at once. Your own uploads do not travel with the
   link; the page says which file to load. Pipelines live in your browser.

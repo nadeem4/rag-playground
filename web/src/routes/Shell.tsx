@@ -13,7 +13,7 @@ import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { AskPanel } from "@/components/ask/AskPanel"
-import { logEntry, type TranscriptEntry } from "@/components/ask/Transcript"
+import { askSnapshot, logEntry, type AskSnapshot, type TranscriptEntry } from "@/components/ask/Transcript"
 import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
@@ -44,7 +44,17 @@ import {
   type PipelineGraph,
 } from "@/state/graph"
 import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
-import { decodePipeline, droppedText, readCurrentId, readPipelines, sameGraph, savePipeline, setCurrentId, usableGraph } from "@/state/pipelines"
+import {
+  decodePipeline,
+  droppedText,
+  readCurrentId,
+  readPipelines,
+  sameGraph,
+  savePipeline,
+  setCurrentId,
+  usableGraph,
+  usePipelines,
+} from "@/state/pipelines"
 
 /**
  * Build: the index pipeline column on the left; on the right the Ask panel,
@@ -105,7 +115,12 @@ function Build({ registry }: { registry: Registry }) {
   const [columnError, setColumnError] = useState<string | null>(null)
   const run = useRun(runId)
   // The last run the Ask button started, and the questions asked in this tab.
-  const [askRunId, setAskRunId] = useState<string | null>(null)
+  // Taken as Ask is pressed (question, pipeline, reranker, settings), with the run id once it starts.
+  const [asked, setAsked] = useState<AskSnapshot | null>(null)
+  // Whether the last run started was an Ask: its column error or crash is then also said in the panel.
+  const [fromAsk, setFromAsk] = useState(false)
+  const { pipelines, currentId } = usePipelines()
+  const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const onLog = useCallback((entry: TranscriptEntry) => setTranscript((t) => logEntry(t, entry)), [])
   // The rerank result whose comparison the reader hid. Held here, so opening a
@@ -190,7 +205,8 @@ function Build({ registry }: { registry: Registry }) {
    * `select` false leaves the right pane as it is: Build the index and Ask keep
    * the Ask panel in view. Resolves to the run id, or undefined when no run started.
    */
-  async function start(target: string | undefined, force: boolean, select = true): Promise<string | undefined> {
+  async function start(target: string | undefined, force: boolean, select = true, ask = false): Promise<string | undefined> {
+    setFromAsk(ask)
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
       setErrors((e) => ({ ...e, [source.id]: { message: "Choose or upload a file first." } }))
@@ -414,7 +430,8 @@ function Build({ registry }: { registry: Registry }) {
             explanations={explanations}
             errors={errors}
             keyNotice={keyNotice && !busy && !run.error && !failedNode ? keyNotice : null}
-            askRunId={askRunId !== null && askRunId === runId && !busy ? askRunId : null}
+            asked={asked !== null && asked.runId === runId && !busy ? asked : null}
+            runError={fromAsk && (columnError || run.error) ? "The run could not start. See the note above the cards." : null}
             transcript={transcript}
             comparisonHidden={comparisonHidden}
             onComparison={setComparisonHidden}
@@ -428,7 +445,8 @@ function Build({ registry }: { registry: Registry }) {
             onUseCase={(t) => edit(setUseCase(graph, registry, t), ...ids(askNodes(graph).useCase))}
             onAsk={() => {
               setComparisonHidden(null)
-              void start(undefined, false, false).then((id) => setAskRunId(id ?? null))
+              const snap = askSnapshot(graph, registry, pipelineName)
+              void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
             }}
           />
         }

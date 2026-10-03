@@ -13,7 +13,7 @@ describe("buildRunRequest", () => {
     expect(buildRunRequest(g, { target: "parse" })).toEqual({ graph: g, targets: ["parse"], force: false })
   })
 
-  it("Run all sends no targets, and Rerun sends force", () => {
+  it("no target sends the whole graph (Ask), and Rerun sends force", () => {
     const g = initialGraph(R)
     expect(buildRunRequest(g, {})).toEqual({ graph: g, force: false })
     expect(buildRunRequest(g, { target: "chunk", force: true })).toEqual({ graph: g, targets: ["chunk"], force: true })

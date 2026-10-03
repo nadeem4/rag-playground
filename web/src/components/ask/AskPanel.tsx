@@ -220,7 +220,7 @@ export function AskPanel(p: AskPanelProps) {
                   // question would spill over the chip below. The chip grows with its text instead.
                   size={null}
                   // Wraps and shrinks, so a long question never pushes the pane sideways on a phone.
-                  className="min-h-[24px] max-w-full shrink px-2 py-1 text-left text-xs whitespace-normal"
+                  className="chip min-h-[24px] max-w-full shrink px-2 py-1 text-left text-xs whitespace-normal"
                   onClick={() => setText(q.question)}
                 >
                   {q.question}

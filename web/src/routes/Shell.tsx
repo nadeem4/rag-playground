@@ -119,6 +119,8 @@ function Build({ registry }: { registry: Registry }) {
   const [asked, setAsked] = useState<AskSnapshot | null>(null)
   // Whether the last run started was an Ask: its column error or crash is then also said in the panel.
   const [fromAsk, setFromAsk] = useState(false)
+  // The node the last run was started for: Build the index says Building only for its own run.
+  const [runTarget, setRunTarget] = useState<string | undefined>(undefined)
   const { pipelines, currentId } = usePipelines()
   const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
@@ -150,6 +152,7 @@ function Build({ registry }: { registry: Registry }) {
   const explanations = useExplanations(graph.nodes)
 
   const busy = submitting || (runId !== null && !run.closed)
+  const building = busy && !fromAsk && runTarget !== undefined && runTarget === indexNode(graph)?.id
   const order = useMemo(() => columnOrder(graph), [graph])
   // Build the index runs the five index steps only, so only they can block it.
   const blocker = order.filter((n) => INDEX_STAGES.includes(n.stage)).find((n) => blockingNode(graph, registry, explanations, n.id)?.id === n.id)
@@ -207,6 +210,7 @@ function Build({ registry }: { registry: Registry }) {
    */
   async function start(target: string | undefined, force: boolean, select = true, ask = false): Promise<string | undefined> {
     setFromAsk(ask)
+    setRunTarget(target)
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
       setErrors((e) => ({ ...e, [source.id]: { message: "Choose or upload a file first." } }))
@@ -314,11 +318,12 @@ function Build({ registry }: { registry: Registry }) {
             ) : null}
             <Button
               size="sm"
+              busy={building}
               disabled={busy || Boolean(blocker) || firstRun}
               title={blocker ? blockedTitle(blocker) : undefined}
               onClick={() => void start(indexNode(graph)?.id, false, false)}
             >
-              {busy ? "Running" : "Build the index"}
+              {building ? "Building" : "Build the index"}
             </Button>
           </div>
         </div>

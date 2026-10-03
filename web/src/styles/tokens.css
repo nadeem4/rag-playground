@@ -47,20 +47,20 @@
   --surface-raised: #fdfdfc; /* the one selected or open card, with --shadow-raised */
   --surface-hover: #e4e4e7; /* zinc-200 wash for hover */
   --hairline: #e4e4e7; /* zinc-200 */
-  --text-primary: #18181b; /* zinc-900, 16.1:1 on elevated */
-  --text-secondary: #52525b; /* zinc-600, 7.0:1 on elevated */
-  --accent: oklch(0.48 0.095 166); /* the one accent, 5.7:1 on elevated; hue 166 is the gap between chunk-7 and chunk-4 */
-  --accent-fg: #fafaf9; /* 5.4:1 on accent */
-  --accent-wash: oklch(0.93 0.04 166); /* pressed and selected fill */
+  --text-primary: #18181b; /* zinc-900, 16.5:1 on the page, 15.4:1 on the panel */
+  --text-secondary: #52525b; /* zinc-600, 7.2:1 on the page, 6.7:1 on the panel */
+  --accent: oklch(0.48 0.095 166); /* the one accent, 5.8:1 on the page, 5.4:1 on the panel; hue 166 is the gap between chunk-7 and chunk-4 */
+  --accent-fg: #fafaf9; /* 6.0:1 on accent */
+  --accent-wash: oklch(0.93 0.04 166); /* pressed and selected fill; accent text on it 5.1:1 */
   --selection: var(--accent-wash); /* an alias, kept for existing uses */
-  --danger: oklch(0.52 0.17 25); /* error text, always with a label, 5.5:1 */
+  --danger: oklch(0.52 0.17 25); /* error text, always with a label, 5.2:1 on the panel */
   --stale: oklch(0.5 0.12 75); /* settings changed since the run; text on --stale-wash */
   --stale-wash: oklch(0.95 0.05 75);
   --shadow-raised: 0 1px 2px rgb(24 24 27 / 0.06), 0 6px 16px rgb(24 24 27 / 0.06);
 
   /* Rows: sizes, not spacing, so outside the spacing cap. */
-  --row: 36px; /* 2.25rem */
-  --row-compact: 28px;
+  --row: 2.25rem; /* 36px at the default root size; rem, so rows follow the type */
+  --row-compact: 1.75rem; /* 28px at the default root size */
 
   /* Motion: only transform and opacity animate (and grid-template-rows for
      one disclosure). Nothing loops. */
@@ -332,7 +332,7 @@
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
 
-/* Rows: 36px, 28px compact. Sizes, not spacing, so outside the cap. */
+/* Rows: 2.25rem, 1.75rem compact. Sizes, not spacing, so outside the cap. */
 @utility h-row {
   height: var(--row);
 }
@@ -385,5 +385,31 @@
   ::selection {
     background: var(--selection);
     color: var(--text-primary);
+  }
+}
+
+/*
+ * The 44px hit box on a touch screen (pointer: coarse). Unlayered on purpose:
+ * it must win over size utilities such as `min-h-[24px]` or `min-w-0`, which
+ * live in the utilities layer. Buttons and chips grow to 44px; the drawn size
+ * of a small control (the 24px remove button on a stacked card) grows with it.
+ * The rank bands in the document gutter are 4px wide and sit side by side, so
+ * they keep their drawn size and get an invisible overlay 10px past each edge.
+ * hitBox.test.ts compiles this and checks it.
+ */
+@media (pointer: coarse) {
+  button:not(.ri-mark),
+  [role="button"]:not(.ri-mark),
+  .chip {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .ri-row {
+    min-height: 44px;
+  }
+  button.ri-mark::after {
+    content: "";
+    position: absolute;
+    inset: -10px;
   }
 }

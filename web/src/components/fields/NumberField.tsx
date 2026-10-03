@@ -12,7 +12,7 @@ export function NumberField({ f, id, value, disabled, invalid, describedBy, onCh
       id={id}
       type="number"
       inputMode={f.kind === "integer" ? "numeric" : "decimal"}
-      className="tabular-nums"
+      className="font-mono tabular-nums"
       step={step}
       min={s.minimum ?? s.exclusiveMinimum}
       max={s.maximum ?? s.exclusiveMaximum}

@@ -146,6 +146,11 @@ describe("theme blocks", () => {
     expect(light.get("--ease-in")).toBe("cubic-bezier(0.2, 0, 0, 1)")
     expect(light.get("--ease-out")).toBe("cubic-bezier(0.4, 0, 1, 1)")
   })
+
+  it("sets the rows in rem, so they follow the browser size like the type", () => {
+    expect(light.get("--row")).toBe("2.25rem")
+    expect(light.get("--row-compact")).toBe("1.75rem")
+  })
 })
 
 describe("surfaces", () => {

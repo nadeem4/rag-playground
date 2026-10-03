@@ -11,6 +11,7 @@
       try {
         var t = localStorage.getItem("rag-theme");
         if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+        if (localStorage.getItem("rag-contrast") === "more") document.documentElement.dataset.contrast = "more";
       } catch (e) {}
     </script>
   </head>

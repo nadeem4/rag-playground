@@ -108,6 +108,56 @@ describe("AppHeader", () => {
   })
 })
 
+describe("the theme and contrast switches", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.theme
+    delete document.documentElement.dataset.contrast
+  })
+
+  const option = (group: string, name: string) =>
+    within(screen.getByRole("group", { name: group })).getByRole("button", { name }) as HTMLButtonElement
+
+  it("the theme switch is a segmented control with System, Light and Dark", () => {
+    header()
+    expect(option("Theme", "System").getAttribute("aria-pressed")).toBe("true")
+    fireEvent.click(option("Theme", "Dark"))
+    expect(option("Theme", "Dark").getAttribute("aria-pressed")).toBe("true")
+    expect(option("Theme", "Dark").className).toContain("bg-accent-wash")
+    expect(document.documentElement.dataset.theme).toBe("dark")
+  })
+
+  it("More contrast sets data-contrast on the page, and System takes it off", () => {
+    header()
+    expect(option("Contrast", "System").getAttribute("aria-pressed")).toBe("true")
+    expect(option("Contrast", "More").title).toBe("More contrast")
+    fireEvent.click(option("Contrast", "More"))
+    expect(document.documentElement.dataset.contrast).toBe("more")
+    expect(option("Contrast", "More").getAttribute("aria-pressed")).toBe("true")
+    expect(window.localStorage.getItem("rag-contrast")).toBe("more")
+    fireEvent.click(option("Contrast", "System"))
+    expect(document.documentElement.hasAttribute("data-contrast")).toBe(false)
+  })
+
+  it("starts from a stored More", () => {
+    window.localStorage.setItem("rag-contrast", "more")
+    header()
+    expect(option("Contrast", "More").getAttribute("aria-pressed")).toBe("true")
+  })
+})
+
+describe("the main nav on a narrow screen", () => {
+  it("wraps inside its own box and can shrink, so the page never scrolls sideways", () => {
+    header()
+    const nav = screen.getByRole("navigation", { name: "Main" })
+    const c = nav.className.split(/\s+/)
+    expect(c).toContain("flex-wrap")
+    expect(c).toContain("min-w-0")
+    const right = screen.getByRole("group", { name: "Theme" }).parentElement!.className.split(/\s+/)
+    expect(right).toContain("flex-wrap")
+    expect(right).not.toContain("shrink-0")
+  })
+})
+
 describe("AppHeader with the lessons hidden", () => {
   it("shows Build, Compare, Evaluate, Read and GitHub, with no Lessons", () => {
     header("/build", false)

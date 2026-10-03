@@ -96,6 +96,20 @@ describe("supported types", () => {
     expect(last()).toEqual({ name: "bge-small" })
   })
 
+  it("text fields and selects hold words, so they are set in sans", () => {
+    renderForm(
+      obj({
+        name: { type: "string", default: "x", title: "Name" },
+        scope: { enum: ["near", "far"], type: "string", default: "near", title: "Scope" },
+      }),
+    )
+    for (const label of ["Name", "Scope"]) {
+      const c = screen.getByLabelText(label).className.split(/\s+/)
+      expect(c).toContain("font-sans")
+      expect(c).not.toContain("font-mono")
+    }
+  })
+
   it("integer, mono and tabular", () => {
     const { last } = renderForm(obj({ k: { type: "integer", default: 5, title: "Top K" } }))
     const input = screen.getByLabelText("Top K") as HTMLInputElement

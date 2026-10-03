@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
 import { ApiKeyControl } from "./ApiKeyControl"
-import { ThemeToggle } from "./ThemeToggle"
+import { ContrastToggle, ThemeToggle } from "./ThemeToggle"
 
 const PRIMARY = [
   { href: "/", label: "Lessons" },
@@ -102,7 +102,8 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         <a href={lessonsEnabled ? "/" : "/build"} className="text-sm font-semibold whitespace-nowrap text-fg no-underline">
           RAG Playground
         </a>
-        <nav className="flex items-center gap-1" aria-label="Main">
+        {/* Wraps inside its own box at any root font size, so the page never scrolls sideways. */}
+        <nav className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Main">
           {primary.map((l) => (
             <NavLink key={l.href} {...l} path={path} />
           ))}
@@ -112,9 +113,10 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         </nav>
         {demo ? null : <DevMenu path={path} />}
       </div>
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <ApiKeyControl />
         <ThemeToggle />
+        <ContrastToggle />
       </div>
     </header>
   )

@@ -4,8 +4,7 @@ import type { GraphNode, JsonSchema, Registry } from "@/api/types"
 import type { NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { TransformSelect } from "@/components/pipeline/TransformSelect"
 import { SchemaForm } from "@/components/SchemaForm"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl"
 import { askNodes, infoFor, transformsFor, upstreamFor, type PipelineGraph } from "@/state/graph"
 
 /**
@@ -58,36 +57,9 @@ function Block({ title, stage, children }: { title: string; stage: string; child
 
 const GLOSS = "text-xs leading-[1.5] text-fg-muted"
 
-function Segmented<T>({
-  label,
-  choices,
-  value,
-  onChange,
-}: {
-  label: string
-  choices: { value: T; label: string; disabled?: boolean }[]
-  value: T
-  onChange: (value: T) => void
-}) {
-  return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-1">
-      {choices.map((c) => (
-        <Button
-          key={c.label}
-          variant="outline"
-          size="sm"
-          disabled={c.disabled}
-          aria-pressed={c.value === value}
-          // The chosen option takes the primary button's accent, so it reads at a glance.
-          className={cn(c.value === value && "border-primary text-primary")}
-          onClick={() => onChange(c.value)}
-        >
-          {c.label}
-        </Button>
-      ))}
-    </div>
-  )
-}
+/** Why LLM and Chat are off: shown under the group and as the option's title. */
+const LLM_REASON = "Add a key to use the LLM reranker"
+const CHAT_REASON = "Add a key to turn Chat on"
 
 /** The schema with only `keys` among its fields. */
 function pick(schema: JsonSchema, keys: string[]): JsonSchema {
@@ -185,16 +157,16 @@ function Retrieval({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
 }
 
 function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
-  const choices = RERANKERS.filter((r) => r.name === null || p.registry.rerank?.[r.name]).map((r) => ({
-    value: r.name,
-    label: r.label,
-    disabled: r.name === "llm_rerank" && p.hasKey === false,
-  }))
+  // No reranker is the empty value, since the control's values are strings.
+  const choices = RERANKERS.filter((r) => r.name === null || p.registry.rerank?.[r.name]).map((r) => {
+    const disabled = r.name === "llm_rerank" && p.hasKey === false
+    return { value: r.name ?? "", label: r.label, disabled, title: disabled ? LLM_REASON : undefined }
+  })
   const gloss = node ? infoFor(p.registry, node)?.summary : "No reranker. The candidates keep their search order."
   return (
     <Block title="Rerank" stage="rerank">
-      <Segmented label="Reranker" choices={choices} value={node?.transform ?? null} onChange={p.onReranker} />
-      {p.hasKey === false && p.registry.rerank?.llm_rerank ? <p className={GLOSS}>Add a key to use the LLM reranker</p> : null}
+      <SegmentedControl label="Reranker" options={choices} value={node?.transform ?? ""} onChange={(v) => p.onReranker(v || null)} />
+      {p.hasKey === false && p.registry.rerank?.llm_rerank ? <p className={GLOSS}>{LLM_REASON}</p> : null}
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}
       {node ? (
         <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} titles={{ top_k: "Keep, top k" }} primary={RERANK_PRIMARY} />
@@ -204,13 +176,16 @@ function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
 }
 
 function Answer({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
-  const choices: { value: string; label: string; disabled?: boolean }[] = [{ value: "search", label: "Search" }]
-  if (p.registry.use_case?.chat) choices.push({ value: "chat", label: "Chat with a model", disabled: p.hasKey === false })
+  const choices: SegmentedOption[] = [{ value: "search", label: "Search" }]
+  if (p.registry.use_case?.chat) {
+    const disabled = p.hasKey === false
+    choices.push({ value: "chat", label: "Chat with a model", disabled, title: disabled ? CHAT_REASON : undefined })
+  }
   return (
     <Block title="Answer" stage="use_case">
-      <Segmented label="Answer with" choices={choices} value={node.transform} onChange={(v) => p.onUseCase(v as "search" | "chat")} />
+      <SegmentedControl label="Answer with" options={choices} value={node.transform} onChange={(v) => p.onUseCase(v as "search" | "chat")} />
       <p className={GLOSS}>Search shows the kept pieces. Chat writes an answer with citations.</p>
-      {p.hasKey === false && p.registry.use_case?.chat ? <p className={GLOSS}>Add a key to turn Chat on</p> : null}
+      {p.hasKey === false && p.registry.use_case?.chat ? <p className={GLOSS}>{CHAT_REASON}</p> : null}
       <NodeForm
         node={node}
         registry={p.registry}

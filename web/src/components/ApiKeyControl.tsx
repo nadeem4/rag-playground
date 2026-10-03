@@ -48,7 +48,13 @@ export function ApiKeyControl() {
   return (
     <Popover.Root open={panelOpen} onOpenChange={setPanelOpen}>
       <Popover.Trigger asChild>
-        <Button variant="outline" size="sm" data-testid="api-key-button">
+        <Button
+          variant="outline"
+          size="sm"
+          // Wraps rather than pushing the header sideways on a phone with a large root font.
+          className="h-auto min-h-(--row-compact) max-w-full py-1 whitespace-normal"
+          data-testid="api-key-button"
+        >
           {keysSet ? (
             <>
               API key
@@ -140,6 +146,7 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
           spellCheck={false}
           data-1p-ignore=""
           data-lpignore="true"
+          className="font-mono"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />

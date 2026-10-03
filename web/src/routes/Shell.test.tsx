@@ -310,6 +310,25 @@ describe("Build the index", () => {
     expect(screen.getByRole("heading", { name: "Index pipeline" })).toBeTruthy()
     expect(screen.getByText("These five steps build the index. Retrieval, reranking and answering live in the Ask panel.")).toBeTruthy()
   })
+
+  it("says Building, disabled and busy, while its run is in flight", async () => {
+    await ready()
+    const button = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+    fireEvent.click(button)
+    const building = (await screen.findByRole("button", { name: "Building" })) as HTMLButtonElement
+    expect(building.disabled).toBe(true)
+    expect(building.getAttribute("aria-busy")).toBe("true")
+    expect(screen.queryByRole("button", { name: "Running" })).toBeNull()
+  })
+
+  it("does not say Building while a single card runs", async () => {
+    await ready()
+    fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(screen.queryByRole("button", { name: "Building" })).toBeNull()
+    expect((screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement).disabled).toBe(true)
+  })
 })
 
 describe("Build the index is blocked only by its own steps", () => {

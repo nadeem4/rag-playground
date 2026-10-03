@@ -1,49 +1,50 @@
 import { useState } from "react"
-import { Monitor, Moon, Sun } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { SegmentedControl } from "@/components/ui/SegmentedControl"
+import { applyContrast, readContrast, type ContrastChoice } from "@/lib/contrast"
 import { applyTheme, readTheme, type ThemeChoice } from "@/lib/theme"
 
-const OPTIONS: { value: ThemeChoice; label: string; Icon: typeof Sun }[] = [
-  { value: "system", label: "System", Icon: Monitor },
-  { value: "light", label: "Light", Icon: Sun },
-  { value: "dark", label: "Dark", Icon: Moon },
+const THEMES = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
 ]
 
-/** A three-way segmented control. Selection is the one accent use here. */
+const CONTRASTS = [
+  { value: "system", label: "System" },
+  { value: "more", label: "More", title: "More contrast" },
+]
+
+/** System, Light or Dark for the whole page. */
 export function ThemeToggle() {
   const [choice, setChoice] = useState<ThemeChoice>(readTheme)
-
   return (
-    <div
-      role="radiogroup"
-      aria-label="Theme"
-      className="grid grid-cols-3 gap-px overflow-hidden rounded-control border border-hairline bg-hairline"
-    >
-      {OPTIONS.map(({ value, label, Icon }) => {
-        const selected = choice === value
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            title={label}
-            aria-label={label}
-            onClick={() => {
-              setChoice(value)
-              applyTheme(value)
-            }}
-            className={cn(
-              "flex h-row-compact items-center gap-1 px-2 text-xs",
-              selected ? "bg-selection text-fg" : "bg-surface text-fg-muted hover:bg-muted",
-            )}
-          >
-            <Icon aria-hidden className="size-[12px]" strokeWidth={1.75} />
-            <span className="hidden md:inline">{label}</span>
-          </button>
-        )
-      })}
-    </div>
+    <SegmentedControl
+      label="Theme"
+      options={THEMES}
+      value={choice}
+      className="gap-0"
+      onChange={(v) => {
+        setChoice(v as ThemeChoice)
+        applyTheme(v as ThemeChoice)
+      }}
+    />
+  )
+}
+
+/** System follows the OS setting; More pins the more-contrast tokens. */
+export function ContrastToggle() {
+  const [choice, setChoice] = useState<ContrastChoice>(readContrast)
+  return (
+    <SegmentedControl
+      label="Contrast"
+      options={CONTRASTS}
+      value={choice}
+      className="gap-0"
+      onChange={(v) => {
+        setChoice(v as ContrastChoice)
+        applyContrast(v as ContrastChoice)
+      }}
+    />
   )
 }

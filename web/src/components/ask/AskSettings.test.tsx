@@ -203,4 +203,17 @@ describe("the pressed segment", () => {
     expect(segment("Reranker", "MMR").className).not.toContain("border-primary")
     expect(segment("Answer with", "Search").className).toContain("border-primary")
   })
+
+  it("is the shared segmented control: the accent wash fill on the pressed option only", () => {
+    setup()
+    expect(segment("Reranker", "None").className).toContain("bg-accent-wash")
+    expect(segment("Reranker", "MMR").className).not.toContain("bg-accent-wash")
+    expect(segment("Answer with", "Search").className).toContain("bg-accent-wash")
+  })
+
+  it("a disabled LLM or Chat carries its reason as a title", () => {
+    setup({ hasKey: false })
+    expect(segment("Reranker", "LLM").title).toBe("Add a key to use the LLM reranker")
+    expect(segment("Answer with", "Chat with a model").title).toBe("Add a key to turn Chat on")
+  })
 })

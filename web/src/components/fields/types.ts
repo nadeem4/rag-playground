@@ -11,6 +11,10 @@ export interface ControlProps {
   onChange: (value: unknown) => void
 }
 
-/** Shared control chrome: every color is a `--field-*` token via the theme. */
+/**
+ * Shared control chrome: every color is a `--field-*` token via the theme.
+ * Sans, because select option labels are words; mono is for numbers, ids and
+ * code names only.
+ */
 export const CONTROL =
-  "h-control w-full min-w-0 rounded-control border border-field-border bg-field px-2 font-mono text-sm text-fg disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger"
+  "h-control w-full min-w-0 rounded-control border border-field-border bg-field px-2 font-sans text-sm text-fg disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger"

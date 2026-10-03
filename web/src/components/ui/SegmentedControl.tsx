@@ -42,7 +42,7 @@ export function SegmentedControl({ options, value, onChange, label, size = "sm",
       className={cn("flex flex-wrap items-center gap-1", className)}
     >
       {caption ? (
-        <span id={captionId} className={cn("mr-2 text-xs text-fg-muted", caption === "md" && "sr-only md:not-sr-only")}>
+        <span id={captionId} className={cn("mr-2 text-xs text-fg-muted", caption === "md" && "sr-only md:not-sr-only md:mr-2")}>
           {label}
         </span>
       ) : null}

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
 import { resetStagesCache } from "@/api/useExplain"
 import type { ExplainState } from "@/api/useExplain"
-import { initialGraph } from "@/state/graph"
+import { addReranker, initialGraph } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
 import { PipelineColumn, type PipelineColumnProps } from "./PipelineColumn"
@@ -114,6 +114,32 @@ describe("the explanation pop-over", () => {
     await screen.findByRole("dialog", { name: "About the Chunk step" })
     expect(screen.getAllByRole("dialog")).toHaveLength(1)
     expect(info("Parse").getAttribute("aria-expanded")).toBe("false")
+  })
+
+  it("ends with the stage's deep-dive posts as external links, in list order", async () => {
+    setup()
+    fireEvent.click(info("Chunk"))
+    const dialog = await screen.findByRole("dialog", { name: "About the Chunk step" })
+    const section = within(dialog).getByRole("region", { name: "Read the deep dive" })
+    const links = within(section).getAllByRole("link")
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([
+      "https://medium.com/learnwithnk/chunking-fundamentals-what-chunk-size-actually-trades-off-216675ec62be",
+      "https://medium.com/learnwithnk/advanced-chunking-parent-child-contextual-retrieval-late-chunking-and-hierarchical-summaries-e6ea55662d07",
+      "https://medium.com/learnwithnk/metadata-and-enrichment-what-to-store-beside-each-chunk-fa19a3b63304",
+    ])
+    expect(links[0].textContent).toBe("Chunking Fundamentals: What Chunk Size Actually Trades Off")
+    for (const a of links) {
+      expect(a.getAttribute("target")).toBe("_blank")
+      expect(a.getAttribute("rel")).toBe("noreferrer")
+    }
+  })
+
+  it("has no deep-dive section for a stage with no posts", async () => {
+    setup({ graph: addReranker(initialGraph(R), R) })
+    fireEvent.click(info("Rerank"))
+    const dialog = await screen.findByRole("dialog", { name: "About the Rerank step" })
+    expect(within(dialog).queryByText("Read the deep dive")).toBeNull()
+    expect(within(dialog).queryByRole("link")).toBeNull()
   })
 
   it("Escape closes it and returns focus to the info button", async () => {

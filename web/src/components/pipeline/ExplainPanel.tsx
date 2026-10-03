@@ -1,8 +1,10 @@
 import type { ReactNode } from "react"
 import { Popover } from "radix-ui"
 
+import type { Stage } from "@/api/types"
 import type { ExplainState } from "@/api/useExplain"
 import { Button } from "@/components/ui/button"
+import { postsFor } from "@/learn/posts"
 
 /**
  * The pop-over beside a card (option B): what the step is for, how the chosen
@@ -13,6 +15,8 @@ import { Button } from "@/components/ui/button"
 
 export interface ExplainPanelProps {
   title: string
+  /** The card's stage: its deep-dive posts are listed at the bottom. */
+  stage: Stage
   transform: string
   what?: string
   summary?: string
@@ -23,7 +27,7 @@ export interface ExplainPanelProps {
 
 function Part({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-1">
+    <section aria-label={typeof label === "string" ? label : undefined} className="flex flex-col gap-1">
       <h4 className="text-xs font-semibold">{label}</h4>
       {children}
     </section>
@@ -32,8 +36,9 @@ function Part({ label, children }: { label: ReactNode; children: ReactNode }) {
 
 const BODY = "m-0 text-sm leading-[1.55] text-fg-muted"
 
-export function ExplainPanel({ title, transform, what, summary, explain, anchor }: ExplainPanelProps) {
+export function ExplainPanel({ title, stage, transform, what, summary, explain, anchor }: ExplainPanelProps) {
   const data = explain?.data
+  const posts = postsFor(stage)
   const keepOpen = (e: Event) => {
     const card = anchor()
     if (card && e.target instanceof Node && card.contains(e.target)) e.preventDefault()
@@ -95,6 +100,19 @@ export function ExplainPanel({ title, transform, what, summary, explain, anchor 
             )}
           </div>
         </Part>
+        {posts.length ? (
+          <Part label="Read the deep dive">
+            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+              {posts.map((p) => (
+                <li key={p.url}>
+                  <a href={p.url} target="_blank" rel="noreferrer" className="text-sm leading-[1.55] text-fg underline decoration-fg-muted underline-offset-2">
+                    {p.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Part>
+        ) : null}
       </Popover.Content>
     </Popover.Portal>
   )

@@ -338,6 +338,7 @@ export function NodeCard(p: NodeCardProps) {
     </Popover.Anchor>
     <ExplainPanel
       title={p.title}
+      stage={p.node.stage}
       transform={p.node.transform}
       what={p.what}
       summary={info?.summary}

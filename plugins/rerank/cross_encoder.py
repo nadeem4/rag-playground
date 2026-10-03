@@ -112,7 +112,9 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
         )
         tradeoff = (
             "A stronger model ranks more accurately, but it costs seconds per "
-            "question on a CPU, where MiniLM takes well under a second."
+            "question on a CPU, where MiniLM takes well under a second. Scores "
+            "are on the model's own scale and differ between models, so compare "
+            "the order, not the numbers."
         )
         warning, blocking = None, False
         if top < 1:
@@ -161,9 +163,15 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
         set_note(
             ctx,
             f"Scored {len(hits)} candidates with {_SHORT_NAMES[config.model]} in "
-            f"{elapsed:.1f} s. {moved} of the top {kept} changed place.",
+            f"{_seconds(elapsed)}. {moved} of the top {kept} changed place.",
         )
         return result.model_dump(mode="json")
+
+
+def _seconds(elapsed: float) -> str:
+    """One decimal place, except that a warm model's few milliseconds would
+    print as "0.0 s", which reads as if nothing ran."""
+    return "under 0.1 s" if elapsed < 0.05 else f"{elapsed:.1f} s"
 
 
 def _rescored(hit: Hit, score: float, rank: int) -> Hit:

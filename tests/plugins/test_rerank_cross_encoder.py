@@ -360,3 +360,38 @@ def test_note_times_the_scoring_not_the_model_load(tmp_path, monkeypatch):
     run_ctx = ctx(tmp_path)
     rerank(TEXTS, tmp_path, run_ctx=run_ctx)
     assert " in 0.3 s." in run_ctx.extras["meta"]["note"]
+
+
+def test_a_sub_tenth_note_says_under_a_tenth_of_a_second(tmp_path, monkeypatch):
+    model = FakeModel(REVERSED)
+    clock = iter([10.0, 10.01])
+    monkeypatch.setattr(ce, "_load", lambda model_id: model)
+    monkeypatch.setattr(ce.time, "perf_counter", lambda: next(clock))
+    run_ctx = ctx(tmp_path)
+    rerank(TEXTS[:6], tmp_path, run_ctx=run_ctx)
+    assert run_ctx.extras["meta"]["note"].startswith(
+        "Scored 6 candidates with MiniLM in under 0.1 s."
+    )
+
+
+def test_explain_says_scores_differ_between_models():
+    explanation = CrossEncoderRerank().explain(CrossEncoderConfig())
+    assert (
+        "Scores are on the model's own scale and differ between models, so "
+        "compare the order, not the numbers."
+    ) in explanation.settings + " " + explanation.tradeoff
+
+
+def test_the_reranker_warms_even_when_the_index_models_fail(monkeypatch, caplog):
+    import plugins.parse.docling as docling_plugin
+
+    def broken(config):
+        raise RuntimeError("docling broke")
+
+    calls: list[str] = []
+    monkeypatch.setattr(docling_plugin, "_converter", broken)
+    monkeypatch.setattr(warmup, "_warm_reranker", lambda: calls.append("reranker"))
+    with caplog.at_level(logging.ERROR):
+        warmup._warm()
+    assert calls == ["reranker"]
+    assert "docling broke" in caplog.text

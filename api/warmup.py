@@ -23,6 +23,16 @@ _thread: threading.Thread | None = None
 
 
 def _warm() -> None:
+    # Each part fails on its own: a Docling or Qwen3 failure is logged and the
+    # reranker still warms.
+    try:
+        _warm_index_models()
+    except Exception:
+        log.exception("model warm-up failed")
+    _warm_reranker()
+
+
+def _warm_index_models() -> None:
     from docling.datamodel.base_models import InputFormat
 
     from plugins.parse.docling import DoclingConfig, _converter
@@ -31,7 +41,6 @@ def _warm() -> None:
     _converter(DoclingConfig()).initialize_pipeline(InputFormat.PDF)
     qwen = Qwen3Embedding06B
     _load_model(qwen.model_id, qwen.revision, qwen.dtype)
-    _warm_reranker()
 
 
 def _warm_reranker() -> None:

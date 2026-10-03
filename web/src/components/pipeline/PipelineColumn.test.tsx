@@ -73,19 +73,38 @@ describe("PipelineColumn", () => {
     expect(p.onRun).toHaveBeenCalledWith("chunk", true)
   })
 
-  it("encodes computed versus reused as a solid versus dotted left rule", () => {
+  it("shows each card's look by data-look, with no left rule", () => {
     setup({
       results: {
         parse: { id: "parse", status: "cached", artifact_id: "p", cache_hit: true, duration_ms: 1 },
         chunk: { id: "chunk", status: "done", artifact_id: "c", cache_hit: false, duration_ms: 12 },
       },
+      stale: new Set(["chunk"]),
     })
-    expect(card("parse").dataset.rule).toBe("dotted")
-    expect(card("parse").style.borderLeft).toContain("dotted")
-    expect(card("chunk").dataset.rule).toBe("solid")
-    expect(card("source").dataset.rule).toBe("none")
-    // In normal case, not the all-caps meta style.
+    expect(card("parse").dataset.look).toBe("done")
+    expect(card("chunk").dataset.look).toBe("stale")
+    expect(card("index").dataset.look).toBe("idle")
+    expect(document.querySelector("[data-rule]")).toBeNull()
+    expect(card("parse").style.borderLeft).toBe("")
+    // In normal case, not the meta style.
     expect(within(card("parse")).getByText("reused from an earlier run").className.split(/\s+/)).not.toContain("meta")
+    expect(within(card("chunk")).getByText("changed, run again")).toBeTruthy()
+  })
+
+  it("names the four looks in words in a one-line legend", () => {
+    setup()
+    expect(screen.getByTestId("step-legend").textContent).toBe(
+      "Grey ring: not run. Bar: running. Filled ring: done, with its result. Amber ring: changed, run again.",
+    )
+  })
+
+  it("raises only the selected card", () => {
+    setup({ selected: "chunk" })
+    const raised = document.querySelectorAll("article.shadow-raised")
+    expect(raised).toHaveLength(1)
+    expect(raised[0].getAttribute("data-node-id")).toBe("chunk")
+    expect(card("parse").className).toContain("bg-surface-elevated")
+    expect(card("parse").className).not.toContain("shadow-raised")
   })
 
   it("Sweep is offered on index steps only: retrieve lives in the Ask panel", () => {
@@ -141,7 +160,7 @@ describe("PipelineColumn", () => {
     setup()
     // Parse has only `pdfium` in the test registry. The Upload card shows no
     // Transform at all (it is plain: pick or upload a file, nothing else).
-    for (const [id, name] of [["parse", "pdfium"]]) {
+    for (const [id, name] of [["parse", "Fast text, pdfium"]]) {
       const shown = within(card(id)).getByLabelText("Transform")
       expect(shown.tagName).toBe("OUTPUT")
       expect(shown.textContent).toBe(name)
@@ -221,7 +240,7 @@ describe("locked transforms", () => {
   it("shows nothing extra on a transform that asks nothing of its upstream", () => {
     setup()
     const chunk = within(card("chunk"))
-    expect(chunk.getByRole("option", { name: "recursive_character" })).toBeTruthy()
+    expect(chunk.getByRole("option", { name: "Recursive (natural breaks), recursive_character" })).toBeTruthy()
     expect(chunk.queryByRole("status")).toBeNull()
     expect(chunk.queryByRole("alert")).toBeNull()
   })
@@ -229,7 +248,7 @@ describe("locked transforms", () => {
   it("tags a soft lock in the dropdown and says why, but keeps it selectable and runnable", () => {
     setup({ graph: setTransform(initialGraph(R), "chunk", "markdown_header", R) })
     const chunk = within(card("chunk"))
-    const option = chunk.getByRole("option", { name: "markdown_header · falls back" }) as HTMLOptionElement
+    const option = chunk.getByRole("option", { name: "By heading, markdown_header · falls back" }) as HTMLOptionElement
     expect(option.disabled).toBe(false)
     expect(chunk.getByRole("status").textContent).toBe(
       "Needs headings from the parse step. pdfium does not find any, so the whole document is treated as one section and cut by size.",

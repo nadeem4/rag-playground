@@ -917,7 +917,7 @@ describe("lock states behind a Clean step", () => {
     render(<Shell />)
     await waitFor(() => expect(card("chunk")).toBeTruthy())
     const chunk = within(card("chunk"))
-    expect(chunk.getByRole("option", { name: "markdown_header" })).toBeTruthy()
+    expect(chunk.getByRole("option", { name: "By heading, markdown_header" })).toBeTruthy()
     expect(chunk.queryByRole("option", { name: /markdown_header · falls back/ })).toBeNull()
   })
 
@@ -960,8 +960,8 @@ describe("lock states behind a Clean step", () => {
     render(<Shell />)
     await waitFor(() => expect(card("chunk")).toBeTruthy())
     const chunk = within(card("chunk"))
-    expect(chunk.getByRole("option", { name: fallsBack ? "layout_blocks · falls back" : "layout_blocks" })).toBeTruthy()
-    expect(chunk.getByRole("option", { name: "sentence_window" })).toBeTruthy()
+    expect(chunk.getByRole("option", { name: fallsBack ? "By layout block, layout_blocks · falls back" : "By layout block, layout_blocks" })).toBeTruthy()
+    expect(chunk.getByRole("option", { name: "By sentence, sentence_window" })).toBeTruthy()
   })
 })
 
@@ -1121,7 +1121,7 @@ describe("the Ask panel results on Build", () => {
     expect(screen.getByText("The pipeline cannot run")).toBeTruthy()
   })
 
-  it("says reused from an earlier run, never cached, in the legend and the card's header", async () => {
+  it("says reused from an earlier run, never cached, on the card and in the inspector header", async () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
     render(<Shell />)
     const build = await screen.findByRole("button", { name: "Build the index" })
@@ -1131,9 +1131,9 @@ describe("the Ask panel results on Build", () => {
     await waitFor(() => expect(streams).toHaveLength(1))
     emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: true, duration_ms: 4 }, "1")
     emit({ event: "stream_end", status: "finished", ok: true }, "2")
-    const legend = screen.getByTestId("rule-legend")
-    expect(legend.textContent).toContain("reused from an earlier run")
-    expect(legend.textContent).not.toContain("from cache")
+    const summary = within(card("index")).getByTestId("step-summary")
+    expect(summary.textContent).toBe("reused from an earlier run")
+    expect(card("index").textContent).not.toContain("from cache")
     fireEvent.click(card("index"))
     const header = await waitFor(() => screen.getByTestId("inspector-timing"))
     expect(header.textContent).toBe("reused from an earlier run 4.0 ms")

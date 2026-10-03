@@ -39,7 +39,7 @@ export function TransformSelect({ id, label, transforms, value, upstream, labelF
       {transforms.length === 1 ? (
         // One registered transform: nothing to choose, so no picker.
         <output id={id} className={CONST_TEXT}>
-          {value}
+          {labelFor(value)}
         </output>
       ) : (
         <select id={id} className={CONTROL} value={value} onChange={(e) => onChange(e.target.value)}>

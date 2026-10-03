@@ -222,6 +222,21 @@ describe("what it did", () => {
     await waitFor(() => expect(within(card("chunk")).getByTestId("what-it-did").textContent).toContain("Made 6 chunks (was 4)."))
   })
 
+  it("sets the sentence in the reading face, with only its numbers in mono", async () => {
+    payloads = { f1: chunkRecursive }
+    setup({ results: done("f1") })
+    const block = await within(card("chunk")).findByTestId("what-it-did")
+    const sentence = await waitFor(() => {
+      const p = block.querySelector("p")
+      if (!p) throw new Error("no sentence yet")
+      return p
+    })
+    expect(sentence.className).not.toContain("font-mono")
+    expect(sentence.className).toContain("text-base")
+    expect(within(sentence).getByText("6").className).toContain("font-mono")
+    expect(within(sentence).getByText("67").className).toContain("font-mono")
+  })
+
   it("shows the plugin's note", async () => {
     // Artifact ids are unique per test: payloads and meta are cached for the session.
     payloads = { n1: chunkRecursive }
@@ -236,7 +251,9 @@ describe("what it did", () => {
     setup({ results: done("s1"), stale: new Set(["chunk"]) })
     const block = await within(card("chunk")).findByTestId("what-it-did")
     expect(block.hasAttribute("data-stale")).toBe(true)
-    expect(within(block).getByText(/^Made 6 chunks/).className).toContain("text-fg-muted")
+    const sentence = block.querySelector("p")!
+    expect(sentence.textContent).toMatch(/^Made 6 chunks/)
+    expect(sentence.className).toContain("text-fg-muted")
     expect(within(card("chunk")).getByTestId("run-note").textContent).toBe("Settings changed since the last run.")
     expect(within(card("chunk")).queryByText("A note about the old run.")).toBeNull()
   })

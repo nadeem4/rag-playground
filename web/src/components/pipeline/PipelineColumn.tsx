@@ -92,6 +92,10 @@ export function PipelineColumn(p: PipelineColumnProps) {
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-px bg-hairline">
+      {/* The four looks of a step card, in words. */}
+      <p data-testid="step-legend" className="m-0 bg-surface px-3 py-2 text-xs text-fg-muted">
+        Grey ring: not run. Bar: running. Filled ring: done, with its result. Amber ring: changed, run again.
+      </p>
       {order.map((node) => {
         const errs = p.errors[node.id]
         const title = titleFor(node)
@@ -169,7 +173,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
             {adds
               .filter((a) => a.anchor?.id === node.id && a.onAdd)
               .map((a) => (
-                <div key={a.label} className="bg-surface px-3 py-2">
+                <div key={a.label} className="bg-surface-elevated px-3 py-2">
                   <Button variant="ghost" size="sm" onClick={a.onAdd}>
                     <Plus aria-hidden strokeWidth={1.75} />
                     {a.label}

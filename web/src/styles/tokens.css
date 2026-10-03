@@ -429,3 +429,26 @@
     inset: -10px;
   }
 }
+
+/*
+ * Motion 5: the running step card's top edge. The one repeating signal: the
+ * accent edge pulses between half and full opacity over --dur-slow while the
+ * step runs, and stops when it finishes. Under reduced motion it is a still
+ * edge.
+ */
+@keyframes step-running {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.step-running-edge {
+  animation: step-running var(--dur-slow) var(--ease-in) infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-running-edge {
+    animation: none;
+  }
+}

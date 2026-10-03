@@ -403,16 +403,6 @@ function Build({ registry }: { registry: Registry }) {
                 explanations={explanations}
                 history={tracked.history}
               />
-              <p data-testid="rule-legend" className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
-                <span className="flex items-center gap-2">
-                  <span aria-hidden className="h-[12px] border-l-3 border-solid border-fg-muted" />
-                  computed this run
-                </span>
-                <span className="flex items-center gap-2">
-                  <span aria-hidden className="h-[12px] border-l-3 border-dotted border-fg-muted" />
-                  reused from an earlier run
-                </span>
-              </p>
             </>
           )}
         </div>

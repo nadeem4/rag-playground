@@ -4,7 +4,8 @@ import type { ArtifactType, Stage } from "@/api/types"
 import { loadMeta, loadPayload } from "@/api/useArtifact"
 import { cn } from "@/lib/utils"
 
-import { outcomeFor, outcomeText } from "./outcome"
+import { outcomeFor, outcomeText, type Outcome } from "./outcome"
+import { useOutcome } from "./useOutcome"
 
 /**
  * The card's "What it did" block (option B): the outcome in one sentence,
@@ -24,11 +25,31 @@ export interface WhatItDidProps {
   preferNote?: boolean
 }
 
-type Shown = { id: string; text: string | null; note: string | null } | { id: string; error: true }
+/** A sentence in the reading face, with each number in it set in mono. */
+export function MonoNumbers({ text }: { text: string }) {
+  const parts = text.split(/(\d(?:[\d,.]*\d)?)/)
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <span key={i} className="font-mono">
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  )
+}
+
+type Extra = { id: string; before: Outcome | null; note: string | null }
 
 export function WhatItDid({ stage, type, artifactId, previousId, stale, preferNote = false }: WhatItDidProps) {
-  const [shown, setShown] = useState<Shown | null>(null)
+  const current = useOutcome(stage, type, artifactId)
+  const [extra, setExtra] = useState<Extra | null>(null)
 
+  // The previous run's headline, for "(was N)", and the plugin's note.
   useEffect(() => {
     let live = true
     const previous = previousId && previousId !== artifactId ? loadPayload(previousId).catch(() => null) : Promise.resolve(null)
@@ -36,22 +57,16 @@ export function WhatItDid({ stage, type, artifactId, previousId, stale, preferNo
       (m) => (typeof m?.meta?.note === "string" && m.meta.note.trim() ? m.meta.note.trim() : null),
       () => null,
     )
-    Promise.all([loadPayload(artifactId), previous, note]).then(
-      ([data, before, n]) => {
-        if (!live) return
-        const now = outcomeFor(stage, type, data)
-        const then = before === null ? null : outcomeFor(stage, type, before)
-        setShown({ id: artifactId, text: now ? outcomeText(now, then?.headline) : null, note: n })
-      },
-      () => live && setShown({ id: artifactId, error: true }),
-    )
+    Promise.all([previous, note]).then(([before, n]) => {
+      if (live) setExtra({ id: artifactId, before: before === null ? null : outcomeFor(stage, type, before), note: n })
+    })
     return () => {
       live = false
     }
   }, [stage, type, artifactId, previousId])
 
-  if (!shown || shown.id !== artifactId) return null
-  if ("error" in shown) {
+  if (!current || current.kind === "loading" || extra?.id !== artifactId) return null
+  if (current.kind === "error") {
     return (
       <div className="flex flex-col gap-1">
         <span className="text-xs font-semibold">What it did</span>
@@ -59,13 +74,18 @@ export function WhatItDid({ stage, type, artifactId, previousId, stale, preferNo
       </div>
     )
   }
-  if (!shown.text && !shown.note) return null
-  const text = preferNote && shown.note && !stale ? null : shown.text
+  const sentence = current.outcome ? outcomeText(current.outcome, extra.before?.headline) : null
+  if (!sentence && !extra.note) return null
+  const text = preferNote && extra.note && !stale ? null : sentence
   return (
     <div className="flex flex-col gap-1" data-testid="what-it-did" data-stale={stale ? "" : undefined}>
       <span className="text-xs font-semibold">What it did</span>
-      {text ? <p className={cn("m-0 font-mono text-sm leading-[1.5] break-words", stale ? "text-fg-muted" : "text-fg")}>{text}</p> : null}
-      {shown.note && !stale ? <p className="m-0 text-sm leading-[1.5] text-fg">{shown.note}</p> : null}
+      {text ? (
+        <p className={cn("m-0 text-base break-words", stale ? "text-fg-muted" : "text-fg")}>
+          <MonoNumbers text={text} />
+        </p>
+      ) : null}
+      {extra.note && !stale ? <p className="m-0 text-base text-fg">{extra.note}</p> : null}
     </div>
   )
 }

@@ -917,3 +917,12 @@ def test_a_long_page_list_is_summarised_as_a_count(tmp_path):
     assert note_of(DropMatching, parsed, tmp_path, pattern="draft") == (
         "Removed 7 blocks: 7 paragraphs across 7 pages that matched the pattern."
     )
+
+
+def test_strip_note_says_was_for_a_single_relabelled_block():
+    # Detection always finds at least two blocks, so the note is built directly.
+    rows = [(el("h1", "ACME", 0, page=1), "header", "repeated")]
+    assert HeaderFooterStrip._note(rows, False, 5) == (
+        "Removed 0 blocks. Removal is off, so 1 block was relabelled instead: "
+        "1 running header."
+    )

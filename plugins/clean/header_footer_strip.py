@@ -213,7 +213,8 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
         else:
             note = (
                 f"{NOTHING_REMOVED}Removal is off, so {plural(len(rows), 'block')} "
-                f"were relabelled instead: {count_by_kind(kinds, KIND_NAMES)}."
+                f"{'was' if len(rows) == 1 else 'were'} relabelled instead: "
+                f"{count_by_kind(kinds, KIND_NAMES)}."
             )
         if len(rows) == total:
             note += (

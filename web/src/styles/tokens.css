@@ -47,7 +47,7 @@
   --surface-elevated: #eaece8; /* panel and tint: a background step, no border against the page */
   --surface-raised: #fdfdfc; /* the sheet, and the one selected card with --shadow-raised */
   --surface-hover: #e4e4e7; /* zinc-200 wash for hover */
-  --hairline: #d6d9d3;
+  --hairline: #d6d9d3; /* a line, not text: 1.3:1 on the page, 1.2:1 on the panel, 1.4:1 on the sheet */
   --text-primary: #161917; /* ink, 16.3:1 on the page, 14.9:1 on the panel */
   --text-secondary: #545a55; /* 6.5:1 on the page, 6.0:1 on the panel */
   --flat: #a7aca6; /* a line, not text: an unchanged slope and a Not kept swatch outline, 2.1:1 on the page */
@@ -444,9 +444,6 @@
   }
   label:has(> input[type="checkbox"]),
   label:has(> input[type="radio"]) {
-    min-height: 44px;
-  }
-  .ri-row {
     min-height: 44px;
   }
   button.ri-mark::after {

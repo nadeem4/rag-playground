@@ -1030,7 +1030,7 @@ describe("the Ask panel results on Build", () => {
     emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
     emit({ event: "node_finished", node_id: "use_case", artifact_id: "out1", cache_hit: false, duration_ms: 1 }, "2")
     emit({ event: "stream_end", status: "finished", ok: true }, "3")
-    await waitFor(() => expect(panel().getByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy())
+    await waitFor(() => expect(panel().getByText("Hybrid search returned 6 candidates. These are the top 5, in search order.")).toBeTruthy())
   }
 
   it("Back to Ask returns from a card to the panel with the question and the results intact (Review Focus 4)", async () => {
@@ -1041,7 +1041,7 @@ describe("the Ask panel results on Build", () => {
     expect(screen.queryByRole("region", { name: "Ask panel" })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Back to Ask" }))
     expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("What does overlap cost?")
-    expect(await waitFor(() => panel().getByRole("heading", { name: "Top 5 of 6 candidates, in search order" }))).toBeTruthy()
+    expect(await waitFor(() => panel().getByText("Hybrid search returned 6 candidates. These are the top 5, in search order."))).toBeTruthy()
     expect(panel().getByText("Earlier questions in this tab (1)")).toBeTruthy()
     expect(panel().getByText("Working copy, no rerank: 5 pieces")).toBeTruthy()
   })

@@ -363,9 +363,11 @@ describe("the upload report", () => {
     expect(slip).toBeTruthy()
     expect(within(slip).getByTestId("passage").textContent).toBe("The duty manager signs it off.")
     expect(within(slip).getByTestId("passage").className).toContain("font-serif")
-    // No rank, score or page is known, so the finding and meta lines are hidden, not invented.
-    expect(slip.className).toContain("[&_[data-testid=finding]]:hidden")
-    expect(slip.className).toContain("[&_[data-testid=meta]]:hidden")
+    // No rank, score or page is known, so the slip is bare: no finding line and no meta line, nothing invented.
+    expect(within(slip).queryByTestId("finding")).toBeNull()
+    expect(within(slip).queryByTestId("meta")).toBeNull()
+    expect(slip.className).not.toContain(":hidden")
+    expect(slip.textContent).toBe("The duty manager signs it off.")
     expect(within(report).getByText("The duty manager approves it.").className).toContain("font-serif")
   })
 

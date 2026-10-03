@@ -13,6 +13,7 @@ import searchJson from "@/api/fixtures/output.search.json"
 import type { Chunk, ChunkSet, CleanReportEntry, ParsedDoc, RetrievalResult } from "@/api/types"
 
 import css from "./inspectors.css?raw"
+import tokensCss from "@/styles/tokens.css?raw"
 import { IndexInspector } from "./IndexInspector"
 import { rowsFromResult } from "./hits"
 import { RetrievalResultInspector, RetrievalView } from "./RetrievalResultInspector"
@@ -394,7 +395,7 @@ describe("RetrievalResultInspector", () => {
   it("the search side of a comparison says each place in search, and never Not kept", () => {
     const rows = rowsFromResult(hybrid)
     const kept = new Set(rows.slice(0, 4).map((r) => r.chunk_id))
-    const { container } = render(<RetrievalView rows={rows} kept={kept} facts={null} showDetail={false} />)
+    const { container } = render(<RetrievalView rows={rows} side="search" kept={kept} facts={null} showDetail={false} />)
     const finding = (rank: number) => container.querySelector<HTMLElement>(`[data-hit-row="${rank}"] [data-testid=finding]`)!.textContent
     expect(finding(1)).toBe("1st in search, RRF 0.03279")
     expect(finding(6)).toMatch(/^6th in search, RRF /)
@@ -411,7 +412,7 @@ describe("RetrievalResultInspector", () => {
     const rows = order.map((i, k) => ({ ...rowsFromResult(hybrid)[i], rank: k + 1, prior_rank: i + 1 }))
     // Hand them over out of order: a dropped piece first.
     const given = [rows[4], rows[0], rows[1], rows[5], rows[2], rows[3]]
-    const { container } = render(<RetrievalView rows={given} badges keepLimit={4} facts={null} showDetail={false} enter />)
+    const { container } = render(<RetrievalView rows={given} side="reranked" keepLimit={4} facts={null} showDetail={false} enter />)
     const slips = [...container.querySelectorAll<HTMLElement>("[data-hit-row]")]
     expect(slips.map((s) => s.dataset.hitRow)).toEqual(["1", "2", "3", "4", "5", "6"])
     const out = slips.slice(4)
@@ -429,13 +430,33 @@ describe("RetrievalResultInspector", () => {
     cleanup()
     // A kept set on the reranked side marks the rows outside it the same way.
     const kept = new Set(rows.slice(0, 5).map((r) => r.chunk_id))
-    const { container: c2 } = render(<RetrievalView rows={rows} badges kept={kept} facts={null} showDetail={false} />)
+    const { container: c2 } = render(<RetrievalView rows={rows} side="reranked" kept={kept} facts={null} showDetail={false} />)
     const last = [...c2.querySelectorAll<HTMLElement>("[data-hit-row]")].at(-1)!
     expect(last.querySelector("[data-testid=finding]")!.textContent).toBe("Not kept. It was 5th in search and the keep limit is 5.")
     cleanup()
     // Without a keep list nothing is marked.
-    const { container: c3 } = render(<RetrievalView rows={rows} badges facts={null} showDetail={false} />)
+    const { container: c3 } = render(<RetrievalView rows={rows} side="reranked" facts={null} showDetail={false} />)
     expect(c3.textContent).not.toContain("Not kept")
+  })
+
+  it("a slip is a tab stop, and Enter or Space selects it", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const second = container.querySelector<HTMLElement>('[data-hit-row="2"]')!
+    expect(second.tabIndex).toBe(0)
+    fireEvent.keyDown(second, { key: "Enter" })
+    expect(second.className).toContain("bg-selection")
+    const third = container.querySelector<HTMLElement>('[data-hit-row="3"]')!
+    fireEvent.keyDown(third, { key: " " })
+    expect(third.className).toContain("bg-selection")
+    expect(second.className).not.toContain("bg-selection")
+  })
+
+  it("draws no summary strip when there are no facts", () => {
+    const { container } = render(<RetrievalView rows={rowsFromResult(hybrid)} facts={null} showDetail={false} />)
+    expect(container.querySelector("[data-summary]")).toBeNull()
+    cleanup()
+    const { container: c2 } = render(<RetrievalResultInspector result={hybrid} />)
+    expect(c2.querySelector("[data-summary]")!.textContent).toContain("hits")
   })
 
   it("new rows fade in and rise, staggered over the first five, and only when asked", () => {
@@ -465,6 +486,15 @@ describe("RetrievalResultInspector", () => {
     const compiled = (await compile(css)).build([])
     expect(compiled).toMatch(/\.ev-slip\[data-enter\] \{\s*animation: ri-enter var\(--dur-mid\) var\(--ease-in\) backwards;/)
     expect(compiled).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.ev-slip\[data-enter\] \{\s*animation: ri-fade var\(--dur-fast\) linear backwards;/)
+  })
+
+  it("a marked slip still fades its hover background: the mark's transition lists both properties", () => {
+    const rule = /\.ri-mark \{([^}]*)\}/.exec(css)![1]
+    expect(rule).toMatch(/transition-property:\s*opacity, background-color, box-shadow;/)
+  })
+
+  it("no stylesheet keeps a rule for the old hit row", () => {
+    expect(tokensCss).not.toContain(".ri-row")
   })
 
   it("the rank bands sit a full hit box apart on a touch screen", () => {

@@ -41,6 +41,9 @@ import { RegistryScreen } from "./Shell"
  * the output of the node the sweep runs through, so a config and what it
  * produced read together.
  */
+/** A column's minimum width in px: room for a slip, so a passage keeps about 40 characters a line at 1440 with three columns. */
+export const COLUMN_MIN = 420
+
 export function Compare() {
   const reg = useRegistry()
   // The node under comparison: from the URL on arrival, then from the picker.
@@ -187,7 +190,7 @@ function Sweep({
   }
 
   const cols = Math.max(variants.length, 1)
-  const grid: CSSProperties = { gridTemplateColumns: `repeat(${cols}, minmax(420px, 1fr))` }
+  const grid: CSSProperties = { gridTemplateColumns: `repeat(${cols}, minmax(${COLUMN_MIN}px, 1fr))` }
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
 
@@ -324,7 +327,7 @@ function Sweep({
   )
 }
 
-function VariantResult({
+export function VariantResult({
   state,
   pending,
   label,

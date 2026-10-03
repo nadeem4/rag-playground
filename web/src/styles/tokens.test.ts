@@ -206,12 +206,10 @@ describe("surfaces", () => {
 describe("ink and lines", () => {
   it.each([
     ["light", light, ["#d6d9d3", "#838882", "#161917", "#545a55"]],
-    ["dark", darkToggle, ["#2c2d31", null, "#f4f4f2", "#a8a8ae"]],
+    ["dark", darkToggle, ["#2c2d31", "#71717a", "#f4f4f2", "#a8a8ae"]],
   ])("%s: hairline, field border, primary and secondary ink", (_, tokens, values) => {
     const names = ["--hairline", "--field-border", "--text-primary", "--text-secondary"]
-    names.forEach((k, i) => {
-      if (values[i] !== null) expect(tokens.get(k), k).toBe(values[i])
-    })
+    names.forEach((k, i) => expect(tokens.get(k), k).toBe(values[i]))
   })
 
   it.each([

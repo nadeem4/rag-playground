@@ -5,7 +5,7 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { sampleGraph, storeGraph } from "@/state/graph"
 
-import { Compare } from "./Compare"
+import { COLUMN_MIN, Compare, VariantResult } from "./Compare"
 
 const registry = liveRegistry as unknown as Registry
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
@@ -113,19 +113,33 @@ describe("the Compare stage picker", () => {
   })
 
   it("gives each column room for a slip: 420 px minimum so a passage keeps 40 characters a line at 1440", async () => {
-    const { readFileSync } = await import("node:fs")
-    const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")
-    expect(src).toContain("minmax(420px, 1fr)")
-    // Three columns of 420 px plus the hairlines fit a 1440 px window.
-    expect(3 * 420 + 2).toBeLessThanOrEqual(1440)
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    const grid = [...document.querySelectorAll<HTMLElement>("div")].find((d) => d.style.gridTemplateColumns)!
+    expect(grid.style.gridTemplateColumns).toBe(`repeat(3, minmax(${COLUMN_MIN}px, 1fr))`)
+    expect(COLUMN_MIN).toBe(420)
+    // Three such columns plus the hairlines fit a 1440 px window.
+    expect(3 * COLUMN_MIN + 2).toBeLessThanOrEqual(1440)
   })
 
   it("sets the agreement line in sans with only its numbers in mono", async () => {
-    const { readFileSync } = await import("node:fs")
-    const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")
-    const tag = src.match(/<span data-testid="agreement"[^>]*>/)?.[0] ?? ""
-    expect(tag).not.toContain("font-mono")
-    expect(src).toMatch(/data-testid="agreement"[^>]*>\s*<MonoNumbers text=\{agreement\}/)
+    const node = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "retrieve")!
+    render(
+      <VariantResult
+        pending={false}
+        label={{ transform: "bm25", fields: [] }}
+        node={node}
+        type="retrieval_result"
+        status={{ kind: "ready" }}
+        agreement="3 of 5 match hybrid_rrf"
+        embeddings={null}
+      />,
+    )
+    const line = screen.getByTestId("agreement")
+    expect(line.textContent).toBe("3 of 5 match hybrid_rrf")
+    expect(line.className).not.toContain("font-mono")
+    const mono = [...line.querySelectorAll(".font-mono")].map((m) => m.textContent)
+    expect(mono).toEqual(["3", "5"])
   })
 
   it("has no em-dashes or en-dashes", async () => {

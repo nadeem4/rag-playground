@@ -183,13 +183,9 @@ export function QuestionSetPanel({
 }
 
 /**
- * The closest text has no rank, no score and no page, so the slip's finding and
- * meta lines would only say invented things ("1st", "score 0.000"). EvidenceSlip
- * has no prop to leave them out yet, so they are hidden here.
+ * The upload check gives only the text, so the slip's row is the text and nothing else. The slip is bare: the
+ * rank and score fields are never shown, so nothing is invented.
  */
-const BARE = "[&_[data-testid=finding]]:hidden [&_[data-testid=meta]]:hidden"
-
-/** The upload check gives only the text, so the slip's row is the text and nothing else: no scores, no page. */
 function closestRow(text: string): HitRowData {
   return {
     rank: 1,
@@ -233,7 +229,7 @@ function UploadReport({ report }: { report: Report }) {
                 <p className="font-serif text-base break-words text-fg">{p.gold_answer}</p>
                 <p className="meta">closest text in the document</p>
                 {p.closest ? (
-                  <EvidenceSlip row={closestRow(p.closest)} side="single" piece={null} scaleKey="score" className={BARE} />
+                  <EvidenceSlip row={closestRow(p.closest)} side="single" piece={null} scaleKey="score" bare />
                 ) : (
                   <p className="text-sm break-words text-fg-muted">Nothing close enough to show.</p>
                 )}

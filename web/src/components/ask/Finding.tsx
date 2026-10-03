@@ -12,12 +12,19 @@ import { goldRank } from "./Transcript"
 
 const MAX = 200
 
-/** The text up to the first `.`, `?` or `!` followed by a space or the end, at most 200 characters. */
+/** Markdown line markers: headings, quotes, list bullets and numbers. */
+const MARKER = /^[ \t]*(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+|\d+[.)][ \t]+)/gm
+
+/**
+ * The text up to the first `.`, `?` or `!` followed by a space or the end, or
+ * up to the first line break, with markdown line markers dropped first. At
+ * most 200 characters, the ellipsis included.
+ */
 export function firstSentence(text: string): string {
-  const t = text.trim()
-  const end = /[.?!](?=\s|$)/.exec(t)
-  const s = end ? t.slice(0, end.index + 1) : t
-  return s.length <= MAX ? s : `${s.slice(0, MAX).trimEnd()}…`
+  const t = text.replace(MARKER, "").trim()
+  const end = /[.?!](?=\s|$)|\n/.exec(t)
+  const s = end ? t.slice(0, end[0] === "\n" ? end.index : end.index + 1).trimEnd() : t
+  return s.length <= MAX ? s : `${s.slice(0, MAX - 1).trimEnd()}…`
 }
 
 /** Where a sample question's gold answer was found: the piece's rank and the answer it holds. */

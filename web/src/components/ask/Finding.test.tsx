@@ -46,11 +46,21 @@ describe("firstSentence", () => {
     expect(firstSentence("  Trimmed.  ")).toBe("Trimmed.")
   })
 
+  it("drops markdown line markers and ends at a newline", () => {
+    expect(firstSentence("## Heading\nSentence.")).toBe("Heading")
+    expect(firstSentence("## Reading order in two-column reports\n\nThe survey ran for six weeks.")).toBe("Reading order in two-column reports")
+    expect(firstSentence("> Quoted line. More.")).toBe("Quoted line.")
+    expect(firstSentence("- A list item\n- Another")).toBe("A list item")
+    expect(firstSentence("1. First step. Then more.")).toBe("First step.")
+    expect(firstSentence("\n\n### Deep\nBody.")).toBe("Deep")
+  })
+
   it("cuts a long sentence at 200 characters with an ellipsis", () => {
     const long = "word ".repeat(60).trim() + "."
     const out = firstSentence(long)
     expect(out.endsWith("…")).toBe(true)
-    expect(out.length).toBeLessThanOrEqual(201)
+    expect(out.length).toBeLessThanOrEqual(200)
+    expect(out.endsWith("\u2026")).toBe(true)
     expect(long.startsWith(out.slice(0, -1))).toBe(true)
   })
 })

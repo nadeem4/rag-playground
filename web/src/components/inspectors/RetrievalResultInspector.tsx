@@ -49,15 +49,16 @@ export interface RetrievalViewProps {
   /** The parsed document the chunks were cut from: enables "Show in PDF". */
   doc?: ParsedDoc
   /**
-   * Chunk ids a reranker kept. Without `badges` this is the search side of the
-   * comparison: each slip says its place in search. With `badges`, a row
-   * outside it is a Not kept slip.
+   * Which list this is: one list (the default), or the search or reranked side
+   * of the comparison. The search side says each piece's place in search; the
+   * reranked side says where each moved from, and puts the pieces it did not
+   * keep after the kept ones.
    */
+  side?: ListSide
+  /** On the reranked side: the chunk ids the reranker kept. A row outside it is a Not kept slip. */
   kept?: ReadonlySet<string>
-  /** The reranker's keep limit: on the reranked side a row ranked past it is a Not kept slip, after the kept ones. */
+  /** On the reranked side: the keep limit. A row ranked past it is a Not kept slip. */
   keepLimit?: number
-  /** True is the reranked side of the comparison: each slip says where it moved from. */
-  badges?: boolean
   /**
    * True when this list is new: its rows fade in and rise (motion 3). Read once,
    * when the list mounts, so a rerender never cuts the motion short; a caller
@@ -161,7 +162,9 @@ function Fact({ value, label, id }: { value: ReactNode; label: string; id: strin
 // or a whole 24px hit box on a touch screen.
 const LABEL = 20 // px for the rank numbers on the spine
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, kept, keepLimit, badges = false, enter = false }: RetrievalViewProps) {
+export type ListSide = "single" | "search" | "reranked"
+
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, enter = false }: RetrievalViewProps) {
   const [entering] = useState(enter)
   const rootRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLDivElement>(null)
@@ -244,7 +247,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, k
             showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
             kept={kept}
             keepLimit={keepLimit}
-            badges={badges}
+            side={side}
             enter={entering}
             pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? null) : r.ordinal)}
             sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
@@ -270,19 +273,25 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, k
   )
 }
 
+/** The facts strip; none when there are no facts to state. */
 function Summary({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-surface-elevated px-3 py-2">{children}</div>
+  if (children === null || children === undefined || children === false) return null
+  return (
+    <div data-summary="" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-surface-elevated px-3 py-2">
+      {children}
+    </div>
+  )
 }
 
 // ------------------------------------------------------------------ list --
 
 /*
  * One evidence slip per hit (EvidenceSlip), a column of them 4px apart with no
- * rule between. Which side a slip is on follows the props: `badges` is the
- * reranked side, `kept` without it the search side, and otherwise one list (a
- * list a reranker reordered still says where each piece moved from). On the
+ * rule between. Which side a slip is on follows the list's `side`; one list
+ * a reranker reordered still says where each piece moved from. On the
  * reranked side a piece past the keep limit, or outside the kept set, is a Not
- * kept slip, and those come after the kept ones.
+ * kept slip, and those come after the kept ones. A slip is a tab stop, and
+ * Enter or Space selects it as a click does.
  */
 
 function HitList({
@@ -296,7 +305,7 @@ function HitList({
   showRetriever,
   kept,
   keepLimit,
-  badges,
+  side: list,
   enter,
   pieceOf,
   sectionOf: section,
@@ -312,15 +321,16 @@ function HitList({
   showRetriever: boolean
   kept?: ReadonlySet<string>
   keepLimit?: number
-  badges: boolean
+  side: ListSide
   enter: boolean
   pieceOf: (row: HitRowData) => number | null
   sectionOf: (row: HitRowData) => string | null
 }) {
   const scale = scoreKey(rows)
-  const moved = rows.some((r) => r.prior_rank !== null)
-  const dropped = (r: HitRowData) => badges && ((keepLimit !== undefined && r.rank > keepLimit) || (kept !== undefined && !kept.has(r.chunk_id)))
-  const side = (r: HitRowData): SlipSide => (dropped(r) ? "notKept" : badges ? "reranked" : kept ? "search" : moved ? "reranked" : "single")
+  const moved = rows.some((r) => r.prior_rank != null)
+  const reranked = list === "reranked"
+  const dropped = (r: HitRowData) => reranked && ((keepLimit !== undefined && r.rank > keepLimit) || (kept !== undefined && !kept.has(r.chunk_id)))
+  const side = (r: HitRowData): SlipSide => (dropped(r) ? "notKept" : list === "single" && moved ? "reranked" : list)
   // Kept slips first, in the order given; Not kept slips after them, in search order.
   const order = rows.map((r, i) => ({ r, i }))
   const shown = [
@@ -354,6 +364,11 @@ function HitList({
             style={enter ? ({ "--i": Math.min(n, 4) } as CSSProperties) : undefined}
             title={`Piece ${r.chunk_id.slice(0, 8)}`}
             onClick={() => onSelect(i)}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return
+              e.preventDefault()
+              onSelect(i)
+            }}
             className={cn("cursor-pointer", k !== undefined && `ri-mark h${k}`, selected === i && "bg-selection hover:bg-selection")}
           />
         )

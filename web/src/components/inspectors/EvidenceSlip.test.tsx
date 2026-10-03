@@ -18,7 +18,7 @@ const part = (name: string) => slip().querySelector<HTMLElement>(`[data-testid=$
 describe("the evidence slip", () => {
   it("has a swatch, a finding line, the passage and a meta line", () => {
     render(<EvidenceSlip row={rows[0]} side="single" piece={2} scaleKey="hybrid_rrf" />)
-    const sw = screen.getByLabelText("Chunk 3")
+    const sw = screen.getByRole("img", { name: "Chunk 3" })
     expect(sw.textContent).toBe("3")
     expect(sw.dataset.id).toBe(rows[0].chunk_id)
     expect(sw.className).toContain("rounded-swatch")
@@ -36,6 +36,10 @@ describe("the evidence slip", () => {
     expect(c).not.toMatch(/(^|\s)border(-b)?(\s|$)/)
     expect(c).toContain("hover:bg-surface-raised")
     expect(c).toContain("focus-within:bg-surface-raised")
+    expect(c).toContain("focus-visible:bg-surface-raised")
+    expect(c).toContain("focus-visible:ring-hairline")
+    // A keyboard reaches it.
+    expect(slip().tabIndex).toBe(0)
     expect(c).toContain("hover:ring-hairline")
   })
 
@@ -57,8 +61,11 @@ describe("the evidence slip", () => {
   it("clamps the passage to two lines only when asked", () => {
     const { rerender } = render(<EvidenceSlip row={rows[0]} side="search" piece={0} scaleKey="hybrid_rrf" clamp />)
     expect(part("passage")!.className).toContain("line-clamp-2")
+    // A clamped passage flows as plain text: a kept blank line would eat a clamped line.
+    expect(part("passage")!.className).not.toContain("whitespace-pre-line")
     rerender(<EvidenceSlip row={rows[0]} side="reranked" piece={0} scaleKey="hybrid_rrf" />)
     expect(part("passage")!.className).not.toContain("line-clamp")
+    expect(part("passage")!.className).toContain("whitespace-pre-line")
   })
 
   it("names every score's scale beside its number, the number in mono and a miss in words", () => {
@@ -87,6 +94,8 @@ describe("the evidence slip", () => {
     render(<EvidenceSlip row={{ ...rows[0], rank: 1, prior_rank: 6 }} side="reranked" piece={0} scaleKey="cross_encoder" />)
     expect(part("finding")!.textContent).toBe("1st, moved up from 6th")
     expect(within(part("finding")!).getByText("moved up from 6th").className).toContain("font-semibold")
+    // The place is set apart too.
+    expect(within(part("finding")!).getByText("1st").className).toContain("font-semibold")
   })
 
   it("a Not kept slip is faint, says why, has no scores, and its swatch is an outline", () => {
@@ -94,7 +103,7 @@ describe("the evidence slip", () => {
     expect(slip().className).toContain("opacity-75")
     expect(part("finding")!.textContent).toBe("Not kept. It was 6th in search and the keep limit is 5.")
     expect(slip().querySelectorAll("[data-score]")).toHaveLength(0)
-    const sw = screen.getByLabelText("Chunk 5")
+    const sw = screen.getByRole("img", { name: "Chunk 5" })
     expect(sw.className).toContain("border-flat")
     expect(sw.className).not.toContain("bg-chunk-5")
   })
@@ -130,5 +139,22 @@ describe("the evidence slip", () => {
     const sw = slip().querySelector<HTMLElement>("[data-id]")!
     expect(sw.className).not.toMatch(/bg-chunk-\d/)
     expect(sw.getAttribute("aria-label")).toBe("Chunk not in this chunk set")
+  })
+
+  it("a bare slip is the swatch and the passage only: no finding line and no scores", () => {
+    const row: HitRowData = { ...rows[0], page_span: null, section: null }
+    render(<EvidenceSlip row={row} side="single" piece={null} scaleKey="score" bare />)
+    expect(part("finding")).toBeNull()
+    expect(slip().querySelectorAll("[data-score]")).toHaveLength(0)
+    // Nothing is known for the meta line, so there is none.
+    expect(part("meta")).toBeNull()
+    expect(part("passage")!.textContent).toBe(row.text)
+    expect(slip().textContent).not.toMatch(/1st/)
+    // It selects nothing, so it is not a tab stop.
+    expect(slip().hasAttribute("tabindex")).toBe(false)
+    cleanup()
+    // Page and section stay when they are known.
+    render(<EvidenceSlip row={{ ...rows[0], section: "Methods" }} side="single" piece={null} scaleKey="score" bare />)
+    expect(part("meta")!.textContent).toBe("p. 3Methods")
   })
 })

@@ -213,8 +213,10 @@
     animation-delay: 0ms;
   }
 }
+/* A marked slip also fades its hover background and ring, so all three are listed. */
 .ri-mark {
-  transition: opacity var(--dur-fast);
+  transition-property: opacity, background-color, box-shadow;
+  transition-duration: var(--dur-fast);
 }
 [data-hover] .ri-mark {
   opacity: 0.4;

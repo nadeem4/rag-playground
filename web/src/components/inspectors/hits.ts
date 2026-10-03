@@ -188,9 +188,10 @@ export function ordinal(n: number): string {
 /** Which list a slip sits in: one list, the search side or the reranked side of the comparison, or below the kept ones. */
 export type SlipSide = "single" | "search" | "reranked" | "notKept"
 
-/** A run of the finding line: `strong` is the movement of a piece that rose, `mono` a score. */
+/** A run of the finding line: `place` is the ordinal, `strong` the movement of a piece that rose, `mono` a score. */
 export interface FindingPart {
   text: string
+  place?: boolean
   strong?: boolean
   mono?: boolean
 }
@@ -202,17 +203,17 @@ export interface FindingPart {
  * past the keep limit `Not kept. It was 6th in search and the keep limit is 5.`
  */
 export function findingLine(row: Pick<HitRowData, "rank" | "prior_rank" | "score">, side: SlipSide, scaleKey: string, keepLimit?: number): FindingPart[] {
-  const place = ordinal(row.rank)
   if (side === "notKept") {
     const was = ordinal(row.prior_rank ?? row.rank)
     return [{ text: keepLimit === undefined ? `Not kept. It was ${was} in search.` : `Not kept. It was ${was} in search and the keep limit is ${keepLimit}.` }]
   }
-  if (side === "search") return [{ text: `${place} in search, ${scaleName(scaleKey)} ` }, { text: fmtScore(row.score), mono: true }]
-  if (side === "single" || row.prior_rank === null || row.prior_rank === undefined) return [{ text: place }]
+  const place: FindingPart = { text: ordinal(row.rank), place: true }
+  if (side === "search") return [place, { text: ` in search, ${scaleName(scaleKey)} ` }, { text: fmtScore(row.score), mono: true }]
+  if (side === "single" || row.prior_rank == null) return [place]
   const move = movement(row)
-  if (move.kind === "none") return [{ text: place }, { text: ", stayed in place" }]
-  if (move.kind === "up") return [{ text: place }, { text: ", " }, { text: `moved up from ${ordinal(move.from)}`, strong: true }]
-  return [{ text: place }, { text: `, moved down from ${ordinal(move.from)}` }]
+  if (move.kind === "none") return [place, { text: ", stayed in place" }]
+  if (move.kind === "up") return [place, { text: ", " }, { text: `moved up from ${ordinal(move.from)}`, strong: true }]
+  return [place, { text: `, moved down from ${ordinal(move.from)}` }]
 }
 
 export function pages(span: [number, number] | null): string | null {

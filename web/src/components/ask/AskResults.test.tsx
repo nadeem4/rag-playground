@@ -165,6 +165,20 @@ describe("the comparison, with a reranker", () => {
     expect(vi.mocked(fetch).mock.calls.filter(([u]) => u === "/api/artifacts/rrOnce")).toHaveLength(1)
   })
 
+  it("holds the sub line's place while the run note loads, so it does not push the lists down late", async () => {
+    let release: (r: Response) => void = () => {}
+    payloads.rrLate = reranked()
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url) => (url === "/api/artifacts/rrLate" ? new Promise<Response>((r) => (release = r)) : base(url)))
+    render(<Panel {...props(withCrossEncoder(), { ...RERANKED, rerank_1: done("rerank_1", "rrLate") })} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const sub = screen.getByTestId("sub-line")
+    expect(sub.textContent).toBe("")
+    expect(sub.className).toContain("min-h-[1lh]")
+    release(new Response(JSON.stringify({ id: "rrLate", meta: { note: NOTE } }), { status: 200 }))
+    await waitFor(() => expect(screen.getByTestId("sub-line").textContent).toBe(NOTE))
+  })
+
   it("has no sub line under a reranker without a run note; the column says what it did", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     const mmr = setReranker(p.graph, LIVE, "mmr")
@@ -365,7 +379,9 @@ describe("the note under a reranker that only reorders", () => {
 describe("the results without a reranker", () => {
   it("shows one list in search order", async () => {
     render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
-    expect(await screen.findByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy()
+    expect((await screen.findByTestId("sub-line")).textContent).toBe("Hybrid search returned 6 candidates. These are the top 5, in search order.")
+    // The sub line says it, so no heading repeats it.
+    expect(screen.queryByRole("heading", { name: /candidates, in search order/ })).toBeNull()
     expect(screen.queryByRole("button", { name: "Hide comparison" })).toBeNull()
     expect(screen.getAllByTestId("finding").map((f) => f.textContent!.split(",")[0])).toEqual(["1st", "2nd", "3rd", "4th", "5th"])
     expect(document.body.textContent).not.toMatch(/Not kept/)
@@ -394,7 +410,7 @@ describe("the results without a reranker", () => {
     await new Promise((r) => setTimeout(r, 50))
     expect(document.querySelectorAll("[data-hit-row]")).toHaveLength(0)
     release(searchJson)
-    expect(await screen.findByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy()
+    expect((await screen.findByTestId("sub-line")).textContent).toBe("Hybrid search returned 6 candidates. These are the top 5, in search order.")
     const shown = [...document.querySelectorAll<HTMLElement>("[data-hit-row]")]
     expect(shown).toHaveLength(5)
     expect(shown.every((r) => r.hasAttribute("data-enter"))).toBe(true)
@@ -403,6 +419,7 @@ describe("the results without a reranker", () => {
   it("shows nothing before a question has run", () => {
     render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), {})} />)
     expect(screen.queryByRole("heading", { name: /candidates/ })).toBeNull()
+    expect(screen.queryByTestId("sub-line")).toBeNull()
   })
 })
 
@@ -416,7 +433,8 @@ describe("the finding sentence", () => {
     const top = (searchJson as { payload: { results: { snippet: string }[] } }).payload.results[0].snippet
     const said = (p.querySelector(".font-serif") as HTMLElement).textContent!
     expect(top.startsWith(said)).toBe(true)
-    expect(said.endsWith("twice.")).toBe(true)
+    // The snippet opens with a heading line: the line ends the sentence.
+    expect(said).toBe("Overlap and its cost")
     expect(collapse(p.textContent!)).toBe(`The closest piece says: ${collapse(said)}`)
     // It sits above the sub line and the list.
     const sub = screen.getByTestId("sub-line")
@@ -459,7 +477,7 @@ describe("a Chat answer", () => {
   it("renders the written answer above the lists", async () => {
     const chat = setUseCase(sampleGraph(LIVE, UPLOAD), LIVE, "chat")
     render(<AskPanel {...props(chat, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "chat1") })} />)
-    const list = await screen.findByRole("heading", { name: "Top 6 of 6 candidates, in search order" })
+    const list = await screen.findByText("Hybrid search returned 6 candidates. These are the top 6, in search order.")
     const answer = await waitFor(() => document.querySelector("[data-chat-inspector]") as HTMLElement)
     expect(answer).toBeTruthy()
     expect(answer.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

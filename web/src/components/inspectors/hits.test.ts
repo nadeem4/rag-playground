@@ -195,12 +195,14 @@ describe("the finding line", () => {
 
   it("a single list says the place only", () => {
     expect(text(findingLine(row(1, null), "single", "hybrid_rrf"))).toBe("1st")
+    expect(findingLine(row(1, null), "single", "hybrid_rrf").filter((p) => p.place).map((p) => p.text)).toEqual(["1st"])
   })
 
   it("the search side says the place in search and the fused score with its scale, the score in mono", () => {
     const parts = findingLine(row(1, null, 0.0328), "search", "hybrid_rrf")
     expect(text(parts)).toBe("1st in search, RRF 0.03280")
     expect(parts.filter((p) => p.mono).map((p) => p.text)).toEqual(["0.03280"])
+    expect(parts.filter((p) => p.place).map((p) => p.text)).toEqual(["1st"])
     expect(strong(parts)).toEqual([])
   })
 
@@ -208,6 +210,7 @@ describe("the finding line", () => {
     const up = findingLine(row(2, 4), "reranked", "cross_encoder")
     expect(text(up)).toBe("2nd, moved up from 4th")
     expect(strong(up)).toEqual(["moved up from 4th"])
+    expect(up.filter((p) => p.place).map((p) => p.text)).toEqual(["2nd"])
     const stayed = findingLine(row(3, 3), "reranked", "cross_encoder")
     expect(text(stayed)).toBe("3rd, stayed in place")
     expect(strong(stayed)).toEqual([])

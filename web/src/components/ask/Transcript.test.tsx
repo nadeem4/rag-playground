@@ -160,7 +160,7 @@ describe("the transcript", () => {
     // None removes the rerank node; Retrieve and its result stay fresh, so the rows change.
     const none = setReranker(graph, LIVE, null)
     rerender(<Harness {...p} graph={none} results={{ ...p.results, rerank_1: undefined as never }} />)
-    await waitFor(() => expect(screen.getByRole("heading", { name: /in search order$/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("sub-line").textContent).toMatch(/in search order\.$/))
     expect(screen.getByTestId("transcript-line").textContent).toBe("Working copy, Cross-encoder: found at #2")
     expect(screen.queryByText(/no rerank/)).toBeNull()
     expect(summary()?.textContent).toBe("Earlier questions in this tab (1)")
@@ -180,7 +180,7 @@ describe("the transcript", () => {
     const none = setReranker(graph, LIVE, null)
     const p = base(none, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") }, snap(graph, "r4"))
     render(<Harness {...p} />)
-    await waitFor(() => expect(screen.getByRole("heading", { name: /in search order$/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("sub-line").textContent).toMatch(/in search order\.$/))
     await new Promise((r) => setTimeout(r, 50))
     expect(summary()).toBeNull()
     expect(screen.queryByText(/no rerank/)).toBeNull()

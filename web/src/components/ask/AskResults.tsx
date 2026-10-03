@@ -212,7 +212,8 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   let sub: string | null = null
   if (rerank && o.rerank && o.retrieve) {
     kept = rowsFromResult(o.rerank)
-    sub = note ?? null
+    // While the note loads its line is held empty, so it does not push the lists down when it lands.
+    sub = note === undefined ? "" : note
     // Hidden for one rerank result only: a new result (a new run, another reranker) opens it again.
     const open = !o.rerankId || comparisonHidden !== o.rerankId
     lists = (
@@ -249,7 +250,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
           chunkSet={o.chunkSet}
           doc={o.doc}
           showDetail={false}
-          facts={<Heading>{`Top ${rows.length} of ${typeof total === "number" ? total : rows.length} candidates, in search order`}</Heading>}
+          facts={null}
         />
       )
     }
@@ -265,8 +266,8 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
       {o.failed ? <Failed node={o.failed.node} error={o.failed.error} /> : null}
       {chat ? <ChatInspector payload={chat} chunkSet={o.chunkSet} /> : null}
       {kept ? <Finding question={String(query?.config.text ?? "")} rows={kept} questions={questions} chat={Boolean(chat) || useCase?.transform === "chat"} /> : null}
-      {sub ? (
-        <p data-testid="sub-line" className="m-0 text-xs text-fg-muted">
+      {sub !== null ? (
+        <p data-testid="sub-line" className="m-0 min-h-[1lh] text-xs text-fg-muted">
           {sub}
         </p>
       ) : null}
@@ -333,7 +334,7 @@ function Comparison({
         chunkSet={o.chunkSet}
         doc={o.doc}
         showDetail={false}
-        badges
+        side="reranked"
         kept={kept}
         keepLimit={after.length}
         facts={
@@ -373,7 +374,7 @@ function Comparison({
             chunkSet={o.chunkSet}
             doc={o.doc}
             showDetail={false}
-            kept={kept}
+            side="search"
             facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
           />
         </div>

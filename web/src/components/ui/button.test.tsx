@@ -15,7 +15,7 @@ describe("Button states", () => {
     expect(c).toContain("duration-(--dur-fast)")
     // Only the tint and the press move. Tailwind 4 presses with the `scale`
     // property, the individual transform, so it is listed beside `transform`.
-    expect(c).toContain("transition-[color,background-color,border-color,transform,scale]")
+    expect(c).toContain("transition-[color,background-color,border-color,opacity,transform,scale]")
     expect(c).not.toContain("active:translate-y-px")
   })
 

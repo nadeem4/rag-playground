@@ -7,7 +7,6 @@ import markdownJson from "@/api/fixtures/chunk_set.markdown_header.json"
 import parsedJson from "@/api/fixtures/parsed_doc.json"
 import cleanedJson from "@/api/fixtures/parsed_doc_cleaned.json"
 import indexJson from "@/api/fixtures/index.lancedb.json"
-import denseJson from "@/api/fixtures/retrieval_result.dense.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import mmrJson from "@/api/fixtures/retrieval_result.mmr.json"
 import searchJson from "@/api/fixtures/output.search.json"
@@ -28,7 +27,6 @@ const markdown = markdownJson as unknown as ChunkSet
 const parsed = parsedJson as unknown as ParsedDoc
 const cleaned = cleanedJson as unknown as ParsedDoc
 const report = cleaned.parser_meta.clean_report as CleanReportEntry[]
-const dense = denseJson as unknown as RetrievalResult
 const hybrid = hybridJson as unknown as RetrievalResult
 const mmr = mmrJson as unknown as RetrievalResult
 
@@ -303,33 +301,26 @@ describe("RetrievalResultInspector", () => {
     expect(screen.getByTestId("fact-hits").textContent).toBe("6")
   })
 
-  it("draws a bar per component on its own scale: the largest of each is full length", () => {
+  it("draws no bars and no header row: each slip names its own scores", () => {
     const { container } = render(<RetrievalResultInspector result={hybrid} />)
-    const widths = [...container.querySelectorAll<HTMLElement>("[data-hit-row]")].map((r) =>
-      [...r.querySelectorAll<HTMLElement>("[data-bar]")].map((b) => Number(b.dataset.bar)),
-    )
-    // Rank 1 has the top dense and the top bm25 score.
-    expect(widths[0]).toEqual([40, 40])
-    // The sixth was found by the dense search only, so it has no bm25 bar.
-    expect(widths.map((w) => w.length)).toEqual([2, 2, 2, 2, 2, 1])
-    expect(Math.max(...widths.slice(1, 5).map((w) => w[1]))).toBeLessThan(8)
+    expect(container.querySelectorAll("[data-bar]")).toHaveLength(0)
+    expect(container.querySelector(".ri-head")).toBeNull()
+    expect(container.querySelector(".ri-row")).toBeNull()
+    expect(container.textContent).not.toContain("KEPT")
   })
 
-  it("a retriever with no components gets one bar on the score itself", () => {
-    const { container } = render(<RetrievalResultInspector result={dense} />)
-    const first = container.querySelector<HTMLElement>("[data-hit-row]")!
-    expect([...first.querySelectorAll<HTMLElement>("[data-bar]")].map((b) => Number(b.dataset.bar))).toEqual([40])
-  })
-
-  it("shows rank movement after rerank as plain text", () => {
+  it("states rank movement after rerank in the finding line, the rise in weight", () => {
     const { container } = render(<RetrievalResultInspector result={mmr} />)
-    const moves = [...container.querySelectorAll<HTMLElement>("[data-testid=movement]")].map((m) => m.textContent)
-    expect(moves).toEqual(["", "was 5", "was 2", "was 3", "was 6"])
+    const lines = [...container.querySelectorAll<HTMLElement>("[data-testid=finding]")].map((m) => m.textContent)
+    expect(lines).toEqual(["1st, stayed in place", "2nd, moved up from 5th", "3rd, moved down from 2nd", "4th, moved down from 3rd", "5th, moved up from 6th"])
     // The count lives in the run note, once: no header chip repeats it.
     expect(screen.queryByTestId("fact-moved")).toBeNull()
-    // A hit that rose is set in weight, not in a colour: 500, the heaviest mono weight loaded.
-    const rose = container.querySelectorAll<HTMLElement>("[data-testid=movement]")[1]
-    expect(rose.className).toContain("font-medium")
+    const rose = container.querySelectorAll<HTMLElement>("[data-testid=finding]")[1]
+    expect(within(rose).getByText("moved up from 5th").className).toContain("font-semibold")
+    // A list no reranker touched says only the place.
+    cleanup()
+    const { container: c2 } = render(<RetrievalResultInspector result={hybrid} />)
+    expect(c2.querySelector<HTMLElement>("[data-testid=finding]")!.textContent).toBe("1st")
   })
 
   it("keeps the piece hash in the row's tooltip, not inline", () => {
@@ -350,59 +341,49 @@ describe("RetrievalResultInspector", () => {
     expect(container.querySelector<HTMLElement>('[data-hit-row="1"]')!.textContent).toContain("no meaning match")
   })
 
-  it("fits a narrow list: each score names its scale, a miss stays on one line, and the stylesheet wraps the row", () => {
-    const { container } = render(<RetrievalResultInspector result={hybrid} />)
-    const sixth = container.querySelector<HTMLElement>('[data-hit-row="6"]')!
-    expect([...sixth.querySelectorAll(".ri-score-name")].map((k) => k.textContent)).toEqual(["RRF", "Dense", "BM25"])
-    const miss = [...sixth.querySelectorAll("span")].find((el) => el.textContent === "no keyword match")!
-    expect(miss.className).toContain("whitespace-nowrap")
-    expect(container.querySelector(".ri-head")).toBeTruthy()
-    // Below 600px of list (a phone, or one column of the side-by-side comparison) the scores become
-    // a wrapping line under the passage and the header hides, so the passage keeps a reading measure.
-    expect(css).not.toContain("max-width: 439px")
-    expect(css).toMatch(/@container \(max-width: 599px\)[\s\S]*\.ri-head \{\s*display: none;[\s\S]*\.ri-scores \{[^}]*display: flex;\s*flex-wrap: wrap;/)
+  it("is one column at any width: the narrow-list container query and the row grid are gone", () => {
+    expect(css).not.toContain("max-width: 599px")
+    expect(css).not.toMatch(/\.ri-(row|head|scores|score|rank|main)\b/)
+    // The lanes for the spine stay.
+    expect(css).toMatch(/\.ri \{[^}]*--lane: 6px;/)
   })
 
-  it("names every score's scale beside its number, in mono: RRF, Dense, BM25", () => {
+  it("names every score's scale beside its number, the number in mono: RRF, Dense, BM25", () => {
     const { container } = render(<RetrievalResultInspector result={hybrid} />)
-    const first = container.querySelector<HTMLElement>('[data-hit-row="1"] .ri-scores')!
-    expect(first.className).toContain("font-mono")
-    const lines = [...first.querySelectorAll<HTMLElement>(".ri-score")].map((l) => l.textContent)
-    expect(lines).toEqual([`RRF${"0.03279"}`, expect.stringMatching(/^Dense0\.\d{3,4}$/), expect.stringMatching(/^BM25\d\.\d{3}$/)])
-    // The name and the value share one size, so their baselines meet.
-    const line = first.querySelector<HTMLElement>(".ri-score")!
-    expect([...line.children].slice(0, 2).map((c) => c.className.match(/\btext-(2xs|xs|sm)\b/)?.[0])).toEqual(["text-xs", "text-xs"])
+    const first = container.querySelector<HTMLElement>('[data-hit-row="1"]')!
+    const lines = [...first.querySelectorAll<HTMLElement>("[data-score]")].map((l) => l.textContent)
+    expect(lines).toEqual(["RRF 0.03279", expect.stringMatching(/^Dense 0\.\d{3,4}$/), expect.stringMatching(/^BM25 \d\.\d{3}$/)])
+    for (const l of first.querySelectorAll<HTMLElement>("[data-score] .font-mono")) expect(l.textContent).toMatch(/^\d/)
     // A reranker that rescored names its own scale.
     cleanup()
     const rescored = { ...mmr, hits: mmr.hits.map((h, i) => ({ ...h, prior_score: h.score, score: 8.21 - i })) }
     const { container: c2 } = render(<RetrievalResultInspector result={rescored} />)
-    expect(c2.querySelector('[data-hit-row="1"] .ri-score')!.textContent).toBe("Cross-encoder8.210")
+    expect(c2.querySelector('[data-hit-row="1"] [data-score]')!.textContent).toBe("Cross-encoder 8.210")
   })
 
-  it("sets the rank large and the passage in the reading face", () => {
-    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+  it("sets the passage in the document voice, the finding line in sans, and the piece as a swatch", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} chunkSet={recursive} />)
     const first = container.querySelector<HTMLElement>('[data-hit-row="1"]')!
-    const rank = first.querySelector<HTMLElement>("[data-testid=rank]")!
-    expect(rank.textContent).toBe("1")
-    expect(rank.className).toMatch(/\btext-lg\b/)
-    expect(rank.className).toContain("font-semibold")
-    const passage = first.querySelector<HTMLElement>(".ri-snippet")!
-    expect(passage.className).toContain("font-sans")
+    const passage = first.querySelector<HTMLElement>("[data-testid=passage]")!
+    expect(passage.className).toContain("font-serif")
     expect(passage.className).toMatch(/\btext-base\b/)
-    // Sentence case column headers.
-    expect([...container.querySelectorAll(".ri-head .meta")].map((h) => h.textContent)).toEqual(["Rank", "Score"])
+    expect(first.querySelector<HTMLElement>("[data-testid=finding]")!.className).not.toContain("font-serif")
+    // The swatch is the piece's number in its chunk colour: its index in the chunk set.
+    const i = recursive.chunks.findIndex((c) => c.id === hybrid.hits[0].chunk.id)
+    const n = i === -1 ? (hybrid.hits[0].chunk.ordinal as number) + 1 : i + 1
+    expect(first.querySelector<HTMLElement>("[data-id]")!.getAttribute("aria-label")).toBe(`Chunk ${n}`)
   })
 
-  it("shows Show in PDF as a quiet text button on the where line", () => {
+  it("shows Show in PDF as a quiet text button on the meta line", () => {
     const { container } = render(<RetrievalResultInspector result={hybrid} doc={parsed} />)
     const buttons = screen.getAllByRole("button", { name: "Show in PDF" })
     expect(buttons.length).toBe(hybrid.hits.length)
     const first = container.querySelector<HTMLElement>('[data-hit-row="1"]')!
     const button = within(first).getByRole("button", { name: "Show in PDF" })
-    const where = first.querySelector<HTMLElement>("[data-testid=where]")!
-    expect(where.contains(button)).toBe(true)
+    const meta = first.querySelector<HTMLElement>("[data-testid=meta]")!
+    expect(meta.contains(button)).toBe(true)
     // One size for the whole line; the button in the accent text tint, no underline at rest, no border, no fill.
-    expect(where.className).toMatch(/\btext-xs\b/)
+    expect(meta.className).toMatch(/\btext-xs\b/)
     expect(button.className).not.toMatch(/\btext-(2xs|xs|sm)\b/)
     expect(button.className).toContain("text-primary")
     expect(button.className).not.toMatch(/(^|\s)underline(\s|$)/)
@@ -410,23 +391,51 @@ describe("RetrievalResultInspector", () => {
     expect(button.className).not.toContain("bg-surface")
   })
 
-  it("marks only the rows that fell out of the keep list, Not kept, with no rule and no kept tag", () => {
+  it("the search side of a comparison says each place in search, and never Not kept", () => {
     const rows = rowsFromResult(hybrid)
     const kept = new Set(rows.slice(0, 4).map((r) => r.chunk_id))
     const { container } = render(<RetrievalView rows={rows} kept={kept} facts={null} showDetail={false} />)
-    const row = (rank: number) => container.querySelector<HTMLElement>(`[data-hit-row="${rank}"]`)!
-    for (const rank of [1, 2, 3, 4]) {
-      expect(row(rank).textContent).not.toMatch(/kept/i)
-    }
-    for (const rank of [5, 6]) {
-      expect(within(row(rank)).getByText("Not kept")).toBeTruthy()
-    }
+    const finding = (rank: number) => container.querySelector<HTMLElement>(`[data-hit-row="${rank}"] [data-testid=finding]`)!.textContent
+    expect(finding(1)).toBe("1st in search, RRF 0.03279")
+    expect(finding(6)).toMatch(/^6th in search, RRF /)
+    expect(container.textContent).not.toMatch(/kept/i)
     expect(container.querySelector("[data-kept]")).toBeNull()
     expect(css).not.toContain("[data-kept]")
+    // The search side clamps its passages to two lines.
+    expect(container.querySelector<HTMLElement>("[data-testid=passage]")!.className).toContain("line-clamp-2")
+  })
+
+  it("the reranked side puts the pieces past the keep limit last, as Not kept slips", () => {
+    // Prior ranks 6, 1, 2, 4, 3, 5: with a keep limit of 4 the last two fall out.
+    const order = [5, 0, 1, 3, 2, 4]
+    const rows = order.map((i, k) => ({ ...rowsFromResult(hybrid)[i], rank: k + 1, prior_rank: i + 1 }))
+    // Hand them over out of order: a dropped piece first.
+    const given = [rows[4], rows[0], rows[1], rows[5], rows[2], rows[3]]
+    const { container } = render(<RetrievalView rows={given} badges keepLimit={4} facts={null} showDetail={false} enter />)
+    const slips = [...container.querySelectorAll<HTMLElement>("[data-hit-row]")]
+    expect(slips.map((s) => s.dataset.hitRow)).toEqual(["1", "2", "3", "4", "5", "6"])
+    const out = slips.slice(4)
+    expect(out.map((s) => s.querySelector("[data-testid=finding]")!.textContent)).toEqual([
+      "Not kept. It was 3rd in search and the keep limit is 4.",
+      "Not kept. It was 5th in search and the keep limit is 4.",
+    ])
+    for (const s of out) {
+      expect(s.className).toContain("opacity-75")
+      expect(s.querySelectorAll("[data-score]")).toHaveLength(0)
+    }
+    for (const s of slips.slice(0, 4)) expect(s.className).not.toContain("opacity-75")
+    // The motion stagger follows the order shown.
+    expect(slips.map((s) => s.style.getPropertyValue("--i"))).toEqual(["0", "1", "2", "3", "4", "4"])
+    cleanup()
+    // A kept set on the reranked side marks the rows outside it the same way.
+    const kept = new Set(rows.slice(0, 5).map((r) => r.chunk_id))
+    const { container: c2 } = render(<RetrievalView rows={rows} badges kept={kept} facts={null} showDetail={false} />)
+    const last = [...c2.querySelectorAll<HTMLElement>("[data-hit-row]")].at(-1)!
+    expect(last.querySelector("[data-testid=finding]")!.textContent).toBe("Not kept. It was 5th in search and the keep limit is 5.")
     cleanup()
     // Without a keep list nothing is marked.
-    const { container: c2 } = render(<RetrievalView rows={rows} facts={null} showDetail={false} />)
-    expect(c2.textContent).not.toContain("Not kept")
+    const { container: c3 } = render(<RetrievalView rows={rows} badges facts={null} showDetail={false} />)
+    expect(c3.textContent).not.toContain("Not kept")
   })
 
   it("new rows fade in and rise, staggered over the first five, and only when asked", () => {
@@ -442,11 +451,11 @@ describe("RetrievalResultInspector", () => {
   })
 
   it("the enter motion is in the stylesheet: rise 6px over --dur-mid, 30 ms apart, and an opacity change only under reduced motion", () => {
-    const rule = /\.ri-row\[data-enter\] \{([^}]*)\}/.exec(css)![1]
+    const rule = /\.ev-slip\[data-enter\] \{([^}]*)\}/.exec(css)![1]
     expect(rule).toMatch(/animation:\s*ri-enter var\(--dur-mid\) var\(--ease-in\) backwards/)
     expect(rule).toMatch(/animation-delay:\s*calc\(var\(--i, 0\) \* 30ms\)/)
     expect(css).toMatch(/@keyframes ri-enter \{\s*from \{\s*opacity: 0;\s*transform: translateY\(6px\);\s*\}/)
-    const reduced = /@media \(prefers-reduced-motion: reduce\) \{\s*\.ri-row\[data-enter\] \{([^}]*)\}/.exec(css)![1]
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{\s*\.ev-slip\[data-enter\] \{([^}]*)\}/.exec(css)![1]
     expect(reduced).toMatch(/animation:\s*ri-fade var\(--dur-fast\)/)
     expect(reduced).toMatch(/animation-delay:\s*0ms/)
     expect(/@keyframes ri-fade \{([^}]*\})/.exec(css)![1]).not.toContain("transform")
@@ -454,8 +463,8 @@ describe("RetrievalResultInspector", () => {
 
   it("the enter motion and its reduced-motion override survive compilation", async () => {
     const compiled = (await compile(css)).build([])
-    expect(compiled).toMatch(/\.ri-row\[data-enter\] \{\s*animation: ri-enter var\(--dur-mid\) var\(--ease-in\) backwards;/)
-    expect(compiled).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.ri-row\[data-enter\] \{\s*animation: ri-fade var\(--dur-fast\) linear backwards;/)
+    expect(compiled).toMatch(/\.ev-slip\[data-enter\] \{\s*animation: ri-enter var\(--dur-mid\) var\(--ease-in\) backwards;/)
+    expect(compiled).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.ev-slip\[data-enter\] \{\s*animation: ri-fade var\(--dur-fast\) linear backwards;/)
   })
 
   it("the rank bands sit a full hit box apart on a touch screen", () => {
@@ -463,21 +472,25 @@ describe("RetrievalResultInspector", () => {
     expect(css).toMatch(/@media \(pointer: coarse\) \{\s*\.ri \{\s*--lane: 24px;/)
   })
 
-  it("shows the section in a hit's where line only when its chunk has one", () => {
+  it("shows the section in a hit's meta line only when its chunk has one", () => {
     const withSection = {
       ...hybrid,
       hits: hybrid.hits.map((h) => (h.rank === 1 ? { ...h, chunk: { ...h.chunk, heading_path: ["Methods", "Survey"] } } : h)),
     }
     const { container } = render(<RetrievalResultInspector result={withSection} />)
-    const where = (rank: number) => container.querySelector<HTMLElement>(`[data-hit-row="${rank}"] [data-testid=where]`)!.textContent
-    expect(where(1)).toContain("Methods > Survey")
-    expect(where(2)).toBe("pp. 2-3")
+    const meta = (rank: number) => container.querySelector<HTMLElement>(`[data-hit-row="${rank}"] [data-testid=meta]`)!.textContent!
+    expect(meta(1)).toContain("Methods > Survey")
+    expect(meta(2)).toMatch(/^pp\. 2-3RRF /)
   })
 
   it("with the upstream chunk set, puts a rank tick for every hit on the spine", () => {
     const { container } = render(<ArtifactInspector type="retrieval_result" data={mmr} context={{ chunks: recursive }} />)
     const ticks = [...container.querySelectorAll<HTMLElement>("[data-tick]")]
     expect(ticks.map((t) => t.textContent)).toEqual(["1", "2", "3", "4", "5"])
+    // Each slip carries its hit's hover key, so hovering it lights its marks on the spine.
+    const slip = container.querySelector<HTMLElement>('[data-hit-row="1"]')!
+    expect(slip.dataset.hits).toBe(ticks[0].dataset.hits)
+    expect(slip.className).toContain(`ri-mark ${ticks[0].dataset.hits}`)
     // Each tick is measured against the segment that starts at its chunk.
     const reading = container.querySelector<HTMLElement>("[data-reading]")!
     for (const [i, t] of ticks.entries()) {
@@ -508,7 +521,7 @@ describe("RetrievalResultInspector", () => {
 
   it("renders a Search output with the same rows", () => {
     const { container } = render(<ArtifactInspector type="output" data={searchJson} context={{ chunks: recursive }} />)
-    expect([...container.querySelectorAll<HTMLElement>("[data-testid=movement]")].map((m) => m.textContent)[1]).toBe("was 5")
+    expect([...container.querySelectorAll<HTMLElement>("[data-testid=finding]")].map((m) => m.textContent)[1]).toBe("2nd, moved up from 5th")
     expect(container.querySelectorAll("[data-tick]")).toHaveLength(5)
     cleanup()
     // Any other use case output falls back to the JSON tree.
@@ -580,12 +593,14 @@ describe("long text in the reading face", () => {
 })
 
 describe("words in Ask results are never mono", () => {
-  it("the movement and the missed-search phrase are sans", () => {
-    const { container } = render(<RetrievalResultInspector result={mmr} chunkSet={recursive} />)
-    for (const m of container.querySelectorAll<HTMLElement>("[data-testid=movement]")) {
+  it("the finding line and the missed-search phrase are sans", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} chunkSet={recursive} />)
+    for (const m of container.querySelectorAll<HTMLElement>("[data-testid=finding]")) {
       expect(m.className).toContain("font-sans")
       expect(m.className).not.toContain("font-mono")
     }
-    for (const miss of container.querySelectorAll<HTMLElement>(".ri-score-miss")) expect(miss.className).toContain("font-sans")
+    const miss = [...container.querySelectorAll<HTMLElement>("[data-score] span")].filter((el) => el.textContent === "no keyword match")
+    expect(miss.length).toBeGreaterThan(0)
+    for (const m of miss) expect(m.className).toContain("font-sans")
   })
 })

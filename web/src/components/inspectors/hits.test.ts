@@ -10,10 +10,12 @@ import {
   badge,
   barWidth,
   componentKeys,
+  findingLine,
   fmtScore,
   hitIds,
   layoutHits,
   movement,
+  ordinal,
   rowsFromResult,
   rowsFromSearch,
   scaleMax,
@@ -175,5 +177,50 @@ describe("top-k agreement", () => {
     const ids = (r: RetrievalResult) => r.hits.map((h) => h.chunk.id)
     expect(hybrid.hits.length).toBeGreaterThan(mmr.hits.length)
     expect(topKAgreement(ids(hybrid), ids(mmr))).toEqual({ match: 4, of: 5 })
+  })
+})
+
+describe("ordinals", () => {
+  it("says 1st, 2nd, 3rd, 4th, and the teens with th", () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111].map(ordinal)).toEqual([
+      "1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "101st", "111th",
+    ])
+  })
+})
+
+describe("the finding line", () => {
+  const row = (rank: number, prior_rank: number | null, score = 0.03279) => ({ ...rowsFromResult(hybrid)[0], rank, prior_rank, score })
+  const text = (parts: { text: string }[]) => parts.map((p) => p.text).join("")
+  const strong = (parts: { text: string; strong?: boolean }[]) => parts.filter((p) => p.strong).map((p) => p.text)
+
+  it("a single list says the place only", () => {
+    expect(text(findingLine(row(1, null), "single", "hybrid_rrf"))).toBe("1st")
+  })
+
+  it("the search side says the place in search and the fused score with its scale, the score in mono", () => {
+    const parts = findingLine(row(1, null, 0.0328), "search", "hybrid_rrf")
+    expect(text(parts)).toBe("1st in search, RRF 0.03280")
+    expect(parts.filter((p) => p.mono).map((p) => p.text)).toEqual(["0.03280"])
+    expect(strong(parts)).toEqual([])
+  })
+
+  it("the reranked side says where a piece moved from, bold only when it rose", () => {
+    const up = findingLine(row(2, 4), "reranked", "cross_encoder")
+    expect(text(up)).toBe("2nd, moved up from 4th")
+    expect(strong(up)).toEqual(["moved up from 4th"])
+    const stayed = findingLine(row(3, 3), "reranked", "cross_encoder")
+    expect(text(stayed)).toBe("3rd, stayed in place")
+    expect(strong(stayed)).toEqual([])
+    const down = findingLine(row(4, 2), "reranked", "cross_encoder")
+    expect(text(down)).toBe("4th, moved down from 2nd")
+    expect(strong(down)).toEqual([])
+    // A piece no reranker saw has no movement to state.
+    expect(text(findingLine(row(1, null), "reranked", "cross_encoder"))).toBe("1st")
+  })
+
+  it("a Not kept piece says its place in search and the keep limit", () => {
+    expect(text(findingLine(row(6, null), "notKept", "hybrid_rrf", 5))).toBe("Not kept. It was 6th in search and the keep limit is 5.")
+    expect(text(findingLine(row(5, 6), "notKept", "cross_encoder", 4))).toBe("Not kept. It was 6th in search and the keep limit is 4.")
+    expect(text(findingLine(row(6, null), "notKept", "hybrid_rrf"))).toBe("Not kept. It was 6th in search.")
   })
 })

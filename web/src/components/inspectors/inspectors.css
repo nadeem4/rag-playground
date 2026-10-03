@@ -184,76 +184,7 @@
   }
 }
 /*
- * The hit list is one grid; the header and every row are subgrids of it, so
- * each column is as wide as its widest content and still lines up from row to
- * row, whatever the font: rank, passage, then the score name, value and bar.
- * Nothing here is a width measured for one typeface.
- */
-.ri-list {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content max-content max-content;
-  column-gap: 12px;
-}
-.ri-head,
-.ri-row {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: subgrid;
-  align-items: start;
-}
-.ri-head {
-  align-items: baseline;
-}
-.ri-rank {
-  grid-column: 1;
-}
-.ri-main {
-  grid-column: 2;
-}
-.ri-scores-head {
-  grid-column: 3 / -1;
-}
-.ri-scores {
-  grid-column: 3 / -1;
-  display: grid;
-  grid-template-columns: subgrid;
-  column-gap: 6px;
-  row-gap: 2px;
-  align-items: center;
-}
-.ri-score {
-  display: contents;
-}
-/* A search that missed the hit: its words take the value and bar columns. */
-.ri-score-miss {
-  grid-column: span 2;
-}
-/* A list under 600px (a phone, or one column of the side-by-side comparison
-   at 1440): the scores wrap under the passage on their own line, each still
-   named, so the passage keeps a reading measure instead of a 30 character
-   ribbon beside the score cluster. */
-@container (max-width: 599px) {
-  .ri-list {
-    grid-template-columns: max-content minmax(0, 1fr);
-  }
-  .ri-head {
-    display: none;
-  }
-  .ri-scores {
-    grid-column: 2;
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: 12px;
-  }
-  .ri-score {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-  }
-}
-/*
- * New results fade in and rise 6px (motion 3), the first five rows 30ms apart
+ * New results fade in and rise 6px (motion 3), the first five slips 30ms apart
  * and the rest together (`--i` is capped at 4 by the component). `backwards`
  * holds the start state through the delay and leaves no transform behind.
  * Under reduced motion it is a short opacity change and nothing moves.
@@ -269,30 +200,18 @@
     opacity: 0;
   }
 }
-/* On a new rerank the reranked rows also run the FLIP (flip.ts). A script
+/* On a new rerank the reranked slips also run the FLIP (flip.ts). A script
    animation composites above this one, so they fade and slide without the
    rise: that is on purpose, the slide is the motion that carries meaning. */
-.ri-row[data-enter] {
+.ev-slip[data-enter] {
   animation: ri-enter var(--dur-mid) var(--ease-in) backwards;
   animation-delay: calc(var(--i, 0) * 30ms);
 }
 @media (prefers-reduced-motion: reduce) {
-  .ri-row[data-enter] {
+  .ev-slip[data-enter] {
     animation: ri-fade var(--dur-fast) linear backwards;
     animation-delay: 0ms;
   }
-}
-.ri-snippet {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-  white-space: normal;
-}
-.ri-row.bg-selection .ri-snippet {
-  -webkit-line-clamp: unset;
-  line-clamp: none;
 }
 .ri-mark {
   transition: opacity var(--dur-fast);

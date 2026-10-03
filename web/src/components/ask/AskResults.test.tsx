@@ -97,7 +97,8 @@ function props(graph: PipelineGraph, results: Record<string, NodeState>): AskPan
 
 const withCrossEncoder = () => setReranker(sampleGraph(LIVE, UPLOAD), LIVE, "cross_encoder")
 const RERANKED = { retrieve: done("retrieve", "ret1"), rerank_1: done("rerank_1", "rr1"), use_case: done("use_case", "out1") }
-const badges = () => screen.queryAllByTestId("badge").map((b) => b.textContent)
+/** The reranked column's finding lines: where each kept piece moved from. */
+const badges = () => [...document.querySelectorAll('[data-column="reranked"] [data-testid=finding]')].map((b) => b.textContent)
 
 /** The panel with the comparison state held above it, as Shell holds it. */
 function Panel(p: AskPanelProps) {
@@ -106,23 +107,38 @@ function Panel(p: AskPanelProps) {
 }
 
 describe("the comparison, with a reranker", () => {
-  it("shows the search order against the reranked order, with badges from prior_rank", async () => {
+  it("shows the search order against the reranked order, with finding lines from prior_rank", async () => {
     render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
     expect(await screen.findByRole("heading", { name: "Search order against the reranked order" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Hide comparison" })).toBeTruthy()
     expect(await screen.findByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
     expect(screen.getByRole("heading", { name: "After rerank, Cross-encoder, 5 kept" })).toBeTruthy()
-    await waitFor(() => expect(badges()).toEqual(["up from #6", "down from #1", "down from #2", "stayed #4", "down from #3"]))
+    await waitFor(() =>
+      expect(badges()).toEqual([
+        "1st, moved up from 6th",
+        "2nd, moved down from 1st",
+        "3rd, moved down from 2nd",
+        "4th, stayed in place",
+        "5th, moved down from 3rd",
+      ]),
+    )
     // The rank 1 hit came from rank 6.
     const top = document.querySelector('[data-column="reranked"] [data-hit-row="1"]') as HTMLElement
-    expect(within(top).getByTestId("badge").textContent).toBe("up from #6")
-    expect(within(top).getByTestId("badge").className).toContain("font-sans")
-    expect(within(top).getByTestId("badge").className).not.toContain("font-mono")
-    // The left column marks only the piece the reranker dropped: the fifth search hit.
+    const finding = within(top).getByTestId("finding")
+    expect(finding.className).toContain("font-sans")
+    expect(finding.className).not.toContain("font-mono")
+    expect(within(finding).getByText("moved up from 6th").className).toContain("font-semibold")
+    // The left column says each piece's place in search; the kept highlight is the finding line and nothing else.
     const left = document.querySelector('[data-column="search"]') as HTMLElement
-    expect(within(left).getAllByText("Not kept")).toHaveLength(1)
-    expect(within(left.querySelector<HTMLElement>('[data-hit-row="5"]')!).getByText("Not kept")).toBeTruthy()
-    expect(left.textContent!.match(/kept/g)).toHaveLength(1)
+    expect(within(left).getAllByTestId("finding").map((f) => f.textContent!.split(",")[0])).toEqual([
+      "1st in search",
+      "2nd in search",
+      "3rd in search",
+      "4th in search",
+      "5th in search",
+      "6th in search",
+    ])
+    expect(left.textContent).not.toMatch(/kept/i)
     expect(await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")).toBeTruthy()
   })
 
@@ -134,14 +150,14 @@ describe("the comparison, with a reranker", () => {
     expect(document.body.textContent).not.toMatch(/Moved \d+ of/)
   })
 
-  it("collapsing hides the search order and keeps the reranked list with its badges", async () => {
+  it("collapsing hides the search order and keeps the reranked list with its finding lines", async () => {
     render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
     fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
     expect(screen.queryByRole("heading", { name: "Search order, 6 candidates" })).toBeNull()
     expect(document.querySelector('[data-column="search"]')).toBeNull()
     expect(screen.getByRole("button", { name: "Show comparison" })).toBeTruthy()
     await waitFor(() => expect(badges()).toHaveLength(5))
-    expect(badges()[0]).toBe("up from #6")
+    expect(badges()[0]).toBe("1st, moved up from 6th")
     fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
     expect(await screen.findByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
   })
@@ -310,7 +326,7 @@ describe("the results without a reranker", () => {
     render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
     expect(await screen.findByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Hide comparison" })).toBeNull()
-    expect(screen.queryAllByTestId("badge")).toHaveLength(0)
+    expect(screen.getAllByTestId("finding").map((f) => f.textContent!.split(",")[0])).toEqual(["1st", "2nd", "3rd", "4th", "5th"])
   })
 
   it("waits for the Search output, so the list never shows six rows and then five", async () => {

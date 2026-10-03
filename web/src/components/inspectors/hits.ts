@@ -178,6 +178,43 @@ export function badge(row: Pick<HitRowData, "rank" | "prior_rank">): Badge | nul
   return row.prior_rank === null || row.prior_rank === undefined ? null : { kind: "stayed", text: `stayed #${row.rank}` }
 }
 
+/** An English ordinal: `1st`, `2nd`, `3rd`, `4th`, `11th`, `21st`. */
+export function ordinal(n: number): string {
+  const teen = n % 100
+  if (teen >= 11 && teen <= 13) return `${n}th`
+  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`
+}
+
+/** Which list a slip sits in: one list, the search side or the reranked side of the comparison, or below the kept ones. */
+export type SlipSide = "single" | "search" | "reranked" | "notKept"
+
+/** A run of the finding line: `strong` is the movement of a piece that rose, `mono` a score. */
+export interface FindingPart {
+  text: string
+  strong?: boolean
+  mono?: boolean
+}
+
+/**
+ * The finding line, in the tool's voice: `1st` in one list; `1st in search,
+ * RRF 0.03279` on the search side; `2nd, moved up from 4th`, `3rd, stayed in
+ * place` or `4th, moved down from 2nd` on the reranked side; and for a piece
+ * past the keep limit `Not kept. It was 6th in search and the keep limit is 5.`
+ */
+export function findingLine(row: Pick<HitRowData, "rank" | "prior_rank" | "score">, side: SlipSide, scaleKey: string, keepLimit?: number): FindingPart[] {
+  const place = ordinal(row.rank)
+  if (side === "notKept") {
+    const was = ordinal(row.prior_rank ?? row.rank)
+    return [{ text: keepLimit === undefined ? `Not kept. It was ${was} in search.` : `Not kept. It was ${was} in search and the keep limit is ${keepLimit}.` }]
+  }
+  if (side === "search") return [{ text: `${place} in search, ${scaleName(scaleKey)} ` }, { text: fmtScore(row.score), mono: true }]
+  if (side === "single" || row.prior_rank === null || row.prior_rank === undefined) return [{ text: place }]
+  const move = movement(row)
+  if (move.kind === "none") return [{ text: place }, { text: ", stayed in place" }]
+  if (move.kind === "up") return [{ text: place }, { text: ", " }, { text: `moved up from ${ordinal(move.from)}`, strong: true }]
+  return [{ text: place }, { text: `, moved down from ${ordinal(move.from)}` }]
+}
+
 export function pages(span: [number, number] | null): string | null {
   if (!span) return null
   return span[0] === span[1] ? `p. ${span[0]}` : `pp. ${span[0]}-${span[1]}`

@@ -250,7 +250,7 @@ class FakeOpenAI:
 
 def dump(name: str, data: object) -> None:
     path = OUT / name
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {path.relative_to(ROOT)}")
 
 

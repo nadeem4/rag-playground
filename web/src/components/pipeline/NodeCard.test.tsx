@@ -429,11 +429,13 @@ describe("the stuck head", () => {
       const h = this.tagName === "HEADER" ? 74.5 : 40
       return { top: 0, bottom: h, left: 0, right: 380, width: 380, height: h, x: 0, y: 0, toJSON() {} } as DOMRect
     })
-    const { box } = boxed(<NodeCard {...props()} />)
+    const { box, view } = boxed(<NodeCard {...props()} />)
     const card = box.querySelector("article")!
     expect(card.style.getPropertyValue("--head-h")).toBe("74.5px")
     const options = within(card).getByTestId("step-options").querySelector(".min-h-0 > div")!
     expect(options.className).toContain("[&_*]:scroll-mt-(--head-h)")
+    view.rerender(<NodeCard {...props({ selected: false })} />)
+    expect(card.style.getPropertyValue("--head-h")).toBe("")
   })
 
   it("scrolls the result line into view once when a run finishes below the fold", async () => {
@@ -453,6 +455,34 @@ describe("the stuck head", () => {
       await vi.waitFor(() => expect(scroll).toHaveBeenCalledTimes(1))
       expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
       expect(scroll.mock.contexts[0]).toBe(line)
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
+  })
+
+  it("yields to a reader who scrolled the column during the run", async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    try {
+      payloads = { rev3: chunkRecursive }
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const at = (top: number, h: number) => ({ top, bottom: top + h, left: 0, right: 380, width: 380, height: h, x: 0, y: top, toJSON() {} }) as DOMRect
+        if (this.hasAttribute("data-scroll-box")) return at(100, 500)
+        if (this.dataset.testid === "run-result") return at(612, 20)
+        return at(200, 40)
+      })
+      const box = document.createElement("div")
+      box.setAttribute("data-scroll-box", "")
+      box.style.overflowY = "auto"
+      let top = 241
+      Object.defineProperty(box, "scrollTop", { configurable: true, get: () => top, set: (v: number) => (top = v) })
+      document.body.appendChild(box)
+      const view = render(<NodeCard {...props({ result: { id: "chunk", status: "running" } })} />, { container: box })
+      top = 0
+      view.rerender(<NodeCard {...props({ result: done("rev3") })} />)
+      await within(box).findByTestId("run-result", {}, { timeout: 4000 })
+      await new Promise((r) => setTimeout(r, 50))
+      expect(scroll).not.toHaveBeenCalled()
     } finally {
       delete (Element.prototype as Partial<Element>).scrollIntoView
     }

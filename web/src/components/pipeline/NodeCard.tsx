@@ -188,6 +188,12 @@ function scrollParent(el: HTMLElement): HTMLElement | null {
   return null
 }
 
+/** How far the card's scroll box (or the window) is scrolled. */
+function scrollTopOf(el: HTMLElement | null): number {
+  const root = el ? scrollParent(el) : null
+  return root ? root.scrollTop : window.scrollY
+}
+
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
 }
@@ -222,6 +228,8 @@ export function NodeCard(p: NodeCardProps) {
   // Set when this card's run finishes, so its result line is brought into view once.
   const [reveal, setReveal] = useState(false)
   const wasRunning = useRef(running)
+  // Where the column was scrolled when this card's run started.
+  const startTop = useRef<number | undefined>(undefined)
   const warning = p.explain?.data?.warning
   const completed = (p.result?.status === "done" || p.result?.status === "cached") && p.result.artifact_id ? p.result.artifact_id : undefined
   const reused = shown.look === "done" && p.result?.status === "cached"
@@ -279,13 +287,23 @@ export function NodeCard(p: NodeCardProps) {
     if (!p.selected || !card || !head || typeof ResizeObserver === "undefined") return
     const ro = new ResizeObserver(() => card.style.setProperty("--head-h", `${head.getBoundingClientRect().height}px`))
     ro.observe(head)
-    return () => ro.disconnect()
+    return () => {
+      ro.disconnect()
+      card.style.removeProperty("--head-h")
+    }
   }, [p.selected])
 
-  // A run of this card that ends with a result asks for the result line once.
+  // A run of this card that ends with a result asks for the result line once,
+  // unless the reader scrolled the column while it ran: then they are elsewhere.
   useEffect(() => {
-    if (running) setReveal(false)
-    else if (wasRunning.current && !failed) setReveal(true)
+    if (running) {
+      setReveal(false)
+      if (startTop.current === undefined) startTop.current = scrollTopOf(cardRef.current)
+    } else {
+      const moved = startTop.current !== undefined && Math.abs(scrollTopOf(cardRef.current) - startTop.current) > 2
+      if (wasRunning.current && !failed && !moved) setReveal(true)
+      startTop.current = undefined
+    }
     wasRunning.current = running
   }, [running, failed])
 

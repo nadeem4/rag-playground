@@ -244,7 +244,7 @@ describe("stale (Channel A)", () => {
 
 describe("the hover wash", () => {
   it("sits on the new green-grey tint, in light and in both dark twins", () => {
-    expect(light.get("--surface-hover")).toBe("#eaece8")
+    expect(light.get("--surface-hover")).toBe("#dfe2dd")
     expect(darkMedia.get("--surface-hover")).toBe("#1f2023")
     expect(darkToggle.get("--surface-hover")).toBe("#1f2023")
   })

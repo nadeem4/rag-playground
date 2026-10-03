@@ -76,6 +76,19 @@ NO_KEY: dict[str, str] = {
     ),
 }
 
+#: Where each provider's key sits in `ctx.extras["credentials"]`.
+CREDENTIAL: dict[str, str] = {
+    "anthropic": "anthropic_api_key",
+    "openai": "openai_api_key",
+    "openai_compatible": "custom_api_key",
+}
+
+
+def key_for(model: ChatModel, credentials: dict[str, Any] | None) -> str | None:
+    """The run's key for this model's provider, or None."""
+    return (credentials or {}).get(CREDENTIAL[model.provider])
+
+
 #: Sent as the key to a custom endpoint that needs none. Local servers ignore it.
 NO_KEY_PLACEHOLDER = "not-needed"
 

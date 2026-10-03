@@ -40,6 +40,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.retrieve.hybrid_rrf",
     "plugins.rerank.mmr",
     "plugins.rerank.cross_encoder",
+    "plugins.rerank.llm_rerank",
     "plugins.use_case.search",
     "plugins.use_case.chat",
     "plugins.use_case.eval",

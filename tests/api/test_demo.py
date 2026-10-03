@@ -241,6 +241,43 @@ def test_a_custom_chat_variant_is_refused_in_sweeps(client, monkeypatch):
     assert r.status_code == 403
 
 
+def llm_rerank_graph(model: str = "claude-haiku-4-5") -> dict:
+    return {
+        "nodes": [
+            {"id": "rr", "stage": "rerank", "transform": "llm_rerank",
+             "config": {"model": model, "custom_base_url": "http://169.254.169.254/",
+                        "custom_model": "m"}},
+        ],
+        "edges": [],
+    }
+
+
+def test_a_custom_llm_rerank_node_is_refused_in_runs(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post("/api/runs", json={"graph": llm_rerank_graph("custom")})
+    assert r.status_code == 403
+    assert "custom" in r.json()["detail"].lower()
+
+
+def test_an_override_cannot_switch_an_llm_rerank_node_to_custom(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post(
+        "/api/runs",
+        json={"graph": llm_rerank_graph(), "overrides": {"rr": {"model": "custom"}}},
+    )
+    assert r.status_code == 403
+
+
+def test_a_custom_llm_rerank_variant_is_refused_in_sweeps(client, monkeypatch):
+    demo_on(monkeypatch)
+    r = client.post(
+        "/api/sweeps",
+        json={"graph": llm_rerank_graph(), "node_id": "rr",
+              "variants": [{"transform": "llm_rerank", "config": {"model": "custom"}}]},
+    )
+    assert r.status_code == 403
+
+
 def test_outside_demo_a_custom_chat_node_is_not_refused(client):
     r = client.post("/api/runs", json={"graph": chat_graph("custom")})
     assert r.status_code != 403  # the one-node graph is invalid for other reasons

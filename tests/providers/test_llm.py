@@ -333,3 +333,13 @@ def test_importing_the_module_does_not_import_either_sdk():
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_key_for_reads_the_providers_credential():
+    from providers.llm import key_for
+
+    creds = {"anthropic_api_key": "a", "openai_api_key": "o", "custom_api_key": "c"}
+    assert key_for(CHAT_MODELS["claude-opus-5"], creds) == "a"
+    assert key_for(CHAT_MODELS["gpt-6-astra"], creds) == "o"
+    assert key_for(CHAT_MODELS["custom"], creds) == "c"
+    assert key_for(CHAT_MODELS["claude-opus-5"], None) is None

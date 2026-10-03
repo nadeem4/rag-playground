@@ -275,7 +275,7 @@ several times, for example two cleaners in a row.
 | **index** | Embeds the chunks and stores them for vector and keyword search | `lancedb` |
 | **query_transform** \* | Rewrites the question before retrieval | planned |
 | **retrieve** | Finds the chunks most relevant to the question and hands on a pool of candidates (20 by default) | `dense`, `bm25`, `hybrid_rrf` |
-| **rerank** \* | Picks the best few from the retrieved candidates | `mmr`, `cross_encoder` |
+| **rerank** \* | Picks the best few from the retrieved candidates | `mmr`, `cross_encoder`, `llm_rerank` |
 | **use_case** | What the user finally gets | `search`, `chat`, `eval` |
 
 ### Parse
@@ -313,6 +313,7 @@ several times, for example two cleaners in a row.
 | retrieve | `hybrid_rrf` | Runs both searches and merges the two rankings by position (reciprocal rank fusion). |
 | rerank | `mmr` | Maximal Marginal Relevance: picks its top 5 from the retriever's pool of 20, trading a little relevance for variety, so it can drop near-duplicates instead of only reordering them. |
 | rerank | `cross_encoder` | A sentence-transformers CrossEncoder reads the question and each candidate together and scores the pair, then keeps its top 5. MiniLM, the default, is small and fast and is loaded in the background when a sample opens; bge-reranker-base is stronger; bge-reranker-v2-m3 is strongest and slow on a CPU. |
+| rerank | `llm_rerank` | Asks the chat model to put the candidates in order of relevance, reading the first 600 characters of each, then keeps its top 5. It needs an API key, makes one model call per question, and its order can change between runs. Claude Haiku 4.5 by default; any chat model can be chosen. |
 
 ### Use case
 

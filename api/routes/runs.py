@@ -102,7 +102,7 @@ def _check(
     if demo.enabled():
         for nd in graph.nodes:
             cfg = overrides.get(nd.id, nd.config)
-            if _is_custom_chat(nd.stage, nd.transform, cfg):
+            if _is_custom_endpoint(nd.stage, nd.transform, cfg):
                 raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
     try:
         graph.validate(registry)
@@ -128,8 +128,12 @@ def _check(
             ) from exc
 
 
-def _is_custom_chat(stage: Stage, transform: str, cfg: dict[str, Any]) -> bool:
-    return stage == Stage.USE_CASE and transform == "chat" and cfg.get("model") == "custom"
+#: Transforms that call a chat model, and so could call a visitor's custom endpoint.
+_MODEL_CALLERS = {(Stage.USE_CASE, "chat"), (Stage.RERANK, "llm_rerank")}
+
+
+def _is_custom_endpoint(stage: Stage, transform: str, cfg: dict[str, Any]) -> bool:
+    return (stage, transform) in _MODEL_CALLERS and cfg.get("model") == "custom"
 
 
 def _credentials(
@@ -214,7 +218,7 @@ async def create_sweep(
     _unknown(graph, [body.node_id] + ([body.through] if body.through else []), "node")
     target = graph.node(body.node_id)
     if demo.enabled() and any(
-        _is_custom_chat(target.stage, v.transform, v.config) for v in body.variants
+        _is_custom_endpoint(target.stage, v.transform, v.config) for v in body.variants
     ):
         raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
     for v in body.variants:

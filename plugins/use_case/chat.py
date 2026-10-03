@@ -134,13 +134,6 @@ _KEY_WORDS: dict[str, str] = {
     ),
 }
 
-_CREDENTIAL: dict[str, str] = {
-    "anthropic": "anthropic_api_key",
-    "openai": "openai_api_key",
-    "openai_compatible": "custom_api_key",
-}
-
-
 def make_client(api_key: str) -> Any:
     """The client for the native path. Tests monkeypatch this."""
     return llm.make_anthropic_client(api_key)
@@ -259,7 +252,7 @@ class ChatUseCase(Transform[ChatConfig]):
         if uses_native(config):
             return _native(inputs, config, creds.get("anthropic_api_key"))
         model = CHAT_MODELS[config.model]
-        return _sentence_ids(inputs, config, model, creds.get(_CREDENTIAL[model.provider]))
+        return _sentence_ids(inputs, config, model, llm.key_for(model, creds))
 
 
 # --------------------------------------------------------------------------

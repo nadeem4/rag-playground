@@ -41,5 +41,18 @@ def mount_spa(app: FastAPI, dist: Path) -> None:
         root = dist.resolve()
         candidate = (dist / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(root):
-            return FileResponse(candidate)
-        return FileResponse(index)
+            return FileResponse(candidate, headers={"Cache-Control": _cache_control(path)})
+        # The shell must be checked on every visit, or a browser keeps showing
+        # the build from before a publish while the new assets sit unused.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+
+
+#: Vite names every bundled asset with a content hash, so those files can be
+#: cached for a year: a new build means a new name.
+ASSETS_PREFIX = "assets/"
+
+
+def _cache_control(path: str) -> str:
+    if path.startswith(ASSETS_PREFIX):
+        return "public, max-age=31536000, immutable"
+    return "no-cache"

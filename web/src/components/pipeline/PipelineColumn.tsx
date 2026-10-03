@@ -7,11 +7,10 @@ import { useStages, type ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { Button } from "@/components/ui/button"
 import { compatibility } from "@/state/compat"
-import { ancestors, columnOrder, COLUMN_STAGES, infoFor, terminalNode, titleFor, transformsFor, upstreamFor, type PipelineGraph } from "@/state/graph"
+import { ancestors, columnOrder, INDEX_STAGES, infoFor, titleFor, transformsFor, upstreamFor, type PipelineGraph } from "@/state/graph"
 import type { RunHistory } from "@/state/pipeline"
 
 import { NodeCard } from "./NodeCard"
-import { QuestionField } from "./QuestionField"
 import { SourcePicker, type SourceConfig } from "./SourcePicker"
 
 /**
@@ -43,7 +42,6 @@ export interface PipelineColumnProps {
   onSample?: (src: Source, question: string) => void
   onRun: (id: string, force: boolean) => void
   onAddCleaner: () => void
-  onAddReranker?: () => void
   onRemove: (id: string) => void
   onSweep: (id: string, preset?: SweepPreset) => void
   /** Plan I-12, per node id: the explanation of each card's current settings. */
@@ -84,14 +82,12 @@ function addAnchor(order: GraphNode[], stage: Stage, feeder: Stage): GraphNode |
 }
 
 export function PipelineColumn(p: PipelineColumnProps) {
-  const order = columnOrder(p.graph).filter((n) => COLUMN_STAGES.includes(n.stage))
-  const terminal = terminalNode(p.graph)
+  const order = columnOrder(p.graph).filter((n) => INDEX_STAGES.includes(n.stage))
   const stages = useStages()
   // One explanation pop-over at a time.
   const [open, setOpen] = useState<string | null>(null)
   const adds: { anchor?: GraphNode; label: string; onAdd?: () => void }[] = [
     { anchor: transformsFor(p.registry, "clean").length ? addAnchor(order, "clean", "parse") : undefined, label: "Add cleaner", onAdd: p.onAddCleaner },
-    { anchor: transformsFor(p.registry, "rerank").length ? addAnchor(order, "rerank", "retrieve") : undefined, label: "Add reranker", onAdd: p.onAddReranker },
   ]
 
   return (
@@ -100,9 +96,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
         const errs = p.errors[node.id]
         const title = titleFor(node)
         const stacked = infoFor(p.registry, node)?.stackable ?? false
-        // Ask runs the question through to the end of the column.
-        const runTarget = node.stage === "query" && terminal ? terminal.id : node.id
-        const isQuestion = node.stage === "query" && "text" in (infoFor(p.registry, node)?.config_schema.properties ?? {})
+        const runTarget = node.id
         return (
           <Fragment key={node.id}>
             <NodeCard
@@ -130,7 +124,6 @@ export function PipelineColumn(p: PipelineColumnProps) {
                 return b ? titleFor(b) : undefined
               })()}
               previousArtifactId={p.history?.[node.id]?.previous}
-              runTitle={runTarget !== node.id && terminal ? `Ask this question and run through ${titleFor(terminal)}` : undefined}
               showId={stacked}
               onRemove={stacked ? () => p.onRemove(node.id) : undefined}
               body={
@@ -140,14 +133,6 @@ export function PipelineColumn(p: PipelineColumnProps) {
                     onChange={(c) => p.onConfig(node.id, { ...c })}
                     onSample={p.onSample}
                     errors={errs?.fields ? Object.entries(errs.fields).flatMap(([k, msgs]) => msgs.map((m) => (k ? `${k}: ${m}` : m))) : undefined}
-                  />
-                ) : isQuestion ? (
-                  <QuestionField
-                    value={String(node.config.text ?? "")}
-                    errors={errs?.fields?.text}
-                    disabled={p.busy}
-                    onChange={(text) => p.onConfig(node.id, { ...node.config, text })}
-                    onSubmit={() => p.onRun(runTarget, false)}
                   />
                 ) : undefined
               }

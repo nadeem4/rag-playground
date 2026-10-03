@@ -94,7 +94,7 @@ export function describeResult(result: NodeState | undefined, stale: boolean | u
     case "done":
       return stale ? { label: "changed, not run", rule: "none" } : { label: "computed", rule: "solid", duration: result.duration_ms }
     case "cached":
-      return stale ? { label: "changed, not run", rule: "none" } : { label: "cached", rule: "dotted", duration: result.duration_ms }
+      return stale ? { label: "changed, not run", rule: "none" } : { label: "reused from an earlier run", rule: "dotted", duration: result.duration_ms }
     default:
       return { label: "not run", rule: "none" }
   }

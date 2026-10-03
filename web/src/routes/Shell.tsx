@@ -20,9 +20,9 @@ import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { Button } from "@/components/ui/button"
 import {
   addCleaner,
-  addReranker,
   ancestors,
   columnOrder,
+  indexNode,
   infoFor,
   initialGraph,
   readStoredGraph,
@@ -280,7 +280,7 @@ function Build({ registry }: { registry: Registry }) {
     <main className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
       <section aria-label="Pipeline" className="flex min-h-0 flex-col bg-surface">
         <div className="flex h-[40px] shrink-0 items-center justify-between gap-2 border-b border-hairline px-3">
-          <h1 className="text-xl font-semibold">Pipeline</h1>
+          <h1 className="text-xl font-semibold">Index pipeline</h1>
           <div className="flex items-center gap-2">
             {busy && runId ? (
               <Button variant="outline" size="sm" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
@@ -291,9 +291,9 @@ function Build({ registry }: { registry: Registry }) {
               size="sm"
               disabled={busy || Boolean(blocker) || firstRun}
               title={blocker ? blockedTitle(blocker) : undefined}
-              onClick={() => void start(undefined, false)}
+              onClick={() => void start(indexNode(graph)?.id, false)}
             >
-              {busy ? "Running" : "Run all"}
+              {busy ? "Running" : "Build the index"}
             </Button>
           </div>
         </div>
@@ -309,6 +309,9 @@ function Build({ registry }: { registry: Registry }) {
           }}
           notice={barNotice}
         />
+        <p className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
+          These five steps build the index. Retrieval, reranking and answering live in the Ask panel.
+        </p>
         {missing ? (
           <p role="status" data-testid="missing-document" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
             This pipeline was built on {sourceName}. Load a sample, or upload that file, to run it.
@@ -364,7 +367,6 @@ function Build({ registry }: { registry: Registry }) {
                 onSample={pickSample}
                 onRun={(id, force) => void start(id, force)}
                 onAddCleaner={() => edit(addCleaner(graph, registry))}
-                onAddReranker={() => edit(addReranker(graph, registry))}
                 onRemove={(id) => {
                   edit(removeNode(graph, id), id)
                   if (selected === id) setSelected(null)

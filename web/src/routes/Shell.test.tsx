@@ -87,7 +87,7 @@ describe("Build page", () => {
     expect(within(card("parse")).queryByText(/greater than or equal/)).toBeNull()
   })
 
-  it("Run all without a file asks calmly for a sample, with no red note", async () => {
+  it("Build the index without a file asks calmly for a sample, with no red note", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
@@ -103,7 +103,7 @@ describe("Build page", () => {
       }),
     )
     render(<Shell />)
-    const runAll = await screen.findByRole("button", { name: "Run all" })
+    const runAll = await screen.findByRole("button", { name: "Build the index" })
     await waitFor(() => expect(runAll.getAttribute("title")).toBe("Load a sample to start."), { timeout: 2000 })
     expect((runAll as HTMLButtonElement).disabled).toBe(true)
     expect(document.querySelector("[data-testid=run-all-blocked]")).toBeNull()
@@ -111,7 +111,8 @@ describe("Build page", () => {
   })
 })
 
-describe("Run all with a chat card and no API key", () => {
+// moves to the Ask panel in Task 3
+describe.skip("Run all with a chat card and no API key", () => {
   const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none" }
   let settings: Record<string, string>
   let streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[]
@@ -173,7 +174,7 @@ describe("Run all with a chat card and no API key", () => {
         <Shell />
       </ApiKeyProvider>,
     )
-    const button = await screen.findByRole("button", { name: "Run all" })
+    const button = await screen.findByRole("button", { name: "Build the index" })
     // Let the settings answer land before pressing.
     await act(async () => {})
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
@@ -215,6 +216,19 @@ describe("Run all with a chat card and no API key", () => {
   })
 })
 
+describe("Build the index", () => {
+  it("sends the Index node as the only target", async () => {
+    await ready()
+    const button = await screen.findByRole("button", { name: "Build the index" })
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(button)
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect((posts[0].body as { targets: string[] }).targets).toEqual(["index"])
+    expect(screen.getByRole("heading", { name: "Index pipeline" })).toBeTruthy()
+    expect(screen.getByText("These five steps build the index. Retrieval, reranking and answering live in the Ask panel.")).toBeTruthy()
+  })
+})
+
 describe("Build page explanations", () => {
   it("a blocking explanation disables Run all with a visible reason, as the user types", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
@@ -239,7 +253,7 @@ describe("Build page explanations", () => {
     )
     await ready()
     const runAll = () => document.querySelector("section[aria-label=Pipeline]")!.querySelector("button:not([aria-label])") as HTMLButtonElement
-    expect(runAll().textContent).toBe("Run all")
+    expect(runAll().textContent).toBe("Build the index")
     await waitFor(() => expect(runAll().disabled).toBe(false))
     fireEvent.change(within(card("chunk")).getByLabelText("Chunk Overlap"), { target: { value: "5000" } })
     await waitFor(() => expect(within(card("chunk")).getByTestId("explain-warning").textContent).toBe("Overlap must be smaller than the chunk size."), {
@@ -355,13 +369,10 @@ describe("First run (plan I-15)", () => {
       ["clean", "dedupe_blocks"],
       ["chunk", "recursive_character"],
       ["index", "lancedb"],
-      ["query", "text"],
-      ["retrieve", "hybrid_rrf"],
-      ["use_case", "search"],
     ])
     expect(byId.get("source")!.config).toEqual({ sha: SAMPLE.sha, filename: SAMPLE.filename })
     expect(byId.get("index")!.config.embedder).toBe("qwen3-embedding-0.6b")
-    expect((within(card("query")).getByLabelText("Question") as HTMLTextAreaElement).value).toBe("Why do chunk boundaries matter?")
+    expect(byId.get("query")!.config.text).toBe("Why do chunk boundaries matter?")
     expect(posts).toHaveLength(0)
     expect(document.body.textContent).toContain("Ready to run")
   })
@@ -389,6 +400,12 @@ describe("First run (plan I-15)", () => {
     expect(card("parse")).toBeNull()
   })
 })
+
+/** The question text in the stored graph. The Ask panel shows it from Task 3. */
+function storedQuestion() {
+  const read = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1") ?? "{}") as { nodes?: { stage: string; config: { text?: string } }[] }
+  return read.nodes?.find((n) => n.stage === "query")?.config.text
+}
 
 describe("picking a sample on the Upload card", () => {
   const TWO_COL = { sha: "11".repeat(32), filename: "two-column-report.pdf", size: 8192, content_type: "application/pdf" }
@@ -433,7 +450,7 @@ describe("picking a sample on the Upload card", () => {
     const pick = await waitFor(() => within(card("source")).getByLabelText("File") as HTMLSelectElement)
     await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
     fireEvent.change(pick, { target: { value: "sample:two-column-report" } })
-    await waitFor(() => expect((within(card("query")).getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?"))
+    await waitFor(() => expect(storedQuestion()).toBe("How long did the survey run?"))
     expect(sampled).toEqual(["two-column-report"])
     type Stored = { nodes: { id: string; config: Record<string, unknown> }[] }
     // The graph reaches storage through a passive effect, so wait for it.
@@ -448,7 +465,8 @@ describe("picking a sample on the Upload card", () => {
     expect(pick.value).toBe("sample:two-column-report")
   })
 
-  it("clears a field error on the Ask card", async () => {
+  // moves to the Ask panel in Task 3
+  it.skip("clears a field error on the Ask card", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",

@@ -339,7 +339,7 @@ describe("the API key panel", () => {
 
   it("a run sends no key header when none is set", async () => {
     await page()
-    fireEvent.click(screen.getByRole("button", { name: "Run all" }))
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
     await waitFor(() => expect(runPosts()).toHaveLength(1))
     for (const p of PROVIDERS) expect(runPosts()[0].headers[H(p)]).toBeUndefined()
   })
@@ -348,7 +348,7 @@ describe("the API key panel", () => {
     await page()
     for (const p of PROVIDERS) enterKey(p, FAKE[p])
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" })
-    fireEvent.click(screen.getByRole("button", { name: "Run all" }))
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
     await waitFor(() => expect(runPosts()).toHaveLength(1))
     const post = runPosts()[0]
     const graph = window.localStorage.getItem("rag-playground:graph:v1")
@@ -375,7 +375,7 @@ describe("the API key panel", () => {
     cleanup()
     sent = []
     await page()
-    fireEvent.click(screen.getByRole("button", { name: "Run all" }))
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
     await waitFor(() => expect(runPosts()).toHaveLength(1))
     for (const p of PROVIDERS) expect(runPosts()[0].headers[H(p)]).toBeUndefined()
   })

@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/api/client"
-import { addCleaner, addReranker, columnOrder, initialGraph, setTransform } from "@/state/graph"
+import { addCleaner, columnOrder, initialGraph, setTransform } from "@/state/graph"
 import { routeRunError } from "@/state/pipeline"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
@@ -31,7 +31,6 @@ function setup(over: Partial<PipelineColumnProps> = {}) {
     onConfig: vi.fn(),
     onRun: vi.fn(),
     onAddCleaner: vi.fn(),
-    onAddReranker: vi.fn(),
     onRemove: vi.fn(),
     onSweep: vi.fn(),
     ...over,
@@ -46,7 +45,7 @@ describe("PipelineColumn", () => {
   it("titles cards with plain verbs, in graph order", () => {
     setup()
     const titles = [...document.querySelectorAll("article h3")].map((h) => h.textContent)
-    expect(titles).toEqual(["Upload", "Parse", "Clean", "Chunk", "Index", "Ask", "Retrieve", "Search"])
+    expect(titles).toEqual(["Upload", "Parse", "Clean", "Chunk", "Index"])
   })
 
   it("the Upload card is plain: no explain button, no Transform, no Run; Parse keeps all three", () => {
@@ -74,7 +73,7 @@ describe("PipelineColumn", () => {
     expect(p.onRun).toHaveBeenCalledWith("chunk", true)
   })
 
-  it("encodes computed versus cached as a solid versus dotted left rule", () => {
+  it("encodes computed versus reused as a solid versus dotted left rule", () => {
     setup({
       results: {
         parse: { id: "parse", status: "cached", artifact_id: "p", cache_hit: true, duration_ms: 1 },
@@ -85,6 +84,7 @@ describe("PipelineColumn", () => {
     expect(card("parse").style.borderLeft).toContain("dotted")
     expect(card("chunk").dataset.rule).toBe("solid")
     expect(card("source").dataset.rule).toBe("none")
+    expect(within(card("parse")).getByText("reused from an earlier run")).toBeTruthy()
   })
 
   it("a 422 shows under the right field of the right card", () => {
@@ -122,48 +122,14 @@ describe("PipelineColumn", () => {
     expect(p.onRemove).toHaveBeenCalledWith(clean.id)
   })
 
-  it("Parse, Chunk, Index and Retrieve offer Sweep; Index also offers the dimensions preset", () => {
+  it("Parse, Chunk and Index offer Sweep; Index also offers the dimensions preset", () => {
     const p = setup()
     const sweeps = screen.getAllByRole("button", { name: "Sweep" })
-    expect(sweeps.map((b) => b.closest("article")!.getAttribute("data-node-id"))).toEqual(["parse", "chunk", "index", "retrieve"])
+    expect(sweeps.map((b) => b.closest("article")!.getAttribute("data-node-id"))).toEqual(["parse", "chunk", "index"])
     fireEvent.click(sweeps[1])
     expect(p.onSweep).toHaveBeenCalledWith("chunk")
     fireEvent.click(within(card("index")).getByRole("button", { name: "Sweep dimensions" }))
     expect(p.onSweep).toHaveBeenCalledWith("index", "matryoshka")
-  })
-
-  it("Add reranker sits after Retrieve; a reranker card is removable and shows its id", () => {
-    const p = setup()
-    const add = screen.getByRole("button", { name: "Add reranker" })
-    expect(add.parentElement!.previousElementSibling!.getAttribute("data-node-id")).toBe("retrieve")
-    fireEvent.click(add)
-    expect(p.onAddReranker).toHaveBeenCalled()
-    cleanup()
-    const graph = addReranker(initialGraph(R), R)
-    const rr = graph.nodes.find((n) => n.stage === "rerank")!
-    const q = setup({ graph })
-    expect(within(card(rr.id)).getByText(rr.id)).toBeTruthy()
-    fireEvent.click(within(card(rr.id)).getByRole("button", { name: `Remove ${rr.id}` }))
-    expect(q.onRemove).toHaveBeenCalledWith(rr.id)
-    // Add reranker now follows the last reranker.
-    expect(screen.getByRole("button", { name: "Add reranker" }).parentElement!.previousElementSibling!.getAttribute("data-node-id")).toBe(rr.id)
-    // Retrieve, Index and Search are not removable.
-    for (const id of ["retrieve", "index", "use_case", "query"]) expect(within(card(id)).queryByRole("button", { name: /^Remove/ })).toBeNull()
-  })
-
-  it("the Ask card edits the question, and its Run runs through Search", () => {
-    const p = setup()
-    const box = within(card("query")).getByLabelText("Question")
-    expect(box.tagName).toBe("TEXTAREA")
-    fireEvent.change(box, { target: { value: "What does overlap cost?" } })
-    expect(p.onConfig).toHaveBeenCalledWith("query", { text: "What does overlap cost?" })
-    fireEvent.click(within(card("query")).getByRole("button", { name: "Run" }))
-    expect(p.onRun).toHaveBeenCalledWith("use_case", false)
-    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })
-    expect(p.onRun).toHaveBeenCalledTimes(2)
-    // A plain Enter is a newline, not a run.
-    fireEvent.keyDown(box, { key: "Enter" })
-    expect(p.onRun).toHaveBeenCalledTimes(2)
   })
 
   it("a stage with one transform shows its name as text, not a one-option picker", () => {
@@ -264,22 +230,5 @@ describe("locked transforms", () => {
       "Needs headings from the parse step. pdfium does not find any, so the whole document is treated as one section and cut by size.",
     )
     expect(chunk.getByRole("button", { name: "Run" }).hasAttribute("disabled")).toBe(false)
-  })
-
-  it("greys a hard lock in the dropdown, and blocks Run with the reason when it is selected", () => {
-    setup({ graph: setTransform(initialGraph(R), "retrieve", "bm25", R) })
-    const retrieve = within(card("retrieve"))
-    const option = retrieve.getByRole("option", { name: "bm25 · locked" }) as HTMLOptionElement
-    expect(option.disabled).toBe(true)
-    expect(retrieve.getByRole("alert").textContent).toBe("Needs text search from the index step. lancedb does not provide it, so this cannot run.")
-    expect(retrieve.getByRole("button", { name: "Run" }).hasAttribute("disabled")).toBe(true)
-    expect(retrieve.getByText("Locked. Pick another transform to run.")).toBeTruthy()
-  })
-
-  it("a hard lock upstream blocks the cards below it too", () => {
-    setup({ graph: setTransform(initialGraph(R), "retrieve", "bm25", R) })
-    const search = within(card("use_case"))
-    expect(search.getByRole("button", { name: "Run" }).hasAttribute("disabled")).toBe(true)
-    expect(search.getByText("Fix the Retrieve settings to run.")).toBeTruthy()
   })
 })

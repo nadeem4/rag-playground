@@ -121,12 +121,12 @@ const RING: Record<Look, string> = {
 }
 
 /** The outcome on one line, its headline number in bold and the other numbers in mono. */
-function ResultLine({ outcome }: { outcome: Outcome }) {
+function ResultLine({ outcome, testId = "step-summary" }: { outcome: Outcome; testId?: string }) {
   const text = outcomeText(outcome)
   const head = fmt(outcome.headline)
   const at = outcome.lead.lastIndexOf(head)
   return (
-    <p data-testid="step-summary" title={text} className="m-0 mt-1 truncate text-sm text-fg">
+    <p data-testid={testId} title={text} className="m-0 mt-1 truncate text-sm text-fg">
       {at < 0 ? (
         <MonoNumbers text={text} />
       ) : (
@@ -195,6 +195,8 @@ export function NodeCard(p: NodeCardProps) {
   const elapsed = useElapsed(running ? p.result?.started_at : undefined)
   const cardRef = useRef<HTMLElement>(null)
   const headRef = useRef<HTMLElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const [stuck, setStuck] = useState(false)
   const warning = p.explain?.data?.warning
   const completed = (p.result?.status === "done" || p.result?.status === "cached") && p.result.artifact_id ? p.result.artifact_id : undefined
   const reused = shown.look === "done" && p.result?.status === "cached"
@@ -241,6 +243,21 @@ export function NodeCard(p: NodeCardProps) {
     return () => window.clearTimeout(t)
   }, [p.selected])
 
+  // The open card's head sticks to the top of the scroll box; a zero-height
+  // marker just above it says when it is stuck, for the hairline under it.
+  useEffect(() => {
+    setStuck(false)
+    const mark = sentinelRef.current
+    if (!p.selected || !mark || typeof IntersectionObserver === "undefined") return
+    const root = mark.closest<HTMLElement>("[data-scroll-box]")
+    const io = new IntersectionObserver(
+      ([e]) => setStuck(!e.isIntersecting && e.boundingClientRect.top < (e.rootBounds?.top ?? 0)),
+      { root, threshold: 0 },
+    )
+    io.observe(mark)
+    return () => io.disconnect()
+  }, [p.selected])
+
   return (
     <Popover.Root open={p.explainOpen} onOpenChange={p.onExplainOpenChange}>
     <Popover.Anchor asChild>
@@ -257,12 +274,22 @@ export function NodeCard(p: NodeCardProps) {
         p.explainOpen && "outline-1 -outline-offset-1 outline-fg-muted outline-solid",
       )}
     >
-      {shown.look === "running" && !isSource ? (
-        <span aria-hidden data-testid="running-bar" className="step-running-edge pointer-events-none absolute inset-x-0 top-0 h-[2px] rounded-t-panel bg-primary" />
-      ) : null}
+      <div ref={sentinelRef} aria-hidden className="h-0" />
       {/* Wraps rather than squeezing: on a stacked step with a long chip, the
-          chip and the buttons drop to their own line and the title and id stay whole. */}
-      <header ref={headRef} className="flex min-w-0 scroll-mt-3 flex-wrap items-start gap-x-2 gap-y-1">
+          chip and the buttons drop to their own line and the title and id stay whole.
+          The open card's head sticks, with its breathing edge, so a run's status
+          stays in view while the options scroll under it. */}
+      <header
+        ref={headRef}
+        className={cn(
+          "relative -mx-3 -mt-3 flex min-w-0 scroll-mt-3 flex-wrap items-start gap-x-2 gap-y-1 rounded-t-panel px-3 pt-3",
+          p.selected && "sticky top-0 z-20 bg-surface-raised",
+          p.selected && stuck && "rounded-none pb-2 shadow-[0_1px_0_var(--hairline)]",
+        )}
+      >
+        {shown.look === "running" && !isSource ? (
+          <span aria-hidden data-testid="running-bar" className="step-running-edge pointer-events-none absolute inset-x-0 top-0 h-[2px] rounded-t-panel bg-primary" />
+        ) : null}
         <div className="flex items-center gap-x-2">
           <h3 className="text-sm font-semibold">
             <button
@@ -394,7 +421,8 @@ export function NodeCard(p: NodeCardProps) {
         )}
       >
       <div className="min-h-0 overflow-hidden">
-      <div className="flex min-w-0 flex-col gap-3 pt-3">
+      {/* A field scrolled to by focus stops below the sticky head, not under it. */}
+      <div className={cn("flex min-w-0 flex-col gap-3 pt-3", p.selected && "[&_*]:scroll-mt-16")}>
       {p.lesson?.length ? (
         <StageLesson title={LESSON_TITLE[p.node.stage] ?? `What does ${p.title} do?`} paragraphs={p.lesson} />
       ) : null}
@@ -432,13 +460,14 @@ export function NodeCard(p: NodeCardProps) {
         <Button
           variant="outline"
           size="sm"
+          busy={running}
           disabled={p.busy || Boolean(p.blockedBy)}
           onClick={(e) => {
             e.stopPropagation()
             p.onRun(false)
           }}
         >
-          Run
+          {running ? "Running" : "Run"}
         </Button>
         {hasOutput || failed ? (
           <Button
@@ -454,6 +483,12 @@ export function NodeCard(p: NodeCardProps) {
             Rerun
           </Button>
         ) : null}
+        {running ? (
+          <span data-testid="run-progress" className="text-xs text-fg-muted">
+            Running {p.title}
+            {elapsed !== undefined ? <span className="font-mono">, {elapsed} s</span> : null}
+          </span>
+        ) : null}
         {runNote ? (
           <span data-testid="run-note" className={cn("text-xs", p.blockedBy && !needsFile ? "text-danger" : "text-fg-muted")}>
             {runNote}
@@ -461,6 +496,8 @@ export function NodeCard(p: NodeCardProps) {
         ) : null}
         {p.actions}
       </footer>
+      {/* The outcome again, right under the buttons, so it shows where Run was pressed. */}
+      {ready?.outcome ? <ResultLine outcome={ready.outcome} testId="run-result" /> : null}
       {completed ? (
         <WhatItDid stage={p.node.stage} type={info?.output} artifactId={completed} previousId={p.previousArtifactId} stale={p.stale} />
       ) : null}

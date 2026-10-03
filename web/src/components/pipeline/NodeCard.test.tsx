@@ -290,3 +290,54 @@ describe("the card head on a stacked step", () => {
     expect(right.className.split(/\s+/)).not.toContain("shrink-0")
   })
 })
+
+describe("a running card keeps its status in view", () => {
+  it("the open card's head sticks to the top of the scroll box; a closed card's head does not", () => {
+    const open = renderCard({ selected: true })
+    const head = open.querySelector("header")!
+    const cls = head.className.split(/\s+/)
+    expect(cls).toEqual(expect.arrayContaining(["sticky", "top-0", "z-20", "bg-surface-raised"]))
+    cleanup()
+    const closed = renderCard({ selected: false })
+    expect(closed.querySelector("header")!.className.split(/\s+/)).not.toContain("sticky")
+  })
+
+  it("the breathing edge rides in the head, so it sticks too", () => {
+    const card = renderCard({ selected: true, result: { id: "chunk", status: "running" } })
+    expect(card.querySelector("header [data-testid='running-bar']")).not.toBeNull()
+  })
+
+  it("the Run button reads Running and is busy only while this card's own step runs", () => {
+    const now = Math.floor(Date.now() / 1000) - 4
+    const card = renderCard({ selected: true, busy: true, result: { id: "chunk", status: "running", started_at: now } })
+    const run = within(card).getByRole("button", { name: "Running" }) as HTMLButtonElement
+    expect(run.disabled).toBe(true)
+    expect(run.getAttribute("aria-busy")).toBe("true")
+    const line = within(card).getByTestId("run-progress")
+    expect(line.textContent).toBe("Running Chunk, 4 s")
+    expect(line.closest("footer")).not.toBeNull()
+  })
+
+  it("another card's run leaves this Run button reading Run, not busy, and no running line", () => {
+    const card = renderCard({ selected: true, busy: true })
+    const run = within(card).getByRole("button", { name: "Run" }) as HTMLButtonElement
+    expect(run.disabled).toBe(true)
+    expect(run.hasAttribute("aria-busy")).toBe(false)
+    expect(within(card).queryByTestId("run-progress")).toBeNull()
+  })
+
+  it("a stale running result is not this card's run", () => {
+    const card = renderCard({ selected: true, stale: true, result: { id: "chunk", status: "running" } })
+    expect(within(card).getByRole("button", { name: "Run" })).toBeTruthy()
+    expect(within(card).queryByTestId("run-progress")).toBeNull()
+  })
+
+  it("when the run finishes the result line also sits right under the button row", async () => {
+    payloads = { under1: chunkRecursive }
+    const card = renderCard({ selected: true, result: done("under1") })
+    const under = await within(card).findByTestId("run-result", {}, { timeout: 4000 })
+    expect(under.textContent).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps.")
+    expect(under.previousElementSibling?.tagName).toBe("FOOTER")
+    expect(within(card).getByTestId("step-summary").textContent).toBe(under.textContent)
+  })
+})

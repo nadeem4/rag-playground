@@ -76,14 +76,21 @@ The playground opens on **Lessons** (`/`): four short lessons on the sample PDFs
 The first one follows one question through a recorded real run of the pipeline, from the
 answer back to the PDF. Your progress is kept in your browser. To work on your own
 document, open **Build** (`/build`). For now the lessons are hidden (see [Lessons](#lessons)),
-so the playground opens on **Build**:
+so the playground opens on **Build**.
+
+The column on the left of **Build** is the index pipeline: Upload, Parse, Clean, Chunk and
+Index, one card each with its own settings. **Build the index** runs those five steps, and selecting a card shows its output on the right, with
+**Back to Ask** to return.
+
+The Ask panel on the right holds the question and the retrieval, rerank and answer
+settings, summed up in one recipe line. **Ask** runs the question against the index and
+shows the ranked pieces, the search order against the reranked order when a reranker is
+on, a written answer when the answer is Chat, and the questions asked earlier in the tab.
 
 1. On **Build**, upload a PDF, or press Load on one of the samples the Upload card lists.
    - The sample, `samples/chunking-primer/chunking-primer.pdf`, is three pages of notes on
      chunking. It comes with a ready pipeline and a question, so pressing **Build the index**
-     and then **Ask** in the Ask panel on the right shows every step working. With a
-     reranker, the panel shows the search order against the reranked order side by side,
-     and it lists the questions asked earlier in the tab.
+     and then **Ask** in the Ask panel shows every step working.
    - Choosing it also starts loading the Docling and Qwen3 models in the background.
    - To regenerate the sample set, run `uv run python scripts/make_samples.py`, which writes
      every sample under `samples/<name>/`.
@@ -98,7 +105,8 @@ so the playground opens on **Build**:
    elements the parser found.
 3. Add a cleaner, pick a chunker and run again. The chunk view draws every chunk boundary
    over the text.
-4. Type a question in **Ask** and run through **Search** to see what retrieval finds.
+4. Type a question in the Ask panel, pick a reranker, and press **Ask** to see what
+   retrieval finds and how the reranker reorders it.
 5. Open **Compare** to run several chunkers, or several embedding sizes, side by side.
 
 ## Run with Docker

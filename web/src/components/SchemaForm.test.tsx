@@ -142,6 +142,8 @@ describe("supported types", () => {
     expect(boxes.map((b) => b.value)).toEqual(["body", "furniture", "background", "invisible", "notes"])
     expect(boxes.map((b) => b.checked)).toEqual([true, false, false, false, false])
     expect(boxes[0].disabled).toBe(true)
+    expect(boxes[0].title).toBe("Always on")
+    expect(boxes.slice(1).every((b) => !b.disabled && !b.title)).toBe(true)
     fireEvent.click(within(group).getByLabelText("furniture"))
     expect(last()!.content_layers).toEqual(["body", "furniture"])
     fireEvent.click(within(group).getByLabelText("notes"))
@@ -159,6 +161,28 @@ describe("supported types", () => {
     expect(last()).toEqual({ picks: ["a", "c"] })
     fireEvent.click(within(group).getByLabelText("a"))
     expect(last()).toEqual({ picks: ["c"] })
+  })
+
+  it("a list of choices takes its fixed choices from x-always, and never drops them", () => {
+    const schema = obj({
+      picks: { type: "array", items: { type: "string", enum: ["a", "b", "c"] }, default: ["b"], "x-always": ["b"], title: "Picks" },
+    })
+    const { last } = renderForm(schema)
+    const group = screen.getByRole("group", { name: "Picks" })
+    const fixed = within(group).getByLabelText("b") as HTMLInputElement
+    expect(fixed.checked).toBe(true)
+    expect(fixed.disabled).toBe(true)
+    expect(fixed.title).toBe("Always on")
+    fireEvent.click(within(group).getByLabelText("c"))
+    expect(last()).toEqual({ picks: ["b", "c"] })
+    fireEvent.click(within(group).getByLabelText("c"))
+    expect(last()).toEqual({ picks: ["b"] })
+  })
+
+  it("a list of choices without x-always has no disabled box, even for a choice named body", () => {
+    renderForm(obj({ layers: { type: "array", items: { type: "string", enum: ["body", "notes"] }, default: [], title: "Layers" } }))
+    const boxes = within(screen.getByRole("group", { name: "Layers" })).getAllByRole("checkbox") as HTMLInputElement[]
+    expect(boxes.map((b) => [b.checked, b.disabled])).toEqual([[false, false], [false, false]])
   })
 
   it("a list of anything else is still raw JSON", () => {

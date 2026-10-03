@@ -1,19 +1,16 @@
-import { optionLabel } from "./schema"
+import { alwaysOn, optionLabel } from "./schema"
 import type { ControlProps } from "./types"
-
-/**
- * Choices the server always adds back, so they are drawn checked and disabled.
- * Docling's content layers always include `body`: its validator adds it.
- */
-const ALWAYS_ON = new Set<unknown>(["body"])
 
 /**
  * A list of fixed choices (`list[Literal[...]]`): one checkbox per choice, in
  * schema order. The value emitted is the checked choices in that same order.
+ * Choices named in the schema's `x-always` are drawn checked and disabled, and
+ * are never removed from the value, because the server always adds them back.
  */
 export function ChoiceListField({ f, id, value, disabled, invalid, describedBy, onChange }: ControlProps) {
+  const fixed = alwaysOn(f.schema)
   const picked = new Set<unknown>(Array.isArray(value) ? value : [])
-  const isOn = (o: unknown) => ALWAYS_ON.has(o) || picked.has(o)
+  const isOn = (o: unknown) => fixed.has(o) || picked.has(o)
   const toggle = (o: unknown) => onChange(f.options.filter((x) => (x === o ? !isOn(x) : isOn(x))))
 
   return (
@@ -28,7 +25,8 @@ export function ChoiceListField({ f, id, value, disabled, invalid, describedBy, 
               value={String(o)}
               className="size-[14px] shrink-0 [accent-color:var(--text-primary)]"
               checked={isOn(o)}
-              disabled={disabled || ALWAYS_ON.has(o)}
+              disabled={disabled || fixed.has(o)}
+              title={fixed.has(o) ? "Always on" : undefined}
               aria-invalid={invalid || undefined}
               aria-describedby={describedBy}
               onChange={() => toggle(o)}

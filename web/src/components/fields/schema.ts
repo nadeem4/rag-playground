@@ -239,6 +239,12 @@ export function isShown(prop: JsonSchema, values: Record<string, unknown>): bool
   return Object.entries(when).every(([k, want]) => values[k] === want)
 }
 
+/** `x-always: [choice, ...]` on a list of choices: the choices the server always keeps. None otherwise. */
+export function alwaysOn(schema: JsonSchema): Set<unknown> {
+  const always = schema["x-always"]
+  return new Set<unknown>(Array.isArray(always) ? always : [])
+}
+
 /** `x-labels: {option: label}` on an enum: the text to show. The option itself otherwise. */
 export function optionLabel(schema: JsonSchema, option: unknown): string {
   const labels = schema["x-labels"]

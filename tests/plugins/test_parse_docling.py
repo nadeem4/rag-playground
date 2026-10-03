@@ -86,6 +86,13 @@ def test_content_layers_is_labelled_and_described_in_doclings_terms():
     )
 
 
+def test_content_layers_schema_has_a_default_and_names_the_fixed_choice():
+    schema = registry.get(Stage.PARSE, "docling").config_model.model_json_schema()
+    layers = schema["properties"]["content_layers"]
+    assert layers["default"] == ["body"]
+    assert layers["x-always"] == ["body"]
+
+
 def test_content_layers_always_include_body_in_doclings_order():
     model = registry.get(Stage.PARSE, "docling").config_model
     assert model(content_layers=["furniture"]).content_layers == ["body", "furniture"]

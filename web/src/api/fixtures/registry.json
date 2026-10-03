@@ -371,6 +371,9 @@
             "type": "string"
           },
           "content_layers": {
+            "default": [
+              "body"
+            ],
             "description": "Docling's included_content_layers: which layers of the page are read into the text. body is the main content and is always read. furniture is page headers and footers. background is watermarks. invisible is hidden text. notes are author or speaker notes.",
             "items": {
               "enum": [
@@ -383,7 +386,10 @@
               "type": "string"
             },
             "title": "Content layers",
-            "type": "array"
+            "type": "array",
+            "x-always": [
+              "body"
+            ]
           }
         },
         "title": "DoclingConfig",

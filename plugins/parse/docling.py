@@ -106,7 +106,7 @@ class DoclingConfig(BaseModel):
         ),
     )
     content_layers: list[ContentLayerName] = Field(
-        default_factory=lambda: ["body"],
+        default=["body"],
         title="Content layers",
         description=(
             "Docling's included_content_layers: which layers of the page are "
@@ -114,6 +114,7 @@ class DoclingConfig(BaseModel):
             "furniture is page headers and footers. background is watermarks. "
             "invisible is hidden text. notes are author or speaker notes."
         ),
+        json_schema_extra={"x-always": ["body"]},
     )
 
     @field_validator("content_layers")

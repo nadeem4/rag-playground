@@ -121,7 +121,9 @@ class LlmRerank(Transform[LlmRerankConfig]):
         tradeoff = (
             "A model can judge relevance well, but it costs one model call per "
             "question and takes seconds. Its order can change between runs, "
-            "because the model's answer can."
+            "because the model's answer can. The model gives no score, so each "
+            "piece keeps the score it had from the retriever. Read the rank, not "
+            "the score."
         )
         warning, blocking = None, False
         if config.top_k < 1:
@@ -174,6 +176,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
         elapsed = time.perf_counter() - started
 
         reply = "" if completion.stop_reason == "refusal" else completion.text
+        usable = _numbers(reply, len(hits))
         order = parse_order(reply, len(hits))[: config.top_k]
         result.hits = [_at_rank(hits[index], rank) for rank, index in enumerate(order, 1)]
         result.total_candidates = len(hits)
@@ -181,11 +184,17 @@ class LlmRerank(Transform[LlmRerankConfig]):
         moved = sum(
             1 for hit, prior in zip(result.hits, prior_ids) if hit.chunk.id != prior
         )
-        set_note(
-            ctx,
-            f"{_model_name(config)} ordered {len(hits)} candidates in "
-            f"{elapsed:.1f} s. {moved} of the top {len(result.hits)} changed place.",
-        )
+        if usable:
+            note = (
+                f"{_model_name(config)} ordered {len(hits)} candidates in "
+                f"{elapsed:.1f} s. {moved} of the top {len(result.hits)} changed place."
+            )
+        else:
+            note = (
+                f"{_model_name(config)} gave no usable order, so the retriever's "
+                "order was kept."
+            )
+        set_note(ctx, note)
         return result.model_dump(mode="json")
 
 
@@ -202,12 +211,18 @@ def _prompt(question: str, hits: list[Hit]) -> str:
 
 def parse_order(reply: str, n: int) -> list[int]:
     """Indices 0..n-1: the reply's numbers first, then the rest in prior order."""
+    seen = _numbers(reply, n)
+    return seen + [i for i in range(n) if i not in seen]
+
+
+def _numbers(reply: str, n: int) -> list[int]:
+    """The reply's in-range numbers as indices, first appearance only."""
     seen: list[int] = []
     for token in re.findall(r"\d+", reply):
         index = int(token) - 1
         if 0 <= index < n and index not in seen:
             seen.append(index)
-    return seen + [i for i in range(n) if i not in seen]
+    return seen
 
 
 def _at_rank(hit: Hit, rank: int) -> Hit:

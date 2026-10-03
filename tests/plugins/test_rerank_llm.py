@@ -321,3 +321,28 @@ def test_user_facing_text_has_no_long_dashes():
     custom = LlmRerank().explain(LlmRerankConfig(model="custom"))
     for text in (LlmRerank.summary, exp.settings, exp.tradeoff, custom.warning or ""):
         assert chr(0x2014) not in text and chr(0x2013) not in text
+
+
+def test_an_empty_reply_says_the_retrievers_order_was_kept(reply, tmp_path, monkeypatch):
+    note = note_for(TEXTS[:3], "", reply, tmp_path, monkeypatch, model="claude-haiku-4-5")
+    assert note == (
+        "Claude Haiku 4.5 gave no usable order, so the retriever's order was kept."
+    )
+
+
+def test_a_refusal_says_the_retrievers_order_was_kept(reply, tmp_path, monkeypatch):
+    reply("I will not rank passage 3 first.", stop_reason="refusal")
+    run_ctx = ctx(tmp_path)
+    out = rerank(TEXTS[:3], tmp_path, run_ctx=run_ctx, model="gpt-6-astra")
+    assert texts_of(out) == TEXTS[:3]
+    assert run_ctx.extras["meta"]["note"] == (
+        "GPT-6 Astra gave no usable order, so the retriever's order was kept."
+    )
+
+
+def test_explain_says_scores_stay_the_retrievers():
+    exp = LlmRerank().explain(LlmRerankConfig())
+    assert (
+        "The model gives no score, so each piece keeps the score it had from the "
+        "retriever. Read the rank, not the score."
+    ) in exp.tradeoff

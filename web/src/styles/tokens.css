@@ -57,6 +57,7 @@
   --stale: oklch(0.5 0.12 75); /* settings changed since the run; text on --stale-wash */
   --stale-wash: oklch(0.95 0.05 75);
   --shadow-raised: 0 1px 2px rgb(24 24 27 / 0.06), 0 6px 16px rgb(24 24 27 / 0.06);
+  --shadow-raised-phone: 0 1px 2px rgb(24 24 27 / 0.06);
 
   /* Rows: sizes, not spacing, so outside the spacing cap. */
   --row: 2.25rem; /* 36px at the default root size; rem, so rows follow the type */
@@ -128,6 +129,7 @@
   --stale: oklch(0.8 0.12 75);
   --stale-wash: oklch(0.3 0.06 75);
   --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.3);
+  --shadow-raised-phone: 0 1px 2px rgb(0 0 0 / 0.4);
   --field-border: #71717a;
   --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
   --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
@@ -167,6 +169,7 @@
     --stale: oklch(0.8 0.12 75);
     --stale-wash: oklch(0.3 0.06 75);
     --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.3);
+    --shadow-raised-phone: 0 1px 2px rgb(0 0 0 / 0.4);
     --field-border: #71717a;
     --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
     --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
@@ -197,6 +200,7 @@
     --text-secondary: var(--text-primary);
     --hairline: var(--field-border);
     --shadow-raised: 0 0 0 1px var(--field-border);
+    --shadow-raised-phone: 0 0 0 1px var(--field-border);
   }
 }
 
@@ -205,6 +209,7 @@
   --text-secondary: var(--text-primary);
   --hairline: var(--field-border);
   --shadow-raised: 0 0 0 1px var(--field-border);
+  --shadow-raised-phone: 0 0 0 1px var(--field-border);
 }
 
 /* ------------------------------------------------------- Tailwind theme -- */
@@ -457,5 +462,17 @@
 @media (prefers-reduced-motion: reduce) {
   .step-running-edge {
     animation: none;
+  }
+}
+
+/*
+ * The phone keeps only the raised card's first shadow layer (spec section 9).
+ * Each theme and contrast block names its own --shadow-raised-phone; this swap
+ * outranks all of them (three :root, specificity 0,3,0), so the phone value of
+ * whichever block is live wins.
+ */
+@media (max-width: 767px) {
+  :root:root:root {
+    --shadow-raised: var(--shadow-raised-phone);
   }
 }

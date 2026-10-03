@@ -245,6 +245,19 @@ function Surfaces() {
           </Row>
         ))}
       </Grid>
+      <p className="text-xs text-fg-muted">Below 768 px the raised card keeps only the first shadow layer, --shadow-raised-phone.</p>
+      <Grid columns="190px minmax(240px,1fr) minmax(240px,1fr)" head={["shadow", "light", "dark"]}>
+        {["--shadow-raised", "--shadow-raised-phone"].map((name) => (
+          <Row key={name}>
+            <Cell mono>{name}</Cell>
+            {THEMES.map(([theme, tokens]) => (
+              <Cell key={theme} mono className="text-fg-muted">
+                {tokens.get(name) ?? ""}
+              </Cell>
+            ))}
+          </Row>
+        ))}
+      </Grid>
     </Section>
   )
 }

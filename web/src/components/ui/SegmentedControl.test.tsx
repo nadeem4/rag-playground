@@ -65,7 +65,7 @@ describe("SegmentedControl", () => {
     const caption = group.firstElementChild!
     expect(caption.textContent).toBe("Theme")
     expect(group.getAttribute("aria-labelledby")).toBe(caption.id)
-    expect(classes(caption)).toEqual(expect.arrayContaining(["sr-only", "md:not-sr-only"]))
+    expect(classes(caption)).toEqual(expect.arrayContaining(["sr-only", "md:not-sr-only", "mr-2"]))
     cleanup()
     render(<SegmentedControl label="Theme" caption="always" options={OPTIONS} value="a" onChange={() => {}} />)
     expect(classes(screen.getByRole("group", { name: "Theme" }).firstElementChild!)).not.toContain("sr-only")

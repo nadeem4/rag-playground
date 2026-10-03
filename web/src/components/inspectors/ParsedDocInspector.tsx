@@ -2,6 +2,7 @@ import { Fragment, useState, type ReactNode } from "react"
 
 import type { ParsedDoc } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
+import { SegmentedControl } from "@/components/ui/SegmentedControl"
 import { cn } from "@/lib/utils"
 
 import { byOrder, ElementText, OrderGutter, PageBreak } from "./elements"
@@ -88,21 +89,14 @@ function ViewToggle({ value, onChange }: { value: View; onChange: (v: View) => v
     ["blocks", "Blocks"],
     ["table", "Table"],
   ]
+  // The one pressed style: the shared segmented control.
   return (
-    <div role="radiogroup" aria-label="View" className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-hairline bg-hairline">
-      {options.map(([v, label]) => (
-        <button
-          key={v}
-          type="button"
-          role="radio"
-          aria-checked={value === v}
-          onClick={() => onChange(v)}
-          className={cn("h-row-compact px-2 text-xs", value === v ? "bg-selection text-fg" : "bg-surface text-fg-muted hover:bg-muted")}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label="View"
+      options={options.map(([v, label]) => ({ value: v, label }))}
+      value={value}
+      onChange={(v) => onChange(v as View)}
+    />
   )
 }
 

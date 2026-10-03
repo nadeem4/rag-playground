@@ -99,7 +99,7 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
     // Below md: the brand and the controls share the first row, and the nav
     // takes the second (wrapping inside its own box at most once). From md up
     // it is one row. The page itself never scrolls sideways.
-    <header className="flex min-h-[40px] shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-4">
+    <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-4">
       <a href={lessonsEnabled ? "/" : "/build"} className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
         RAG Playground
       </a>

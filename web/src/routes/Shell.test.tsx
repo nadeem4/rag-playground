@@ -1136,6 +1136,10 @@ describe("the Ask panel results on Build", () => {
     fireEvent.click(card("index"))
     const header = await waitFor(() => screen.getByTestId("inspector-timing"))
     expect(header.textContent).toBe("reused from an earlier run 4.0 ms")
+    // Words in sans; the type, the id and the duration in mono.
+    expect(header.className).not.toContain("font-mono")
+    expect(header.parentElement!.className).not.toContain("font-mono")
+    expect(within(header).getByText("4.0 ms").className).toContain("font-mono")
   })
 
   it("switching Answer to Search clears a field error on the chat model", async () => {

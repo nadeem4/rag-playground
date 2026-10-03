@@ -170,7 +170,7 @@ export function AskPanel(p: AskPanelProps) {
 
   return (
     <section aria-label="Ask panel" className="flex min-w-0 flex-col md:min-h-0">
-      <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
+      <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
         <h2 className="text-xl font-semibold">Ask</h2>
         <span data-testid="index-status" className="text-xs text-fg-muted">
           {indexId
@@ -218,7 +218,7 @@ export function AskPanel(p: AskPanelProps) {
                 <Button
                   key={q.id}
                   variant="outline"
-                  // No size: the sm size's fixed 24px height would win over h-auto, and a wrapped
+                  // No size: the sm size's fixed 28px height (h-row-compact) would win over h-auto, and a wrapped
                   // question would spill over the chip below. The chip grows with its text instead.
                   size={null}
                   // Wraps and shrinks, so a long question never pushes the pane sideways on a phone.

@@ -94,7 +94,7 @@ describe("PipelineColumn", () => {
   it("names the four looks in words in a one-line legend", () => {
     setup()
     expect(screen.getByTestId("step-legend").textContent).toBe(
-      "Grey ring: not run. Bar: running. Filled ring: done, with its result. Amber ring: changed, run again.",
+      "Grey ring: not run. Half ring: running. Ring with a dot: done, dashed when reused. Amber ring: changed, run again.",
     )
   })
 

@@ -579,18 +579,20 @@ function CardInspector({
       </div>
       {/* Wraps rather than squeezing: at phone width the title and the artifact
           metadata each take a row, as on Compare and Evaluate. */}
-      <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
+      <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
         <div className="flex min-w-0 items-baseline gap-2">
           <h2 className="text-xl font-semibold">{verb}</h2>
           <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span>
         </div>
         {artifactId ? (
-          <div className="flex shrink-0 items-center gap-3 font-mono text-xs text-fg-muted">
-            <span>{type}</span>
-            <span title={artifactId}>{artifactId.slice(0, 12)}</span>
+          <div className="flex shrink-0 items-center gap-3 text-xs text-fg-muted">
+            <span className="font-mono">{type}</span>
+            <span className="font-mono" title={artifactId}>
+              {artifactId.slice(0, 12)}
+            </span>
             {result?.duration_ms !== undefined ? (
               <span data-testid="inspector-timing">
-                {result.cache_hit ? "reused from an earlier run" : "computed"} {fmtMs(result.duration_ms)}
+                {result.cache_hit ? "reused from an earlier run" : "computed"} <span className="font-mono">{fmtMs(result.duration_ms)}</span>
               </span>
             ) : null}
           </div>

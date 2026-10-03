@@ -147,6 +147,10 @@ describe("ChatInspector", () => {
     expect(rows.map((r) => r.getAttribute("data-citation"))).toEqual(["1", "2", "3", "4", "5"])
     expect(rows[0].querySelector("q")!.textContent).toBe(byN(1).cited_text)
     expect(within(rows[0]).getByTestId("citation-page").textContent).toBe("p. 1")
+    const meta = within(rows[0]).getByTestId("citation-meta")
+    expect(meta.className).not.toContain("font-mono")
+    expect(within(meta).getByText(byN(1).verified ? "verified" : "not verified").className).not.toContain("font-mono")
+    if (byN(1).chunk_id) expect(within(meta).getByText(byN(1).chunk_id!.slice(0, 8)).className).toContain("font-mono")
     expect(within(rows[1]).getByTestId("citation-page").textContent).toBe("p. 2")
     // No page of its own: the chunk's page, marked as a guess, and said plainly.
     expect(within(rows[3]).getByTestId("citation-page").textContent).toBe("p. 1?")
@@ -327,7 +331,7 @@ describe("ChatInspector, sentence ids", () => {
   it("shows each citation's support", () => {
     render(<ChatInspector payload={SID} chunkSet={chunks} />)
     const row = document.querySelector<HTMLElement>('li[data-citation="2"]')!
-    expect(within(row).getByText("support 0.41")).toBeTruthy()
+    expect(within(row).getByTestId("citation-meta").textContent).toContain("support 0.41")
   })
 
   it("clicking a claim opens its page, as a number does", async () => {

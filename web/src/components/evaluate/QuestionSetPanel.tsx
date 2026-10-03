@@ -203,9 +203,9 @@ function UploadReport({ report }: { report: Report }) {
               <li key={`${p.question}-${i}`} className="flex min-w-0 flex-col gap-1 border-t border-hairline pt-2">
                 <p className="text-sm text-fg">{p.question}</p>
                 <p className="meta">written in the file</p>
-                <p className="font-mono text-xs break-words text-fg">{p.gold_answer}</p>
+                <p className="text-sm break-words text-fg">{p.gold_answer}</p>
                 <p className="meta">closest text in the document</p>
-                <p className="font-mono text-xs break-words text-fg-muted">{p.closest ?? "Nothing close enough to show."}</p>
+                <p className="text-sm break-words text-fg-muted">{p.closest ?? "Nothing close enough to show."}</p>
               </li>
             ))}
           </ul>

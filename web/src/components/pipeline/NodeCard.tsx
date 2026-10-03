@@ -260,8 +260,10 @@ export function NodeCard(p: NodeCardProps) {
       {shown.look === "running" && !isSource ? (
         <span aria-hidden data-testid="running-bar" className="step-running-edge pointer-events-none absolute inset-x-0 top-0 h-[2px] rounded-t-panel bg-primary" />
       ) : null}
-      <header ref={headRef} className="flex min-w-0 items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2">
+      {/* Wraps rather than squeezing: on a stacked step with a long chip, the
+          chip and the buttons drop to their own line and the title and id stay whole. */}
+      <header ref={headRef} className="flex min-w-0 scroll-mt-3 flex-wrap items-start gap-x-2 gap-y-1">
+        <div className="flex items-center gap-x-2">
           <h3 className="text-sm font-semibold">
             <button
               type="button"
@@ -290,16 +292,16 @@ export function NodeCard(p: NodeCardProps) {
               {p.title}
             </button>
           </h3>
-          {p.showId ? <span className="font-mono text-xs break-all text-fg-muted">{p.node.id}</span> : null}
+          {p.showId ? <span className="font-mono text-xs whitespace-nowrap text-fg-muted">{p.node.id}</span> : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2" aria-live="polite">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2" aria-live="polite">
           {isSource ? null : (
             <>
               {shown.look === "done" && !reused ? null : (
                 <span
                   data-testid="status-chip"
                   className={cn(
-                    "rounded-full px-2 text-2xs",
+                    "rounded-full px-2 text-2xs whitespace-nowrap",
                     shown.look === "stale" ? "bg-stale-wash text-stale" : shown.look === "failed" ? "text-danger" : "text-fg-muted",
                   )}
                 >

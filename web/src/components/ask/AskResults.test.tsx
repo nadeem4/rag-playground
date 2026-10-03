@@ -116,6 +116,8 @@ describe("the comparison, with a reranker", () => {
     // The rank 1 hit came from rank 6.
     const top = document.querySelector('[data-column="reranked"] [data-hit-row="1"]') as HTMLElement
     expect(within(top).getByTestId("badge").textContent).toBe("up from #6")
+    expect(within(top).getByTestId("badge").className).toContain("font-sans")
+    expect(within(top).getByTestId("badge").className).not.toContain("font-mono")
     // The left column marks only the piece the reranker dropped: the fifth search hit.
     const left = document.querySelector('[data-column="search"]') as HTMLElement
     expect(within(left).getAllByText("Not kept")).toHaveLength(1)

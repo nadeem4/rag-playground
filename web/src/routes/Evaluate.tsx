@@ -96,7 +96,7 @@ export function Evaluate() {
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-surface">
       {/* Outside the keyed body, so switching pipelines keeps this select, and its focus (F5). */}
-      <div className="flex min-h-[40px] shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-3 py-1">
+      <div className="flex min-h-row shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-3 py-1">
         <label htmlFor={pickerId} className="text-sm text-fg-muted">
           Pipeline
         </label>
@@ -389,7 +389,7 @@ function Evaluation({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
+      <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
         <div className="flex items-baseline gap-3">
           <h1 className="text-xl font-semibold">Evaluate</h1>
           {/* Wraps rather than truncates, so the bar never pushes the page sideways at phone width. */}
@@ -451,7 +451,7 @@ function Evaluation({
         and run this again to see what it did.
       </p>
 
-      <div className="flex min-h-[40px] shrink-0 flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-hairline px-3 py-2" aria-live="polite">
+      <div className="flex min-h-row shrink-0 flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-hairline px-3 py-2" aria-live="polite">
         {error || questionsError || samplesError ? (
           <p role="alert" className="font-mono text-xs break-words text-danger">
             {error ?? questionsError ?? samplesError}
@@ -550,19 +550,27 @@ function QuestionRow({ row, before, topK }: { row: Row; before?: EvalPayload; to
   return (
     <details className={cn("bg-surface", CHANGE_RULE[change])} data-question={row.question.id} data-change={change === "none" ? undefined : change}>
       <summary className="grid cursor-pointer list-none grid-cols-[52px_44px_minmax(0,1fr)] items-baseline gap-x-2 px-3 py-2 hover:bg-muted">
-        <span className={cn("justify-self-start rounded-control px-1 font-mono text-2xs", tone)}>{verdict}</span>
+        <span className={cn("justify-self-start rounded-control px-1 font-sans text-2xs", tone)}>{verdict}</span>
         <span className="text-right font-mono text-sm text-fg tabular-nums">{p?.rank ?? ""}</span>
         <span className="flex min-w-0 flex-col gap-1">
           <span className="text-sm text-fg">{row.question.question}</span>
-          <span className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-2xs text-fg-muted">
+          <span className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-muted">
             {p?.hit && p.match !== "exact" ? <span>{p.match} match</span> : null}
-            {p?.matched_chunk_id ? <span title={p.matched_chunk_id}>{p.matched_chunk_id.slice(0, 8)}</span> : null}
-            {p ? (
-              <span>
-                {p.considered} of {p.total_candidates} checked
+            {p?.matched_chunk_id ? (
+              <span className="font-mono" title={p.matched_chunk_id}>
+                {p.matched_chunk_id.slice(0, 8)}
               </span>
             ) : null}
-            {p && !p.hit ? <span>{missText(p, topK)}</span> : null}
+            {p ? (
+              <span>
+                <span className="font-mono">{p.considered}</span> of <span className="font-mono">{p.total_candidates}</span> checked
+              </span>
+            ) : null}
+            {p && !p.hit ? (
+              <span>
+                <MonoNumbers text={missText(p, topK)} />
+              </span>
+            ) : null}
             {moved ? <span className="font-medium text-fg">{moved}</span> : null}
             {row.failed ? <span className="text-danger">{errorHeadline(row.failed.error ?? "Failed")}</span> : null}
           </span>

@@ -351,14 +351,27 @@ function CitationRow({ c, chunkSet, selected, onOpen }: { c: ChatCitation; chunk
       </span>
       <div className="flex min-w-0 flex-col gap-1">
         <q className="chat-quote max-w-[82ch] text-sm text-fg">{quoteText(c.cited_text)}</q>
-        <p className="flex flex-wrap gap-x-3 font-mono text-2xs text-fg-muted">
+        <p data-testid="citation-meta" className="flex flex-wrap gap-x-3 text-2xs text-fg-muted">
           <span className={c.verified ? "text-fg" : undefined}>{c.verified ? "verified" : "not verified"}</span>
-          {c.chunk_id ? <span title={c.chunk_id}>chunk {c.chunk_id.slice(0, 8)}</span> : <span>not in the hits</span>}
+          {c.chunk_id ? (
+            <span title={c.chunk_id}>
+              chunk <span className="font-mono">{c.chunk_id.slice(0, 8)}</span>
+            </span>
+          ) : (
+            <span>not in the hits</span>
+          )}
           {c.method === "id" ? <span>cited by id</span> : c.method === "similarity" ? <span>similarity match</span> : null}
-          {typeof c.support === "number" ? <span>support {c.support.toFixed(2)}</span> : null}
+          {typeof c.support === "number" ? (
+            <span>
+              support <span className="font-mono">{c.support.toFixed(2)}</span>
+            </span>
+          ) : null}
           {c.doc_start !== null && c.doc_end !== null ? (
             <span>
-              chars {c.doc_start}-{c.doc_end}
+              chars{" "}
+              <span className="font-mono">
+                {c.doc_start}-{c.doc_end}
+              </span>
             </span>
           ) : null}
         </p>

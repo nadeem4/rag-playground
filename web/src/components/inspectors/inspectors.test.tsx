@@ -189,7 +189,10 @@ describe("ParsedDocInspector", () => {
   it("renders every element as a block, then as a table ordered by order", () => {
     const { container } = render(<ParsedDocInspector doc={parsed} />)
     expect(container.querySelectorAll("[data-element]")).toHaveLength(20)
-    fireEvent.click(screen.getByRole("radio", { name: "Table" }))
+    const table = screen.getByRole("button", { name: "Table" })
+    fireEvent.click(table)
+    expect(table.getAttribute("aria-pressed")).toBe("true")
+    expect(table.className.split(/\s+/)).toEqual(expect.arrayContaining(["border-primary", "bg-accent-wash", "text-primary"]))
     const rows = container.querySelectorAll("[data-row]")
     expect(rows).toHaveLength(20)
     expect(rows[14].querySelector("[data-col=order]")!.textContent).toBe("14")
@@ -559,9 +562,30 @@ describe("long text in the reading face", () => {
     reads(doc.container.querySelector<HTMLElement>("[data-element] p")!)
   })
 
+  it("the chunk detail's text is reading text; only ids and numbers are mono", () => {
+    render(<ChunkSetInspector chunkSet={recursive} initialSelected={0} />)
+    const detail = screen.getByTestId("chunk-detail")
+    reads(within(detail).getByText("text").nextElementSibling as HTMLElement)
+    const dd = (label: string) => within(detail).getByText(label).nextElementSibling as HTMLElement
+    expect(dd("id").className).toContain("font-mono")
+    expect(dd("tokens").className).toContain("font-mono")
+    expect(dd("heading").className).not.toContain("font-mono")
+  })
+
   it("the painted chunk band is measured for the reading face: line height 1.6, content area 1.3em", () => {
     expect(css).toMatch(/--ci-leading: calc\(\(1\.6em - 1\.3em\) \/ 2 \+ 0\.5px\)/)
     expect(css).not.toMatch(/Martian/)
     expect(css).not.toMatch(/font-size:\s*\d+px/)
+  })
+})
+
+describe("words in Ask results are never mono", () => {
+  it("the movement and the missed-search phrase are sans", () => {
+    const { container } = render(<RetrievalResultInspector result={mmr} chunkSet={recursive} />)
+    for (const m of container.querySelectorAll<HTMLElement>("[data-testid=movement]")) {
+      expect(m.className).toContain("font-sans")
+      expect(m.className).not.toContain("font-mono")
+    }
+    for (const miss of container.querySelectorAll<HTMLElement>(".ri-score-miss")) expect(miss.className).toContain("font-sans")
   })
 })

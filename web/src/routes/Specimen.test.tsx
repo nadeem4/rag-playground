@@ -16,6 +16,8 @@ describe("the specimen page", () => {
     expect(s.getByText("Raised").closest(".shadow-raised")).toBeTruthy()
     expect(s.getAllByText("#fdfdfc").length).toBeGreaterThan(0)
     expect(s.getAllByText("#1f2023").length).toBeGreaterThan(0)
+    expect(s.getByText("--shadow-raised-phone")).toBeTruthy()
+    expect(s.getByText("0 1px 2px rgb(24 24 27 / 0.06)")).toBeTruthy()
   })
 
   it("lists the motion tokens with their values", () => {
@@ -47,7 +49,7 @@ describe("the specimen page", () => {
     expect(s.getByText("--text-secondary")).toBeTruthy()
     expect(s.getByText("var(--text-primary)")).toBeTruthy()
     expect(s.getByText("--hairline")).toBeTruthy()
-    expect(s.getByText("0 0 0 1px var(--field-border)")).toBeTruthy()
+    expect(s.getAllByText("0 0 0 1px var(--field-border)").length).toBeGreaterThan(0)
     // Secondary text on the panel, before and after, in both themes.
     expect(s.getAllByText(/\d+\.\d:1/).length).toBeGreaterThanOrEqual(4)
   })

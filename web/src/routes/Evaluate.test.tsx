@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
@@ -346,6 +346,8 @@ describe("the upload report", () => {
     expect(report.textContent).toMatch(/The duty manager approves it\./)
     expect(report.textContent).toMatch(/The duty manager signs it off\./)
     expect(report.textContent).toMatch(/as the pdfium parser reads it/)
+    expect(within(report).getByText("The duty manager approves it.").className).not.toContain("font-mono")
+    expect(within(report).getByText("The duty manager signs it off.").className).not.toContain("font-mono")
     // A set with problems is still in use: the page swapped to it.
     expect(screen.getByTestId("set-name").textContent).toBe("refunds.csv")
   })
@@ -534,6 +536,14 @@ describe("while and after scoring", () => {
     expect(screen.getByTestId("hit-rate")).toBeTruthy()
     expect(document.body.textContent).not.toContain("Scoring question")
     expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")
+    // Verdict words and the meta line in sans; only numbers and the id in mono.
+    for (const row of document.querySelectorAll<HTMLElement>("details[data-question] summary")) {
+      const [verdict, , words] = [...row.children] as HTMLElement[]
+      expect(verdict.className).toContain("font-sans")
+      const meta = words.lastElementChild as HTMLElement
+      expect(meta.className).not.toContain("font-mono")
+      expect(meta.querySelector(".font-mono")).not.toBeNull()
+    }
   })
 
   it("keeps saying the k that was scored when the Top k input changes after the run", async () => {

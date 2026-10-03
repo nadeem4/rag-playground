@@ -103,6 +103,15 @@ describe("the Compare stage picker", () => {
     expect(src).toContain("<MonoNumbers text={tallyLine(")
   })
 
+  it("sets the column's provenance in sans, with mono only on the duration", async () => {
+    const { readFileSync } = await import("node:fs")
+    const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")
+    const line = src.match(/<span[^>]*>\s*\{titleFor\(node\)\}[^]*?<\/span>\s*\) : null\}/)?.[0] ?? ""
+    expect(line).not.toBe("")
+    expect(line.split("\n")[0]).not.toContain("font-mono")
+    expect(line).toContain('<span className="font-mono">{fmtMs(n!.duration_ms)}</span>')
+  })
+
   it("has no em-dashes or en-dashes", async () => {
     render(<Compare />)
     await waitFor(() => expect(picker().value).toBe("chunk"))

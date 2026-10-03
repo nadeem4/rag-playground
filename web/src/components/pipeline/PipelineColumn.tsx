@@ -95,7 +95,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
     <div className="grid min-w-0 grid-cols-1 gap-3 bg-surface-elevated p-3">
       {/* The four looks of a step card, in words. */}
       <p data-testid="step-legend" className="m-0 text-xs text-fg-muted">
-        Grey ring: not run. Bar: running. Filled ring: done, with its result. Amber ring: changed, run again.
+        Grey ring: not run. Half ring: running. Ring with a dot: done, dashed when reused. Amber ring: changed, run again.
       </p>
       {order.map((node) => {
         const errs = p.errors[node.id]

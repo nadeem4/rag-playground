@@ -96,7 +96,11 @@ export function Transcript({ entries, onAskAgain }: { entries: TranscriptEntry[]
           <li key={e.runId} data-testid="transcript-entry" className="flex flex-wrap items-start justify-between gap-2 border-b border-hairline py-2 last:border-b-0">
             <div className="flex min-w-0 flex-col gap-1">
               <p className="text-sm text-fg">{e.question}</p>
-              <p className="font-mono text-xs text-fg-muted">{transcriptLine(e.pipeline, e.reranker, e.found, e.rows.length)}</p>
+              <p data-testid="transcript-line" className="text-xs text-fg-muted">
+                {transcriptLine(e.pipeline, e.reranker, e.found, e.rows.length)
+                  .split(/(#\d+)/)
+                  .map((part, i) => (i % 2 === 1 ? <span key={i} className="font-mono">{part}</span> : part))}
+              </p>
             </div>
             <Button variant="outline" size="sm" aria-label={`Ask again: ${e.question}`} onClick={() => onAskAgain(e.question)}>
               Ask again

@@ -349,7 +349,7 @@ function HitList({
               <span
                 data-testid="movement"
                 title={move.kind === "none" ? undefined : `rank ${move.from} before rerank`}
-                className={cn("font-mono text-2xs whitespace-nowrap", move.kind === "up" ? "font-medium text-fg" : "text-fg-muted")}
+                className={cn("font-sans text-2xs whitespace-nowrap tabular-nums", move.kind === "up" ? "font-medium text-fg" : "text-fg-muted")}
               >
                 {move.kind === "none" || badges ? "" : move.text}
               </span>
@@ -358,7 +358,7 @@ function HitList({
               {tag || dropped ? (
                 <p className="flex flex-wrap items-center gap-2">
                   {tag ? (
-                    <span data-testid="badge" data-badge={tag.kind} className="rounded-control px-1 font-mono text-2xs" style={BADGE_TINT[tag.kind]}>
+                    <span data-testid="badge" data-badge={tag.kind} className="rounded-control px-1 font-sans text-2xs tabular-nums" style={BADGE_TINT[tag.kind]}>
                       {tag.text}
                     </span>
                   ) : null}
@@ -420,7 +420,7 @@ function Score({ name, value, max, bar, missed }: { name: string; value: number 
     return (
       <span className="ri-score">
         {nameEl}
-        <span className="ri-score-miss text-xs whitespace-nowrap text-fg-muted">{missed ?? ""}</span>
+        <span className="ri-score-miss font-sans text-xs whitespace-nowrap text-fg-muted">{missed ?? ""}</span>
       </span>
     )
   }

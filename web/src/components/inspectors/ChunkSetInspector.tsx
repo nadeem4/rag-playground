@@ -447,11 +447,12 @@ function Reading({
 
 // ---------------------------------------------------------------- detail --
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+/** One metadata row. `mono` for ids, code names and numbers; words stay in the reading face. */
+function Field({ label, mono = false, children }: { label: string; mono?: boolean; children: ReactNode }) {
   return (
     <>
       <dt className="meta">{label}</dt>
-      <dd className="min-w-0 font-mono text-xs break-words text-fg">{children}</dd>
+      <dd className={cn("min-w-0 text-xs break-words text-fg", mono && "font-mono")}>{children}</dd>
     </>
   )
 }
@@ -483,16 +484,28 @@ function Detail({ chunk, index, onShowPdf }: { chunk?: Chunk; index: number | nu
         ) : null}
       </div>
       <dl className="grid grid-cols-[88px_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1">
-        <Field label="id">{chunk.id}</Field>
-        <Field label="ordinal">{chunk.ordinal}</Field>
-        <Field label="kind">{chunk.kind}</Field>
-        <Field label="tokens">{fmt(chunk.token_count)}</Field>
-        <Field label="chars">
+        <Field label="id" mono>
+          {chunk.id}
+        </Field>
+        <Field label="ordinal" mono>
+          {chunk.ordinal}
+        </Field>
+        <Field label="kind" mono>
+          {chunk.kind}
+        </Field>
+        <Field label="tokens" mono>
+          {fmt(chunk.token_count)}
+        </Field>
+        <Field label="chars" mono>
           {chunk.start_char}-{chunk.end_char}
         </Field>
         <Field label="heading">{chunk.heading_path.length ? chunk.heading_path.join(" / ") : "none"}</Field>
-        <Field label="pages">{pages}</Field>
-        <Field label="elements">{chunk.source_element_ids.length}</Field>
+        <Field label="pages" mono={pages !== "none"}>
+          {pages}
+        </Field>
+        <Field label="elements" mono>
+          {chunk.source_element_ids.length}
+        </Field>
       </dl>
       <TextBlock label="text">{chunk.text}</TextBlock>
       {differs ? <TextBlock label="embed_text">{chunk.embed_text}</TextBlock> : null}
@@ -504,7 +517,7 @@ function TextBlock({ label, children }: { label: string; children: ReactNode }) 
   return (
     <div className="flex flex-col gap-1">
       <span className="meta">{label}</span>
-      <p className="rounded-control border border-hairline bg-surface-elevated p-2 font-mono text-xs whitespace-pre-wrap text-fg">
+      <p className="rounded-control border border-hairline bg-surface-elevated p-2 font-sans text-base whitespace-pre-wrap text-fg">
         {children}
       </p>
     </div>

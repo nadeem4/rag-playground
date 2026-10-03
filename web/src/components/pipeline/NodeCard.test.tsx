@@ -270,3 +270,23 @@ describe("click to close, and scroll into view", () => {
     })
   })
 })
+
+describe("the card head on a stacked step", () => {
+  it("wraps instead of squeezing: the title, the whole id and the chip each keep their width", () => {
+    payloads = { head1: chunkRecursive }
+    const cleanNode = { ...chunkNode, id: "clean_1" }
+    const card = renderCard({ node: cleanNode, title: "Clean", showId: true, onRemove: vi.fn(), result: done("head1", "cached") })
+    const header = card.querySelector("header")!
+    expect(header.className.split(/\s+/)).toContain("flex-wrap")
+    expect(header.className.split(/\s+/)).toContain("scroll-mt-3")
+    expect(card.querySelector(".break-all")).toBeNull()
+    const id = within(header).getByText("clean_1")
+    expect(id.className).toContain("whitespace-nowrap")
+    expect(within(header).getByRole("button", { name: "Clean" })).toBeTruthy()
+    const chip = within(header).getByTestId("status-chip")
+    expect(chip.textContent).toBe("reused from an earlier run")
+    const right = chip.parentElement!
+    expect(right.className.split(/\s+/)).toContain("ml-auto")
+    expect(right.className.split(/\s+/)).not.toContain("shrink-0")
+  })
+})

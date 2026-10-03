@@ -136,7 +136,10 @@ describe("the transcript", () => {
     rerender(<Harness {...p} asked={snap(graph, "r2")} />)
     await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (1)"))
     // The question set may answer after the run: the entry then gains its gold rank.
-    expect(await screen.findByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
+    const line = await screen.findByTestId("transcript-line")
+    await waitFor(() => expect(line.textContent).toBe("Working copy, Cross-encoder: found at #2"))
+    expect(line.className).not.toContain("font-mono")
+    expect(within(line).getByText("#2").className).toContain("font-mono")
     const entry = screen.getByTestId("transcript-entry")
     expect(within(entry).getByText("What does overlap cost?")).toBeTruthy()
     // The same run is not logged twice.
@@ -153,12 +156,12 @@ describe("the transcript", () => {
     const graph = setReranker(sampleGraph(LIVE, SAMPLE, "What does overlap cost?"), LIVE, "cross_encoder")
     const p = base(graph, RERANKED, snap(graph, "r2"))
     const { rerender } = render(<Harness {...p} />)
-    expect(await screen.findByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId("transcript-line").textContent).toBe("Working copy, Cross-encoder: found at #2"))
     // None removes the rerank node; Retrieve and its result stay fresh, so the rows change.
     const none = setReranker(graph, LIVE, null)
     rerender(<Harness {...p} graph={none} results={{ ...p.results, rerank_1: undefined as never }} />)
     await waitFor(() => expect(screen.getByRole("heading", { name: /in search order$/ })).toBeTruthy())
-    expect(screen.getByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
+    expect(screen.getByTestId("transcript-line").textContent).toBe("Working copy, Cross-encoder: found at #2")
     expect(screen.queryByText(/no rerank/)).toBeNull()
     expect(summary()?.textContent).toBe("Earlier questions in this tab (1)")
   })

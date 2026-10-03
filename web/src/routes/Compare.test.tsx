@@ -118,8 +118,6 @@ describe("the Compare stage picker", () => {
     const grid = [...document.querySelectorAll<HTMLElement>("div")].find((d) => d.style.gridTemplateColumns)!
     expect(grid.style.gridTemplateColumns).toBe(`repeat(3, minmax(${COLUMN_MIN}px, 1fr))`)
     expect(COLUMN_MIN).toBe(420)
-    // Three such columns plus the hairlines fit a 1440 px window.
-    expect(3 * COLUMN_MIN + 2).toBeLessThanOrEqual(1440)
   })
 
   it("sets the agreement line in sans with only its numbers in mono", async () => {

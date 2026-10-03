@@ -59,6 +59,14 @@ export interface RetrievalViewProps {
   kept?: ReadonlySet<string>
   /** On the reranked side: the keep limit. A row ranked past it is a Not kept slip. */
   keepLimit?: number
+  /** On the reranked side: the reranker's transform key, so a Not kept slip can say why it was left out. */
+  reranker?: string
+  /**
+   * True sets the list flat on the page (spec section 2: results carry no card
+   * boxes): no bordered frame, and the facts as a plain line, not a tinted strip.
+   * The Build inspector keeps its frame, which is the inspector's own chrome.
+   */
+  flat?: boolean
   /**
    * True when this list is new: its rows fade in and rise (motion 3). Read once,
    * when the list mounts, so a rerender never cuts the motion short; a caller
@@ -164,7 +172,8 @@ const LABEL = 20 // px for the rank numbers on the spine
 
 export type ListSide = "single" | "search" | "reranked"
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, enter = false }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false }: RetrievalViewProps) {
+  const Box = flat ? FlatFrame : Frame
   const [entering] = useState(enter)
   const rootRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLDivElement>(null)
@@ -218,21 +227,21 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
 
   if (rows.length === 0) {
     return (
-      <Frame>
-        <Summary>{facts}</Summary>
+      <Box>
+        <Summary flat={flat}>{facts}</Summary>
         <div className="bg-surface">
           <EmptyState title="No hits">
             The retriever returned nothing for this question. Check that the question is not empty and that the index has chunks.
           </EmptyState>
         </div>
-      </Frame>
+      </Box>
     )
   }
 
   return (
-    <Frame>
-      {/* The movement count is the reranker's run note, under the list: never repeated here. */}
-      <Summary>{facts}</Summary>
+    <Box>
+      {/* The movement count is the reranker's run note, the sub line above the results: never repeated here. */}
+      <Summary flat={flat}>{facts}</Summary>
       <div ref={rootRef} className="ri" onPointerOver={onPointerOver} onPointerLeave={onPointerLeave}>
         <style>{hoverRules}</style>
         <div className="ri-body" data-doc={layout ? "" : undefined}>
@@ -247,6 +256,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
             showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
             kept={kept}
             keepLimit={keepLimit}
+            reranker={reranker}
             side={side}
             enter={entering}
             pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? null) : r.ordinal)}
@@ -269,15 +279,20 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
           />
         </div>
       ) : null}
-    </Frame>
+    </Box>
   )
 }
 
-/** The facts strip; none when there are no facts to state. */
-function Summary({ children }: { children: ReactNode }) {
+/** A flat list: no border, no radius, no tinted gaps. */
+function FlatFrame({ children }: { children: ReactNode }) {
+  return <div className="flex min-w-0 flex-col gap-1">{children}</div>
+}
+
+/** The facts strip, or a plain line when the list is flat; none when there are no facts to state. */
+function Summary({ children, flat = false }: { children: ReactNode; flat?: boolean }) {
   if (children === null || children === undefined || children === false) return null
   return (
-    <div data-summary="" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-surface-elevated px-3 py-2">
+    <div data-summary="" className={cn("flex flex-wrap items-baseline gap-x-4 gap-y-1", flat ? "px-1" : "bg-surface-elevated px-3 py-2")}>
       {children}
     </div>
   )
@@ -305,6 +320,7 @@ function HitList({
   showRetriever,
   kept,
   keepLimit,
+  reranker,
   side: list,
   enter,
   pieceOf,
@@ -321,6 +337,7 @@ function HitList({
   showRetriever: boolean
   kept?: ReadonlySet<string>
   keepLimit?: number
+  reranker?: string
   side: ListSide
   enter: boolean
   pieceOf: (row: HitRowData) => number | null
@@ -353,6 +370,7 @@ function HitList({
             scaleKey={scale}
             keys={keys}
             keepLimit={limit}
+            reranker={reranker}
             clamp={s === "search" && selected !== i}
             section={section(r)}
             retriever={showRetriever && r.retriever ? r.retriever : null}
@@ -362,14 +380,13 @@ function HitList({
             data-hits={k === undefined ? undefined : `h${k}`}
             data-enter={enter ? "" : undefined}
             style={enter ? ({ "--i": Math.min(n, 4) } as CSSProperties) : undefined}
-            title={`Piece ${r.chunk_id.slice(0, 8)}`}
             onClick={() => onSelect(i)}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return
               e.preventDefault()
               onSelect(i)
             }}
-            className={cn("cursor-pointer", k !== undefined && `ri-mark h${k}`, selected === i && "bg-selection hover:bg-selection")}
+            className={cn("cursor-pointer", k !== undefined && `ri-mark h${k}`, selected === i && "bg-selection hover:bg-selection focus-visible:bg-selection focus-within:bg-selection")}
           />
         )
       })}
@@ -443,7 +460,7 @@ function HitDocument({
               ),
             )}
           </div>
-          <div data-reading="" className="min-w-0 font-sans text-base break-words whitespace-pre-wrap text-fg">
+          <div data-reading="" className="min-w-0 font-serif text-base leading-[1.55] break-words whitespace-pre-wrap text-fg">
             {layout.segments.map((s, j) => {
               const text = source.slice(s.start, s.end)
               if (s.chunks.length === 0) {

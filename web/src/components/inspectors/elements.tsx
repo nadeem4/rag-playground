@@ -16,7 +16,7 @@ export function ElementText({ el }: { el: Element }) {
   switch (el.type) {
     case "heading":
       return (
-        <p className="font-sans text-base font-semibold">
+        <p className="font-serif text-base leading-[1.55] font-semibold">
           <span aria-hidden className="mr-2 font-mono text-fg-muted">
             {"#".repeat(Math.max(1, el.level ?? 1))}
           </span>
@@ -25,7 +25,7 @@ export function ElementText({ el }: { el: Element }) {
       )
     case "list_item":
       return (
-        <p className="font-sans text-base" style={{ paddingLeft: Math.max(0, (el.level ?? 1) - 1) * 16 }}>
+        <p className="font-serif text-base leading-[1.55]" style={{ paddingLeft: Math.max(0, (el.level ?? 1) - 1) * 16 }}>
           <span aria-hidden className="mr-2 font-mono text-fg-muted">
             -
           </span>
@@ -40,7 +40,7 @@ export function ElementText({ el }: { el: Element }) {
       )
     default:
       return (
-        <p className={cn("font-sans text-base whitespace-pre-wrap", QUIET.has(el.type) && "text-fg-muted")}>
+        <p className={cn("font-serif text-base leading-[1.55] whitespace-pre-wrap", QUIET.has(el.type) && "text-fg-muted")}>
           {el.text}
         </p>
       )

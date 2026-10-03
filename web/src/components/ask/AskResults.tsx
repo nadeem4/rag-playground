@@ -250,6 +250,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
           chunkSet={o.chunkSet}
           doc={o.doc}
           showDetail={false}
+          flat
           facts={null}
         />
       )
@@ -335,6 +336,8 @@ function Comparison({
         doc={o.doc}
         showDetail={false}
         side="reranked"
+        flat
+        reranker={node.transform}
         kept={kept}
         keepLimit={after.length}
         facts={
@@ -375,6 +378,7 @@ function Comparison({
             doc={o.doc}
             showDetail={false}
             side="search"
+            flat
             facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
           />
         </div>

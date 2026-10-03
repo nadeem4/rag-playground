@@ -4,8 +4,9 @@ import { assignLanes, projectSpans, type Segment } from "./spans"
 
 /**
  * The pure half of the retrieval inspectors: one row shape for a retriever's
- * hits and for a Search output's rows, the scales their bars read, the rank a
- * reranker moved a hit from, and where each hit sits in the document.
+ * hits and for a Search output's rows, the scales their scores are on, the
+ * rank a reranker moved a hit from, the finding line, and where each hit sits
+ * in the document.
  */
 
 /** One ranked hit, whichever artifact it came from. */
@@ -138,21 +139,6 @@ export function reorderedOnly(rows: readonly HitRowData[]): boolean {
   return rows.length > 0 && rows.every((r) => r.prior_score !== null && r.prior_score === r.score)
 }
 
-/**
- * The largest positive value of one measure across the hits. Each component
- * gets its own scale: a cosine lives in [-1, 1] and a BM25 score is unbounded,
- * so one shared axis would flatten one of them to nothing.
- */
-export function scaleMax(values: readonly (number | undefined)[]): number {
-  return Math.max(0, ...values.filter((v): v is number => typeof v === "number" && Number.isFinite(v)))
-}
-
-/** Bar length in px for `value` on a scale whose maximum is `max`. */
-export function barWidth(value: number | undefined, max: number, full: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0 || max <= 0) return 0
-  return Math.max(1, Math.round((value / max) * full))
-}
-
 /** Four significant figures: RRF scores differ in the fourth digit. */
 export function fmtScore(v: number): string {
   if (!Number.isFinite(v)) return String(v)
@@ -160,22 +146,13 @@ export function fmtScore(v: number): string {
   return v.toPrecision(4)
 }
 
-export type Movement = { kind: "none" } | { kind: "up" | "down"; from: number; text: string }
+export type Movement = { kind: "none" } | { kind: "up" | "down"; from: number }
 
-/** Where a reranker moved a hit from: `was 4`. Nothing when it did not move. */
+/** Where a reranker moved a hit from. Nothing when it did not move. */
 export function movement(row: Pick<HitRowData, "rank" | "prior_rank">): Movement {
   const from = row.prior_rank
   if (from === null || from === undefined || from === row.rank) return { kind: "none" }
-  return { kind: from > row.rank ? "up" : "down", from, text: `was ${from}` }
-}
-
-export type Badge = { kind: "up" | "down" | "stayed"; text: string }
-
-/** The Ask panel's movement badge: `up from #6`, `down from #2`, `stayed #4`. Null for a hit no reranker saw. */
-export function badge(row: Pick<HitRowData, "rank" | "prior_rank">): Badge | null {
-  const move = movement(row)
-  if (move.kind !== "none") return { kind: move.kind, text: `${move.kind} from #${move.from}` }
-  return row.prior_rank === null || row.prior_rank === undefined ? null : { kind: "stayed", text: `stayed #${row.rank}` }
+  return { kind: from > row.rank ? "up" : "down", from }
 }
 
 /** An English ordinal: `1st`, `2nd`, `3rd`, `4th`, `11th`, `21st`. */
@@ -199,13 +176,25 @@ export interface FindingPart {
 /**
  * The finding line, in the tool's voice: `1st` in one list; `1st in search,
  * RRF 0.03279` on the search side; `2nd, moved up from 4th`, `3rd, stayed in
- * place` or `4th, moved down from 2nd` on the reranked side; and for a piece
- * past the keep limit `Not kept. It was 6th in search and the keep limit is 5.`
+ * place` or `4th, moved down from 2nd` on the reranked side. A piece the
+ * reranker did not keep says why: past the keep limit, `Not kept. It was 6th
+ * in search and the keep limit is 5.`; from inside it, the reranker's choice,
+ * `Not kept. It was 5th in search, but MMR chose others for variety.`
+ * `reranker` is the reranker's transform key.
  */
-export function findingLine(row: Pick<HitRowData, "rank" | "prior_rank" | "score">, side: SlipSide, scaleKey: string, keepLimit?: number): FindingPart[] {
+export function findingLine(
+  row: Pick<HitRowData, "rank" | "prior_rank" | "score">,
+  side: SlipSide,
+  scaleKey: string,
+  keepLimit?: number,
+  reranker?: string,
+): FindingPart[] {
   if (side === "notKept") {
-    const was = ordinal(row.prior_rank ?? row.rank)
-    return [{ text: keepLimit === undefined ? `Not kept. It was ${was} in search.` : `Not kept. It was ${was} in search and the keep limit is ${keepLimit}.` }]
+    const searchRank = row.prior_rank ?? row.rank
+    const was = `Not kept. It was ${ordinal(searchRank)} in search`
+    if (keepLimit === undefined) return [{ text: `${was}.` }]
+    if (searchRank > keepLimit) return [{ text: `${was} and the keep limit is ${keepLimit}.` }]
+    return [{ text: `${was}, but ${chose(reranker)}` }]
   }
   const place: FindingPart = { text: ordinal(row.rank), place: true }
   if (side === "search") return [place, { text: ` in search, ${scaleName(scaleKey)} ` }, { text: fmtScore(row.score), mono: true }]
@@ -214,6 +203,14 @@ export function findingLine(row: Pick<HitRowData, "rank" | "prior_rank" | "score
   if (move.kind === "none") return [place, { text: ", stayed in place" }]
   if (move.kind === "up") return [place, { text: ", " }, { text: `moved up from ${ordinal(move.from)}`, strong: true }]
   return [place, { text: `, moved down from ${ordinal(move.from)}` }]
+}
+
+/** Why a reranker left out a piece that was inside its keep limit. */
+function chose(reranker: string | undefined): string {
+  if (!reranker) return "the reranker chose others."
+  if (reranker === "mmr") return "MMR chose others for variety."
+  if (reranker === "cross_encoder") return "Cross-encoder ranked others higher."
+  return `${scaleName(reranker)} chose others.`
 }
 
 export function pages(span: [number, number] | null): string | null {

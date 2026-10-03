@@ -46,7 +46,7 @@
   --surface: #f5f6f4; /* page, off-white, never pure white */
   --surface-elevated: #eaece8; /* panel and tint: a background step, no border against the page */
   --surface-raised: #fdfdfc; /* the sheet, and the one selected card with --shadow-raised */
-  --surface-hover: #e4e4e7; /* zinc-200 wash for hover */
+  --surface-hover: #eaece8; /* hover wash: the tint, on the page's green-grey cast */
   --hairline: #d6d9d3; /* a line, not text: 1.3:1 on the page, 1.2:1 on the panel, 1.4:1 on the sheet */
   --text-primary: #161917; /* ink, 16.3:1 on the page, 14.9:1 on the panel */
   --text-secondary: #545a55; /* 6.5:1 on the page, 6.0:1 on the panel */
@@ -58,8 +58,8 @@
   --danger: oklch(0.52 0.17 25); /* error text, always with a label, 5.1:1 on the panel */
   --stale: oklch(0.5 0.12 75); /* settings changed since the run; text on --stale-wash */
   --stale-wash: oklch(0.95 0.05 75);
-  --shadow-raised: 0 1px 2px rgb(24 24 27 / 0.06), 0 6px 16px rgb(24 24 27 / 0.06);
-  --shadow-raised-phone: 0 1px 2px rgb(24 24 27 / 0.06);
+  --shadow-raised: 0 1px 2px rgb(22 25 23 / 0.06), 0 6px 16px rgb(22 25 23 / 0.06);
+  --shadow-raised-phone: 0 1px 2px rgb(22 25 23 / 0.06);
   --shadow-sheet: 0 2px 4px rgb(22 25 23 / 0.06), 0 12px 32px rgb(22 25 23 / 0.10); /* the options sheet only */
 
   /* Rows: sizes, not spacing, so outside the spacing cap. */
@@ -121,7 +121,7 @@
   --surface: #0e0f10;
   --surface-elevated: #17181a;
   --surface-raised: #1f2023;
-  --surface-hover: #27272a;
+  --surface-hover: #1f2023; /* one step above the panel, so a hover on the panel still shows */
   --hairline: #2c2d31;
   --text-primary: #f4f4f2;
   --text-secondary: #a8a8ae;
@@ -163,7 +163,7 @@
     --surface: #0e0f10;
     --surface-elevated: #17181a;
     --surface-raised: #1f2023;
-    --surface-hover: #27272a;
+    --surface-hover: #1f2023; /* one step above the panel, so a hover on the panel still shows */
     --hairline: #2c2d31;
     --text-primary: #f4f4f2;
     --text-secondary: #a8a8ae;
@@ -209,6 +209,7 @@
     --shadow-raised: 0 0 0 1px var(--field-border);
     --shadow-raised-phone: 0 0 0 1px var(--field-border);
     --shadow-sheet: 0 0 0 1px var(--field-border);
+    --flat: var(--text-secondary);
   }
 }
 
@@ -219,6 +220,7 @@
   --shadow-raised: 0 0 0 1px var(--field-border);
   --shadow-raised-phone: 0 0 0 1px var(--field-border);
   --shadow-sheet: 0 0 0 1px var(--field-border);
+  --flat: var(--text-secondary);
 }
 
 /* ------------------------------------------------------- Tailwind theme -- */

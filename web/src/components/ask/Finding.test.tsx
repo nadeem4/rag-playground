@@ -47,12 +47,15 @@ describe("firstSentence", () => {
   })
 
   it("drops markdown line markers and ends at a newline", () => {
-    expect(firstSentence("## Heading\nSentence.")).toBe("Heading")
-    expect(firstSentence("## Reading order in two-column reports\n\nThe survey ran for six weeks.")).toBe("Reading order in two-column reports")
+    expect(firstSentence("## Heading\nFirst body sentence.")).toBe("First body sentence.")
+    expect(firstSentence("## Reading order in two-column reports\n\nThe survey ran for six weeks.")).toBe("The survey ran for six weeks.")
+    expect(firstSentence("## Title\n\nBody sentence. More.")).toBe("Body sentence.")
+    // A heading and nothing else falls back to the heading.
+    expect(firstSentence("## Only a heading")).toBe("Only a heading")
     expect(firstSentence("> Quoted line. More.")).toBe("Quoted line.")
     expect(firstSentence("- A list item\n- Another")).toBe("A list item")
     expect(firstSentence("1. First step. Then more.")).toBe("First step.")
-    expect(firstSentence("\n\n### Deep\nBody.")).toBe("Deep")
+    expect(firstSentence("\n\n### Deep\nBody.")).toBe("Body.")
   })
 
   it("cuts a long sentence at 200 characters with an ellipsis", () => {

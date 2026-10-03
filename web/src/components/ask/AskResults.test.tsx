@@ -191,7 +191,7 @@ describe("the comparison, with a reranker", () => {
   it("puts the piece the reranker dropped under the kept ones, as a Not kept slip, on the reranked column only", async () => {
     render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
     await waitFor(() => expect(findings()).toHaveLength(6))
-    expect(findings()[5]).toBe("Not kept. It was 5th in search and the keep limit is 5.")
+    expect(findings()[5]).toBe("Not kept. It was 5th in search, but Cross-encoder ranked others higher.")
     const right = [...document.querySelectorAll<HTMLElement>('[data-column="reranked"] [data-slip]')]
     expect(right[5].dataset.flipKey).toBe(hybrid.hits[4].chunk.id)
     expect(right[5].className).toContain("opacity-75")
@@ -199,7 +199,17 @@ describe("the comparison, with a reranker", () => {
     expect(left.textContent).not.toMatch(/Not kept/)
     // Collapsed, the right list still ends with it.
     fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
-    expect(findings()[5]).toBe("Not kept. It was 5th in search and the keep limit is 5.")
+    expect(findings()[5]).toBe("Not kept. It was 5th in search, but Cross-encoder ranked others higher.")
+  })
+
+  it("sets the lists flat on the page: no boxed frame and no tinted header strip (spec section 2)", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(findings()).toHaveLength(6))
+    const results = screen.getByRole("region", { name: "Results" })
+    expect(results.querySelector(".rounded-panel.border")).toBeNull()
+    expect(results.querySelector(".bg-surface-elevated")).toBeNull()
+    // The column titles stay, as plain lines.
+    expect(screen.getByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
   })
 
   it("collapsing hides the search order and keeps the reranked list with its finding lines", async () => {

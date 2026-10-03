@@ -415,7 +415,7 @@ function Reading({
     <div
       data-reading=""
       onClick={onClick}
-      className="min-w-0 font-sans text-base break-words whitespace-pre-wrap text-fg"
+      className="min-w-0 font-serif text-base leading-[1.55] break-words whitespace-pre-wrap text-fg"
     >
       {segments.map((s, k) => {
         const text = source.slice(s.start, s.end)
@@ -517,7 +517,7 @@ function TextBlock({ label, children }: { label: string; children: ReactNode }) 
   return (
     <div className="flex flex-col gap-1">
       <span className="meta">{label}</span>
-      <p className="rounded-control border border-hairline bg-surface-elevated p-2 font-sans text-base whitespace-pre-wrap text-fg">
+      <p className="rounded-control border border-hairline bg-surface-elevated p-2 font-serif text-base leading-[1.55] whitespace-pre-wrap text-fg">
         {children}
       </p>
     </div>

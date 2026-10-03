@@ -7,8 +7,6 @@ import searchJson from "@/api/fixtures/output.search.json"
 import type { ChunkSet, RetrievalResult } from "@/api/types"
 
 import {
-  badge,
-  barWidth,
   componentKeys,
   findingLine,
   fmtScore,
@@ -18,7 +16,6 @@ import {
   ordinal,
   rowsFromResult,
   rowsFromSearch,
-  scaleMax,
   scaleName,
   scoreKey,
   topKAgreement,
@@ -32,41 +29,24 @@ const search = searchJson as unknown as SearchOutput
 
 describe("rank movement", () => {
   it("says where a reranked hit was, and nothing when it did not move", () => {
-    expect(movement({ rank: 2, prior_rank: 5 })).toEqual({ kind: "up", from: 5, text: "was 5" })
-    expect(movement({ rank: 4, prior_rank: 3 })).toEqual({ kind: "down", from: 3, text: "was 3" })
+    expect(movement({ rank: 2, prior_rank: 5 })).toEqual({ kind: "up", from: 5 })
+    expect(movement({ rank: 4, prior_rank: 3 })).toEqual({ kind: "down", from: 3 })
     expect(movement({ rank: 1, prior_rank: 1 })).toEqual({ kind: "none" })
     expect(movement({ rank: 1, prior_rank: null })).toEqual({ kind: "none" })
-  })
-
-  it("words a reranked hit's badge from its prior rank, and none for a hit no reranker saw", () => {
-    expect(badge({ rank: 1, prior_rank: 6 })).toEqual({ kind: "up", text: "up from #6" })
-    expect(badge({ rank: 4, prior_rank: 3 })).toEqual({ kind: "down", text: "down from #3" })
-    expect(badge({ rank: 2, prior_rank: 2 })).toEqual({ kind: "stayed", text: "stayed #2" })
-    expect(badge({ rank: 2, prior_rank: null })).toBeNull()
   })
 
   it("the real MMR fixture moved its fifth hit to second", () => {
     const rows = rowsFromResult(mmr)
     expect(rows.map((r) => movement(r).kind)).toEqual(["none", "up", "down", "down", "up"])
-    expect(movement(rows[1])).toMatchObject({ text: "was 5" })
+    expect(movement(rows[1])).toEqual({ kind: "up", from: 5 })
   })
 })
 
-describe("score bars", () => {
+describe("scores", () => {
   it("dense comes before bm25, and a retriever without components has none", () => {
     expect(componentKeys(rowsFromResult(hybrid))).toEqual(["dense", "bm25"])
     expect(componentKeys([{ ...rowsFromResult(hybrid)[0], component_scores: { rerank: 1, bm25: 2, alpha: 0 } }])).toEqual(["bm25", "alpha", "rerank"])
     expect(componentKeys(rowsFromResult({ ...hybrid, hits: hybrid.hits.map((h) => ({ ...h, component_scores: {} })) }))).toEqual([])
-  })
-
-  it("each measure has its own scale; zero, negative and missing values draw nothing", () => {
-    expect(scaleMax([0.2, 0.5, undefined, -1])).toBe(0.5)
-    expect(barWidth(0.5, 0.5, 48)).toBe(48)
-    expect(barWidth(0.25, 0.5, 48)).toBe(24)
-    expect(barWidth(0.001, 0.5, 48)).toBe(1)
-    expect(barWidth(-0.2, 0.5, 48)).toBe(0)
-    expect(barWidth(undefined, 0.5, 48)).toBe(0)
-    expect(barWidth(1, 0, 48)).toBe(0)
   })
 
   it("prints four significant figures, so RRF scores that differ in the fourth digit read apart", () => {
@@ -223,7 +203,16 @@ describe("the finding line", () => {
 
   it("a Not kept piece says its place in search and the keep limit", () => {
     expect(text(findingLine(row(6, null), "notKept", "hybrid_rrf", 5))).toBe("Not kept. It was 6th in search and the keep limit is 5.")
-    expect(text(findingLine(row(5, 6), "notKept", "cross_encoder", 4))).toBe("Not kept. It was 6th in search and the keep limit is 4.")
+    expect(text(findingLine(row(5, 6), "notKept", "cross_encoder", 4, "cross_encoder"))).toBe("Not kept. It was 6th in search and the keep limit is 4.")
     expect(text(findingLine(row(6, null), "notKept", "hybrid_rrf"))).toBe("Not kept. It was 6th in search.")
+  })
+
+  it("a piece dropped from inside the keep limit names the reranker's choice, not the limit", () => {
+    const within = (reranker?: string) => text(findingLine(row(5, null), "notKept", "hybrid_rrf", 5, reranker))
+    expect(within("mmr")).toBe("Not kept. It was 5th in search, but MMR chose others for variety.")
+    expect(within("llm_rerank")).toBe("Not kept. It was 5th in search, but LLM chose others.")
+    expect(within("cross_encoder")).toBe("Not kept. It was 5th in search, but Cross-encoder ranked others higher.")
+    expect(within()).toBe("Not kept. It was 5th in search, but the reranker chose others.")
+    expect(within("mmr")).not.toContain("keep limit")
   })
 })

@@ -27,6 +27,8 @@ export interface EvidenceSlipProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   clamp?: boolean
   /** The keep limit a Not kept slip names. */
   keepLimit?: number
+  /** The reranker's transform key, for why a Not kept slip was left out. */
+  reranker?: string
   /** The component scores to show, in order; the row's own when not given. */
   keys?: string[]
   /** The heading path as one line. */
@@ -52,6 +54,7 @@ export function EvidenceSlip({
   scaleKey,
   clamp = false,
   keepLimit,
+  reranker,
   keys,
   section,
   retriever,
@@ -61,7 +64,7 @@ export function EvidenceSlip({
   ...rest
 }: EvidenceSlipProps) {
   const notKept = side === "notKept"
-  const parts = bare ? [] : findingLine(row, side, scaleKey, keepLimit)
+  const parts = bare ? [] : findingLine(row, side, scaleKey, keepLimit, reranker)
   const scores: { name: string; value: number | undefined; missed?: string }[] =
     notKept || bare
       ? []
@@ -87,8 +90,11 @@ export function EvidenceSlip({
     >
       <span
         data-id={row.chunk_id}
-        role="img"
-        aria-label={piece === null ? "Chunk not in this chunk set" : `Chunk ${piece + 1}`}
+        // A bare slip's text is not a chunk, so its swatch claims nothing; a hit's swatch names its piece.
+        role={bare ? undefined : "img"}
+        aria-label={bare ? undefined : piece === null ? "Chunk not in this chunk set" : `Chunk ${piece + 1}`}
+        aria-hidden={bare ? true : undefined}
+        title={bare ? undefined : `Piece ${row.chunk_id.slice(0, 8)}`}
         className={cn(
           "grid size-[30px] place-items-center rounded-swatch font-mono text-xs font-semibold tabular-nums",
           piece === null ? "bg-surface-elevated text-fg-muted" : notKept ? "border border-flat text-fg-muted" : CHUNK_CLASSES[chunkSlot(piece) - 1],

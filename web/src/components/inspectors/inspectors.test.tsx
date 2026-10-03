@@ -324,11 +324,12 @@ describe("RetrievalResultInspector", () => {
     expect(c2.querySelector<HTMLElement>("[data-testid=finding]")!.textContent).toBe("1st")
   })
 
-  it("keeps the piece hash in the row's tooltip, not inline", () => {
+  it("keeps the piece hash in the swatch's tooltip, not on the slip and not inline", () => {
     const { container } = render(<RetrievalResultInspector result={hybrid} />)
     const first = container.querySelector<HTMLElement>("[data-hit-row]")!
     const id = hybrid.hits[0].chunk.id
-    expect(first.getAttribute("title")).toBe(`Piece ${id.slice(0, 8)}`)
+    expect(first.hasAttribute("title")).toBe(false)
+    expect(first.querySelector("[data-id]")!.getAttribute("title")).toBe(`Piece ${id.slice(0, 8)}`)
     expect(first.textContent).not.toContain(id.slice(0, 8))
   })
 
@@ -417,7 +418,7 @@ describe("RetrievalResultInspector", () => {
     expect(slips.map((s) => s.dataset.hitRow)).toEqual(["1", "2", "3", "4", "5", "6"])
     const out = slips.slice(4)
     expect(out.map((s) => s.querySelector("[data-testid=finding]")!.textContent)).toEqual([
-      "Not kept. It was 3rd in search and the keep limit is 4.",
+      "Not kept. It was 3rd in search, but the reranker chose others.",
       "Not kept. It was 5th in search and the keep limit is 4.",
     ])
     for (const s of out) {
@@ -432,7 +433,12 @@ describe("RetrievalResultInspector", () => {
     const kept = new Set(rows.slice(0, 5).map((r) => r.chunk_id))
     const { container: c2 } = render(<RetrievalView rows={rows} side="reranked" kept={kept} facts={null} showDetail={false} />)
     const last = [...c2.querySelectorAll<HTMLElement>("[data-hit-row]")].at(-1)!
-    expect(last.querySelector("[data-testid=finding]")!.textContent).toBe("Not kept. It was 5th in search and the keep limit is 5.")
+    expect(last.querySelector("[data-testid=finding]")!.textContent).toBe("Not kept. It was 5th in search, but the reranker chose others.")
+    cleanup()
+    // Named for the reranker that dropped it.
+    const { container: cm } = render(<RetrievalView rows={rows} side="reranked" kept={kept} reranker="mmr" facts={null} showDetail={false} />)
+    const lastMmr = [...cm.querySelectorAll<HTMLElement>("[data-hit-row]")].at(-1)!
+    expect(lastMmr.querySelector("[data-testid=finding]")!.textContent).toBe("Not kept. It was 5th in search, but MMR chose others for variety.")
     cleanup()
     // Without a keep list nothing is marked.
     const { container: c3 } = render(<RetrievalView rows={rows} side="reranked" facts={null} showDetail={false} />)
@@ -449,6 +455,24 @@ describe("RetrievalResultInspector", () => {
     fireEvent.keyDown(third, { key: " " })
     expect(third.className).toContain("bg-selection")
     expect(second.className).not.toContain("bg-selection")
+  })
+
+  it("a selected slip keeps the selection fill while it has keyboard focus", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const second = container.querySelector<HTMLElement>('[data-hit-row="2"]')!
+    fireEvent.keyDown(second, { key: "Enter" })
+    expect(second.className).toContain("focus-visible:bg-selection")
+  })
+
+  it("a flat list has no frame and no tinted strip: the facts are a plain line", () => {
+    const { container } = render(<RetrievalView rows={rowsFromResult(hybrid)} facts={<h3>Search order</h3>} showDetail={false} flat />)
+    expect(container.querySelector(".rounded-panel.border")).toBeNull()
+    expect(container.querySelector(".bg-surface-elevated")).toBeNull()
+    expect(container.querySelector("[data-summary]")!.textContent).toBe("Search order")
+    cleanup()
+    // The Build inspector keeps its own frame.
+    const { container: c2 } = render(<RetrievalResultInspector result={hybrid} />)
+    expect(c2.firstElementChild!.className).toContain("border-hairline")
   })
 
   it("draws no summary strip when there are no facts", () => {
@@ -586,15 +610,16 @@ describe("IndexInspector", () => {
   })
 })
 
-describe("long text in the reading face", () => {
+describe("the document's words in the document voice", () => {
   const reads = (el: HTMLElement) => {
-    expect(el.className).toContain("font-sans")
+    expect(el.className).toContain("font-serif")
+    expect(el.className).not.toContain("font-sans")
     expect(el.className).toMatch(/\btext-base\b/)
+    expect(el.className).toContain("leading-[1.55]")
     expect(el.className).not.toContain("font-mono")
-    expect(el.className).not.toContain("leading-[1.65]")
   }
 
-  it("the chunk text, the hit document and the parsed blocks are Atkinson at the reading size", () => {
+  it("the chunk text, the hit document and the parsed blocks are the serif at the reading size", () => {
     const { container, unmount } = render(<ChunkSetInspector chunkSet={recursive} />)
     reads(container.querySelector<HTMLElement>("[data-reading]")!)
     unmount()
@@ -602,7 +627,9 @@ describe("long text in the reading face", () => {
     reads(hits.container.querySelector<HTMLElement>("[data-reading]")!)
     hits.unmount()
     const doc = render(<ParsedDocInspector doc={parsed} />)
-    reads(doc.container.querySelector<HTMLElement>("[data-element] p")!)
+    for (const p of doc.container.querySelectorAll<HTMLElement>("[data-element] p")) reads(p)
+    // Code, tables and formulas are data, not prose: they stay mono.
+    for (const pre of doc.container.querySelectorAll<HTMLElement>("[data-element] pre")) expect(pre.className).toContain("font-mono")
   })
 
   it("the chunk detail's text is reading text; only ids and numbers are mono", () => {
@@ -615,8 +642,9 @@ describe("long text in the reading face", () => {
     expect(dd("heading").className).not.toContain("font-mono")
   })
 
-  it("the painted chunk band is measured for the reading face: line height 1.6, content area 1.3em", () => {
-    expect(css).toMatch(/--ci-leading: calc\(\(1\.6em - 1\.3em\) \/ 2 \+ 0\.5px\)/)
+  it("the painted chunk band is measured for Source Serif 4: line height 1.55, content area 1.371em", () => {
+    expect(css).toMatch(/--ci-leading: calc\(\(1\.55em - 1\.371em\) \/ 2 \+ 0\.5px\)/)
+    expect(css).not.toContain("1.3em) / 2")
     expect(css).not.toMatch(/Martian/)
     expect(css).not.toMatch(/font-size:\s*\d+px/)
   })

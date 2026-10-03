@@ -152,6 +152,12 @@ describe("the evidence slip", () => {
     expect(slip().textContent).not.toMatch(/1st/)
     // It selects nothing, so it is not a tab stop.
     expect(slip().hasAttribute("tabindex")).toBe(false)
+    // The text is not a chunk, so the swatch claims nothing about one.
+    const sw = slip().querySelector<HTMLElement>("[data-id]")!
+    expect(sw.getAttribute("role")).toBeNull()
+    expect(sw.getAttribute("aria-label")).toBeNull()
+    expect(sw.getAttribute("aria-hidden")).toBe("true")
+    expect(screen.queryByRole("img")).toBeNull()
     cleanup()
     // Page and section stay when they are known.
     render(<EvidenceSlip row={{ ...rows[0], section: "Methods" }} side="single" piece={null} scaleKey="score" bare />)

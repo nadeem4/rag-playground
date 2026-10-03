@@ -17,7 +17,7 @@ describe("the specimen page", () => {
     expect(s.getAllByText("#fdfdfc").length).toBeGreaterThan(0)
     expect(s.getAllByText("#1f2023").length).toBeGreaterThan(0)
     expect(s.getByText("--shadow-raised-phone")).toBeTruthy()
-    expect(s.getByText("0 1px 2px rgb(24 24 27 / 0.06)")).toBeTruthy()
+    expect(s.getByText("0 1px 2px rgb(22 25 23 / 0.06)")).toBeTruthy()
   })
 
   it("shows the document voice in the serif and the data face in JetBrains Mono", () => {

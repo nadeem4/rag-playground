@@ -146,7 +146,7 @@ describe("theme blocks", () => {
       if (!full) continue
       expect(tokens.get("--shadow-raised-phone")).toBe(full.split(/,\s*(?=\d)/)[0])
     }
-    expect(light.get("--shadow-raised-phone")).toBe("0 1px 2px rgb(24 24 27 / 0.06)")
+    expect(light.get("--shadow-raised-phone")).toBe("0 1px 2px rgb(22 25 23 / 0.06)")
     expect(dark.get("--shadow-raised-phone")).toBe("0 1px 2px rgb(0 0 0 / 0.4)")
     expect(css).toMatch(/@media \(max-width: 767px\) \{\s*:root:root:root \{\s*--shadow-raised: var\(--shadow-raised-phone\);\s*\}\s*\}/)
   })
@@ -242,6 +242,14 @@ describe("stale (Channel A)", () => {
   })
 })
 
+describe("the hover wash", () => {
+  it("sits on the new green-grey tint, in light and in both dark twins", () => {
+    expect(light.get("--surface-hover")).toBe("#eaece8")
+    expect(darkMedia.get("--surface-hover")).toBe("#1f2023")
+    expect(darkToggle.get("--surface-hover")).toBe("#1f2023")
+  })
+})
+
 describe("more contrast", () => {
   it("the prefers-contrast and toggle blocks are identical", () => {
     expect([...contrastMedia.entries()]).toEqual([...contrastToggle.entries()])
@@ -254,6 +262,7 @@ describe("more contrast", () => {
       "--shadow-raised": "0 0 0 1px var(--field-border)",
       "--shadow-raised-phone": "0 0 0 1px var(--field-border)",
       "--shadow-sheet": "0 0 0 1px var(--field-border)",
+      "--flat": "var(--text-secondary)",
     })
     for (const name of contrastToggle.keys()) expect(light.has(name), name).toBe(true)
   })

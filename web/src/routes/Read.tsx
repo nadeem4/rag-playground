@@ -66,7 +66,7 @@ function StageSection({ section, registry, samples }: { section: Section; regist
   const id = `read-${section.stage}`
   const sample = section.sample ? samples?.find((s) => s.name === section.sample) : undefined
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 border-t border-hairline py-6">
+    <section aria-labelledby={id} className="flex flex-col gap-3 border-t border-hairline py-8">
       <h2 id={id} className="learn-h2">
         {section.title}
       </h2>

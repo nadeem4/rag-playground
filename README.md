@@ -506,9 +506,11 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 **UI styling and fixtures:**
 - Every colour, size and radius is a token in `web/src/styles/tokens.css`. Tailwind's
   default scales are cleared, so values that are not tokens do not compile.
+  Text sizes are rem, so they follow the browser's font size, and the spacing scale
+  runs from 4 px to 32 px.
 - The **Dev** menu in the header opens the component inspectors and a token specimen page.
   It is hidden in demo mode.
-- The two typefaces, Atkinson Hyperlegible Next for reading and Martian Mono for data, are
+- The two typefaces, Atkinson Hyperlegible Next for reading and IBM Plex Mono for data, are
   self-hosted from npm. No font is fetched from the network at run time.
 - The UI tests use JSON fixtures generated from the real engine. Regenerate them with
   `uv run python web/scripts/export_fixtures.py`.

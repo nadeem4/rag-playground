@@ -471,7 +471,7 @@ function Evaluation({
             ) : null}
           </>
         ) : busy ? (
-          <p className="font-mono text-sm font-medium text-fg">{`Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}</p>
+          <p className="text-sm font-medium text-fg">{`Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}</p>
         ) : (
           <>
             <p data-testid="summary" className="font-mono text-sm font-medium text-fg">

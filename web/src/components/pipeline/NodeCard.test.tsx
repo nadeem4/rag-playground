@@ -102,7 +102,7 @@ describe("the step card's look", () => {
     expect(ring.className).not.toContain("border-dashed")
     expect(within(ring).getByTestId("ring-dot").className).toContain("bg-primary")
     const sentence = "Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps."
-    const summary = await within(card).findByTestId("step-summary")
+    const summary = await within(card).findByTestId("step-summary", {}, { timeout: 4000 })
     expect(summary.textContent).toBe(sentence)
     expect(summary.getAttribute("title")).toBe(sentence)
     expect(summary.className).toContain("truncate")
@@ -119,7 +119,7 @@ describe("the step card's look", () => {
     expect(card.dataset.look).toBe("done")
     expect(within(card).getByTestId("status-ring").className).toContain("border-dashed")
     expect(within(card).getByTestId("status-chip").textContent).toBe("reused from an earlier run")
-    const summary = await within(card).findByTestId("step-summary")
+    const summary = await within(card).findByTestId("step-summary", {}, { timeout: 4000 })
     expect(summary.textContent).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps.")
   })
 

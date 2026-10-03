@@ -53,6 +53,15 @@ describe("Read", () => {
     expect(titles).toEqual(["Overview", "Upload", "Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer", "Evaluate"])
   })
 
+  it("sets the page on the scale: 32 px rhythm between sections, text-lg post titles", async () => {
+    render(<Read />)
+    await screen.findByRole("heading", { level: 1, name: "Read, then try it" })
+    expect(section("Chunk").className).toContain("py-8")
+    const link = within(section("Chunk")).getAllByRole("link")[0]
+    expect(link.className).toContain("text-lg")
+    expect(screen.getByRole("heading", { level: 1 }).className).toContain("learn-display")
+  })
+
   it("lists the three Chunk posts as external links with the date in words", async () => {
     render(<Read />)
     await screen.findByRole("heading", { level: 1 })

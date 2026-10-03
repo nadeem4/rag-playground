@@ -20,8 +20,8 @@
 
 .learn-display {
   margin: 0;
-  font-size: clamp(30px, 4.4vw, 44px);
-  line-height: 1.08;
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl--line-height);
   letter-spacing: -0.035em;
   font-weight: 600;
   text-wrap: balance;
@@ -29,8 +29,8 @@
 
 .learn-title {
   margin: 0;
-  font-size: clamp(28px, 4vw, 40px);
-  line-height: 1.1;
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl--line-height);
   letter-spacing: -0.03em;
   font-weight: 600;
   text-wrap: balance;
@@ -38,8 +38,8 @@
 
 .learn-h2 {
   margin: 0;
-  font-size: 24px;
-  line-height: 1.25;
+  font-size: var(--text-xl);
+  line-height: var(--text-xl--line-height);
   letter-spacing: -0.02em;
   font-weight: 600;
 }
@@ -47,17 +47,17 @@
 .learn-lead {
   margin: 0;
   max-width: 60ch;
-  font-size: 17px;
-  line-height: 1.6;
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
   color: var(--text-secondary);
 }
 
 .learn-top {
-  padding-block: 48px 24px;
+  padding-block: var(--spacing-8) var(--spacing-6);
 }
 
 .learn-band {
-  padding-block: 40px 56px;
+  padding-block: var(--spacing-8);
   border-top: 1px solid var(--hairline);
 }
 

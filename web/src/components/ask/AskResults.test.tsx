@@ -10,9 +10,13 @@ import type { Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry, RetrievalResult } from "@/api/types"
+import { play } from "@/lib/flip"
 import { sampleGraph, setReranker, setUseCase, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
+import { resetMotionMemory, slideTiming } from "./AskResults"
+
+vi.mock("@/lib/flip", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/flip")>()), play: vi.fn() }))
 
 const LIVE = liveRegistry as unknown as Registry
 const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
@@ -31,12 +35,16 @@ function reranked(): RetrievalResult {
 let payloads: Record<string, unknown>
 
 beforeEach(() => {
+  vi.mocked(play).mockClear()
+  resetMotionMemory()
   resetSampleQuestionsCache()
   payloads = {
     idx1: { doc_count: 6 },
     ret1: hybrid,
     rr1: reranked(),
     rr2: reranked(),
+    rr3: reranked(),
+    rrScored: { ...reranked(), hits: reranked().hits.map((h, i) => ({ ...h, score: 8.21 - i })) },
     out1: searchJson,
     chat1: chatJson,
   }
@@ -45,7 +53,7 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       const payload = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
-      if (payload && payloads[payload[1]] !== undefined) return ok(payloads[payload[1]])
+      if (payload && payloads[payload[1]] !== undefined) return ok(await payloads[payload[1]])
       if (url === "/api/artifacts/rr1" || url === "/api/artifacts/rr2") {
         return ok({ id: "rr1", meta: { note: "Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place." } })
       }
@@ -108,10 +116,11 @@ describe("the comparison, with a reranker", () => {
     // The rank 1 hit came from rank 6.
     const top = document.querySelector('[data-column="reranked"] [data-hit-row="1"]') as HTMLElement
     expect(within(top).getByTestId("badge").textContent).toBe("up from #6")
-    // The left column marks the five pieces the reranker kept; the fifth search hit was dropped.
+    // The left column marks only the piece the reranker dropped: the fifth search hit.
     const left = document.querySelector('[data-column="search"]') as HTMLElement
-    expect(left.querySelectorAll("[data-kept]")).toHaveLength(5)
-    expect(left.querySelector('[data-hit-row="5"]')!.hasAttribute("data-kept")).toBe(false)
+    expect(within(left).getAllByText("Not kept")).toHaveLength(1)
+    expect(within(left.querySelector<HTMLElement>('[data-hit-row="5"]')!).getByText("Not kept")).toBeTruthy()
+    expect(left.textContent!.match(/kept/g)).toHaveLength(1)
     expect(await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")).toBeTruthy()
   })
 
@@ -197,12 +206,123 @@ describe("the comparison, with a reranker", () => {
   })
 })
 
+describe("the two result motions", () => {
+  const rows = (column: string) => [...document.querySelectorAll<HTMLElement>(`[data-column="${column}"] [data-hit-row]`)]
+
+  it("slides the reranked hits once per rerank result, from the place of their prior rank", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const { rerender } = render(<Panel {...p} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    const [container, before, timing] = vi.mocked(play).mock.calls[0]
+    expect(container).toBe(document.querySelector('[data-column="reranked"]'))
+    // Every kept hit has a place to come from; the one from #6 starts below the five.
+    expect([...before.keys()].sort()).toEqual(rows("reranked").map((r) => r.dataset.flipKey).sort())
+    expect(timing).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
+    // A rerender, a collapse and an expand do not play it again.
+    rerender(<Panel {...p} />)
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
+    await screen.findByRole("heading", { name: "Search order, 6 candidates" })
+    expect(play).toHaveBeenCalledTimes(1)
+    // A new rerank result plays once more.
+    rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(2))
+  })
+
+  it("new lists fade in when they first appear, and not again on collapse or expand", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(rows("search").length).toBe(6))
+    expect(rows("reranked").every((r) => r.hasAttribute("data-enter"))).toBe(true)
+    expect(rows("search").every((r) => r.hasAttribute("data-enter"))).toBe(true)
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
+    await screen.findByRole("heading", { name: "Search order, 6 candidates" })
+    expect(rows("search").some((r) => r.hasAttribute("data-enter"))).toBe(false)
+    expect(rows("reranked").some((r) => r.hasAttribute("data-enter"))).toBe(false)
+  })
+
+  it("remembers what it showed across a remount, as Back to Ask does", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    render(<Panel {...p} />)
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(rows("search").length).toBe(6))
+    cleanup()
+    render(<Panel {...p} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(rows("search").length).toBe(6))
+    expect(play).toHaveBeenCalledTimes(1)
+    expect(document.querySelector("[data-enter]")).toBeNull()
+  })
+
+  it("plays once per distinct rerank result: X, then Y, then X again plays twice", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const { rerender } = render(<Panel {...p} />)
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    const mmr = setReranker(p.graph, LIVE, "mmr")
+    rerender(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
+    await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(2))
+    rerender(<Panel {...p} />)
+    await screen.findByRole("heading", { name: "After rerank, Cross-encoder, 5 kept" })
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(play).toHaveBeenCalledTimes(2)
+  })
+
+  it("reads the slide's duration in its own unit: the built CSS says .32s", () => {
+    const style = (dur: string) =>
+      vi.spyOn(window, "getComputedStyle").mockReturnValue({
+        getPropertyValue: (name: string) => (name === "--dur-slow" ? dur : " cubic-bezier(0.2, 0, 0, 1)"),
+      } as CSSStyleDeclaration)
+    style(".32s")
+    expect(slideTiming()).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
+    style("320ms")
+    expect(slideTiming().duration).toBe(320)
+    style("")
+    expect(slideTiming().duration).toBe(320)
+    vi.restoreAllMocks()
+  })
+})
+
+describe("the note under a reranker that only reorders", () => {
+  it("says the scores are the search's when the reranker kept them", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const mmr = setReranker(p.graph, LIVE, "mmr")
+    render(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
+    const note = await screen.findByText("Ordered by MMR; the scores are the search's.")
+    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(true)
+    expect(note.className).toContain("text-fg-muted")
+  })
+
+  it("says nothing when the reranker wrote its own scores", async () => {
+    const p = props(withCrossEncoder(), { ...RERANKED, rerank_1: done("rerank_1", "rrScored") })
+    render(<Panel {...p} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(screen.queryByText(/the scores are the search's/)).toBeNull()
+  })
+})
+
 describe("the results without a reranker", () => {
   it("shows one list in search order", async () => {
     render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
     expect(await screen.findByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Hide comparison" })).toBeNull()
     expect(screen.queryAllByTestId("badge")).toHaveLength(0)
+  })
+
+  it("waits for the Search output, so the list never shows six rows and then five", async () => {
+    let release: (v: unknown) => void = () => {}
+    payloads.outSlow = new Promise((r) => (release = r))
+    render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "outSlow") })} />)
+    // The retrieval result has loaded, but the list waits for what the Search use case returns.
+    await new Promise((r) => setTimeout(r, 50))
+    expect(document.querySelectorAll("[data-hit-row]")).toHaveLength(0)
+    release(searchJson)
+    expect(await screen.findByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy()
+    const shown = [...document.querySelectorAll<HTMLElement>("[data-hit-row]")]
+    expect(shown).toHaveLength(5)
+    expect(shown.every((r) => r.hasAttribute("data-enter"))).toBe(true)
   })
 
   it("shows nothing before a question has run", () => {

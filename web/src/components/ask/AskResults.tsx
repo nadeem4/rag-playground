@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
@@ -6,10 +6,11 @@ import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Registry, RetrievalRes
 import { useArtifactPayload } from "@/api/useArtifact"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
-import { rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
+import { reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
 import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
+import { measure, play, type Rect } from "@/lib/flip"
 import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
@@ -30,6 +31,7 @@ export function fresh(results: Record<string, NodeState>, stale: Set<string>, no
 /** What the Ask steps produced, loaded. */
 export interface AskOutputs {
   retrieve?: RetrievalResult
+  retrieveId?: string
   rerank?: RetrievalResult
   rerankId?: string
   /** The use case's payload: a Search output or a Chat output. */
@@ -58,6 +60,7 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
   const failedNode = [query, retrieve, rerank, useCase].find((n) => n && results[n.id]?.status === "failed" && !stale.has(n.id))
   return {
     retrieve: asResult(r.data),
+    retrieveId,
     rerank: asResult(rr.data),
     rerankId,
     output: out.data,
@@ -94,24 +97,117 @@ export interface AskResultsProps {
 
 export const STALE_LINE = "The settings changed since the last Ask. Press Ask to see the new results."
 
+/**
+ * Where each reranked hit stood before the rerank, as a place in the reranked
+ * list itself: the hit that was #3 starts where row 3 is now. A hit from below
+ * the kept rows starts just under the last one. The rows mount fresh with the
+ * result (the old list is gone while Ask runs), so the slots of the new list
+ * are the only "before" there is.
+ */
+export function priorPlaces(now: ReadonlyMap<string, Rect>, rows: readonly HitRowData[]): Map<string, Rect> {
+  const slots = rows.map((r) => now.get(r.chunk_id))
+  const last = slots[slots.length - 1]
+  const out = new Map<string, Rect>()
+  for (const r of rows) {
+    const p = r.prior_rank
+    if (p === null || p < 1) continue
+    const slot = p <= slots.length ? slots[p - 1] : last && { left: last.left, top: last.top + (last.height ?? 0) }
+    if (slot) out.set(r.chunk_id, slot)
+  }
+  return out
+}
+
+/**
+ * A CSS time in milliseconds. The built stylesheet is minified, so `320ms`
+ * reads back as `.32s`: the unit must be read, not assumed.
+ */
+export function durationMs(raw: string, fallback: number): number {
+  const v = raw.trim()
+  const n = parseFloat(v)
+  if (!Number.isFinite(n)) return fallback
+  return v.endsWith("ms") ? n : v.endsWith("s") ? n * 1000 : fallback
+}
+
+/** Motion 4's timing from the tokens: `--dur-slow` on `--ease-in`. */
+export function slideTiming(): { duration: number; easing: string } {
+  const css = getComputedStyle(document.documentElement)
+  return {
+    duration: durationMs(css.getPropertyValue("--dur-slow"), 320),
+    easing: css.getPropertyValue("--ease-in").trim() || "cubic-bezier(0.2, 0, 0, 1)",
+  }
+}
+
+/*
+ * What the two motions have already shown, by artifact id. Module level, not
+ * component state: Back to Ask remounts the panel, and a cached result comes
+ * back under the id it had (Cross-encoder, MMR, Cross-encoder again), and
+ * neither may replay a motion the reader has seen.
+ */
+const listsShown = new Set<string>()
+const reranksPlayed = new Set<string>()
+
+/** Forget both, for tests. */
+export function resetMotionMemory(): void {
+  listsShown.clear()
+  reranksPlayed.clear()
+}
+
 export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false }: AskResultsProps) {
   const { rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
+
+  // Motion 3: a list fades in the first time it appears for its artifact id,
+  // never again when Hide and Show comparison or Back to Ask remount it.
+  const shown: string[] = []
+  const enter = (id: string | undefined) => {
+    if (id) shown.push(id)
+    return id !== undefined && !listsShown.has(id)
+  }
+  useEffect(() => {
+    for (const id of shown) listsShown.add(id)
+  })
+
+  // Motion 4: once per rerank result, the reranked hits slide from the place
+  // of their prior rank. Never on a rerender, a collapse, an expand or a remount.
+  const flipRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = flipRef.current
+    const id = o.rerankId
+    if (!el || !id || !o.rerank || reranksPlayed.has(id)) return
+    reranksPlayed.add(id)
+    play(el, priorPlaces(measure(el, "[data-flip-key]"), rowsFromResult(o.rerank)), slideTiming())
+  })
+
   let lists: ReactNode = null
   if (rerank && o.rerank && o.retrieve) {
     // Hidden for one rerank result only: a new result (a new run, another reranker) opens it again.
     const open = !o.rerankId || comparisonHidden !== o.rerankId
     lists = (
-      <Comparison node={rerank} registry={registry} outputs={o} open={open} onToggle={() => onComparison(open ? (o.rerankId ?? null) : null)} />
+      <Comparison
+        node={rerank}
+        registry={registry}
+        outputs={o}
+        open={open}
+        onToggle={() => onComparison(open ? (o.rerankId ?? null) : null)}
+        enterSearch={enter(o.retrieveId)}
+        enterReranked={enter(o.rerankId)}
+        flipRef={flipRef}
+      />
     )
   } else if (!rerank) {
     // With a reranker whose result is loading, failed or stale, no list: the order shown would not be the reranked one.
     const search = !rerank && isSearch(o.output) ? o.output : undefined
-    const rows = search ? rowsFromSearch(search) : o.retrieve ? rowsFromResult(o.retrieve) : null
+    // A Search use case trims the hits (six candidates, five shown): wait for its
+    // output rather than show the retrieval rows and then swap them. Only a failed
+    // use case falls back to the retrieval rows, under its error.
+    const waiting = useCase?.transform === "search" && !search && o.failed?.node.id !== useCase.id
+    const rows = waiting ? null : search ? rowsFromSearch(search) : o.retrieve ? rowsFromResult(o.retrieve) : null
     const total = search ? search.payload.total_candidates : o.retrieve?.total_candidates
     if (rows) {
       lists = (
         <RetrievalView
+          key={o.retrieveId}
+          enter={enter(o.retrieveId)}
           rows={rows}
           chunkSet={o.chunkSet}
           doc={o.doc}
@@ -157,12 +253,19 @@ function Comparison({
   outputs: o,
   open,
   onToggle,
+  enterSearch,
+  enterReranked,
+  flipRef,
 }: {
   node: GraphNode
   registry: Registry
   outputs: AskOutputs
   open: boolean
   onToggle: () => void
+  enterSearch: boolean
+  enterReranked: boolean
+  /** The reranked column, where motion 4 plays. */
+  flipRef: RefObject<HTMLDivElement | null>
 }) {
   const before = rowsFromResult(o.retrieve!)
   const after = rowsFromResult(o.rerank!)
@@ -174,22 +277,30 @@ function Comparison({
   )
   const title = <Heading>{`After rerank, ${rerankLabel(node.transform)}, ${after.length} kept`}</Heading>
   const reranked = (
-    <div data-column="reranked" className="flex min-w-0 flex-col gap-2">
+    <div ref={flipRef} data-column="reranked" className="flex min-w-0 flex-col gap-2">
       <RetrievalView
+        key={o.rerankId}
+        enter={enterReranked}
         rows={after}
         chunkSet={o.chunkSet}
         doc={o.doc}
         showDetail={false}
         badges
         facts={
-          open ? (
-            title
-          ) : (
-            <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
-              {title}
-              {toggle}
-            </div>
-          )
+          <>
+            {open ? (
+              title
+            ) : (
+              <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
+                {title}
+                {toggle}
+              </div>
+            )}
+            {/* MMR and the LLM reranker reorder without rescoring: say why the scores are not in order. */}
+            {reorderedOnly(after) ? (
+              <p className="basis-full text-xs text-fg-muted">{`Ordered by ${rerankLabel(node.transform)}; the scores are the search's.`}</p>
+            ) : null}
+          </>
         }
       />
       {/* The reranker's run note states the movement count; it is said here and nowhere else. */}
@@ -206,6 +317,8 @@ function Comparison({
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div data-column="search" className="min-w-0">
           <RetrievalView
+            key={o.retrieveId}
+            enter={enterSearch}
             rows={before}
             chunkSet={o.chunkSet}
             doc={o.doc}

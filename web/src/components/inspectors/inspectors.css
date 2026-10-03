@@ -15,20 +15,23 @@
 .ci-seg {
   background-color: var(--a);
   color: var(--a-text);
-  transition: opacity 120ms;
+  transition: opacity var(--dur-fast);
 }
 
 /*
  * A chunk reads as ONE region, not a stack of stripes.
  *
  * An inline background covers only the font's content area, which is shorter
- * than the line box (line-height 1.65), so every wrapped line would be its own
- * stripe. Vertical padding on an inline box changes no layout, only the
- * painted area: padding each covered span by exactly half the leading makes
- * the painted box one line pitch tall, so consecutive lines touch. It is
- * measured in the browser for Martian Mono (content area 16.8px at 14px, so
- * 1.2em; see --ci-leading), not guessed. A blank line inside a chunk has no glyphs, so the span's fragment
- * there is widened by `.ci-fill` and painted by the same background.
+ * than the line box (line-height 1.6, the `text-base` reading size), so every
+ * wrapped line would be its own stripe. Vertical padding on an inline box
+ * changes no layout, only the painted area: padding each covered span by
+ * exactly half the leading makes the painted box one line pitch tall, so
+ * consecutive lines touch. The content area is read from the font files, not
+ * guessed: Atkinson Hyperlegible Next has ascender 984 and descender -316 per
+ * 1000 units (hhea and typo, USE_TYPO_METRICS set), so 1.3em; IBM Plex Mono is
+ * 1025 and -275, also 1.3em, so a mono span inside the text paints the same.
+ * A blank line inside a chunk has no glyphs, so the span's fragment there is
+ * widened by `.ci-fill` and painted by the same background.
  *
  * `box-decoration-break: clone` repaints the hatch per line fragment instead
  * of slicing one image across all of them, so an overlap that wraps keeps
@@ -38,7 +41,7 @@
   /* +0.5px: rows sit on fractional pixels, and without a full pixel of overlap
      an antialiased edge shows as a dark seam every few lines (seen in dark
      mode). The overlap lands in padding, never on glyphs. */
-  --ci-leading: calc((1.65em - 1.2em) / 2 + 0.5px);
+  --ci-leading: calc((1.6em - 1.3em) / 2 + 0.5px);
   padding-block: var(--ci-leading);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
@@ -87,7 +90,7 @@
 
 .ci-band,
 .ci-bar {
-  transition: opacity 120ms;
+  transition: opacity var(--dur-fast);
 }
 
 [data-hover] :is(.ci-seg, .ci-band, .ci-bar):not([data-gap]) {
@@ -143,6 +146,18 @@
  */
 .ri {
   container-type: inline-size;
+  /* One spine lane: a 4px rank band plus a 2px gap. */
+  --lane: 6px;
+}
+/*
+ * On a touch screen each band's hit box is 24px wide (tokens.css: 10px past
+ * each side of the 4px band), so the lanes move 24px apart and two bands side
+ * by side never share a hit box. The band keeps its drawn width.
+ */
+@media (pointer: coarse) {
+  .ri {
+    --lane: 24px;
+  }
 }
 .ri-body {
   display: grid;
@@ -167,33 +182,104 @@
     top: 0;
   }
 }
-.ri-grid {
+/*
+ * The hit list is one grid; the header and every row are subgrids of it, so
+ * each column is as wide as its widest content and still lines up from row to
+ * row, whatever the font: rank, passage, then the score name, value and bar.
+ * Nothing here is a width measured for one typeface.
+ */
+.ri-list {
   display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content max-content;
   column-gap: 12px;
+}
+.ri-head,
+.ri-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: start;
+}
+.ri-head {
+  align-items: baseline;
+}
+.ri-rank {
+  grid-column: 1;
+}
+.ri-main {
+  grid-column: 2;
+}
+.ri-scores-head {
+  grid-column: 3 / -1;
+}
+.ri-scores {
+  grid-column: 3 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  column-gap: 6px;
+  row-gap: 2px;
   align-items: center;
 }
-.ri-key {
-  display: none;
+.ri-score {
+  display: contents;
 }
-/* A list narrower than the full row (a phone): the scores wrap under the rank
-   on their own line, each named, instead of being cut off at the edge. */
-@container (max-width: 439px) {
-  .ri-grid {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: 8px;
-    row-gap: 2px;
+/* A search that missed the hit: its words take the value and bar columns. */
+.ri-score-miss {
+  grid-column: span 2;
+}
+/* A list under 600px (a phone, or one column of the side-by-side comparison
+   at 1440): the scores wrap under the passage on their own line, each still
+   named, so the passage keeps a reading measure instead of a 30 character
+   ribbon beside the score cluster. */
+@container (max-width: 599px) {
+  .ri-list {
+    grid-template-columns: max-content minmax(0, 1fr);
   }
   .ri-head {
     display: none;
   }
-  .ri-key {
-    display: inline;
+  .ri-scores {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 12px;
+  }
+  .ri-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
   }
 }
-/* A piece the reranker kept, in the Ask panel's search order column. */
-.ri-row[data-kept] {
-  border-left: 3px solid var(--kept-mark);
+/*
+ * New results fade in and rise 6px (motion 3), the first five rows 30ms apart
+ * and the rest together (`--i` is capped at 4 by the component). `backwards`
+ * holds the start state through the delay and leaves no transform behind.
+ * Under reduced motion it is a short opacity change and nothing moves.
+ */
+@keyframes ri-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes ri-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* On a new rerank the reranked rows also run the FLIP (flip.ts). A script
+   animation composites above this one, so they fade and slide without the
+   rise: that is on purpose, the slide is the motion that carries meaning. */
+.ri-row[data-enter] {
+  animation: ri-enter var(--dur-mid) var(--ease-in) backwards;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ri-row[data-enter] {
+    animation: ri-fade var(--dur-fast) linear backwards;
+    animation-delay: 0ms;
+  }
 }
 .ri-snippet {
   display: -webkit-box;
@@ -208,7 +294,7 @@
   line-clamp: none;
 }
 .ri-mark {
-  transition: opacity 120ms;
+  transition: opacity var(--dur-fast);
 }
 [data-hover] .ri-mark {
   opacity: 0.4;
@@ -231,13 +317,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
+  /* In rem, on the type scale's smallest step, so it follows the browser's font size. */
+  min-width: 1rem;
+  height: 1rem;
   padding: 0 3px;
   margin-left: 2px;
   border-radius: 4px;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: var(--text-2xs);
+  line-height: 1rem;
   font-weight: 600;
   background: transparent;
   color: var(--text-primary);

@@ -402,8 +402,12 @@
  * a small control (the 24px remove button on a stacked card) grows with it.
  * A checkbox or radio keeps its box; the label around it takes the 44px
  * height. The rank bands in the document gutter are 4px wide and sit side by
- * side, so they keep their drawn size and get an invisible overlay 10px past
- * each edge. hitBox.test.ts compiles this and checks it.
+ * side, so they keep their drawn size and get an invisible overlay: 10px past
+ * each side, 24px wide in all, and 10px past the top and the bottom, or more
+ * on a short band, so it is never under 44px tall. On a touch screen the
+ * gutter's lanes are 24px apart (inspectors.css, `--lane`), so the overlays of
+ * two bands side by side do not overlap. hitBox.test.ts compiles this and
+ * checks it.
  */
 @media (pointer: coarse) {
   button:not(.ri-mark),
@@ -427,7 +431,9 @@
   button.ri-mark::after {
     content: "";
     position: absolute;
-    inset: -10px;
+    inset-inline: -10px;
+    top: min(-10px, calc(50% - 22px));
+    bottom: min(-10px, calc(50% - 22px));
   }
 }
 

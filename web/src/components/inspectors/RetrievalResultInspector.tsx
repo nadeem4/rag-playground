@@ -3,7 +3,6 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, typ
 import type { ChunkSet, ParsedDoc, RetrievalResult } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
 import { ElementsInPdf } from "@/components/pdf/ElementsInPdf"
-import { Button } from "@/components/ui/button"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +19,8 @@ import {
   rowsFromResult,
   rowsFromSearch,
   scaleMax,
+  scaleName,
+  scoreKey,
   sectionOf,
   type Badge,
   type HitLayout,
@@ -33,9 +34,11 @@ import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
 /**
  * Ranked hits, and where in the document they came from.
  *
- * The list: rank, the rank a reranker moved it from, the score, and one small
- * bar per component score (dense, bm25) on its own scale, drawn from a hairline
- * baseline with no track. Then the ORIGINAL chunk text.
+ * The list, one row of evidence per hit: the rank, large, with the rank a
+ * reranker moved it from; the ORIGINAL chunk text in the reading face; a where
+ * line (page, section, Show in PDF); and on the right the scores in mono, each
+ * with its scale named (`RRF 0.0328`, `Dense 0.254`), each component with a
+ * small bar on its own scale, drawn from a hairline baseline with no track.
  *
  * The document (when the upstream chunk set is passed): the position spine of
  * contract §9 with one band per hit, labelled with its rank, at the hit's true
@@ -52,10 +55,16 @@ export interface RetrievalViewProps {
   showDetail?: boolean
   /** The parsed document the chunks were cut from: enables "Show in PDF". */
   doc?: ParsedDoc
-  /** Chunk ids a reranker kept: their rows are marked (the Ask panel's search order column). */
+  /** Chunk ids a reranker kept: the rows NOT in it say `Not kept` (the Ask panel's search order column). */
   kept?: ReadonlySet<string>
   /** True shows each row's movement as a tinted badge, `up from #6`, instead of `was 6`. */
   badges?: boolean
+  /**
+   * True when this list is new: its rows fade in and rise (motion 3). Read once,
+   * when the list mounts, so a rerender never cuts the motion short; a caller
+   * keys the list on its artifact id to get a new one.
+   */
+  enter?: boolean
 }
 
 export function RetrievalResultInspector({
@@ -150,10 +159,12 @@ function Fact({ value, label, id }: { value: ReactNode; label: string; id: strin
 // ---------------------------------------------------------------- layout --
 
 const BAR = 40 // px, the longest score bar
-const LANE = 6 // px per spine lane: a 4px band plus a 2px gap
+// One spine lane is `--lane` wide (inspectors.css): a 4px band plus a 2px gap,
+// or a whole 24px hit box on a touch screen.
 const LABEL = 20 // px for the rank numbers on the spine
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, kept, badges = false }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, kept, badges = false, enter = false }: RetrievalViewProps) {
+  const [entering] = useState(enter)
   const rootRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLDivElement>(null)
   const pdfRef = useRef<HTMLDivElement>(null)
@@ -233,6 +244,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, k
             showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
             kept={kept}
             badges={badges}
+            enter={entering}
             sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
           />
           {layout && chunkSet ? (
@@ -262,19 +274,13 @@ function Summary({ children }: { children: ReactNode }) {
 
 // ------------------------------------------------------------------ list --
 
-/**
- * Column template shared by the header and every row, so bars align: rank,
- * rank before rerank, score, then one bar column per component score. With no
- * components the score gets the single bar column, unlabelled beside its number.
+/*
+ * The list is one grid and every row a subgrid of it (inspectors.css), so the
+ * columns are sized by their content, the widest row's, and still line up from
+ * row to row: rank, the passage, then the score cluster's name, value and bar.
+ * No width is measured for a font. Below 600px of list the scores wrap under
+ * the passage instead.
  */
-function columns(bars: number): CSSProperties {
-  // The widths hold the mono text they carry: a 4 letter tracked column label
-  // in the rank column, and a bar plus a five decimal score in each bar column.
-  // Martian Mono is wider than a usual mono, so they were measured for it. A bar
-  // column grows to hold "no keyword match" on one line. In a narrow list the
-  // stylesheet turns the row into a wrapping line instead (inspectors.css).
-  return { gridTemplateColumns: `32px 44px 64px repeat(${bars}, minmax(${BAR + 48}px, max-content))` }
-}
 
 function HitList({
   rows,
@@ -287,6 +293,7 @@ function HitList({
   showRetriever,
   kept,
   badges,
+  enter,
   sectionOf: section,
 }: {
   rows: HitRowData[]
@@ -300,93 +307,88 @@ function HitList({
   showRetriever: boolean
   kept?: ReadonlySet<string>
   badges: boolean
+  enter: boolean
   sectionOf: (row: HitRowData) => string | null
 }) {
   const scoreMax = scaleMax(rows.map((r) => r.score))
   const maxOf = Object.fromEntries(keys.map((k) => [k, scaleMax(rows.map((r) => r.component_scores[k]))]))
-  const grid = columns(Math.max(1, keys.length))
+  const fused = scaleName(scoreKey(rows))
   return (
-    <div className="ri-list flex min-w-0 flex-col bg-surface" role="list" aria-label="Ranked hits">
-      <div className="ri-grid ri-head border-b border-hairline px-3 py-1" style={grid} aria-hidden>
-        <span className="meta text-right">rank</span>
-        <span />
-        <span className="meta text-right">score</span>
-        {keys.length ? (
-          keys.map((k) => (
-            <span key={k} className="meta">
-              {k}
-            </span>
-          ))
-        ) : (
-          <span />
-        )}
+    <div className="ri-list min-w-0 bg-surface" role="list" aria-label="Ranked hits">
+      <div className="ri-head border-b border-hairline px-3 py-1" aria-hidden>
+        <span className="ri-rank meta text-right">Rank</span>
+        <span className="ri-scores-head meta">Score</span>
       </div>
       {rows.map((r, i) => {
         const move = movement(r)
         const k = markOf.get(i)
         const tag = badges ? badge(r) : null
-        const isKept = kept?.has(r.chunk_id) ?? false
+        const dropped = kept !== undefined && !kept.has(r.chunk_id)
+        const where = [pages(r.page_span), section(r), showRetriever && r.retriever ? r.retriever : null]
         return (
           <div
             key={`${r.chunk_id}-${i}`}
             role="listitem"
             data-hit-row={r.rank}
+            data-flip-key={r.chunk_id}
             data-hits={k === undefined ? undefined : `h${k}`}
-            data-kept={isKept ? "" : undefined}
+            data-enter={enter ? "" : undefined}
+            style={enter ? ({ "--i": Math.min(i, 4) } as CSSProperties) : undefined}
             title={`Piece ${r.chunk_id.slice(0, 8)}`}
             onClick={() => onSelect(i)}
             className={cn(
-              "ri-row flex cursor-pointer flex-col gap-1 border-b border-hairline px-3 py-2 last:border-b-0 hover:bg-surface-elevated",
+              "ri-row cursor-pointer border-b border-hairline px-3 py-2 last:border-b-0 hover:bg-surface-elevated",
               k !== undefined && `ri-mark h${k}`,
               selected === i && "bg-selection hover:bg-selection",
             )}
           >
-            <div className="ri-grid items-baseline" style={grid}>
-              <span className="text-right font-mono text-sm font-semibold text-fg tabular-nums">{r.rank}</span>
+            <div className="ri-rank flex flex-col items-end">
+              <span data-testid="rank" className="text-lg font-semibold text-fg tabular-nums">
+                {r.rank}
+              </span>
               <span
                 data-testid="movement"
                 title={move.kind === "none" ? undefined : `rank ${move.from} before rerank`}
-                className={cn("font-mono text-xs", move.kind === "up" ? "font-semibold text-fg" : "text-fg-muted")}
+                className={cn("font-mono text-2xs whitespace-nowrap", move.kind === "up" ? "font-medium text-fg" : "text-fg-muted")}
               >
                 {move.kind === "none" || badges ? "" : move.text}
               </span>
-              <span className="text-right font-mono text-sm text-fg tabular-nums">{fmtScore(r.score)}</span>
-              {keys.length ? (
-                keys.map((key) => <ScoreBar key={key} name={key} value={r.component_scores[key]} max={maxOf[key]} label={MISSED[key] ?? "no match"} />)
-              ) : (
-                <ScoreBar value={r.score} max={scoreMax} />
-              )}
             </div>
-            <div className="flex min-w-0 flex-col gap-1 pl-[40px]">
-              {tag || isKept ? (
+            <div className="ri-main flex min-w-0 flex-col gap-1">
+              {tag || dropped ? (
                 <p className="flex flex-wrap items-center gap-2">
                   {tag ? (
                     <span data-testid="badge" data-badge={tag.kind} className="rounded-control px-1 font-mono text-2xs" style={BADGE_TINT[tag.kind]}>
                       {tag.text}
                     </span>
                   ) : null}
-                  {isKept ? <span className="meta">kept</span> : null}
+                  {dropped ? <span className="meta">Not kept</span> : null}
                 </p>
               ) : null}
-              <p className="ri-snippet text-sm text-fg">{r.text}</p>
-              <p data-testid="where" className="flex flex-wrap gap-x-3 font-mono text-2xs text-fg-muted">
-                {pages(r.page_span) ? <span>{pages(r.page_span)}</span> : null}
-                {section(r) ? <span>{section(r)}</span> : null}
-                {showRetriever && r.retriever ? <span>{r.retriever}</span> : null}
+              <p className="ri-snippet font-sans text-base text-fg">{r.text}</p>
+              <p data-testid="where" className="flex flex-wrap items-baseline gap-x-3 text-xs text-fg-muted">
+                {where[0] ? <span className="font-mono tabular-nums">{where[0]}</span> : null}
+                {where[1] ? <span>{where[1]}</span> : null}
+                {where[2] ? <span className="font-mono">{where[2]}</span> : null}
+                {onShowPdf && canPdf(i) ? (
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-control font-medium text-primary underline-offset-4 transition-colors duration-(--dur-fast) hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onShowPdf(i)
+                    }}
+                  >
+                    Show in PDF
+                  </button>
+                ) : null}
               </p>
-              {onShowPdf && canPdf(i) ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="self-start"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onShowPdf(i)
-                  }}
-                >
-                  Show in PDF
-                </Button>
-              ) : null}
+            </div>
+            <div className="ri-scores font-mono">
+              <Score name={fused} value={r.score} max={scoreMax} bar={keys.length === 0} />
+              {keys.map((key) => (
+                <Score key={key} name={scaleName(key)} value={r.component_scores[key]} max={maxOf[key]} bar missed={MISSED[key] ?? "no match"} />
+              ))}
             </div>
           </div>
         )
@@ -406,30 +408,35 @@ const BADGE_TINT: Record<Badge["kind"], CSSProperties> = {
 const MISSED: Record<string, string> = { bm25: "no keyword match", dense: "no meaning match" }
 
 /**
- * A score bar: grows from a 1px hairline baseline, no filled track (contract
- * §11), the value printed at its tip in text ink. Absent means the search did
- * not find the hit, which is different from scoring zero, so `label` says so.
+ * One score with its scale named, `Dense 0.254`, and optionally a bar: it grows
+ * from a 1px hairline baseline, no filled track (contract §11). Absent means
+ * the search did not find the hit, which is different from scoring zero, so
+ * `missed` says so. Three grid items per line (name, value, bar), placed in the
+ * row's score subgrid; `.ri-score` itself is `display: contents`.
  */
-function ScoreBar({ value, max, label, name }: { value: number | undefined; max: number; label?: string; name?: string }) {
-  const w = barWidth(value, max, BAR)
-  // The component's name, shown only in a narrow list, where the header row is hidden.
-  const key = name ? <span className="ri-key font-mono text-2xs text-fg-muted">{name}</span> : null
+function Score({ name, value, max, bar, missed }: { name: string; value: number | undefined; max: number; bar: boolean; missed?: string }) {
+  const nameEl = <span className="ri-score-name text-xs text-fg-muted">{name}</span>
   if (value === undefined) {
     return (
-      <span className="flex min-w-0 items-center gap-1 font-mono text-2xs whitespace-nowrap text-fg-muted">
-        {key}
-        {label ?? ""}
+      <span className="ri-score">
+        {nameEl}
+        <span className="ri-score-miss text-xs whitespace-nowrap text-fg-muted">{missed ?? ""}</span>
       </span>
     )
   }
+  const w = barWidth(value, max, BAR)
   return (
-    <span className="flex min-w-0 items-center gap-1" data-bar={w}>
-      {key}
-      <span aria-hidden className="flex items-center">
-        <span className="block h-[12px] w-px shrink-0 bg-hairline" />
-        <span className="block h-[6px] shrink-0" style={{ width: w, background: "var(--score-3)" }} />
-      </span>
-      {label ? <span className="font-mono text-2xs text-fg-muted tabular-nums">{fmtScore(value)}</span> : null}
+    <span className="ri-score">
+      {nameEl}
+      <span className="text-right text-xs text-fg tabular-nums">{fmtScore(value)}</span>
+      {bar ? (
+        <span aria-hidden className="flex items-center" data-bar={w}>
+          <span className="block h-[12px] w-px shrink-0 bg-hairline" />
+          <span className="block h-[6px] shrink-0" style={{ width: w, background: "var(--score-3)" }} />
+        </span>
+      ) : (
+        <span aria-hidden />
+      )}
     </span>
   )
 }
@@ -454,12 +461,12 @@ function HitDocument({
   const measureRef = useRef<HTMLDivElement>(null)
   useSpineLayout(measureRef, [layout])
   const lanes = Math.max(1, ...layout.marks.map((m) => m.lane + 1))
-  const spineWidth = LABEL + 4 + lanes * LANE
+  const spineWidth = `calc(${LABEL + 4}px + ${lanes} * var(--lane))`
 
   return (
     <div className="flex min-w-0 flex-col bg-surface">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-hairline px-3 py-1">
-        <span className="meta">hits in the document</span>
+        <span className="meta">Hits in the document</span>
         {layout.unplaced.length ? (
           <span className="text-xs text-fg-muted">
             {layout.unplaced.length === 1 ? `Rank ${layout.unplaced[0]} is` : `Ranks ${layout.unplaced.join(", ")} are`} from chunks not in this
@@ -468,7 +475,7 @@ function HitDocument({
         ) : null}
       </div>
       <div ref={scrollRef} className="min-w-0">
-        <div ref={measureRef} className="grid gap-3 p-3" style={{ gridTemplateColumns: `${spineWidth}px minmax(0, 82ch)` }}>
+        <div ref={measureRef} className="grid gap-3 p-3" style={{ gridTemplateColumns: `${spineWidth} minmax(0, 82ch)` }}>
           <div data-spine="" aria-label="Hits on the position spine" className="relative">
             <span aria-hidden className="absolute top-0 bottom-0 w-px bg-hairline" style={{ left: LABEL + 1 }} />
             {layout.marks.map((m, k) =>
@@ -479,7 +486,7 @@ function HitDocument({
                     data-hits={`h${k}`}
                     data-first={m.first}
                     data-last={m.first}
-                    className={cn("ri-mark absolute left-0 text-right font-mono text-2xs leading-4 font-semibold text-fg tabular-nums", `h${k}`)}
+                    className={cn("ri-mark absolute left-0 text-right font-mono text-2xs leading-4 font-medium text-fg tabular-nums", `h${k}`)}
                     style={{ width: LABEL - 4 }}
                   >
                     {m.rank}
@@ -494,13 +501,13 @@ function HitDocument({
                     aria-pressed={selected === m.row}
                     onClick={() => onSelect(m.row)}
                     className={cn("ri-mark ci-band absolute w-[4px] cursor-pointer p-0", `h${k}`, selected === m.row && "sel")}
-                    style={{ left: LABEL + 4 + m.lane * LANE, background: `var(--chunk-${chunkSlot(m.chunkIndex)})` }}
+                    style={{ left: `calc(${LABEL + 4}px + ${m.lane} * var(--lane))`, background: `var(--chunk-${chunkSlot(m.chunkIndex)})` }}
                   />
                 </Fragment>
               ),
             )}
           </div>
-          <div data-reading="" className="min-w-0 font-mono text-base leading-[1.65] break-words whitespace-pre-wrap text-fg">
+          <div data-reading="" className="min-w-0 font-sans text-base break-words whitespace-pre-wrap text-fg">
             {layout.segments.map((s, j) => {
               const text = source.slice(s.start, s.end)
               if (s.chunks.length === 0) {

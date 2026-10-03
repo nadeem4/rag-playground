@@ -55,6 +55,15 @@ const view = () => document.querySelector("[data-pdf-view]") as HTMLElement
 const rects = () => [...document.querySelectorAll<HTMLElement>("[data-highlight]")]
 const how = () => document.querySelector("[data-highlight-how]")?.getAttribute("data-highlight-how")
 
+describe("the answer's face", () => {
+  it("is set in the reading face at the reading size", () => {
+    render(<ChatInspector payload={chat.payload} chunkSet={chunks} />)
+    expect(answer().className).toContain("font-sans")
+    expect(answer().className).toMatch(/\btext-base\b/)
+    expect(answer().className).not.toContain("leading-[1.65]")
+  })
+})
+
 describe("the fixture matches I-10", () => {
   it("has the payload keys and citation keys, with every edge case", () => {
     // The I-10 keys, plus only the additive I-20 ones.

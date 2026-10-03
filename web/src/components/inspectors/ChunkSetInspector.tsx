@@ -415,7 +415,7 @@ function Reading({
     <div
       data-reading=""
       onClick={onClick}
-      className="min-w-0 font-mono text-base leading-[1.65] break-words whitespace-pre-wrap text-fg"
+      className="min-w-0 font-sans text-base break-words whitespace-pre-wrap text-fg"
     >
       {segments.map((s, k) => {
         const text = source.slice(s.start, s.end)

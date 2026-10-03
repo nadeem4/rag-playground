@@ -340,3 +340,23 @@ def test_the_warm_up_loads_the_reranker_after_the_others(monkeypatch):
     monkeypatch.setattr(warmup, "_warm_reranker", lambda: calls.append("reranker"))
     warmup._warm()
     assert calls == ["docling", "qwen", "reranker"]
+
+
+def test_note_times_the_scoring_not_the_model_load(tmp_path, monkeypatch):
+    now = [100.0]
+    model = FakeModel(REVERSED)
+
+    def slow_load(model_id: str) -> FakeModel:
+        now[0] += 5.0  # a download and load the note must not count
+        return model
+
+    def scoring(pairs):
+        now[0] += 0.3
+        return FakeModel.predict(model, pairs)
+
+    model.predict = scoring  # type: ignore[method-assign]
+    monkeypatch.setattr(ce, "_load", slow_load)
+    monkeypatch.setattr(ce.time, "perf_counter", lambda: now[0])
+    run_ctx = ctx(tmp_path)
+    rerank(TEXTS, tmp_path, run_ctx=run_ctx)
+    assert " in 0.3 s." in run_ctx.extras["meta"]["note"]

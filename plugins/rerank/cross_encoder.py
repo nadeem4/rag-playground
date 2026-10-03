@@ -136,8 +136,10 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
             hit.prior_rank = hit.rank
             hit.prior_score = hit.score
 
-        started = time.perf_counter()
+        # Load before starting the clock: the note reports scoring time, and a
+        # first run's download would otherwise read as a slow reranker.
         model = _load(config.model)
+        started = time.perf_counter()
         scores = [
             float(s)
             for s in model.predict([(query.text, hit.chunk.text) for hit in hits])

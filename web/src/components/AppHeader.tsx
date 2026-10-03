@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
 import { ApiKeyControl } from "./ApiKeyControl"
-import { ContrastToggle, ThemeToggle } from "./ThemeToggle"
+import { DisplaySettings } from "./ThemeToggle"
 
 const PRIMARY = [
   { href: "/", label: "Lessons" },
@@ -53,7 +53,7 @@ function DevMenu({ path }: { path: string }) {
         data-current={onDevPage ? "true" : undefined}
         className={cn(
           // Hidden on narrow screens, as the dev galleries always were.
-          "hidden h-row-compact items-center gap-1 rounded-control px-2 text-xs md:flex",
+          "hidden h-row-compact items-center gap-1 rounded-control px-2 text-xs md:order-3 md:flex",
           onDevPage ? "bg-muted text-fg" : "text-fg-muted hover:text-fg data-[state=open]:text-fg",
         )}
       >
@@ -96,27 +96,25 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
   // With the lessons hidden, there is no Lessons link and the brand opens Build.
   const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/")
   return (
-    // Wraps to a second row on a phone, so the page itself never scrolls sideways.
-    <header className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 md:gap-x-4">
-        <a href={lessonsEnabled ? "/" : "/build"} className="text-sm font-semibold whitespace-nowrap text-fg no-underline">
-          RAG Playground
+    // Below md: the brand and the controls share the first row, and the nav
+    // takes the second (wrapping inside its own box at most once). From md up
+    // it is one row. The page itself never scrolls sideways.
+    <header className="flex min-h-[40px] shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-4">
+      <a href={lessonsEnabled ? "/" : "/build"} className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
+        RAG Playground
+      </a>
+      <nav className="order-3 flex w-full min-w-0 flex-wrap items-center gap-1 md:order-2 md:w-auto" aria-label="Main">
+        {primary.map((l) => (
+          <NavLink key={l.href} {...l} path={path} />
+        ))}
+        <a href={REPO} className="flex h-row-compact items-center rounded-control px-2 text-sm text-fg-muted hover:text-fg">
+          GitHub
         </a>
-        {/* Wraps inside its own box at any root font size, so the page never scrolls sideways. */}
-        <nav className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Main">
-          {primary.map((l) => (
-            <NavLink key={l.href} {...l} path={path} />
-          ))}
-          <a href={REPO} className="flex h-row-compact items-center rounded-control px-2 text-sm text-fg-muted hover:text-fg">
-            GitHub
-          </a>
-        </nav>
-        {demo ? null : <DevMenu path={path} />}
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+      </nav>
+      {demo ? null : <DevMenu path={path} />}
+      <div data-testid="header-controls" className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-4">
         <ApiKeyControl />
-        <ThemeToggle />
-        <ContrastToggle />
+        <DisplaySettings />
       </div>
     </header>
   )

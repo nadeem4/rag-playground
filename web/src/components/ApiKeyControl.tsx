@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils"
  */
 type Check = { state: "idle" } | { state: "checking" } | { state: "done"; result: LlmCheck } | { state: "error"; message: string }
 
+const NO_KEY = "Add a key for chat answers (optional)"
+
 export function ApiKeyControl() {
   const { keys, panelOpen, setPanelOpen } = useApiKey()
   const [server, setServer] = useState<LlmSettings | null>(null)
@@ -54,6 +56,7 @@ export function ApiKeyControl() {
           // Wraps rather than pushing the header sideways on a phone with a large root font.
           className="h-auto min-h-(--row-compact) max-w-full py-1 whitespace-normal"
           data-testid="api-key-button"
+          title={keysSet ? undefined : NO_KEY}
         >
           {keysSet ? (
             <>
@@ -62,7 +65,11 @@ export function ApiKeyControl() {
             </>
           ) : (
             // A key is only needed for a written answer, so no key is not a problem.
-            "Add a key for chat answers (optional)"
+            // Below md the words shrink to Key, and the title keeps the whole sentence.
+            <>
+              <span className="md:hidden">Key</span>
+              <span className="hidden md:inline">{NO_KEY}</span>
+            </>
           )}
         </Button>
       </Popover.Trigger>

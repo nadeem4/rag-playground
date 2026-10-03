@@ -29,6 +29,8 @@ export interface AskPanelProps {
   results: Record<string, NodeState>
   stale: Set<string>
   busy: boolean
+  /** An Ask run is in flight: only then does Ask read Asking. */
+  asking?: boolean
   keys: Keys
   server: LlmSettings | null
   explanations?: Record<string, ExplainState>
@@ -188,8 +190,8 @@ export function AskPanel(p: AskPanelProps) {
             onChange={setText}
             onSubmit={ask}
             action={
-              <Button size="sm" disabled={askDisabled} onClick={ask}>
-                {p.busy ? "Asking" : "Ask"}
+              <Button size="sm" busy={p.asking} disabled={askDisabled} onClick={ask}>
+                {p.asking ? "Asking" : "Ask"}
               </Button>
             }
           />

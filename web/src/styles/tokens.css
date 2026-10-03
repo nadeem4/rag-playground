@@ -342,6 +342,10 @@
 @utility h-control {
   height: var(--row-compact);
 }
+/* A bar that is at least a row tall and grows with what it holds. */
+@utility min-h-row {
+  min-height: var(--row);
+}
 
 /* The metadata voice: the smallest size, sans, sentence case, secondary tint. */
 @utility meta {
@@ -391,18 +395,30 @@
 /*
  * The 44px hit box on a touch screen (pointer: coarse). Unlayered on purpose:
  * it must win over size utilities such as `min-h-[24px]` or `min-w-0`, which
- * live in the utilities layer. Buttons and chips grow to 44px; the drawn size
- * of a small control (the 24px remove button on a stacked card) grows with it.
- * The rank bands in the document gutter are 4px wide and sit side by side, so
- * they keep their drawn size and get an invisible overlay 10px past each edge.
- * hitBox.test.ts compiles this and checks it.
+ * live in the utilities layer. Every control grows to 44px: buttons, chips,
+ * links, selects, text fields and disclosures (an inline link in a sentence is
+ * untouched, since min sizes do not apply to inline boxes). The drawn size of
+ * a small control (the 24px remove button on a stacked card) grows with it.
+ * A checkbox or radio keeps its box; the label around it takes the 44px
+ * height. The rank bands in the document gutter are 4px wide and sit side by
+ * side, so they keep their drawn size and get an invisible overlay 10px past
+ * each edge. hitBox.test.ts compiles this and checks it.
  */
 @media (pointer: coarse) {
   button:not(.ri-mark),
   [role="button"]:not(.ri-mark),
-  .chip {
+  .chip,
+  a,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  summary {
     min-height: 44px;
     min-width: 44px;
+  }
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    min-height: 44px;
   }
   .ri-row {
     min-height: 44px;

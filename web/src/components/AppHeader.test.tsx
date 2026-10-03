@@ -126,35 +126,76 @@ describe("the theme and contrast switches", () => {
     expect(document.documentElement.dataset.theme).toBe("dark")
   })
 
-  it("More contrast sets data-contrast on the page, and System takes it off", () => {
+  it("the contrast switch offers Normal and More contrast; More contrast sets data-contrast, Normal takes it off", () => {
     header()
-    expect(option("Contrast", "System").getAttribute("aria-pressed")).toBe("true")
-    expect(option("Contrast", "More").title).toBe("More contrast")
-    fireEvent.click(option("Contrast", "More"))
+    const names = within(screen.getByRole("group", { name: "Contrast" }))
+      .getAllByRole("button")
+      .map((b) => b.textContent)
+    expect(names).toEqual(["Normal", "More contrast"])
+    expect(option("Contrast", "Normal").getAttribute("aria-pressed")).toBe("true")
+    fireEvent.click(option("Contrast", "More contrast"))
     expect(document.documentElement.dataset.contrast).toBe("more")
-    expect(option("Contrast", "More").getAttribute("aria-pressed")).toBe("true")
+    expect(option("Contrast", "More contrast").getAttribute("aria-pressed")).toBe("true")
     expect(window.localStorage.getItem("rag-contrast")).toBe("more")
-    fireEvent.click(option("Contrast", "System"))
+    fireEvent.click(option("Contrast", "Normal"))
     expect(document.documentElement.hasAttribute("data-contrast")).toBe(false)
   })
 
-  it("starts from a stored More", () => {
+  it("starts from a stored More contrast", () => {
     window.localStorage.setItem("rag-contrast", "more")
     header()
-    expect(option("Contrast", "More").getAttribute("aria-pressed")).toBe("true")
+    expect(option("Contrast", "More contrast").getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("each switch is named by a small label before it: visible from md up, hidden from sight below", () => {
+    header()
+    for (const name of ["Theme", "Contrast"]) {
+      const group = screen.getByRole("group", { name })
+      const caption = group.firstElementChild!
+      expect(caption.textContent).toBe(name)
+      expect(group.getAttribute("aria-labelledby")).toBe(caption.id)
+      const c = caption.className.split(/\s+/)
+      expect(c).toContain("sr-only")
+      expect(c).toContain("md:not-sr-only")
+    }
   })
 })
 
-describe("the main nav on a narrow screen", () => {
-  it("wraps inside its own box and can shrink, so the page never scrolls sideways", () => {
+describe("the header on a phone", () => {
+  it("puts the brand and the right cluster on the first row and the nav on its own row below md", () => {
     header()
     const nav = screen.getByRole("navigation", { name: "Main" })
     const c = nav.className.split(/\s+/)
-    expect(c).toContain("flex-wrap")
-    expect(c).toContain("min-w-0")
-    const right = screen.getByRole("group", { name: "Theme" }).parentElement!.className.split(/\s+/)
-    expect(right).toContain("flex-wrap")
-    expect(right).not.toContain("shrink-0")
+    for (const k of ["flex-wrap", "min-w-0", "order-3", "w-full", "md:order-2", "md:w-auto"]) expect(c).toContain(k)
+    const right = screen.getByTestId("header-controls").className.split(/\s+/)
+    for (const k of ["order-2", "ml-auto", "md:order-4"]) expect(right).toContain(k)
+  })
+
+  it("keeps the inline switches for md and up, and a Display menu holds them below md", async () => {
+    header()
+    const inline = screen.getByRole("group", { name: "Theme" }).parentElement!.className.split(/\s+/)
+    expect(inline).toContain("hidden")
+    expect(inline).toContain("md:flex")
+    const display = screen.getByRole("button", { name: "Display" })
+    expect(display.className.split(/\s+/)).toContain("md:hidden")
+    fireEvent.click(display)
+    const dialog = await screen.findByRole("dialog", { name: "Display" })
+    expect(within(dialog).getByRole("group", { name: "Theme" })).toBeTruthy()
+    expect(within(dialog).getByRole("group", { name: "Contrast" })).toBeTruthy()
+    // In the menu the labels are always visible.
+    expect(within(dialog).getByText("Contrast").className.split(/\s+/)).not.toContain("sr-only")
+  })
+
+  it("shortens the key button to Key below md, with the full words as its title", async () => {
+    serve({ demo: true })
+    header()
+    const button = screen.getByTestId("api-key-button")
+    await waitFor(() => expect(button.title).toBe("Add a key for chat answers (optional)"))
+    const short = within(button).getByText("Key")
+    expect(short.className.split(/\s+/)).toContain("md:hidden")
+    const long = within(button).getByText("Add a key for chat answers (optional)")
+    expect(long.className.split(/\s+/)).toContain("hidden")
+    expect(long.className.split(/\s+/)).toContain("md:inline")
   })
 })
 
@@ -214,7 +255,7 @@ describe("the key button", () => {
   it("offers a key for chat answers, as an option, when no key is set", async () => {
     serve({ demo: true })
     header()
-    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toBe("Add a key for chat answers (optional)"))
+    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toBe("KeyAdd a key for chat answers (optional)"))
   })
 
   it("stays API key with a count when a key is set in this tab", async () => {

@@ -58,4 +58,23 @@ describe("SegmentedControl", () => {
     const { button } = setup("a")
     expect(classes(button("Beta"))).toContain("active:scale-[0.98]")
   })
+
+  it("with a caption, shows the group's name before the options and names the group by it", () => {
+    render(<SegmentedControl label="Theme" caption="md" options={OPTIONS} value="a" onChange={() => {}} />)
+    const group = screen.getByRole("group", { name: "Theme" })
+    const caption = group.firstElementChild!
+    expect(caption.textContent).toBe("Theme")
+    expect(group.getAttribute("aria-labelledby")).toBe(caption.id)
+    expect(classes(caption)).toEqual(expect.arrayContaining(["sr-only", "md:not-sr-only"]))
+    cleanup()
+    render(<SegmentedControl label="Theme" caption="always" options={OPTIONS} value="a" onChange={() => {}} />)
+    expect(classes(screen.getByRole("group", { name: "Theme" }).firstElementChild!)).not.toContain("sr-only")
+  })
+
+  it("without a caption, the group is named by its aria-label and shows no words of its own", () => {
+    setup()
+    const group = screen.getByRole("group", { name: "Letters" })
+    expect(group.getAttribute("aria-label")).toBe("Letters")
+    expect(group.firstElementChild!.tagName).toBe("BUTTON")
+  })
 })

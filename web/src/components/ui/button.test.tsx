@@ -13,8 +13,9 @@ describe("Button states", () => {
     const c = classes(screen.getByRole("button", { name: "Save" }))
     expect(c).toContain("active:scale-[0.98]")
     expect(c).toContain("duration-(--dur-fast)")
-    // Tailwind 4 scales with the `scale` property, so that is what transitions.
-    expect(c).toContain("transition-[scale,background-color,opacity]")
+    // Only the tint and the press move. Tailwind 4 presses with the `scale`
+    // property, the individual transform, so it is listed beside `transform`.
+    expect(c).toContain("transition-[color,background-color,border-color,transform,scale]")
     expect(c).not.toContain("active:translate-y-px")
   })
 

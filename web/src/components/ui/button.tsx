@@ -10,11 +10,12 @@ import { cn } from "@/lib/utils"
 // is chrome.
 //
 // One set of states for every button: hover tints and press scales to 0.98,
-// both over --dur-fast; focus-visible is a 2px --focus-ring outline with a 2px
+// both over --dur-fast (only color, background, border and the transform
+// move; Tailwind presses through `scale`, the individual transform); focus-visible is a 2px --focus-ring outline with a 2px
 // offset; disabled is half opacity with no pointer events. `busy` is disabled
 // too, and keeps the label the caller gives it (Building, Asking): no spinner.
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent font-sans text-sm font-medium whitespace-nowrap select-none transition-[scale,background-color,opacity] duration-(--dur-fast) ease-(--ease-in) active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[14px]",
+  "inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent font-sans text-sm font-medium whitespace-nowrap select-none transition-[color,background-color,border-color,transform,scale] duration-(--dur-fast) ease-(--ease-in) active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[14px]",
   {
     variants: {
       variant: {

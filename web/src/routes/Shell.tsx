@@ -153,6 +153,8 @@ function Build({ registry }: { registry: Registry }) {
 
   const busy = submitting || (runId !== null && !run.closed)
   const building = busy && !fromAsk && runTarget !== undefined && runTarget === indexNode(graph)?.id
+  // An Ask run has no target of its own (or the step before Chat when no key is set).
+  const asking = busy && fromAsk && runTarget !== indexNode(graph)?.id
   const order = useMemo(() => columnOrder(graph), [graph])
   // Build the index runs the five index steps only, so only they can block it.
   const blocker = order.filter((n) => INDEX_STAGES.includes(n.stage)).find((n) => blockingNode(graph, registry, explanations, n.id)?.id === n.id)
@@ -308,7 +310,8 @@ function Build({ registry }: { registry: Registry }) {
   return (
     <main className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
       <section aria-label="Pipeline" className="flex flex-col bg-surface md:min-h-0">
-        <div className="flex h-[40px] shrink-0 items-center justify-between gap-2 border-b border-hairline px-3">
+        {/* Grows rather than clipping: on a touch screen its buttons are 44px tall. */}
+        <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-hairline px-3 py-1">
           <h1 className="text-xl font-semibold">Index pipeline</h1>
           <div className="flex items-center gap-2">
             {busy && runId ? (
@@ -430,6 +433,7 @@ function Build({ registry }: { registry: Registry }) {
             results={results}
             stale={stale}
             busy={busy}
+            asking={asking}
             keys={keys}
             server={server}
             explanations={explanations}

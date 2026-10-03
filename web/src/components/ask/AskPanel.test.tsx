@@ -125,11 +125,19 @@ describe("the question box", () => {
     expect(p.onAsk).toHaveBeenCalledTimes(2)
   })
 
-  it("Ask reads Asking and is disabled while a run is going", () => {
-    setup({ busy: true })
+  it("Ask reads Asking and is disabled while its own run is going", () => {
+    setup({ busy: true, asking: true })
     const button = screen.getByRole("button", { name: "Asking" }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
+    expect(button.getAttribute("aria-busy")).toBe("true")
     expect(screen.queryByRole("button", { name: "Ask" })).toBeNull()
+  })
+
+  it("Ask stays Ask, disabled, while another run (the index build) is going", () => {
+    setup({ busy: true, asking: false })
+    const button = screen.getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.queryByRole("button", { name: "Asking" })).toBeNull()
   })
 
   it("says why the results are gone when the settings moved past them", () => {

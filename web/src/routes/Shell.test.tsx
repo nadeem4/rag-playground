@@ -322,6 +322,17 @@ describe("Build the index", () => {
     expect(screen.queryByRole("button", { name: "Running" })).toBeNull()
   })
 
+  it("leaves Ask reading Ask, disabled, while the index builds", async () => {
+    await ready()
+    const button = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+    fireEvent.click(button)
+    await screen.findByRole("button", { name: "Building" })
+    const ask = panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    expect(ask.disabled).toBe(true)
+    expect(panel().queryByRole("button", { name: "Asking" })).toBeNull()
+  })
+
   it("does not say Building while a single card runs", async () => {
     await ready()
     fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))

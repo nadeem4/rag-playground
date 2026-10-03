@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import type { ReactNode } from "react"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
@@ -81,13 +81,25 @@ export const rerankLabel = (transform: string) => RERANKERS.find((r) => r.name =
 
 const Heading = ({ children }: { children: ReactNode }) => <h3 className="text-sm font-semibold">{children}</h3>
 
-export function AskResults({ graph, registry, outputs: o }: { graph: PipelineGraph; registry: Registry; outputs: AskOutputs }) {
+export interface AskResultsProps {
+  graph: PipelineGraph
+  registry: Registry
+  outputs: AskOutputs
+  /** The rerank result whose comparison the reader hid, or null. Held by Build, so a card and Back to Ask keep it. */
+  comparisonHidden: string | null
+  onComparison: (hidden: string | null) => void
+}
+
+export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison }: AskResultsProps) {
   const { rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
   let lists: ReactNode = null
   if (rerank && o.rerank && o.retrieve) {
-    // Keyed by the reranker and its result: a new reranker or a new run opens it again.
-    lists = <Comparison key={`${rerank.id}:${rerank.transform}:${o.rerankId}`} node={rerank} registry={registry} outputs={o} />
+    // Hidden for one rerank result only: a new result (a new run, another reranker) opens it again.
+    const open = !o.rerankId || comparisonHidden !== o.rerankId
+    lists = (
+      <Comparison node={rerank} registry={registry} outputs={o} open={open} onToggle={() => onComparison(open ? (o.rerankId ?? null) : null)} />
+    )
   } else if (!rerank) {
     // With a reranker whose result is loading, failed or stale, no list: the order shown would not be the reranked one.
     const search = !rerank && isSearch(o.output) ? o.output : undefined
@@ -126,15 +138,32 @@ function Failed({ node, error }: { node: GraphNode; error: string }) {
 }
 
 /**
- * The search order against the reranked order. Keyed by the rerank node, its
- * transform and its result, so it opens again when the reranker changes and
- * after each run; a reader can still collapse it for that run.
+ * The search order against the reranked order. Open by default; the reader
+ * can hide it for one rerank result, and Build keeps that choice. Hidden, the
+ * right list's own title sits beside Show comparison.
  */
-function Comparison({ node, registry, outputs: o }: { node: GraphNode; registry: Registry; outputs: AskOutputs }) {
-  const [open, setOpen] = useState(true)
+function Comparison({
+  node,
+  registry,
+  outputs: o,
+  open,
+  onToggle,
+}: {
+  node: GraphNode
+  registry: Registry
+  outputs: AskOutputs
+  open: boolean
+  onToggle: () => void
+}) {
   const before = rowsFromResult(o.retrieve!)
   const after = rowsFromResult(o.rerank!)
   const kept = new Set(after.map((r) => r.chunk_id))
+  const toggle = (
+    <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
+      {open ? "Hide comparison" : "Show comparison"}
+    </Button>
+  )
+  const title = <Heading>{`After rerank, ${rerankLabel(node.transform)}, ${after.length} kept`}</Heading>
   const reranked = (
     <div data-column="reranked" className="flex min-w-0 flex-col gap-2">
       <RetrievalView
@@ -143,36 +172,41 @@ function Comparison({ node, registry, outputs: o }: { node: GraphNode; registry:
         doc={o.doc}
         showDetail={false}
         badges
-        facts={<Heading>{`After rerank, ${rerankLabel(node.transform)}, ${after.length} kept`}</Heading>}
+        facts={
+          open ? (
+            title
+          ) : (
+            <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
+              {title}
+              {toggle}
+            </div>
+          )
+        }
       />
-      {o.rerankId ? <WhatItDid stage="rerank" type={infoFor(registry, node)?.output} artifactId={o.rerankId} /> : null}
+      {/* The reranker's run note states the movement count; it is said here and nowhere else. */}
+      {o.rerankId ? <WhatItDid stage="rerank" type={infoFor(registry, node)?.output} artifactId={o.rerankId} preferNote /> : null}
     </div>
   )
+  if (!open) return reranked
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Heading>Search order against the reranked order</Heading>
-        <Button variant="outline" size="sm" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-          {open ? "Hide comparison" : "Show comparison"}
-        </Button>
+        {toggle}
       </div>
-      {open ? (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          <div data-column="search" className="min-w-0">
-            <RetrievalView
-              rows={before}
-              chunkSet={o.chunkSet}
-              doc={o.doc}
-              showDetail={false}
-              kept={kept}
-              facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
-            />
-          </div>
-          {reranked}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <div data-column="search" className="min-w-0">
+          <RetrievalView
+            rows={before}
+            chunkSet={o.chunkSet}
+            doc={o.doc}
+            showDetail={false}
+            kept={kept}
+            facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
+          />
         </div>
-      ) : (
-        reranked
-      )}
+        {reranked}
+      </div>
     </div>
   )
 }

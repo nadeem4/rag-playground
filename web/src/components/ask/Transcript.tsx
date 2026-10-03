@@ -64,7 +64,7 @@ export function Transcript({ entries, onAskAgain }: { entries: TranscriptEntry[]
               <p className="text-sm text-fg">{e.question}</p>
               <p className="font-mono text-xs text-fg-muted">{transcriptLine(e.pipeline, e.reranker, e.found, e.rows.length)}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => onAskAgain(e.question)}>
+            <Button variant="outline" size="sm" aria-label={`Ask again: ${e.question}`} onClick={() => onAskAgain(e.question)}>
               Ask again
             </Button>
           </li>

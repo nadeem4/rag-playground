@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react"
 
-import type { GraphNode, Registry } from "@/api/types"
+import type { GraphNode, JsonSchema, Registry } from "@/api/types"
 import type { NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { TransformSelect } from "@/components/pipeline/TransformSelect"
 import { SchemaForm } from "@/components/SchemaForm"
@@ -12,6 +12,7 @@ import { askNodes, infoFor, transformsFor, upstreamFor, type PipelineGraph } fro
  * The three settings blocks of the Ask panel: Retrieval, Rerank and Answer.
  * Each edits one node of the pipeline graph, and each node's own settings are
  * the same schema form the cards use, so help text and validation match.
+ * Each block shows its primary fields; the rest wait under a closed More.
  */
 
 /** Technical names for the retrieve transforms. Unknown ones show their own name. */
@@ -77,7 +78,8 @@ function Segmented<T>({
           size="sm"
           disabled={c.disabled}
           aria-pressed={c.value === value}
-          className={cn(c.value === value && "border-fg-muted bg-surface-elevated")}
+          // The chosen option takes the primary button's accent, so it reads at a glance.
+          className={cn(c.value === value && "border-primary text-primary")}
           onClick={() => onChange(c.value)}
         >
           {c.label}
@@ -87,38 +89,73 @@ function Segmented<T>({
   )
 }
 
-/** A node's schema form and any message the server sent about it. */
+/** The schema with only `keys` among its fields. */
+function pick(schema: JsonSchema, keys: string[]): JsonSchema {
+  const props = schema.properties ?? {}
+  return {
+    ...schema,
+    properties: Object.fromEntries(keys.map((k) => [k, props[k]])),
+    required: schema.required?.filter((k) => keys.includes(k)),
+  }
+}
+
+/**
+ * A node's schema form and any message the server sent about it. The fields
+ * named in `primary` show at full weight; the others go under a closed More,
+ * which opens by itself when the server names one of them in an error.
+ */
 function NodeForm({
   node,
   registry,
   errors,
   onConfig,
   titles,
+  primary,
 }: {
   node: GraphNode
   registry: Registry
   errors?: NodeErrors
   onConfig: AskSettingsProps["onConfig"]
   titles?: Record<string, string>
+  primary: string[]
 }) {
   const info = infoFor(registry, node)
+  const keys = Object.keys(info?.config_schema.properties ?? {})
+  const front = keys.filter((k) => primary.includes(k))
+  const rest = keys.filter((k) => !primary.includes(k))
+  const restErrors = Object.fromEntries(Object.entries(errors?.fields ?? {}).filter(([path]) => rest.includes(path.split(".")[0])))
+  const form = (fields: string[], fieldErrors?: Record<string, string[]>) =>
+    info ? (
+      <SchemaForm
+        key={`${node.id}:${info.name}`}
+        schema={pick(info.config_schema, fields)}
+        value={node.config}
+        onChange={(c) => onConfig(node.id, c)}
+        errors={fieldErrors}
+        learn={info.learn}
+        titles={titles}
+      />
+    ) : null
   return (
     <>
-      {info ? (
-        <SchemaForm
-          key={`${node.id}:${info.name}`}
-          schema={info.config_schema}
-          value={node.config}
-          onChange={(c) => onConfig(node.id, c)}
-          errors={errors?.fields}
-          learn={info.learn}
-          titles={titles}
-        />
+      {front.length ? form(front, errors?.fields) : null}
+      {rest.length ? (
+        <details open={Object.keys(restErrors).length > 0 || undefined} className="min-w-0">
+          <summary className="cursor-pointer text-xs font-medium text-fg-muted select-none">More</summary>
+          <div className="pt-2">{form(rest, restErrors)}</div>
+        </details>
       ) : null}
       {errors?.message ? <p className="text-xs break-words text-danger">{errors.message}</p> : null}
     </>
   )
 }
+
+/** The fields each block shows at full weight. Strategy, the reranker and Search / Chat are their own controls. */
+const RETRIEVAL_PRIMARY = ["top_k"]
+// A custom model's address and name only show when the model is custom: they belong with the model.
+const MODEL_FIELDS = ["model", "custom_base_url", "custom_model"]
+const RERANK_PRIMARY = ["top_k", ...MODEL_FIELDS]
+const ANSWER_PRIMARY = MODEL_FIELDS
 
 function Retrieval({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
   const id = useId()
@@ -135,7 +172,14 @@ function Retrieval({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
         onChange={(t) => p.onTransform(node.id, t)}
       />
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}
-      <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} titles={{ top_k: "Candidates, top k" }} />
+      <NodeForm
+        node={node}
+        registry={p.registry}
+        errors={p.errors[node.id]}
+        onConfig={p.onConfig}
+        titles={{ top_k: "Candidates, top k", rrf_k: "RRF k" }}
+        primary={RETRIEVAL_PRIMARY}
+      />
     </Block>
   )
 }
@@ -152,7 +196,9 @@ function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
       <Segmented label="Reranker" choices={choices} value={node?.transform ?? null} onChange={p.onReranker} />
       {p.hasKey === false && p.registry.rerank?.llm_rerank ? <p className={GLOSS}>Add a key to use the LLM reranker</p> : null}
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}
-      {node ? <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} titles={{ top_k: "Keep, top k" }} /> : null}
+      {node ? (
+        <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} titles={{ top_k: "Keep, top k" }} primary={RERANK_PRIMARY} />
+      ) : null}
     </Block>
   )
 }
@@ -163,8 +209,16 @@ function Answer({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
   return (
     <Block title="Answer" stage="use_case">
       <Segmented label="Answer with" choices={choices} value={node.transform} onChange={(v) => p.onUseCase(v as "search" | "chat")} />
+      <p className={GLOSS}>Search shows the kept pieces. Chat writes an answer with citations.</p>
       {p.hasKey === false && p.registry.use_case?.chat ? <p className={GLOSS}>Add a key to turn Chat on</p> : null}
-      <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} />
+      <NodeForm
+        node={node}
+        registry={p.registry}
+        errors={p.errors[node.id]}
+        onConfig={p.onConfig}
+        titles={{ top_k: "Show, top k", max_snippet_chars: "Snippet length" }}
+        primary={ANSWER_PRIMARY}
+      />
     </Block>
   )
 }

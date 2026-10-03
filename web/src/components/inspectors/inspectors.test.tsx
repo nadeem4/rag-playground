@@ -320,14 +320,40 @@ describe("RetrievalResultInspector", () => {
     const { container } = render(<RetrievalResultInspector result={mmr} />)
     const moves = [...container.querySelectorAll<HTMLElement>("[data-testid=movement]")].map((m) => m.textContent)
     expect(moves).toEqual(["", "was 5", "was 2", "was 3", "was 6"])
-    expect(screen.getByTestId("fact-moved").textContent).toBe("rerank moved 4 of 5")
+    // The count lives in the run note, once: no header chip repeats it.
+    expect(screen.queryByTestId("fact-moved")).toBeNull()
     // A hit that rose is set in weight, not in a colour.
     const rose = container.querySelectorAll<HTMLElement>("[data-testid=movement]")[1]
     expect(rose.className).toContain("font-semibold")
-    cleanup()
-    // No movement line before rerank.
-    const { container: before } = render(<RetrievalResultInspector result={hybrid} />)
-    expect(before.querySelector("[data-testid=fact-moved]")).toBeNull()
+  })
+
+  it("keeps the piece hash in the row's tooltip, not inline", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const first = container.querySelector<HTMLElement>("[data-hit-row]")!
+    const id = hybrid.hits[0].chunk.id
+    expect(first.getAttribute("title")).toBe(`Piece ${id.slice(0, 8)}`)
+    expect(first.textContent).not.toContain(id.slice(0, 8))
+  })
+
+  it("says which search missed a hit: no keyword match for BM25, no meaning match for dense", () => {
+    const { container, rerender } = render(<RetrievalResultInspector result={hybrid} />)
+    const sixth = container.querySelector<HTMLElement>('[data-hit-row="6"]')!
+    expect(sixth.textContent).toContain("no keyword match")
+    expect(container.textContent).not.toContain("not in list")
+    const noDense = { ...hybrid, hits: hybrid.hits.map((h) => ({ ...h, component_scores: { bm25: 1, ...(h.rank === 1 ? {} : { dense: 0.5 }) } })) }
+    rerender(<RetrievalResultInspector result={noDense} />)
+    expect(container.querySelector<HTMLElement>('[data-hit-row="1"]')!.textContent).toContain("no meaning match")
+  })
+
+  it("shows the section in a hit's where line only when its chunk has one", () => {
+    const withSection = {
+      ...hybrid,
+      hits: hybrid.hits.map((h) => (h.rank === 1 ? { ...h, chunk: { ...h.chunk, heading_path: ["Methods", "Survey"] } } : h)),
+    }
+    const { container } = render(<RetrievalResultInspector result={withSection} />)
+    const where = (rank: number) => container.querySelector<HTMLElement>(`[data-hit-row="${rank}"] [data-testid=where]`)!.textContent
+    expect(where(1)).toContain("Methods > Survey")
+    expect(where(2)).toBe("pp. 2-3")
   })
 
   it("with the upstream chunk set, puts a rank tick for every hit on the spine", () => {

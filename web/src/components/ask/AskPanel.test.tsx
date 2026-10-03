@@ -66,6 +66,8 @@ function setup(over: Partial<AskPanelProps> = {}) {
     keyNotice: null,
     askRunId: null,
     transcript: [],
+    comparisonHidden: null,
+    onComparison: vi.fn(),
     onLog: vi.fn(),
     onConfig: vi.fn(),
     onTransform: vi.fn(),
@@ -93,6 +95,13 @@ describe("the Ask panel header", () => {
     setup({ results: {} })
     expect(screen.getByTestId("index-status").textContent).toBe("Build the index first.")
     expect(askButton().disabled).toBe(true)
+  })
+
+  it("with no file, says where to start", () => {
+    const g = sampleGraph(LIVE, SAMPLE)
+    const noFile: PipelineGraph = { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: {} } : n)) }
+    setup({ graph: noFile, results: {} })
+    expect(screen.getByTestId("index-status").textContent).toBe("Load a PDF or pick a sample on the Upload card, then build the index.")
   })
 
   it("a stale Index result counts as not built", () => {
@@ -128,6 +137,21 @@ describe("the question box", () => {
     expect(screen.getByRole("button", { name: "What is a chunk?" })).toBeTruthy()
     fireEvent.click(chip)
     expect(p.onConfig).toHaveBeenCalledWith("query", expect.objectContaining({ text: "Why overlap?" }))
+  })
+
+  it("chips wrap: no chip keeps its text on one line or refuses to shrink", async () => {
+    setup()
+    const chip = await screen.findByRole("button", { name: "Why overlap?" })
+    expect(chip.className.split(/\s+/)).not.toContain("whitespace-nowrap")
+    expect(chip.className.split(/\s+/)).not.toContain("shrink-0")
+  })
+
+  it("Ask sits on the row under the question box, beside the shortcut hint", () => {
+    setup()
+    const row = askButton().parentElement!
+    expect(within(row).getByText("Ctrl+Enter asks it.")).toBeTruthy()
+    expect(row.className).toContain("justify-between")
+    expect(row.lastElementChild).toBe(askButton())
   })
 
   it("shows no chips for an upload", async () => {
@@ -200,6 +224,22 @@ describe("the recipe line and the settings toggle", () => {
     rerender(<AskPanel {...p} errors={{ use_case: { message: "The search step could not run." } }} />)
     expect(screen.getByRole("group", { name: "Reranker" })).toBeTruthy()
     expect(screen.getByText("The search step could not run.")).toBeTruthy()
+  })
+
+  it("while a settings error shows, the toggle says why it cannot fold, and does not", () => {
+    setup({ errors: { use_case: { message: "The search step could not run." } } })
+    const toggle = screen.getByRole("button", { name: "Hide settings" }) as HTMLButtonElement
+    expect(toggle.disabled).toBe(false)
+    expect(toggle.getAttribute("aria-disabled")).toBe("true")
+    expect(toggle.title).toBe("Fix the error below first.")
+    fireEvent.click(toggle)
+    expect(screen.getByRole("group", { name: "Reranker" })).toBeTruthy()
+  })
+
+  it("labels the recipe line", () => {
+    setup()
+    const recipe = screen.getByTestId("recipe")
+    expect(recipe.previousElementSibling?.textContent).toBe("Recipe")
   })
 
   it("has no en or em dash anywhere", async () => {

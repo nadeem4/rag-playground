@@ -10,6 +10,8 @@ export function EnumField({ f, id, value, disabled, invalid, describedBy, onChan
       id={id}
       className={CONTROL}
       value={known ? String(value) : ""}
+      // A long value can be cut off in a narrow block; the tooltip has it whole.
+      title={known ? optionLabel(f.schema, value) : undefined}
       disabled={disabled}
       aria-invalid={invalid || undefined}
       aria-describedby={describedBy}

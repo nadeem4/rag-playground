@@ -20,11 +20,13 @@ export interface WhatItDidProps {
   /** The artifact of this card's previous run, if any. */
   previousId?: string
   stale?: boolean
+  /** True shows the plugin's note alone when there is one: the Ask panel, where the note already states the count. */
+  preferNote?: boolean
 }
 
 type Shown = { id: string; text: string | null; note: string | null } | { id: string; error: true }
 
-export function WhatItDid({ stage, type, artifactId, previousId, stale }: WhatItDidProps) {
+export function WhatItDid({ stage, type, artifactId, previousId, stale, preferNote = false }: WhatItDidProps) {
   const [shown, setShown] = useState<Shown | null>(null)
 
   useEffect(() => {
@@ -58,10 +60,11 @@ export function WhatItDid({ stage, type, artifactId, previousId, stale }: WhatIt
     )
   }
   if (!shown.text && !shown.note) return null
+  const text = preferNote && shown.note && !stale ? null : shown.text
   return (
     <div className="flex flex-col gap-1" data-testid="what-it-did" data-stale={stale ? "" : undefined}>
       <span className="text-xs font-semibold">What it did</span>
-      {shown.text ? <p className={cn("m-0 font-mono text-sm leading-[1.5] break-words", stale ? "text-fg-muted" : "text-fg")}>{shown.text}</p> : null}
+      {text ? <p className={cn("m-0 font-mono text-sm leading-[1.5] break-words", stale ? "text-fg-muted" : "text-fg")}>{text}</p> : null}
       {shown.note && !stale ? <p className="m-0 text-sm leading-[1.5] text-fg">{shown.note}</p> : null}
     </div>
   )

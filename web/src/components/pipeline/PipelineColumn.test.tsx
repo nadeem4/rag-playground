@@ -6,7 +6,7 @@ import { addCleaner, columnOrder, initialGraph, setTransform } from "@/state/gra
 import { routeRunError } from "@/state/pipeline"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
-import { PipelineColumn, type PipelineColumnProps } from "./PipelineColumn"
+import { PipelineColumn, SWEEPABLE, type PipelineColumnProps } from "./PipelineColumn"
 
 beforeEach(() => {
   // The Load card lists uploaded sources on mount.
@@ -84,7 +84,12 @@ describe("PipelineColumn", () => {
     expect(card("parse").style.borderLeft).toContain("dotted")
     expect(card("chunk").dataset.rule).toBe("solid")
     expect(card("source").dataset.rule).toBe("none")
-    expect(within(card("parse")).getByText("reused from an earlier run")).toBeTruthy()
+    // In normal case, not the all-caps meta style.
+    expect(within(card("parse")).getByText("reused from an earlier run").className.split(/\s+/)).not.toContain("meta")
+  })
+
+  it("Sweep is offered on index steps only: retrieve lives in the Ask panel", () => {
+    expect(SWEEPABLE).not.toContain("retrieve")
   })
 
   it("a 422 shows under the right field of the right card", () => {

@@ -7,7 +7,7 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
-import { addReranker, chatSampleGraph, initialGraph, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
+import { addReranker, chatSampleGraph, initialGraph, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -107,13 +107,19 @@ describe("Build page", () => {
       }),
     )
     render(<Shell />)
-    const runAll = await screen.findByRole("button", { name: "Build the index" })
-    await waitFor(() => expect(runAll.getAttribute("title")).toBe("Load a sample to start."), { timeout: 2000 })
-    expect((runAll as HTMLButtonElement).disabled).toBe(true)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await waitFor(() => expect(build.getAttribute("title")).toBe("Load a sample to start."), { timeout: 2000 })
+    expect((build as HTMLButtonElement).disabled).toBe(true)
     expect(document.querySelector("[data-testid=run-all-blocked]")).toBeNull()
     expect(posts).toHaveLength(0)
   })
 })
+
+/** The hybrid result reranked: prior ranks 6, 1, 2, 4, 3. */
+function reranked() {
+  const order = [5, 0, 1, 3, 2]
+  return { ...hybridResult, hits: order.map((i, k) => ({ ...hybridResult.hits[i], rank: k + 1, prior_rank: hybridResult.hits[i].rank })) }
+}
 
 /** The Ask panel, in the right pane while no card is selected. */
 const panel = () => within(screen.getByRole("region", { name: "Ask panel" }))
@@ -279,6 +285,20 @@ function storedStages() {
   return (read.nodes ?? []).map((n) => n.stage)
 }
 
+describe("the page on a phone", () => {
+  it("below the md breakpoint the page scrolls as one: no inner box scrolls on its own", async () => {
+    storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename }))
+    setup()
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    const main = document.querySelector("main")!
+    const tokens = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/)
+    expect(tokens(main)).toContain("overflow-y-auto")
+    // Inner boxes scroll from md up only (md:overflow-y-auto); below it the page is one scroll.
+    const inner = [...main.querySelectorAll("[class]")].filter((el) => tokens(el).includes("overflow-y-auto"))
+    expect(inner.map((el) => el.getAttribute("class"))).toEqual([])
+  })
+})
+
 describe("Build the index", () => {
   it("sends the Index node as the only target", async () => {
     await ready()
@@ -327,7 +347,7 @@ describe("Build the index is blocked only by its own steps", () => {
 })
 
 describe("Build page explanations", () => {
-  it("a blocking explanation disables Run all with a visible reason, as the user types", async () => {
+  it("a blocking explanation disables Build the index with a visible reason, as the user types", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
@@ -349,14 +369,14 @@ describe("Build page explanations", () => {
       }),
     )
     await ready()
-    const runAll = () => document.querySelector("section[aria-label=Pipeline]")!.querySelector("button:not([aria-label])") as HTMLButtonElement
-    expect(runAll().textContent).toBe("Build the index")
-    await waitFor(() => expect(runAll().disabled).toBe(false))
+    const build = () => document.querySelector("section[aria-label=Pipeline]")!.querySelector("button:not([aria-label])") as HTMLButtonElement
+    expect(build().textContent).toBe("Build the index")
+    await waitFor(() => expect(build().disabled).toBe(false))
     fireEvent.change(within(card("chunk")).getByLabelText("Chunk Overlap"), { target: { value: "5000" } })
     await waitFor(() => expect(within(card("chunk")).getByTestId("explain-warning").textContent).toBe("Overlap must be smaller than the chunk size."), {
       timeout: 2000,
     })
-    expect(runAll().disabled).toBe(true)
+    expect(build().disabled).toBe(true)
     expect(document.querySelector("[data-testid=run-all-blocked]")!.textContent).toBe("Fix the Chunk settings to run the pipeline.")
     fireEvent.click(within(card("chunk")).getByRole("button", { name: "Run" }))
     expect(posts).toHaveLength(0)
@@ -418,8 +438,9 @@ describe("First run (plan I-15)", () => {
   it("shows when no source is selected and nothing is uploaded", async () => {
     render(<Shell />)
     expect((await sampleButton()).textContent).toBe("Load")
-    expect(document.body.textContent).toContain("Nothing to show yet")
-    expect(document.body.textContent).toContain("Then press Build the index, and ask a question in the Ask panel.")
+    // The Ask panel's status line carries the first-run guidance; no empty state sits above it.
+    expect(panel().getByTestId("index-status").textContent).toBe("Load a PDF or pick a sample on the Upload card, then build the index.")
+    expect(document.body.textContent).not.toContain("Nothing to show yet")
     expect(document.body.textContent).not.toContain("Run all")
     expect(card("parse")).toBeNull()
     // The empty Load card blocks the run, but a first visit is not an error.
@@ -439,7 +460,7 @@ describe("First run (plan I-15)", () => {
     )
     render(<Shell />)
     const upload = await found<HTMLElement>('[aria-label="Upload"]')
-    expect(document.body.textContent).toContain("Nothing to show yet")
+    expect(panel().getByTestId("index-status").textContent).toBe("Load a PDF or pick a sample on the Upload card, then build the index.")
     expect(card("parse")).toBeNull()
     await waitFor(() => expect(within(upload).getByRole("option", { name: /report\.pdf/ })).toBeTruthy())
   })
@@ -473,11 +494,19 @@ describe("First run (plan I-15)", () => {
     expect(byId.get("index")!.config.embedder).toBe("qwen3-embedding-0.6b")
     expect(byId.get("query")!.config.text).toBe("Why do chunk boundaries matter?")
     expect(posts).toHaveLength(0)
-    expect(document.body.textContent).toContain("Ready to run")
-    expect(document.body.textContent).toContain(
-      "The sample is loaded and every step has a sensible default. Press Build the index, then ask a question on the right.",
-    )
+    expect(panel().getByTestId("index-status").textContent).toBe("Build the index first.")
+    expect(document.body.textContent).not.toContain("Ready to run")
     expect(document.body.textContent).not.toContain("Ask card")
+  })
+
+  it("after a sample loads, the column starts at the top: a fresh scroll box, not the Upload card's", async () => {
+    render(<Shell />)
+    const btn = await sampleButton()
+    const box = document.querySelector('[data-testid="pipeline-scroll"]')
+    expect(box).toBeTruthy()
+    fireEvent.click(btn)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    expect(document.querySelector('[data-testid="pipeline-scroll"]')).not.toBe(box)
   })
 
   it("shows a pending state while the sample loads", async () => {
@@ -939,6 +968,7 @@ describe("the Ask panel results on Build", () => {
         if (url === "/api/settings/llm") return ok({ anthropic: "dotenv", openai: "none", custom: "none" })
         if (url === "/api/artifacts/ret1/payload") return ok(hybridResult)
         if (url === "/api/artifacts/out1/payload") return ok(searchOutput)
+        if (url === "/api/artifacts/rr1/payload") return ok(reranked())
         if (url === "/api/runs" && init?.method === "POST") {
           posts.push({ path: url, body: JSON.parse(String(init.body)) })
           if (reply422) return ok(reply422, 422)
@@ -980,6 +1010,56 @@ describe("the Ask panel results on Build", () => {
     expect(await waitFor(() => panel().getByRole("heading", { name: "Top 5 of 6 candidates, in search order" }))).toBeTruthy()
     expect(panel().getByText("Earlier questions in this tab (1)")).toBeTruthy()
     expect(panel().getByText("Working copy, no rerank: 5 pieces")).toBeTruthy()
+  })
+
+  it("a hidden comparison stays hidden across a card and Back to Ask", async () => {
+    storeGraph(setReranker(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), liveRegistry as never, "cross_encoder"))
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    const askButton = panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    await waitFor(() => expect(askButton.disabled).toBe(false))
+    fireEvent.click(askButton)
+    await waitFor(() => expect(streams).toHaveLength(2))
+    const stored = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as { nodes: { id: string; stage: string }[] }
+    const rerankId = stored.nodes.find((n) => n.stage === "rerank")!.id
+    emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "node_finished", node_id: rerankId, artifact_id: "rr1", cache_hit: false, duration_ms: 1 }, "2")
+    emit({ event: "node_finished", node_id: "use_case", artifact_id: "out1", cache_hit: false, duration_ms: 1 }, "3")
+    emit({ event: "stream_end", status: "finished", ok: true }, "4")
+    fireEvent.click(await waitFor(() => panel().getByRole("button", { name: "Hide comparison" })))
+    expect(panel().getByRole("button", { name: "Show comparison" })).toBeTruthy()
+    fireEvent.click(card("parse"))
+    fireEvent.click(screen.getByRole("button", { name: "Back to Ask" }))
+    expect(await waitFor(() => panel().getByRole("button", { name: "Show comparison" }))).toBeTruthy()
+    expect(panel().queryByRole("button", { name: "Hide comparison" })).toBeNull()
+    // A new Ask opens it again.
+    fireEvent.click(panel().getByRole("button", { name: "Ask" }))
+    await waitFor(() => expect(streams).toHaveLength(3))
+    expect(await waitFor(() => panel().getByRole("button", { name: "Hide comparison" }))).toBeTruthy()
+  })
+
+  it("says reused from an earlier run, never cached, in the legend and the card's header", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: true, duration_ms: 4 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    const legend = screen.getByTestId("rule-legend")
+    expect(legend.textContent).toContain("reused from an earlier run")
+    expect(legend.textContent).not.toContain("from cache")
+    fireEvent.click(card("index"))
+    const header = await waitFor(() => screen.getByTestId("inspector-timing"))
+    expect(header.textContent).toBe("reused from an earlier run 4.0 ms")
   })
 
   it("switching Answer to Search clears a field error on the chat model", async () => {

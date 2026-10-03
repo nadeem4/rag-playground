@@ -74,7 +74,7 @@ export function blockingNode(
 }
 
 /** Cards whose variants are worth comparing side by side. */
-export const SWEEPABLE: Stage[] = ["parse", "chunk", "index", "retrieve"]
+export const SWEEPABLE: Stage[] = ["parse", "chunk", "index"]
 
 /** Where a stackable stage's "Add" button sits: after its last node, or after the card that feeds it. */
 function addAnchor(order: GraphNode[], stage: Stage, feeder: Stage): GraphNode | undefined {

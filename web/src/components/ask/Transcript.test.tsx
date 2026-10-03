@@ -111,6 +111,8 @@ function base(graph: PipelineGraph, results: Record<string, NodeState>, askRunId
     errors: {},
     keyNotice: null,
     askRunId,
+    comparisonHidden: null,
+    onComparison: vi.fn(),
     onConfig: vi.fn(),
     onTransform: vi.fn(),
     onReranker: vi.fn(),
@@ -137,7 +139,8 @@ describe("the transcript", () => {
     // The same run is not logged twice.
     rerender(<Harness {...p} askRunId="r2" busy={false} />)
     expect(summary()?.textContent).toBe("Earlier questions in this tab (1)")
-    fireEvent.click(within(entry).getByRole("button", { name: "Ask again" }))
+    // Each Ask again names its question, so two entries never share an accessible name.
+    fireEvent.click(within(entry).getByRole("button", { name: "Ask again: What does overlap cost?" }))
     expect(p.onConfig).toHaveBeenCalledWith("query", expect.objectContaining({ text: "What does overlap cost?" }))
     rerender(<Harness {...p} askRunId="r3" />)
     await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (2)"))

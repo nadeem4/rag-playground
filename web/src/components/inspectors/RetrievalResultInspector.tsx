@@ -20,6 +20,7 @@ import {
   rowsFromResult,
   rowsFromSearch,
   scaleMax,
+  sectionOf,
   type Badge,
   type HitLayout,
   type HitRowData,
@@ -171,8 +172,8 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, k
     [chunkSet, rows, showDetail],
   )
   const markOf = useMemo(() => new Map(layout?.marks.map((m, k) => [m.row, k]) ?? []), [layout])
-  const moved = rows.filter((r) => movement(r).kind !== "none").length
-  const reranked = rows.some((r) => r.prior_rank !== null)
+  // A Search row carries no heading path; the chunk set behind it does.
+  const sections = useMemo(() => new Map(chunkSet?.chunks.map((c) => [c.id, sectionOf(c.heading_path)]) ?? []), [chunkSet])
 
   // Hover: a data attribute written through the ref, never state (contract §7).
   const onPointerOver = (e: PointerEvent) => {
@@ -216,14 +217,8 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, k
 
   return (
     <Frame>
-      <Summary>
-        {facts}
-        {reranked ? (
-          <span data-testid="fact-moved" className="text-xs text-fg-muted">
-            rerank moved {moved} of {rows.length}
-          </span>
-        ) : null}
-      </Summary>
+      {/* The movement count is the reranker's run note, under the list: never repeated here. */}
+      <Summary>{facts}</Summary>
       <div ref={rootRef} className="ri" onPointerOver={onPointerOver} onPointerLeave={onPointerLeave}>
         <style>{hoverRules}</style>
         <div className="ri-body" data-doc={layout ? "" : undefined}>
@@ -238,6 +233,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, k
             showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
             kept={kept}
             badges={badges}
+            sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
           />
           {layout && chunkSet ? (
             <HitDocument layout={layout} rows={rows} source={chunkSet.source_text} selected={selected} onSelect={select} scrollRef={docRef} />
@@ -289,6 +285,7 @@ function HitList({
   showRetriever,
   kept,
   badges,
+  sectionOf: section,
 }: {
   rows: HitRowData[]
   keys: string[]
@@ -301,6 +298,7 @@ function HitList({
   showRetriever: boolean
   kept?: ReadonlySet<string>
   badges: boolean
+  sectionOf: (row: HitRowData) => string | null
 }) {
   const scoreMax = scaleMax(rows.map((r) => r.score))
   const maxOf = Object.fromEntries(keys.map((k) => [k, scaleMax(rows.map((r) => r.component_scores[k]))]))
@@ -333,6 +331,7 @@ function HitList({
             data-hit-row={r.rank}
             data-hits={k === undefined ? undefined : `h${k}`}
             data-kept={isKept ? "" : undefined}
+            title={`Piece ${r.chunk_id.slice(0, 8)}`}
             onClick={() => onSelect(i)}
             className={cn(
               "ri-row flex cursor-pointer flex-col gap-1 border-b border-hairline px-3 py-2 last:border-b-0 hover:bg-surface-elevated",
@@ -351,7 +350,7 @@ function HitList({
               </span>
               <span className="text-right font-mono text-sm text-fg tabular-nums">{fmtScore(r.score)}</span>
               {keys.length ? (
-                keys.map((key) => <ScoreBar key={key} value={r.component_scores[key]} max={maxOf[key]} label />)
+                keys.map((key) => <ScoreBar key={key} value={r.component_scores[key]} max={maxOf[key]} label={MISSED[key] ?? "no match"} />)
               ) : (
                 <ScoreBar value={r.score} max={scoreMax} />
               )}
@@ -368,10 +367,10 @@ function HitList({
                 </p>
               ) : null}
               <p className="ri-snippet text-sm text-fg">{r.text}</p>
-              <p className="flex flex-wrap gap-x-3 font-mono text-2xs text-fg-muted">
+              <p data-testid="where" className="flex flex-wrap gap-x-3 font-mono text-2xs text-fg-muted">
                 {pages(r.page_span) ? <span>{pages(r.page_span)}</span> : null}
+                {section(r) ? <span>{section(r)}</span> : null}
                 {showRetriever && r.retriever ? <span>{r.retriever}</span> : null}
-                <span title={r.chunk_id}>{r.chunk_id.slice(0, 8)}</span>
               </p>
               {onShowPdf && canPdf(i) ? (
                 <Button
@@ -401,15 +400,18 @@ const BADGE_TINT: Record<Badge["kind"], CSSProperties> = {
   stayed: { background: "var(--surface-hover)", color: "var(--text-secondary)" },
 }
 
+/** What an absent component score means, by the search that missed the hit. */
+const MISSED: Record<string, string> = { bm25: "no keyword match", dense: "no meaning match" }
+
 /**
  * A score bar: grows from a 1px hairline baseline, no filled track (contract
- * §11), the value printed at its tip in text ink. Absent means the hit was not
- * in that list, which is different from scoring zero, so it says so.
+ * §11), the value printed at its tip in text ink. Absent means the search did
+ * not find the hit, which is different from scoring zero, so `label` says so.
  */
-function ScoreBar({ value, max, label = false }: { value: number | undefined; max: number; label?: boolean }) {
+function ScoreBar({ value, max, label }: { value: number | undefined; max: number; label?: string }) {
   const w = barWidth(value, max, BAR)
   if (value === undefined) {
-    return <span className="font-mono text-2xs text-fg-muted">{label ? "not in list" : ""}</span>
+    return <span className="font-mono text-2xs text-fg-muted">{label ?? ""}</span>
   }
   return (
     <span className="flex items-center gap-1" data-bar={w}>

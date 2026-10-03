@@ -10,6 +10,7 @@ import { KeyHint } from "@/components/ApiKeyControl"
 import { blockingNode, type NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { QuestionField } from "@/components/pipeline/QuestionField"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { ASK_STAGES, askNodes, indexNode, infoFor, terminalNode, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { usePipelines } from "@/state/pipelines"
 
@@ -38,6 +39,9 @@ export interface AskPanelProps {
   /** The Ask run that has just finished, once it has: its answer joins the transcript. */
   askRunId: string | null
   transcript: TranscriptEntry[]
+  /** The rerank result whose comparison the reader hid. Build holds it, so it outlives the panel. */
+  comparisonHidden: string | null
+  onComparison: (hidden: string | null) => void
   onLog: (entry: TranscriptEntry) => void
   onConfig: (id: string, config: Record<string, unknown>) => void
   onTransform: (id: string, transform: string) => void
@@ -110,23 +114,30 @@ export function AskPanel(p: AskPanelProps) {
 
   // One transcript entry per finished Ask, found at the gold's rank when the question is the sample's.
   const outputs = useAskOutputs(p.graph, p.results, p.stale)
-  const rows = useMemo(() => finalRows(outputs, Boolean(rerank)), [outputs.rerank, outputs.output, outputs.retrieve, rerank]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The memo reads exactly what it lists: the three payloads and whether a reranker is in the graph.
+  const reranked = Boolean(rerank)
+  const { rerank: rerankOut, output, retrieve: retrieveOut } = outputs
+  const rows = useMemo(
+    () => finalRows({ rerank: rerankOut, output, retrieve: retrieveOut }, reranked),
+    [rerankOut, output, retrieveOut, reranked],
+  )
   const { pipelines, currentId } = usePipelines()
   const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
   const text = String(query?.config.text ?? "")
-  const { onLog } = p
+  const rerankerName = rerank ? rerankLabel(rerank.transform) : "no rerank"
+  const { onLog, askRunId, transcript } = p
   useEffect(() => {
-    if (!p.askRunId) return
+    if (!askRunId) return
     // A logged run is frozen: its own question and pieces are read again, never the current settings.
-    const logged = p.transcript.find((e) => e.runId === p.askRunId)
+    const logged = transcript.find((e) => e.runId === askRunId)
     const entry: TranscriptEntry | null =
       logged ??
       (rows
         ? {
-            runId: p.askRunId,
+            runId: askRunId,
             question: text,
             pipeline: pipelineName,
-            reranker: rerank ? rerankLabel(rerank.transform) : "no rerank",
+            reranker: rerankerName,
             rows: rows.map((r) => ({ rank: r.rank, text: r.text })),
             found: null,
           }
@@ -136,7 +147,7 @@ export function AskPanel(p: AskPanelProps) {
     const found = asked ? goldRank(entry.rows, [asked.gold_answer, ...(asked.gold_answers ?? [])]) : null
     if (logged && found === null) return
     onLog({ ...entry, found })
-  }, [p.askRunId, rows, questions, p.transcript]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [askRunId, transcript, rows, questions, text, pipelineName, rerankerName, onLog])
 
   const queryErrors = query ? p.errors[query.id] : undefined
   const setText = (text: string) => {
@@ -150,24 +161,35 @@ export function AskPanel(p: AskPanelProps) {
   ].filter(Boolean)
 
   return (
-    <section aria-label="Ask panel" className="flex min-h-0 min-w-0 flex-col">
+    <section aria-label="Ask panel" className="flex min-w-0 flex-col md:min-h-0">
       <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
         <h2 className="text-xl font-semibold">Ask</h2>
         <span data-testid="index-status" className="text-xs text-fg-muted">
-          {indexId ? `Index ready: ${ready.join(", ")}` : "Build the index first."}
+          {indexId
+            ? `Index ready: ${ready.join(", ")}`
+            : sha
+              ? "Build the index first."
+              : "Load a PDF or pick a sample on the Upload card, then build the index."}
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+      {/* Scrolls on its own from md up; below it the whole page is one scroll. */}
+      <div className="flex flex-col gap-3 p-3 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {query ? (
-          <QuestionField value={String(query.config.text ?? "")} errors={queryErrors?.fields?.text} disabled={askDisabled} onChange={setText} onSubmit={ask} />
+          <QuestionField
+            value={String(query.config.text ?? "")}
+            errors={queryErrors?.fields?.text}
+            disabled={askDisabled}
+            onChange={setText}
+            onSubmit={ask}
+            action={
+              <Button size="sm" disabled={askDisabled} onClick={ask}>
+                Ask
+              </Button>
+            }
+          />
         ) : null}
         {queryErrors?.message ? <p className="text-xs break-words text-danger">{queryErrors.message}</p> : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" disabled={askDisabled} onClick={ask}>
-            Ask
-          </Button>
-          {indexId && blocker ? <span className="text-xs text-danger">Fix the {titleFor(blocker)} settings to ask.</span> : null}
-        </div>
+        {indexId && blocker ? <p className="text-xs text-danger">Fix the {titleFor(blocker)} settings to ask.</p> : null}
         {p.keyNotice ? (
           // A div, not a p: KeyHint is itself a p, and a p cannot hold one.
           <div role="status" data-testid="key-notice" className="text-xs text-fg-muted">
@@ -180,7 +202,14 @@ export function AskPanel(p: AskPanelProps) {
             <p className="text-xs text-fg-muted">Try one of the sample's questions:</p>
             <div className="flex flex-wrap gap-1">
               {questions.map((q) => (
-                <Button key={q.id} variant="outline" size="sm" className="h-auto py-1 text-left whitespace-normal" onClick={() => setText(q.question)}>
+                <Button
+                  key={q.id}
+                  variant="outline"
+                  size="sm"
+                  // Wraps and shrinks, so a long question never pushes the pane sideways on a phone.
+                  className="h-auto max-w-full shrink py-1 text-left whitespace-normal"
+                  onClick={() => setText(q.question)}
+                >
                   {q.question}
                 </Button>
               ))}
@@ -188,10 +217,24 @@ export function AskPanel(p: AskPanelProps) {
           </div>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3">
-          <p data-testid="recipe" className="text-sm">
-            {recipeLine(p.graph, p.registry)}
-          </p>
-          <Button variant="outline" size="sm" aria-expanded={shown} disabled={settingsError} onClick={() => setOpen((o) => !o)}>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-medium text-fg-muted">Recipe</span>
+            <p data-testid="recipe" className="text-sm">
+              {recipeLine(p.graph, p.registry)}
+            </p>
+          </div>
+          {/* Not disabled while an error shows: the label stays honest and the title says why it will not fold. */}
+          <Button
+            variant="outline"
+            size="sm"
+            aria-expanded={shown}
+            aria-disabled={settingsError || undefined}
+            title={settingsError ? "Fix the error below first." : undefined}
+            className={cn(settingsError && "cursor-not-allowed opacity-50")}
+            onClick={() => {
+              if (!settingsError) setOpen((o) => !o)
+            }}
+          >
             {shown ? "Hide settings" : "Change settings"}
           </Button>
         </div>
@@ -207,7 +250,13 @@ export function AskPanel(p: AskPanelProps) {
             onUseCase={p.onUseCase}
           />
         ) : null}
-        <AskResults graph={p.graph} registry={p.registry} outputs={outputs} />
+        <AskResults
+          graph={p.graph}
+          registry={p.registry}
+          outputs={outputs}
+          comparisonHidden={p.comparisonHidden}
+          onComparison={p.onComparison}
+        />
         <Transcript entries={p.transcript} onAskAgain={setText} />
       </div>
     </section>

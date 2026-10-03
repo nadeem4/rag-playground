@@ -174,7 +174,7 @@ export function NodeCard(p: NodeCardProps) {
         <div className="flex shrink-0 items-center gap-2" aria-live="polite">
           {isSource ? null : (
             <>
-              <span className="meta">{shown.label}</span>
+              <span className="text-xs text-fg-muted">{shown.label}</span>
               {elapsed !== undefined ? (
                 <span className="font-mono text-xs text-fg" title="Elapsed since this node started">
                   {elapsed} s

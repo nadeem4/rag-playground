@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
@@ -75,6 +76,8 @@ function props(graph: PipelineGraph, results: Record<string, NodeState>): AskPan
     keyNotice: null,
     askRunId: null,
     transcript: [],
+    comparisonHidden: null,
+    onComparison: vi.fn(),
     onLog: vi.fn(),
     onConfig: vi.fn(),
     onTransform: vi.fn(),
@@ -88,9 +91,15 @@ const withCrossEncoder = () => setReranker(sampleGraph(LIVE, UPLOAD), LIVE, "cro
 const RERANKED = { retrieve: done("retrieve", "ret1"), rerank_1: done("rerank_1", "rr1"), use_case: done("use_case", "out1") }
 const badges = () => screen.queryAllByTestId("badge").map((b) => b.textContent)
 
+/** The panel with the comparison state held above it, as Shell holds it. */
+function Panel(p: AskPanelProps) {
+  const [hidden, setHidden] = useState<string | null>(null)
+  return <AskPanel {...p} comparisonHidden={hidden} onComparison={setHidden} />
+}
+
 describe("the comparison, with a reranker", () => {
   it("shows the search order against the reranked order, with badges from prior_rank", async () => {
-    render(<AskPanel {...props(withCrossEncoder(), RERANKED)} />)
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
     expect(await screen.findByRole("heading", { name: "Search order against the reranked order" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Hide comparison" })).toBeTruthy()
     expect(await screen.findByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
@@ -106,8 +115,16 @@ describe("the comparison, with a reranker", () => {
     expect(await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")).toBeTruthy()
   })
 
+  it("states the movement count once, in the run note under the right list", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    const note = await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")
+    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(true)
+    expect(screen.queryByTestId("fact-moved")).toBeNull()
+    expect(document.body.textContent).not.toMatch(/Moved \d+ of/)
+  })
+
   it("collapsing hides the search order and keeps the reranked list with its badges", async () => {
-    render(<AskPanel {...props(withCrossEncoder(), RERANKED)} />)
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
     fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
     expect(screen.queryByRole("heading", { name: "Search order, 6 candidates" })).toBeNull()
     expect(document.querySelector('[data-column="search"]')).toBeNull()
@@ -118,12 +135,35 @@ describe("the comparison, with a reranker", () => {
     expect(await screen.findByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
   })
 
+  it("collapsed, the title row is the right list's title beside Show comparison", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
+    expect(screen.queryByRole("heading", { name: "Search order against the reranked order" })).toBeNull()
+    const show = screen.getByRole("button", { name: "Show comparison" })
+    expect(within(show.parentElement!).getByRole("heading", { name: "After rerank, Cross-encoder, 5 kept" })).toBeTruthy()
+    expect(screen.getAllByRole("heading", { name: "After rerank, Cross-encoder, 5 kept" })).toHaveLength(1)
+  })
+
+  it("the open state is held above the panel, keyed by the rerank result", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    render(<AskPanel {...p} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
+    expect(p.onComparison).toHaveBeenCalledWith("rr1")
+    cleanup()
+    render(<AskPanel {...p} comparisonHidden="rr1" />)
+    expect(await screen.findByRole("button", { name: "Show comparison" })).toBeTruthy()
+    cleanup()
+    // Hidden for another result: this one is open.
+    render(<AskPanel {...p} comparisonHidden="rr0" />)
+    expect(await screen.findByRole("button", { name: "Hide comparison" })).toBeTruthy()
+  })
+
   it("reopens after a new run with the same reranker", async () => {
     const p = props(withCrossEncoder(), RERANKED)
-    const { rerender } = render(<AskPanel {...p} />)
+    const { rerender } = render(<Panel {...p} />)
     fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
     expect(screen.getByRole("button", { name: "Show comparison" })).toBeTruthy()
-    rerender(<AskPanel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
     expect(await screen.findByRole("button", { name: "Hide comparison" })).toBeTruthy()
   })
 
@@ -147,11 +187,11 @@ describe("the comparison, with a reranker", () => {
 
   it("reopens when the reranker changes", async () => {
     const p = props(withCrossEncoder(), RERANKED)
-    const { rerender } = render(<AskPanel {...p} />)
+    const { rerender } = render(<Panel {...p} />)
     fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
     expect(screen.getByRole("button", { name: "Show comparison" })).toBeTruthy()
     const mmr = setReranker(p.graph, LIVE, "mmr")
-    rerender(<AskPanel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    rerender(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
     expect(await screen.findByRole("button", { name: "Hide comparison" })).toBeTruthy()
     expect(await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })).toBeTruthy()
   })

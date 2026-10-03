@@ -136,4 +136,71 @@ describe("the Answer block", () => {
     setup({ graph: setUseCase(sampleGraph(LIVE, SAMPLE), LIVE, "chat") })
     expect(block("Answer").getByLabelText("Model")).toBeTruthy()
   })
+
+  it("says what Search and Chat give", () => {
+    setup()
+    expect(block("Answer").getByText("Search shows the kept pieces. Chat writes an answer with citations.")).toBeTruthy()
+  })
+})
+
+/** The block's closed More disclosure, or null. */
+const more = (name: string) => screen.getByRole("region", { name }).querySelector("details") as HTMLDetailsElement | null
+const inMore = (name: string, label: string) => more(name)!.contains(block(name).getByLabelText(label))
+
+describe("primary fields and the More disclosure", () => {
+  it("Retrieval shows Strategy and Candidates, with RRF k under a closed More", () => {
+    setup()
+    expect(more("Retrieval")!.open).toBe(false)
+    expect(more("Retrieval")!.querySelector("summary")!.textContent).toBe("More")
+    expect(inMore("Retrieval", "Candidates, top k")).toBe(false)
+    expect(inMore("Retrieval", "RRF k")).toBe(true)
+  })
+
+  it("Answer with Search puts its top k and snippet length under More, in sentence case", () => {
+    const p = setup()
+    expect(inMore("Answer", "Show, top k")).toBe(true)
+    expect(inMore("Answer", "Snippet length")).toBe(true)
+    // A field under More still edits the whole config.
+    fireEvent.change(block("Answer").getByLabelText("Snippet length"), { target: { value: "200" } })
+    expect(p.onConfig).toHaveBeenCalledWith("use_case", expect.objectContaining({ max_snippet_chars: 200, top_k: 5 }))
+  })
+
+  it("Answer with Chat keeps the model in front and the rest under More", () => {
+    setup({ graph: setUseCase(sampleGraph(LIVE, SAMPLE), LIVE, "chat") })
+    expect(inMore("Answer", "Model")).toBe(false)
+    expect(inMore("Answer", "Citation Method")).toBe(true)
+  })
+
+  it("Rerank keeps the model and Keep, top k in front; MMR's lambda goes under More", () => {
+    setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "cross_encoder") })
+    expect(block("Rerank").getByLabelText("Model")).toBeTruthy()
+    expect(more("Rerank")).toBeNull()
+    cleanup()
+    setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "mmr") })
+    expect(inMore("Rerank", "Keep, top k")).toBe(false)
+    expect(inMore("Rerank", "Lambda Mult")).toBe(true)
+  })
+
+  it("a server error on a field under More opens it", () => {
+    setup({ errors: { retrieve: { fields: { rrf_k: ["Input should be greater than 0"] } } } })
+    expect(more("Retrieval")!.open).toBe(true)
+  })
+
+  it("the Cross-encoder model select carries its full value as a title", () => {
+    setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "cross_encoder") })
+    const select = block("Rerank").getByLabelText("Model") as HTMLSelectElement
+    expect(select.title).toBe(select.value)
+    expect(select.className).toContain("w-full")
+    expect(select.className).toContain("min-w-0")
+  })
+})
+
+describe("the pressed segment", () => {
+  it("takes the accent border and text of the primary button; the others do not", () => {
+    setup()
+    expect(segment("Reranker", "None").className).toContain("border-primary")
+    expect(segment("Reranker", "None").className).toContain("text-primary")
+    expect(segment("Reranker", "MMR").className).not.toContain("border-primary")
+    expect(segment("Answer with", "Search").className).toContain("border-primary")
+  })
 })

@@ -23,7 +23,12 @@ export interface HitRowData {
   element_ids: string[] | null
   /** The chunk's position in its chunk set: its palette slot when the set is not at hand. */
   ordinal: number | null
+  /** The chunk's heading path as one line, `Methods > Survey`, when the chunker gave it one. */
+  section: string | null
 }
+
+/** A heading path as one line, or null when it is empty. */
+export const sectionOf = (path: readonly string[] | null | undefined): string | null => (path?.length ? path.join(" > ") : null)
 
 export function rowsFromResult(r: RetrievalResult): HitRowData[] {
   return r.hits.map((h: Hit) => ({
@@ -37,6 +42,7 @@ export function rowsFromResult(r: RetrievalResult): HitRowData[] {
     page_span: h.chunk.page_span,
     element_ids: h.chunk.source_element_ids ?? null,
     ordinal: typeof h.chunk.ordinal === "number" ? h.chunk.ordinal : null,
+    section: sectionOf(h.chunk.heading_path),
   }))
 }
 
@@ -69,6 +75,7 @@ export function rowsFromSearch(out: SearchOutput): HitRowData[] {
     page_span: r.page_span ?? null,
     element_ids: null,
     ordinal: null,
+    section: null,
   }))
 }
 

@@ -47,8 +47,8 @@ import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } 
 import { decodePipeline, droppedText, readCurrentId, readPipelines, sameGraph, savePipeline, setCurrentId, usableGraph } from "@/state/pipelines"
 
 /**
- * Build: the pipeline column on the left, the selected card's output on the
- * right. The graph is the state; the column renders it.
+ * Build: the index pipeline column on the left; on the right the Ask panel,
+ * or the selected card's output. The graph is the state; both render it.
  */
 export function Shell() {
   const reg = useRegistry()
@@ -78,8 +78,8 @@ export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry
 }
 
 /**
- * Why Run all is disabled: the Upload card just needs a file, not a settings
- * fix, so it gets its own calm sentence instead of naming a "Upload" setting.
+ * Why Build the index is disabled: the Upload card just needs a file, not a
+ * settings fix, so it gets its own calm sentence instead of naming a "Upload" setting.
  */
 function blockedTitle(blocker: GraphNode): string {
   return blocker.stage === "source" ? "Load a sample to start." : `Fix the ${titleFor(blocker)} settings to run the pipeline.`
@@ -108,23 +108,25 @@ function Build({ registry }: { registry: Registry }) {
   const [askRunId, setAskRunId] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const onLog = useCallback((entry: TranscriptEntry) => setTranscript((t) => logEntry(t, entry)), [])
+  // The rerank result whose comparison the reader hid. Held here, so opening a
+  // card and coming Back to Ask keeps it; a new Ask or another reranker opens it.
+  const [comparisonHidden, setComparisonHidden] = useState<string | null>(null)
   const { keys } = useApiKey()
   // Plan I-15: null until `GET /api/sources` answers, and if it fails.
   const [uploaded, setUploaded] = useState<Source[] | null>(null)
-  const [sampleLoaded, setSampleLoaded] = useState(false)
 
   useEffect(() => {
     api.sources().then(setUploaded, () => undefined)
   }, [])
 
   // Which keys the server has. Null until it answers, and if it fails: then
-  // Run all is left alone.
+  // Ask is left alone.
   const [server, setServer] = useState<LlmSettings | null>(null)
   useEffect(() => {
     api.llmSettings().then(setServer, () => setServer(null))
   }, [])
 
-  // Set when a keyless Run all stopped before Chat. A new key clears it.
+  // Set when a keyless Ask stopped before Chat. A new key clears it.
   const [keyNotice, setKeyNotice] = useState<string | null>(null)
   useEffect(() => setKeyNotice(null), [keys])
 
@@ -196,7 +198,7 @@ function Build({ registry }: { registry: Registry }) {
       return
     }
     setKeyNotice(null)
-    // A Run all with no key anywhere would end in a chat traceback. Stop at
+    // An Ask with no key anywhere would end in a chat traceback. Stop at
     // the card that feeds Chat instead, and say so in one sentence.
     let notice: string | null = null
     if (target === undefined && hasAnyKey(server, keys) === false) {
@@ -265,20 +267,11 @@ function Build({ registry }: { registry: Registry }) {
       ? null
       : uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
   const missing = Boolean(sourceSha) && known === false
-  const intro = firstRun
-    ? { title: "Nothing to show yet", body: "Load a PDF, or try the sample document. Then press Build the index, and ask a question in the Ask panel." }
-    : sampleLoaded && Object.keys(results).length === 0
-      ? {
-          title: "Ready to run",
-          body: "The sample is loaded and every step has a sensible default. Press Build the index, then ask a question on the right.",
-        }
-      : undefined
 
   function loadSample(src: Source, question: string) {
     edit(sampleGraph(registry, src, question))
     setUploaded((u) => [...(u ?? []), src])
     setSelected(null)
-    setSampleLoaded(true)
   }
 
   /** A sample picked on the Upload card: set its file and its question, and keep every other setting. */
@@ -294,7 +287,7 @@ function Build({ registry }: { registry: Registry }) {
 
   return (
     <main className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
-      <section aria-label="Pipeline" className="flex min-h-0 flex-col bg-surface">
+      <section aria-label="Pipeline" className="flex flex-col bg-surface md:min-h-0">
         <div className="flex h-[40px] shrink-0 items-center justify-between gap-2 border-b border-hairline px-3">
           <h1 className="text-xl font-semibold">Index pipeline</h1>
           <div className="flex items-center gap-2">
@@ -357,7 +350,9 @@ function Build({ registry }: { registry: Registry }) {
             ))}
           </div>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Keyed by the screen it holds: the column after a sample loads starts at the top,
+            not at the Upload card's scroll position. Below md the page scrolls as one. */}
+        <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {firstRun && sourceNode ? (
             <FirstRun onSource={(v) => edit(setConfig(graph, sourceNode.id, { ...v }), sourceNode.id)} onSample={loadSample} />
           ) : (
@@ -384,14 +379,14 @@ function Build({ registry }: { registry: Registry }) {
                 explanations={explanations}
                 history={tracked.history}
               />
-              <p className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
+              <p data-testid="rule-legend" className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline px-3 py-2 text-xs text-fg-muted">
                 <span className="flex items-center gap-2">
                   <span aria-hidden className="h-[12px] border-l-3 border-solid border-fg-muted" />
                   computed this run
                 </span>
                 <span className="flex items-center gap-2">
                   <span aria-hidden className="h-[12px] border-l-3 border-dotted border-fg-muted" />
-                  from cache
+                  reused from an earlier run
                 </span>
               </p>
             </>
@@ -407,7 +402,6 @@ function Build({ registry }: { registry: Registry }) {
         selected={selected}
         onSelect={setSelected}
         failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
-        intro={intro}
         ask={
           <AskPanel
             graph={graph}
@@ -422,12 +416,20 @@ function Build({ registry }: { registry: Registry }) {
             keyNotice={keyNotice && !busy && !run.error && !failedNode ? keyNotice : null}
             askRunId={askRunId !== null && askRunId === runId && !busy ? askRunId : null}
             transcript={transcript}
+            comparisonHidden={comparisonHidden}
+            onComparison={setComparisonHidden}
             onLog={onLog}
             onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
             onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
-            onReranker={(t) => edit(setReranker(graph, registry, t), ...ids(askNodes(graph).rerank))}
+            onReranker={(t) => {
+              setComparisonHidden(null)
+              edit(setReranker(graph, registry, t), ...ids(askNodes(graph).rerank))
+            }}
             onUseCase={(t) => edit(setUseCase(graph, registry, t), ...ids(askNodes(graph).useCase))}
-            onAsk={() => void start(undefined, false, false).then((id) => setAskRunId(id ?? null))}
+            onAsk={() => {
+              setComparisonHidden(null)
+              void start(undefined, false, false).then((id) => setAskRunId(id ?? null))
+            }}
           />
         }
       />
@@ -449,7 +451,6 @@ function InspectorPanel({
   selected,
   onSelect,
   failedHint,
-  intro,
   ask,
 }: {
   graph: PipelineGraph
@@ -459,16 +460,13 @@ function InspectorPanel({
   selected: string | null
   onSelect: (id: string | null) => void
   failedHint?: string
-  /** What the empty inspector says on a first visit, and after the sample loads. */
-  intro?: { title: string; body: string }
   /** The Ask panel: shown when no card is selected, or when the selection is a step the panel edits. */
   ask: ReactNode
 }) {
   const picked = graph.nodes.find((n) => n.id === selected)
   if (!picked || ASK_STAGES.includes(picked.stage)) {
     return (
-      <section aria-label="Inspector" className="flex min-h-0 min-w-0 flex-col overflow-y-auto bg-surface">
-        {intro ? <EmptyState title={intro.title}>{intro.body}</EmptyState> : null}
+      <section aria-label="Inspector" className="flex min-w-0 flex-col bg-surface md:min-h-0 md:overflow-y-auto">
         {failedHint ? <p className="px-3 pt-3 text-sm text-fg-muted">Select the {failedHint} card to see why it failed.</p> : null}
         {ask}
       </section>
@@ -556,7 +554,7 @@ function CardInspector({
   }
 
   return (
-    <section aria-label="Inspector" className="flex min-h-0 min-w-0 flex-col bg-surface">
+    <section aria-label="Inspector" className="flex min-w-0 flex-col bg-surface md:min-h-0">
       <div className="shrink-0 border-b border-hairline px-3 py-2">
         <Button variant="outline" size="sm" onClick={onBack}>
           Back to Ask
@@ -574,14 +572,14 @@ function CardInspector({
             <span>{type}</span>
             <span title={artifactId}>{artifactId.slice(0, 12)}</span>
             {result?.duration_ms !== undefined ? (
-              <span>
-                {result.cache_hit ? "cached" : "computed"} {fmtMs(result.duration_ms)}
+              <span data-testid="inspector-timing">
+                {result.cache_hit ? "reused from an earlier run" : "computed"} {fmtMs(result.duration_ms)}
               </span>
             ) : null}
           </div>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">{body}</div>
+      <div className="p-3 md:min-h-0 md:flex-1 md:overflow-y-auto">{body}</div>
     </section>
   )
 }

@@ -1,4 +1,4 @@
-import { useId } from "react"
+import { useId, type ReactNode } from "react"
 
 import { Errors } from "@/components/fields/FieldShell"
 
@@ -6,6 +6,8 @@ import { Errors } from "@/components/fields/FieldShell"
  * The Ask card's question. It is what a user changes most, so it is a real
  * multi-line box rather than a schema field, and Ctrl+Enter (Cmd+Enter on a
  * Mac) asks it: the same as the card's Run, straight through to the end.
+ * `action` (the Ask button) sits right-aligned on the hint's row, so the box
+ * and its action read as one group.
  */
 export function QuestionField({
   value,
@@ -13,12 +15,14 @@ export function QuestionField({
   disabled,
   onChange,
   onSubmit,
+  action,
 }: {
   value: string
   errors?: string[]
   disabled?: boolean
   onChange: (text: string) => void
   onSubmit: () => void
+  action?: ReactNode
 }) {
   const id = useId()
   const errorId = `${id}-error`
@@ -42,9 +46,12 @@ export function QuestionField({
         }}
         className="w-full min-w-0 resize-y rounded-control border border-field-border bg-field px-2 py-1 text-sm leading-5 text-fg aria-invalid:border-danger"
       />
-      <p id={`${id}-help`} className="text-xs text-fg-muted">
-        Ctrl+Enter asks it.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p id={`${id}-help`} className="text-xs text-fg-muted">
+          Ctrl+Enter asks it.
+        </p>
+        {action}
+      </div>
       <Errors id={errorId} errors={errors} />
     </div>
   )

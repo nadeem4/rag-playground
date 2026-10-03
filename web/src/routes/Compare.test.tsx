@@ -95,6 +95,14 @@ describe("the Compare stage picker", () => {
     expect(screen.getByLabelText("Show through")).toBeTruthy()
   })
 
+  it("sets the tally sentence in sans, with only its numbers in mono", async () => {
+    const { readFileSync } = await import("node:fs")
+    const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")
+    const tag = src.match(/<p data-testid="tally"[^>]*>/)?.[0] ?? ""
+    expect(tag).not.toContain("font-mono")
+    expect(src).toContain("<MonoNumbers text={tallyLine(")
+  })
+
   it("has no em-dashes or en-dashes", async () => {
     render(<Compare />)
     await waitFor(() => expect(picker().value).toBe("chunk"))

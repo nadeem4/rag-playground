@@ -528,7 +528,9 @@ describe("while and after scoring", () => {
     es.emit(4, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
     es.emit(5, { event: "stream_end", status: "finished", ok: true })
 
-    await screen.findByTestId("summary")
+    const summary = await screen.findByTestId("summary")
+    expect(summary.className).not.toContain("font-mono")
+    expect(summary.querySelector("span.font-mono")).not.toBeNull()
     expect(screen.getByTestId("hit-rate")).toBeTruthy()
     expect(document.body.textContent).not.toContain("Scoring question")
     expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")

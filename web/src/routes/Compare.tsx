@@ -15,6 +15,7 @@ import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/I
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { fmtMs } from "@/components/pipeline/NodeCard"
+import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
 import {
@@ -257,8 +258,8 @@ function Sweep({
           </p>
         ) : tally ? (
           <>
-            <p data-testid="tally" className="font-mono text-sm text-fg">
-              {tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))}
+            <p data-testid="tally" className="text-sm text-fg">
+              <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))} />
             </p>
             <p className="text-xs text-fg-muted">
               {running !== null ? `Running variant ${running + 1} of ${submitted.variants.length}.` : run.closed ? "Steps above the swept one ran once; the rest came from the cache." : "Starting."}

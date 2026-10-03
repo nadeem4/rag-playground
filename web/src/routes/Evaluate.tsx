@@ -42,6 +42,7 @@ import {
 } from "@/state/evaluate"
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
 import { readStoredGraph, upstreamOfStage, type PipelineGraph } from "@/state/graph"
+import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { sameGraph, usableGraph, usePipelines } from "@/state/pipelines"
 
@@ -474,8 +475,8 @@ function Evaluation({
           <p className="text-sm font-medium text-fg">{`Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}</p>
         ) : (
           <>
-            <p data-testid="summary" className="font-mono text-sm font-medium text-fg">
-              {summaryLine(summary, previous?.summary)}
+            <p data-testid="summary" className="text-sm font-medium text-fg">
+              <MonoNumbers text={summaryLine(summary, previous?.summary)} />
             </p>
             <p data-testid="hit-rate" className="text-sm text-fg-muted">
               Hit rate at {shownK} <span className="font-mono font-medium text-fg tabular-nums">{percent(scores.hitRate) ?? "not yet"}</span>

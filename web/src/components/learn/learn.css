@@ -1,8 +1,8 @@
 /*
  * Home and the lessons: pages a person reads, not the workbench. They follow
  * the Learn and Home dials in the plan (variance 5, motion 4, density 4), so
- * they get a display size and more space than the 20px and 24px caps allow.
- * Everything else still comes from tokens.css. Documented in
+ * they get the display size from the type scale and the 32px section rhythm.
+ * Every font size here is a --text-* token. Everything else comes from tokens.css. Documented in
  * docs/superpowers/design-system.md, section 5.
  */
 
@@ -18,20 +18,12 @@
   max-width: 1400px;
 }
 
-.learn-display {
-  margin: 0;
-  font-size: var(--text-2xl);
-  line-height: var(--text-2xl--line-height);
-  letter-spacing: -0.035em;
-  font-weight: 600;
-  text-wrap: balance;
-}
-
+.learn-display,
 .learn-title {
   margin: 0;
   font-size: var(--text-2xl);
   line-height: var(--text-2xl--line-height);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
   font-weight: 600;
   text-wrap: balance;
 }

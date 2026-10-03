@@ -46,7 +46,7 @@
   --surface: #f5f6f4; /* page, off-white, never pure white */
   --surface-elevated: #eaece8; /* panel and tint: a background step, no border against the page */
   --surface-raised: #fdfdfc; /* the sheet, and the one selected card with --shadow-raised */
-  --surface-hover: #eaece8; /* hover wash: the tint, on the page's green-grey cast */
+  --surface-hover: #dfe2dd; /* hover wash: one step below the tint, so a hover shows on the panel too */
   --hairline: #d6d9d3; /* a line, not text: 1.3:1 on the page, 1.2:1 on the panel, 1.4:1 on the sheet */
   --text-primary: #161917; /* ink, 16.3:1 on the page, 14.9:1 on the panel */
   --text-secondary: #545a55; /* 6.5:1 on the page, 6.0:1 on the panel */

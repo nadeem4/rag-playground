@@ -352,6 +352,23 @@ describe("the upload report", () => {
     expect(screen.getByTestId("set-name").textContent).toBe("refunds.csv")
   })
 
+  it("shows the closest text as a single evidence slip with no scores, and the gold answer in the serif", async () => {
+    serve({ upload: goldSet() })
+    render(<Evaluate />)
+    await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
+    const report = await screen.findByTestId("upload-report", {}, { timeout: 4000 })
+    const slip = report.querySelector("[data-slip]") as HTMLElement
+    expect(slip).toBeTruthy()
+    expect(within(slip).getByTestId("passage").textContent).toBe("The duty manager signs it off.")
+    expect(within(slip).getByTestId("passage").className).toContain("font-serif")
+    // No rank, score or page is known, so the finding and meta lines are hidden, not invented.
+    expect(slip.className).toContain("[&_[data-testid=finding]]:hidden")
+    expect(slip.className).toContain("[&_[data-testid=meta]]:hidden")
+    expect(within(report).getByText("The duty manager approves it.").className).toContain("font-serif")
+  })
+
   it("stays on screen after the set is in use, and has no em-dashes or en-dashes", async () => {
     serve({ upload: goldSet() })
     render(<Evaluate />)

@@ -4,6 +4,8 @@ import { Upload } from "lucide-react"
 import { api } from "@/api/client"
 import type { StoredQuestionSet } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
+import { EvidenceSlip } from "@/components/inspectors/EvidenceSlip"
+import type { HitRowData } from "@/components/inspectors/hits"
 import { Button } from "@/components/ui/button"
 import { mismatch, reportLines, type InUse, type Report } from "@/state/goldSet"
 
@@ -181,6 +183,31 @@ export function QuestionSetPanel({
 }
 
 /**
+ * The closest text has no rank, no score and no page, so the slip's finding and
+ * meta lines would only say invented things ("1st", "score 0.000"). EvidenceSlip
+ * has no prop to leave them out yet, so they are hidden here.
+ */
+const BARE = "[&_[data-testid=finding]]:hidden [&_[data-testid=meta]]:hidden"
+
+/** The upload check gives only the text, so the slip's row is the text and nothing else: no scores, no page. */
+function closestRow(text: string): HitRowData {
+  return {
+    rank: 1,
+    score: 0,
+    prior_rank: null,
+    prior_score: null,
+    retriever: "",
+    component_scores: {},
+    chunk_id: "closest",
+    text,
+    page_span: null,
+    element_ids: null,
+    ordinal: null,
+    section: null,
+  }
+}
+
+/**
  * What the upload check found. A set with problems can still be used, so this
  * is a report and not a refusal, and it stays on screen until the set changes.
  */
@@ -203,9 +230,13 @@ function UploadReport({ report }: { report: Report }) {
               <li key={`${p.question}-${i}`} className="flex min-w-0 flex-col gap-1 border-t border-hairline pt-2">
                 <p className="text-sm text-fg">{p.question}</p>
                 <p className="meta">written in the file</p>
-                <p className="text-sm break-words text-fg">{p.gold_answer}</p>
+                <p className="font-serif text-base break-words text-fg">{p.gold_answer}</p>
                 <p className="meta">closest text in the document</p>
-                <p className="text-sm break-words text-fg-muted">{p.closest ?? "Nothing close enough to show."}</p>
+                {p.closest ? (
+                  <EvidenceSlip row={closestRow(p.closest)} side="single" piece={null} scaleKey="score" className={BARE} />
+                ) : (
+                  <p className="text-sm break-words text-fg-muted">Nothing close enough to show.</p>
+                )}
               </li>
             ))}
           </ul>

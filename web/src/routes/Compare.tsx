@@ -187,7 +187,7 @@ function Sweep({
   }
 
   const cols = Math.max(variants.length, 1)
-  const grid: CSSProperties = { gridTemplateColumns: `repeat(${cols}, minmax(400px, 1fr))` }
+  const grid: CSSProperties = { gridTemplateColumns: `repeat(${cols}, minmax(420px, 1fr))` }
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
 
@@ -401,7 +401,7 @@ function VariantResult({
             <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
               {agreement ? (
                 <span data-testid="agreement" className="font-medium text-fg">
-                  {agreement}
+                  <MonoNumbers text={agreement} />
                 </span>
               ) : null}
               {embeddings ? (

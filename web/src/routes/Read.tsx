@@ -52,7 +52,7 @@ function tryLink(registry: Registry, sample: SampleCard, title: string): string 
 function PostItem({ post }: { post: Post }) {
   return (
     <li className="flex flex-col gap-1">
-      <a href={post.url} target="_blank" rel="noreferrer" className="text-lg font-medium text-fg underline-offset-2 hover:underline">
+      <a href={post.url} target="_blank" rel="noreferrer" className="font-serif text-lg font-medium text-fg underline-offset-2 hover:underline">
         {post.title}
       </a>
       <p className="m-0 max-w-[60ch] text-base text-fg-muted">{post.line}</p>

@@ -59,6 +59,10 @@ describe("Read", () => {
     expect(section("Chunk").className).toContain("py-8")
     const link = within(section("Chunk")).getAllByRole("link")[0]
     expect(link.className).toContain("text-lg")
+    expect(link.className).toContain("font-serif")
+    // The one-line summary and the date stay in the tool's voice.
+    const item = link.closest("li") as HTMLElement
+    for (const p of Array.from(item.querySelectorAll("p"))) expect(p.className).not.toContain("font-serif")
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("learn-display")
   })
 

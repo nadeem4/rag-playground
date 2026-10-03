@@ -112,6 +112,22 @@ describe("the Compare stage picker", () => {
     expect(line).toContain('<span className="font-mono">{fmtMs(n!.duration_ms)}</span>')
   })
 
+  it("gives each column room for a slip: 420 px minimum so a passage keeps 40 characters a line at 1440", async () => {
+    const { readFileSync } = await import("node:fs")
+    const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")
+    expect(src).toContain("minmax(420px, 1fr)")
+    // Three columns of 420 px plus the hairlines fit a 1440 px window.
+    expect(3 * 420 + 2).toBeLessThanOrEqual(1440)
+  })
+
+  it("sets the agreement line in sans with only its numbers in mono", async () => {
+    const { readFileSync } = await import("node:fs")
+    const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")
+    const tag = src.match(/<span data-testid="agreement"[^>]*>/)?.[0] ?? ""
+    expect(tag).not.toContain("font-mono")
+    expect(src).toMatch(/data-testid="agreement"[^>]*>\s*<MonoNumbers text=\{agreement\}/)
+  })
+
   it("has no em-dashes or en-dashes", async () => {
     render(<Compare />)
     await waitFor(() => expect(picker().value).toBe("chunk"))

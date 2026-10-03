@@ -47,6 +47,11 @@ export interface SchemaFormProps {
    * gets this; absent, the form is unchanged.
    */
   learn?: Record<string, Lesson>
+  /**
+   * Shown titles by field path, in place of the schema's own. Only the label
+   * changes: help text, defaults and validation stay the schema's.
+   */
+  titles?: Record<string, string>
 }
 
 const CONTROLS: Partial<Record<FieldKind, ComponentType<ControlProps>>> = {
@@ -60,7 +65,7 @@ const CONTROLS: Partial<Record<FieldKind, ComponentType<ControlProps>>> = {
 
 const humanize = (key: string) => key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
 
-export function SchemaForm({ schema, value, onChange, errors, learn }: SchemaFormProps) {
+export function SchemaForm({ schema, value, onChange, errors, learn, titles }: SchemaFormProps) {
   const defaults = useMemo(() => defaultsFor(schema, schema), [schema])
   const current = value ?? defaults
   const base = useId()
@@ -105,6 +110,7 @@ export function SchemaForm({ schema, value, onChange, errors, learn }: SchemaFor
         errors={allErrors}
         base={base}
         learn={learn}
+        titles={titles}
       />
     </div>
   )
@@ -120,6 +126,7 @@ interface FieldsProps {
   errors: FieldErrors
   base: string
   learn?: Record<string, Lesson>
+  titles?: Record<string, string>
 }
 
 function Fields({ schema, value, onValue, ...rest }: FieldsProps) {
@@ -160,12 +167,12 @@ function Property(props: PropertyProps) {
   )
 }
 
-function Field({ name, prop, value, onValue, root, path, depth, errors, base, learn }: PropertyProps) {
+function Field({ name, prop, value, onValue, root, path, depth, errors, base, learn, titles }: PropertyProps) {
   const f = describeField(prop, root)
   const at = [...path, name]
   const key = at.join(".")
   const ids = fieldIds(`${base}${key}`)
-  const label = f.schema.title ?? humanize(name)
+  const label = titles?.[key] ?? f.schema.title ?? humanize(name)
   const own = errors[key] ?? []
   const v = value === undefined ? f.schema.default : value
   const isNull = f.nullable && v === null
@@ -193,6 +200,7 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
             errors={errors}
             base={base}
             learn={learn}
+            titles={titles}
           />
         )}
       </>

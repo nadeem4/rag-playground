@@ -7,18 +7,16 @@ import type { NodeState } from "@/api/runState"
 import type { GraphNode, TransformInfo } from "@/api/types"
 import type { ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
-import { CONST_TEXT } from "@/components/fields/ConstField"
-import { CONTROL } from "@/components/fields/types"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { LearnHint, StageLesson } from "@/components/learn/LearnHint"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { compatibility, optionLabel, type Compat } from "@/state/compat"
 import { STAGE_VERB } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
 import { ExplainPanel } from "./ExplainPanel"
+import { lockOf, TransformSelect } from "./TransformSelect"
 import { WhatItDid } from "./WhatItDid"
 
 /**
@@ -127,11 +125,8 @@ export function NodeCard(p: NodeCardProps) {
   // no transform picker and no footer. It is just "pick or upload a file".
   const isSource = p.node.stage === "source"
   const info = p.transforms.find((t) => t.name === p.node.transform)
-  // Every option is judged against the same upstream, so the dropdown can tag
-  // the ones that would fall back (soft) or could not run (hard) before they
-  // are picked, and the reason for the current pick shows under it.
-  const compat: Record<string, Compat> = Object.fromEntries(p.transforms.map((t) => [t.name, compatibility(t, p.upstream ?? {})]))
-  const lock: Compat = compat[p.node.transform] ?? { kind: "ok" }
+  // The picker tags locked options; the run note needs the current pick's lock too.
+  const lock = lockOf(p.transforms, p.node.transform, p.upstream ?? {})
   const shown = describeResult(p.result, p.stale)
   const failed = p.result?.status === "failed" && !p.stale ? p.result.error : undefined
   const hasOutput = shown.rule === "solid" || shown.rule === "dotted"
@@ -224,32 +219,14 @@ export function NodeCard(p: NodeCardProps) {
 
       {isSource ? null : (
       <div className="flex min-w-0 flex-col gap-1">
-        <label htmlFor={`${id}-transform`} className="text-sm font-medium">
-          Transform
-        </label>
-        {p.transforms.length === 1 ? (
-          // One registered transform: nothing to choose, so no picker.
-          <output id={`${id}-transform`} className={CONST_TEXT}>
-            {p.node.transform}
-          </output>
-        ) : (
-          <select id={`${id}-transform`} className={CONTROL} value={p.node.transform} onChange={(e) => p.onTransform(e.target.value)}>
-            {p.transforms.map((t) => (
-              <option key={t.name} value={t.name} disabled={compat[t.name]?.kind === "hard"}>
-                {optionLabel(t.name, compat[t.name] ?? { kind: "ok" })}
-              </option>
-            ))}
-          </select>
-        )}
-        {lock.kind === "soft" ? (
-          <p role="status" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-fg-muted">
-            {lock.reason}
-          </p>
-        ) : lock.kind === "hard" ? (
-          <p role="alert" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-danger">
-            {lock.reason}
-          </p>
-        ) : null}
+        <TransformSelect
+          id={`${id}-transform`}
+          label="Transform"
+          transforms={p.transforms}
+          value={p.node.transform}
+          upstream={p.upstream ?? {}}
+          onChange={p.onTransform}
+        />
         {info?.learn?._strategy ? <LearnHint lesson={info.learn._strategy} /> : null}
       </div>
       )}

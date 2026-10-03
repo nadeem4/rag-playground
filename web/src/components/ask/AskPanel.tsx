@@ -72,7 +72,7 @@ export function recipeLine(graph: PipelineGraph, registry: Registry): string {
 }
 
 export function AskPanel(p: AskPanelProps) {
-  const { query } = askNodes(p.graph)
+  const { query, retrieve, rerank, useCase } = askNodes(p.graph)
   const index = indexNode(p.graph)
   const indexId = index?.stage === "index" ? fresh(p.results, p.stale, index) : undefined
   const indexPayload = useArtifactPayload(indexId)
@@ -90,7 +90,7 @@ export function AskPanel(p: AskPanelProps) {
   const docPayload = useArtifactPayload(docId)
   const pages = sample?.pages ?? (docPayload.data as { page_count?: unknown } | undefined)?.page_count
 
-  const questions = useSampleQuestions(sha)
+  const questions = useSampleQuestions(sample?.name)
   const terminal = terminalNode(p.graph)
   const blocker = terminal ? blockingNode(p.graph, p.registry, p.explanations, terminal.id) : undefined
   const askDisabled = p.busy || !indexId || Boolean(blocker)
@@ -98,6 +98,9 @@ export function AskPanel(p: AskPanelProps) {
   // Open on a pipeline whose question has not run yet; folded once it has.
   const asked = p.graph.nodes.some((n) => ASK_STAGES.includes(n.stage) && n.stage !== "query" && p.results[n.id])
   const [open, setOpen] = useState(!asked)
+  // A server error on a settings step must be seen, so it unfolds the settings.
+  const settingsError = [retrieve, rerank, useCase].some((n) => n && p.errors[n.id])
+  const shown = open || settingsError
 
   function ask() {
     setOpen(false)
@@ -157,11 +160,11 @@ export function AskPanel(p: AskPanelProps) {
           <p data-testid="recipe" className="text-sm">
             {recipeLine(p.graph, p.registry)}
           </p>
-          <Button variant="outline" size="sm" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-            {open ? "Hide settings" : "Change settings"}
+          <Button variant="outline" size="sm" aria-expanded={shown} disabled={settingsError} onClick={() => setOpen((o) => !o)}>
+            {shown ? "Hide settings" : "Change settings"}
           </Button>
         </div>
-        {open ? (
+        {shown ? (
           <AskSettings
             graph={p.graph}
             registry={p.registry}

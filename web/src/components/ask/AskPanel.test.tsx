@@ -129,8 +129,11 @@ describe("the question box", () => {
 
   it("shows no chips for an upload", async () => {
     setup({ graph: sampleGraph(LIVE, UPLOAD) })
-    await waitFor(() => expect((globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => c[0] === "/api/samples")).toBe(true))
-    await new Promise((r) => setTimeout(r, 20))
+    const calls = () => (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]))
+    await waitFor(() => expect(calls()).toContain("/api/samples"))
+    // The list has answered and names no sample with this file, so no question set is asked for.
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toContain("report.pdf"))
+    expect(calls().filter((u) => u.endsWith("/questions"))).toEqual([])
     expect(screen.queryByText("Try one of the sample's questions:")).toBeNull()
     expect(screen.queryByRole("button", { name: "Why overlap?" })).toBeNull()
   })
@@ -176,6 +179,24 @@ describe("the recipe line and the settings toggle", () => {
   it("settings start folded once the question has an answer", () => {
     setup({ results: { ...INDEX_DONE, use_case: { id: "use_case", status: "done", artifact_id: "out1" } } })
     expect(screen.getByRole("button", { name: "Change settings" })).toBeTruthy()
+  })
+
+  it("fetches the samples list once", async () => {
+    setup()
+    await screen.findByRole("button", { name: "Why overlap?" })
+    const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]))
+    expect(calls.filter((u) => u === "/api/samples")).toHaveLength(1)
+  })
+
+  it("an error arriving after Ask unfolds the settings in place", () => {
+    const p = setup()
+    cleanup()
+    const { rerender } = render(<AskPanel {...p} />)
+    fireEvent.click(askButton())
+    expect(screen.queryByRole("group", { name: "Reranker" })).toBeNull()
+    rerender(<AskPanel {...p} errors={{ use_case: { message: "The search step could not run." } }} />)
+    expect(screen.getByRole("group", { name: "Reranker" })).toBeTruthy()
+    expect(screen.getByText("The search step could not run.")).toBeTruthy()
   })
 
   it("has no en or em dash anywhere", async () => {

@@ -548,3 +548,17 @@ describe("x-labels", () => {
     expect(last()).toEqual({ model: "m-2" })
   })
 })
+
+describe("title overrides", () => {
+  it("a titles entry replaces a field's shown title; help and validation are unchanged", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      properties: { top_k: { type: "integer", default: 5, minimum: 1, title: "Top K", description: "How many." } },
+    }
+    render(<SchemaForm schema={schema} value={{ top_k: 0 }} onChange={() => {}} titles={{ top_k: "Candidates, top k" }} />)
+    expect(screen.getByLabelText("Candidates, top k")).toBeTruthy()
+    expect(screen.queryByText("Top K")).toBeNull()
+    expect(screen.getByText("How many.")).toBeTruthy()
+    expect(screen.getByRole("spinbutton").getAttribute("aria-invalid")).toBe("true")
+  })
+})

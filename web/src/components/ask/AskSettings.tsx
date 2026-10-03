@@ -2,11 +2,10 @@ import { useId, type ReactNode } from "react"
 
 import type { GraphNode, Registry } from "@/api/types"
 import type { NodeErrors } from "@/components/pipeline/PipelineColumn"
+import { TransformSelect } from "@/components/pipeline/TransformSelect"
 import { SchemaForm } from "@/components/SchemaForm"
-import { CONTROL } from "@/components/fields/types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { compatibility, optionLabel, type Compat } from "@/state/compat"
 import { askNodes, infoFor, transformsFor, upstreamFor, type PipelineGraph } from "@/state/graph"
 
 /**
@@ -89,7 +88,19 @@ function Segmented<T>({
 }
 
 /** A node's schema form and any message the server sent about it. */
-function NodeForm({ node, registry, errors, onConfig }: { node: GraphNode; registry: Registry; errors?: NodeErrors; onConfig: AskSettingsProps["onConfig"] }) {
+function NodeForm({
+  node,
+  registry,
+  errors,
+  onConfig,
+  titles,
+}: {
+  node: GraphNode
+  registry: Registry
+  errors?: NodeErrors
+  onConfig: AskSettingsProps["onConfig"]
+  titles?: Record<string, string>
+}) {
   const info = infoFor(registry, node)
   return (
     <>
@@ -101,6 +112,7 @@ function NodeForm({ node, registry, errors, onConfig }: { node: GraphNode; regis
           onChange={(c) => onConfig(node.id, c)}
           errors={errors?.fields}
           learn={info.learn}
+          titles={titles}
         />
       ) : null}
       {errors?.message ? <p className="text-xs break-words text-danger">{errors.message}</p> : null}
@@ -110,30 +122,20 @@ function NodeForm({ node, registry, errors, onConfig }: { node: GraphNode; regis
 
 function Retrieval({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
   const id = useId()
-  const transforms = transformsFor(p.registry, "retrieve")
-  const upstream = upstreamFor(p.graph, p.registry, node.id)
-  const compat: Record<string, Compat> = Object.fromEntries(transforms.map((t) => [t.name, compatibility(t, upstream)]))
-  const lock = compat[node.transform] ?? { kind: "ok" }
   const gloss = RETRIEVAL_GLOSS[node.transform] ?? infoFor(p.registry, node)?.summary
   return (
     <Block title="Retrieval" stage="retrieve">
-      <label htmlFor={`${id}-strategy`} className="text-sm font-medium">
-        Strategy
-      </label>
-      <select id={`${id}-strategy`} className={CONTROL} value={node.transform} onChange={(e) => p.onTransform(node.id, e.target.value)}>
-        {transforms.map((t) => (
-          <option key={t.name} value={t.name} disabled={compat[t.name]?.kind === "hard"}>
-            {optionLabel(RETRIEVAL_LABEL[t.name] ?? t.name, compat[t.name] ?? { kind: "ok" })}
-          </option>
-        ))}
-      </select>
+      <TransformSelect
+        id={`${id}-strategy`}
+        label="Strategy"
+        transforms={transformsFor(p.registry, "retrieve")}
+        value={node.transform}
+        upstream={upstreamFor(p.graph, p.registry, node.id)}
+        labelFor={(name) => RETRIEVAL_LABEL[name] ?? name}
+        onChange={(t) => p.onTransform(node.id, t)}
+      />
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}
-      {lock.kind !== "ok" ? (
-        <p role={lock.kind === "hard" ? "alert" : "status"} className={cn("text-xs leading-[1.5] break-words", lock.kind === "hard" ? "text-danger" : "text-fg-muted")}>
-          {lock.reason}
-        </p>
-      ) : null}
-      <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} />
+      <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} titles={{ top_k: "Candidates, top k" }} />
     </Block>
   )
 }
@@ -150,7 +152,7 @@ function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
       <Segmented label="Reranker" choices={choices} value={node?.transform ?? null} onChange={p.onReranker} />
       {p.hasKey === false && p.registry.rerank?.llm_rerank ? <p className={GLOSS}>Add a key to use the LLM reranker</p> : null}
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}
-      {node ? <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} /> : null}
+      {node ? <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} titles={{ top_k: "Keep, top k" }} /> : null}
     </Block>
   )
 }
@@ -160,7 +162,7 @@ function Answer({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
   if (p.registry.use_case?.chat) choices.push({ value: "chat", label: "Chat with a model", disabled: p.hasKey === false })
   return (
     <Block title="Answer" stage="use_case">
-      <Segmented label="Answer" choices={choices} value={node.transform} onChange={(v) => p.onUseCase(v as "search" | "chat")} />
+      <Segmented label="Answer with" choices={choices} value={node.transform} onChange={(v) => p.onUseCase(v as "search" | "chat")} />
       {p.hasKey === false && p.registry.use_case?.chat ? <p className={GLOSS}>Add a key to turn Chat on</p> : null}
       <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} />
     </Block>

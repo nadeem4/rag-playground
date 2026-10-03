@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import liveRegistry from "@/api/fixtures/registry.json"
+import { resetSampleQuestionsCache } from "@/api/samples"
 import { addReranker, chatSampleGraph, initialGraph, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
@@ -23,6 +24,7 @@ let posts: { path: string; body: unknown }[] = []
 
 beforeEach(() => {
   posts = []
+  resetSampleQuestionsCache()
   window.localStorage.clear()
   resetPipelinesForTests()
   window.history.replaceState(null, "", "/build")

@@ -44,7 +44,6 @@ describe("the Retrieval block", () => {
     expect(select.value).toBe("hybrid_rrf")
     expect(b.getByText("Meaning search and keyword search, fused by reciprocal rank.")).toBeTruthy()
     expect(b.getByText("retrieve")).toBeTruthy()
-    fireEvent.change(select, { target: { value: "dense" } })
   })
 
   it("picking a strategy calls onTransform on the retrieve node", () => {
@@ -55,7 +54,7 @@ describe("the Retrieval block", () => {
 
   it("its settings are the retrieve node's schema form", () => {
     const p = setup()
-    const topK = block("Retrieval").getByLabelText("Top K") as HTMLInputElement
+    const topK = block("Retrieval").getByLabelText("Candidates, top k") as HTMLInputElement
     expect(topK.value).toBe("20")
     fireEvent.change(topK, { target: { value: "8" } })
     expect(p.onConfig).toHaveBeenCalledWith("retrieve", expect.objectContaining({ top_k: 8 }))
@@ -77,6 +76,7 @@ describe("the Retrieval block", () => {
     const b = block("Retrieval")
     const option = b.getByRole("option", { name: "BM25 · locked" }) as HTMLOptionElement
     expect(option.disabled).toBe(true)
+    expect(b.getByTestId("lock-reason").getAttribute("role")).toBe("alert")
     expect(b.getByRole("alert").textContent).toBe("Needs text search from the index step. lancedb does not provide it, so this cannot run.")
   })
 })
@@ -97,7 +97,7 @@ describe("the Rerank block", () => {
     expect(b.getByText(LIVE.rerank!.cross_encoder.summary!)).toBeTruthy()
     expect(b.getByText("rerank")).toBeTruthy()
     const id = askNodes(g).rerank!.id
-    fireEvent.change(b.getByLabelText("Top K"), { target: { value: "3" } })
+    fireEvent.change(b.getByLabelText("Keep, top k"), { target: { value: "3" } })
     expect(p.onConfig).toHaveBeenCalledWith(id, expect.objectContaining({ top_k: 3 }))
   })
 
@@ -120,15 +120,15 @@ describe("the Rerank block", () => {
 describe("the Answer block", () => {
   it("switches between Search and Chat", () => {
     const p = setup()
-    expect(segment("Answer", "Search").getAttribute("aria-pressed")).toBe("true")
-    fireEvent.click(segment("Answer", "Chat with a model"))
+    expect(segment("Answer with", "Search").getAttribute("aria-pressed")).toBe("true")
+    fireEvent.click(segment("Answer with", "Chat with a model"))
     expect(p.onUseCase).toHaveBeenCalledWith("chat")
     expect(block("Answer").getByText("use_case")).toBeTruthy()
   })
 
   it("Chat is disabled without a key, with the reason", () => {
     setup({ hasKey: false })
-    expect(segment("Answer", "Chat with a model").disabled).toBe(true)
+    expect(segment("Answer with", "Chat with a model").disabled).toBe(true)
     expect(screen.getByText("Add a key to turn Chat on")).toBeTruthy()
   })
 

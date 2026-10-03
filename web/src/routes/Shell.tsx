@@ -23,6 +23,7 @@ import {
   addCleaner,
   ancestors,
   ASK_STAGES,
+  askNodes,
   columnOrder,
   INDEX_STAGES,
   indexNode,
@@ -411,8 +412,8 @@ function Build({ registry }: { registry: Registry }) {
             keyNotice={keyNotice && !busy && !run.error && !failedNode ? keyNotice : null}
             onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
             onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
-            onReranker={(t) => edit(setReranker(graph, registry, t))}
-            onUseCase={(t) => edit(setUseCase(graph, registry, t))}
+            onReranker={(t) => edit(setReranker(graph, registry, t), ...ids(askNodes(graph).rerank))}
+            onUseCase={(t) => edit(setUseCase(graph, registry, t), ...ids(askNodes(graph).useCase))}
             onAsk={() => void start(undefined, false, false)}
           />
         }
@@ -420,6 +421,9 @@ function Build({ registry }: { registry: Registry }) {
     </main>
   )
 }
+
+/** The id of a node that may be absent, as a list to spread into `edit`. */
+const ids = (n: GraphNode | undefined) => (n ? [n.id] : [])
 
 /** Stages whose output is placed on the upstream chunk set's document. */
 const RETRIEVAL = new Set(["retrieve", "rerank", "use_case"])
@@ -455,7 +459,7 @@ function InspectorPanel({
       </section>
     )
   }
-  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} selected={selected} />
+  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} />
 }
 
 function CardInspector({
@@ -463,42 +467,39 @@ function CardInspector({
   registry,
   results,
   stale,
-  selected,
+  node,
 }: {
   graph: PipelineGraph
   registry: Registry
   results: Record<string, NodeState>
   stale: Set<string>
-  selected: string | null
+  node: GraphNode
 }) {
-  const node = graph.nodes.find((n) => n.id === selected)
-  const result = node ? results[node.id] : undefined
+  const result = results[node.id]
   const usable = result && (result.status === "done" || result.status === "cached") && !stale.has(result.id)
   const artifactId = usable ? result.artifact_id : undefined
-  const type = node ? infoFor(registry, node)?.output : undefined
+  const type = infoFor(registry, node)?.output
 
   // A cleaned document is drawn against the document before any cleaning;
   // retrieval is drawn on the chunk set its index was built from.
-  const relatedStage = node?.stage === "clean" ? "parse" : node && RETRIEVAL.has(node.stage) ? "chunk" : undefined
-  const related = node && relatedStage ? upstreamOfStage(graph, node.id, relatedStage) : undefined
+  const relatedStage = node.stage === "clean" ? "parse" : RETRIEVAL.has(node.stage) ? "chunk" : undefined
+  const related = relatedStage ? upstreamOfStage(graph, node.id, relatedStage) : undefined
   const relatedResult = related ? results[related.id] : undefined
   const relatedId = artifactId && relatedResult && !stale.has(related!.id) ? relatedResult.artifact_id : undefined
 
   // The parsed document the chunks were cut from (the last cleaner, else the
   // parser): "Show in PDF" reads its elements' pages and bboxes.
-  const docNode = node && (node.stage === "chunk" || RETRIEVAL.has(node.stage)) ? upstreamOfStage(graph, node.id, ["clean", "parse"]) : undefined
+  const docNode = node.stage === "chunk" || RETRIEVAL.has(node.stage) ? upstreamOfStage(graph, node.id, ["clean", "parse"]) : undefined
   const docResult = docNode ? results[docNode.id] : undefined
   const docId = artifactId && docResult && !stale.has(docNode!.id) ? docResult.artifact_id : undefined
 
   const payload = useArtifactPayload(artifactId)
   const before = useArtifactPayload(relatedId)
   const parsed = useArtifactPayload(docId)
-  const verb = node ? titleFor(node) : ""
+  const verb = titleFor(node)
 
   let body: ReactNode
-  if (!node) {
-    body = null
-  } else if (!result) {
+  if (!result) {
     body = <EmptyState title={`${verb} has not run`}>Run it, or Run all, to see its output here.</EmptyState>
   } else if (stale.has(node.id)) {
     body = <EmptyState title="Output is out of date">This card or one above it changed since it last ran. Run it again to see the new output.</EmptyState>
@@ -542,8 +543,8 @@ function CardInspector({
           metadata each take a row, as on Compare and Evaluate. */}
       <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="text-xl font-semibold">{node ? verb : "Inspector"}</h2>
-          {node ? <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span> : null}
+          <h2 className="text-xl font-semibold">{verb}</h2>
+          <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span>
         </div>
         {artifactId ? (
           <div className="flex shrink-0 items-center gap-3 font-mono text-xs text-fg-muted">

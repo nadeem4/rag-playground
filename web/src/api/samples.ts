@@ -54,12 +54,11 @@ function loadQuestions(name: string): Promise<SampleQuestion[]> {
 }
 
 /**
- * The question set of the sample whose file is `sha`. An upload, or a sha no
- * sample has, gets none.
+ * The question set of the sample called `name`. No name (an upload, or a file
+ * no sample has) gets none. The caller finds the sample, so the list is not
+ * fetched twice.
  */
-export function useSampleQuestions(sha: string | undefined): SampleQuestion[] {
-  const { samples } = useSamples()
-  const name = sha ? samples?.find((s) => s.sha === sha)?.name : undefined
+export function useSampleQuestions(name: string | undefined): SampleQuestion[] {
   const [state, setState] = useState<{ name?: string; questions: SampleQuestion[] }>({ questions: [] })
   useEffect(() => {
     if (!name) return

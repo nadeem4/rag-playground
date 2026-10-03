@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { Popover } from "radix-ui"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
@@ -7,6 +8,7 @@ import type { ExplainState } from "@/api/useExplain"
 import { initialGraph } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
+import { ExplainPanel } from "./ExplainPanel"
 import { PipelineColumn, type PipelineColumnProps } from "./PipelineColumn"
 
 class NoopResizeObserver {
@@ -132,6 +134,20 @@ describe("the explanation pop-over", () => {
       expect(a.getAttribute("target")).toBe("_blank")
       expect(a.getAttribute("rel")).toBe("noreferrer")
     }
+  })
+
+  it("has no deep-dive section for a stage with no posts", async () => {
+    // No column card lacks posts now, so the panel is rendered on its own, for a rerank node.
+    render(
+      <Popover.Root open>
+        <Popover.Anchor />
+        <ExplainPanel title="Rerank" stage="rerank" transform="mmr" summary="Summary of mmr." explain={explained("s")} anchor={() => null} />
+      </Popover.Root>,
+    )
+    const dialog = await screen.findByRole("dialog", { name: "About the Rerank step" })
+    expect(within(dialog).getByText("Summary of mmr.")).toBeTruthy()
+    expect(within(dialog).queryByText("Read the deep dive")).toBeNull()
+    expect(within(dialog).queryByRole("link")).toBeNull()
   })
 
   it("Escape closes it and returns focus to the info button", async () => {

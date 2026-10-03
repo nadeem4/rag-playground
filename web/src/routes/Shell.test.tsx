@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import liveRegistry from "@/api/fixtures/registry.json"
-import { chatSampleGraph, initialGraph, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
+import { addReranker, chatSampleGraph, initialGraph, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -111,8 +111,10 @@ describe("Build page", () => {
   })
 })
 
-// moves to the Ask panel in Task 3
-describe.skip("Run all with a chat card and no API key", () => {
+/** The Ask panel, in the right pane while no card is selected. */
+const panel = () => within(screen.getByRole("region", { name: "Ask panel" }))
+
+describe("Ask with a chat card and no API key", () => {
   const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none" }
   let settings: Record<string, string>
   let streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[]
@@ -127,11 +129,15 @@ describe.skip("Run all with a chat card and no API key", () => {
     close() {}
   }
 
+  /** Sends one event over the newest run's stream. */
+  function emit(event: Record<string, unknown>, id: string) {
+    act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data: JSON.stringify(event), lastEventId: id })))
+  }
+
   /** Ends the run over its event stream, as the server does when it finishes. */
   async function endRun() {
     await waitFor(() => expect(streams.length).toBeGreaterThan(0))
-    const data = JSON.stringify({ event: "stream_end", status: "finished", ok: true })
-    act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data, lastEventId: "1" })))
+    emit({ event: "stream_end", status: "finished", ok: true }, "9")
   }
 
   beforeEach(() => {
@@ -147,7 +153,7 @@ describe.skip("Run all with a chat card and no API key", () => {
         if (url === "/api/settings/llm") return new Response(JSON.stringify(settings), { status: 200 })
         if (url === "/api/runs" && init?.method === "POST") {
           posts.push({ path: url, body: JSON.parse(String(init.body)) })
-          return new Response(JSON.stringify({ run_id: "r1" }), { status: 202 })
+          return new Response(JSON.stringify({ run_id: `r${posts.length}` }), { status: 202 })
         }
         return base(url, init)
       }),
@@ -167,54 +173,107 @@ describe.skip("Run all with a chat card and no API key", () => {
     return null
   }
 
-  async function runAll(withKey = false) {
+  /** Builds the index, then presses the panel's Ask. Returns the Ask run's request. */
+  async function ask(withKey = false) {
     render(
       <ApiKeyProvider>
         {withKey ? <WithKey /> : null}
         <Shell />
       </ApiKeyProvider>,
     )
-    const button = await screen.findByRole("button", { name: "Build the index" })
+    const build = await screen.findByRole("button", { name: "Build the index" })
     // Let the settings answer land before pressing.
     await act(async () => {})
-    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(button)
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
     await waitFor(() => expect(posts).toHaveLength(1))
-    return posts[0].body as { targets?: string[] }
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 1 }, "1")
+    await endRun()
+    const button = panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+    fireEvent.click(button)
+    await waitFor(() => expect(posts).toHaveLength(2))
+    return posts[1].body as { targets?: string[] }
   }
 
-  it("keyless Run all stops before Chat", async () => {
-    const body = await runAll()
+  it("a keyless Ask stops before Chat, and the notice shows in the panel (Review Focus 3)", async () => {
+    const body = await ask()
     expect(body.targets).toEqual([chatUpstream()])
+    await waitFor(() => expect(streams).toHaveLength(2))
     await endRun()
-    const notice = await screen.findByTestId("key-notice")
+    const notice = await waitFor(() => panel().getByTestId("key-notice"))
     expect(notice.textContent!.startsWith("Search results are ready. Add a key to get a written answer.")).toBe(true)
     expect(within(notice).getByTestId("key-hint")).toBeTruthy()
   })
 
   it("the key notice waits until the keyless run has finished", async () => {
-    await runAll()
-    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    await ask()
+    await waitFor(() => expect(streams).toHaveLength(2))
     await act(async () => {})
-    expect(screen.getByRole("button", { name: "Running" })).toBeTruthy()
+    expect((panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByTestId("key-notice")).toBeNull()
     await endRun()
-    expect(await screen.findByTestId("key-notice")).toBeTruthy()
+    expect(await waitFor(() => panel().getByTestId("key-notice"))).toBeTruthy()
   })
 
   it("a UI key runs all the way", async () => {
-    const body = await runAll(true)
+    const body = await ask(true)
     expect(body.targets).toBeUndefined()
     expect(screen.queryByTestId("key-notice")).toBeNull()
   })
 
   it("a server .env key runs all the way", async () => {
     settings = { ...NO_SERVER_KEYS, anthropic: "dotenv" }
-    const body = await runAll()
+    const body = await ask()
     expect(body.targets).toBeUndefined()
     expect(screen.queryByTestId("key-notice")).toBeNull()
   })
 })
+
+describe("the Ask panel on Build", () => {
+  const withFile = () => setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename })
+  const reranker = () => within(panel().getByRole("group", { name: "Reranker" }))
+  const pressed = (name: string) => reranker().getByRole("button", { name }).getAttribute("aria-pressed")
+
+  it("a pipeline whose Index has not run asks for the index first, with Ask disabled (Review Focus 5)", async () => {
+    storeGraph(withFile())
+    setup()
+    await waitFor(() => expect(panel().getByTestId("index-status").textContent).toBe("Build the index first."))
+    expect((panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("a share link with a reranker opens with that reranker in the Rerank block (Review Focus 1)", async () => {
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("Reranked", addReranker(withFile(), TEST_REGISTRY))}`)
+    setup()
+    await waitFor(() => expect(pressed("MMR")).toBe("true"))
+    expect(pressed("None")).toBe("false")
+  })
+
+  it("a saved pipeline without a reranker opens with None (Review Focus 1)", async () => {
+    const saved = savePipeline("Plain", withFile())!.saved
+    setCurrentId(saved.id)
+    setup()
+    await waitFor(() => expect(pressed("None")).toBe("true"))
+    expect(pressed("MMR")).toBe("false")
+  })
+
+  it("None and a reranker change the graph", async () => {
+    storeGraph(withFile())
+    setup()
+    await waitFor(() => expect(pressed("None")).toBe("true"))
+    fireEvent.click(reranker().getByRole("button", { name: "MMR" }))
+    await waitFor(() => expect(storedStages()).toContain("rerank"))
+    fireEvent.click(reranker().getByRole("button", { name: "None" }))
+    await waitFor(() => expect(storedStages()).not.toContain("rerank"))
+  })
+})
+
+/** The stages of the stored graph. */
+function storedStages() {
+  const read = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1") ?? "{}") as { nodes?: { stage: string }[] }
+  return (read.nodes ?? []).map((n) => n.stage)
+}
 
 describe("Build the index", () => {
   it("sends the Index node as the only target", async () => {
@@ -497,10 +556,10 @@ describe("picking a sample on the Upload card", () => {
     expect(byId.get("chunk")).toEqual({ ...chunk.config, chunk_size: 321 })
     expect(stored.nodes.map((n) => n.id)).toEqual(g.nodes.map((n) => n.id))
     expect(pick.value).toBe("sample:two-column-report")
+    expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?")
   })
 
-  // moves to the Ask panel in Task 3
-  it.skip("clears a field error on the Ask card", async () => {
+  it("a field error on the question shows in the panel and clears as the question is typed", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
@@ -515,12 +574,10 @@ describe("picking a sample on the Upload card", () => {
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
     fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))
-    await waitFor(() => expect(within(card("query")).getAllByText("Text is required").length).toBeGreaterThan(0))
-    const pick = within(card("source")).getByLabelText("File") as HTMLSelectElement
-    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
-    fireEvent.change(pick, { target: { value: "sample:two-column-report" } })
-    await waitFor(() => expect((within(card("query")).getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?"))
-    expect(within(card("query")).queryByText("Text is required")).toBeNull()
+    await waitFor(() => expect(panel().getAllByText("Text is required").length).toBeGreaterThan(0))
+    fireEvent.change(panel().getByLabelText("Question"), { target: { value: "What is a chunk?" } })
+    await waitFor(() => expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("What is a chunk?"))
+    expect(panel().queryByText("Text is required")).toBeNull()
   })
 })
 

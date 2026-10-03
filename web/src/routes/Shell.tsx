@@ -12,6 +12,7 @@ import { useSamples } from "@/api/samples"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
+import { AskPanel } from "@/components/ask/AskPanel"
 import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import {
   addCleaner,
   ancestors,
+  ASK_STAGES,
   columnOrder,
   INDEX_STAGES,
   indexNode,
@@ -30,7 +32,9 @@ import {
   removeNode,
   sampleGraph,
   setConfig,
+  setReranker,
   setTransform,
+  setUseCase,
   signature,
   storeGraph,
   titleFor,
@@ -174,7 +178,8 @@ function Build({ registry }: { registry: Registry }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount by design
   }, [registry])
 
-  async function start(target: string | undefined, force: boolean) {
+  /** `select` false leaves the right pane as it is: Build the index and Ask keep the Ask panel in view. */
+  async function start(target: string | undefined, force: boolean, select = true) {
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
       setErrors((e) => ({ ...e, [source.id]: { message: "Choose or upload a file first." } }))
@@ -201,7 +206,7 @@ function Build({ registry }: { registry: Registry }) {
       setKeyNotice(notice)
       const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
-      setSelected(target ?? order[order.length - 1]?.id ?? null)
+      if (select) setSelected(target ?? order[order.length - 1]?.id ?? null)
       setRunId(run_id)
     } catch (err) {
       const routed = routeRunError(err, graph)
@@ -292,7 +297,7 @@ function Build({ registry }: { registry: Registry }) {
               size="sm"
               disabled={busy || Boolean(blocker) || firstRun}
               title={blocker ? blockedTitle(blocker) : undefined}
-              onClick={() => void start(indexNode(graph)?.id, false)}
+              onClick={() => void start(indexNode(graph)?.id, false, false)}
             >
               {busy ? "Running" : "Build the index"}
             </Button>
@@ -324,13 +329,6 @@ function Build({ registry }: { registry: Registry }) {
           <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
             {blockedTitle(blocker)}
           </p>
-        ) : null}
-        {keyNotice && !busy && !run.error && !failedNode ? (
-          // A div, not a p: KeyHint is itself a p, and a p cannot hold one.
-          <div role="status" data-testid="key-notice" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
-            <p>{keyNotice}</p>
-            <KeyHint />
-          </div>
         ) : null}
         {columnError || run.error ? (
           <div role="alert" className="flex flex-col gap-1 border-b border-hairline p-3">
@@ -397,8 +395,27 @@ function Build({ registry }: { registry: Registry }) {
         results={results}
         stale={stale}
         selected={selected}
-        failedHint={failedNode ? titleFor(failedNode) : undefined}
+        failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
         intro={intro}
+        ask={
+          <AskPanel
+            graph={graph}
+            registry={registry}
+            results={results}
+            stale={stale}
+            busy={busy}
+            keys={keys}
+            server={server}
+            explanations={explanations}
+            errors={errors}
+            keyNotice={keyNotice && !busy && !run.error && !failedNode ? keyNotice : null}
+            onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
+            onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
+            onReranker={(t) => edit(setReranker(graph, registry, t))}
+            onUseCase={(t) => edit(setUseCase(graph, registry, t))}
+            onAsk={() => void start(undefined, false, false)}
+          />
+        }
       />
     </main>
   )
@@ -415,6 +432,7 @@ function InspectorPanel({
   selected,
   failedHint,
   intro,
+  ask,
 }: {
   graph: PipelineGraph
   registry: Registry
@@ -424,6 +442,34 @@ function InspectorPanel({
   failedHint?: string
   /** What the empty inspector says on a first visit, and after the sample loads. */
   intro?: { title: string; body: string }
+  /** The Ask panel: shown when no card is selected, or when the selection is a step the panel edits. */
+  ask: ReactNode
+}) {
+  const picked = graph.nodes.find((n) => n.id === selected)
+  if (!picked || ASK_STAGES.includes(picked.stage)) {
+    return (
+      <section aria-label="Inspector" className="flex min-h-0 min-w-0 flex-col overflow-y-auto bg-surface">
+        {intro ? <EmptyState title={intro.title}>{intro.body}</EmptyState> : null}
+        {failedHint ? <p className="px-3 pt-3 text-sm text-fg-muted">Select the {failedHint} card to see why it failed.</p> : null}
+        {ask}
+      </section>
+    )
+  }
+  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} selected={selected} />
+}
+
+function CardInspector({
+  graph,
+  registry,
+  results,
+  stale,
+  selected,
+}: {
+  graph: PipelineGraph
+  registry: Registry
+  results: Record<string, NodeState>
+  stale: Set<string>
+  selected: string | null
 }) {
   const node = graph.nodes.find((n) => n.id === selected)
   const result = node ? results[node.id] : undefined
@@ -450,14 +496,8 @@ function InspectorPanel({
   const verb = node ? titleFor(node) : ""
 
   let body: ReactNode
-  if (!node && intro) {
-    body = <EmptyState title={intro.title}>{intro.body}</EmptyState>
-  } else if (!node) {
-    body = (
-      <EmptyState title="Nothing selected">
-        {failedHint ? `Select the ${failedHint} card to see why it failed.` : "Select a card in the pipeline to see its output here."}
-      </EmptyState>
-    )
+  if (!node) {
+    body = null
   } else if (!result) {
     body = <EmptyState title={`${verb} has not run`}>Run it, or Run all, to see its output here.</EmptyState>
   } else if (stale.has(node.id)) {

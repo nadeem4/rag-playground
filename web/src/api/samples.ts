@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { api } from "./client"
-import type { SampleCard, Source } from "./types"
+import type { SampleCard, SampleQuestion, Source } from "./types"
 
 /**
  * The bundled samples, shared by every place that lists or loads one (F2):
@@ -33,4 +33,44 @@ export function useSamples(): SamplesState {
 /** `POST /api/sources/sample`: load one bundled sample by name. */
 export function loadSample(name: string): Promise<Source> {
   return api.sampleSource(name)
+}
+
+/** Question sets by sample name, fetched once per session. A failed fetch is not kept. */
+const questionCache = new Map<string, Promise<SampleQuestion[]>>()
+
+/** Tests only: forget the cached question sets. */
+export function resetSampleQuestionsCache(): void {
+  questionCache.clear()
+}
+
+function loadQuestions(name: string): Promise<SampleQuestion[]> {
+  let p = questionCache.get(name)
+  if (!p) {
+    p = api.sampleQuestions(name)
+    p.catch(() => questionCache.delete(name))
+    questionCache.set(name, p)
+  }
+  return p
+}
+
+/**
+ * The question set of the sample whose file is `sha`. An upload, or a sha no
+ * sample has, gets none.
+ */
+export function useSampleQuestions(sha: string | undefined): SampleQuestion[] {
+  const { samples } = useSamples()
+  const name = sha ? samples?.find((s) => s.sha === sha)?.name : undefined
+  const [state, setState] = useState<{ name?: string; questions: SampleQuestion[] }>({ questions: [] })
+  useEffect(() => {
+    if (!name) return
+    let live = true
+    loadQuestions(name).then(
+      (questions) => live && setState({ name, questions: Array.isArray(questions) ? questions : [] }),
+      () => live && setState({ name, questions: [] }),
+    )
+    return () => {
+      live = false
+    }
+  }, [name])
+  return name && state.name === name ? state.questions : []
 }

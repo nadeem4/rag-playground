@@ -62,13 +62,17 @@ describe("the 44 px hit box on a coarse pointer", () => {
     expect(sized[0].filter((s) => s.includes("checkbox") && !s.includes(":not("))).toEqual([])
   })
 
-  it("covers the small rank marks with an overlay 10 px past every edge, so their drawn size stays", async () => {
+  it("covers each rank band with an overlay 24 px wide and at least 44 px tall, so its drawn size stays", async () => {
     const all = rules(coarseBlocks(await buildCss()))
     const overlay = all.find(([sel]) => sel.some((s) => s.includes(".ri-mark") && s.endsWith("::after")))
     expect(overlay).toBeTruthy()
-    expect(overlay![1]).toMatch(/position:\s*absolute/)
-    expect(overlay![1]).toMatch(/inset:\s*-10px/)
     expect(overlay![1]).toMatch(/content:\s*""/)
+    expect(overlay![1]).toMatch(/position:\s*absolute/)
+    // 10 px past each side of a 4 px band: 24 px, one lane pitch on a touch screen (inspectors.css), so neighbours do not overlap.
+    expect(overlay![1]).toMatch(/inset-inline:\s*-10px/)
+    // 10 px past the top and the bottom, or more on a short band: never under 44 px tall.
+    expect(overlay![1]).toMatch(/top:\s*min\(-10px,\s*calc\(50% - 22px\)\)/)
+    expect(overlay![1]).toMatch(/bottom:\s*min\(-10px,\s*calc\(50% - 22px\)\)/)
   })
 
   it("keeps the 4 px rank bands out of the 44 px minimum width, so the gutter keeps its lanes", async () => {

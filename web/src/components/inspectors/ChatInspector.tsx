@@ -122,7 +122,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
             {note}
           </p>
         ) : null}
-        <p data-answer="" className="max-w-[82ch] text-base leading-[1.65] whitespace-pre-wrap text-fg">
+        <p data-answer="" className="max-w-[82ch] font-sans text-base whitespace-pre-wrap text-fg">
           {payload.answer.map((seg, k) => {
             const grounding = claimKind(seg)
             if (grounding) {

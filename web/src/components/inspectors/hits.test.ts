@@ -17,6 +17,8 @@ import {
   rowsFromResult,
   rowsFromSearch,
   scaleMax,
+  scaleName,
+  scoreKey,
   topKAgreement,
   type SearchOutput,
 } from "./hits"
@@ -69,6 +71,32 @@ describe("score bars", () => {
     expect(fmtScore(0.032786)).toBe("0.03279")
     expect(fmtScore(5.131432)).toBe("5.131")
     expect(fmtScore(0)).toBe("0.000")
+  })
+})
+
+describe("scale names", () => {
+  it("names each score's scale the way the panel says it", () => {
+    expect(scaleName("score")).toBe("RRF")
+    expect(scaleName("rrf")).toBe("RRF")
+    expect(scaleName("hybrid_rrf")).toBe("RRF")
+    expect(scaleName("dense")).toBe("Dense")
+    expect(scaleName("bm25")).toBe("BM25")
+    expect(scaleName("cross_encoder")).toBe("Cross-encoder")
+    expect(scaleName("mmr")).toBe("MMR")
+    expect(scaleName("llm_rerank")).toBe("LLM")
+    expect(scaleName("llm")).toBe("LLM")
+    expect(scaleName("splade")).toBe("splade")
+  })
+
+  it("a list's score is on the retriever's scale, unless a reranker rescored it", () => {
+    expect(scoreKey(rowsFromResult(hybrid))).toBe("hybrid_rrf")
+    // MMR reorders and keeps the retriever's score.
+    expect(scoreKey(rowsFromResult(mmr))).toBe("hybrid_rrf")
+    // The cross-encoder writes its own score and keeps the old one as prior_score.
+    const rescored = { ...mmr, hits: mmr.hits.map((h, i) => ({ ...h, prior_score: h.score, score: 8.21 - i })) }
+    expect(scoreKey(rowsFromResult(rescored))).toBe("cross_encoder")
+    expect(scoreKey(rowsFromSearch({ ...search, payload: { ...search.payload, results: search.payload.results!.map((r) => ({ ...r, prior_score: 1, score: 2 })) } }))).toBe("cross_encoder")
+    expect(scoreKey([])).toBe("score")
   })
 })
 

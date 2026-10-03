@@ -13,6 +13,8 @@ export interface HitRowData {
   rank: number
   score: number
   prior_rank: number | null
+  /** The score before a reranker ran: a reranker that rescored leaves it different from `score`. */
+  prior_score: number | null
   retriever: string
   component_scores: Record<string, number>
   chunk_id: string
@@ -35,6 +37,7 @@ export function rowsFromResult(r: RetrievalResult): HitRowData[] {
     rank: h.rank,
     score: h.score,
     prior_rank: h.prior_rank,
+    prior_score: h.prior_score ?? null,
     retriever: h.retriever,
     component_scores: h.component_scores ?? {},
     chunk_id: h.chunk.id,
@@ -52,6 +55,7 @@ export interface SearchRow {
   score: number
   component_scores?: Record<string, number>
   prior_rank?: number | null
+  prior_score?: number | null
   retriever?: string
   snippet?: string
   chunk_id: string
@@ -68,6 +72,7 @@ export function rowsFromSearch(out: SearchOutput): HitRowData[] {
     rank: r.rank,
     score: r.score,
     prior_rank: r.prior_rank ?? null,
+    prior_score: r.prior_score ?? null,
     retriever: r.retriever ?? "",
     component_scores: r.component_scores ?? {},
     chunk_id: r.chunk_id,
@@ -94,6 +99,35 @@ const KNOWN = ["dense", "bm25"]
 export function componentKeys(rows: readonly HitRowData[]): string[] {
   const keys = new Set(rows.flatMap((r) => Object.keys(r.component_scores)))
   return [...KNOWN.filter((k) => keys.has(k)), ...[...keys].filter((k) => !KNOWN.includes(k)).sort()]
+}
+
+/** Each score's scale as the panel names it: `RRF 0.0328`, `Dense 0.254`, `Cross-encoder 8.21`. */
+const SCALES: Record<string, string> = {
+  score: "RRF",
+  rrf: "RRF",
+  hybrid_rrf: "RRF",
+  dense: "Dense",
+  bm25: "BM25",
+  cross_encoder: "Cross-encoder",
+  mmr: "MMR",
+  llm_rerank: "LLM",
+  llm: "LLM",
+}
+
+/** The scale's display name; an unknown key is shown as it is. */
+export const scaleName = (key: string): string => SCALES[key] ?? key
+
+/**
+ * Which scale a list's `score` is on. A reranker stamps `prior_score` on every
+ * hit; only the cross-encoder writes a new score (MMR and the LLM reranker keep
+ * the retriever's), so a score that differs from its prior one is the
+ * cross-encoder's. Otherwise it is the retriever's own: `hybrid_rrf`, `dense`
+ * or `bm25`. With no single retriever named, `score`.
+ */
+export function scoreKey(rows: readonly HitRowData[]): string {
+  if (rows.some((r) => r.prior_score !== null && r.prior_score !== r.score)) return "cross_encoder"
+  const retrievers = new Set(rows.map((r) => r.retriever).filter(Boolean))
+  return retrievers.size === 1 ? [...retrievers][0] : "score"
 }
 
 /**

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { compile } from "tailwindcss"
 import { afterEach, describe, expect, it } from "vitest"
 
 import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
@@ -14,7 +15,8 @@ import type { Chunk, ChunkSet, CleanReportEntry, ParsedDoc, RetrievalResult } fr
 
 import css from "./inspectors.css?raw"
 import { IndexInspector } from "./IndexInspector"
-import { RetrievalResultInspector } from "./RetrievalResultInspector"
+import { rowsFromResult } from "./hits"
+import { RetrievalResultInspector, RetrievalView } from "./RetrievalResultInspector"
 
 import { ChunkSetInspector } from "./ChunkSetInspector"
 import { CleanReportInspector } from "./CleanReportInspector"
@@ -322,9 +324,9 @@ describe("RetrievalResultInspector", () => {
     expect(moves).toEqual(["", "was 5", "was 2", "was 3", "was 6"])
     // The count lives in the run note, once: no header chip repeats it.
     expect(screen.queryByTestId("fact-moved")).toBeNull()
-    // A hit that rose is set in weight, not in a colour.
+    // A hit that rose is set in weight, not in a colour: 500, the heaviest mono weight loaded.
     const rose = container.querySelectorAll<HTMLElement>("[data-testid=movement]")[1]
-    expect(rose.className).toContain("font-semibold")
+    expect(rose.className).toContain("font-medium")
   })
 
   it("keeps the piece hash in the row's tooltip, not inline", () => {
@@ -345,15 +347,107 @@ describe("RetrievalResultInspector", () => {
     expect(container.querySelector<HTMLElement>('[data-hit-row="1"]')!.textContent).toContain("no meaning match")
   })
 
-  it("fits a narrow list: each score names its search, a miss stays on one line, and the stylesheet wraps the row", () => {
+  it("fits a narrow list: each score names its scale, a miss stays on one line, and the stylesheet wraps the row", () => {
     const { container } = render(<RetrievalResultInspector result={hybrid} />)
     const sixth = container.querySelector<HTMLElement>('[data-hit-row="6"]')!
-    expect([...sixth.querySelectorAll(".ri-key")].map((k) => k.textContent)).toEqual(["dense", "bm25"])
-    const miss = [...sixth.querySelectorAll("span")].find((el) => el.textContent === "bm25no keyword match")!
+    expect([...sixth.querySelectorAll(".ri-score-name")].map((k) => k.textContent)).toEqual(["RRF", "Dense", "BM25"])
+    const miss = [...sixth.querySelectorAll("span")].find((el) => el.textContent === "no keyword match")!
     expect(miss.className).toContain("whitespace-nowrap")
     expect(container.querySelector(".ri-head")).toBeTruthy()
-    // Below the full row's width the grid becomes a wrapping line and the header hides.
-    expect(css).toMatch(/@container \(max-width: 439px\)[\s\S]*\.ri-grid \{\s*display: flex;\s*flex-wrap: wrap;[\s\S]*\.ri-head \{\s*display: none;/)
+    // Below the full row's width the scores become a wrapping line under the passage and the header hides.
+    expect(css).toMatch(/@container \(max-width: 439px\)[\s\S]*\.ri-head \{\s*display: none;[\s\S]*\.ri-scores \{[^}]*display: flex;\s*flex-wrap: wrap;/)
+  })
+
+  it("names every score's scale beside its number, in mono: RRF, Dense, BM25", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const first = container.querySelector<HTMLElement>('[data-hit-row="1"] .ri-scores')!
+    expect(first.className).toContain("font-mono")
+    const lines = [...first.querySelectorAll<HTMLElement>(".ri-score")].map((l) => l.textContent)
+    expect(lines).toEqual([`RRF${"0.03279"}`, expect.stringMatching(/^Dense0\.\d{3,4}$/), expect.stringMatching(/^BM25\d\.\d{3}$/)])
+    // A reranker that rescored names its own scale.
+    cleanup()
+    const rescored = { ...mmr, hits: mmr.hits.map((h, i) => ({ ...h, prior_score: h.score, score: 8.21 - i })) }
+    const { container: c2 } = render(<RetrievalResultInspector result={rescored} />)
+    expect(c2.querySelector('[data-hit-row="1"] .ri-score')!.textContent).toBe("Cross-encoder8.210")
+  })
+
+  it("sets the rank large and the passage in the reading face", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} />)
+    const first = container.querySelector<HTMLElement>('[data-hit-row="1"]')!
+    const rank = first.querySelector<HTMLElement>("[data-testid=rank]")!
+    expect(rank.textContent).toBe("1")
+    expect(rank.className).toMatch(/\btext-lg\b/)
+    expect(rank.className).toContain("font-semibold")
+    const passage = first.querySelector<HTMLElement>(".ri-snippet")!
+    expect(passage.className).toContain("font-sans")
+    expect(passage.className).toMatch(/\btext-base\b/)
+    // Sentence case column headers.
+    expect([...container.querySelectorAll(".ri-head .meta")].map((h) => h.textContent)).toEqual(["Rank", "Score"])
+  })
+
+  it("shows Show in PDF as a quiet text button on the where line", () => {
+    const { container } = render(<RetrievalResultInspector result={hybrid} doc={parsed} />)
+    const buttons = screen.getAllByRole("button", { name: "Show in PDF" })
+    expect(buttons.length).toBe(hybrid.hits.length)
+    const first = container.querySelector<HTMLElement>('[data-hit-row="1"]')!
+    const button = within(first).getByRole("button", { name: "Show in PDF" })
+    expect(first.querySelector("[data-testid=where]")!.contains(button)).toBe(true)
+    expect(button.className).toContain("underline")
+    expect(button.className).not.toMatch(/\bborder\b/)
+    expect(button.className).not.toContain("bg-surface")
+  })
+
+  it("marks only the rows that fell out of the keep list, Not kept, with no rule and no kept tag", () => {
+    const rows = rowsFromResult(hybrid)
+    const kept = new Set(rows.slice(0, 4).map((r) => r.chunk_id))
+    const { container } = render(<RetrievalView rows={rows} kept={kept} facts={null} showDetail={false} />)
+    const row = (rank: number) => container.querySelector<HTMLElement>(`[data-hit-row="${rank}"]`)!
+    for (const rank of [1, 2, 3, 4]) {
+      expect(row(rank).textContent).not.toMatch(/kept/i)
+    }
+    for (const rank of [5, 6]) {
+      expect(within(row(rank)).getByText("Not kept")).toBeTruthy()
+    }
+    expect(container.querySelector("[data-kept]")).toBeNull()
+    expect(css).not.toContain("[data-kept]")
+    cleanup()
+    // Without a keep list nothing is marked.
+    const { container: c2 } = render(<RetrievalView rows={rows} facts={null} showDetail={false} />)
+    expect(c2.textContent).not.toContain("Not kept")
+  })
+
+  it("new rows fade in and rise, staggered over the first five, and only when asked", () => {
+    const rows = rowsFromResult(hybrid)
+    const { container } = render(<RetrievalView rows={rows} facts={null} showDetail={false} enter />)
+    const all = [...container.querySelectorAll<HTMLElement>("[data-hit-row]")]
+    expect(all.every((r) => r.hasAttribute("data-enter"))).toBe(true)
+    expect(all.map((r) => r.style.getPropertyValue("--i"))).toEqual(["0", "1", "2", "3", "4", "4"])
+    expect(all.map((r) => r.dataset.flipKey)).toEqual(rows.map((r) => r.chunk_id))
+    cleanup()
+    const { container: c2 } = render(<RetrievalView rows={rows} facts={null} showDetail={false} />)
+    expect(c2.querySelector("[data-enter]")).toBeNull()
+  })
+
+  it("the enter motion is in the stylesheet: rise 6px over --dur-mid, 30 ms apart, and an opacity change only under reduced motion", () => {
+    const rule = /\.ri-row\[data-enter\] \{([^}]*)\}/.exec(css)![1]
+    expect(rule).toMatch(/animation:\s*ri-enter var\(--dur-mid\) var\(--ease-in\) backwards/)
+    expect(rule).toMatch(/animation-delay:\s*calc\(var\(--i, 0\) \* 30ms\)/)
+    expect(css).toMatch(/@keyframes ri-enter \{\s*from \{\s*opacity: 0;\s*transform: translateY\(6px\);\s*\}/)
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{\s*\.ri-row\[data-enter\] \{([^}]*)\}/.exec(css)![1]
+    expect(reduced).toMatch(/animation:\s*ri-fade var\(--dur-fast\)/)
+    expect(reduced).toMatch(/animation-delay:\s*0ms/)
+    expect(/@keyframes ri-fade \{([^}]*\})/.exec(css)![1]).not.toContain("transform")
+  })
+
+  it("the enter motion and its reduced-motion override survive compilation", async () => {
+    const compiled = (await compile(css)).build([])
+    expect(compiled).toMatch(/\.ri-row\[data-enter\] \{\s*animation: ri-enter var\(--dur-mid\) var\(--ease-in\) backwards;/)
+    expect(compiled).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.ri-row\[data-enter\] \{\s*animation: ri-fade var\(--dur-fast\) linear backwards;/)
+  })
+
+  it("the rank bands sit a full hit box apart on a touch screen", () => {
+    expect(css).toMatch(/\.ri \{[^}]*--lane: 6px;/)
+    expect(css).toMatch(/@media \(pointer: coarse\) \{\s*\.ri \{\s*--lane: 24px;/)
   })
 
   it("shows the section in a hit's where line only when its chunk has one", () => {
@@ -433,5 +527,31 @@ describe("IndexInspector", () => {
     expect(screen.getByText("No index yet")).toBeTruthy()
     rerender(<IndexInspector status={{ kind: "loading" }} />)
     expect(screen.getByRole("status")).toBeTruthy()
+  })
+})
+
+describe("long text in the reading face", () => {
+  const reads = (el: HTMLElement) => {
+    expect(el.className).toContain("font-sans")
+    expect(el.className).toMatch(/\btext-base\b/)
+    expect(el.className).not.toContain("font-mono")
+    expect(el.className).not.toContain("leading-[1.65]")
+  }
+
+  it("the chunk text, the hit document and the parsed blocks are Atkinson at the reading size", () => {
+    const { container, unmount } = render(<ChunkSetInspector chunkSet={recursive} />)
+    reads(container.querySelector<HTMLElement>("[data-reading]")!)
+    unmount()
+    const hits = render(<RetrievalResultInspector result={mmr} chunkSet={recursive} />)
+    reads(hits.container.querySelector<HTMLElement>("[data-reading]")!)
+    hits.unmount()
+    const doc = render(<ParsedDocInspector doc={parsed} />)
+    reads(doc.container.querySelector<HTMLElement>("[data-element] p")!)
+  })
+
+  it("the painted chunk band is measured for the reading face: line height 1.6, content area 1.3em", () => {
+    expect(css).toMatch(/--ci-leading: calc\(\(1\.6em - 1\.3em\) \/ 2 \+ 0\.5px\)/)
+    expect(css).not.toMatch(/Martian/)
+    expect(css).not.toMatch(/font-size:\s*\d+px/)
   })
 })

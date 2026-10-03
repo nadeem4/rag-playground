@@ -10,9 +10,12 @@ import type { Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry, RetrievalResult } from "@/api/types"
+import { play } from "@/lib/flip"
 import { sampleGraph, setReranker, setUseCase, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
+
+vi.mock("@/lib/flip", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/flip")>()), play: vi.fn() }))
 
 const LIVE = liveRegistry as unknown as Registry
 const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
@@ -31,6 +34,7 @@ function reranked(): RetrievalResult {
 let payloads: Record<string, unknown>
 
 beforeEach(() => {
+  vi.mocked(play).mockClear()
   resetSampleQuestionsCache()
   payloads = {
     idx1: { doc_count: 6 },
@@ -108,10 +112,11 @@ describe("the comparison, with a reranker", () => {
     // The rank 1 hit came from rank 6.
     const top = document.querySelector('[data-column="reranked"] [data-hit-row="1"]') as HTMLElement
     expect(within(top).getByTestId("badge").textContent).toBe("up from #6")
-    // The left column marks the five pieces the reranker kept; the fifth search hit was dropped.
+    // The left column marks only the piece the reranker dropped: the fifth search hit.
     const left = document.querySelector('[data-column="search"]') as HTMLElement
-    expect(left.querySelectorAll("[data-kept]")).toHaveLength(5)
-    expect(left.querySelector('[data-hit-row="5"]')!.hasAttribute("data-kept")).toBe(false)
+    expect(within(left).getAllByText("Not kept")).toHaveLength(1)
+    expect(within(left.querySelector<HTMLElement>('[data-hit-row="5"]')!).getByText("Not kept")).toBeTruthy()
+    expect(left.textContent!.match(/kept/g)).toHaveLength(1)
     expect(await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")).toBeTruthy()
   })
 
@@ -194,6 +199,44 @@ describe("the comparison, with a reranker", () => {
     rerender(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
     expect(await screen.findByRole("button", { name: "Hide comparison" })).toBeTruthy()
     expect(await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })).toBeTruthy()
+  })
+})
+
+describe("the two result motions", () => {
+  const rows = (column: string) => [...document.querySelectorAll<HTMLElement>(`[data-column="${column}"] [data-hit-row]`)]
+
+  it("slides the reranked hits once per rerank result, from the place of their prior rank", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const { rerender } = render(<Panel {...p} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    const [container, before, timing] = vi.mocked(play).mock.calls[0]
+    expect(container).toBe(document.querySelector('[data-column="reranked"]'))
+    // Every kept hit has a place to come from; the one from #6 starts below the five.
+    expect([...before.keys()].sort()).toEqual(rows("reranked").map((r) => r.dataset.flipKey).sort())
+    expect(timing).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
+    // A rerender, a collapse and an expand do not play it again.
+    rerender(<Panel {...p} />)
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
+    await screen.findByRole("heading", { name: "Search order, 6 candidates" })
+    expect(play).toHaveBeenCalledTimes(1)
+    // A new rerank result plays once more.
+    rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(2))
+  })
+
+  it("new lists fade in when they first appear, and not again on collapse or expand", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(rows("search").length).toBe(6))
+    expect(rows("reranked").every((r) => r.hasAttribute("data-enter"))).toBe(true)
+    expect(rows("search").every((r) => r.hasAttribute("data-enter"))).toBe(true)
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
+    await screen.findByRole("heading", { name: "Search order, 6 candidates" })
+    expect(rows("search").some((r) => r.hasAttribute("data-enter"))).toBe(false)
+    expect(rows("reranked").some((r) => r.hasAttribute("data-enter"))).toBe(false)
   })
 })
 

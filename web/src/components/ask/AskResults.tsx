@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
@@ -10,6 +10,7 @@ import { rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } fr
 import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
+import { measure, play, type Rect } from "@/lib/flip"
 import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
@@ -30,8 +31,11 @@ export function fresh(results: Record<string, NodeState>, stale: Set<string>, no
 /** What the Ask steps produced, loaded. */
 export interface AskOutputs {
   retrieve?: RetrievalResult
+  retrieveId?: string
   rerank?: RetrievalResult
   rerankId?: string
+  /** The use case output's artifact id. */
+  outputId?: string
   /** The use case's payload: a Search output or a Chat output. */
   output?: unknown
   chunkSet?: ChunkSet
@@ -52,14 +56,17 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
   const docNode = retrieve && retrieveId ? upstreamOfStage(graph, retrieve.id, ["clean", "parse"]) : undefined
   const r = useArtifactPayload(retrieveId)
   const rr = useArtifactPayload(rerankId)
-  const out = useArtifactPayload(fresh(results, stale, useCase))
+  const outputId = fresh(results, stale, useCase)
+  const out = useArtifactPayload(outputId)
   const chunks = useArtifactPayload(fresh(results, stale, chunkNode))
   const doc = useArtifactPayload(fresh(results, stale, docNode))
   const failedNode = [query, retrieve, rerank, useCase].find((n) => n && results[n.id]?.status === "failed" && !stale.has(n.id))
   return {
     retrieve: asResult(r.data),
+    retrieveId,
     rerank: asResult(rr.data),
     rerankId,
+    outputId,
     output: out.data,
     chunkSet: chunks.data as ChunkSet | undefined,
     doc: doc.data as ParsedDoc | undefined,
@@ -94,24 +101,90 @@ export interface AskResultsProps {
 
 export const STALE_LINE = "The settings changed since the last Ask. Press Ask to see the new results."
 
+/**
+ * Where each reranked hit stood before the rerank, as a place in the reranked
+ * list itself: the hit that was #3 starts where row 3 is now. A hit from below
+ * the kept rows starts just under the last one. The rows mount fresh with the
+ * result (the old list is gone while Ask runs), so the slots of the new list
+ * are the only "before" there is.
+ */
+export function priorPlaces(now: ReadonlyMap<string, Rect>, rows: readonly HitRowData[]): Map<string, Rect> {
+  const slots = rows.map((r) => now.get(r.chunk_id))
+  const last = slots[slots.length - 1]
+  const out = new Map<string, Rect>()
+  for (const r of rows) {
+    const p = r.prior_rank
+    if (p === null || p < 1) continue
+    const slot = p <= slots.length ? slots[p - 1] : last && { left: last.left, top: last.top + (last.height ?? 0) }
+    if (slot) out.set(r.chunk_id, slot)
+  }
+  return out
+}
+
+/** Motion 4's timing from the tokens: `--dur-slow` on `--ease-in`. */
+function slideTiming(): { duration: number; easing: string } {
+  const css = getComputedStyle(document.documentElement)
+  return {
+    duration: parseFloat(css.getPropertyValue("--dur-slow")) || 320,
+    easing: css.getPropertyValue("--ease-in").trim() || "cubic-bezier(0.2, 0, 0, 1)",
+  }
+}
+
 export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false }: AskResultsProps) {
   const { rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
+
+  // Motion 3: a list fades in the first time it appears for its artifact id,
+  // never again when Hide and Show comparison remount it.
+  const seen = useRef(new Set<string>())
+  const shown: string[] = []
+  const enter = (id: string | undefined) => {
+    if (id) shown.push(id)
+    return id !== undefined && !seen.current.has(id)
+  }
+  useEffect(() => {
+    for (const id of shown) seen.current.add(id)
+  })
+
+  // Motion 4: once per rerank result, the reranked hits slide from the place
+  // of their prior rank. Never on a rerender, a collapse or an expand.
+  const flipRef = useRef<HTMLDivElement>(null)
+  const played = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    const el = flipRef.current
+    const id = o.rerankId
+    if (!el || !id || !o.rerank || played.current === id) return
+    played.current = id
+    play(el, priorPlaces(measure(el, "[data-flip-key]"), rowsFromResult(o.rerank)), slideTiming())
+  })
+
   let lists: ReactNode = null
   if (rerank && o.rerank && o.retrieve) {
     // Hidden for one rerank result only: a new result (a new run, another reranker) opens it again.
     const open = !o.rerankId || comparisonHidden !== o.rerankId
     lists = (
-      <Comparison node={rerank} registry={registry} outputs={o} open={open} onToggle={() => onComparison(open ? (o.rerankId ?? null) : null)} />
+      <Comparison
+        node={rerank}
+        registry={registry}
+        outputs={o}
+        open={open}
+        onToggle={() => onComparison(open ? (o.rerankId ?? null) : null)}
+        enterSearch={enter(o.retrieveId)}
+        enterReranked={enter(o.rerankId)}
+        flipRef={flipRef}
+      />
     )
   } else if (!rerank) {
     // With a reranker whose result is loading, failed or stale, no list: the order shown would not be the reranked one.
     const search = !rerank && isSearch(o.output) ? o.output : undefined
     const rows = search ? rowsFromSearch(search) : o.retrieve ? rowsFromResult(o.retrieve) : null
     const total = search ? search.payload.total_candidates : o.retrieve?.total_candidates
+    const id = search ? o.outputId : o.retrieveId
     if (rows) {
       lists = (
         <RetrievalView
+          key={id}
+          enter={enter(id)}
           rows={rows}
           chunkSet={o.chunkSet}
           doc={o.doc}
@@ -157,12 +230,19 @@ function Comparison({
   outputs: o,
   open,
   onToggle,
+  enterSearch,
+  enterReranked,
+  flipRef,
 }: {
   node: GraphNode
   registry: Registry
   outputs: AskOutputs
   open: boolean
   onToggle: () => void
+  enterSearch: boolean
+  enterReranked: boolean
+  /** The reranked column, where motion 4 plays. */
+  flipRef: RefObject<HTMLDivElement | null>
 }) {
   const before = rowsFromResult(o.retrieve!)
   const after = rowsFromResult(o.rerank!)
@@ -174,8 +254,10 @@ function Comparison({
   )
   const title = <Heading>{`After rerank, ${rerankLabel(node.transform)}, ${after.length} kept`}</Heading>
   const reranked = (
-    <div data-column="reranked" className="flex min-w-0 flex-col gap-2">
+    <div ref={flipRef} data-column="reranked" className="flex min-w-0 flex-col gap-2">
       <RetrievalView
+        key={o.rerankId}
+        enter={enterReranked}
         rows={after}
         chunkSet={o.chunkSet}
         doc={o.doc}
@@ -206,6 +288,8 @@ function Comparison({
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div data-column="search" className="min-w-0">
           <RetrievalView
+            key={o.retrieveId}
+            enter={enterSearch}
             rows={before}
             chunkSet={o.chunkSet}
             doc={o.doc}

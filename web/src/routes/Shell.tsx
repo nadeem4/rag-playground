@@ -13,6 +13,7 @@ import { KeyHint } from "@/components/ApiKeyControl"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { AskPanel } from "@/components/ask/AskPanel"
+import { logEntry, type TranscriptEntry } from "@/components/ask/Transcript"
 import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
@@ -103,6 +104,10 @@ function Build({ registry }: { registry: Registry }) {
   const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
   const [columnError, setColumnError] = useState<string | null>(null)
   const run = useRun(runId)
+  // The last run the Ask button started, and the questions asked in this tab.
+  const [askRunId, setAskRunId] = useState<string | null>(null)
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
+  const onLog = useCallback((entry: TranscriptEntry) => setTranscript((t) => logEntry(t, entry)), [])
   const { keys } = useApiKey()
   // Plan I-15: null until `GET /api/sources` answers, and if it fails.
   const [uploaded, setUploaded] = useState<Source[] | null>(null)
@@ -179,8 +184,11 @@ function Build({ registry }: { registry: Registry }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount by design
   }, [registry])
 
-  /** `select` false leaves the right pane as it is: Build the index and Ask keep the Ask panel in view. */
-  async function start(target: string | undefined, force: boolean, select = true) {
+  /**
+   * `select` false leaves the right pane as it is: Build the index and Ask keep
+   * the Ask panel in view. Resolves to the run id, or undefined when no run started.
+   */
+  async function start(target: string | undefined, force: boolean, select = true): Promise<string | undefined> {
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
       setErrors((e) => ({ ...e, [source.id]: { message: "Choose or upload a file first." } }))
@@ -209,6 +217,7 @@ function Build({ registry }: { registry: Registry }) {
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       if (select) setSelected(target ?? order[order.length - 1]?.id ?? null)
       setRunId(run_id)
+      return run_id
     } catch (err) {
       const routed = routeRunError(err, graph)
       if (routed.kind === "fields") setErrors({ [routed.nodeId]: { fields: routed.errors } })
@@ -257,11 +266,11 @@ function Build({ registry }: { registry: Registry }) {
       : uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
   const missing = Boolean(sourceSha) && known === false
   const intro = firstRun
-    ? { title: "Nothing to show yet", body: "Load a PDF, or try the sample document. Then press Run all, and select any step to see what it did." }
+    ? { title: "Nothing to show yet", body: "Load a PDF, or try the sample document. Then press Build the index, and ask a question in the Ask panel." }
     : sampleLoaded && Object.keys(results).length === 0
       ? {
           title: "Ready to run",
-          body: "The sample is loaded and every step has a sensible default. Press Run all, then select any step to see what it did. The question on the Ask card is already filled in.",
+          body: "The sample is loaded and every step has a sensible default. Press Build the index, then ask a question on the right.",
         }
       : undefined
 
@@ -396,6 +405,7 @@ function Build({ registry }: { registry: Registry }) {
         results={results}
         stale={stale}
         selected={selected}
+        onSelect={setSelected}
         failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
         intro={intro}
         ask={
@@ -410,11 +420,14 @@ function Build({ registry }: { registry: Registry }) {
             explanations={explanations}
             errors={errors}
             keyNotice={keyNotice && !busy && !run.error && !failedNode ? keyNotice : null}
+            askRunId={askRunId !== null && askRunId === runId && !busy ? askRunId : null}
+            transcript={transcript}
+            onLog={onLog}
             onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
             onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
             onReranker={(t) => edit(setReranker(graph, registry, t), ...ids(askNodes(graph).rerank))}
             onUseCase={(t) => edit(setUseCase(graph, registry, t), ...ids(askNodes(graph).useCase))}
-            onAsk={() => void start(undefined, false, false)}
+            onAsk={() => void start(undefined, false, false).then((id) => setAskRunId(id ?? null))}
           />
         }
       />
@@ -434,6 +447,7 @@ function InspectorPanel({
   results,
   stale,
   selected,
+  onSelect,
   failedHint,
   intro,
   ask,
@@ -443,6 +457,7 @@ function InspectorPanel({
   results: Record<string, NodeState>
   stale: Set<string>
   selected: string | null
+  onSelect: (id: string | null) => void
   failedHint?: string
   /** What the empty inspector says on a first visit, and after the sample loads. */
   intro?: { title: string; body: string }
@@ -459,7 +474,7 @@ function InspectorPanel({
       </section>
     )
   }
-  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} />
+  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} onBack={() => onSelect(null)} />
 }
 
 function CardInspector({
@@ -468,12 +483,15 @@ function CardInspector({
   results,
   stale,
   node,
+  onBack,
 }: {
   graph: PipelineGraph
   registry: Registry
   results: Record<string, NodeState>
   stale: Set<string>
   node: GraphNode
+  /** Returns the right pane to the Ask panel. */
+  onBack: () => void
 }) {
   const result = results[node.id]
   const usable = result && (result.status === "done" || result.status === "cached") && !stale.has(result.id)
@@ -500,7 +518,7 @@ function CardInspector({
 
   let body: ReactNode
   if (!result) {
-    body = <EmptyState title={`${verb} has not run`}>Run it, or Run all, to see its output here.</EmptyState>
+    body = <EmptyState title={`${verb} has not run`}>Run it, or Build the index, to see its output here.</EmptyState>
   } else if (stale.has(node.id)) {
     body = <EmptyState title="Output is out of date">This card or one above it changed since it last ran. Run it again to see the new output.</EmptyState>
   } else if (result.status === "running" || result.status === "pending") {
@@ -539,6 +557,11 @@ function CardInspector({
 
   return (
     <section aria-label="Inspector" className="flex min-h-0 min-w-0 flex-col bg-surface">
+      <div className="shrink-0 border-b border-hairline px-3 py-2">
+        <Button variant="outline" size="sm" onClick={onBack}>
+          Back to Ask
+        </Button>
+      </div>
       {/* Wraps rather than squeezing: at phone width the title and the artifact
           metadata each take a row, as on Compare and Evaluate. */}
       <div className="flex min-h-[40px] shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">

@@ -1,0 +1,180 @@
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import liveRegistry from "@/api/fixtures/registry.json"
+import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
+import searchJson from "@/api/fixtures/output.search.json"
+import chatJson from "@/api/fixtures/output.chat.json"
+import type { Keys } from "@/api/apiKey"
+import type { NodeState } from "@/api/runState"
+import { resetSampleQuestionsCache } from "@/api/samples"
+import type { Registry, RetrievalResult } from "@/api/types"
+import { sampleGraph, setReranker, setUseCase, type PipelineGraph } from "@/state/graph"
+
+import { AskPanel, type AskPanelProps } from "./AskPanel"
+
+const LIVE = liveRegistry as unknown as Registry
+const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
+const UPLOAD = { sha: "ab".repeat(32), filename: "report.pdf" }
+const hybrid = hybridJson as unknown as RetrievalResult
+
+/** The hybrid result reranked: the sixth hit first, the fifth dropped. Prior ranks 6, 1, 2, 4, 3. */
+function reranked(): RetrievalResult {
+  const order = [5, 0, 1, 3, 2]
+  return {
+    ...hybrid,
+    hits: order.map((i, k) => ({ ...hybrid.hits[i], rank: k + 1, prior_rank: hybrid.hits[i].rank, prior_score: hybrid.hits[i].score })),
+  }
+}
+
+let payloads: Record<string, unknown>
+
+beforeEach(() => {
+  resetSampleQuestionsCache()
+  payloads = {
+    idx1: { doc_count: 6 },
+    ret1: hybrid,
+    rr1: reranked(),
+    rr2: reranked(),
+    out1: searchJson,
+    chat1: chatJson,
+  }
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+      const payload = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      if (payload && payloads[payload[1]] !== undefined) return ok(payloads[payload[1]])
+      if (url === "/api/artifacts/rr1" || url === "/api/artifacts/rr2") {
+        return ok({ id: "rr1", meta: { note: "Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place." } })
+      }
+      if (url === "/api/samples") return ok([])
+      return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+    }),
+  )
+})
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+const done = (id: string, artifact_id: string): NodeState => ({ id, status: "done", artifact_id })
+
+function props(graph: PipelineGraph, results: Record<string, NodeState>): AskPanelProps {
+  return {
+    graph,
+    registry: LIVE,
+    results: { index: done("index", "idx1"), ...results },
+    stale: new Set(),
+    busy: false,
+    keys: NO_KEYS,
+    server: null,
+    explanations: {},
+    errors: {},
+    keyNotice: null,
+    askRunId: null,
+    transcript: [],
+    onLog: vi.fn(),
+    onConfig: vi.fn(),
+    onTransform: vi.fn(),
+    onReranker: vi.fn(),
+    onUseCase: vi.fn(),
+    onAsk: vi.fn(),
+  }
+}
+
+const withCrossEncoder = () => setReranker(sampleGraph(LIVE, UPLOAD), LIVE, "cross_encoder")
+const RERANKED = { retrieve: done("retrieve", "ret1"), rerank_1: done("rerank_1", "rr1"), use_case: done("use_case", "out1") }
+const badges = () => screen.queryAllByTestId("badge").map((b) => b.textContent)
+
+describe("the comparison, with a reranker", () => {
+  it("shows the search order against the reranked order, with badges from prior_rank", async () => {
+    render(<AskPanel {...props(withCrossEncoder(), RERANKED)} />)
+    expect(await screen.findByRole("heading", { name: "Search order against the reranked order" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Hide comparison" })).toBeTruthy()
+    expect(await screen.findByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
+    expect(screen.getByRole("heading", { name: "After rerank, Cross-encoder, 5 kept" })).toBeTruthy()
+    await waitFor(() => expect(badges()).toEqual(["up from #6", "down from #1", "down from #2", "stayed #4", "down from #3"]))
+    // The rank 1 hit came from rank 6.
+    const top = document.querySelector('[data-column="reranked"] [data-hit-row="1"]') as HTMLElement
+    expect(within(top).getByTestId("badge").textContent).toBe("up from #6")
+    // The left column marks the five pieces the reranker kept; the fifth search hit was dropped.
+    const left = document.querySelector('[data-column="search"]') as HTMLElement
+    expect(left.querySelectorAll("[data-kept]")).toHaveLength(5)
+    expect(left.querySelector('[data-hit-row="5"]')!.hasAttribute("data-kept")).toBe(false)
+    expect(await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")).toBeTruthy()
+  })
+
+  it("collapsing hides the search order and keeps the reranked list with its badges", async () => {
+    render(<AskPanel {...props(withCrossEncoder(), RERANKED)} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
+    expect(screen.queryByRole("heading", { name: "Search order, 6 candidates" })).toBeNull()
+    expect(document.querySelector('[data-column="search"]')).toBeNull()
+    expect(screen.getByRole("button", { name: "Show comparison" })).toBeTruthy()
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(badges()[0]).toBe("up from #6")
+    fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
+    expect(await screen.findByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
+  })
+
+  it("reopens when the reranker changes", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const { rerender } = render(<AskPanel {...p} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
+    expect(screen.getByRole("button", { name: "Show comparison" })).toBeTruthy()
+    const mmr = setReranker(p.graph, LIVE, "mmr")
+    rerender(<AskPanel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    expect(await screen.findByRole("button", { name: "Hide comparison" })).toBeTruthy()
+    expect(await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })).toBeTruthy()
+  })
+})
+
+describe("the results without a reranker", () => {
+  it("shows one list in search order", async () => {
+    render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    expect(await screen.findByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Hide comparison" })).toBeNull()
+    expect(screen.queryAllByTestId("badge")).toHaveLength(0)
+  })
+
+  it("shows nothing before a question has run", () => {
+    render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), {})} />)
+    expect(screen.queryByRole("heading", { name: /candidates/ })).toBeNull()
+  })
+})
+
+describe("a Chat answer", () => {
+  it("renders the written answer above the lists", async () => {
+    const chat = setUseCase(sampleGraph(LIVE, UPLOAD), LIVE, "chat")
+    render(<AskPanel {...props(chat, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "chat1") })} />)
+    const list = await screen.findByRole("heading", { name: "Top 6 of 6 candidates, in search order" })
+    const answer = await waitFor(() => document.querySelector("[data-chat-inspector]") as HTMLElement)
+    expect(answer).toBeTruthy()
+    expect(answer.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe("a failed Ask step", () => {
+  it("shows the step and its error in the panel", async () => {
+    render(
+      <AskPanel
+        {...props(sampleGraph(LIVE, UPLOAD), {
+          retrieve: { id: "retrieve", status: "failed", error: "Traceback (most recent call last):\nValueError: the index is empty" },
+          use_case: { id: "use_case", status: "skipped" },
+        })}
+      />,
+    )
+    const alert = await screen.findByRole("alert")
+    expect(within(alert).getByText("Retrieve failed")).toBeTruthy()
+    expect(within(alert).getByText("ValueError: the index is empty")).toBeTruthy()
+  })
+})
+
+describe("house style", () => {
+  it("has no en or em dash in the results", async () => {
+    render(<AskPanel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(document.body.textContent).not.toMatch(new RegExp("[\\u2013\\u2014]"))
+  })
+})

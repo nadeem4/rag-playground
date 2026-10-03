@@ -1,0 +1,148 @@
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { useState } from "react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import liveRegistry from "@/api/fixtures/registry.json"
+import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
+import searchJson from "@/api/fixtures/output.search.json"
+import type { Keys } from "@/api/apiKey"
+import type { NodeState } from "@/api/runState"
+import { resetSampleQuestionsCache } from "@/api/samples"
+import type { Registry, RetrievalResult } from "@/api/types"
+import { rowsFromResult } from "@/components/inspectors/hits"
+import { sampleGraph, setReranker, type PipelineGraph } from "@/state/graph"
+import { resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
+
+import { AskPanel, type AskPanelProps } from "./AskPanel"
+import { goldRank, logEntry, type TranscriptEntry } from "./Transcript"
+
+const LIVE = liveRegistry as unknown as Registry
+const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
+const SAMPLE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
+const UPLOAD = { sha: "ab".repeat(32), filename: "report.pdf" }
+const hybrid = hybridJson as unknown as RetrievalResult
+const CARD = {
+  name: "chunking-primer",
+  title: "A primer on chunking",
+  blurb: "b",
+  shows: "s",
+  stresses: "chunk",
+  pages: 3,
+  default: true,
+  filename: SAMPLE.filename,
+  sha: SAMPLE.sha,
+  question: "What does overlap cost?",
+}
+// The gold answer sits in the first hybrid hit, across a line break the parser kept.
+const QUESTIONS = [{ id: "q1", question: "What does overlap cost?", gold_answer: "Overlap protects answers that   straddle a boundary" }]
+
+/** The hybrid result reranked: the sixth hit first. Prior ranks 6, 1, 2, 4, 3. */
+function reranked(): RetrievalResult {
+  const order = [5, 0, 1, 3, 2]
+  return { ...hybrid, hits: order.map((i, k) => ({ ...hybrid.hits[i], rank: k + 1, prior_rank: hybrid.hits[i].rank })) }
+}
+
+beforeEach(() => {
+  resetSampleQuestionsCache()
+  window.localStorage.clear()
+  resetPipelinesForTests()
+  const payloads: Record<string, unknown> = { idx1: { doc_count: 6 }, ret1: hybrid, rr1: reranked(), out1: searchJson }
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+      const payload = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      if (payload && payloads[payload[1]] !== undefined) return ok(payloads[payload[1]])
+      if (url === "/api/samples") return ok([CARD])
+      if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)
+      return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
+    }),
+  )
+})
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+describe("goldRank", () => {
+  it("finds the first piece that holds the gold, whitespace and case aside", () => {
+    expect(goldRank(rowsFromResult(hybrid), ["overlap protects answers that straddle a boundary"])).toBe(1)
+    expect(goldRank(rowsFromResult(reranked()), ["Overlap protects answers"])).toBe(2)
+    expect(goldRank(rowsFromResult(hybrid), ["not in the document"])).toBeNull()
+    expect(goldRank(rowsFromResult(hybrid), [])).toBeNull()
+  })
+})
+
+describe("logEntry", () => {
+  it("keeps one entry per run, with its latest wording", () => {
+    const e: TranscriptEntry = { runId: "r1", question: "q", line: "l" }
+    const once = logEntry([], e)
+    expect(once).toEqual([e])
+    expect(logEntry(once, { ...e })).toBe(once)
+    expect(logEntry(once, { ...e, line: "other" })).toEqual([{ ...e, line: "other" }])
+    expect(logEntry(once, { ...e, runId: "r2" })).toHaveLength(2)
+  })
+})
+
+const done = (id: string, artifact_id: string): NodeState => ({ id, status: "done", artifact_id })
+
+/** The panel with the transcript kept in state, as Build keeps it. */
+function Harness(p: Omit<AskPanelProps, "transcript" | "onLog">) {
+  const [entries, setEntries] = useState<TranscriptEntry[]>([])
+  return <AskPanel {...p} transcript={entries} onLog={(e) => setEntries((t) => logEntry(t, e))} />
+}
+
+function base(graph: PipelineGraph, results: Record<string, NodeState>, askRunId: string | null) {
+  return {
+    graph,
+    registry: LIVE,
+    results: { index: done("index", "idx1"), ...results },
+    stale: new Set<string>(),
+    busy: false,
+    keys: NO_KEYS,
+    server: null,
+    explanations: {},
+    errors: {},
+    keyNotice: null,
+    askRunId,
+    onConfig: vi.fn(),
+    onTransform: vi.fn(),
+    onReranker: vi.fn(),
+    onUseCase: vi.fn(),
+    onAsk: vi.fn(),
+  }
+}
+
+const RERANKED = { retrieve: done("retrieve", "ret1"), rerank_1: done("rerank_1", "rr1"), use_case: done("use_case", "out1") }
+const summary = () => screen.queryByText(/^Earlier questions in this tab/)
+
+describe("the transcript", () => {
+  it("grows after a finished run, once per run, and Ask again refills the box", async () => {
+    const graph = setReranker(sampleGraph(LIVE, SAMPLE, "What does overlap cost?"), LIVE, "cross_encoder")
+    const p = base(graph, RERANKED, null)
+    const { rerender } = render(<Harness {...p} />)
+    expect(summary()).toBeNull()
+    rerender(<Harness {...p} askRunId="r2" />)
+    await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (1)"))
+    // The question set may answer after the run: the entry then gains its gold rank.
+    expect(await screen.findByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
+    const entry = screen.getByTestId("transcript-entry")
+    expect(within(entry).getByText("What does overlap cost?")).toBeTruthy()
+    // The same run is not logged twice.
+    rerender(<Harness {...p} askRunId="r2" busy={false} />)
+    expect(summary()?.textContent).toBe("Earlier questions in this tab (1)")
+    fireEvent.click(within(entry).getByRole("button", { name: "Ask again" }))
+    expect(p.onConfig).toHaveBeenCalledWith("query", expect.objectContaining({ text: "What does overlap cost?" }))
+    rerender(<Harness {...p} askRunId="r3" />)
+    await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (2)"))
+  })
+
+  it("an upload has no gold, so the entry counts the pieces, and names the saved pipeline", async () => {
+    const graph = sampleGraph(LIVE, UPLOAD, "Anything?")
+    setCurrentId(savePipeline("Plain hybrid", graph)!.saved.id)
+    render(<Harness {...base(graph, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") }, "r9")} />)
+    await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (1)"))
+    expect(screen.getByText("Plain hybrid, no rerank: 5 pieces")).toBeTruthy()
+  })
+})

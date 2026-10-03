@@ -80,8 +80,10 @@ so the playground opens on **Build**:
 
 1. On **Build**, upload a PDF, or press Load on one of the samples the Upload card lists.
    - The sample, `samples/chunking-primer/chunking-primer.pdf`, is three pages of notes on
-     chunking. It comes with a ready pipeline and a question, so pressing **Run all** shows
-     every step working.
+     chunking. It comes with a ready pipeline and a question, so pressing **Build the index**
+     and then **Ask** in the Ask panel on the right shows every step working. With a
+     reranker, the panel shows the search order against the reranked order side by side,
+     and it lists the questions asked earlier in the tab.
    - Choosing it also starts loading the Docling and Qwen3 models in the background.
    - To regenerate the sample set, run `uv run python scripts/make_samples.py`, which writes
      every sample under `samples/<name>/`.
@@ -174,7 +176,7 @@ unsafe to share:
 - **Save and share pipelines.** Name the pipeline on Build and keep it; switch between saved
   pipelines from the bar under the Pipeline header of the column, and edit any of them. Once a
   pipeline is saved, Copy link puts the whole configuration in a URL: whoever opens it gets the pipeline on their Build page, and if it was
-  built on a bundled sample, Run all works at once. Your own uploads do not travel with the
+  built on a bundled sample, Build the index and Ask work at once. Your own uploads do not travel with the
   link; the page says which file to load. Pipelines live in your browser.
 - **Score a pipeline instead of guessing.** The Evaluate page takes the pipeline on Build, or
   any saved pipeline you pick, asks it every question in the loaded sample's question set, and

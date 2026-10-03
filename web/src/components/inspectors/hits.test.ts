@@ -7,6 +7,7 @@ import searchJson from "@/api/fixtures/output.search.json"
 import type { ChunkSet, RetrievalResult } from "@/api/types"
 
 import {
+  badge,
   barWidth,
   componentKeys,
   fmtScore,
@@ -31,6 +32,13 @@ describe("rank movement", () => {
     expect(movement({ rank: 4, prior_rank: 3 })).toEqual({ kind: "down", from: 3, text: "was 3" })
     expect(movement({ rank: 1, prior_rank: 1 })).toEqual({ kind: "none" })
     expect(movement({ rank: 1, prior_rank: null })).toEqual({ kind: "none" })
+  })
+
+  it("words a reranked hit's badge from its prior rank, and none for a hit no reranker saw", () => {
+    expect(badge({ rank: 1, prior_rank: 6 })).toEqual({ kind: "up", text: "up from #6" })
+    expect(badge({ rank: 4, prior_rank: 3 })).toEqual({ kind: "down", text: "down from #3" })
+    expect(badge({ rank: 2, prior_rank: 2 })).toEqual({ kind: "stayed", text: "stayed #2" })
+    expect(badge({ rank: 2, prior_rank: null })).toBeNull()
   })
 
   it("the real MMR fixture moved its fifth hit to second", () => {

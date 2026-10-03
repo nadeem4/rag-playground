@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import liveRegistry from "@/api/fixtures/registry.json"
+import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
+import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { addReranker, chatSampleGraph, initialGraph, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
@@ -417,6 +419,8 @@ describe("First run (plan I-15)", () => {
     render(<Shell />)
     expect((await sampleButton()).textContent).toBe("Load")
     expect(document.body.textContent).toContain("Nothing to show yet")
+    expect(document.body.textContent).toContain("Then press Build the index, and ask a question in the Ask panel.")
+    expect(document.body.textContent).not.toContain("Run all")
     expect(card("parse")).toBeNull()
     // The empty Load card blocks the run, but a first visit is not an error.
     await waitFor(() => expect(sourceExplains).toBeGreaterThan(0), { timeout: 2000 })
@@ -470,6 +474,10 @@ describe("First run (plan I-15)", () => {
     expect(byId.get("query")!.config.text).toBe("Why do chunk boundaries matter?")
     expect(posts).toHaveLength(0)
     expect(document.body.textContent).toContain("Ready to run")
+    expect(document.body.textContent).toContain(
+      "The sample is loaded and every step has a sensible default. Press Build the index, then ask a question on the right.",
+    )
+    expect(document.body.textContent).not.toContain("Ask card")
   })
 
   it("shows a pending state while the sample loads", async () => {
@@ -895,5 +903,95 @@ describe("lock states behind a Clean step", () => {
     const chunk = within(card("chunk"))
     expect(chunk.getByRole("option", { name: fallsBack ? "layout_blocks · falls back" : "layout_blocks" })).toBeTruthy()
     expect(chunk.getByRole("option", { name: "sentence_window" })).toBeTruthy()
+  })
+})
+
+describe("the Ask panel results on Build", () => {
+  let streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[]
+
+  class OpenEventSource {
+    onmessage = null
+    onerror = null
+    onopen = null
+    constructor() {
+      streams.push(this)
+    }
+    close() {}
+  }
+
+  function emit(event: Record<string, unknown>, id: string) {
+    act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data: JSON.stringify(event), lastEventId: id })))
+  }
+
+  let reply422: unknown = null
+
+  beforeEach(() => {
+    streams = []
+    reply422 = null
+    vi.stubGlobal("EventSource", OpenEventSource)
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
+        if (url === "/api/registry") return ok(liveRegistry)
+        if (url === "/api/samples") return ok([])
+        if (url === "/api/settings/llm") return ok({ anthropic: "dotenv", openai: "none", custom: "none" })
+        if (url === "/api/artifacts/ret1/payload") return ok(hybridResult)
+        if (url === "/api/artifacts/out1/payload") return ok(searchOutput)
+        if (url === "/api/runs" && init?.method === "POST") {
+          posts.push({ path: url, body: JSON.parse(String(init.body)) })
+          if (reply422) return ok(reply422, 422)
+          return ok({ run_id: `r${posts.length}` }, 202)
+        }
+        return base(url, init)
+      }),
+    )
+  })
+
+  /** Builds the index, then asks; the Ask run finishes with a Search output. */
+  async function buildAndAsk() {
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    const askButton = panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    await waitFor(() => expect(askButton.disabled).toBe(false))
+    fireEvent.click(askButton)
+    await waitFor(() => expect(streams).toHaveLength(2))
+    emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "node_finished", node_id: "use_case", artifact_id: "out1", cache_hit: false, duration_ms: 1 }, "2")
+    emit({ event: "stream_end", status: "finished", ok: true }, "3")
+    await waitFor(() => expect(panel().getByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy())
+  }
+
+  it("Back to Ask returns from a card to the panel with the question and the results intact (Review Focus 4)", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    await buildAndAsk()
+    await waitFor(() => expect(panel().getByText("Earlier questions in this tab (1)")).toBeTruthy())
+    fireEvent.click(card("parse"))
+    expect(screen.queryByRole("region", { name: "Ask panel" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Back to Ask" }))
+    expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("What does overlap cost?")
+    expect(await waitFor(() => panel().getByRole("heading", { name: "Top 5 of 6 candidates, in search order" }))).toBeTruthy()
+    expect(panel().getByText("Earlier questions in this tab (1)")).toBeTruthy()
+    expect(panel().getByText("Working copy, no rerank: 5 pieces")).toBeTruthy()
+  })
+
+  it("switching Answer to Search clears a field error on the chat model", async () => {
+    storeGraph(chatSampleGraph(liveRegistry as never, SOURCE))
+    reply422 = { detail: { node_id: "use_case", errors: [{ loc: ["model"], msg: "This model is not available" }] } }
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(panel().getAllByText("This model is not available").length).toBeGreaterThan(0))
+    fireEvent.click(within(panel().getByRole("group", { name: "Answer with" })).getByRole("button", { name: "Search" }))
+    await waitFor(() => expect(panel().queryByText("This model is not available")).toBeNull())
   })
 })

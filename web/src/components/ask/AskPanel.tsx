@@ -1,9 +1,9 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { hasAnyKey, type Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions, useSamples } from "@/api/samples"
-import type { GraphNode, LlmSettings, Registry } from "@/api/types"
+import type { LlmSettings, Registry } from "@/api/types"
 import { useArtifactPayload } from "@/api/useArtifact"
 import type { ExplainState } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
@@ -11,8 +11,11 @@ import { blockingNode, type NodeErrors } from "@/components/pipeline/PipelineCol
 import { QuestionField } from "@/components/pipeline/QuestionField"
 import { Button } from "@/components/ui/button"
 import { ASK_STAGES, askNodes, indexNode, infoFor, terminalNode, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
+import { usePipelines } from "@/state/pipelines"
 
-import { AskSettings, RERANKERS, RETRIEVAL_LABEL } from "./AskSettings"
+import { AskResults, finalRows, fresh, rerankLabel, useAskOutputs } from "./AskResults"
+import { AskSettings, RETRIEVAL_LABEL } from "./AskSettings"
+import { goldRank, Transcript, transcriptLine, type TranscriptEntry } from "./Transcript"
 
 /**
  * The Ask panel: the right pane when no card is selected. It holds the
@@ -32,17 +35,15 @@ export interface AskPanelProps {
   errors: Record<string, NodeErrors>
   /** Set when a keyless ask stopped before Chat and the run has ended. */
   keyNotice: string | null
+  /** The Ask run that has just finished, once it has: its answer joins the transcript. */
+  askRunId: string | null
+  transcript: TranscriptEntry[]
+  onLog: (entry: TranscriptEntry) => void
   onConfig: (id: string, config: Record<string, unknown>) => void
   onTransform: (id: string, transform: string) => void
   onReranker: (transform: string | null) => void
   onUseCase: (transform: "search" | "chat") => void
   onAsk: () => void
-}
-
-/** A completed result that still matches the graph. */
-function fresh(results: Record<string, NodeState>, stale: Set<string>, node: GraphNode | undefined): string | undefined {
-  const r = node ? results[node.id] : undefined
-  return r && (r.status === "done" || r.status === "cached") && !stale.has(r.id) ? r.artifact_id : undefined
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -56,7 +57,7 @@ export function recipeLine(graph: PipelineGraph, registry: Registry): string {
     parts.push(typeof retrieve.config.top_k === "number" ? `${label}, top ${retrieve.config.top_k} candidates.` : `${label}.`)
   }
   if (rerank) {
-    const label = RERANKERS.find((r) => r.name === rerank.transform)?.label ?? rerank.transform
+    const label = rerankLabel(rerank.transform)
     parts.push(typeof rerank.config.top_k === "number" ? `Rerank: ${label}, keep ${rerank.config.top_k}.` : `Rerank: ${label}.`)
   } else {
     parts.push("Rerank: none.")
@@ -106,6 +107,21 @@ export function AskPanel(p: AskPanelProps) {
     setOpen(false)
     p.onAsk()
   }
+
+  // One transcript entry per finished Ask, found at the gold's rank when the question is the sample's.
+  const outputs = useAskOutputs(p.graph, p.results, p.stale)
+  const rows = useMemo(() => finalRows(outputs, Boolean(rerank)), [outputs.rerank, outputs.output, outputs.retrieve, rerank]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { pipelines, currentId } = usePipelines()
+  const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
+  const text = String(query?.config.text ?? "")
+  const { onLog } = p
+  useEffect(() => {
+    if (!p.askRunId || !rows) return
+    const asked = questions.find((q) => q.question.trim() === text.trim())
+    const found = asked ? goldRank(rows, [asked.gold_answer, ...(asked.gold_answers ?? [])]) : null
+    const reranker = rerank ? rerankLabel(rerank.transform) : "no rerank"
+    onLog({ runId: p.askRunId, question: text, line: transcriptLine(pipelineName, reranker, found, rows.length) })
+  }, [p.askRunId, rows, questions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const queryErrors = query ? p.errors[query.id] : undefined
   const setText = (text: string) => {
@@ -176,6 +192,8 @@ export function AskPanel(p: AskPanelProps) {
             onUseCase={p.onUseCase}
           />
         ) : null}
+        <AskResults graph={p.graph} registry={p.registry} outputs={outputs} />
+        <Transcript entries={p.transcript} onAskAgain={setText} />
       </div>
     </section>
   )

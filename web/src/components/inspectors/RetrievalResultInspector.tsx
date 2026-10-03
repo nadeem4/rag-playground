@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 
 import "./inspectors.css"
 import {
+  badge,
   barWidth,
   componentKeys,
   fmtScore,
@@ -19,6 +20,7 @@ import {
   rowsFromResult,
   rowsFromSearch,
   scaleMax,
+  type Badge,
   type HitLayout,
   type HitRowData,
   type SearchOutput,
@@ -49,6 +51,10 @@ export interface RetrievalViewProps {
   showDetail?: boolean
   /** The parsed document the chunks were cut from: enables "Show in PDF". */
   doc?: ParsedDoc
+  /** Chunk ids a reranker kept: their rows are marked (the Ask panel's search order column). */
+  kept?: ReadonlySet<string>
+  /** True shows each row's movement as a tinted badge, `up from #6`, instead of `was 6`. */
+  badges?: boolean
 }
 
 export function RetrievalResultInspector({
@@ -146,7 +152,7 @@ const BAR = 40 // px, the longest score bar
 const LANE = 6 // px per spine lane: a 4px band plus a 2px gap
 const LABEL = 20 // px for the rank numbers on the spine
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, kept, badges = false }: RetrievalViewProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLDivElement>(null)
   const pdfRef = useRef<HTMLDivElement>(null)
@@ -230,6 +236,8 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc }:
             onShowPdf={doc ? setPdfRow : undefined}
             canPdf={canPdf}
             showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
+            kept={kept}
+            badges={badges}
           />
           {layout && chunkSet ? (
             <HitDocument layout={layout} rows={rows} source={chunkSet.source_text} selected={selected} onSelect={select} scrollRef={docRef} />
@@ -279,6 +287,8 @@ function HitList({
   onShowPdf,
   canPdf,
   showRetriever,
+  kept,
+  badges,
 }: {
   rows: HitRowData[]
   keys: string[]
@@ -289,6 +299,8 @@ function HitList({
   canPdf: (row: number) => boolean
   /** Per row only when the rows mix retrievers; otherwise the summary names it once. */
   showRetriever: boolean
+  kept?: ReadonlySet<string>
+  badges: boolean
 }) {
   const scoreMax = scaleMax(rows.map((r) => r.score))
   const maxOf = Object.fromEntries(keys.map((k) => [k, scaleMax(rows.map((r) => r.component_scores[k]))]))
@@ -312,12 +324,16 @@ function HitList({
       {rows.map((r, i) => {
         const move = movement(r)
         const k = markOf.get(i)
+        const tag = badges ? badge(r) : null
+        const isKept = kept?.has(r.chunk_id) ?? false
         return (
           <div
             key={`${r.chunk_id}-${i}`}
             role="listitem"
             data-hit-row={r.rank}
             data-hits={k === undefined ? undefined : `h${k}`}
+            data-kept={isKept ? "" : undefined}
+            style={isKept ? { borderLeft: "3px solid var(--kept-mark)" } : undefined}
             onClick={() => onSelect(i)}
             className={cn(
               "ri-row flex cursor-pointer flex-col gap-1 border-b border-hairline px-3 py-2 last:border-b-0 hover:bg-surface-elevated",
@@ -332,7 +348,7 @@ function HitList({
                 title={move.kind === "none" ? undefined : `rank ${move.from} before rerank`}
                 className={cn("font-mono text-xs", move.kind === "up" ? "font-semibold text-fg" : "text-fg-muted")}
               >
-                {move.kind === "none" ? "" : move.text}
+                {move.kind === "none" || badges ? "" : move.text}
               </span>
               <span className="text-right font-mono text-sm text-fg tabular-nums">{fmtScore(r.score)}</span>
               {keys.length ? (
@@ -342,6 +358,16 @@ function HitList({
               )}
             </div>
             <div className="flex min-w-0 flex-col gap-1 pl-[40px]">
+              {tag || isKept ? (
+                <p className="flex flex-wrap items-center gap-2">
+                  {tag ? (
+                    <span data-testid="badge" data-badge={tag.kind} className="rounded-control px-1 font-mono text-2xs" style={BADGE_TINT[tag.kind]}>
+                      {tag.text}
+                    </span>
+                  ) : null}
+                  {isKept ? <span className="meta">kept</span> : null}
+                </p>
+              ) : null}
               <p className="ri-snippet text-sm text-fg">{r.text}</p>
               <p className="flex flex-wrap gap-x-3 font-mono text-2xs text-fg-muted">
                 {pages(r.page_span) ? <span>{pages(r.page_span)}</span> : null}
@@ -367,6 +393,13 @@ function HitList({
       })}
     </div>
   )
+}
+
+/** Up takes the kept tint and down the removed tint, the pair the diff views use. */
+const BADGE_TINT: Record<Badge["kind"], CSSProperties> = {
+  up: { background: "var(--kept)", color: "var(--kept-text)" },
+  down: { background: "var(--removed)", color: "var(--removed-text)" },
+  stayed: { background: "var(--surface-hover)", color: "var(--text-secondary)" },
 }
 
 /**

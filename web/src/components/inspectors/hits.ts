@@ -120,6 +120,15 @@ export function movement(row: Pick<HitRowData, "rank" | "prior_rank">): Movement
   return { kind: from > row.rank ? "up" : "down", from, text: `was ${from}` }
 }
 
+export type Badge = { kind: "up" | "down" | "stayed"; text: string }
+
+/** The Ask panel's movement badge: `up from #6`, `down from #2`, `stayed #4`. Null for a hit no reranker saw. */
+export function badge(row: Pick<HitRowData, "rank" | "prior_rank">): Badge | null {
+  const move = movement(row)
+  if (move.kind !== "none") return { kind: move.kind, text: `${move.kind} from #${move.from}` }
+  return row.prior_rank === null || row.prior_rank === undefined ? null : { kind: "stayed", text: `stayed #${row.rank}` }
+}
+
 export function pages(span: [number, number] | null): string | null {
   if (!span) return null
   return span[0] === span[1] ? `p. ${span[0]}` : `pp. ${span[0]}-${span[1]}`

@@ -13,6 +13,8 @@ export default defineConfig({
       '@': here('./src'),
       // The faces are self-hosted from the npm packages: no font CDN, ever.
       '@fonts': here('./node_modules/@fontsource-variable'),
+      // Static faces (IBM Plex Mono has no variable build) live in @fontsource.
+      '@fonts-static': here('./node_modules/@fontsource'),
     },
   },
   server: {

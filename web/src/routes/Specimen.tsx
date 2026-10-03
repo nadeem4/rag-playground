@@ -13,6 +13,7 @@ import { CHUNK_CLASSES, SCORE_CLASSES } from "@/styles/dataClasses"
 import {
   CHUNK_SLOTS,
   contrast,
+  contrastToggleTokens,
   darkTokens,
   lightTokens,
   resolve,
@@ -105,21 +106,25 @@ function TypeScale() {
   const src = recursive.source_text.replace(/\s+/g, " ")
   const from = Math.max(0, src.indexOf("Recursive splitting tries"))
   const paragraph = src.slice(from, src.indexOf(".", from + 300) + 1)
-  const rows: [string, number, ReactNode][] = [
-    ["2xs", 11, <span className="meta">chunk 1 chars {first.start_char}-{first.end_char}</span>],
-    ["xs", 12, <span className="text-xs text-fg-muted">recursive_character v1, chunk_size 400, chunk_overlap 80</span>],
-    ["sm", 13, <span className="text-sm">{clip(first.text, 90)} <span className="font-mono">{fmt(total)} tokens</span></span>],
-    ["base", 14, <span className="block max-w-reading text-base whitespace-normal">{paragraph}</span>],
-    ["lg", 16, <span className="text-lg font-medium">Recursive character splitting</span>],
-    ["xl", 20, <span className="text-xl font-semibold">Inspector</span>],
+  const rows: [string, string, ReactNode][] = [
+    ["2xs", "0.75rem", <span className="meta">Chunk 1, chars <span className="font-mono">{first.start_char}-{first.end_char}</span></span>],
+    ["xs", "0.8125rem", <span className="text-xs text-fg-muted">recursive_character v1, chunk_size 400, chunk_overlap 80</span>],
+    ["sm", "0.9375rem", <span className="text-sm">{clip(first.text, 90)} <span className="font-mono">{fmt(total)} tokens</span></span>],
+    ["base", "1.0625rem", <span className="block max-w-reading text-base whitespace-normal">{paragraph}</span>],
+    ["lg", "1.25rem", <span className="text-lg font-medium">Recursive character splitting</span>],
+    ["xl", "1.625rem", <span className="text-xl font-semibold">Inspector</span>],
+    ["2xl", "2.25rem", <span className="text-2xl font-semibold">Read</span>],
   ]
   return (
-    <Section title="Type" note="Atkinson Hyperlegible Next for labels and prose, Martian Mono for every number. Six sizes; hierarchy comes from weight and tint.">
+    <Section
+      title="Type"
+      note="Atkinson Hyperlegible Next for labels and prose, IBM Plex Mono for numbers, ids and code names. Seven sizes in rem, so text follows the browser's font size. Hierarchy comes from weight and tint first."
+    >
       <div className="flex flex-col gap-px overflow-hidden rounded-panel border border-hairline bg-hairline">
-        {rows.map(([name, px, sample]) => (
-          <div key={name} className="grid grid-cols-[96px_minmax(0,1fr)] items-baseline gap-3 bg-surface px-3 py-2">
+        {rows.map(([name, rem, sample]) => (
+          <div key={name} className="grid grid-cols-[160px_minmax(0,1fr)] items-baseline gap-3 bg-surface px-3 py-2">
             <span className="font-mono text-xs text-fg-muted">
-              text-{name} {px}px
+              text-{name} {rem}
             </span>
             <div className="min-w-0 truncate">{sample}</div>
           </div>
@@ -130,12 +135,12 @@ function TypeScale() {
 }
 
 function SpacingScale() {
-  const steps: [string, number][] = [["1", 4], ["2", 8], ["3", 12], ["4", 16], ["6", 24]]
+  const steps: [string, number][] = [["1", 4], ["2", 8], ["3", 12], ["4", 16], ["6", 24], ["8", 32]]
   return (
-    <Section title="Spacing" note="4px base, capped at 24px. Nothing larger compiles: the Tailwind theme declares only these five steps.">
+    <Section title="Spacing" note="4px base, capped at 32px. Nothing larger compiles: the Tailwind theme declares only these six steps.">
       <div className="flex flex-col gap-2">
         {steps.map(([k, px]) => (
-          <div key={k} className="grid grid-cols-[96px_24px_minmax(0,1fr)] items-center gap-3">
+          <div key={k} className="grid grid-cols-[96px_32px_minmax(0,1fr)] items-center gap-3">
             <span className="font-mono text-xs text-fg-muted">p-{k} {px}px</span>
             <span aria-hidden className="block h-[8px] bg-fg-muted" style={{ width: px }} />
             <span className="text-xs text-fg-muted">
@@ -143,7 +148,8 @@ function SpacingScale() {
               {px === 8 && "field gap"}
               {px === 12 && "panel padding"}
               {px === 16 && "group separation"}
-              {px === 24 && "the cap"}
+              {px === 24 && "block separation"}
+              {px === 32 && "section rhythm in the Ask panel and on Read, the cap"}
             </span>
           </div>
         ))}
@@ -154,14 +160,14 @@ function SpacingScale() {
 
 function Shape() {
   return (
-    <Section title="Shape" note="One hairline, two radii, no shadows. Elevation is a border plus a background step.">
+    <Section title="Shape" note="One hairline and two radii. The one shadow belongs to the raised card, shown under Surfaces.">
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex flex-col gap-1">
-          <Button variant="outline">Control 4px</Button>
+          <Button variant="outline">Control 6px</Button>
           <span className="font-mono text-xs text-fg-muted">rounded-control</span>
         </div>
         <div className="flex flex-col gap-1">
-          <div className="rounded-panel border border-hairline bg-surface-elevated p-3 text-sm">Panel 6px</div>
+          <div className="rounded-panel bg-surface-elevated p-3 text-sm">Panel 8px</div>
           <span className="font-mono text-xs text-fg-muted">rounded-panel bg-surface-elevated</span>
         </div>
       </div>
@@ -172,11 +178,13 @@ function Shape() {
 const CHROME: [string, string][] = [
   ["--surface", "page"],
   ["--surface-elevated", "panel, one step up"],
+  ["--surface-raised", "the one raised card"],
   ["--hairline", "every border"],
   ["--text-primary", "body text"],
   ["--text-secondary", "secondary text"],
   ["--accent", "focus, selection, Run"],
-  ["--selection", "selected row"],
+  ["--accent-wash", "pressed and selected fill"],
+  ["--selection", "selected row, an alias of the wash"],
   ["--danger", "error text"],
   ["--field-border", "input border"],
 ]
@@ -196,6 +204,128 @@ function ChromeChannel() {
             <Cell className="text-fg-muted">{role}</Cell>
           </Row>
         ))}
+      </Grid>
+    </Section>
+  )
+}
+
+const SURFACES: [string, string, string][] = [
+  ["Page", "--surface", "bg-surface"],
+  ["Panel", "--surface-elevated", "bg-surface-elevated"],
+  ["Raised", "--surface-raised", "bg-surface-raised"],
+]
+
+function Surfaces() {
+  return (
+    <Section
+      title="Surfaces"
+      note="Three levels. The panel sits on the page with no border. Only one card is raised at a time, with a hairline and the one shadow, shadow-raised."
+    >
+      <div className="rounded-panel bg-surface p-4">
+        <div className="flex flex-col gap-3 rounded-panel bg-surface-elevated p-4">
+          <span className="text-sm text-fg-muted">Panel</span>
+          <div className="rounded-panel border border-hairline bg-surface-raised p-3 shadow-raised">
+            <span className="text-sm font-medium">Raised</span>
+          </div>
+        </div>
+        <span className="mt-2 block text-sm text-fg-muted">Page</span>
+      </div>
+      <Grid columns="160px 190px 190px minmax(160px,1fr)" head={["level", "light", "dark", "token"]}>
+        {SURFACES.map(([level, name, utility]) => (
+          <Row key={name}>
+            <Cell>{level.toLowerCase()}</Cell>
+            {THEMES.map(([theme, tokens]) => (
+              <Cell key={theme}>
+                <Swatch value={resolve(tokens, name)} />
+              </Cell>
+            ))}
+            <Cell mono className="text-fg-muted">
+              {name}, {utility}
+            </Cell>
+          </Row>
+        ))}
+      </Grid>
+    </Section>
+  )
+}
+
+const MOTION: [string, string][] = [
+  ["--dur-fast", "press and hover"],
+  ["--dur-mid", "open, close and new results"],
+  ["--dur-slow", "a rerank move"],
+  ["--ease-in", "things arriving"],
+  ["--ease-out", "things leaving"],
+]
+
+function Motion() {
+  return (
+    <Section title="Motion" note="Only transform and opacity animate, plus grid-template-rows for one disclosure. Nothing loops. Under reduced motion every move becomes a short fade.">
+      <Grid columns="160px 240px minmax(200px,1fr)" head={["token", "value", "use"]}>
+        {MOTION.map(([name, use]) => (
+          <Row key={name}>
+            <Cell mono>{name}</Cell>
+            <Cell mono>{lightTokens.get(name)}</Cell>
+            <Cell className="text-fg-muted">{use}</Cell>
+          </Row>
+        ))}
+      </Grid>
+    </Section>
+  )
+}
+
+function Stale() {
+  return (
+    <Section title="Stale" note="Channel A. Amber for a card or result whose settings changed since the run. The text clears 4.5:1 on its wash.">
+      <div className="flex flex-wrap gap-4">
+        {THEMES.map(([theme, tokens]) => {
+          const ink = tokens.get("--stale")!
+          const wash = tokens.get("--stale-wash")!
+          return (
+            <div key={theme} className="flex items-center gap-2 text-xs">
+              <span className="w-[40px] font-mono text-fg-muted">{theme}</span>
+              <span className="rounded-control px-2" style={{ background: wash, color: ink }}>
+                changed, run again <span className="font-mono">{ratio(contrast(ink, wash))}</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </Section>
+  )
+}
+
+function MoreContrast() {
+  const pairs: [string, string, string][] = [
+    ["Secondary text on the panel", "--text-secondary", "--surface-elevated"],
+    ["Hairline on the page", "--hairline", "--surface"],
+  ]
+  return (
+    <Section
+      title="More contrast"
+      note="Applied under prefers-contrast: more, and by the toggle beside the theme switch. Read from the contrast block in tokens.css."
+    >
+      <Grid columns="160px minmax(240px,1fr)" head={["token", "becomes"]}>
+        {[...contrastToggleTokens].map(([name, value]) => (
+          <Row key={name}>
+            <Cell mono>{name}</Cell>
+            <Cell mono>{value}</Cell>
+          </Row>
+        ))}
+      </Grid>
+      <Grid columns="200px 64px 120px 120px" head={["pair", "theme", "normal", "more contrast"]}>
+        {pairs.flatMap(([label, fg, bg]) =>
+          THEMES.map(([theme, tokens]) => {
+            const more: TokenMap = new Map([...tokens, ...contrastToggleTokens])
+            return (
+              <Row key={`${fg}-${theme}`}>
+                <Cell>{label}</Cell>
+                <Cell mono>{theme}</Cell>
+                <Cell mono>{ratio(contrast(resolve(tokens, fg), resolve(tokens, bg)))}</Cell>
+                <Cell mono>{ratio(contrast(resolve(more, fg), resolve(more, bg)))}</Cell>
+              </Row>
+            )
+          }),
+        )}
       </Grid>
     </Section>
   )
@@ -374,7 +504,7 @@ function FormSample() {
 
 function ChunkTable() {
   return (
-    <Section title="Table" note="Hairline gap-grid, 28px rows, mono numbers. recursive_character output on the cleaned fixture document.">
+    <Section title="Table" note="Hairline gap-grid, 36px rows, mono numbers. recursive_character output on the cleaned fixture document.">
       <Grid columns="40px 64px 64px 64px 56px minmax(320px,1fr)" head={["#", "start", "end", "tokens", "pages", "text"]}>
         {recursive.chunks.map((c) => (
           <Row key={c.id}>
@@ -404,7 +534,11 @@ export function Specimen() {
         <TypeScale />
         <SpacingScale />
         <Shape />
+        <Surfaces />
+        <Motion />
         <ChromeChannel />
+        <Stale />
+        <MoreContrast />
         <ChunkChannel />
         <ScoreRamp />
         <KeptRemoved />

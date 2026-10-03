@@ -32,6 +32,16 @@ export const darkToggleTokens = darkOverrides
 /** Dark values, with light values for anything dark does not override. */
 export const darkTokens: TokenMap = new Map([...lightTokens, ...darkOverrides])
 
+/** The more-contrast variant: the OS preference block and the toggle block. */
+export const contrastMediaTokens = readBlock(css, /@media \(prefers-contrast: more\) \{\s*:root:root \{/)
+export const contrastToggleTokens = readBlock(css, /^:root\[data-contrast="more"\] \{/m)
+
+/** Every name declared in the Tailwind theme, from both `@theme` blocks. */
+export const themeTokens: TokenMap = new Map([
+  ...readBlock(css, /^@theme \{/m),
+  ...readBlock(css, /^@theme inline \{/m),
+])
+
 /** Resolve `var(--x)` chains against one theme's map. */
 export function resolve(tokens: TokenMap, name: string): string {
   let value = tokens.get(name) ?? ""

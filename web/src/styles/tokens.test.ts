@@ -3,11 +3,16 @@ import { describe, expect, it } from "vitest"
 import {
   CHUNK_SLOTS,
   contrast,
+  contrastMediaTokens as contrastMedia,
+  contrastToggleTokens as contrastToggle,
   darkMediaTokens as darkMedia,
   darkToggleTokens as darkToggle,
+  darkTokens as dark,
   inGamut,
   lightTokens as light,
   parseOklch as parse,
+  resolve,
+  themeTokens as theme,
   tokenCss as css,
 } from "./tokenSource"
 
@@ -104,10 +109,84 @@ describe("theme blocks", () => {
   it("clears Tailwind's default scales so off-contract values cannot compile", () => {
     expect(css).toMatch(/@theme \{\s*--\*: initial;/)
     const spacing = [...css.matchAll(/--spacing-(\d+): (\d+)px/g)].map((m) => +m[2])
-    // 0 is the zero step (see zeroSpacing.test.ts); the scale itself caps at 24.
-    expect(spacing).toEqual([0, 4, 8, 12, 16, 24])
-    const sizes = [...css.matchAll(/--text-(2xs|xs|sm|base|lg|xl): (\d+)px/g)].map((m) => +m[2])
-    expect(sizes).toEqual([11, 12, 13, 14, 16, 20])
+    // 0 is the zero step (see zeroSpacing.test.ts); the scale itself caps at 32.
+    expect(spacing).toEqual([0, 4, 8, 12, 16, 24, 32])
+  })
+
+  it("declares the seven type sizes in rem, so text follows the browser's font size", () => {
+    const sizes = [...css.matchAll(/--text-([\w]+): ([\d.]+)rem;/g)].map((m) => [m[1], +m[2]])
+    expect(sizes).toEqual([
+      ["2xs", 0.75],
+      ["xs", 0.8125],
+      ["sm", 0.9375],
+      ["base", 1.0625],
+      ["lg", 1.25],
+      ["xl", 1.625],
+      ["2xl", 2.25],
+    ])
+    expect(css).not.toMatch(/--text-[\w]+: [\d.]+px/)
+  })
+
+  it("leaves the root font size to the browser", () => {
+    const html = /@layer base \{\s*html \{([^}]*)\}/.exec(css)?.[1] ?? ""
+    expect(html).toMatch(/font-size: 100%;/)
+    expect(css).not.toMatch(/font-size: 13px/)
+  })
+
+  it("declares exactly one shadow, the raised card's", () => {
+    const shadows = [...theme.keys()].filter((k) => k.startsWith("--shadow-"))
+    expect(shadows).toEqual(["--shadow-raised"])
+    expect(dark.get("--shadow-raised")).not.toBe(light.get("--shadow-raised"))
+  })
+
+  it("names the motion tokens once, for both themes", () => {
+    expect(light.get("--dur-fast")).toBe("120ms")
+    expect(light.get("--dur-mid")).toBe("200ms")
+    expect(light.get("--dur-slow")).toBe("320ms")
+    expect(light.get("--ease-in")).toBe("cubic-bezier(0.2, 0, 0, 1)")
+    expect(light.get("--ease-out")).toBe("cubic-bezier(0.4, 0, 1, 1)")
+  })
+})
+
+describe("surfaces", () => {
+  it.each([
+    ["light", light, ["#f7f7f5", "#efefec", "#fdfdfc"]],
+    ["dark", darkToggle, ["#0e0f10", "#17181a", "#1f2023"]],
+  ])("%s: page, panel and raised levels", (_, tokens, values) => {
+    expect(["--surface", "--surface-elevated", "--surface-raised"].map((k) => tokens.get(k))).toEqual(values)
+  })
+
+  it.each([
+    ["light", light],
+    ["dark", dark],
+  ])("%s: the field border clears 3:1 on the page and the panel", (_, tokens) => {
+    for (const surface of ["--surface", "--surface-elevated"]) {
+      expect(contrast(tokens.get("--field-border")!, tokens.get(surface)!), surface).toBeGreaterThanOrEqual(3)
+    }
+  })
+})
+
+describe("stale (Channel A)", () => {
+  it.each([
+    ["light", light],
+    ["dark", dark],
+  ])("%s: stale text on its wash clears 4.5:1", (_, tokens) => {
+    expect(contrast(tokens.get("--stale")!, tokens.get("--stale-wash")!)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe("more contrast", () => {
+  it("the prefers-contrast and toggle blocks are identical", () => {
+    expect([...contrastMedia.entries()]).toEqual([...contrastToggle.entries()])
+  })
+
+  it("lifts secondary text, hairlines and the raised shadow", () => {
+    expect(Object.fromEntries(contrastToggle)).toEqual({
+      "--text-secondary": "var(--text-primary)",
+      "--hairline": "var(--field-border)",
+      "--shadow-raised": "0 0 0 1px var(--field-border)",
+    })
+    for (const name of contrastToggle.keys()) expect(light.has(name), name).toBe(true)
   })
 })
 
@@ -126,13 +205,14 @@ describe("the one accent (Channel A)", () => {
 describe("the accent hue", () => {
   it.each([
     ["light", light],
-    ["dark toggle", darkToggle],
+    ["dark", dark],
   ])("%s: sits in the widest gap of the data hue wheel, off the indigo band", (_, tokens) => {
     const h = parse(tokens.get("--accent")!)!.h
     // Between chunk-7 (144) and chunk-4 (189), so it never reads as a chunk
     // colour, and outside 255..280, the hue band that reads as generated UI.
     expect(h).toBeGreaterThan(150)
     expect(h).toBeLessThan(185)
-    expect(parse(tokens.get("--selection")!)!.h).toBe(h)
+    expect(parse(resolve(tokens, "--selection"))!.h).toBe(h)
+    expect(parse(resolve(tokens, "--accent-wash"))!.h).toBe(h)
   })
 })

@@ -2,7 +2,7 @@
  * RAG Playground design tokens. The single source of every color, size and
  * radius in the UI. Binding contract: docs/superpowers/design-system.md.
  *
- * DESIGN_VARIANCE: 3 / MOTION_INTENSITY: 2 / VISUAL_DENSITY: 9
+ * DESIGN_VARIANCE: 3 / MOTION_INTENSITY: 3 / VISUAL_DENSITY: 7
  *
  * Two color channels, never mixed:
  *   Channel A (chrome)  zinc neutrals, off-black / off-white, one hairline,
@@ -17,6 +17,18 @@
  * enforces it. One theme per page (Page Theme Lock): nothing below may be
  * scoped to a sub-tree to flip it.
  *
+ * Three surface levels: the page (`--surface`), the panel
+ * (`--surface-elevated`, no border against the page) and the raised card
+ * (`--surface-raised`, a hairline plus `--shadow-raised`). Only one card is
+ * raised at a time, and `--shadow-raised` is the only shadow in the system.
+ *
+ * More contrast follows the same pattern as dark: one block for the OS
+ * (`prefers-contrast: more`) and one for the toggle (`[data-contrast="more"]`),
+ * kept identical and checked by tokens.test.ts.
+ *
+ * Type is in rem and the root size is the browser's, so text follows the
+ * reader's font size setting.
+ *
  * Palette provenance (dataviz method, validate_palette.js):
  *   chunk-1..8   OKLCH L 0.74 light / 0.64 dark, C 0.11, H varies only.
  *                Order [9, 234, 54, 189, 99, 324, 144, 279] maximises the
@@ -30,21 +42,38 @@
   color-scheme: light;
 
   /* Channel A: chrome */
-  --surface: #fafaf9; /* page, off-white, never pure white */
-  --surface-elevated: #f4f4f5; /* zinc-100: panels, a background step, not a shadow */
+  --surface: #f7f7f5; /* page, off-white, never pure white */
+  --surface-elevated: #efefec; /* panel: a background step, no border against the page */
+  --surface-raised: #fdfdfc; /* the one selected or open card, with --shadow-raised */
   --surface-hover: #e4e4e7; /* zinc-200 wash for hover */
   --hairline: #e4e4e7; /* zinc-200 */
   --text-primary: #18181b; /* zinc-900, 16.1:1 on elevated */
   --text-secondary: #52525b; /* zinc-600, 7.0:1 on elevated */
   --accent: oklch(0.48 0.095 166); /* the one accent, 5.7:1 on elevated; hue 166 is the gap between chunk-7 and chunk-4 */
   --accent-fg: #fafaf9; /* 5.4:1 on accent */
-  --selection: oklch(0.93 0.04 166);
+  --accent-wash: oklch(0.93 0.04 166); /* pressed and selected fill */
+  --selection: var(--accent-wash); /* an alias, kept for existing uses */
   --danger: oklch(0.52 0.17 25); /* error text, always with a label, 5.5:1 */
+  --stale: oklch(0.5 0.12 75); /* settings changed since the run; text on --stale-wash */
+  --stale-wash: oklch(0.95 0.05 75);
+  --shadow-raised: 0 1px 2px rgb(24 24 27 / 0.06), 0 6px 16px rgb(24 24 27 / 0.06);
+
+  /* Rows: sizes, not spacing, so outside the spacing cap. */
+  --row: 36px; /* 2.25rem */
+  --row-compact: 28px;
+
+  /* Motion: only transform and opacity animate (and grid-template-rows for
+     one disclosure). Nothing loops. */
+  --dur-fast: 120ms;
+  --dur-mid: 200ms;
+  --dur-slow: 320ms;
+  --ease-in: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.4, 0, 1, 1);
 
   /* Form fields: contrast-verified once here, so a schema renderer cannot emit
      an off-palette field. Border clears WCAG 1.4.11 (3:1) on both surfaces. */
   --field-bg: var(--surface);
-  --field-border: #8a8a93; /* 3.3:1 surface, 3.1:1 elevated */
+  --field-border: #86868e; /* 3.4:1 surface, 3.1:1 elevated */
   --field-text: var(--text-primary);
   --field-label: var(--text-primary);
   --field-help: var(--text-secondary);
@@ -84,16 +113,20 @@
 /* Block 1 of 2: the toggle. Keep identical to block 2. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface: #0b0b0c;
-  --surface-elevated: #18181b;
+  --surface: #0e0f10;
+  --surface-elevated: #17181a;
+  --surface-raised: #1f2023;
   --surface-hover: #27272a;
   --hairline: #27272a;
   --text-primary: #fafaf9;
   --text-secondary: #a1a1aa;
   --accent: oklch(0.72 0.14 166);
   --accent-fg: #0b0b0c;
-  --selection: oklch(0.3 0.06 166);
+  --accent-wash: oklch(0.3 0.05 166);
   --danger: oklch(0.72 0.13 25);
+  --stale: oklch(0.8 0.12 75);
+  --stale-wash: oklch(0.3 0.06 75);
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.3);
   --field-border: #71717a;
   --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
   --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
@@ -119,16 +152,20 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --surface: #0b0b0c;
-    --surface-elevated: #18181b;
+    --surface: #0e0f10;
+    --surface-elevated: #17181a;
+    --surface-raised: #1f2023;
     --surface-hover: #27272a;
     --hairline: #27272a;
     --text-primary: #fafaf9;
     --text-secondary: #a1a1aa;
     --accent: oklch(0.72 0.14 166);
     --accent-fg: #0b0b0c;
-    --selection: oklch(0.3 0.06 166);
+    --accent-wash: oklch(0.3 0.05 166);
     --danger: oklch(0.72 0.13 25);
+    --stale: oklch(0.8 0.12 75);
+    --stale-wash: oklch(0.3 0.06 75);
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.3);
     --field-border: #71717a;
     --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
     --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
@@ -151,6 +188,24 @@
   }
 }
 
+/* -------------------------------------------------------- more contrast -- */
+/* Block 1 of 2: the OS preference. `:root:root` matches the specificity of the
+   dark blocks above, so this wins over them by order. Keep identical to block 2. */
+@media (prefers-contrast: more) {
+  :root:root {
+    --text-secondary: var(--text-primary);
+    --hairline: var(--field-border);
+    --shadow-raised: 0 0 0 1px var(--field-border);
+  }
+}
+
+/* Block 2 of 2: the toggle beside the theme switch. */
+:root[data-contrast="more"] {
+  --text-secondary: var(--text-primary);
+  --hairline: var(--field-border);
+  --shadow-raised: 0 0 0 1px var(--field-border);
+}
+
 /* ------------------------------------------------------- Tailwind theme -- */
 /*
  * Every default scale is cleared first, so off-contract values cannot be
@@ -160,27 +215,22 @@
 @theme {
   --*: initial;
 
-  /* Type: one sans, one mono. Six sizes, nothing above 20px. */
+  /* Type: one sans, one mono. Seven sizes in rem, so they follow the browser. */
   --font-sans: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Martian Mono", ui-monospace, "SF Mono", monospace;
-  /* Martian Mono is wide: 0.70em per character at its normal width. Its width
-     axis runs 75 to 112.5, and it is narrowed once here to 0.65em, which keeps
-     the letters open while a dense row of counts still fits its column. Applied
-     in the base layer below and in the `meta` utility. */
-  --mono-stretch: 87.5%;
-  --text-2xs: 11px; --text-2xs--line-height: 16px; /* uppercase mono metadata */
-  --text-xs: 12px;  --text-xs--line-height: 16px;
-  --text-sm: 13px;  --text-sm--line-height: 20px;  /* the workhorse */
-  --text-base: 14px; --text-base--line-height: 1.65; /* markdown reading surface only */
-  --text-lg: 16px;  --text-lg--line-height: 24px;
-  --text-xl: 20px;  --text-xl--line-height: 28px;  /* panel title, nothing else */
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  --text-2xs: 0.75rem;    --text-2xs--line-height: 1.35; /* 12: metadata, unit labels, sentence case */
+  --text-xs: 0.8125rem;   --text-xs--line-height: 1.5;   /* 13: help text, secondary lines */
+  --text-sm: 0.9375rem;   --text-sm--line-height: 1.5;   /* 15: the workhorse */
+  --text-base: 1.0625rem; --text-base--line-height: 1.6; /* 17: passages and document text */
+  --text-lg: 1.25rem;     --text-lg--line-height: 1.3;   /* 20: hit rank, block titles */
+  --text-xl: 1.625rem;    --text-xl--line-height: 1.25;  /* 26: panel titles */
+  --text-2xl: 2.25rem;    --text-2xl--line-height: 1.15; /* 36: the Read page title only */
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
-  --tracking-meta: 0.06em;
 
-  /* Spacing: 4px base, capped at 24px. There is no `--spacing` multiplier, so
-     only the keys below resolve — that cap is the enforcement and it stays.
+  /* Spacing: 4px base, capped at 32px. There is no `--spacing` multiplier, so
+     only the keys below resolve, and that cap is the enforcement and it stays.
      The zero step has to be declared, though: with no multiplier Tailwind
      cannot derive it either, and `min-w-0`, `min-h-0`, `p-0`, `gap-0`,
      `inset-0` and the rest compile to nothing while still reading as live
@@ -191,10 +241,11 @@
   --spacing-3: 12px;
   --spacing-4: 16px;
   --spacing-6: 24px;
+  --spacing-8: 32px; /* section rhythm in the Ask panel and on Read only */
 
-  /* Shape: one radius per role, zero shadows (none are declared). */
-  --radius-control: 4px; /* interactive */
-  --radius-panel: 6px; /* panels */
+  /* Shape: one radius per role. */
+  --radius-control: 6px; /* interactive */
+  --radius-panel: 8px; /* cards and panels */
 
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
@@ -203,9 +254,17 @@
 }
 
 @theme inline {
+  /* The one shadow. Inline, so `shadow-raised` reads the live token and swaps
+     with the theme and the contrast variant; no other shadow is declared. */
+  --shadow-raised: var(--shadow-raised);
+
   /* Channel A, semantic */
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
+  --color-surface-raised: var(--surface-raised);
+  --color-accent-wash: var(--accent-wash);
+  --color-stale: var(--stale);
+  --color-stale-wash: var(--stale-wash);
   --color-hairline: var(--hairline);
   --color-fg: var(--text-primary);
   --color-fg-muted: var(--text-secondary);
@@ -273,33 +332,30 @@
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
 
-/* Data rows: 28px, 24px compact. Sizes, not spacing, so outside the cap. */
+/* Rows: 36px, 28px compact. Sizes, not spacing, so outside the cap. */
 @utility h-row {
-  height: 28px;
+  height: var(--row);
 }
 @utility h-row-compact {
-  height: 24px;
+  height: var(--row-compact);
 }
 @utility h-control {
-  height: 28px;
+  height: var(--row-compact);
 }
 
-/* The 11px metadata voice: uppercase mono, tracked. */
+/* The metadata voice: the smallest size, sans, sentence case, secondary tint. */
 @utility meta {
-  font-family: var(--font-mono);
-  font-stretch: var(--mono-stretch);
-  font-size: 11px;
-  line-height: 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
   color: var(--text-secondary);
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
-    font-size: 13px;
-    line-height: 20px;
+    font-size: 100%;
+    line-height: 1.5;
     background: var(--surface);
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
@@ -314,15 +370,13 @@
   ::after {
     border-color: var(--hairline);
   }
-  /* Mono does the numbers; tabular figures so token counts align. Martian Mono
-     is narrowed on its width axis so dense rows and tables still fit. */
+  /* Mono does the numbers; tabular figures so token counts align. */
   code,
   kbd,
   pre,
   samp,
   .font-mono {
     font-variant-numeric: tabular-nums;
-    font-stretch: var(--mono-stretch);
   }
   :focus-visible {
     outline: 2px solid var(--focus-ring);

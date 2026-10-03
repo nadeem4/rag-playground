@@ -42,9 +42,20 @@ describe("the zero step of the spacing scale", () => {
     expect(ZERO.filter((name) => !css.includes(`.${name}`))).toEqual([])
   })
 
-  it("still refuses spacing above the 24px cap", async () => {
-    const over = ["p-8", "p-32", "gap-10"]
-    const css = await buildCss(over)
+  it("compiles the 32px step and still refuses spacing above the 32px cap", async () => {
+    const over = ["p-10", "p-12", "p-32", "gap-10"]
+    const css = await buildCss(["p-8", ...over])
+    expect(css).toContain(".p-8")
     expect(over.filter((name) => css.includes(`.${name}`))).toEqual([])
+  })
+})
+
+describe("the one shadow", () => {
+  it("compiles shadow-raised and no other shadow utility", async () => {
+    const others = ["shadow", "shadow-sm", "shadow-md", "shadow-lg", "shadow-xl"]
+    const css = await buildCss(["shadow-raised", ...others])
+    expect(css).toContain(".shadow-raised")
+    expect(css).toMatch(/var\(--shadow-raised\)/)
+    expect(others.filter((name) => css.includes(`.${name} {`))).toEqual([])
   })
 })

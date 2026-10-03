@@ -131,6 +131,14 @@ export function scoreKey(rows: readonly HitRowData[]): string {
 }
 
 /**
+ * True when a reranker reordered the hits but kept the search's scores (MMR,
+ * the LLM reranker): every row has a prior score equal to its score.
+ */
+export function reorderedOnly(rows: readonly HitRowData[]): boolean {
+  return rows.length > 0 && rows.every((r) => r.prior_score !== null && r.prior_score === r.score)
+}
+
+/**
  * The largest positive value of one measure across the hits. Each component
  * gets its own scale: a cosine lives in [-1, 1] and a BM25 score is unbounded,
  * so one shared axis would flatten one of them to nothing.

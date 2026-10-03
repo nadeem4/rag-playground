@@ -354,8 +354,10 @@ describe("RetrievalResultInspector", () => {
     const miss = [...sixth.querySelectorAll("span")].find((el) => el.textContent === "no keyword match")!
     expect(miss.className).toContain("whitespace-nowrap")
     expect(container.querySelector(".ri-head")).toBeTruthy()
-    // Below the full row's width the scores become a wrapping line under the passage and the header hides.
-    expect(css).toMatch(/@container \(max-width: 439px\)[\s\S]*\.ri-head \{\s*display: none;[\s\S]*\.ri-scores \{[^}]*display: flex;\s*flex-wrap: wrap;/)
+    // Below 600px of list (a phone, or one column of the side-by-side comparison) the scores become
+    // a wrapping line under the passage and the header hides, so the passage keeps a reading measure.
+    expect(css).not.toContain("max-width: 439px")
+    expect(css).toMatch(/@container \(max-width: 599px\)[\s\S]*\.ri-head \{\s*display: none;[\s\S]*\.ri-scores \{[^}]*display: flex;\s*flex-wrap: wrap;/)
   })
 
   it("names every score's scale beside its number, in mono: RRF, Dense, BM25", () => {
@@ -364,6 +366,9 @@ describe("RetrievalResultInspector", () => {
     expect(first.className).toContain("font-mono")
     const lines = [...first.querySelectorAll<HTMLElement>(".ri-score")].map((l) => l.textContent)
     expect(lines).toEqual([`RRF${"0.03279"}`, expect.stringMatching(/^Dense0\.\d{3,4}$/), expect.stringMatching(/^BM25\d\.\d{3}$/)])
+    // The name and the value share one size, so their baselines meet.
+    const line = first.querySelector<HTMLElement>(".ri-score")!
+    expect([...line.children].slice(0, 2).map((c) => c.className.match(/\btext-(2xs|xs|sm)\b/)?.[0])).toEqual(["text-xs", "text-xs"])
     // A reranker that rescored names its own scale.
     cleanup()
     const rescored = { ...mmr, hits: mmr.hits.map((h, i) => ({ ...h, prior_score: h.score, score: 8.21 - i })) }
@@ -391,8 +396,13 @@ describe("RetrievalResultInspector", () => {
     expect(buttons.length).toBe(hybrid.hits.length)
     const first = container.querySelector<HTMLElement>('[data-hit-row="1"]')!
     const button = within(first).getByRole("button", { name: "Show in PDF" })
-    expect(first.querySelector("[data-testid=where]")!.contains(button)).toBe(true)
-    expect(button.className).toContain("underline")
+    const where = first.querySelector<HTMLElement>("[data-testid=where]")!
+    expect(where.contains(button)).toBe(true)
+    // One size for the whole line; the button in the accent text tint, no underline at rest, no border, no fill.
+    expect(where.className).toMatch(/\btext-xs\b/)
+    expect(button.className).not.toMatch(/\btext-(2xs|xs|sm)\b/)
+    expect(button.className).toContain("text-primary")
+    expect(button.className).not.toMatch(/(^|\s)underline(\s|$)/)
     expect(button.className).not.toMatch(/\bborder\b/)
     expect(button.className).not.toContain("bg-surface")
   })

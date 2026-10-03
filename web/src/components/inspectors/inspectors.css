@@ -227,9 +227,11 @@
 .ri-score-miss {
   grid-column: span 2;
 }
-/* A list narrower than the full row (a phone): the scores wrap under the
-   passage on their own line, each still named, instead of being cut off. */
-@container (max-width: 439px) {
+/* A list under 600px (a phone, or one column of the side-by-side comparison
+   at 1440): the scores wrap under the passage on their own line, each still
+   named, so the passage keeps a reading measure instead of a 30 character
+   ribbon beside the score cluster. */
+@container (max-width: 599px) {
   .ri-list {
     grid-template-columns: max-content minmax(0, 1fr);
   }
@@ -266,6 +268,9 @@
     opacity: 0;
   }
 }
+/* On a new rerank the reranked rows also run the FLIP (flip.ts). A script
+   animation composites above this one, so they fade and slide without the
+   rise: that is on purpose, the slide is the motion that carries meaning. */
 .ri-row[data-enter] {
   animation: ri-enter var(--dur-mid) var(--ease-in) backwards;
   animation-delay: calc(var(--i, 0) * 30ms);

@@ -6,7 +6,7 @@ import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Registry, RetrievalRes
 import { useArtifactPayload } from "@/api/useArtifact"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
-import { rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
+import { reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
 import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
@@ -34,8 +34,6 @@ export interface AskOutputs {
   retrieveId?: string
   rerank?: RetrievalResult
   rerankId?: string
-  /** The use case output's artifact id. */
-  outputId?: string
   /** The use case's payload: a Search output or a Chat output. */
   output?: unknown
   chunkSet?: ChunkSet
@@ -56,8 +54,7 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
   const docNode = retrieve && retrieveId ? upstreamOfStage(graph, retrieve.id, ["clean", "parse"]) : undefined
   const r = useArtifactPayload(retrieveId)
   const rr = useArtifactPayload(rerankId)
-  const outputId = fresh(results, stale, useCase)
-  const out = useArtifactPayload(outputId)
+  const out = useArtifactPayload(fresh(results, stale, useCase))
   const chunks = useArtifactPayload(fresh(results, stale, chunkNode))
   const doc = useArtifactPayload(fresh(results, stale, docNode))
   const failedNode = [query, retrieve, rerank, useCase].find((n) => n && results[n.id]?.status === "failed" && !stale.has(n.id))
@@ -66,7 +63,6 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
     retrieveId,
     rerank: asResult(rr.data),
     rerankId,
-    outputId,
     output: out.data,
     chunkSet: chunks.data as ChunkSet | undefined,
     doc: doc.data as ParsedDoc | undefined,
@@ -121,13 +117,39 @@ export function priorPlaces(now: ReadonlyMap<string, Rect>, rows: readonly HitRo
   return out
 }
 
+/**
+ * A CSS time in milliseconds. The built stylesheet is minified, so `320ms`
+ * reads back as `.32s`: the unit must be read, not assumed.
+ */
+export function durationMs(raw: string, fallback: number): number {
+  const v = raw.trim()
+  const n = parseFloat(v)
+  if (!Number.isFinite(n)) return fallback
+  return v.endsWith("ms") ? n : v.endsWith("s") ? n * 1000 : fallback
+}
+
 /** Motion 4's timing from the tokens: `--dur-slow` on `--ease-in`. */
-function slideTiming(): { duration: number; easing: string } {
+export function slideTiming(): { duration: number; easing: string } {
   const css = getComputedStyle(document.documentElement)
   return {
-    duration: parseFloat(css.getPropertyValue("--dur-slow")) || 320,
+    duration: durationMs(css.getPropertyValue("--dur-slow"), 320),
     easing: css.getPropertyValue("--ease-in").trim() || "cubic-bezier(0.2, 0, 0, 1)",
   }
+}
+
+/*
+ * What the two motions have already shown, by artifact id. Module level, not
+ * component state: Back to Ask remounts the panel, and a cached result comes
+ * back under the id it had (Cross-encoder, MMR, Cross-encoder again), and
+ * neither may replay a motion the reader has seen.
+ */
+const listsShown = new Set<string>()
+const reranksPlayed = new Set<string>()
+
+/** Forget both, for tests. */
+export function resetMotionMemory(): void {
+  listsShown.clear()
+  reranksPlayed.clear()
 }
 
 export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false }: AskResultsProps) {
@@ -135,26 +157,24 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
 
   // Motion 3: a list fades in the first time it appears for its artifact id,
-  // never again when Hide and Show comparison remount it.
-  const seen = useRef(new Set<string>())
+  // never again when Hide and Show comparison or Back to Ask remount it.
   const shown: string[] = []
   const enter = (id: string | undefined) => {
     if (id) shown.push(id)
-    return id !== undefined && !seen.current.has(id)
+    return id !== undefined && !listsShown.has(id)
   }
   useEffect(() => {
-    for (const id of shown) seen.current.add(id)
+    for (const id of shown) listsShown.add(id)
   })
 
   // Motion 4: once per rerank result, the reranked hits slide from the place
-  // of their prior rank. Never on a rerender, a collapse or an expand.
+  // of their prior rank. Never on a rerender, a collapse, an expand or a remount.
   const flipRef = useRef<HTMLDivElement>(null)
-  const played = useRef<string | undefined>(undefined)
   useLayoutEffect(() => {
     const el = flipRef.current
     const id = o.rerankId
-    if (!el || !id || !o.rerank || played.current === id) return
-    played.current = id
+    if (!el || !id || !o.rerank || reranksPlayed.has(id)) return
+    reranksPlayed.add(id)
     play(el, priorPlaces(measure(el, "[data-flip-key]"), rowsFromResult(o.rerank)), slideTiming())
   })
 
@@ -177,14 +197,17 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   } else if (!rerank) {
     // With a reranker whose result is loading, failed or stale, no list: the order shown would not be the reranked one.
     const search = !rerank && isSearch(o.output) ? o.output : undefined
-    const rows = search ? rowsFromSearch(search) : o.retrieve ? rowsFromResult(o.retrieve) : null
+    // A Search use case trims the hits (six candidates, five shown): wait for its
+    // output rather than show the retrieval rows and then swap them. Only a failed
+    // use case falls back to the retrieval rows, under its error.
+    const waiting = useCase?.transform === "search" && !search && o.failed?.node.id !== useCase.id
+    const rows = waiting ? null : search ? rowsFromSearch(search) : o.retrieve ? rowsFromResult(o.retrieve) : null
     const total = search ? search.payload.total_candidates : o.retrieve?.total_candidates
-    const id = search ? o.outputId : o.retrieveId
     if (rows) {
       lists = (
         <RetrievalView
-          key={id}
-          enter={enter(id)}
+          key={o.retrieveId}
+          enter={enter(o.retrieveId)}
           rows={rows}
           chunkSet={o.chunkSet}
           doc={o.doc}
@@ -264,14 +287,20 @@ function Comparison({
         showDetail={false}
         badges
         facts={
-          open ? (
-            title
-          ) : (
-            <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
-              {title}
-              {toggle}
-            </div>
-          )
+          <>
+            {open ? (
+              title
+            ) : (
+              <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
+                {title}
+                {toggle}
+              </div>
+            )}
+            {/* MMR and the LLM reranker reorder without rescoring: say why the scores are not in order. */}
+            {reorderedOnly(after) ? (
+              <p className="basis-full text-xs text-fg-muted">{`Ordered by ${rerankLabel(node.transform)}; the scores are the search's.`}</p>
+            ) : null}
+          </>
         }
       />
       {/* The reranker's run note states the movement count; it is said here and nowhere else. */}

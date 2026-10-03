@@ -278,7 +278,7 @@ function Summary({ children }: { children: ReactNode }) {
  * The list is one grid and every row a subgrid of it (inspectors.css), so the
  * columns are sized by their content, the widest row's, and still line up from
  * row to row: rank, the passage, then the score cluster's name, value and bar.
- * No width is measured for a font. Below 440px of list the scores wrap under
+ * No width is measured for a font. Below 600px of list the scores wrap under
  * the passage instead.
  */
 
@@ -366,14 +366,14 @@ function HitList({
                 </p>
               ) : null}
               <p className="ri-snippet font-sans text-base text-fg">{r.text}</p>
-              <p data-testid="where" className="flex flex-wrap items-baseline gap-x-3 text-2xs text-fg-muted">
+              <p data-testid="where" className="flex flex-wrap items-baseline gap-x-3 text-xs text-fg-muted">
                 {where[0] ? <span className="font-mono tabular-nums">{where[0]}</span> : null}
                 {where[1] ? <span>{where[1]}</span> : null}
                 {where[2] ? <span className="font-mono">{where[2]}</span> : null}
                 {onShowPdf && canPdf(i) ? (
                   <button
                     type="button"
-                    className="cursor-pointer rounded-control text-xs text-fg-muted underline decoration-hairline underline-offset-4 transition-colors duration-(--dur-fast) hover:text-fg hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
+                    className="cursor-pointer rounded-control font-medium text-primary underline-offset-4 transition-colors duration-(--dur-fast) hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
                     onClick={(e) => {
                       e.stopPropagation()
                       onShowPdf(i)
@@ -415,12 +415,12 @@ const MISSED: Record<string, string> = { bm25: "no keyword match", dense: "no me
  * row's score subgrid; `.ri-score` itself is `display: contents`.
  */
 function Score({ name, value, max, bar, missed }: { name: string; value: number | undefined; max: number; bar: boolean; missed?: string }) {
-  const nameEl = <span className="ri-score-name text-2xs text-fg-muted">{name}</span>
+  const nameEl = <span className="ri-score-name text-xs text-fg-muted">{name}</span>
   if (value === undefined) {
     return (
       <span className="ri-score">
         {nameEl}
-        <span className="ri-score-miss text-2xs whitespace-nowrap text-fg-muted">{missed ?? ""}</span>
+        <span className="ri-score-miss text-xs whitespace-nowrap text-fg-muted">{missed ?? ""}</span>
       </span>
     )
   }

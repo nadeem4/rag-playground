@@ -1,8 +1,9 @@
 """Warm up the first-run models in the background.
 
 The sample document's default graph parses with Docling and indexes with the
-Qwen3 embedder, and each takes a while to load the first time. `start()` loads
-both in a daemon thread, so the models are likely ready by the time the user
+Qwen3 embedder, and each takes a while to load the first time; so does the
+default cross-encoder the first time someone reranks. `start()` loads all
+three in a daemon thread, so the models are likely ready by the time the user
 presses Run. It runs at most once per process, never blocks the caller, and a
 failure is only logged: the run itself loads the models again if it has to.
 
@@ -30,6 +31,18 @@ def _warm() -> None:
     _converter(DoclingConfig()).initialize_pipeline(InputFormat.PDF)
     qwen = Qwen3Embedding06B
     _load_model(qwen.model_id, qwen.revision, qwen.dtype)
+    _warm_reranker()
+
+
+def _warm_reranker() -> None:
+    """Load the default cross-encoder. A failed download is logged, never
+    raised: the reranker loads the model again when it first runs."""
+    from plugins.rerank.cross_encoder import CrossEncoderConfig, _load
+
+    try:
+        _load(CrossEncoderConfig().model)
+    except Exception:
+        log.exception("cross-encoder warm-up failed")
 
 
 def _run() -> None:

@@ -323,7 +323,7 @@
     },
     "docling": {
       "name": "docling",
-      "version": "1",
+      "version": "2",
       "summary": "Renders each page as an image and runs a layout model that labels every region: title, section heading, list item, table, page header and footer. A reading-order model then puts the regions in sequence. Much slower than pdfium, with far more structure.",
       "stage": "parse",
       "output": "parsed_doc",
@@ -369,6 +369,12 @@
             ],
             "title": "Table Mode",
             "type": "string"
+          },
+          "keep_furniture": {
+            "default": false,
+            "description": "Keep page headers and footers in the text. Turn this on when the layout model mistakes real content near the page edges, such as the last line of a one-page resume, for a footer.",
+            "title": "Keep page headers and footers",
+            "type": "boolean"
           }
         },
         "title": "DoclingConfig",

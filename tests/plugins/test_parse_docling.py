@@ -19,9 +19,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from docling_core.types.doc import ContentLayer
+
 from core.artifacts import ArtifactType
 from core.payloads import ParsedDoc
-from core.ports import Stage
+from core.ports import RunContext, Stage
 from core.registry import registry
 
 import plugins.parse.docling as docling_plugin
@@ -40,7 +42,7 @@ def test_registered_under_the_parse_stage():
     assert cls.output is ArtifactType.PARSED_DOC
     assert set(cls.inputs) == {"file"}
     assert cls.inputs["file"].type is ArtifactType.RAW_FILE
-    assert cls.version == "1"
+    assert cls.version == "2"
     assert cls.deterministic is True
 
 
@@ -49,6 +51,7 @@ def test_config_defaults():
     assert cfg.do_ocr is False
     assert cfg.do_table_structure is True
     assert cfg.table_mode == "fast"
+    assert cfg.keep_furniture is False
 
 
 def test_every_config_field_has_plain_help_text():
@@ -56,6 +59,13 @@ def test_every_config_field_has_plain_help_text():
     for name, field in model.model_fields.items():
         assert field.description, f"{name} has no description"
         assert chr(0x2014) not in field.description, f"{name} uses an em-dash"
+
+
+def test_keep_furniture_is_labelled_as_the_note_names_it():
+    """The run note says "Turn on Keep page headers and footers", so the form
+    must show that label, not one derived from the field name."""
+    field = registry.get(Stage.PARSE, "docling").config_model.model_fields["keep_furniture"]
+    assert field.title == "Keep page headers and footers"
 
 
 def test_table_mode_rejects_unknown_values():
@@ -184,9 +194,11 @@ def _prov(page, l, t, r, b):
     )
 
 
-def _item(label, text="", page=1, level=None, box=(10, 700, 200, 680), md=None):
+def _item(label, text="", page=1, level=None, box=(10, 700, 200, 680), md=None,
+          layer=ContentLayer.BODY):
     item = SimpleNamespace(label=SimpleNamespace(value=label), text=text,
-                           prov=[_prov(page, *box)] if page else [])
+                           prov=[_prov(page, *box)] if page else [],
+                           content_layer=layer)
     if level is not None:
         item.level = level
     if md is not None:
@@ -200,9 +212,16 @@ class _FakeDoc:
         self.pages = {n: SimpleNamespace(size=SimpleNamespace(height=height))
                       for n in range(1, pages + 1)}
 
-    def iterate_items(self):
+    def iterate_items(self, included_content_layers=None):
+        # Like Docling: only the body layer unless the caller asks for more.
+        layers = included_content_layers or {ContentLayer.BODY}
         for item in self._items:
-            yield item, 0
+            if item.content_layer in layers:
+                yield item, 0
+
+
+def _footer(text, page=1):
+    return _item("page_footer", text, page=page, layer=ContentLayer.FURNITURE)
 
 
 def test_document_walk_maps_types_order_pages_and_bboxes():
@@ -251,6 +270,111 @@ def test_footers_stay_in_elements_but_out_of_the_markdown():
     markdown, _ = parsed.render_markdown()
     assert markdown == "Body text."
     assert parsed.elements[1].type == "footer"
+
+
+def test_furniture_layer_is_walked_so_a_footer_becomes_a_footer_block():
+    """Docling puts page headers and footers in its furniture layer. A real
+    line near the page edge (the last line of a one-page resume) can land
+    there, so it must reach `elements` where the inspector lists it."""
+    doc = _FakeDoc([
+        _item("text", "Experience."),
+        _footer("Boston University, Master of Science"),
+    ])
+    parsed = ParsedDoc(elements=elements_from_document(doc))
+    assert [(e.type, e.text) for e in parsed.elements] == [
+        ("paragraph", "Experience."),
+        ("footer", "Boston University, Master of Science"),
+    ]
+    markdown, _ = parsed.render_markdown()
+    assert markdown == "Experience."
+
+
+def test_keep_furniture_puts_headers_and_footers_into_the_text():
+    doc = _FakeDoc([
+        _item("page_header", "Running head", layer=ContentLayer.FURNITURE),
+        _item("text", "Experience."),
+        _footer("Boston University, Master of Science"),
+    ])
+    parsed = ParsedDoc(elements=elements_from_document(doc, keep_furniture=True))
+    assert [(e.type, e.level) for e in parsed.elements] == [
+        ("paragraph", None), ("paragraph", None), ("paragraph", None),
+    ]
+    markdown, _ = parsed.render_markdown()
+    assert "Boston University, Master of Science" in markdown
+    assert "Running head" in markdown
+
+
+def _ctx(tmp_path: Path) -> RunContext:
+    return RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path)
+
+
+def _run_with_fake_converter(monkeypatch, tmp_path, doc, **config):
+    cls = registry.get(Stage.PARSE, "docling")
+    fake = SimpleNamespace(convert=lambda stream: SimpleNamespace(document=doc))
+    monkeypatch.setattr(docling_plugin, "_converter", lambda cfg: fake)
+    path = tmp_path / "doc.pdf"
+    path.write_bytes(b"%PDF-1.4")
+    ctx = _ctx(tmp_path)
+    payload = cls().apply(
+        {"file": {"sha": "a" * 64, "filename": path.name, "path": str(path)}},
+        cls.config_model(**config),
+        ctx,
+    )
+    return ParsedDoc(**payload), ctx.extras.get("meta", {}).get("note")
+
+
+def test_note_says_one_block_was_set_aside(monkeypatch, tmp_path):
+    doc = _FakeDoc([_item("text", "Body."), _footer("Boston University")])
+    _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc)
+    assert note == (
+        "Docling set aside 1 block as page headers or footers, so it is not in "
+        "the text. Turn on Keep page headers and footers if something near a "
+        "page edge is missing."
+    )
+
+
+def test_note_says_several_blocks_were_set_aside(monkeypatch, tmp_path):
+    doc = _FakeDoc([_item("text", "Body."), _footer("One"), _footer("Two", page=2)])
+    _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc)
+    assert note == (
+        "Docling set aside 2 blocks as page headers or footers, so they are not "
+        "in the text. Turn on Keep page headers and footers if something near a "
+        "page edge is missing."
+    )
+
+
+def test_note_says_the_blocks_were_kept_when_the_switch_is_on(monkeypatch, tmp_path):
+    doc = _FakeDoc([_item("text", "Body."), _footer("One"), _footer("Two", page=2)])
+    parsed, note = _run_with_fake_converter(monkeypatch, tmp_path, doc,
+                                            keep_furniture=True)
+    assert note == (
+        "Docling kept 2 blocks it took for page headers or footers in the text."
+    )
+    assert [e.type for e in parsed.elements] == ["paragraph"] * 3
+
+    doc = _FakeDoc([_item("text", "Body."), _footer("One")])
+    _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc,
+                                       keep_furniture=True)
+    assert note == (
+        "Docling kept 1 block it took for page headers or footers in the text."
+    )
+
+
+def test_no_note_when_nothing_was_set_aside(monkeypatch, tmp_path):
+    doc = _FakeDoc([_item("text", "Body.")])
+    _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc)
+    assert note is None
+
+
+def test_explain_states_the_keep_furniture_switch():
+    cls = registry.get(Stage.PARSE, "docling")
+    off = cls().explain(cls.config_model()).settings
+    on = cls().explain(cls.config_model(keep_furniture=True)).settings
+    assert "Page headers and footers it recognises are kept out of the text." in off
+    assert "Keep page headers and footers is off" in off
+    assert "Keep page headers and footers is on" in on
+    for text in (off, on):
+        assert chr(0x2014) not in text and chr(0x2013) not in text
 
 
 # -- slow half: real conversions ----------------------------------------------

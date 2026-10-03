@@ -481,6 +481,23 @@ def test_exact_duplicate_is_removed_and_the_first_kept(tmp_path):
     assert ids_in_order(out) == ["a", "b"]
 
 
+def test_parser_marked_headers_and_footers_are_left_alone(tmp_path):
+    """A running footer the parser already typed as `footer` never renders, so
+    repeating it is not a duplicate worth reporting; the header and footer step
+    owns those blocks."""
+    d = doc(
+        [
+            el("a", "Body on page one.", 0),
+            el("f1", "RAG Playground sample. Page 1", 1, etype="footer", page=1),
+            el("b", "Body on page two.", 2),
+            el("f2", "RAG Playground sample. Page 1", 3, etype="footer", page=2),
+        ]
+    )
+    out = run(DedupeBlocks, d, tmp_path)
+    assert ids_in_order(out) == ["a", "f1", "b", "f2"]
+    assert reports(out) == []
+
+
 def test_exact_matching_normalizes_whitespace_and_case(tmp_path):
     d = doc(
         [

@@ -32,7 +32,7 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
-from core.payloads import Element
+from core.payloads import Element, EXCLUDED_FROM_MARKDOWN
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
 from core.transform import Explanation, Transform
@@ -139,6 +139,11 @@ class DedupeBlocks(Transform[DedupeBlocksConfig]):
             # block into one would silently merge unrelated figures and tables,
             # whose meaning is in their metadata, not their text.
             if not key:
+                continue
+            # Blocks the parser already typed as page headers, footers or page
+            # numbers never render, so repeating them is not a duplicate worth
+            # reporting; the header and footer step owns those blocks.
+            if element.type in EXCLUDED_FROM_MARKDOWN:
                 continue
 
             twin = exact_index.get((element.type, key))

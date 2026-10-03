@@ -271,6 +271,7 @@ export function AskPanel(p: AskPanelProps) {
           outputs={outputs}
           comparisonHidden={p.comparisonHidden}
           stale={askStale}
+          questions={questions}
           onComparison={p.onComparison}
         />
         <Transcript entries={p.transcript} onAskAgain={setText} />

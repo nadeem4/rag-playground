@@ -97,8 +97,11 @@ function props(graph: PipelineGraph, results: Record<string, NodeState>): AskPan
 
 const withCrossEncoder = () => setReranker(sampleGraph(LIVE, UPLOAD), LIVE, "cross_encoder")
 const RERANKED = { retrieve: done("retrieve", "ret1"), rerank_1: done("rerank_1", "rr1"), use_case: done("use_case", "out1") }
-/** The reranked column's finding lines: where each kept piece moved from. */
-const badges = () => [...document.querySelectorAll('[data-column="reranked"] [data-testid=finding]')].map((b) => b.textContent)
+/** The reranked column's finding lines, Not kept slips included. */
+const findings = () => [...document.querySelectorAll('[data-column="reranked"] [data-testid=finding]')].map((b) => b.textContent ?? "")
+/** The kept pieces' finding lines: where each moved from. */
+const badges = () => findings().filter((t) => !t.startsWith("Not kept"))
+const NOTE = "Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place."
 
 /** The panel with the comparison state held above it, as Shell holds it. */
 function Panel(p: AskPanelProps) {
@@ -142,12 +145,47 @@ describe("the comparison, with a reranker", () => {
     expect(await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")).toBeTruthy()
   })
 
-  it("states the movement count once, in the run note under the right list", async () => {
-    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
-    const note = await screen.findByText("Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place.")
-    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(true)
+  it("states the movement count once, in the run note as the sub line", async () => {
+    // An id of its own: the meta cache outlives a test, and this one counts the fetches.
+    payloads.rrOnce = reranked()
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      url === "/api/artifacts/rrOnce" ? new Response(JSON.stringify({ id: "rrOnce", meta: { note: NOTE } }), { status: 200 }) : base(url),
+    )
+    render(<Panel {...props(withCrossEncoder(), { ...RERANKED, rerank_1: done("rerank_1", "rrOnce") })} />)
+    const note = await screen.findByText(NOTE)
+    expect(note.dataset.testid).toBe("sub-line")
+    expect(note.className).toContain("text-xs")
+    expect(note.className).toContain("text-fg-muted")
+    expect(screen.getAllByText(NOTE)).toHaveLength(1)
+    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(false)
     expect(screen.queryByTestId("fact-moved")).toBeNull()
     expect(document.body.textContent).not.toMatch(/Moved \d+ of/)
+    // The note was fetched once.
+    expect(vi.mocked(fetch).mock.calls.filter(([u]) => u === "/api/artifacts/rrOnce")).toHaveLength(1)
+  })
+
+  it("has no sub line under a reranker without a run note; the column says what it did", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const mmr = setReranker(p.graph, LIVE, "mmr")
+    render(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
+    await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })
+    await waitFor(() => expect(document.querySelector('[data-column="reranked"] [data-testid=what-it-did]')).toBeTruthy())
+    expect(screen.queryByTestId("sub-line")).toBeNull()
+  })
+
+  it("puts the piece the reranker dropped under the kept ones, as a Not kept slip, on the reranked column only", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(findings()).toHaveLength(6))
+    expect(findings()[5]).toBe("Not kept. It was 5th in search and the keep limit is 5.")
+    const right = [...document.querySelectorAll<HTMLElement>('[data-column="reranked"] [data-slip]')]
+    expect(right[5].dataset.flipKey).toBe(hybrid.hits[4].chunk.id)
+    expect(right[5].className).toContain("opacity-75")
+    const left = document.querySelector('[data-column="search"]') as HTMLElement
+    expect(left.textContent).not.toMatch(/Not kept/)
+    // Collapsed, the right list still ends with it.
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    expect(findings()[5]).toBe("Not kept. It was 5th in search and the keep limit is 5.")
   })
 
   it("collapsing hides the search order and keeps the reranked list with its finding lines", async () => {
@@ -235,7 +273,10 @@ describe("the two result motions", () => {
     const [container, before, timing] = vi.mocked(play).mock.calls[0]
     expect(container).toBe(document.querySelector('[data-column="reranked"]'))
     // Every kept hit has a place to come from; the one from #6 starts below the five.
-    expect([...before.keys()].sort()).toEqual(rows("reranked").map((r) => r.dataset.flipKey).sort())
+    // The Not kept slip stays where it is.
+    const keptRows = rows("reranked").filter((r) => !r.textContent!.includes("Not kept"))
+    expect(keptRows).toHaveLength(5)
+    expect([...before.keys()].sort()).toEqual(keptRows.map((r) => r.dataset.flipKey).sort())
     expect(timing).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
     // A rerender, a collapse and an expand do not play it again.
     rerender(<Panel {...p} />)
@@ -327,6 +368,22 @@ describe("the results without a reranker", () => {
     expect(await screen.findByRole("heading", { name: "Top 5 of 6 candidates, in search order" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Hide comparison" })).toBeNull()
     expect(screen.getAllByTestId("finding").map((f) => f.textContent!.split(",")[0])).toEqual(["1st", "2nd", "3rd", "4th", "5th"])
+    expect(document.body.textContent).not.toMatch(/Not kept/)
+  })
+
+  it("says how many candidates the search returned and how many are shown, in the sub line", async () => {
+    render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    const sub = await screen.findByTestId("sub-line")
+    expect(sub.textContent).toBe("Hybrid search returned 6 candidates. These are the top 5, in search order.")
+    expect(sub.className).toContain("text-xs")
+    expect(sub.className).toContain("text-fg-muted")
+  })
+
+  it("names the retriever in the sub line", async () => {
+    const g = sampleGraph(LIVE, UPLOAD)
+    const bm25: PipelineGraph = { ...g, nodes: g.nodes.map((n) => (n.stage === "retrieve" ? { ...n, transform: "bm25" } : n)) }
+    render(<AskPanel {...props(bm25, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    expect((await screen.findByTestId("sub-line")).textContent).toBe("BM25 search returned 6 candidates. These are the top 5, in search order.")
   })
 
   it("waits for the Search output, so the list never shows six rows and then five", async () => {
@@ -346,6 +403,55 @@ describe("the results without a reranker", () => {
   it("shows nothing before a question has run", () => {
     render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD), {})} />)
     expect(screen.queryByRole("heading", { name: /candidates/ })).toBeNull()
+  })
+})
+
+describe("the finding sentence", () => {
+  const SEARCH_ONLY = { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") }
+  const collapse = (t: string) => t.replace(/\s+/g, " ")
+
+  it("says what the closest piece says, verbatim, for a question outside the sample set", async () => {
+    render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD, "Who wrote this?"), SEARCH_ONLY)} />)
+    const p = await screen.findByTestId("finding-sentence")
+    const top = (searchJson as { payload: { results: { snippet: string }[] } }).payload.results[0].snippet
+    const said = (p.querySelector(".font-serif") as HTMLElement).textContent!
+    expect(top.startsWith(said)).toBe(true)
+    expect(said.endsWith("twice.")).toBe(true)
+    expect(collapse(p.textContent!)).toBe(`The closest piece says: ${collapse(said)}`)
+    // It sits above the sub line and the list.
+    const sub = screen.getByTestId("sub-line")
+    expect(p.compareDocumentPosition(sub) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("names the kept piece that holds the gold answer of a sample's question", async () => {
+    const card = { name: "primer", title: "t", blurb: "b", shows: "s", stresses: "chunk", pages: 3, default: false, filename: UPLOAD.filename, sha: UPLOAD.sha, question: "q" }
+    const golds = [{ id: "q1", question: "What should I measure?", gold_answer: "compare strategies on the same parsed document" }]
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+      if (url === "/api/samples") return ok([card])
+      if (url === "/api/samples/primer/questions") return ok(golds)
+      return base(url)
+    })
+    render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD, "What should I measure?"), SEARCH_ONLY)} />)
+    await waitFor(() => expect(screen.getByTestId("finding-sentence").textContent).toBe("Found in the 4th piece: compare strategies on the same parsed document"))
+    const q = screen.getByTestId("finding-sentence").querySelector("q") as HTMLElement
+    expect(q.className).toContain("font-serif")
+    expect(q.className).toContain("italic")
+  })
+
+  it("reads the kept pieces in reranked order under a reranker", async () => {
+    render(<Panel {...props(setReranker(sampleGraph(LIVE, UPLOAD, "Who wrote this?"), LIVE, "cross_encoder"), RERANKED)} />)
+    const p = await screen.findByTestId("finding-sentence")
+    // The reranked top piece is the search's sixth.
+    expect(hybrid.hits[5].chunk.text.startsWith((p.querySelector(".font-serif") as HTMLElement).textContent!)).toBe(true)
+  })
+
+  it("is not shown with Chat: the written answer stands in", async () => {
+    const chat = setUseCase(sampleGraph(LIVE, UPLOAD), LIVE, "chat")
+    render(<AskPanel {...props(chat, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "chat1") })} />)
+    await waitFor(() => expect(document.querySelector("[data-chat-inspector]")).toBeTruthy())
+    expect(screen.queryByTestId("finding-sentence")).toBeNull()
   })
 })
 

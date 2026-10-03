@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
-import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Registry, RetrievalResult } from "@/api/types"
-import { useArtifactPayload } from "@/api/useArtifact"
+import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
+import { loadMeta, useArtifactPayload } from "@/api/useArtifact"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
 import { reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
@@ -14,12 +14,14 @@ import { measure, play, type Rect } from "@/lib/flip"
 import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
-import { RERANKERS } from "./AskSettings"
+import { RERANKERS, RETRIEVAL_LABEL } from "./AskSettings"
+import { Finding } from "./Finding"
 
 /**
- * The results of the Ask panel: a Chat answer when there is one, then either
- * one list in search order or, with a reranker, the search order against the
- * reranked order side by side. A failed Ask step shows its error here.
+ * The results of the Ask panel: the finding sentence (or a Chat answer when
+ * there is one), the sub line, then either one list in search order or, with a
+ * reranker, the search order against the reranked order side by side. A
+ * failed Ask step shows its error here.
  */
 
 /** A completed result that still matches the graph. */
@@ -82,6 +84,29 @@ export function finalRows(o: AskOutputs, reranked: boolean): HitRowData[] | null
 
 export const rerankLabel = (transform: string) => RERANKERS.find((r) => r.name === transform)?.label ?? transform
 
+/** The retriever's plain name for the sub line: `Hybrid`, `Dense`, `BM25`. */
+const retrieverName = (transform: string) => (RETRIEVAL_LABEL[transform] ?? transform).replace(/\s*\(.*\)$/, "")
+
+/**
+ * A run's note (`meta.note`), or null when it has none; undefined while it
+ * loads. The meta is cached for the session, so What it did reads the same fetch.
+ */
+function useRunNote(id: string | undefined): string | null | undefined {
+  const [state, setState] = useState<{ id?: string; note: string | null }>({ note: null })
+  useEffect(() => {
+    if (!id) return
+    let live = true
+    loadMeta(id).then(
+      (m) => live && setState({ id, note: typeof m?.meta?.note === "string" && m.meta.note.trim() ? m.meta.note.trim() : null }),
+      () => live && setState({ id, note: null }),
+    )
+    return () => {
+      live = false
+    }
+  }, [id])
+  return id && state.id === id ? state.note : undefined
+}
+
 const Heading = ({ children }: { children: ReactNode }) => <h3 className="text-sm font-semibold">{children}</h3>
 
 export interface AskResultsProps {
@@ -93,6 +118,8 @@ export interface AskResultsProps {
   onComparison: (hidden: string | null) => void
   /** True when an Ask step's last result no longer matches the settings: the old results are gone, so say why. */
   stale?: boolean
+  /** The sample's question set, for the finding sentence; empty for an upload. */
+  questions?: readonly SampleQuestion[]
 }
 
 export const STALE_LINE = "The settings changed since the last Ask. Press Ask to see the new results."
@@ -152,9 +179,11 @@ export function resetMotionMemory(): void {
   reranksPlayed.clear()
 }
 
-export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false }: AskResultsProps) {
-  const { rerank, useCase } = askNodes(graph)
+export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [] }: AskResultsProps) {
+  const { query, retrieve, rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
+  // The reranker's run note is the sub line; its meta is fetched once and What it did reads the same cache.
+  const note = useRunNote(rerank && o.rerank && o.retrieve ? o.rerankId : undefined)
 
   // Motion 3: a list fades in the first time it appears for its artifact id,
   // never again when Hide and Show comparison or Back to Ask remount it.
@@ -179,7 +208,11 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   })
 
   let lists: ReactNode = null
+  let kept: HitRowData[] | null = null
+  let sub: string | null = null
   if (rerank && o.rerank && o.retrieve) {
+    kept = rowsFromResult(o.rerank)
+    sub = note ?? null
     // Hidden for one rerank result only: a new result (a new run, another reranker) opens it again.
     const open = !o.rerankId || comparisonHidden !== o.rerankId
     lists = (
@@ -192,6 +225,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
         enterSearch={enter(o.retrieveId)}
         enterReranked={enter(o.rerankId)}
         flipRef={flipRef}
+        whatItDid={note === null}
       />
     )
   } else if (!rerank) {
@@ -204,6 +238,9 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
     const rows = waiting ? null : search ? rowsFromSearch(search) : o.retrieve ? rowsFromResult(o.retrieve) : null
     const total = search ? search.payload.total_candidates : o.retrieve?.total_candidates
     if (rows) {
+      kept = rows
+      const n = typeof total === "number" ? total : rows.length
+      sub = `${retrieverName(retrieve?.transform ?? "")} search returned ${n} candidates. These are the top ${rows.length}, in search order.`
       lists = (
         <RetrievalView
           key={o.retrieveId}
@@ -227,6 +264,12 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
       ) : null}
       {o.failed ? <Failed node={o.failed.node} error={o.failed.error} /> : null}
       {chat ? <ChatInspector payload={chat} chunkSet={o.chunkSet} /> : null}
+      {kept ? <Finding question={String(query?.config.text ?? "")} rows={kept} questions={questions} chat={Boolean(chat) || useCase?.transform === "chat"} /> : null}
+      {sub ? (
+        <p data-testid="sub-line" className="m-0 text-xs text-fg-muted">
+          {sub}
+        </p>
+      ) : null}
       {lists}
     </section>
   )
@@ -256,6 +299,7 @@ function Comparison({
   enterSearch,
   enterReranked,
   flipRef,
+  whatItDid,
 }: {
   node: GraphNode
   registry: Registry
@@ -266,10 +310,14 @@ function Comparison({
   enterReranked: boolean
   /** The reranked column, where motion 4 plays. */
   flipRef: RefObject<HTMLDivElement | null>
+  /** True when the reranker left no run note: What it did says the outcome under the list instead. */
+  whatItDid: boolean
 }) {
   const before = rowsFromResult(o.retrieve!)
   const after = rowsFromResult(o.rerank!)
   const kept = new Set(after.map((r) => r.chunk_id))
+  // The candidates the reranker dropped, each with its search place, follow the kept ones as Not kept slips.
+  const dropped = before.filter((r) => !kept.has(r.chunk_id)).map((r) => ({ ...r, prior_rank: r.rank }))
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
       {open ? "Hide comparison" : "Show comparison"}
@@ -281,11 +329,13 @@ function Comparison({
       <RetrievalView
         key={o.rerankId}
         enter={enterReranked}
-        rows={after}
+        rows={[...after, ...dropped]}
         chunkSet={o.chunkSet}
         doc={o.doc}
         showDetail={false}
         badges
+        kept={kept}
+        keepLimit={after.length}
         facts={
           <>
             {open ? (
@@ -303,8 +353,8 @@ function Comparison({
           </>
         }
       />
-      {/* The reranker's run note states the movement count; it is said here and nowhere else. */}
-      {o.rerankId ? <WhatItDid stage="rerank" type={infoFor(registry, node)?.output} artifactId={o.rerankId} preferNote /> : null}
+      {/* The reranker's run note is the sub line above the results; without one, What it did says the outcome here. */}
+      {o.rerankId && whatItDid ? <WhatItDid stage="rerank" type={infoFor(registry, node)?.output} artifactId={o.rerankId} preferNote /> : null}
     </div>
   )
   if (!open) return reranked

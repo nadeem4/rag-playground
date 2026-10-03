@@ -22,6 +22,7 @@ import {
   addCleaner,
   ancestors,
   columnOrder,
+  INDEX_STAGES,
   indexNode,
   infoFor,
   initialGraph,
@@ -123,8 +124,8 @@ function Build({ registry }: { registry: Registry }) {
 
   const busy = submitting || (runId !== null && !run.closed)
   const order = useMemo(() => columnOrder(graph), [graph])
-  // Run all stops at the first card whose settings cannot run.
-  const blocker = order.find((n) => blockingNode(graph, registry, explanations, n.id)?.id === n.id)
+  // Build the index runs the five index steps only, so only they can block it.
+  const blocker = order.filter((n) => INDEX_STAGES.includes(n.stage)).find((n) => blockingNode(graph, registry, explanations, n.id)?.id === n.id)
   const stale = useMemo(
     () => new Set(Object.keys(results).filter((id) => sigs[id] !== undefined && sigs[id] !== signature(graph, id, registry))),
     [results, sigs, graph, registry],

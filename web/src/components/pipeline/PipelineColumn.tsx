@@ -96,7 +96,6 @@ export function PipelineColumn(p: PipelineColumnProps) {
         const errs = p.errors[node.id]
         const title = titleFor(node)
         const stacked = infoFor(p.registry, node)?.stackable ?? false
-        const runTarget = node.id
         return (
           <Fragment key={node.id}>
             <NodeCard
@@ -113,14 +112,14 @@ export function PipelineColumn(p: PipelineColumnProps) {
               onSelect={() => p.onSelect(node.id)}
               onTransform={(t) => p.onTransform(node.id, t)}
               onConfig={(c) => p.onConfig(node.id, c)}
-              onRun={(force) => p.onRun(runTarget, force)}
+              onRun={(force) => p.onRun(node.id, force)}
               explain={p.explanations?.[node.id]}
               what={stages[node.stage]?.what}
               lesson={stages[node.stage]?.lesson}
               explainOpen={open === node.id}
               onExplainOpenChange={(o) => setOpen((cur) => (o ? node.id : cur === node.id ? null : cur))}
               blockedBy={(() => {
-                const b = blockingNode(p.graph, p.registry, p.explanations, runTarget)
+                const b = blockingNode(p.graph, p.registry, p.explanations, node.id)
                 return b ? titleFor(b) : undefined
               })()}
               previousArtifactId={p.history?.[node.id]?.previous}

@@ -51,8 +51,6 @@ export interface NodeCardProps {
   showId?: boolean
   /** Extra actions in the footer (Sweep). */
   actions?: ReactNode
-  /** Tooltip for Run when it runs more than this card (Ask runs through Search). */
-  runTitle?: string
   /** Plan I-12: this card's explanation for its CURRENT settings. */
   explain?: ExplainState
   /** Plan I-12: what this stage is for. */
@@ -300,7 +298,6 @@ export function NodeCard(p: NodeCardProps) {
           variant="outline"
           size="sm"
           disabled={p.busy || Boolean(p.blockedBy)}
-          title={p.runTitle}
           onClick={(e) => {
             e.stopPropagation()
             p.onRun(false)

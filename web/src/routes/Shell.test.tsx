@@ -229,6 +229,40 @@ describe("Build the index", () => {
   })
 })
 
+describe("Build the index is blocked only by its own steps", () => {
+  function stubBlocking(stage: string) {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/explain") {
+          const body = JSON.parse(String(init?.body))
+          const bad = body.stage === stage
+          return new Response(JSON.stringify({ settings: "s", tradeoff: null, warning: bad ? "No." : null, blocking: bad }), { status: 200 })
+        }
+        return base(url, init)
+      }),
+    )
+  }
+
+  it("a blocking explanation on a hidden ask-stage node leaves the button enabled", async () => {
+    stubBlocking("retrieve")
+    await ready()
+    const button = await screen.findByRole("button", { name: "Build the index" })
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+    await act(async () => {})
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+    expect(document.querySelector("[data-testid=run-all-blocked]")).toBeNull()
+  })
+
+  it("a blocking explanation on Parse disables it with the reason", async () => {
+    stubBlocking("parse")
+    await ready()
+    await waitFor(() => expect(document.querySelector("[data-testid=run-all-blocked]")?.textContent).toBe("Fix the Parse settings to run the pipeline."), { timeout: 2000 })
+    expect((screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
 describe("Build page explanations", () => {
   it("a blocking explanation disables Run all with a visible reason, as the user types", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>

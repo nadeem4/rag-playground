@@ -169,4 +169,4 @@ def test_drop_matching_notes_a_pattern_that_matched_nothing(tmp_path):
         DropMatchingConfig(pattern="zzz"),
         ctx,
     )
-    assert "matched no block" in ctx.extras["meta"]["note"]
+    assert "No block matched the pattern." in ctx.extras["meta"]["note"]

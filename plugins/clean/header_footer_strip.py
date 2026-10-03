@@ -46,7 +46,17 @@ from core.payloads import EXCLUDED_FROM_MARKDOWN, Element
 from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
 from core.transform import Explanation, Transform
-from plugins.clean import apply_edits, as_parsed_doc, make_report, normalize, report_entry
+from plugins.clean import (
+    NOTHING_REMOVED,
+    apply_edits,
+    as_parsed_doc,
+    count_by_kind,
+    make_report,
+    normalize,
+    plural,
+    removed_note,
+    report_entry,
+)
 
 #: A running head is short by definition. A repeated *paragraph* is boilerplate,
 #: which is `dedupe_blocks`' job — conflating the two would let this plugin
@@ -66,6 +76,13 @@ MIN_PAGES = 2
 #: Which end of the page a block sits at. The tuple order is the precedence
 #: order when one block is both (a page holding a single element).
 POSITIONS: tuple[tuple[str, str], ...] = (("first", "header"), ("last", "footer"))
+
+#: How a run note names each kind this step finds.
+KIND_NAMES = {
+    "header": "running header",
+    "footer": "running footer",
+    "page_number": "page number",
+}
 
 
 class HeaderFooterStripConfig(BaseModel):
@@ -188,6 +205,24 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
             )
         return Explanation(settings=settings, tradeoff=tradeoff, warning=warning)
 
+    @staticmethod
+    def _note(rows: list[tuple[Element, str, str]], drop: bool, total: int) -> str:
+        kinds = [new_type for _, new_type, _ in rows]
+        if drop:
+            note = removed_note([{"type": k} for k in kinds], names=KIND_NAMES)
+        else:
+            note = (
+                f"{NOTHING_REMOVED}Removal is off, so {plural(len(rows), 'block')} "
+                f"were relabelled instead: {count_by_kind(kinds, KIND_NAMES)}."
+            )
+        if len(rows) == total:
+            note += (
+                " Every block was marked as a running head, foot or page number: "
+                "each one repeated, or looked like a page number, at the same "
+                "page edge on at least two pages."
+            )
+        return note
+
     def apply(
         self,
         inputs: Mapping[str, Any],
@@ -213,21 +248,14 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
             verdicts.update(found)
 
         pages = {e.page for e in doc.elements if e.page is not None}
-        if len(pages) == 1:
-            set_note(
-                ctx,
-                "The document has only one page, so nothing can repeat across "
-                "pages and nothing was stripped.",
-            )
-        elif doc.elements and len(verdicts) == len(doc.elements):
-            set_note(
-                ctx,
-                "Every block was marked as a running head, foot or page number: "
-                "each one repeated, or looked like a page number, at the same "
-                "page edge on at least two pages.",
-            )
-
         if not verdicts:
+            reason = (
+                "The document has only one page, so nothing can repeat across pages."
+                if len(pages) == 1
+                else "No short block repeats on enough pages to count as a running "
+                "header or footer."
+            )
+            set_note(ctx, NOTHING_REMOVED + reason)
             return apply_edits(doc)
 
         retype = {eid: new_type for eid, (new_type, _) in verdicts.items()}
@@ -254,6 +282,8 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
                 }
                 for element, new_type, reason in rows
             ]
+
+        set_note(ctx, self._note(rows, config.drop, len(doc.elements)))
 
         report = make_report(
             self.name,

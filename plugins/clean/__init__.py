@@ -164,3 +164,60 @@ def apply_edits(
     if report is not None:
         out.parser_meta.setdefault(REPORT_KEY, []).append(dict(report))
     return out
+
+
+#: Past this many pages, a note says "across 12 pages" instead of listing them.
+MAX_PAGES_NAMED = 5
+
+
+def plural(count: int, word: str) -> str:
+    """`1 block`, `2 blocks`: the simple English plural a run note needs."""
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
+def join_words(items: list[str]) -> str:
+    """`a`, `a and b`, `a, b and c`."""
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def count_by_kind(kinds: list[str], names: Mapping[str, str] | None = None) -> str:
+    """`2 paragraphs and 1 list item`, in the order each kind first appears.
+
+    A kind is the element type with underscores as spaces, unless `names`
+    gives it a plainer word (a `header` is a `running header` to a reader).
+    """
+    counts: dict[str, int] = {}
+    for kind in kinds:
+        counts[kind] = counts.get(kind, 0) + 1
+    names = names or {}
+    return join_words(
+        [plural(n, names.get(k, k.replace("_", " "))) for k, n in counts.items()]
+    )
+
+
+def page_phrase(pages: list[int | None], preposition: str) -> str:
+    """` on pages 1, 2 and 3`, or empty when any block has no page."""
+    if not pages or any(p is None for p in pages):
+        return ""
+    unique = sorted(set(pages))
+    if len(unique) == 1:
+        return f" {preposition} page {unique[0]}"
+    if len(unique) > MAX_PAGES_NAMED:
+        return f" across {len(unique)} pages"
+    return f" {preposition} pages {join_words([str(p) for p in unique])}"
+
+
+def removed_note(
+    rows: list[dict[str, Any]], detail: str = "", names: Mapping[str, str] | None = None
+) -> str:
+    """`Removed 2 blocks: 2 paragraphs{detail}.`, the opening every cleaner uses."""
+    return (
+        f"Removed {plural(len(rows), 'block')}: "
+        f"{count_by_kind([r['type'] for r in rows], names)}{detail}."
+    )
+
+
+#: The note for a cleaner that removed nothing starts with this.
+NOTHING_REMOVED = "Removed 0 blocks. "

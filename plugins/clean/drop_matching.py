@@ -29,7 +29,15 @@ from core.artifacts import ArtifactType
 from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
 from core.transform import Explanation, Transform
-from plugins.clean import apply_edits, as_parsed_doc, make_report, report_entry
+from plugins.clean import (
+    NOTHING_REMOVED,
+    apply_edits,
+    as_parsed_doc,
+    make_report,
+    page_phrase,
+    removed_note,
+    report_entry,
+)
 
 
 class DropMatchingConfig(BaseModel):
@@ -120,6 +128,7 @@ class DropMatching(Transform[DropMatchingConfig]):
     ):
         doc = as_parsed_doc(inputs["doc"])
         if not config.pattern:
+            set_note(ctx, NOTHING_REMOVED + "No pattern is set, so there was nothing to match.")
             return apply_edits(doc)
 
         matches = _matcher(config)
@@ -130,8 +139,11 @@ class DropMatching(Transform[DropMatchingConfig]):
             if matches(element.text)
         ]
         if not removed:
-            set_note(ctx, "The pattern matched no block, so nothing was removed.")
+            set_note(ctx, NOTHING_REMOVED + "No block matched the pattern.")
             return apply_edits(doc)
+
+        where = page_phrase([row["page"] for row in removed], "on")
+        set_note(ctx, removed_note(removed, f"{where} that matched the pattern"))
 
         report = make_report(
             self.name,

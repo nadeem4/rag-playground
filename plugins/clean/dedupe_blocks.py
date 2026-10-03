@@ -33,10 +33,33 @@ from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import Element, EXCLUDED_FROM_MARKDOWN
-from core.ports import PortSpec, RunContext, Stage
+from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
 from core.transform import Explanation, Transform
-from plugins.clean import apply_edits, as_parsed_doc, make_report, normalize, report_entry
+from plugins.clean import (
+    NOTHING_REMOVED,
+    apply_edits,
+    as_parsed_doc,
+    make_report,
+    normalize,
+    page_phrase,
+    removed_note,
+    report_entry,
+)
+
+
+def _note(removed: list[dict[str, Any]], pages: Mapping[str, int | None]) -> str:
+    """`Removed 1 block: 1 paragraph from page 3 that repeats one from page 1.`"""
+    if len(removed) == 1:
+        row = removed[0]
+        twin_page = pages.get(row["duplicate_of"])
+        if row["page"] is not None and twin_page is not None:
+            return removed_note(
+                removed, f" from page {row['page']} that repeats one from page {twin_page}"
+            )
+        return removed_note(removed, " that repeats an earlier block")
+    where = page_phrase([r["page"] for r in removed], "from")
+    return removed_note(removed, f"{where} that repeat earlier blocks")
 
 
 class DedupeBlocksConfig(BaseModel):
@@ -170,8 +193,15 @@ class DedupeBlocks(Transform[DedupeBlocksConfig]):
             near_index.setdefault(element.type, []).append((element, key))
 
         if not removed:
+            reason = (
+                "No two blocks had the same text."
+                if config.scope == "exact"
+                else "No two blocks were similar enough."
+            )
+            set_note(ctx, NOTHING_REMOVED + reason)
             return apply_edits(doc)
 
+        set_note(ctx, _note(removed, {e.id: e.page for e in doc.elements}))
         report = make_report(
             self.name,
             self.version,

@@ -791,3 +791,129 @@ def test_stacking_preserves_the_upstream_parser_meta(tmp_path):
     assert out.parser_meta["parser"] == "pdfium"
     assert out.page_count == 4
     assert out.filename == "sample.pdf"
+
+
+# --------------------------------------------------------------------------
+# run notes: every cleaner says what it removed, even when that is nothing
+# --------------------------------------------------------------------------
+
+
+def note_of(transform, parsed: ParsedDoc, tmp_path: Path, **cfg) -> str | None:
+    """Apply a cleaner and read the run note the way the executor would."""
+    inst = transform()
+    ctx = RunContext(output_dir=tmp_path / "out", emit=lambda ev: None, tmp=tmp_path / "tmp")
+    inst.apply({"doc": parsed}, inst.config_model(**cfg), ctx)
+    return ctx.extras.get("meta", {}).get("note")
+
+
+def test_dedupe_note_when_nothing_repeats_exactly(tmp_path):
+    parsed = doc([el("a", "One thing.", 0, page=1), el("b", "Another thing.", 1, page=2)])
+    assert note_of(DedupeBlocks, parsed, tmp_path) == (
+        "Removed 0 blocks. No two blocks had the same text."
+    )
+
+
+def test_dedupe_note_when_nothing_is_similar_enough(tmp_path):
+    parsed = doc([el("a", "One thing.", 0, page=1), el("b", "Another thing.", 1, page=2)])
+    assert note_of(DedupeBlocks, parsed, tmp_path, scope="near") == (
+        "Removed 0 blocks. No two blocks were similar enough."
+    )
+
+
+def test_dedupe_note_names_the_pages_of_a_single_copy(tmp_path):
+    parsed = doc(
+        [
+            el("a", "Same words here.", 0, page=1),
+            el("b", "Different words.", 1, page=2),
+            el("c", "Same words here.", 2, page=3),
+        ]
+    )
+    assert note_of(DedupeBlocks, parsed, tmp_path) == (
+        "Removed 1 block: 1 paragraph from page 3 that repeats one from page 1."
+    )
+
+
+def test_dedupe_note_breaks_several_copies_down_by_type(tmp_path):
+    parsed = doc(
+        [
+            el("a", "Para one.", 0),
+            el("b", "Para two.", 1),
+            el("c", "An item.", 2, etype="list_item"),
+            el("d", "Para one.", 3),
+            el("e", "Para two.", 4),
+            el("f", "An item.", 5, etype="list_item"),
+        ]
+    )
+    assert note_of(DedupeBlocks, parsed, tmp_path) == (
+        "Removed 3 blocks: 2 paragraphs and 1 list item that repeat earlier blocks."
+    )
+
+
+def test_strip_note_when_nothing_repeats(tmp_path):
+    parsed = doc([el("a", "First page text.", 0, page=1), el("b", "Second page text.", 1, page=2)])
+    assert note_of(HeaderFooterStrip, parsed, tmp_path) == (
+        "Removed 0 blocks. No short block repeats on enough pages to count as a "
+        "running header or footer."
+    )
+
+
+def test_strip_note_counts_what_it_removed_by_kind(tmp_path):
+    assert note_of(HeaderFooterStrip, paged_doc(), tmp_path) == (
+        "Removed 8 blocks: 4 running headers and 4 page numbers."
+    )
+
+
+def test_strip_note_on_a_single_page(tmp_path):
+    parsed = doc([el("a", "a", 0, page=1), el("b", "b", 1, page=1)])
+    assert note_of(HeaderFooterStrip, parsed, tmp_path) == (
+        "Removed 0 blocks. The document has only one page, so nothing can repeat "
+        "across pages."
+    )
+
+
+def test_strip_note_when_every_block_is_marked(tmp_path):
+    parsed = doc([el("a", "ACME", 0, page=1), el("b", "ACME", 1, page=2)])
+    assert note_of(HeaderFooterStrip, parsed, tmp_path) == (
+        "Removed 2 blocks: 2 running headers. Every block was marked as a running "
+        "head, foot or page number: each one repeated, or looked like a page "
+        "number, at the same page edge on at least two pages."
+    )
+
+
+def test_strip_note_when_removal_is_off(tmp_path):
+    assert note_of(HeaderFooterStrip, paged_doc(), tmp_path, drop=False) == (
+        "Removed 0 blocks. Removal is off, so 8 blocks were relabelled instead: "
+        "4 running headers and 4 page numbers."
+    )
+
+
+def test_drop_matching_note_when_nothing_matches(tmp_path):
+    assert note_of(DropMatching, messy_doc(), tmp_path, pattern="zzz") == (
+        "Removed 0 blocks. No block matched the pattern."
+    )
+
+
+def test_drop_matching_note_when_no_pattern_is_set(tmp_path):
+    assert note_of(DropMatching, messy_doc(), tmp_path) == (
+        "Removed 0 blocks. No pattern is set, so there was nothing to match."
+    )
+
+
+def test_drop_matching_note_counts_what_matched(tmp_path):
+    parsed = doc([el("a", "Draft copy.", 0), el("b", "Real text.", 1), el("c", "Draft copy two.", 2)])
+    assert note_of(DropMatching, parsed, tmp_path, pattern="draft") == (
+        "Removed 2 blocks: 2 paragraphs that matched the pattern."
+    )
+
+
+def test_drop_matching_note_names_pages_when_every_block_has_one(tmp_path):
+    assert note_of(DropMatching, messy_doc(), tmp_path, pattern="notice is repeated") == (
+        "Removed 4 blocks: 4 paragraphs on pages 1, 2, 3 and 4 that matched the pattern."
+    )
+
+
+def test_a_long_page_list_is_summarised_as_a_count(tmp_path):
+    parsed = doc([el(f"x{p}", "Draft.", p, page=p) for p in range(1, 8)])
+    assert note_of(DropMatching, parsed, tmp_path, pattern="draft") == (
+        "Removed 7 blocks: 7 paragraphs across 7 pages that matched the pattern."
+    )

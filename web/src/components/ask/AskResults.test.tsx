@@ -118,6 +118,33 @@ describe("the comparison, with a reranker", () => {
     expect(await screen.findByRole("heading", { name: "Search order, 6 candidates" })).toBeTruthy()
   })
 
+  it("reopens after a new run with the same reranker", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const { rerender } = render(<AskPanel {...p} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Hide comparison" }))
+    expect(screen.getByRole("button", { name: "Show comparison" })).toBeTruthy()
+    rerender(<AskPanel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    expect(await screen.findByRole("button", { name: "Hide comparison" })).toBeTruthy()
+  })
+
+  it("shows no single list while the rerank result is missing, so a failed rerank explains itself", async () => {
+    render(
+      <AskPanel
+        {...props(withCrossEncoder(), {
+          retrieve: done("retrieve", "ret1"),
+          rerank_1: { id: "rerank_1", status: "failed", error: "RuntimeError: the model did not load" },
+          use_case: { id: "use_case", status: "skipped" },
+        })}
+      />,
+    )
+    const alert = await screen.findByRole("alert")
+    expect(within(alert).getByText("RuntimeError: the model did not load")).toBeTruthy()
+    // Give the retrieve payload time to load: still no list under the no-reranker heading.
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByRole("heading", { name: /in search order$/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Hide comparison" })).toBeNull()
+  })
+
   it("reopens when the reranker changes", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     const { rerender } = render(<AskPanel {...p} />)

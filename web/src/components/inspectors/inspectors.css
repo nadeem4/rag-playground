@@ -172,6 +172,10 @@
   column-gap: 12px;
   align-items: center;
 }
+/* A piece the reranker kept, in the Ask panel's search order column. */
+.ri-row[data-kept] {
+  border-left: 3px solid var(--kept-mark);
+}
 .ri-snippet {
   display: -webkit-box;
   -webkit-box-orient: vertical;

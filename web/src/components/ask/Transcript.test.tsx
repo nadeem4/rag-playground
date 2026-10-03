@@ -75,12 +75,17 @@ describe("goldRank", () => {
 })
 
 describe("logEntry", () => {
-  it("keeps one entry per run, with its latest wording", () => {
-    const e: TranscriptEntry = { runId: "r1", question: "q", line: "l" }
+  it("keeps one entry per run, frozen except for a gold rank filled in later", () => {
+    const e: TranscriptEntry = { runId: "r1", question: "q", pipeline: "Working copy", reranker: "Cross-encoder", rows: [{ rank: 1, text: "t" }], found: null }
     const once = logEntry([], e)
     expect(once).toEqual([e])
     expect(logEntry(once, { ...e })).toBe(once)
-    expect(logEntry(once, { ...e, line: "other" })).toEqual([{ ...e, line: "other" }])
+    // Other settings never rewrite a logged run.
+    expect(logEntry(once, { ...e, reranker: "no rerank", pipeline: "Other" })).toBe(once)
+    // The gold rank may arrive later, and only that is filled in.
+    expect(logEntry(once, { ...e, reranker: "no rerank", found: 1 })).toEqual([{ ...e, found: 1 }])
+    const found = logEntry(once, { ...e, found: 1 })
+    expect(logEntry(found, { ...e, found: 3 })).toBe(found)
     expect(logEntry(once, { ...e, runId: "r2" })).toHaveLength(2)
   })
 })
@@ -136,6 +141,20 @@ describe("the transcript", () => {
     expect(p.onConfig).toHaveBeenCalledWith("query", expect.objectContaining({ text: "What does overlap cost?" }))
     rerender(<Harness {...p} askRunId="r3" />)
     await waitFor(() => expect(summary()?.textContent).toBe("Earlier questions in this tab (2)"))
+  })
+
+  it("a finished entry keeps the settings its run used when the reranker changes afterwards", async () => {
+    const graph = setReranker(sampleGraph(LIVE, SAMPLE, "What does overlap cost?"), LIVE, "cross_encoder")
+    const p = base(graph, RERANKED, "r2")
+    const { rerender } = render(<Harness {...p} />)
+    expect(await screen.findByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
+    // None removes the rerank node; Retrieve and its result stay fresh, so the rows change.
+    const none = setReranker(graph, LIVE, null)
+    rerender(<Harness {...p} graph={none} results={{ ...p.results, rerank_1: undefined as never }} />)
+    await waitFor(() => expect(screen.getByRole("heading", { name: /in search order$/ })).toBeTruthy())
+    expect(screen.getByText("Working copy, Cross-encoder: found at #2")).toBeTruthy()
+    expect(screen.queryByText(/no rerank/)).toBeNull()
+    expect(summary()?.textContent).toBe("Earlier questions in this tab (1)")
   })
 
   it("an upload has no gold, so the entry counts the pieces, and names the saved pipeline", async () => {

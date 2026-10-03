@@ -333,7 +333,6 @@ function HitList({
             data-hit-row={r.rank}
             data-hits={k === undefined ? undefined : `h${k}`}
             data-kept={isKept ? "" : undefined}
-            style={isKept ? { borderLeft: "3px solid var(--kept-mark)" } : undefined}
             onClick={() => onSelect(i)}
             className={cn(
               "ri-row flex cursor-pointer flex-col gap-1 border-b border-hairline px-3 py-2 last:border-b-0 hover:bg-surface-elevated",

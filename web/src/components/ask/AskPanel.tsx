@@ -15,7 +15,7 @@ import { usePipelines } from "@/state/pipelines"
 
 import { AskResults, finalRows, fresh, rerankLabel, useAskOutputs } from "./AskResults"
 import { AskSettings, RETRIEVAL_LABEL } from "./AskSettings"
-import { goldRank, Transcript, transcriptLine, type TranscriptEntry } from "./Transcript"
+import { goldRank, Transcript, type TranscriptEntry } from "./Transcript"
 
 /**
  * The Ask panel: the right pane when no card is selected. It holds the
@@ -116,12 +116,27 @@ export function AskPanel(p: AskPanelProps) {
   const text = String(query?.config.text ?? "")
   const { onLog } = p
   useEffect(() => {
-    if (!p.askRunId || !rows) return
-    const asked = questions.find((q) => q.question.trim() === text.trim())
-    const found = asked ? goldRank(rows, [asked.gold_answer, ...(asked.gold_answers ?? [])]) : null
-    const reranker = rerank ? rerankLabel(rerank.transform) : "no rerank"
-    onLog({ runId: p.askRunId, question: text, line: transcriptLine(pipelineName, reranker, found, rows.length) })
-  }, [p.askRunId, rows, questions]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!p.askRunId) return
+    // A logged run is frozen: its own question and pieces are read again, never the current settings.
+    const logged = p.transcript.find((e) => e.runId === p.askRunId)
+    const entry: TranscriptEntry | null =
+      logged ??
+      (rows
+        ? {
+            runId: p.askRunId,
+            question: text,
+            pipeline: pipelineName,
+            reranker: rerank ? rerankLabel(rerank.transform) : "no rerank",
+            rows: rows.map((r) => ({ rank: r.rank, text: r.text })),
+            found: null,
+          }
+        : null)
+    if (!entry || entry.found !== null) return
+    const asked = questions.find((q) => q.question.trim() === entry.question.trim())
+    const found = asked ? goldRank(entry.rows, [asked.gold_answer, ...(asked.gold_answers ?? [])]) : null
+    if (logged && found === null) return
+    onLog({ ...entry, found })
+  }, [p.askRunId, rows, questions, p.transcript]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const queryErrors = query ? p.errors[query.id] : undefined
   const setText = (text: string) => {

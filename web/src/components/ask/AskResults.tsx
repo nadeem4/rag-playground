@@ -86,8 +86,10 @@ export function AskResults({ graph, registry, outputs: o }: { graph: PipelineGra
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
   let lists: ReactNode = null
   if (rerank && o.rerank && o.retrieve) {
-    lists = <Comparison key={`${rerank.id}:${rerank.transform}`} node={rerank} registry={registry} outputs={o} />
-  } else {
+    // Keyed by the reranker and its result: a new reranker or a new run opens it again.
+    lists = <Comparison key={`${rerank.id}:${rerank.transform}:${o.rerankId}`} node={rerank} registry={registry} outputs={o} />
+  } else if (!rerank) {
+    // With a reranker whose result is loading, failed or stale, no list: the order shown would not be the reranked one.
     const search = !rerank && isSearch(o.output) ? o.output : undefined
     const rows = search ? rowsFromSearch(search) : o.retrieve ? rowsFromResult(o.retrieve) : null
     const total = search ? search.payload.total_candidates : o.retrieve?.total_candidates
@@ -124,8 +126,9 @@ function Failed({ node, error }: { node: GraphNode; error: string }) {
 }
 
 /**
- * The search order against the reranked order. Keyed by the rerank node and
- * its transform, so it opens again when the reranker changes.
+ * The search order against the reranked order. Keyed by the rerank node, its
+ * transform and its result, so it opens again when the reranker changes and
+ * after each run; a reader can still collapse it for that run.
  */
 function Comparison({ node, registry, outputs: o }: { node: GraphNode; registry: Registry; outputs: AskOutputs }) {
   const [open, setOpen] = useState(true)

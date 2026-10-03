@@ -42,7 +42,7 @@ def test_registered_under_the_parse_stage():
     assert cls.output is ArtifactType.PARSED_DOC
     assert set(cls.inputs) == {"file"}
     assert cls.inputs["file"].type is ArtifactType.RAW_FILE
-    assert cls.version == "2"
+    assert cls.version == "3"
     assert cls.deterministic is True
 
 
@@ -51,7 +51,8 @@ def test_config_defaults():
     assert cfg.do_ocr is False
     assert cfg.do_table_structure is True
     assert cfg.table_mode == "fast"
-    assert cfg.keep_furniture is False
+    assert cfg.content_layers == ["body"]
+    assert "keep_furniture" not in type(cfg).model_fields
 
 
 def test_every_config_field_has_plain_help_text():
@@ -59,13 +60,45 @@ def test_every_config_field_has_plain_help_text():
     for name, field in model.model_fields.items():
         assert field.description, f"{name} has no description"
         assert chr(0x2014) not in field.description, f"{name} uses an em-dash"
+        assert chr(0x2013) not in field.description, f"{name} uses an en-dash"
 
 
-def test_keep_furniture_is_labelled_as_the_note_names_it():
-    """The run note says "Turn on Keep page headers and footers", so the form
-    must show that label, not one derived from the field name."""
-    field = registry.get(Stage.PARSE, "docling").config_model.model_fields["keep_furniture"]
-    assert field.title == "Keep page headers and footers"
+def test_every_option_names_its_docling_parameter():
+    """A learner can copy each setting into their own Docling code."""
+    fields = registry.get(Stage.PARSE, "docling").config_model.model_fields
+    assert fields["do_ocr"].description.startswith("Docling's PdfPipelineOptions.do_ocr. ")
+    assert fields["do_table_structure"].description.startswith(
+        "Docling's PdfPipelineOptions.do_table_structure. "
+    )
+    assert fields["table_mode"].description.startswith(
+        "Docling's TableStructureOptions.mode, fast or accurate. "
+    )
+
+
+def test_content_layers_is_labelled_and_described_in_doclings_terms():
+    field = registry.get(Stage.PARSE, "docling").config_model.model_fields["content_layers"]
+    assert field.title == "Content layers"
+    assert field.description == (
+        "Docling's included_content_layers: which layers of the page are read "
+        "into the text. body is the main content and is always read. furniture "
+        "is page headers and footers. background is watermarks. invisible is "
+        "hidden text. notes are author or speaker notes."
+    )
+
+
+def test_content_layers_always_include_body_in_doclings_order():
+    model = registry.get(Stage.PARSE, "docling").config_model
+    assert model(content_layers=["furniture"]).content_layers == ["body", "furniture"]
+    assert model(content_layers=[]).content_layers == ["body"]
+    assert model(
+        content_layers=["notes", "furniture", "body", "furniture"]
+    ).content_layers == ["body", "furniture", "notes"]
+
+
+def test_content_layers_reject_unknown_values():
+    model = registry.get(Stage.PARSE, "docling").config_model
+    with pytest.raises(Exception):
+        model(content_layers=["margins"])
 
 
 def test_table_mode_rejects_unknown_values():
@@ -272,36 +305,49 @@ def test_footers_stay_in_elements_but_out_of_the_markdown():
     assert parsed.elements[1].type == "footer"
 
 
-def test_furniture_layer_is_walked_so_a_footer_becomes_a_footer_block():
-    """Docling puts page headers and footers in its furniture layer. A real
-    line near the page edge (the last line of a one-page resume) can land
-    there, so it must reach `elements` where the inspector lists it."""
+def test_by_default_only_the_body_layer_is_read_as_docling_does():
     doc = _FakeDoc([
         _item("text", "Experience."),
         _footer("Boston University, Master of Science"),
+        _item("text", "DRAFT", layer=ContentLayer.BACKGROUND),
     ])
     parsed = ParsedDoc(elements=elements_from_document(doc))
-    assert [(e.type, e.text) for e in parsed.elements] == [
-        ("paragraph", "Experience."),
-        ("footer", "Boston University, Master of Science"),
-    ]
-    markdown, _ = parsed.render_markdown()
-    assert markdown == "Experience."
+    assert [(e.type, e.text) for e in parsed.elements] == [("paragraph", "Experience.")]
 
 
-def test_keep_furniture_puts_headers_and_footers_into_the_text():
+def test_selecting_furniture_reads_headers_and_footers_into_the_text():
     doc = _FakeDoc([
         _item("page_header", "Running head", layer=ContentLayer.FURNITURE),
         _item("text", "Experience."),
         _footer("Boston University, Master of Science"),
     ])
-    parsed = ParsedDoc(elements=elements_from_document(doc, keep_furniture=True))
+    parsed = ParsedDoc(
+        elements=elements_from_document(doc, content_layers=["body", "furniture"])
+    )
     assert [(e.type, e.level) for e in parsed.elements] == [
         ("paragraph", None), ("paragraph", None), ("paragraph", None),
     ]
     markdown, _ = parsed.render_markdown()
     assert "Boston University, Master of Science" in markdown
     assert "Running head" in markdown
+
+
+def test_other_layers_keep_doclings_labels():
+    doc = _FakeDoc([
+        _item("text", "Body."),
+        _item("text", "DRAFT", layer=ContentLayer.BACKGROUND),
+        _item("section_header", "Speaker notes", level=1, layer=ContentLayer.NOTES),
+        _item("page_footer", "Hidden footer", layer=ContentLayer.INVISIBLE),
+    ])
+    elements = elements_from_document(
+        doc, content_layers=["body", "background", "invisible", "notes"]
+    )
+    assert [(e.type, e.level, e.text) for e in elements] == [
+        ("paragraph", None, "Body."),
+        ("paragraph", None, "DRAFT"),
+        ("heading", 2, "Speaker notes"),
+        ("footer", None, "Hidden footer"),
+    ]
 
 
 def _ctx(tmp_path: Path) -> RunContext:
@@ -325,55 +371,62 @@ def _run_with_fake_converter(monkeypatch, tmp_path, doc, **config):
 
 def test_note_says_one_block_was_set_aside(monkeypatch, tmp_path):
     doc = _FakeDoc([_item("text", "Body."), _footer("Boston University")])
-    _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc)
+    parsed, note = _run_with_fake_converter(monkeypatch, tmp_path, doc)
     assert note == (
-        "Docling set aside 1 block as page headers or footers, so it is not in "
-        "the text. Turn on Keep page headers and footers if something near a "
-        "page edge is missing."
+        "Docling set aside 1 block in its furniture layer, which holds page "
+        "headers and footers, so it is not in the text. Add furniture under "
+        "Content layers if something near a page edge is missing."
     )
+    assert [e.text for e in parsed.elements] == ["Body."]
 
 
 def test_note_says_several_blocks_were_set_aside(monkeypatch, tmp_path):
-    doc = _FakeDoc([_item("text", "Body."), _footer("One"), _footer("Two", page=2)])
+    doc = _FakeDoc([_item("text", "Body."), _footer("One"), _footer("Two", page=2),
+                    _footer("   ")])
     _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc)
     assert note == (
-        "Docling set aside 2 blocks as page headers or footers, so they are not "
-        "in the text. Turn on Keep page headers and footers if something near a "
-        "page edge is missing."
+        "Docling set aside 2 blocks in its furniture layer, which holds page "
+        "headers and footers, so they are not in the text. Add furniture under "
+        "Content layers if something near a page edge is missing."
     )
 
 
-def test_note_says_the_blocks_were_kept_when_the_switch_is_on(monkeypatch, tmp_path):
+def test_note_says_the_blocks_were_read_when_furniture_is_selected(monkeypatch, tmp_path):
     doc = _FakeDoc([_item("text", "Body."), _footer("One"), _footer("Two", page=2)])
     parsed, note = _run_with_fake_converter(monkeypatch, tmp_path, doc,
-                                            keep_furniture=True)
-    assert note == (
-        "Docling kept 2 blocks it took for page headers or footers in the text."
-    )
+                                            content_layers=["body", "furniture"])
+    assert note == "Docling read 2 blocks from its furniture layer into the text."
     assert [e.type for e in parsed.elements] == ["paragraph"] * 3
+    markdown, _ = parsed.render_markdown()
+    assert "Two" in markdown
 
     doc = _FakeDoc([_item("text", "Body."), _footer("One")])
     _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc,
-                                       keep_furniture=True)
-    assert note == (
-        "Docling kept 1 block it took for page headers or footers in the text."
-    )
+                                       content_layers=["furniture"])
+    assert note == "Docling read 1 block from its furniture layer into the text."
 
 
-def test_no_note_when_nothing_was_set_aside(monkeypatch, tmp_path):
+def test_no_note_when_the_furniture_layer_is_empty(monkeypatch, tmp_path):
     doc = _FakeDoc([_item("text", "Body.")])
     _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc)
     assert note is None
+    _, note = _run_with_fake_converter(monkeypatch, tmp_path, doc,
+                                       content_layers=["body", "furniture"])
+    assert note is None
 
 
-def test_explain_states_the_keep_furniture_switch():
+def test_explain_names_the_layers_read():
     cls = registry.get(Stage.PARSE, "docling")
-    off = cls().explain(cls.config_model()).settings
-    on = cls().explain(cls.config_model(keep_furniture=True)).settings
-    assert "Page headers and footers it recognises are kept out of the text." in off
-    assert "Keep page headers and footers is off" in off
-    assert "Keep page headers and footers is on" in on
-    for text in (off, on):
+    default = cls().explain(cls.config_model()).settings
+    more = cls().explain(
+        cls.config_model(content_layers=["body", "furniture", "background"])
+    ).settings
+    assert "Only the body layer, the main content, is read into the text." in default
+    assert (
+        "These layers are read into the text: body, the main content; "
+        "furniture, page headers and footers; background, watermarks."
+    ) in more
+    for text in (default, more):
         assert chr(0x2014) not in text and chr(0x2013) not in text
 
 

@@ -283,7 +283,7 @@ several times, for example two cleaners in a row.
 | Strategy | How it works | Good for |
 |---|---|---|
 | `pdfium` | Reads the text stored in the PDF in the order it was drawn. Every block is a plain paragraph, and a scanned page with no stored text comes out empty. | A fast baseline with no model |
-| `docling` | Renders each page and runs a layout model that labels titles, headings, list items, tables, and page headers and footers, then fixes the reading order. Page headers and footers show as blocks but stay out of the text, and the run note says how many; turn on Keep page headers and footers if it mistook a real line near a page edge for one. | Real documents. It is the recommended parser. |
+| `docling` | Renders each page and runs a layout model that labels titles, headings, list items, tables, and page headers and footers, then fixes the reading order. Its Content layers option is Docling's own included_content_layers. By default only the body layer is read, so page headers and footers stay out of the text and the run note says how many were set aside; add furniture if it mistook a real line near a page edge for one. | Real documents. It is the recommended parser. |
 
 ### Clean
 

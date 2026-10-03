@@ -15,12 +15,16 @@ set, because building one loads the models.
 
 **Mapping.** Docling's labels map onto our `ElementType` in `map_label`, a pure
 function. `page_footer` becomes `footer`, which `ParsedDoc.render_markdown()`
-already keeps out of the projection. Docling puts page headers and footers in
-a separate furniture layer, which `iterate_items()` skips by default; we ask
-for it, so those lines show up as blocks instead of vanishing. The layout model
-sometimes takes real content near a page edge for a footer, so `keep_furniture`
-maps them to paragraphs and the run note says how many there were. Items with no text (a picture without
-text) are skipped, as pdfium skips empty blocks, so `order` stays contiguous.
+already keeps out of the projection. Docling sorts items into content layers
+(body, furniture, background, invisible, notes) and `iterate_items()` reads
+only body by default. `content_layers` is Docling's own
+`included_content_layers`, so only the layers selected are read, as Docling
+does. Page headers and footers from the furniture layer become paragraphs when
+furniture is selected, because they are being read into the text on purpose.
+The run note counts the furniture layer either way, since the layout model
+sometimes takes real content near a page edge for a footer. Items with no text
+(a picture without text) are skipped, as pdfium skips empty blocks, so `order`
+stays contiguous.
 
 **Boxes** use pdfium's convention: (left, bottom, right, top) in PDF points,
 y growing upwards.
@@ -36,7 +40,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.artifacts import ArtifactType
 from core.payloads import Element, ElementType, ParsedDoc
@@ -64,11 +68,23 @@ _DIRECT: dict[str, ElementType] = {
 #: Docling's labels for page furniture.
 _FURNITURE = {"page_header", "page_footer"}
 
+ContentLayerName = Literal["body", "furniture", "background", "invisible", "notes"]
+
+#: Docling's content layers in its own order, with what each holds.
+LAYERS: dict[str, str] = {
+    "body": "the main content",
+    "furniture": "page headers and footers",
+    "background": "watermarks",
+    "invisible": "hidden text",
+    "notes": "author or speaker notes",
+}
+
 
 class DoclingConfig(BaseModel):
     do_ocr: bool = Field(
         default=False,
         description=(
+            "Docling's PdfPipelineOptions.do_ocr. "
             "Read text from page images with OCR. Only needed for scanned PDFs "
             "with no text layer; it is much slower."
         ),
@@ -76,6 +92,7 @@ class DoclingConfig(BaseModel):
     do_table_structure: bool = Field(
         default=True,
         description=(
+            "Docling's PdfPipelineOptions.do_table_structure. "
             "Recover rows and columns of detected tables, so a table reaches "
             "the chunks as a markdown table instead of loose text."
         ),
@@ -83,19 +100,27 @@ class DoclingConfig(BaseModel):
     table_mode: Literal["fast", "accurate"] = Field(
         default="fast",
         description=(
+            "Docling's TableStructureOptions.mode, fast or accurate. "
             "Which table model to use. Fast is fine for simple grids; accurate "
             "handles merged cells better and takes longer."
         ),
     )
-    keep_furniture: bool = Field(
-        default=False,
-        title="Keep page headers and footers",
+    content_layers: list[ContentLayerName] = Field(
+        default_factory=lambda: ["body"],
+        title="Content layers",
         description=(
-            "Keep page headers and footers in the text. Turn this on when the "
-            "layout model mistakes real content near the page edges, such as "
-            "the last line of a one-page resume, for a footer."
+            "Docling's included_content_layers: which layers of the page are "
+            "read into the text. body is the main content and is always read. "
+            "furniture is page headers and footers. background is watermarks. "
+            "invisible is hidden text. notes are author or speaker notes."
         ),
     )
+
+    @field_validator("content_layers")
+    @classmethod
+    def _body_first_in_doclings_order(cls, value: list[str]) -> list[str]:
+        chosen = set(value) | {"body"}
+        return [name for name in LAYERS if name in chosen]
 
 
 def map_label(label: Any, level: int | None) -> tuple[ElementType, int | None]:
@@ -122,25 +147,24 @@ def pdf_bbox(
     return (l, b, r, t)
 
 
-def elements_from_document(doc: Any, *, keep_furniture: bool = False) -> list[Element]:
-    """Walk a DoclingDocument in reading order and build our elements."""
-    return walk_document(doc, keep_furniture=keep_furniture)[0]
+def elements_from_document(
+    doc: Any, *, content_layers: list[str] | tuple[str, ...] = ("body",)
+) -> list[Element]:
+    """Walk the selected content layers of a DoclingDocument in reading order.
 
-
-def walk_document(doc: Any, *, keep_furniture: bool = False) -> tuple[list[Element], int]:
-    """Elements in reading order, and how many were page headers or footers.
-
-    Both content layers are walked: Docling files page headers and footers
-    under furniture, and the default walk would drop them without a trace.
+    Only those layers are read, as `iterate_items(included_content_layers=...)`
+    does in Docling. Page headers and footers from the furniture layer become
+    paragraphs, since selecting furniture means reading them into the text.
     """
     from docling_core.types.doc import ContentLayer
 
+    furniture_read = "furniture" in content_layers
+    layers = {ContentLayer(name) for name in content_layers}
     elements: list[Element] = []
-    furniture = 0
-    layers = {ContentLayer.BODY, ContentLayer.FURNITURE}
     for item, _depth in doc.iterate_items(included_content_layers=layers):
-        is_furniture = str(getattr(item.label, "value", item.label)) in _FURNITURE
-        if is_furniture and keep_furniture:
+        label = str(getattr(item.label, "value", item.label))
+        in_furniture = getattr(item, "content_layer", None) == ContentLayer.FURNITURE
+        if furniture_read and in_furniture and label in _FURNITURE:
             type_, level = "paragraph", None
         else:
             type_, level = map_label(item.label, getattr(item, "level", None))
@@ -168,22 +192,34 @@ def walk_document(doc: Any, *, keep_furniture: bool = False) -> tuple[list[Eleme
             Element(id=f"e{order:05d}", type=type_, text=text, order=order,
                     page=page, bbox=bbox, level=level)
         )
-        furniture += is_furniture
-    return elements, furniture
+    return elements
 
 
-def furniture_note(count: int, *, kept: bool) -> str | None:
-    """The run note about page headers and footers, or None if there were none."""
+def furniture_count(doc: Any) -> int:
+    """How many items with text Docling filed in its furniture layer."""
+    from docling_core.types.doc import ContentLayer
+
+    return sum(
+        1
+        for item, _depth in doc.iterate_items(
+            included_content_layers={ContentLayer.FURNITURE}
+        )
+        if (getattr(item, "text", "") or "").strip()
+    )
+
+
+def furniture_note(count: int, *, read: bool) -> str | None:
+    """The run note about the furniture layer, or None if it was empty."""
     if not count:
         return None
     blocks = "block" if count == 1 else "blocks"
-    if kept:
-        return f"Docling kept {count} {blocks} it took for page headers or footers in the text."
+    if read:
+        return f"Docling read {count} {blocks} from its furniture layer into the text."
     it_is = "it is" if count == 1 else "they are"
     return (
-        f"Docling set aside {count} {blocks} as page headers or footers, so "
-        f"{it_is} not in the text. Turn on Keep page headers and footers if "
-        "something near a page edge is missing."
+        f"Docling set aside {count} {blocks} in its furniture layer, which holds "
+        f"page headers and footers, so {it_is} not in the text. Add furniture "
+        "under Content layers if something near a page edge is missing."
     )
 
 
@@ -229,7 +265,7 @@ class DoclingParse(Transform[DoclingConfig]):
     name = "docling"
     #: Headings come out as heading elements, which `markdown_header` prefers.
     provides = {"structure": ["headings"]}
-    version = "2"
+    version = "3"
     stage = Stage.PARSE
     inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
     output = ArtifactType.PARSED_DOC
@@ -268,19 +304,13 @@ class DoclingParse(Transform[DoclingConfig]):
                 "Table structure is off, so a table comes through as loose text, "
                 f"and the table model setting ({config.table_mode}) is not used."
             )
-        if config.keep_furniture:
-            furniture = (
-                "Keep page headers and footers is on, so lines it takes for page "
-                "headers or footers stay in the text as ordinary paragraphs."
-            )
+        if config.content_layers == ["body"]:
+            layers = "Only the body layer, the main content, is read into the text."
         else:
-            furniture = (
-                "Page headers and footers it recognises are kept out of the text. "
-                "Keep page headers and footers is off, so they show as blocks "
-                "but do not reach the pieces."
-            )
+            named = "; ".join(f"{name}, {LAYERS[name]}" for name in config.content_layers)
+            layers = f"These layers are read into the text: {named}."
         return Explanation(
-            settings=f"{ocr} {tables} {furniture}",
+            settings=f"{ocr} {tables} {layers}",
             tradeoff=(
                 "The first run downloads the layout models, and each page takes "
                 "seconds rather than milliseconds, but you get headings, which "
@@ -314,8 +344,10 @@ class DoclingParse(Transform[DoclingConfig]):
 
         doc = result.document
         page_count = len(doc.pages)
-        elements, furniture = walk_document(doc, keep_furniture=config.keep_furniture)
-        note = furniture_note(furniture, kept=config.keep_furniture)
+        elements = elements_from_document(doc, content_layers=config.content_layers)
+        note = furniture_note(
+            furniture_count(doc), read="furniture" in config.content_layers
+        )
         if note:
             set_note(ctx, note)
         return ParsedDoc(

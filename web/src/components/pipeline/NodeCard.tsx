@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react"
 import { Info, X } from "lucide-react"
 import { Popover } from "radix-ui"
 
@@ -121,12 +121,12 @@ const RING: Record<Look, string> = {
 }
 
 /** The outcome on one line, its headline number in bold and the other numbers in mono. */
-function ResultLine({ outcome, testId = "step-summary" }: { outcome: Outcome; testId?: string }) {
+function ResultLine({ outcome, testId = "step-summary", ref }: { outcome: Outcome; testId?: string; ref?: Ref<HTMLParagraphElement> }) {
   const text = outcomeText(outcome)
   const head = fmt(outcome.headline)
   const at = outcome.lead.lastIndexOf(head)
   return (
-    <p data-testid={testId} title={text} className="m-0 mt-1 truncate text-sm text-fg">
+    <p ref={ref} data-testid={testId} title={text} className="m-0 mt-1 truncate text-sm text-fg">
       {at < 0 ? (
         <MonoNumbers text={text} />
       ) : (
@@ -180,6 +180,27 @@ export function useElapsed(startedAt: number | undefined): number | undefined {
   return Math.max(0, Math.floor(now / 1000 - startedAt))
 }
 
+/** The nearest ancestor that scrolls (the column's box on desktop, `<main>` below md), or null for the window. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let n = el.parentElement; n; n = n.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(n).overflowY)) return n
+  }
+  return null
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+/** Scrolls `el` into view (nearest) when it is outside its scroll box, or the window when nothing scrolls. */
+function revealIfHidden(el: HTMLElement | null) {
+  if (!el || typeof el.scrollIntoView !== "function") return
+  const root = scrollParent(el)
+  const view = root ? root.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+  const r = el.getBoundingClientRect()
+  if (r.top < view.top || r.bottom > view.bottom) el.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" })
+}
+
 export function NodeCard(p: NodeCardProps) {
   const id = useId()
   // The Upload card is deliberately plain: no run status, no explain button,
@@ -196,7 +217,11 @@ export function NodeCard(p: NodeCardProps) {
   const cardRef = useRef<HTMLElement>(null)
   const headRef = useRef<HTMLElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const resultRef = useRef<HTMLParagraphElement>(null)
   const [stuck, setStuck] = useState(false)
+  // Set when this card's run finishes, so its result line is brought into view once.
+  const [reveal, setReveal] = useState(false)
+  const wasRunning = useRef(running)
   const warning = p.explain?.data?.warning
   const completed = (p.result?.status === "done" || p.result?.status === "cached") && p.result.artifact_id ? p.result.artifact_id : undefined
   const reused = shown.look === "done" && p.result?.status === "cached"
@@ -223,25 +248,52 @@ export function NodeCard(p: NodeCardProps) {
 
   const filename = isSource && typeof p.node.config.filename === "string" ? p.node.config.filename : ""
 
-  // Selecting a card brings its head into view when it is outside the column's
-  // scroll box, after the card above has had its --dur-mid to close.
+  // Selecting a card brings it into view after the card above has had its
+  // --dur-mid to close. The card's own top is measured, not the head's: a stuck
+  // head always reads as on screen. Its top goes to the box's top plus 12 px
+  // (scroll-mt-3); a head below the box is brought up to the bottom edge.
   useEffect(() => {
     if (!p.selected) return
-    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const reduce = prefersReducedMotion()
     const t = window.setTimeout(
       () => {
+        const card = cardRef.current
         const head = headRef.current
-        if (!head || typeof head.scrollIntoView !== "function") return
-        const box = head.closest<HTMLElement>("[data-scroll-box]")
-        const scrolls = box !== null && /(auto|scroll)/.test(getComputedStyle(box).overflowY)
-        const view = scrolls ? box.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
-        const r = head.getBoundingClientRect()
-        if (r.top < view.top || r.bottom > view.bottom) head.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" })
+        if (!card || !head || typeof card.scrollIntoView !== "function") return
+        const root = scrollParent(card)
+        const view = root ? root.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+        const behavior = reduce ? "auto" : "smooth"
+        if (card.getBoundingClientRect().top < view.top) card.scrollIntoView({ block: "start", behavior })
+        else if (head.getBoundingClientRect().bottom > view.bottom) head.scrollIntoView({ block: "nearest", behavior })
       },
       reduce ? 0 : 220,
     )
     return () => window.clearTimeout(t)
   }, [p.selected])
+
+  // The head's height, as --head-h on the card: the options' fields keep that
+  // much scroll margin, so focus never lands under the stuck head, wrapped or not.
+  useEffect(() => {
+    const card = cardRef.current
+    const head = headRef.current
+    if (!p.selected || !card || !head || typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(() => card.style.setProperty("--head-h", `${head.getBoundingClientRect().height}px`))
+    ro.observe(head)
+    return () => ro.disconnect()
+  }, [p.selected])
+
+  // A run of this card that ends with a result asks for the result line once.
+  useEffect(() => {
+    if (running) setReveal(false)
+    else if (wasRunning.current && !failed) setReveal(true)
+    wasRunning.current = running
+  }, [running, failed])
+
+  useEffect(() => {
+    if (!reveal || !ready?.outcome) return
+    setReveal(false)
+    if (open) revealIfHidden(resultRef.current)
+  }, [reveal, ready, open])
 
   // The open card's head sticks to the top of the scroll box; a zero-height
   // marker just above it says when it is stuck, for the hairline under it.
@@ -249,10 +301,11 @@ export function NodeCard(p: NodeCardProps) {
     setStuck(false)
     const mark = sentinelRef.current
     if (!p.selected || !mark || typeof IntersectionObserver === "undefined") return
-    const root = mark.closest<HTMLElement>("[data-scroll-box]")
+    // The marker sits 12 px (the card's padding) below the head's top, so the
+    // watched edge moves down 12 px to match the moment the head sticks.
     const io = new IntersectionObserver(
       ([e]) => setStuck(!e.isIntersecting && e.boundingClientRect.top < (e.rootBounds?.top ?? 0)),
-      { root, threshold: 0 },
+      { root: scrollParent(mark), rootMargin: "-12px 0px 0px 0px", threshold: 0 },
     )
     io.observe(mark)
     return () => io.disconnect()
@@ -269,7 +322,7 @@ export function NodeCard(p: NodeCardProps) {
       aria-current={p.selected ? "true" : undefined}
       onClick={p.onSelect}
       className={cn(
-        "relative flex min-w-0 flex-col rounded-panel border border-hairline p-3",
+        "relative flex min-w-0 scroll-mt-3 flex-col rounded-panel border border-hairline p-3",
         p.selected ? "z-10 bg-surface-raised shadow-raised" : "bg-surface",
         p.explainOpen && "outline-1 -outline-offset-1 outline-fg-muted outline-solid",
       )}
@@ -283,8 +336,8 @@ export function NodeCard(p: NodeCardProps) {
         ref={headRef}
         className={cn(
           "relative -mx-3 -mt-3 flex min-w-0 scroll-mt-3 flex-wrap items-start gap-x-2 gap-y-1 rounded-t-panel px-3 pt-3",
-          p.selected && "sticky top-0 z-20 bg-surface-raised",
-          p.selected && stuck && "rounded-none pb-2 shadow-[0_1px_0_var(--hairline)]",
+          p.selected && "sticky top-0 z-20 bg-surface-raised pb-2",
+          p.selected && stuck && "rounded-none shadow-[0_1px_0_var(--hairline)]",
         )}
       >
         {shown.look === "running" && !isSource ? (
@@ -382,7 +435,8 @@ export function NodeCard(p: NodeCardProps) {
         </p>
       )}
 
-      {ready?.outcome && !isSource ? <ResultLine outcome={ready.outcome} /> : null}
+      {/* Closed, the result shows here; open, it shows under the Run button instead. */}
+      {ready?.outcome && !isSource && !open ? <ResultLine outcome={ready.outcome} /> : null}
       {ready && p.node.stage === "chunk" ? <ChunkBar data={ready.data} /> : null}
 
       {warning ? (
@@ -422,7 +476,7 @@ export function NodeCard(p: NodeCardProps) {
       >
       <div className="min-h-0 overflow-hidden">
       {/* A field scrolled to by focus stops below the sticky head, not under it. */}
-      <div className={cn("flex min-w-0 flex-col gap-3 pt-3", p.selected && "[&_*]:scroll-mt-16")}>
+      <div className={cn("flex min-w-0 flex-col gap-3 pt-3", p.selected && "[&_*]:scroll-mt-(--head-h)")}>
       {p.lesson?.length ? (
         <StageLesson title={LESSON_TITLE[p.node.stage] ?? `What does ${p.title} do?`} paragraphs={p.lesson} />
       ) : null}
@@ -497,7 +551,7 @@ export function NodeCard(p: NodeCardProps) {
         {p.actions}
       </footer>
       {/* The outcome again, right under the buttons, so it shows where Run was pressed. */}
-      {ready?.outcome ? <ResultLine outcome={ready.outcome} testId="run-result" /> : null}
+      {ready?.outcome ? <ResultLine ref={resultRef} outcome={ready.outcome} testId="run-result" /> : null}
       {completed ? (
         <WhatItDid stage={p.node.stage} type={info?.output} artifactId={completed} previousId={p.previousArtifactId} stale={p.stale} />
       ) : null}

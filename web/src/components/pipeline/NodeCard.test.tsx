@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { ReactElement } from "react"
 
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
 import type { NodeState } from "@/api/runState"
@@ -233,13 +234,14 @@ describe("click to close, and scroll into view", () => {
 
     const rect = (top: number, height: number) => ({ top, bottom: top + height, left: 0, right: 380, width: 380, height, x: 0, y: top, toJSON() {} })
 
-    function inBox(headTop: number) {
+    function inBox(headTop: number, cardTop = headTop) {
       const box = document.createElement("div")
       box.setAttribute("data-scroll-box", "")
       box.style.overflowY = "auto"
       document.body.appendChild(box)
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-        return this === box ? rect(100, 500) : rect(headTop, 40)
+        if (this === box) return rect(100, 500)
+        return this.tagName === "ARTICLE" ? rect(cardTop, 300) : rect(headTop, 40)
       })
       const props: NodeCardProps = {
         node: chunkNode,
@@ -259,9 +261,20 @@ describe("click to close, and scroll into view", () => {
       })
     }
 
-    it("brings the selected card's head into view when it is above the column's scroll box", () => {
-      inBox(20)
+    it("scrolls the card's own top into view when it is above the column's scroll box, even with its head stuck", () => {
+      // A stuck head reads as on screen; the card's top is what has gone.
+      inBox(100, -113)
+      expect(scroll).toHaveBeenCalledTimes(1)
+      expect(scroll).toHaveBeenCalledWith({ block: "start", behavior: "smooth" })
+      const target = scroll.mock.contexts[0] as HTMLElement
+      expect(target.tagName).toBe("ARTICLE")
+      expect(target.className.split(/\s+/)).toContain("scroll-mt-3")
+    })
+
+    it("brings the head up when it is below the column's scroll box", () => {
+      inBox(580)
       expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
+      expect((scroll.mock.contexts[0] as HTMLElement).tagName).toBe("HEADER")
     })
 
     it("leaves the scroll alone when the head is already visible", () => {
@@ -338,6 +351,123 @@ describe("a running card keeps its status in view", () => {
     const under = await within(card).findByTestId("run-result", {}, { timeout: 4000 })
     expect(under.textContent).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps.")
     expect(under.previousElementSibling?.tagName).toBe("FOOTER")
-    expect(within(card).getByTestId("step-summary").textContent).toBe(under.textContent)
+    // One result line at a time: the head's copy is for the closed card.
+    expect(within(card).queryByTestId("step-summary")).toBeNull()
+  })
+})
+
+describe("the stuck head", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    document.querySelectorAll("[data-scroll-box]").forEach((el) => el.remove())
+  })
+
+  function boxed(ui: ReactElement) {
+    const box = document.createElement("div")
+    box.setAttribute("data-scroll-box", "")
+    box.style.overflowY = "auto"
+    document.body.appendChild(box)
+    return { box, view: render(ui, { container: box }) }
+  }
+
+  const props = (over: Partial<NodeCardProps> = {}): NodeCardProps => ({
+    node: chunkNode,
+    title: "Chunk",
+    transforms: transformsFor(R, "chunk"),
+    selected: true,
+    busy: false,
+    onSelect: vi.fn(),
+    onTransform: vi.fn(),
+    onConfig: vi.fn(),
+    onRun: vi.fn(),
+    ...over,
+  })
+
+  it("shows the hairline once the head has stuck, watching the nearest scrolling box 12 px down", () => {
+    let fire: IntersectionObserverCallback = () => {}
+    let opts: IntersectionObserverInit | undefined
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(cb: IntersectionObserverCallback, o?: IntersectionObserverInit) {
+          fire = cb
+          opts = o
+        }
+        observe() {}
+        disconnect() {}
+      },
+    )
+    const { box } = boxed(<NodeCard {...props()} />)
+    expect(opts?.root).toBe(box)
+    expect(opts?.rootMargin).toBe("-12px 0px 0px 0px")
+    const head = box.querySelector("header")!
+    expect(head.className).not.toContain("shadow-[0_1px_0_var(--hairline)]")
+    const padBefore = head.className.split(/\s+/).filter((c) => /^p[bt]-/.test(c))
+    act(() => {
+      fire([{ isIntersecting: false, boundingClientRect: { top: 50 }, rootBounds: { top: 112 } } as unknown as IntersectionObserverEntry], {} as IntersectionObserver)
+    })
+    expect(head.className).toContain("shadow-[0_1px_0_var(--hairline)]")
+    // Sticking does not change the head's padding, so nothing under it jumps.
+    expect(head.className.split(/\s+/).filter((c) => /^p[bt]-/.test(c))).toEqual(padBefore)
+  })
+
+  it("the options' fields clear the head by its measured height", () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        cb: ResizeObserverCallback
+        constructor(cb: ResizeObserverCallback) {
+          this.cb = cb
+        }
+        observe() {
+          this.cb([], this as unknown as ResizeObserver)
+        }
+        disconnect() {}
+      },
+    )
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const h = this.tagName === "HEADER" ? 74.5 : 40
+      return { top: 0, bottom: h, left: 0, right: 380, width: 380, height: h, x: 0, y: 0, toJSON() {} } as DOMRect
+    })
+    const { box } = boxed(<NodeCard {...props()} />)
+    const card = box.querySelector("article")!
+    expect(card.style.getPropertyValue("--head-h")).toBe("74.5px")
+    const options = within(card).getByTestId("step-options").querySelector(".min-h-0 > div")!
+    expect(options.className).toContain("[&_*]:scroll-mt-(--head-h)")
+  })
+
+  it("scrolls the result line into view once when a run finishes below the fold", async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    try {
+      payloads = { rev1: chunkRecursive }
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        const at = (top: number, h: number) => ({ top, bottom: top + h, left: 0, right: 380, width: 380, height: h, x: 0, y: top, toJSON() {} }) as DOMRect
+        if (this.hasAttribute("data-scroll-box")) return at(100, 500)
+        if (this.dataset.testid === "run-result") return at(612, 20)
+        return at(200, 40)
+      })
+      const { box, view } = boxed(<NodeCard {...props({ result: { id: "chunk", status: "running" } })} />)
+      view.rerender(<NodeCard {...props({ result: done("rev1") })} />)
+      const line = await within(box).findByTestId("run-result", {}, { timeout: 4000 })
+      await vi.waitFor(() => expect(scroll).toHaveBeenCalledTimes(1))
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
+      expect(scroll.mock.contexts[0]).toBe(line)
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
+  })
+
+  it("does not scroll to a result that was already there before any run", async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    try {
+      payloads = { rev2: chunkRecursive }
+      const { box } = boxed(<NodeCard {...props({ result: done("rev2") })} />)
+      await within(box).findByTestId("run-result", {}, { timeout: 4000 })
+      expect(scroll).not.toHaveBeenCalled()
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
   })
 })

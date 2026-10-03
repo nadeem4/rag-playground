@@ -196,9 +196,9 @@ unsafe to share:
   looking like a retrieval failure. A question may carry several gold passages when the
   document answers it in more than one place; any of them counts.
 - **Read, then try it.** The Read page lists the author's posts on each step, in pipeline
-  order, with the date each was published. Each step with a post has a Try it on Build
-  button that opens Build on a bundled sample, ready for that step. The Evaluate section has
-  an Open Evaluate button. Steps with no post yet say so.
+  order, with the date each was published. Each step with a post has a "Try it on Build"
+  button that opens Build on a bundled sample with that sample's own question, ready for
+  that step. The Evaluate section has an "Open Evaluate" button. Steps with no post yet say so.
 - **Learn as you go.** Each card has an info button that explains what the step is for,
   how the chosen strategy works, and what it will do with your current settings, including
   the trade-off. Settings that make no sense show a warning and disable Run. A strategy

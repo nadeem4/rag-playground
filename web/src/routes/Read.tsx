@@ -38,14 +38,14 @@ const SECTIONS: Section[] = [
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 /** "2026-09-30" as "30 September 2026". */
-export function dateInWords(iso: string): string {
+function dateInWords(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number)
   return `${d} ${MONTHS[m - 1]} ${y}`
 }
 
-/** A share link that opens Build on the stage's sample, built the way the parsing lab builds one. */
-export function tryLink(registry: Registry, sample: SampleCard, title: string): string {
-  const graph = sampleGraph(registry, { sha: sample.sha, filename: sample.filename })
+/** A share link that opens Build on the stage's sample with the sample's own question, built the way the parsing lab builds one. */
+function tryLink(registry: Registry, sample: SampleCard, title: string): string {
+  const graph = sampleGraph(registry, { sha: sample.sha, filename: sample.filename }, sample.question)
   return `/build?pipeline=${encodePipeline(`Read: ${title}`, graph)}`
 }
 
@@ -105,7 +105,7 @@ export function Read() {
       <div className="learn-page">
         <section className="learn-top flex max-w-[680px] flex-col gap-4">
           <h1 className="learn-display">Read, then try it</h1>
-          <p className="learn-lead">The posts behind each step, in pipeline order. Each one opens Build ready for that step.</p>
+          <p className="learn-lead">The posts behind each step, in pipeline order. Most steps have a button that opens Build ready for that step.</p>
         </section>
         {SECTIONS.map((s) => (
           <StageSection key={s.stage} section={s} registry={reg.registry} samples={samples} />

@@ -41,7 +41,8 @@ def mount_spa(app: FastAPI, dist: Path) -> None:
         root = dist.resolve()
         candidate = (dist / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(root):
-            return FileResponse(candidate, headers={"Cache-Control": _cache_control(path)})
+            relative = candidate.relative_to(root).as_posix()
+            return FileResponse(candidate, headers={"Cache-Control": _cache_control(relative)})
         # The shell must be checked on every visit, or a browser keeps showing
         # the build from before a publish while the new assets sit unused.
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
@@ -52,7 +53,8 @@ def mount_spa(app: FastAPI, dist: Path) -> None:
 ASSETS_PREFIX = "assets/"
 
 
-def _cache_control(path: str) -> str:
-    if path.startswith(ASSETS_PREFIX):
+def _cache_control(relative: str) -> str:
+    """`relative` is the served file's path under the dist root, after resolving dots."""
+    if relative.startswith(ASSETS_PREFIX):
         return "public, max-age=31536000, immutable"
     return "no-cache"

@@ -11,7 +11,7 @@ const registry = liveRegistry as unknown as Registry
 const PRIMER_SHA = "cd".repeat(32)
 const COLUMNS_SHA = "ab".repeat(32)
 
-const sample = (name: string, sha: string) => ({
+const sample = (name: string, sha: string, question = "What is it about?") => ({
   name,
   title: name,
   blurb: "",
@@ -21,7 +21,7 @@ const sample = (name: string, sha: string) => ({
   default: false,
   filename: `${name}.pdf`,
   sha,
-  question: "What is it about?",
+  question,
 })
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
@@ -31,7 +31,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       if (url === "/api/registry") return ok(registry)
-      if (url === "/api/samples") return ok([sample("chunking-primer", PRIMER_SHA), sample("two-column-report", COLUMNS_SHA)])
+      if (url === "/api/samples") return ok([sample("chunking-primer", PRIMER_SHA, "Why do chunk boundaries matter?"), sample("two-column-report", COLUMNS_SHA, "What does the report recommend?")])
       return new Response("not found", { status: 404 })
     }),
   )
@@ -48,7 +48,7 @@ describe("Read", () => {
   it("shows the header and ten sections in pipeline order", async () => {
     render(<Read />)
     expect(await screen.findByRole("heading", { level: 1, name: "Read, then try it" })).toBeTruthy()
-    expect(screen.getByText("The posts behind each step, in pipeline order. Each one opens Build ready for that step.")).toBeTruthy()
+    expect(screen.getByText("The posts behind each step, in pipeline order. Most steps have a button that opens Build ready for that step.")).toBeTruthy()
     const titles = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)
     expect(titles).toEqual(["Overview", "Upload", "Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer", "Evaluate"])
   })
@@ -64,6 +64,18 @@ describe("Read", () => {
       "Metadata and Enrichment: What to Store Beside Each Chunk",
     ])
     expect(within(chunk).getByText("30 September 2026")).toBeTruthy()
+  })
+
+  it("every post link opens in a new tab without a referrer and points at the owner's post", async () => {
+    render(<Read />)
+    const chunk = await screen.findByRole("region", { name: "Chunk" })
+    const links = within(chunk).getAllByRole("link", { name: /Chunking Fundamentals|Advanced Chunking|Metadata and Enrichment/ })
+    expect(links).toHaveLength(3)
+    for (const a of links) {
+      expect(a.getAttribute("target")).toBe("_blank")
+      expect(a.getAttribute("rel")).toBe("noreferrer")
+      expect(a.getAttribute("href")).toMatch(/^https:\/\/medium\.com\/learnwithnk\//)
+    }
   })
 
   it("says Rerank has no post yet", async () => {
@@ -87,6 +99,7 @@ describe("Read", () => {
     const parse = await within(await screen.findByRole("region", { name: "Parse" })).findByRole("link", { name: "Try it on Build" })
     const decoded = decodePipeline(parse.getAttribute("href")!.slice("/build?pipeline=".length), registry)!
     expect(decoded.graph.nodes.find((n) => n.stage === "source")!.config.sha).toBe(COLUMNS_SHA)
+    expect(decoded.graph.nodes.find((n) => n.stage === "query")!.config.text).toBe("What does the report recommend?")
     expect(within(section("Evaluate")).getByRole("link", { name: "Open Evaluate" }).getAttribute("href")).toBe("/evaluate")
     expect(within(section("Overview")).queryByRole("link", { name: "Try it on Build" })).toBeNull()
   })

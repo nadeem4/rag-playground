@@ -20,6 +20,27 @@ describe("the specimen page", () => {
     expect(s.getByText("0 1px 2px rgb(24 24 27 / 0.06)")).toBeTruthy()
   })
 
+  it("shows the document voice in the serif and the data face in JetBrains Mono", () => {
+    render(<Specimen />)
+    const s = within(section("Type"))
+    const serif = s.getByText(/Recursive splitting tries/, { selector: ".font-serif" })
+    expect(serif.className).toContain("text-base")
+    expect(s.getByText(/Source Serif 4/)).toBeTruthy()
+    expect(s.getAllByText(/JetBrains Mono/).length).toBeGreaterThan(0)
+  })
+
+  it("shows --flat as a line and the sheet with its shadow", () => {
+    render(<Specimen />)
+    const surfaces = within(section("Surfaces"))
+    expect(surfaces.getByText("Sheet").closest(".shadow-sheet")).toBeTruthy()
+    expect(surfaces.getByText("--shadow-sheet")).toBeTruthy()
+    expect(surfaces.getByText("0 2px 4px rgb(22 25 23 / 0.06), 0 12px 32px rgb(22 25 23 / 0.10)")).toBeTruthy()
+    const chrome = within(section("Chrome"))
+    expect(chrome.getByText("--flat")).toBeTruthy()
+    expect(chrome.getAllByText("#a7aca6").length).toBeGreaterThan(0)
+    expect(chrome.getAllByText("#5a5f5b").length).toBeGreaterThan(0)
+  })
+
   it("lists the motion tokens with their values", () => {
     render(<Specimen />)
     const s = within(section("Motion"))

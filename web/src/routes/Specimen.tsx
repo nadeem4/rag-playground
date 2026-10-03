@@ -110,15 +110,15 @@ function TypeScale() {
     ["2xs", "0.75rem", <span className="meta">Chunk 1, chars <span className="font-mono">{first.start_char}-{first.end_char}</span></span>],
     ["xs", "0.8125rem", <span className="text-xs text-fg-muted">recursive_character v1, chunk_size 400, chunk_overlap 80</span>],
     ["sm", "0.9375rem", <span className="text-sm">{clip(first.text, 90)} <span className="font-mono">{fmt(total)} tokens</span></span>],
-    ["base", "1.0625rem", <span className="block max-w-reading text-base whitespace-normal">{paragraph}</span>],
-    ["lg", "1.25rem", <span className="text-lg font-medium">Recursive character splitting</span>],
-    ["xl", "1.625rem", <span className="text-xl font-semibold">Inspector</span>],
+    ["base", "1.0625rem", <span className="block max-w-reading font-serif text-base whitespace-normal">{paragraph}</span>],
+    ["lg", "1.375rem", <span className="text-lg font-medium">Recursive character splitting</span>],
+    ["xl", "1.75rem", <span className="text-xl font-semibold">Inspector</span>],
     ["2xl", "2.25rem", <span className="text-2xl font-semibold">Read</span>],
   ]
   return (
     <Section
       title="Type"
-      note="Atkinson Hyperlegible Next for labels and prose, IBM Plex Mono for numbers, ids and code names. Seven sizes in rem, so text follows the browser's font size. Hierarchy comes from weight and tint first."
+      note="Atkinson Hyperlegible Next for labels and the tool's own sentences. Source Serif 4 only for text that came from the document, like the passage at text-base. JetBrains Mono for numbers, ids and code names. Seven sizes in rem, so text follows the browser's font size. Hierarchy comes from weight and tint first."
     >
       <div className="flex flex-col gap-px overflow-hidden rounded-panel border border-hairline bg-hairline">
         {rows.map(([name, rem, sample]) => (
@@ -129,6 +129,12 @@ function TypeScale() {
             <div className="min-w-0 truncate">{sample}</div>
           </div>
         ))}
+        <div className="grid grid-cols-[160px_minmax(0,1fr)] items-baseline gap-3 bg-surface px-3 py-2">
+          <span className="font-mono text-xs text-fg-muted">font-mono</span>
+          <span className="truncate font-mono text-sm">
+            {first.id} {fmt(first.start_char)}-{fmt(first.end_char)} {fmt(total)} tokens 0.8731
+          </span>
+        </div>
       </div>
     </Section>
   )
@@ -160,15 +166,19 @@ function SpacingScale() {
 
 function Shape() {
   return (
-    <Section title="Shape" note="One hairline and two radii. The one shadow belongs to the raised card, shown under Surfaces.">
+    <Section title="Shape" note="One hairline and three radii. The two shadows, the raised card's and the sheet's, are shown under Surfaces.">
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex flex-col gap-1">
-          <Button variant="outline">Control 6px</Button>
+          <Button variant="outline">Control 8px</Button>
           <span className="font-mono text-xs text-fg-muted">rounded-control</span>
         </div>
         <div className="flex flex-col gap-1">
-          <div className="rounded-panel bg-surface-elevated p-3 text-sm">Panel 8px</div>
+          <div className="rounded-panel bg-surface-elevated p-3 text-sm">Panel 12px</div>
           <span className="font-mono text-xs text-fg-muted">rounded-panel bg-surface-elevated</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <div className="flex size-[30px] items-center justify-center rounded-swatch bg-chunk-1 font-mono text-xs text-chunk-1-text">1</div>
+          <span className="font-mono text-xs text-fg-muted">rounded-swatch 6px</span>
         </div>
       </div>
     </Section>
@@ -180,6 +190,7 @@ const CHROME: [string, string][] = [
   ["--surface-elevated", "panel, one step up"],
   ["--surface-raised", "the one raised card"],
   ["--hairline", "every border"],
+  ["--flat", "a line only: an unchanged slope, a Not kept swatch outline"],
   ["--text-primary", "body text"],
   ["--text-secondary", "secondary text"],
   ["--accent", "focus, selection, Run"],
@@ -219,7 +230,7 @@ function Surfaces() {
   return (
     <Section
       title="Surfaces"
-      note="Three levels. The panel sits on the page with no border. Only one card is raised at a time, with a hairline and the one shadow, shadow-raised."
+      note="Three levels. The panel sits on the page with no border. Only one card is raised at a time, with a hairline and shadow-raised. The options sheet is the only other thing that casts a shadow, shadow-sheet."
     >
       <div className="rounded-panel bg-surface p-4">
         <div className="flex flex-col gap-3 rounded-panel bg-surface-elevated p-4">
@@ -229,6 +240,9 @@ function Surfaces() {
           </div>
         </div>
         <span className="mt-2 block text-sm text-fg-muted">Page</span>
+        <div className="mt-4 rounded-panel bg-surface-raised p-3 shadow-sheet">
+          <span className="text-sm font-medium">Sheet</span>
+        </div>
       </div>
       <Grid columns="160px 190px 190px minmax(160px,1fr)" head={["level", "light", "dark", "token"]}>
         {SURFACES.map(([level, name, utility]) => (
@@ -247,7 +261,7 @@ function Surfaces() {
       </Grid>
       <p className="text-xs text-fg-muted">Below 768 px the raised card keeps only the first shadow layer, --shadow-raised-phone.</p>
       <Grid columns="190px minmax(240px,1fr) minmax(240px,1fr)" head={["shadow", "light", "dark"]}>
-        {["--shadow-raised", "--shadow-raised-phone"].map((name) => (
+        {["--shadow-raised", "--shadow-raised-phone", "--shadow-sheet"].map((name) => (
           <Row key={name}>
             <Cell mono>{name}</Cell>
             {THEMES.map(([theme, tokens]) => (

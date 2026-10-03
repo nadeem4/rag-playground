@@ -28,12 +28,14 @@ describe("the zero step of the spacing scale", () => {
   })
 })
 
-describe("the one shadow", () => {
-  it("compiles shadow-raised and no other shadow utility", async () => {
+describe("the two shadows", () => {
+  it("compiles shadow-raised and shadow-sheet and no other shadow utility", async () => {
     const others = ["shadow", "shadow-sm", "shadow-md", "shadow-lg", "shadow-xl"]
-    const css = await buildCss(["shadow-raised", ...others])
+    const css = await buildCss(["shadow-raised", "shadow-sheet", ...others])
     expect(css).toContain(".shadow-raised")
     expect(css).toMatch(/var\(--shadow-raised\)/)
+    expect(css).toContain(".shadow-sheet")
+    expect(css).toMatch(/var\(--shadow-sheet\)/)
     expect(others.filter((name) => css.includes(`.${name} {`))).toEqual([])
   })
 })

@@ -510,8 +510,9 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
   runs from 4 px to 32 px.
 - The **Dev** menu in the header opens the component inspectors and a token specimen page.
   It is hidden in demo mode.
-- The two typefaces, Atkinson Hyperlegible Next for reading and IBM Plex Mono for data, are
-  self-hosted from npm. No font is fetched from the network at run time.
+- The three typefaces are self-hosted from npm: Atkinson Hyperlegible Next for the
+  interface, Source Serif 4 only for the document's own words, and JetBrains Mono for
+  numbers and ids. No font is fetched from the network at run time.
 - The UI tests use JSON fixtures generated from the real engine. Regenerate them with
   `uv run python web/scripts/export_fixtures.py`.
 

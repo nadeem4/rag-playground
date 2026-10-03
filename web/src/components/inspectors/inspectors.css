@@ -28,8 +28,9 @@
  * exactly half the leading makes the painted box one line pitch tall, so
  * consecutive lines touch. The content area is read from the font files, not
  * guessed: Atkinson Hyperlegible Next has ascender 984 and descender -316 per
- * 1000 units (hhea and typo, USE_TYPO_METRICS set), so 1.3em; IBM Plex Mono is
- * 1025 and -275, also 1.3em, so a mono span inside the text paints the same.
+ * 1000 units (hhea and typo, USE_TYPO_METRICS set), so 1.3em; JetBrains Mono is
+ * 1020 and -300, 1.32em, so a mono span inside the text paints a hair taller
+ * and still meets its neighbours.
  * A blank line inside a chunk has no glyphs, so the span's fragment there is
  * widened by `.ci-fill` and painted by the same background.
  *

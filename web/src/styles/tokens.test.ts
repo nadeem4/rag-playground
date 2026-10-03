@@ -1,4 +1,11 @@
+/// <reference types="node" />
+import { readdirSync, readFileSync, statSync } from "node:fs"
+import { dirname, join, resolve as resolvePath } from "node:path"
+import { fileURLToPath } from "node:url"
+
 import { describe, expect, it } from "vitest"
+
+import { buildCss } from "./compileCss"
 
 import {
   CHUNK_SLOTS,
@@ -120,8 +127,8 @@ describe("theme blocks", () => {
       ["xs", 0.8125],
       ["sm", 0.9375],
       ["base", 1.0625],
-      ["lg", 1.25],
-      ["xl", 1.625],
+      ["lg", 1.375],
+      ["xl", 1.75],
       ["2xl", 2.25],
     ])
     expect(css).not.toMatch(/--text-[\w]+: [\d.]+px/)
@@ -144,10 +151,18 @@ describe("theme blocks", () => {
     expect(css).toMatch(/@media \(max-width: 767px\) \{\s*:root:root:root \{\s*--shadow-raised: var\(--shadow-raised-phone\);\s*\}\s*\}/)
   })
 
-  it("declares exactly one shadow, the raised card's", () => {
+  it("declares exactly two shadows, the raised card's and the sheet's", () => {
     const shadows = [...theme.keys()].filter((k) => k.startsWith("--shadow-"))
-    expect(shadows).toEqual(["--shadow-raised"])
+    expect(shadows).toEqual(["--shadow-raised", "--shadow-sheet"])
     expect(dark.get("--shadow-raised")).not.toBe(light.get("--shadow-raised"))
+    expect(light.get("--shadow-sheet")).toBe("0 2px 4px rgb(22 25 23 / 0.06), 0 12px 32px rgb(22 25 23 / 0.10)")
+    expect(darkToggle.get("--shadow-sheet")).toBe("0 2px 4px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.5)")
+  })
+
+  it("gives each role its radius: panel 12px, control 8px, swatch 6px", () => {
+    expect(theme.get("--radius-panel")).toBe("12px")
+    expect(theme.get("--radius-control")).toBe("8px")
+    expect(theme.get("--radius-swatch")).toBe("6px")
   })
 
   it("names the motion tokens once, for both themes", () => {
@@ -172,7 +187,7 @@ describe("theme blocks", () => {
 
 describe("surfaces", () => {
   it.each([
-    ["light", light, ["#f7f7f5", "#efefec", "#fdfdfc"]],
+    ["light", light, ["#f5f6f4", "#eaece8", "#fdfdfc"]],
     ["dark", darkToggle, ["#0e0f10", "#17181a", "#1f2023"]],
   ])("%s: page, panel and raised levels", (_, tokens, values) => {
     expect(["--surface", "--surface-elevated", "--surface-raised"].map((k) => tokens.get(k))).toEqual(values)
@@ -185,6 +200,38 @@ describe("surfaces", () => {
     for (const surface of ["--surface", "--surface-elevated"]) {
       expect(contrast(tokens.get("--field-border")!, tokens.get(surface)!), surface).toBeGreaterThanOrEqual(3)
     }
+  })
+})
+
+describe("ink and lines", () => {
+  it.each([
+    ["light", light, ["#d6d9d3", "#838882", "#161917", "#545a55"]],
+    ["dark", darkToggle, ["#2c2d31", null, "#f4f4f2", "#a8a8ae"]],
+  ])("%s: hairline, field border, primary and secondary ink", (_, tokens, values) => {
+    const names = ["--hairline", "--field-border", "--text-primary", "--text-secondary"]
+    names.forEach((k, i) => {
+      if (values[i] !== null) expect(tokens.get(k), k).toBe(values[i])
+    })
+  })
+
+  it.each([
+    ["light", light],
+    ["dark", dark],
+  ])("%s: primary and secondary text clear 4.5:1 on every surface", (_, tokens) => {
+    for (const ink of ["--text-primary", "--text-secondary"]) {
+      for (const surface of ["--surface", "--surface-elevated", "--surface-raised"]) {
+        expect(contrast(tokens.get(ink)!, tokens.get(surface)!), `${ink} on ${surface}`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+
+  it.each([
+    ["light", light, "#a7aca6"],
+    ["dark", darkToggle, "#5a5f5b"],
+  ])("%s: --flat is a line colour that stands 2:1 off the page", (_, tokens, value) => {
+    expect(tokens.get("--flat")).toBe(value)
+    expect(contrast(tokens.get("--flat")!, tokens.get("--surface")!)).toBeGreaterThanOrEqual(2)
+    expect(theme.get("--color-flat")).toBe("var(--flat)")
   })
 })
 
@@ -202,12 +249,13 @@ describe("more contrast", () => {
     expect([...contrastMedia.entries()]).toEqual([...contrastToggle.entries()])
   })
 
-  it("lifts secondary text, hairlines and the raised shadow", () => {
+  it("lifts secondary text, hairlines and both shadows", () => {
     expect(Object.fromEntries(contrastToggle)).toEqual({
       "--text-secondary": "var(--text-primary)",
       "--hairline": "var(--field-border)",
       "--shadow-raised": "0 0 0 1px var(--field-border)",
       "--shadow-raised-phone": "0 0 0 1px var(--field-border)",
+      "--shadow-sheet": "0 0 0 1px var(--field-border)",
     })
     for (const name of contrastToggle.keys()) expect(light.has(name), name).toBe(true)
   })
@@ -237,5 +285,53 @@ describe("the accent hue", () => {
     expect(h).toBeLessThan(185)
     expect(parse(resolve(tokens, "--selection"))!.h).toBe(h)
     expect(parse(resolve(tokens, "--accent-wash"))!.h).toBe(h)
+  })
+})
+
+describe("faces", () => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const src = resolvePath(here, "..")
+  const fonts = readFileSync(join(here, "fonts.css"), "utf8")
+
+  it("names the document voice and the data face", () => {
+    expect(theme.get("--font-serif")).toBe('"Source Serif 4", "Iowan Old Style", Georgia, serif')
+    expect(theme.get("--font-mono")).toBe('"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace')
+    expect(theme.get("--font-sans")).toMatch(/^"Atkinson Hyperlegible Next"/)
+  })
+
+  it("self-hosts Source Serif 4, upright and italic, and JetBrains Mono, latin and latin-ext", () => {
+    const faces = [...fonts.matchAll(/@font-face \{([^}]*)\}/g)].map((m) => m[1])
+    const files = faces.map((f) => /files\/([\w-]+)\.woff2/.exec(f)?.[1])
+    for (const file of [
+      "source-serif-4-latin-wght-normal",
+      "source-serif-4-latin-ext-wght-normal",
+      "source-serif-4-latin-wght-italic",
+      "source-serif-4-latin-ext-wght-italic",
+      "jetbrains-mono-latin-wght-normal",
+      "jetbrains-mono-latin-ext-wght-normal",
+    ]) {
+      expect(files, file).toContain(file)
+    }
+    for (const face of faces) expect(face).toMatch(/font-display: swap;/)
+  })
+
+  it("compiles the font-serif utility to the serif stack", async () => {
+    const out = await buildCss(["font-serif", "font-mono"])
+    expect(out).toMatch(/\.font-serif \{\s*font-family: var\(--font-serif\)/)
+    expect(out).toMatch(/--font-serif: "Source Serif 4"/)
+    expect(out).toMatch(/--font-mono: "JetBrains Mono"/)
+  })
+
+  it("leaves no trace of the old mono face under src", () => {
+    const self = fileURLToPath(import.meta.url)
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name)
+        return statSync(path).isDirectory() ? walk(path) : [path]
+      })
+    const hits = walk(src)
+      .filter((path) => path !== self && /\.(tsx?|css|json)$/.test(path))
+      .filter((path) => /ibm-plex|Plex|fonts-static/.test(readFileSync(path, "utf8")))
+    expect(hits).toEqual([])
   })
 })

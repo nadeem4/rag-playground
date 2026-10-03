@@ -743,6 +743,26 @@ describe("lock states behind a Clean step", () => {
     expect(chunk.queryByRole("option", { name: /markdown_header · falls back/ })).toBeNull()
   })
 
+  it("the Docling card shows its content layers as five checkboxes", async () => {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
+        return base(url, init)
+      }),
+    )
+    const g = sampleGraph(liveRegistry as never, SOURCE)
+    const parse = g.nodes.find((n) => n.stage === "parse")!
+    storeGraph(setTransform(g, parse.id, "docling", liveRegistry as never))
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    const group = await waitFor(() => within(card("parse")).getByRole("group", { name: "Content layers" }))
+    expect(within(group).getAllByRole("checkbox")).toHaveLength(5)
+    expect((within(group).getByLabelText("body") as HTMLInputElement).checked).toBe(true)
+  })
+
   it.each([
     ["pdfium", true],
     ["docling", false],

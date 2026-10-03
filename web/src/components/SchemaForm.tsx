@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, type ComponentType } from "react"
 
 import type { JsonSchema, Lesson } from "@/api/types"
 import { BooleanField } from "@/components/fields/BooleanField"
+import { ChoiceListField } from "@/components/fields/ChoiceListField"
 import { ConstField } from "@/components/fields/ConstField"
 import { EnumField } from "@/components/fields/EnumField"
 import { describedBy, Errors, FieldShell, fieldIds, Help, UnsetToggle } from "@/components/fields/FieldShell"
@@ -241,6 +242,19 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
         {help ? <Help id={ids.help} text={help} /> : null}
         <Errors id={ids.error} errors={own} />
       </div>
+    )
+  }
+
+  if (f.kind === "choices") {
+    // A group of checkboxes is named by a legend, not a label pointing at one input.
+    return (
+      <fieldset data-field-kind="choices" className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
+        <legend className="mb-1 p-0 text-sm font-medium text-fg">{label}</legend>
+        {unset}
+        <ChoiceListField {...control} />
+        {help ? <Help id={ids.help} text={help} /> : null}
+        <Errors id={ids.error} errors={own} />
+      </fieldset>
     )
   }
 

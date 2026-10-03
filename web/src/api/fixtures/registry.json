@@ -323,7 +323,7 @@
     },
     "docling": {
       "name": "docling",
-      "version": "2",
+      "version": "3",
       "summary": "Renders each page as an image and runs a layout model that labels every region: title, section heading, list item, table, page header and footer. A reading-order model then puts the regions in sequence. Much slower than pdfium, with far more structure.",
       "stage": "parse",
       "output": "parsed_doc",
@@ -350,19 +350,19 @@
         "properties": {
           "do_ocr": {
             "default": false,
-            "description": "Read text from page images with OCR. Only needed for scanned PDFs with no text layer; it is much slower.",
+            "description": "Docling's PdfPipelineOptions.do_ocr. Read text from page images with OCR. Only needed for scanned PDFs with no text layer; it is much slower.",
             "title": "Do Ocr",
             "type": "boolean"
           },
           "do_table_structure": {
             "default": true,
-            "description": "Recover rows and columns of detected tables, so a table reaches the chunks as a markdown table instead of loose text.",
+            "description": "Docling's PdfPipelineOptions.do_table_structure. Recover rows and columns of detected tables, so a table reaches the chunks as a markdown table instead of loose text.",
             "title": "Do Table Structure",
             "type": "boolean"
           },
           "table_mode": {
             "default": "fast",
-            "description": "Which table model to use. Fast is fine for simple grids; accurate handles merged cells better and takes longer.",
+            "description": "Docling's TableStructureOptions.mode, fast or accurate. Which table model to use. Fast is fine for simple grids; accurate handles merged cells better and takes longer.",
             "enum": [
               "fast",
               "accurate"
@@ -370,11 +370,20 @@
             "title": "Table Mode",
             "type": "string"
           },
-          "keep_furniture": {
-            "default": false,
-            "description": "Keep page headers and footers in the text. Turn this on when the layout model mistakes real content near the page edges, such as the last line of a one-page resume, for a footer.",
-            "title": "Keep page headers and footers",
-            "type": "boolean"
+          "content_layers": {
+            "description": "Docling's included_content_layers: which layers of the page are read into the text. body is the main content and is always read. furniture is page headers and footers. background is watermarks. invisible is hidden text. notes are author or speaker notes.",
+            "items": {
+              "enum": [
+                "body",
+                "furniture",
+                "background",
+                "invisible",
+                "notes"
+              ],
+              "type": "string"
+            },
+            "title": "Content layers",
+            "type": "array"
           }
         },
         "title": "DoclingConfig",

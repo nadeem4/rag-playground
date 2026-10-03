@@ -133,6 +133,34 @@ describe("supported types", () => {
     expect((screen.getAllByLabelText(/^Golds/) as HTMLInputElement[]).map((i) => i.value)).toEqual([""])
   })
 
+  it("Docling's content layers are a checkbox group in schema order, with body always on", () => {
+    const layers = registry.parse!.docling.config_schema
+    expect(describeField(layers.properties!.content_layers, layers).kind).toBe("choices")
+    const { last } = renderForm(layers)
+    const group = screen.getByRole("group", { name: "Content layers" })
+    const boxes = within(group).getAllByRole("checkbox") as HTMLInputElement[]
+    expect(boxes.map((b) => b.value)).toEqual(["body", "furniture", "background", "invisible", "notes"])
+    expect(boxes.map((b) => b.checked)).toEqual([true, false, false, false, false])
+    expect(boxes[0].disabled).toBe(true)
+    fireEvent.click(within(group).getByLabelText("furniture"))
+    expect(last()!.content_layers).toEqual(["body", "furniture"])
+    fireEvent.click(within(group).getByLabelText("notes"))
+    fireEvent.click(within(group).getByLabelText("furniture"))
+    expect(last()!.content_layers).toEqual(["body", "notes"])
+  })
+
+  it("a list of choices keeps schema order whatever order the boxes are ticked in", () => {
+    const schema = obj({ picks: { type: "array", items: { type: "string", enum: ["a", "b", "c"] }, default: [], title: "Picks" } })
+    const { last } = renderForm(schema)
+    const group = screen.getByRole("group", { name: "Picks" })
+    expect(within(group).getAllByRole("checkbox").every((b) => !(b as HTMLInputElement).disabled)).toBe(true)
+    fireEvent.click(within(group).getByLabelText("c"))
+    fireEvent.click(within(group).getByLabelText("a"))
+    expect(last()).toEqual({ picks: ["a", "c"] })
+    fireEvent.click(within(group).getByLabelText("a"))
+    expect(last()).toEqual({ picks: ["c"] })
+  })
+
   it("a list of anything else is still raw JSON", () => {
     expect(describeField({ type: "array", items: { type: "integer" } }, {}).kind).toBe("json")
     expect(describeField({ type: "array" }, {}).kind).toBe("json")

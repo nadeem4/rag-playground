@@ -56,6 +56,9 @@ const STRATEGY_LABELS: Record<string, string> = {
   token_based: "Fixed token count",
   layout_blocks: "By layout block",
   sentence_window: "By sentence",
+  mmr: "MMR (variety)",
+  cross_encoder: "Cross-encoder",
+  llm_rerank: "LLM",
 }
 
 /** A strategy's name for the reader. Settings sent to the server keep the id. */

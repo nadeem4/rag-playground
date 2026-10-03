@@ -1143,6 +1143,136 @@
         "type": "object"
       },
       "learn": {}
+    },
+    "cross_encoder": {
+      "name": "cross_encoder",
+      "version": "1",
+      "summary": "A cross-encoder reads the question and each candidate piece together and gives the pair one relevance score. It is slower than the retriever's comparison but more accurate, so it only reorders the small pool of candidates the retriever found.",
+      "stage": "rerank",
+      "output": "retrieval_result",
+      "stackable": true,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "prefers": {},
+      "fallback": "",
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "model": {
+            "default": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            "description": "A sentence-transformers CrossEncoder. MiniLM is small and fast; bge-reranker-base is stronger; bge-reranker-v2-m3 is strongest and slow on a CPU.",
+            "enum": [
+              "cross-encoder/ms-marco-MiniLM-L-6-v2",
+              "BAAI/bge-reranker-base",
+              "BAAI/bge-reranker-v2-m3"
+            ],
+            "title": "Model",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "CrossEncoderConfig",
+        "type": "object"
+      },
+      "learn": {}
+    },
+    "llm_rerank": {
+      "name": "llm_rerank",
+      "version": "1",
+      "summary": "Asks a chat model to read the question and every candidate piece and put the pieces in order of relevance. It needs an API key and makes one model call per question.",
+      "stage": "rerank",
+      "output": "retrieval_result",
+      "stackable": true,
+      "deterministic": false,
+      "cacheable": false,
+      "requires": {},
+      "provides": {},
+      "prefers": {},
+      "fallback": "",
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "model": {
+            "default": "claude-haiku-4-5",
+            "enum": [
+              "claude-opus-5",
+              "claude-sonnet-5",
+              "claude-haiku-4-5",
+              "gpt-6-astra",
+              "gpt-5.6-sol",
+              "gpt-5.6-luna",
+              "custom"
+            ],
+            "title": "Model",
+            "type": "string",
+            "x-labels": {
+              "claude-haiku-4-5": "Claude Haiku 4.5",
+              "claude-opus-5": "Claude Opus 5",
+              "claude-sonnet-5": "Claude Sonnet 5",
+              "custom": "Custom (OpenAI-compatible)",
+              "gpt-5.6-luna": "GPT-5.6 Luna",
+              "gpt-5.6-sol": "GPT-5.6 Sol",
+              "gpt-6-astra": "GPT-6 Astra"
+            }
+          },
+          "custom_base_url": {
+            "default": "",
+            "title": "Custom Base Url",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "custom_model": {
+            "default": "",
+            "title": "Custom Model",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "LlmRerankConfig",
+        "type": "object"
+      },
+      "learn": {}
     }
   }
 }

@@ -34,6 +34,12 @@ describe("strategyLabel", () => {
     expect(strategyLabel("layout_blocks")).toBe("By layout block")
     expect(strategyLabel("sentence_window")).toBe("By sentence")
   })
+
+  it("names the three rerankers in plain words", () => {
+    expect(strategyLabel("mmr")).toBe("MMR (variety)")
+    expect(strategyLabel("cross_encoder")).toBe("Cross-encoder")
+    expect(strategyLabel("llm_rerank")).toBe("LLM")
+  })
 })
 
 describe("challengePrompt", () => {

@@ -63,10 +63,11 @@
   --row-compact: 1.75rem; /* 28px at the default root size */
 
   /* Motion: only transform and opacity animate (and grid-template-rows for
-     one disclosure). Nothing loops. */
+     one disclosure). Nothing loops except the running step's edge (--dur-breathe). */
   --dur-fast: 120ms;
   --dur-mid: 200ms;
   --dur-slow: 320ms;
+  --dur-breathe: 1200ms;
   --ease-in: cubic-bezier(0.2, 0, 0, 1);
   --ease-out: cubic-bezier(0.4, 0, 1, 1);
 
@@ -432,7 +433,7 @@
 
 /*
  * Motion 5: the running step card's top edge. The one repeating signal: the
- * accent edge pulses between half and full opacity over --dur-slow while the
+ * accent edge breathes between half and full opacity over --dur-breathe while the
  * step runs, and stops when it finishes. Under reduced motion it is a still
  * edge.
  */
@@ -445,7 +446,7 @@
   }
 }
 .step-running-edge {
-  animation: step-running var(--dur-slow) var(--ease-in) infinite alternate;
+  animation: step-running var(--dur-breathe) var(--ease-in) infinite alternate;
 }
 @media (prefers-reduced-motion: reduce) {
   .step-running-edge {

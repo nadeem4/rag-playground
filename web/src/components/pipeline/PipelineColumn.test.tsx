@@ -98,12 +98,27 @@ describe("PipelineColumn", () => {
     )
   })
 
+  it("lays the cards out as tiles 12 px apart", () => {
+    setup()
+    const column = card("parse").parentElement!
+    expect(column.className.split(/\s+/)).toEqual(expect.arrayContaining(["gap-3", "bg-surface-elevated"]))
+    expect(card("parse").className.split(/\s+/)).toEqual(expect.arrayContaining(["rounded-panel", "border", "border-hairline"]))
+  })
+
+  it("clicking the selected card's head deselects it", () => {
+    const p = setup({ selected: "chunk" })
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    expect(p.onSelect).toHaveBeenCalledWith(null)
+    fireEvent.click(within(card("parse")).getByRole("button", { name: "Parse" }))
+    expect(p.onSelect).toHaveBeenLastCalledWith("parse")
+  })
+
   it("raises only the selected card", () => {
     setup({ selected: "chunk" })
     const raised = document.querySelectorAll("article.shadow-raised")
     expect(raised).toHaveLength(1)
     expect(raised[0].getAttribute("data-node-id")).toBe("chunk")
-    expect(card("parse").className).toContain("bg-surface-elevated")
+    expect(card("parse").className.split(/\s+/)).toContain("bg-surface")
     expect(card("parse").className).not.toContain("shadow-raised")
   })
 

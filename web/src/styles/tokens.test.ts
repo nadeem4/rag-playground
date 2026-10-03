@@ -143,8 +143,14 @@ describe("theme blocks", () => {
     expect(light.get("--dur-fast")).toBe("120ms")
     expect(light.get("--dur-mid")).toBe("200ms")
     expect(light.get("--dur-slow")).toBe("320ms")
+    expect(light.get("--dur-breathe")).toBe("1200ms")
     expect(light.get("--ease-in")).toBe("cubic-bezier(0.2, 0, 0, 1)")
     expect(light.get("--ease-out")).toBe("cubic-bezier(0.4, 0, 1, 1)")
+  })
+
+  it("breathes the running edge over --dur-breathe, and stills it under reduced motion", () => {
+    expect(css).toMatch(/\.step-running-edge \{\s*animation: step-running var\(--dur-breathe\) [^;]* infinite alternate;/)
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.step-running-edge \{\s*animation: none;\s*\}\s*\}/)
   })
 
   it("sets the rows in rem, so they follow the browser size like the type", () => {

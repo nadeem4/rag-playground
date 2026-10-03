@@ -8,28 +8,31 @@ import type { GraphNode, TransformInfo } from "@/api/types"
 import type { ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { KeyHint } from "@/components/ApiKeyControl"
+import { fmt } from "@/components/inspectors/status"
 import { LearnHint, StageLesson } from "@/components/learn/LearnHint"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { strategyLabel } from "@/learn/challenges"
 import { cn } from "@/lib/utils"
 import { STAGE_VERB } from "@/state/graph"
+import { CHUNK_CLASSES } from "@/styles/dataClasses"
 import { errorHeadline } from "@/state/pipeline"
 
 import { ExplainPanel } from "./ExplainPanel"
 import { lockOf, TransformSelect } from "./TransformSelect"
-import { outcomeText } from "./outcome"
+import { outcomeText, type Outcome } from "./outcome"
 import { useOutcome } from "./useOutcome"
 import { MonoNumbers, WhatItDid } from "./WhatItDid"
 
 /**
- * One node of the pipeline column (foundation spec section 7). A 10 px status
- * ring before the step name shows the card's look without reading a word:
- * grey when not run, half accent while running (with a pulsing top edge),
- * accent when done, amber when the settings changed since the run, danger
- * when it failed. Under the name: the transform's plain name and code name,
- * then the result in one line. The options open below when the card is
- * selected, and the selected card is the one raised card.
+ * One node of the pipeline column (foundation spec section 7), a tile on the
+ * panel. A 14 px status ring before the step name shows the card's look
+ * without reading a word: grey when not run, half accent while running (with
+ * a breathing top edge), an accent dot when done (dashed when reused from an
+ * earlier run), amber when the settings changed since the run, danger when it
+ * failed. Under the name: the transform's plain name and code name, then the
+ * result on one line. The options open below when the card is selected, the
+ * selected card is the one raised card, and its head closes it again.
  */
 
 export interface NodeCardProps {
@@ -45,6 +48,8 @@ export interface NodeCardProps {
   fieldErrors?: FieldErrors
   message?: string
   onSelect: () => void
+  /** Clicking the head of the selected card closes it. */
+  onDeselect?: () => void
   onTransform: (name: string) => void
   onConfig: (config: Record<string, unknown>) => void
   onRun: (force: boolean) => void
@@ -108,11 +113,44 @@ export function describeResult(result: NodeState | undefined, stale: boolean | u
 
 /** The status ring's stroke and fill per look. */
 const RING: Record<Look, string> = {
-  idle: "border-hairline",
+  idle: "border-field-border",
   running: "border-primary/50 bg-primary/50",
-  done: "border-primary bg-primary",
+  done: "border-primary",
   stale: "border-stale",
   failed: "border-danger",
+}
+
+/** The outcome on one line, its headline number in bold and the other numbers in mono. */
+function ResultLine({ outcome }: { outcome: Outcome }) {
+  const text = outcomeText(outcome)
+  const head = fmt(outcome.headline)
+  const at = outcome.lead.lastIndexOf(head)
+  return (
+    <p data-testid="step-summary" title={text} className="m-0 mt-1 truncate text-sm text-fg">
+      {at < 0 ? (
+        <MonoNumbers text={text} />
+      ) : (
+        <>
+          <MonoNumbers text={outcome.lead.slice(0, at)} />
+          <span className="font-semibold">{head}</span>
+          <MonoNumbers text={outcome.lead.slice(at + head.length) + outcome.tail} />
+        </>
+      )}
+    </p>
+  )
+}
+
+/** The pieces to scale, in their chunk colours, under the Chunk card's result. */
+function ChunkBar({ data }: { data: unknown }) {
+  const chunks = (data as { chunks?: { token_count?: number }[] } | null)?.chunks
+  if (!Array.isArray(chunks) || chunks.length === 0) return null
+  return (
+    <div data-testid="chunk-bar" aria-hidden className="mt-1 flex h-[4px] overflow-hidden rounded-full">
+      {chunks.map((c, i) => (
+        <span key={i} className={CHUNK_CLASSES[i % CHUNK_CLASSES.length]} style={{ flexGrow: c.token_count ?? 1, flexBasis: 0 }} />
+      ))}
+    </div>
+  )
 }
 
 /** "Recursive (natural breaks)" for `recursive_character`; the code name alone when it has no plain name. */
@@ -156,16 +194,14 @@ export function NodeCard(p: NodeCardProps) {
   const running = p.result?.status === "running" && !p.stale
   const elapsed = useElapsed(running ? p.result?.started_at : undefined)
   const cardRef = useRef<HTMLElement>(null)
+  const headRef = useRef<HTMLElement>(null)
   const warning = p.explain?.data?.warning
   const completed = (p.result?.status === "done" || p.result?.status === "cached") && p.result.artifact_id ? p.result.artifact_id : undefined
   const reused = shown.look === "done" && p.result?.status === "cached"
-  // The summary row: a fresh result's outcome in one line, without "(was N)".
-  const outcome = useOutcome(p.node.stage, info?.output, shown.look === "done" && !reused ? completed : undefined)
-  const summary = reused
-    ? "reused from an earlier run"
-    : outcome?.kind === "ready" && outcome.outcome
-      ? outcomeText(outcome.outcome)
-      : null
+  // The summary row: the result's outcome on one line, without "(was N)",
+  // computed or reused alike. Only the ring and the chip say it was reused.
+  const outcome = useOutcome(p.node.stage, info?.output, shown.look === "done" ? completed : undefined)
+  const ready = outcome?.kind === "ready" ? outcome : null
   // Open with the selection; a card with an error to show opens too.
   const open = p.selected || Boolean(p.message) || Object.keys(p.fieldErrors ?? {}).length > 0
   const plain = plainName(p.node.transform)
@@ -185,6 +221,26 @@ export function NodeCard(p: NodeCardProps) {
 
   const filename = isSource && typeof p.node.config.filename === "string" ? p.node.config.filename : ""
 
+  // Selecting a card brings its head into view when it is outside the column's
+  // scroll box, after the card above has had its --dur-mid to close.
+  useEffect(() => {
+    if (!p.selected) return
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const t = window.setTimeout(
+      () => {
+        const head = headRef.current
+        if (!head || typeof head.scrollIntoView !== "function") return
+        const box = head.closest<HTMLElement>("[data-scroll-box]")
+        const scrolls = box !== null && /(auto|scroll)/.test(getComputedStyle(box).overflowY)
+        const view = scrolls ? box.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }
+        const r = head.getBoundingClientRect()
+        if (r.top < view.top || r.bottom > view.bottom) head.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" })
+      },
+      reduce ? 0 : 220,
+    )
+    return () => window.clearTimeout(t)
+  }, [p.selected])
+
   return (
     <Popover.Root open={p.explainOpen} onOpenChange={p.onExplainOpenChange}>
     <Popover.Anchor asChild>
@@ -196,26 +252,40 @@ export function NodeCard(p: NodeCardProps) {
       aria-current={p.selected ? "true" : undefined}
       onClick={p.onSelect}
       className={cn(
-        "relative flex min-w-0 flex-col p-3",
-        // The one raised card sits above its neighbours so they do not cover its shadow.
-        p.selected ? "z-10 bg-surface-raised shadow-raised" : "bg-surface-elevated",
+        "relative flex min-w-0 flex-col rounded-panel border border-hairline p-3",
+        p.selected ? "z-10 bg-surface-raised shadow-raised" : "bg-surface",
         p.explainOpen && "outline-1 -outline-offset-1 outline-fg-muted outline-solid",
       )}
     >
       {shown.look === "running" && !isSource ? (
-        <span aria-hidden data-testid="running-bar" className="step-running-edge pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-primary" />
+        <span aria-hidden data-testid="running-bar" className="step-running-edge pointer-events-none absolute inset-x-0 top-0 h-[2px] rounded-t-panel bg-primary" />
       ) : null}
-      <header className="flex min-w-0 items-start justify-between gap-2">
+      <header ref={headRef} className="flex min-w-0 items-start justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2">
           <h3 className="text-sm font-semibold">
             <button
               type="button"
               aria-expanded={open}
               aria-controls={`${id}-options`}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (p.selected && p.onDeselect) p.onDeselect()
+                else p.onSelect()
+              }}
               className="flex min-h-row-compact items-center gap-2 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
             >
               {isSource ? null : (
-                <span aria-hidden data-testid="status-ring" className={cn("size-[10px] shrink-0 rounded-full border-2", RING[shown.look])} />
+                <span
+                  aria-hidden
+                  data-testid="status-ring"
+                  className={cn(
+                    "flex size-[14px] shrink-0 items-center justify-center rounded-full border-2",
+                    RING[shown.look],
+                    reused && "border-dashed",
+                  )}
+                >
+                  {shown.look === "done" ? <span data-testid="ring-dot" className="size-[6px] rounded-full bg-primary" /> : null}
+                </span>
               )}
               {p.title}
             </button>
@@ -225,7 +295,7 @@ export function NodeCard(p: NodeCardProps) {
         <div className="flex shrink-0 items-center gap-2" aria-live="polite">
           {isSource ? null : (
             <>
-              {shown.look === "done" ? null : (
+              {shown.look === "done" && !reused ? null : (
                 <span
                   data-testid="status-chip"
                   className={cn(
@@ -283,11 +353,8 @@ export function NodeCard(p: NodeCardProps) {
         </p>
       )}
 
-      {summary && !isSource ? (
-        <p data-testid="step-summary" className="m-0 mt-1 text-sm break-words text-fg">
-          <MonoNumbers text={summary} />
-        </p>
-      ) : null}
+      {ready?.outcome && !isSource ? <ResultLine outcome={ready.outcome} /> : null}
+      {ready && p.node.stage === "chunk" ? <ChunkBar data={ready.data} /> : null}
 
       {warning ? (
         <p role="status" data-testid="explain-warning" className="mt-2 text-xs leading-[1.5] break-words text-danger">

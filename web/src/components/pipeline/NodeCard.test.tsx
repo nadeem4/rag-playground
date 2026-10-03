@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
@@ -70,17 +70,21 @@ describe("describeResult", () => {
 })
 
 describe("the step card's look", () => {
-  it("idle: a hairline ring, no bar, no summary", () => {
+  it("idle: a 14 px ring with a 2 px field-border stroke and an empty centre, no bar, no summary", () => {
     const card = renderCard()
     expect(card.dataset.look).toBe("idle")
     expect(card.hasAttribute("data-rule")).toBe(false)
     expect(card.style.borderLeft).toBe("")
-    expect(within(card).getByTestId("status-ring").className).toContain("border-hairline")
+    const ring = within(card).getByTestId("status-ring")
+    expect(ring.className).toContain("border-field-border")
+    expect(ring.className).toContain("size-[14px]")
+    expect(ring.className).toContain("border-2")
+    expect(within(ring).queryByTestId("ring-dot")).toBeNull()
     expect(within(card).queryByTestId("running-bar")).toBeNull()
     expect(within(card).queryByTestId("step-summary")).toBeNull()
   })
 
-  it("running: the accent at half strength and a pulsing top edge that goes still under reduced motion", () => {
+  it("running: the accent at half strength and the breathing top edge", () => {
     const card = renderCard({ result: { id: "chunk", status: "running" } })
     expect(card.dataset.look).toBe("running")
     expect(within(card).getByTestId("status-ring").className).toContain("bg-primary/50")
@@ -89,22 +93,47 @@ describe("the step card's look", () => {
     expect(bar.className).toContain("top-0")
   })
 
-  it("done: an accent fill and the outcome sentence, without (was N), in the summary row", async () => {
+  it("done: a solid ring with an accent dot, and the outcome on one line, without (was N), headline in bold", async () => {
     payloads = { look1: chunkRecursive }
     const card = renderCard({ result: done("look1"), previousArtifactId: "look0" })
     expect(card.dataset.look).toBe("done")
-    expect(within(card).getByTestId("status-ring").className).toContain("bg-primary")
+    const ring = within(card).getByTestId("status-ring")
+    expect(ring.className).toContain("border-primary")
+    expect(ring.className).not.toContain("border-dashed")
+    expect(within(ring).getByTestId("ring-dot").className).toContain("bg-primary")
+    const sentence = "Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps."
     const summary = await within(card).findByTestId("step-summary")
-    await waitFor(() => expect(summary.textContent).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps."))
-    // Numbers in mono, the sentence in the reading face.
+    expect(summary.textContent).toBe(sentence)
+    expect(summary.getAttribute("title")).toBe(sentence)
+    expect(summary.className).toContain("truncate")
     expect(summary.className).not.toContain("font-mono")
-    expect(within(summary).getByText("6").className).toContain("font-mono")
+    expect(within(summary).getByText("6").className).toContain("font-semibold")
+    expect(within(summary).getByText("67").className).toContain("font-mono")
+    // A computed result has no chip.
+    expect(within(card).queryByTestId("status-chip")).toBeNull()
   })
 
-  it("done from the cache: the summary row says reused from an earlier run", () => {
+  it("done from the cache: the same result line, a dashed ring and the reused chip", async () => {
+    payloads = { look2: chunkRecursive }
     const card = renderCard({ result: done("look2", "cached") })
     expect(card.dataset.look).toBe("done")
-    expect(within(card).getByTestId("step-summary").textContent).toBe("reused from an earlier run")
+    expect(within(card).getByTestId("status-ring").className).toContain("border-dashed")
+    expect(within(card).getByTestId("status-chip").textContent).toBe("reused from an earlier run")
+    const summary = await within(card).findByTestId("step-summary")
+    expect(summary.textContent).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps.")
+  })
+
+  it("the Chunk card shows its pieces to scale in the chunk colours", async () => {
+    payloads = { bar1: chunkRecursive }
+    const card = renderCard({ result: done("bar1") })
+    const bar = await within(card).findByTestId("chunk-bar")
+    const pieces = [...bar.children] as HTMLElement[]
+    expect(pieces).toHaveLength(chunkRecursive.chunks.length)
+    pieces.forEach((el, i) => {
+      expect(el.className).toContain(`bg-chunk-${(i % 8) + 1}`)
+      expect(el.style.flexGrow).toBe(String(chunkRecursive.chunks[i].token_count))
+    })
+    expect(bar.className).toContain("h-[4px]")
   })
 
   it("stale: an amber ring and the status word changed, run again", () => {
@@ -125,6 +154,7 @@ describe("the step card's look", () => {
   })
 
   it("the duration is in mono", () => {
+    payloads = { look4: chunkRecursive }
     const card = renderCard({ result: done("look4", "cached") })
     expect(within(card).getByText("3.0 ms").className).toContain("font-mono")
   })
@@ -138,7 +168,8 @@ describe("the transform line", () => {
     const code = within(line).getByText("recursive_character")
     expect(code.className).toContain("font-mono")
     expect(code.className).toContain("text-2xs")
-    expect(card.querySelector(".truncate")).toBeNull()
+    expect(line.className).not.toContain("truncate")
+    expect(card.querySelector("header .truncate")).toBeNull()
   })
 
   it("the picker's options read the same way", () => {
@@ -162,8 +193,80 @@ describe("raised and open", () => {
 
     const flat = renderCard({ selected: false })
     expect(flat.className).not.toContain("shadow-raised")
-    expect(flat.className).toContain("bg-surface-elevated")
+    expect(flat.className.split(/\s+/)).toEqual(expect.arrayContaining(["bg-surface", "rounded-panel", "border", "border-hairline"]))
     expect(within(flat).getByRole("button", { name: "Chunk" }).getAttribute("aria-expanded")).toBe("false")
     expect(within(flat).getByTestId("step-options").className).toContain("grid-rows-[0fr]")
+  })
+})
+
+describe("click to close, and scroll into view", () => {
+  it("the head selects a closed card and deselects the selected one; a button's keys reach it as a click", () => {
+    const onSelect = vi.fn()
+    const onDeselect = vi.fn()
+    renderCard({ selected: false, onSelect, onDeselect })
+    fireEvent.click(screen.getByRole("button", { name: "Chunk" }))
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onDeselect).not.toHaveBeenCalled()
+    cleanup()
+
+    const onSelect2 = vi.fn()
+    const onDeselect2 = vi.fn()
+    renderCard({ selected: true, onSelect: onSelect2, onDeselect: onDeselect2 })
+    fireEvent.click(screen.getByRole("button", { name: "Chunk" }))
+    expect(onDeselect2).toHaveBeenCalledTimes(1)
+    expect(onSelect2).not.toHaveBeenCalled()
+  })
+
+  describe("scrolling", () => {
+    const scroll = vi.fn()
+    beforeEach(() => {
+      vi.useFakeTimers()
+      scroll.mockReset()
+      Element.prototype.scrollIntoView = scroll
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+      document.querySelectorAll("[data-scroll-box]").forEach((el) => el.remove())
+    })
+
+    const rect = (top: number, height: number) => ({ top, bottom: top + height, left: 0, right: 380, width: 380, height, x: 0, y: top, toJSON() {} })
+
+    function inBox(headTop: number) {
+      const box = document.createElement("div")
+      box.setAttribute("data-scroll-box", "")
+      box.style.overflowY = "auto"
+      document.body.appendChild(box)
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return this === box ? rect(100, 500) : rect(headTop, 40)
+      })
+      const props: NodeCardProps = {
+        node: chunkNode,
+        title: "Chunk",
+        transforms: transformsFor(R, "chunk"),
+        selected: false,
+        busy: false,
+        onSelect: vi.fn(),
+        onTransform: vi.fn(),
+        onConfig: vi.fn(),
+        onRun: vi.fn(),
+      }
+      const view = render(<NodeCard {...props} />, { container: box })
+      view.rerender(<NodeCard {...props} selected />)
+      act(() => {
+        vi.runAllTimers()
+      })
+    }
+
+    it("brings the selected card's head into view when it is above the column's scroll box", () => {
+      inBox(20)
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
+    })
+
+    it("leaves the scroll alone when the head is already visible", () => {
+      inBox(200)
+      expect(scroll).not.toHaveBeenCalled()
+    })
   })
 })

@@ -25,6 +25,7 @@ describe("the specimen page", () => {
       ["--dur-fast", "120ms"],
       ["--dur-mid", "200ms"],
       ["--dur-slow", "320ms"],
+      ["--dur-breathe", "1200ms"],
       ["--ease-in", "cubic-bezier(0.2, 0, 0, 1)"],
       ["--ease-out", "cubic-bezier(0.4, 0, 1, 1)"],
     ]) {

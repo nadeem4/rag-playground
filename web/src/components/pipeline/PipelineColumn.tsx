@@ -35,7 +35,8 @@ export interface PipelineColumnProps {
   selected: string | null
   busy: boolean
   errors: Record<string, NodeErrors>
-  onSelect: (id: string) => void
+  /** A card's id, or null when the selected card's head closes it. */
+  onSelect: (id: string | null) => void
   onTransform: (id: string, transform: string) => void
   onConfig: (id: string, config: Record<string, unknown>) => void
   /** A sample picked on the Upload card: its source and its own question. */
@@ -91,9 +92,9 @@ export function PipelineColumn(p: PipelineColumnProps) {
   ]
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-px bg-hairline">
+    <div className="grid min-w-0 grid-cols-1 gap-3 bg-surface-elevated p-3">
       {/* The four looks of a step card, in words. */}
-      <p data-testid="step-legend" className="m-0 bg-surface px-3 py-2 text-xs text-fg-muted">
+      <p data-testid="step-legend" className="m-0 text-xs text-fg-muted">
         Grey ring: not run. Bar: running. Filled ring: done, with its result. Amber ring: changed, run again.
       </p>
       {order.map((node) => {
@@ -114,6 +115,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
               fieldErrors={errs?.fields}
               message={errs?.message}
               onSelect={() => p.onSelect(node.id)}
+              onDeselect={() => p.onSelect(null)}
               onTransform={(t) => p.onTransform(node.id, t)}
               onConfig={(c) => p.onConfig(node.id, c)}
               onRun={(force) => p.onRun(node.id, force)}
@@ -173,7 +175,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
             {adds
               .filter((a) => a.anchor?.id === node.id && a.onAdd)
               .map((a) => (
-                <div key={a.label} className="bg-surface-elevated px-3 py-2">
+                <div key={a.label}>
                   <Button variant="ghost" size="sm" onClick={a.onAdd}>
                     <Plus aria-hidden strokeWidth={1.75} />
                     {a.label}

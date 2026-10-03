@@ -11,7 +11,7 @@ import { outcomeFor, type Outcome } from "./outcome"
  * per artifact for the session, so the payload is read once.
  */
 
-export type OutcomeState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; outcome: Outcome | null }
+export type OutcomeState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; outcome: Outcome | null; data: unknown }
 
 export function useOutcome(stage: Stage, type: ArtifactType | undefined, artifactId: string | undefined): OutcomeState | null {
   const [state, setState] = useState<{ id: string; value: OutcomeState } | null>(null)
@@ -20,7 +20,7 @@ export function useOutcome(stage: Stage, type: ArtifactType | undefined, artifac
     if (!artifactId) return
     let live = true
     loadPayload(artifactId).then(
-      (data) => live && setState({ id: artifactId, value: { kind: "ready", outcome: outcomeFor(stage, type, data) } }),
+      (data) => live && setState({ id: artifactId, value: { kind: "ready", outcome: outcomeFor(stage, type, data), data } }),
       () => live && setState({ id: artifactId, value: { kind: "error" } }),
     )
     return () => {

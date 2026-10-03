@@ -376,7 +376,7 @@ function Build({ registry }: { registry: Registry }) {
         ) : null}
         {/* Keyed by the screen it holds: the column after a sample loads starts at the top,
             not at the Upload card's scroll position. Below md the page scrolls as one. */}
-        <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" className="md:min-h-0 md:flex-1 md:overflow-y-auto">
+        <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" data-scroll-box className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {firstRun && sourceNode ? (
             <FirstRun onSource={(v) => edit(setConfig(graph, sourceNode.id, { ...v }), sourceNode.id)} onSample={loadSample} />
           ) : (

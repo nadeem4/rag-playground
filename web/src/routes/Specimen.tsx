@@ -253,13 +253,14 @@ const MOTION: [string, string][] = [
   ["--dur-fast", "press and hover"],
   ["--dur-mid", "open, close and new results"],
   ["--dur-slow", "a rerank move"],
+  ["--dur-breathe", "the running step's edge, each way"],
   ["--ease-in", "things arriving"],
   ["--ease-out", "things leaving"],
 ]
 
 function Motion() {
   return (
-    <Section title="Motion" note="Only transform and opacity animate, plus grid-template-rows for one disclosure. Nothing loops. Under reduced motion every move becomes a short fade.">
+    <Section title="Motion" note="Only transform and opacity animate, plus grid-template-rows for one disclosure. Nothing loops except the running step's edge. Under reduced motion every move becomes a short fade.">
       <Grid columns="160px 240px minmax(200px,1fr)" head={["token", "value", "use"]}>
         {MOTION.map(([name, use]) => (
           <Row key={name}>

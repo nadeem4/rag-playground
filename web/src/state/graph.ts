@@ -18,11 +18,11 @@ export type PipelineGraph = Graph
  */
 export const COLUMN_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "index", "query", "retrieve", "rerank", "use_case"]
 
-/** Stages a new graph starts with. Clean and Rerank are added by the user. */
 /** The two halves of the column: what Build edits, and what the Ask panel edits. */
 export const INDEX_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "index"]
 export const ASK_STAGES: Stage[] = ["query", "retrieve", "rerank", "use_case"]
 
+/** Stages a new graph starts with. Clean and Rerank are added by the user. */
 export const DEFAULT_STAGES: Stage[] = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
 
 export const STAGE_VERB: Partial<Record<Stage, string>> = {

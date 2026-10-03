@@ -370,6 +370,8 @@ describe("ask panel helpers", () => {
     const g = sampleGraph(LIVE, SRC)
     expect(indexNode(g)?.stage).toBe("index")
     expect(indexNode({ nodes: g.nodes.filter((n) => ASK_STAGES.includes(n.stage)), edges: [] })).toBeUndefined()
+    // Without an Index card the last index-stage node is Chunk, so Build the index still has a target.
+    expect(indexNode({ nodes: g.nodes.filter((n) => n.stage !== "index"), edges: [] })?.stage).toBe("chunk")
   })
 
   it("rerankerOf names the reranker or gives null", () => {

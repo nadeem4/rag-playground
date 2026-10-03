@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { canonicalPath, pageFor, routeFor } from "@/App"
 import { Home } from "@/routes/Home"
 import { Learn } from "@/routes/Learn"
+import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
@@ -40,6 +41,12 @@ describe("routeFor with the lessons off", () => {
     }
     expect(pageFor("/build", false)).toBe(Shell)
     expect(pageFor("/nope", false)).toBe(Shell)
+  })
+
+  it("renders the Read page at /read", () => {
+    expect(routeFor("/read", false)).toBe("/read")
+    expect(pageFor("/read", false)).toBe(Read)
+    expect(pageFor("/read", true)).toBe(Read)
   })
 })
 

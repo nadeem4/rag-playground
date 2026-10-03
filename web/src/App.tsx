@@ -5,6 +5,7 @@ import { Evaluate } from "@/routes/Evaluate"
 import { Home } from "@/routes/Home"
 import { Inspect } from "@/routes/Inspect"
 import { Learn } from "@/routes/Learn"
+import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
 import { Specimen } from "@/routes/Specimen"
 import { LESSONS_ENABLED } from "@/state/lessons"
@@ -14,9 +15,11 @@ import { LESSONS_ENABLED } from "@/state/lessons"
 //
 // "/" is Home (the lessons as an ordered path), "/build" is Build (the
 // pipeline column, Shell), /compare is the sweep view and /evaluate scores the
-// pipeline against the sample question set. Each lesson has its own page under
-// /learn; /learn itself redirects to Home. Build, Compare and Evaluate share
-// the pipeline graph through per-viewer storage (state/graph.ts).
+// pipeline against the sample question set. /read lists the deep-dive posts
+// in pipeline order, each stage with a link that opens Build. Each lesson has
+// its own page under /learn; /learn itself redirects to Home. Build, Compare
+// and Evaluate share the pipeline graph through per-viewer storage
+// (state/graph.ts).
 //
 // /inspect and /design are development pages, reached from the header's Dev
 // menu. /specimen is the design page's old path, kept so no old link breaks.
@@ -29,6 +32,7 @@ const ROUTES: Record<string, () => React.JSX.Element> = {
   "/build": Shell,
   "/compare": Compare,
   "/evaluate": Evaluate,
+  "/read": Read,
   "/design": Specimen,
   "/specimen": Specimen,
   "/inspect": Inspect,

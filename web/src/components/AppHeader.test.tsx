@@ -37,16 +37,17 @@ function header(path = "/", lessonsEnabled = true) {
 const devButton = () => screen.getByRole("button", { name: "Dev" })
 
 describe("AppHeader", () => {
-  it("shows Lessons, Build, Compare, Evaluate and GitHub as primary navigation", () => {
+  it("shows Lessons, Build, Compare, Evaluate, Read and GitHub as primary navigation", () => {
     header()
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Lessons", "Build", "Compare", "Evaluate", "GitHub"])
+    expect(links.map((l) => l.textContent)).toEqual(["Lessons", "Build", "Compare", "Evaluate", "Read", "GitHub"])
     expect(links.map((l) => l.getAttribute("href"))).toEqual([
       "/",
       "/build",
       "/compare",
       "/evaluate",
+      "/read",
       "https://github.com/nadeem4/rag-playground",
     ])
     expect(screen.queryByText("Forms")).toBeNull()
@@ -108,11 +109,11 @@ describe("AppHeader", () => {
 })
 
 describe("AppHeader with the lessons hidden", () => {
-  it("shows Build, Compare, Evaluate and GitHub, with no Lessons", () => {
+  it("shows Build, Compare, Evaluate, Read and GitHub, with no Lessons", () => {
     header("/build", false)
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Build", "Compare", "Evaluate", "GitHub"])
+    expect(links.map((l) => l.textContent)).toEqual(["Build", "Compare", "Evaluate", "Read", "GitHub"])
     expect(screen.queryByText("Lessons")).toBeNull()
   })
 
@@ -124,6 +125,11 @@ describe("AppHeader with the lessons hidden", () => {
   it("marks Build as current on /build", () => {
     header("/build", false)
     expect(screen.getByRole("link", { name: "Build" }).getAttribute("aria-current")).toBe("page")
+  })
+
+  it("marks Read as current on /read", () => {
+    header("/read", false)
+    expect(screen.getByRole("link", { name: "Read" }).getAttribute("aria-current")).toBe("page")
   })
 })
 

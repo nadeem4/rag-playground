@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 // offset; disabled is half opacity with no pointer events. `busy` is disabled
 // too, and keeps the label the caller gives it (Building, Asking): no spinner.
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent font-sans text-sm font-medium whitespace-nowrap select-none transition-[color,background-color,border-color,transform,scale] duration-(--dur-fast) ease-(--ease-in) active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[14px]",
+  "inline-flex shrink-0 items-center justify-center gap-1 rounded-control border border-transparent font-sans text-sm font-medium whitespace-nowrap select-none transition-[color,background-color,border-color,opacity,transform,scale] duration-(--dur-fast) ease-(--ease-in) active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[14px]",
   {
     variants: {
       variant: {

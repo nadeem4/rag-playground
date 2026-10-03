@@ -3,6 +3,14 @@ import { describe, expect, it } from "vitest"
 import {
   addCleaner,
   addReranker,
+  askNodes,
+  ASK_STAGES,
+  COLUMN_STAGES,
+  INDEX_STAGES,
+  indexNode,
+  rerankerOf,
+  setReranker,
+  setUseCase,
   ancestors,
   columnOrder,
   completeGraph,
@@ -333,5 +341,92 @@ describe("effective provides: capabilities pass through Clean", () => {
     const g = sampleGraph(reg, SRC)
     expect(effectiveProvides(g, reg, "clean_1")).toEqual({ structure: [] })
     expect(compatibility(headings, upstreamFor(g, reg, "chunk")).kind).toBe("soft")
+  })
+})
+
+describe("ask panel helpers", () => {
+  const LIVE = liveRegistry as unknown as Registry
+  const SRC = { sha: "ef".repeat(32), filename: "primer.pdf" }
+
+  it("splits the stages into Index and Ask halves that add up to the column", () => {
+    expect(INDEX_STAGES).toEqual(["source", "parse", "clean", "chunk", "index"])
+    expect(ASK_STAGES).toEqual(["query", "retrieve", "rerank", "use_case"])
+    expect([...INDEX_STAGES, ...ASK_STAGES]).toEqual(COLUMN_STAGES)
+  })
+
+  it("askNodes finds the four Ask nodes, with no reranker on the sample graph", () => {
+    const a = askNodes(sampleGraph(LIVE, SRC))
+    expect(a.query?.stage).toBe("query")
+    expect(a.retrieve?.stage).toBe("retrieve")
+    expect(a.rerank).toBeUndefined()
+    expect(a.useCase?.stage).toBe("use_case")
+  })
+
+  it("askNodes finds the reranker on the end-to-end graph", () => {
+    expect(askNodes(e2eSampleGraph(LIVE, SRC)).rerank?.transform).toBe("mmr")
+  })
+
+  it("indexNode is the index card, and undefined with no Index-stage node", () => {
+    const g = sampleGraph(LIVE, SRC)
+    expect(indexNode(g)?.stage).toBe("index")
+    expect(indexNode({ nodes: g.nodes.filter((n) => ASK_STAGES.includes(n.stage)), edges: [] })).toBeUndefined()
+  })
+
+  it("rerankerOf names the reranker or gives null", () => {
+    expect(rerankerOf(sampleGraph(LIVE, SRC))).toBeNull()
+    expect(rerankerOf(e2eSampleGraph(LIVE, SRC))).toBe("mmr")
+  })
+
+  it("setReranker adds a reranker when there is none", () => {
+    const g = setReranker(sampleGraph(LIVE, SRC), LIVE, "cross_encoder")
+    expect(rerankerOf(g)).toBe("cross_encoder")
+    expect(g.nodes.filter((n) => n.stage === "rerank")).toHaveLength(1)
+    expect(edgeSet(g)).toContain("retrieve->rerank_1:result")
+    expect(edgeSet(g)).toContain("rerank_1->use_case:result")
+  })
+
+  it("setReranker switches the transform and resets its config to the defaults", () => {
+    const g0 = e2eSampleGraph(LIVE, SRC)
+    const id = g0.nodes.find((n) => n.stage === "rerank")!.id
+    const g = setReranker(setConfig(g0, id, { lambda_mult: 0.9 }), LIVE, "llm_rerank")
+    const node = g.nodes.find((n) => n.stage === "rerank")!
+    expect(node.transform).toBe("llm_rerank")
+    expect(node.config).toEqual(defaultConfig(LIVE.rerank!.llm_rerank))
+    expect(g.nodes.filter((n) => n.stage === "rerank")).toHaveLength(1)
+  })
+
+  it("setReranker(null) removes the reranker and bridges Retrieve to Search", () => {
+    const g = setReranker(e2eSampleGraph(LIVE, SRC), LIVE, null)
+    expect(rerankerOf(g)).toBeNull()
+    expect(edgeSet(g)).toContain("retrieve->use_case:result")
+    expect(edgeSet(g).some((e) => e.includes("rerank"))).toBe(false)
+  })
+
+  it("setReranker(null) on a graph with no reranker changes nothing", () => {
+    const g = sampleGraph(LIVE, SRC)
+    expect(setReranker(g, LIVE, null)).toEqual(g)
+  })
+
+  it("Cross-encoder to None and back leaves one rerank node and the others' config alone", () => {
+    const g0 = sampleGraph(LIVE, SRC)
+    const edited = (x: PipelineGraph) => {
+      const a = askNodes(x)
+      return [a.retrieve!, a.useCase!].map((n) => ({ id: n.id, transform: n.transform, config: n.config }))
+    }
+    const tuned = setConfig(g0, askNodes(g0).retrieve!.id, { ...askNodes(g0).retrieve!.config, top_k: 7 })
+    const before = edited(tuned)
+    const on = setReranker(tuned, LIVE, "cross_encoder")
+    const off = setReranker(on, LIVE, null)
+    const back = setReranker(off, LIVE, "cross_encoder")
+    expect(back.nodes.filter((n) => n.stage === "rerank")).toHaveLength(1)
+    expect(rerankerOf(back)).toBe("cross_encoder")
+    expect(edited(back)).toEqual(before)
+    expect(edited(off)).toEqual(before)
+  })
+
+  it("setUseCase switches between search and chat", () => {
+    const g = setUseCase(sampleGraph(LIVE, SRC), LIVE, "chat")
+    expect(askNodes(g).useCase?.transform).toBe("chat")
+    expect(askNodes(setUseCase(g, LIVE, "search")).useCase?.transform).toBe("search")
   })
 })

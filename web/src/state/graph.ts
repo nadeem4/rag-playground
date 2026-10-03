@@ -19,6 +19,10 @@ export type PipelineGraph = Graph
 export const COLUMN_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "index", "query", "retrieve", "rerank", "use_case"]
 
 /** Stages a new graph starts with. Clean and Rerank are added by the user. */
+/** The two halves of the column: what Build edits, and what the Ask panel edits. */
+export const INDEX_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "index"]
+export const ASK_STAGES: Stage[] = ["query", "retrieve", "rerank", "use_case"]
+
 export const DEFAULT_STAGES: Stage[] = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
 
 export const STAGE_VERB: Partial<Record<Stage, string>> = {
@@ -426,6 +430,42 @@ export function upstreamOfStage(g: PipelineGraph, id: string, stage: Stage | rea
     frontier = g.edges.filter((e) => frontier.includes(e.dst) && !seen.has(e.src)).map((e) => e.src)
   }
   return undefined
+}
+
+/** The last Index-stage card in column order: the target of "Build the index". */
+export function indexNode(g: PipelineGraph): GraphNode | undefined {
+  return columnOrder(g)
+    .filter((n) => INDEX_STAGES.includes(n.stage))
+    .pop()
+}
+
+/** The Ask-stage nodes the Ask panel edits. */
+export function askNodes(g: PipelineGraph): { query?: GraphNode; retrieve?: GraphNode; rerank?: GraphNode; useCase?: GraphNode } {
+  const find = (stage: Stage) => g.nodes.find((n) => n.stage === stage)
+  return { query: find("query"), retrieve: find("retrieve"), rerank: find("rerank"), useCase: find("use_case") }
+}
+
+/** The reranker's transform name, or null when there is none. */
+export function rerankerOf(g: PipelineGraph): string | null {
+  return askNodes(g).rerank?.transform ?? null
+}
+
+/**
+ * Set the reranker: null removes it (Retrieve then feeds the use case), a name
+ * adds one if absent and sets its transform, which resets its config.
+ */
+export function setReranker(g: PipelineGraph, registry: Registry, transform: string | null): PipelineGraph {
+  const existing = askNodes(g).rerank
+  if (transform === null) return existing ? removeNode(g, existing.id) : g
+  const withNode = existing ? g : addReranker(g, registry)
+  const node = askNodes(withNode).rerank
+  return node ? setTransform(withNode, node.id, transform, registry) : g
+}
+
+/** Switch the use case between Search and Chat. */
+export function setUseCase(g: PipelineGraph, registry: Registry, transform: "search" | "chat"): PipelineGraph {
+  const node = askNodes(g).useCase
+  return node ? setTransform(g, node.id, transform, registry) : g
 }
 
 /** The last card of the column: the use case, the node a question runs through. */

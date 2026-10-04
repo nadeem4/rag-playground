@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { cleanup } from "@testing-library/react"
 
@@ -91,7 +91,7 @@ describe("supported types", () => {
   it("string", () => {
     const { last } = renderForm(obj({ name: { type: "string", default: "x", title: "Name", description: "Model id" } }))
     const input = screen.getByLabelText("Name")
-    expect(screen.getByText("Model id")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "About Name" })).toBeTruthy()
     fireEvent.change(input, { target: { value: "bge-small" } })
     expect(last()).toEqual({ name: "bge-small" })
   })
@@ -564,7 +564,7 @@ describe("x-labels", () => {
 })
 
 describe("title overrides", () => {
-  it("a titles entry replaces a field's shown title; help and validation are unchanged", () => {
+  it("a titles entry replaces a field's shown title; help and validation are unchanged", async () => {
     const schema: JsonSchema = {
       type: "object",
       properties: { top_k: { type: "integer", default: 5, minimum: 1, title: "Top K", description: "How many." } },
@@ -572,7 +572,90 @@ describe("title overrides", () => {
     render(<SchemaForm schema={schema} value={{ top_k: 0 }} onChange={() => {}} titles={{ top_k: "Candidates, top k" }} />)
     expect(screen.getByLabelText("Candidates, top k")).toBeTruthy()
     expect(screen.queryByText("Top K")).toBeNull()
-    expect(screen.getByText("How many.")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "About Candidates, top k" }))
+    expect(within(await screen.findByRole("dialog")).getByText("How many.")).toBeTruthy()
     expect(screen.getByRole("spinbutton").getAttribute("aria-invalid")).toBe("true")
+  })
+})
+
+describe("field help behind an info button", () => {
+  const LONG = "Docling's PdfPipelineOptions.do_ocr. Read text from page images with OCR. It is much slower."
+  const UNIT = "The largest a chunk can be, counted in characters. Small chunks match a question precisely."
+
+  it("a field shows its label, its control and an info button, and no description text", () => {
+    renderForm(
+      obj({
+        do_ocr: { type: "boolean", default: false, title: "Do Ocr", description: LONG },
+        size: { type: "integer", default: 5, title: "Size", description: LONG },
+      }),
+    )
+    expect(screen.getByLabelText("Do Ocr")).toBeTruthy()
+    expect(screen.getByLabelText("Size")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "About Do Ocr" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "About Size" })).toBeTruthy()
+    expect(screen.queryByText(/Read text from page images/)).toBeNull()
+    // The label and the button name the control; nothing hidden describes it.
+    expect(screen.getByLabelText("Size").getAttribute("aria-describedby")).toBeNull()
+  })
+
+  it("a field with no description has no info button", () => {
+    renderForm(obj({ size: { type: "integer", default: 5, title: "Size" } }))
+    expect(screen.queryByRole("button", { name: "About Size" })).toBeNull()
+  })
+
+  it("the info button opens the title and the full description, and Escape closes it", async () => {
+    renderForm(obj({ do_ocr: { type: "boolean", default: false, title: "Do Ocr", description: LONG } }))
+    const button = screen.getByRole("button", { name: "About Do Ocr" })
+    fireEvent.click(button)
+    const dialog = await screen.findByRole("dialog", { name: "Do Ocr" })
+    expect(within(dialog).getByRole("heading", { name: "Do Ocr" })).toBeTruthy()
+    expect(within(dialog).getByText(/Read text from page images with OCR/)).toBeTruthy()
+    fireEvent.keyDown(dialog, { key: "Escape" })
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(document.activeElement).toBe(button)
+  })
+
+  it("a short first sentence with a unit stays under the control as a hint", async () => {
+    renderForm(obj({ chunk_size: { type: "integer", default: 1000, title: "Chunk Size", description: UNIT } }))
+    const input = screen.getByLabelText("Chunk Size")
+    const hint = screen.getByText("The largest a chunk can be, counted in characters.")
+    expect(input.getAttribute("aria-describedby")).toBe(hint.id)
+    expect(input.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText(/Small chunks match/)).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "About Chunk Size" }))
+    const dialog = await screen.findByRole("dialog", { name: "Chunk Size" })
+    expect(within(dialog).getByText(UNIT)).toBeTruthy()
+  })
+
+  it("a long first sentence gives no hint", () => {
+    renderForm(
+      obj({ size: { type: "integer", default: 5, title: "Size", description: "The largest number of characters a chunk can hold before it is cut in two." } }),
+    )
+    expect(screen.queryByText(/characters/)).toBeNull()
+  })
+
+  it("errors still show under the control", () => {
+    renderForm(obj({ size: { type: "integer", default: 5, minimum: 1, title: "Size", description: LONG } }), { size: 0 })
+    const input = screen.getByLabelText("Size")
+    const error = screen.getByText("Must be at least 1")
+    expect(input.getAttribute("aria-describedby")).toBe(error.id)
+  })
+
+  it("a field's lesson opens behind its info button, not under the control", async () => {
+    const learn = { size: { hint: "How big each piece is.", more: ["Small pieces match precisely."] } }
+    render(<SchemaForm schema={obj({ size: { type: "integer", default: 5, title: "Size" } })} value={{ size: 5 }} onChange={() => {}} learn={learn} />)
+    expect(screen.queryByText("How big each piece is.")).toBeNull()
+    expect(screen.queryByText("Read more")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "About Size" }))
+    const dialog = await screen.findByRole("dialog", { name: "Size" })
+    expect(within(dialog).getByText("How big each piece is.")).toBeTruthy()
+    expect(within(dialog).getByText("Small pieces match precisely.")).toBeTruthy()
+  })
+
+  it("with no description, a lesson's short unit sentence is the hint", () => {
+    const learn = { size: { hint: "The largest a chunk can be, counted in characters.", more: ["More."] } }
+    render(<SchemaForm schema={obj({ size: { type: "integer", default: 5, title: "Size" } })} value={{ size: 5 }} onChange={() => {}} learn={learn} />)
+    const hint = screen.getByText("The largest a chunk can be, counted in characters.")
+    expect(screen.getByLabelText("Size").getAttribute("aria-describedby")).toBe(hint.id)
   })
 })

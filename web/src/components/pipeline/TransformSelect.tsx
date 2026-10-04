@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import type { TransformInfo } from "@/api/types"
 import { CONST_TEXT } from "@/components/fields/ConstField"
 import { CONTROL } from "@/components/fields/types"
@@ -19,6 +21,8 @@ export interface TransformSelectProps {
   upstream: Record<string, TransformInfo | undefined>
   /** The option's shown name. Defaults to the transform's own name. */
   labelFor?: (name: string) => string
+  /** The info button beside the label (FieldHelp), as every field has. */
+  info?: ReactNode
   onChange: (transform: string) => void
 }
 
@@ -28,14 +32,17 @@ export function lockOf(transforms: TransformInfo[], value: string, upstream: Rec
   return info ? compatibility(info, upstream) : { kind: "ok" }
 }
 
-export function TransformSelect({ id, label, transforms, value, upstream, labelFor = (n) => n, onChange }: TransformSelectProps) {
+export function TransformSelect({ id, label, transforms, value, upstream, labelFor = (n) => n, info, onChange }: TransformSelectProps) {
   const compat: Record<string, Compat> = Object.fromEntries(transforms.map((t) => [t.name, compatibility(t, upstream)]))
   const lock = compat[value] ?? { kind: "ok" }
   return (
     <>
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
+      <div className="flex min-h-[20px] min-w-0 items-center gap-1">
+        <label htmlFor={id} className="text-sm font-medium">
+          {label}
+        </label>
+        {info}
+      </div>
       {transforms.length === 1 ? (
         // One registered transform: nothing to choose, so no picker.
         <output id={id} className={CONST_TEXT}>

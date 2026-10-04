@@ -8,8 +8,8 @@ import { postsFor } from "@/learn/posts"
 
 /**
  * The pop-over beside a card (option B): what the step is for, how the chosen
- * transform works, what it will do with the card's current settings, and the
- * trade-off. Rendered inside the card's Popover.Root; Radix supplies Escape,
+ * transform works, what it will do with the card's current settings, the
+ * trade-off, the deep-dive posts, and last the stage's lesson when it has one. Rendered inside the card's Popover.Root; Radix supplies Escape,
  * outside-click dismissal and focus return to the info button.
  */
 
@@ -21,6 +21,9 @@ export interface ExplainPanelProps {
   what?: string
   summary?: string
   explain?: ExplainState
+  /** Plan I-22: the stage's lesson paragraphs, and their heading. */
+  lesson?: string[]
+  lessonTitle?: string
   /** The card: interacting with it keeps the pop-over open, so settings can be edited beside it. */
   anchor: () => HTMLElement | null
 }
@@ -36,7 +39,7 @@ function Part({ label, children }: { label: ReactNode; children: ReactNode }) {
 
 const BODY = "m-0 text-sm leading-[1.55] text-fg-muted"
 
-export function ExplainPanel({ title, stage, transform, what, summary, explain, anchor }: ExplainPanelProps) {
+export function ExplainPanel({ title, stage, transform, what, summary, explain, lesson, lessonTitle, anchor }: ExplainPanelProps) {
   const data = explain?.data
   const posts = postsFor(stage)
   const keepOpen = (e: Event) => {
@@ -111,6 +114,15 @@ export function ExplainPanel({ title, stage, transform, what, summary, explain, 
                 </li>
               ))}
             </ul>
+          </Part>
+        ) : null}
+        {lesson?.length ? (
+          <Part label={lessonTitle ?? `What does ${title} do?`}>
+            {lesson.map((p) => (
+              <p key={p} className={BODY}>
+                {p}
+              </p>
+            ))}
           </Part>
         ) : null}
       </Popover.Content>

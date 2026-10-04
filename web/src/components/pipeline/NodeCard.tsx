@@ -6,10 +6,10 @@ import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, TransformInfo } from "@/api/types"
 import type { ExplainState } from "@/api/useExplain"
+import { FieldHelp } from "@/components/fields/FieldHelp"
 import type { FieldErrors } from "@/components/fields/schema"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { fmt } from "@/components/inspectors/status"
-import { LearnHint, StageLesson } from "@/components/learn/LearnHint"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { strategyLabel } from "@/learn/challenges"
@@ -72,7 +72,7 @@ export interface NodeCardProps {
   blockedBy?: string
   /** This card's previous run's artifact, for "(was N)". */
   previousArtifactId?: string
-  /** Plan I-22: this stage's lesson paragraphs, when the server has them. */
+  /** Plan I-22: this stage's lesson paragraphs, when the server has them. Shown last in the explain pop-over. */
   lesson?: string[]
   /** The transform wired into each of this node's input ports, for lock states. */
   upstream?: Record<string, TransformInfo | undefined>
@@ -521,10 +521,6 @@ export function NodeCard(p: NodeCardProps) {
       <div className="min-h-0 overflow-hidden">
       {/* A field scrolled to by focus stops below the sticky head, not under it. */}
       <div className={cn("flex min-w-0 flex-col gap-3 pt-3", p.selected && "[&_*]:scroll-mt-(--head-h)")}>
-      {p.lesson?.length ? (
-        <StageLesson title={LESSON_TITLE[p.node.stage] ?? `What does ${p.title} do?`} paragraphs={p.lesson} />
-      ) : null}
-
       {isSource ? null : (
       <div className="flex min-w-0 flex-col gap-1">
         <TransformSelect
@@ -534,9 +530,9 @@ export function NodeCard(p: NodeCardProps) {
           value={p.node.transform}
           upstream={p.upstream ?? {}}
           labelFor={transformLabel}
+          info={<FieldHelp title="Transform" lesson={info?.learn?._strategy} />}
           onChange={p.onTransform}
         />
-        {info?.learn?._strategy ? <LearnHint lesson={info.learn._strategy} /> : null}
       </div>
       )}
 
@@ -613,6 +609,8 @@ export function NodeCard(p: NodeCardProps) {
       what={p.what}
       summary={info?.summary}
       explain={p.explain}
+      lesson={p.lesson}
+      lessonTitle={LESSON_TITLE[p.node.stage]}
       anchor={() => cardRef.current}
     />
     </Popover.Root>

@@ -88,9 +88,10 @@ describe("no em-dashes or en-dashes in visible text", () => {
       if (!el) throw new Error("the Chunk card has not rendered")
       return el
     })
-    await waitFor(() => expect(visibleText()).toMatch(/What is chunking\?/))
     fireEvent.click(within(chunk).getByRole("button", { name: "Explain the Chunk step" }))
     await waitFor(() => expect(visibleText()).toMatch(/What this step does/))
+    // The stage lesson is the explanation's last part.
+    await waitFor(() => expect(visibleText()).toMatch(/What is chunking\?/))
     expect(visibleText()).not.toMatch(DASH)
   })
 

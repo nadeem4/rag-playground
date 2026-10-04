@@ -71,9 +71,10 @@ class MmrRerank(Transform[MmrRerankConfig]):
     summary = (
         "Maximal Marginal Relevance picks results one at a time, each time taking "
         "the piece the retriever scored highest while being least like the "
-        "pieces already picked. It trades a little relevance for variety, and it "
-        "reuses the index's own vectors to judge likeness, so it needs no extra "
-        "model."
+        "pieces already picked. It trades relevance for variety, so it suits "
+        "questions with several good answers and not a single-fact question, "
+        "where no reranker or the cross-encoder does better. It reuses the "
+        "index's own vectors to judge likeness, so it needs no extra model."
     )
 
     def explain(self, config: MmrRerankConfig) -> Explanation:
@@ -135,7 +136,7 @@ class MmrRerank(Transform[MmrRerankConfig]):
         # Relevance is the retriever's judgement, whatever produced it: a cosine,
         # a BM25 score or a small, close RRF score. Min-max puts them all on 0..1
         # without changing their order, so `lambda_mult=1.0` is the incoming
-        # order exactly. A pool with no spread (one hit, or all equal) is all 1.0.
+        # order (when the retriever set the scores). A pool with no spread (one hit, or all equal) is all 1.0.
         relevance = _normalise([hit.score for hit in hits])
 
         descriptor = _base.read_descriptor(inputs["index"])

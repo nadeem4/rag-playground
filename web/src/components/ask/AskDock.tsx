@@ -19,15 +19,15 @@ import { PanelWide } from "./useWide"
 /**
  * The Ask panel's dock on Build: a column at the right (or left) edge that the
  * main pane shrinks to make room for, with a resize edge, a side switch and a
- * close button. Closed, a round Ask button sits at the bottom right. Below md
+ * close button. Closed, a round Ask button sits at the bottom right. Below lg
  * it is a bottom sheet over the page instead. The panel inside is never
  * unmounted: closing only hides it, so the question and results are kept.
  */
 
 /** Where the side, the width and open or closed are remembered in this browser. */
 export const DOCK_KEY = "rag-playground:ask-dock:v1"
-/** Below md: the panel is a bottom sheet. */
-export const SHEET_QUERY = "(max-width: 47.99rem)"
+/** Below lg: the panel is a bottom sheet; the dock exists from lg up. */
+export const SHEET_QUERY = "(max-width: 63.99rem)"
 /** lg and up: a first visit opens the panel. */
 export const DESKTOP_QUERY = "(min-width: 64rem)"
 
@@ -78,7 +78,7 @@ function readStored(): { open?: boolean; side?: DockSide; width?: number } {
 
 /**
  * The dock's state, read once from this browser and saved as it changes. A
- * first visit opens it from lg up. A phone always starts with the sheet
+ * first visit opens it from lg up. Below lg it always starts with the sheet
  * closed, so a page never loads behind a sheet.
  */
 export function useAskDock(): Dock {
@@ -111,7 +111,7 @@ function subscribeSheet(onChange: () => void): () => void {
   return () => mq.removeEventListener?.("change", onChange)
 }
 
-/** Whether the window is below md, kept current as it resizes. */
+/** Whether the window is below lg, kept current as it resizes. */
 function useSheet(): boolean {
   return useSyncExternalStore(subscribeSheet, () => matches(SHEET_QUERY, false))
 }
@@ -171,6 +171,17 @@ export function AskDock({
     if (next === "button") fabRef.current?.focus()
     else if (next === "question") (aside?.querySelector<HTMLElement>("textarea") ?? aside?.querySelector<HTMLElement>(FOCUSABLE))?.focus()
   }, [open, aside])
+
+  // While the sheet is open the page behind it stays still: the document and
+  // Build's own scroll box stop scrolling, and get their own values back on close.
+  const locked = sheet && open
+  useEffect(() => {
+    if (!locked) return
+    const boxes = [document.documentElement, document.body, aside?.parentElement].filter((el): el is HTMLElement => Boolean(el))
+    const before = boxes.map((el) => el.style.overflow)
+    boxes.forEach((el) => (el.style.overflow = "hidden"))
+    return () => boxes.forEach((el, i) => (el.style.overflow = before[i]))
+  }, [locked, aside])
 
   // Alt+A opens and closes the panel from anywhere on Build. The key code, so Option+A on a Mac works too.
   useEffect(() => {
@@ -271,8 +282,8 @@ export function AskDock({
         onKeyDown={onSheetKey}
         className={cn(
           "ask-dock @container fixed inset-x-0 bottom-0 z-50 flex h-[85dvh] min-w-0 flex-col rounded-t-[16px] border border-hairline bg-surface shadow-sheet",
-          "md:relative md:inset-x-auto md:bottom-auto md:z-auto md:h-auto md:min-h-0 md:rounded-none md:border-0 md:shadow-none",
-          side === "left" && "md:order-first",
+          "lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:h-auto lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none",
+          side === "left" && "lg:order-first",
         )}
       >
         {sheet ? <span data-grab aria-hidden="true" className="mx-auto mt-2 h-[4px] w-[40px] shrink-0 rounded-full bg-flat" /> : null}

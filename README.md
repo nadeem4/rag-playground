@@ -89,7 +89,8 @@ keys), move it to the left edge with the button in its head, or close it. Closed
 **Ask** button sits at the bottom right and shows how many results the last question
 found. **Alt+A** opens and closes the panel from anywhere on Build. Closing keeps the
 question and the results, and the side, the width and open or closed are remembered in
-this browser. On a phone the panel is a bottom sheet over the page instead.
+this browser. Below 1024 px (a tablet or a phone) the panel is a bottom sheet over the page
+instead, and the page behind it stays still while it is open.
 
 The Ask panel holds the question and the retrieval, rerank and answer
 settings, summed up in one recipe line. **Ask** runs the question against the index and
@@ -97,7 +98,7 @@ shows the ranked pieces, the search order against the reranked order when a rera
 on, a written answer when the answer is Chat, and the questions asked earlier in the tab.
 The rerank is drawn as a slope between the search order and the reranked order: one
 line per kept piece, rising in the accent and falling in grey. When the panel is narrower
-than 640 px (always on a phone), the reranked list comes first and the search order folds
+than 640 px (always as a bottom sheet), the reranked list comes first and the search order folds
 under Show search order; widen the panel to see the two side by side.
 The **Rewrite** control in the Retrieval block can widen the keyword search with words
 borrowed from the top dense hits (PRF, no key) or have a model restate the question in

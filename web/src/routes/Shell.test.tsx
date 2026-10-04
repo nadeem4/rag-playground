@@ -306,13 +306,18 @@ describe("the main pane", () => {
     expect(main().getByRole("heading", { name: "Parse" })).toBeTruthy()
   })
 
-  it("the dock takes a third column at its remembered width, and the main pane shrinks; closed, the column goes", async () => {
+  it("from lg the dock takes a third column at its remembered width, and the main pane shrinks; closed, the column goes", async () => {
     await ready()
     const main = document.querySelector("main")!
+    const tokens = () => main.className.split(/\s+/)
     expect(main.style.getPropertyValue("--ask-w")).toBe("440px")
-    expect(main.className).toMatch(/md:grid-cols-\[380px_minmax\(0,1fr\)_/)
+    // From md the column and the main pane; the third column only from lg, where the dock exists.
+    expect(tokens()).toContain("md:grid-cols-[380px_minmax(0,1fr)]")
+    expect(tokens()).toContain("lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]")
+    expect(tokens().filter((t) => t.startsWith("md:grid-cols-"))).toHaveLength(1)
     fireEvent.click(screen.getByRole("button", { name: CLOSE_ASK }))
-    expect(main.className).toContain("md:grid-cols-[380px_minmax(0,1fr)]")
+    expect(tokens()).toContain("md:grid-cols-[380px_minmax(0,1fr)]")
+    expect(tokens().filter((t) => t.startsWith("lg:grid-cols-"))).toEqual([])
   })
 })
 

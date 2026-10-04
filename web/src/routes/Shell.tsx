@@ -338,13 +338,11 @@ function Build({ registry }: { registry: Registry }) {
       ref={mainRef}
       style={{ "--ask-w": `${dock.width}px` } as CSSProperties}
       className={cn(
-        "grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-rows-[minmax(0,1fr)] md:overflow-hidden",
-        // Open, the dock is a third column: its width, but never so wide that the main pane falls under 360 px.
-        !dock.open
-          ? "md:grid-cols-[380px_minmax(0,1fr)]"
-          : dock.side === "right"
-            ? "md:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]"
-            : "md:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
+        "grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden",
+        // From lg, an open dock is a third column: its width, but never so wide that the main pane falls
+        // under 360 px. Below lg, Ask is a bottom sheet over the page and takes no column.
+        dock.open && dock.side === "right" && "lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]",
+        dock.open && dock.side === "left" && "lg:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
       )}
     >
       <section aria-label="Pipeline" className="flex flex-col bg-surface md:min-h-0">

@@ -219,6 +219,40 @@ def test_check_unknown_provider_is_a_422(client):
     assert r.status_code == 422
 
 
+def test_check_custom_validates_the_endpoint_behind_the_demo_ban(client, monkeypatch):
+    """The route refuses custom endpoints on the demo first. If that ban were
+    lifted, the endpoint check would still refuse a private address."""
+    from api.routes import settings
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    monkeypatch.setattr(settings.demo, "enabled", lambda: False)
+    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["169.254.169.254"])
+    calls = fake_openai(monkeypatch)
+    body = client.post(
+        "/api/settings/llm/check",
+        json={"provider": "custom", "base_url": "https://meta.example.com/v1"},
+    ).json()
+    assert body["ok"] is False
+    assert body["error"].startswith("On the demo, a custom endpoint must be a public https")
+    assert calls == []
+
+
+def test_check_custom_in_demo_mode_does_not_follow_redirects(client, monkeypatch):
+    from api.routes import settings
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    monkeypatch.setattr(settings.demo, "enabled", lambda: False)
+    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["104.18.2.115"])
+    calls = fake_openai(monkeypatch)
+    client.post(
+        "/api/settings/llm/check",
+        json={"provider": "custom", "base_url": "https://api.example.com/v1"},
+    )
+    [call] = calls
+    assert call["http_client"].follow_redirects is False
+    assert call["max_retries"] == 0
+
+
 # --- the keys reach a run, and never leak -------------------------------------
 
 

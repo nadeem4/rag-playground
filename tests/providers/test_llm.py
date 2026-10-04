@@ -343,3 +343,61 @@ def test_key_for_reads_the_providers_credential():
     assert key_for(CHAT_MODELS["gpt-6-astra"], creds) == "o"
     assert key_for(CHAT_MODELS["custom"], creds) == "c"
     assert key_for(CHAT_MODELS["claude-opus-5"], None) is None
+
+
+# --- demo mode: a custom endpoint must be a public https address -------------
+
+
+def test_compatible_in_demo_mode_refuses_a_private_endpoint_before_any_client(
+    fake_openai, monkeypatch
+):
+    from providers.endpoints import DEMO_ENDPOINT_ERROR, EndpointRefused
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["127.0.0.1"])
+    with pytest.raises(EndpointRefused, match="public https address") as info:
+        complete(
+            CHAT_MODELS["custom"], system="s", user="u", api_key=None,
+            base_url="https://rebind.example.com/v1", model_name="m",
+        )
+    assert str(info.value) == DEMO_ENDPOINT_ERROR
+    assert fake_openai.built == []
+
+
+def test_compatible_in_demo_mode_accepts_a_public_https_endpoint(fake_openai, monkeypatch):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["104.18.2.115"])
+    complete(
+        CHAT_MODELS["custom"], system="s", user="u", api_key=None,
+        base_url="https://api.example.com/v1", model_name="m",
+    )
+    assert fake_openai.built[0]["base_url"] == "https://api.example.com/v1"
+
+
+def test_outside_demo_mode_a_local_endpoint_still_works(fake_openai, monkeypatch):
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+
+    def no_dns(host):
+        raise AssertionError("no DNS lookup outside demo mode")
+
+    monkeypatch.setattr("providers.endpoints._resolve", no_dns)
+    complete(
+        CHAT_MODELS["custom"], system="s", user="u", api_key=None,
+        base_url="http://localhost:11434/v1", model_name="m",
+    )
+    assert fake_openai.built[0]["base_url"] == "http://localhost:11434/v1"
+
+
+def test_in_demo_mode_a_custom_client_does_not_follow_redirects(monkeypatch):
+    import openai
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    kwargs = llm.openai_client_kwargs(None, "https://api.example.com/v1")
+    assert kwargs["http_client"].follow_redirects is False
+    client = openai.OpenAI(**kwargs)
+    assert client._client.follow_redirects is False
+
+
+def test_outside_demo_mode_the_client_keeps_the_sdk_default(monkeypatch):
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+    assert "http_client" not in llm.openai_client_kwargs(None, "http://localhost:1/v1")

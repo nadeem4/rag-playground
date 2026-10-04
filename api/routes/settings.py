@@ -15,7 +15,8 @@ from pydantic import BaseModel
 
 from api import demo, visitor
 from api.credentials import PROVIDERS, redact, resolve_key, server_source
-from providers.llm import NO_KEY_PLACEHOLDER
+from providers.endpoints import EndpointRefused, guard_endpoint
+from providers.llm import openai_client_kwargs
 
 router = APIRouter()
 
@@ -73,6 +74,10 @@ def check_llm_key(
     if provider == "custom":
         if not body.base_url:
             return {"ok": False, "source": source, "error": NO_BASE_URL}
+        try:
+            guard_endpoint(body.base_url)
+        except EndpointRefused as exc:
+            return {"ok": False, "source": source, "error": str(exc)}
     elif not key:
         return {"ok": False, "source": source, "error": NO_KEY[provider]}
 
@@ -86,13 +91,12 @@ def check_llm_key(
             import openai
 
             auth_error = openai.AuthenticationError
+            base_url = body.base_url if provider == "custom" else None
             kwargs: dict[str, Any] = {
-                "api_key": key or NO_KEY_PLACEHOLDER,
+                **openai_client_kwargs(key, base_url),
                 "max_retries": 0,
                 "timeout": 15.0,
             }
-            if provider == "custom":
-                kwargs["base_url"] = body.base_url
             client = openai.OpenAI(**kwargs)
         client.models.list()
     except Exception as exc:

@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
-import { chunkFinding, recipeNames, retrieveFinding } from "./compare"
+import { chunkFinding, MAX_RECIPES, recipeNames, retrieveFinding } from "./compare"
+import { defaultConfig } from "./graph"
 
 const registry = liveRegistry as unknown as Registry
 
@@ -33,6 +34,43 @@ describe("recipeNames", () => {
     const v = [null, 512].map((d) => ({ transform: "lancedb", config: { embedder: "qwen3-embedding-0.6b", truncate_dim: d } }))
     expect(recipeNames(v, "index", registry).map((n) => n.short)).toEqual(["native width", "512 dimensions"])
     expect(recipeNames(v, "index", registry)[1].name).toBe("LanceDB, 512 dimensions")
+  })
+})
+
+describe("recipeNames for many recipes", () => {
+  const recipe = (t: string, c: Record<string, unknown> = {}) => ({ transform: t, config: { ...defaultConfig(registry.retrieve![t]), ...c } })
+
+  it("takes at most ten recipes", () => {
+    expect(MAX_RECIPES).toBe(10)
+  })
+
+  it("gives ten search recipes ten names, leaving out values at their defaults", () => {
+    const v = [
+      recipe("hybrid_rrf"), recipe("dense"), recipe("bm25"), recipe("hybrid_rrf", { rrf_k: 10 }), recipe("hybrid_rrf", { query_expansion: "prf" }),
+      recipe("hybrid_rrf", { rrf_k: 200 }), recipe("dense", { top_k: 3 }), recipe("bm25", { top_k: 1 }), recipe("dense", { top_k: 1 }),
+      recipe("hybrid_rrf", { rrf_k: 20, query_expansion: "prf" }),
+    ]
+    const names = recipeNames(v, "retrieve", registry, 0)
+    expect(new Set(names.map((n) => n.name)).size).toBe(10)
+    expect(names.map((n) => n.name).slice(0, 5)).toEqual(["Hybrid (RRF)", "Dense", "BM25", "Hybrid (RRF), RRF k 10", "Hybrid (RRF) with PRF"])
+    expect(names[8].name).toBe("Dense, top 1")
+    expect(names[8].phrase).toBe("Dense with top 1")
+    expect(names[0].phrase).toBe("Your pipeline")
+  })
+
+  it("says chunk recipes in the short phrases the findings use", () => {
+    const v = [
+      { transform: "recursive_character", config: { chunk_size: 100, chunk_overlap: 20, heading_context: true } },
+      { transform: "sentence_window", config: { sentences_per_chunk: 2, overlap_sentences: 0 } },
+      { transform: "token_based", config: { max_tokens: 96, overlap: 16 } },
+      { transform: "layout_blocks", config: { max_tokens: 400, keep_tables_whole: true, heading_context: true, section_level: 6 } },
+    ]
+    expect(recipeNames(v, "chunk", registry).map((n) => n.phrase)).toEqual(["Recursive at 100 characters", "By sentence at 2", "Fixed 96-token pieces", "By layout block"])
+  })
+
+  it("marks a recipe that repeats an earlier one", () => {
+    const v = [recipe("dense"), recipe("dense")]
+    expect(recipeNames(v, "retrieve", registry).map((n) => n.name)).toEqual(["Dense", "Dense, copy 2"])
   })
 })
 

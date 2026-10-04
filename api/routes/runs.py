@@ -89,7 +89,7 @@ class VariantIn(BaseModel):
 class SweepIn(BaseModel):
     graph: GraphIn
     node_id: str
-    variants: list[VariantIn] = Field(min_length=1)
+    variants: list[VariantIn] = Field(min_length=1, max_length=10)
     through: str | None = None
     force: bool = False
 
@@ -217,6 +217,10 @@ async def create_sweep(
     x_openai_api_key: str | None = Header(default=None),
     x_custom_api_key: str | None = Header(default=None),
 ) -> dict[str, str]:
+    """Start a sweep: one node of the graph run over each recipe in turn.
+
+    A sweep takes at most ten recipes, which bounds the work one request can ask of the hosted demo.
+    """
     deps = request.app.state.deps
     graph = body.graph.to_graph()
     _unknown(graph, [body.node_id] + ([body.through] if body.through else []), "node")

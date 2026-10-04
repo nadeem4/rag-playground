@@ -24,7 +24,7 @@ import { chunkStats } from "@/components/inspectors/spans"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { transformLabel } from "@/components/pipeline/NodeCard"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
-import { RECIPE_TITLES, SweepControl } from "@/components/SweepControl"
+import { SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/SegmentedControl"
 import {
@@ -40,7 +40,7 @@ import {
   type PipelineGraph,
 } from "@/state/graph"
 import { useDocument } from "@/state/document"
-import { chunkFinding, recipeNames, rejectedRecipe, retrieveFinding, type Finding } from "@/state/compare"
+import { chunkFinding, RECIPE_TITLES, recipeNames, rejectedRecipe, retrieveFinding, type Finding } from "@/state/compare"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 

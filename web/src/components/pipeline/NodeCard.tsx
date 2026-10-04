@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react"
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode, type Ref } from "react"
 import { Info, X } from "lucide-react"
 import { Popover } from "radix-ui"
 
@@ -256,6 +256,13 @@ export function NodeCard(p: NodeCardProps) {
 
   const filename = isSource && typeof p.node.config.filename === "string" ? p.node.config.filename : ""
 
+  // The head's name and the chevron both open a closed card and close the open one.
+  const toggle = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (p.selected && p.onDeselect) p.onDeselect()
+    else p.onSelect()
+  }
+
   // Selecting a card brings it into view after the card above has had its
   // --dur-mid to close. The card's own top is measured, not the head's: a stuck
   // head always reads as on screen. Its top goes to the box's top plus 12 px
@@ -341,7 +348,10 @@ export function NodeCard(p: NodeCardProps) {
       onClick={p.onSelect}
       className={cn(
         "relative flex min-w-0 scroll-mt-3 flex-col rounded-panel border border-hairline p-3",
-        p.selected ? "z-10 bg-surface-raised shadow-raised" : "bg-surface",
+        // A closed card tints on hover to say it opens; only the selected card is raised.
+        p.selected
+          ? "z-10 bg-surface-raised shadow-raised"
+          : "bg-surface transition-colors duration-(--dur-fast) hover:border-field-border hover:bg-surface-raised",
         p.explainOpen && "outline-1 -outline-offset-1 outline-fg-muted outline-solid",
       )}
     >
@@ -367,11 +377,7 @@ export function NodeCard(p: NodeCardProps) {
               type="button"
               aria-expanded={open}
               aria-controls={`${id}-options`}
-              onClick={(e) => {
-                e.stopPropagation()
-                if (p.selected && p.onDeselect) p.onDeselect()
-                else p.onSelect()
-              }}
+              onClick={toggle}
               className="flex min-h-row-compact items-center gap-2 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
             >
               {isSource ? null : (
@@ -441,6 +447,35 @@ export function NodeCard(p: NodeCardProps) {
               <X aria-hidden strokeWidth={1.75} />
             </Button>
           ) : null}
+          {/* The explicit open and close; the Upload card has no options to open. */}
+          {isSource ? null : (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`${open ? "Collapse" : "Expand"} ${p.title}`}
+              aria-expanded={open}
+              aria-controls={`${id}-options`}
+              onClick={toggle}
+            >
+              <svg
+                aria-hidden
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={cn(
+                  "size-[16px] transition-transform duration-(--dur-fast) motion-reduce:transition-none",
+                  open && "rotate-180 motion-reduce:rotate-0",
+                )}
+              >
+                <path d="M4 6l4 4 4-4" />
+              </svg>
+            </Button>
+          )}
         </div>
       </header>
 

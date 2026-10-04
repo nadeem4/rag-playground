@@ -300,6 +300,13 @@ describe("the page on a phone", () => {
 })
 
 describe("Build the index", () => {
+  it("says what it runs in its tooltip when it can run", async () => {
+    await ready()
+    const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(build.disabled).toBe(false))
+    expect(build.getAttribute("title")).toBe("Runs Upload, Parse, Clean, Chunk and Index with their current settings. A step whose settings have not changed is reused.")
+  })
+
   it("sends the Index node as the only target", async () => {
     await ready()
     const button = await screen.findByRole("button", { name: "Build the index" })

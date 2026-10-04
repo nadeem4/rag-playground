@@ -81,6 +81,15 @@ function setup(over: Partial<AskPanelProps> = {}) {
 }
 
 const askButton = () => screen.getByRole("button", { name: "Ask" }) as HTMLButtonElement
+
+describe("the Ask button tooltip", () => {
+  it("says what Ask runs", async () => {
+    setup()
+    await waitFor(() => expect(askButton().disabled).toBe(false))
+    expect(askButton().getAttribute("title")).toBe("Runs retrieval, reranking and the answer on the built index, with the settings below.")
+  })
+})
+
 const question = () => screen.getByLabelText("Question") as HTMLTextAreaElement
 
 describe("the Ask panel header", () => {

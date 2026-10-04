@@ -23,6 +23,9 @@ import { askSignature, goldRank, Transcript, type AskSnapshot, type TranscriptEn
  * query, retrieve, rerank and use case nodes of the same pipeline graph.
  */
 
+/** What the Ask button does, for its tooltip. */
+const ASK_TITLE = "Runs retrieval, reranking and the answer on the built index, with the settings below."
+
 export interface AskPanelProps {
   graph: PipelineGraph
   registry: Registry
@@ -190,7 +193,7 @@ export function AskPanel(p: AskPanelProps) {
             onChange={setText}
             onSubmit={ask}
             action={
-              <Button size="sm" busy={p.asking} disabled={askDisabled} onClick={ask}>
+              <Button size="sm" busy={p.asking} disabled={askDisabled} title={askDisabled ? undefined : ASK_TITLE} onClick={ask}>
                 {p.asking ? "Asking" : "Ask"}
               </Button>
             }

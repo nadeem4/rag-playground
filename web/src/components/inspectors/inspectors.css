@@ -201,9 +201,8 @@
     opacity: 0;
   }
 }
-/* On a new rerank the reranked slips also run the FLIP (flip.ts). A script
-   animation composites above this one, so they fade and slide without the
-   rise: that is on purpose, the slide is the motion that carries meaning. */
+/* A new list of slips rises in. On a new rerank the slope's line draw
+   carries the meaning; the rise only says the list is new. */
 .ev-slip[data-enter] {
   animation: ri-enter var(--dur-mid) var(--ease-in) backwards;
   animation-delay: calc(var(--i, 0) * 30ms);

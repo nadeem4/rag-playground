@@ -461,7 +461,7 @@ function Comparison({
         <div
           ref={gridRef}
           data-slope-grid=""
-          className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)] xl:items-start"
+          className="relative grid grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)] items-start gap-3"
           onMouseOver={(e) => hover(e.target)}
           onMouseLeave={clearSoon}
           onFocus={(e) => hover(e.target)}
@@ -474,7 +474,7 @@ function Comparison({
           </svg>
           {search}
           {/* The gutter the lines cross. */}
-          <div data-gutter="" aria-hidden className="hidden xl:block" />
+          <div data-gutter="" aria-hidden />
           {reranked}
         </div>
       ) : (

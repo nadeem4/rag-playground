@@ -301,9 +301,9 @@ describe("the slope between the two lists", () => {
     expect(svg).toBeTruthy()
     expect(svg.getAttribute("aria-hidden")).toBe("true")
     // Each list is as tall as its own slips, so opening a passage resizes it and the lines follow.
-    expect(document.querySelector("[data-slope-grid]")!.className).toContain("xl:items-start")
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("items-start")
     // A 96 px gutter between the two lists.
-    expect(document.querySelector("[data-slope-grid]")!.className).toContain("xl:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)]")
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)]")
     // Prior ranks 6, 1, 2, 4, 3: up, down, down, stayed, down. The dropped piece has no line.
     const ids = [5, 0, 1, 3, 2].map((i) => hybrid.hits[i].chunk.id)
     await waitFor(() => expect(svg.querySelectorAll("path")).toHaveLength(5))
@@ -395,6 +395,17 @@ describe("the linked highlight", () => {
 
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
   afterEach(() => vi.useRealTimers())
+
+  it("a new rerank result starts with nothing lit", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const { rerender } = render(<Panel {...p} />)
+    await ready()
+    fireEvent.mouseOver(slipOf("search", top()))
+    expect(litSlips()).toHaveLength(2)
+    rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(litSlips()).toHaveLength(0)
+  })
 
   it("hovering a left slip lights its right twin and its line, and dims the other lines; leaving clears it", async () => {
     render(<Panel {...props(withCrossEncoder(), RERANKED)} />)

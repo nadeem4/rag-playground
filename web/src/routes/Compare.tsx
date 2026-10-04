@@ -4,11 +4,12 @@ import { Plus } from "lucide-react"
 import { useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState, VariantState } from "@/api/runState"
-import type { GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
+import type { ChunkSet, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
 import { usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
+import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
 import { RecipeHead } from "@/components/compare/RecipeHead"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
@@ -488,6 +489,8 @@ export function VariantResult({
     )
   } else if (n.status === "skipped") {
     body = <EmptyState title="Skipped">A step above it failed, or the run was cancelled.</EmptyState>
+  } else if (type === "chunk_set" && status.kind === "ready" && Array.isArray((data as ChunkSet | undefined)?.chunks)) {
+    body = <ChunkEvidence set={data as ChunkSet} />
   } else {
     body = <ArtifactInspector type={type} data={data} status={status} context={chunks ? { chunks: chunks as never } : undefined} />
   }

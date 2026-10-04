@@ -17,8 +17,10 @@ import {
   movement,
   ordinal,
   rowsFromResult,
+  rowFromChunk,
   rowsFromSearch,
   scaleName,
+  stripHeadingMarks,
   scoreKey,
   type SearchOutput,
 } from "./hits"
@@ -256,5 +258,26 @@ describe("the finding line", () => {
     expect(within("cross_encoder")).toBe("Not kept. It was 5th in search, but Cross-encoder ranked others higher.")
     expect(within()).toBe("Not kept. It was 5th in search, but the reranker chose others.")
     expect(within("mmr")).not.toContain("keep limit")
+  })
+})
+
+describe("a chunk as a row", () => {
+  it("carries the chunk's id, text, pages, place and heading, with no rank or score of its own", () => {
+    const c = chunkSet.chunks[2]
+    const row = rowFromChunk(c)
+    expect(row).toMatchObject({ chunk_id: c.id, text: c.text, page_span: c.page_span, ordinal: c.ordinal, prior_rank: null, component_scores: {} })
+    expect(row.rank).toBe(c.ordinal + 1)
+  })
+})
+
+describe("stripHeadingMarks", () => {
+  it("drops leading heading lines and keeps the text", () => {
+    expect(stripHeadingMarks("## Heading\n\nText")).toBe("Text")
+    expect(stripHeadingMarks("# A\n## B\nText\n## Later")).toBe("Text\n## Later")
+    expect(stripHeadingMarks("Plain text")).toBe("Plain text")
+  })
+
+  it("keeps a heading that is all there is, without its marks", () => {
+    expect(stripHeadingMarks("## Only a heading")).toBe("Only a heading")
   })
 })

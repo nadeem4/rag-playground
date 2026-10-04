@@ -200,3 +200,21 @@ describe("the evidence slip", () => {
     expect(part("meta")!.textContent).toBe("p. 3Methods")
   })
 })
+
+describe("a slip with its own finding line", () => {
+  it("shows the given finding in place of the computed one", () => {
+    render(<EvidenceSlip row={rows[0]} side="single" piece={0} scaleKey="hybrid_rrf" finding={[{ text: "Piece 1", place: true }, { text: ", " }, { text: "58", mono: true }, { text: " tokens" }]} />)
+    expect(part("finding")!.textContent).toBe("Piece 1, 58 tokens")
+    expect(part("finding")!.querySelector(".font-mono")!.textContent).toBe("58")
+  })
+
+  it("leaves the scores out when asked", () => {
+    render(<EvidenceSlip row={rows[0]} side="single" piece={0} scaleKey="hybrid_rrf" scores={false} />)
+    expect(slip().querySelector("[data-score]")).toBeNull()
+  })
+
+  it("drops a leading markdown heading line from the passage", () => {
+    render(<EvidenceSlip row={{ ...rows[0], text: "## Heading\n\nText" }} side="single" piece={0} scaleKey="hybrid_rrf" />)
+    expect(part("passage")!.textContent).toBe("Text")
+  })
+})

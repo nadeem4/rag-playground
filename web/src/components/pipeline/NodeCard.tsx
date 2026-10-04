@@ -141,14 +141,22 @@ function ResultLine({ outcome, testId = "step-summary", ref }: { outcome: Outcom
   )
 }
 
-/** The pieces to scale, in their chunk colours, under the Chunk card's result. */
-function ChunkBar({ data }: { data: unknown }) {
+/**
+ * The pieces to scale by tokens, in their chunk colours. Thin, 4 px, under the
+ * Chunk card's result; a bar, 12 px with 2 px gaps and 3 px corners, in a
+ * Compare column.
+ */
+export function ChunkBar({ data, size = "thin" }: { data: unknown; size?: "thin" | "bar" }) {
   const chunks = (data as { chunks?: { token_count?: number }[] } | null)?.chunks
   if (!Array.isArray(chunks) || chunks.length === 0) return null
   return (
-    <div data-testid="chunk-bar" aria-hidden className="mt-1 flex h-[4px] overflow-hidden rounded-full">
+    <div data-testid="chunk-bar" aria-hidden className={size === "bar" ? "flex h-[12px] gap-[2px]" : "mt-1 flex h-[4px] overflow-hidden rounded-full"}>
       {chunks.map((c, i) => (
-        <span key={i} className={CHUNK_CLASSES[i % CHUNK_CLASSES.length]} style={{ flexGrow: c.token_count ?? 1, flexBasis: 0 }} />
+        <span
+          key={i}
+          className={cn(CHUNK_CLASSES[i % CHUNK_CLASSES.length], size === "bar" && "min-w-[3px] rounded-[3px]")}
+          style={{ flexGrow: c.token_count ?? 1, flexBasis: 0 }}
+        />
       ))}
     </div>
   )

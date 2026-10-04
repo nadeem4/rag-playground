@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { sampleGraph, storeGraph, transformsFor } from "@/state/graph"
@@ -125,6 +126,24 @@ describe("the Compare stage picker", () => {
     expect(mono).toEqual(["5", "2", "3"])
   })
 
+  it("shows a chunk column as evidence, not Build's chunk inspector", () => {
+    const node = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "chunk")!
+    render(
+      <VariantResult
+        pending
+        state={{ index: 0, order: ["chunk"], nodes: { chunk: { id: "chunk", status: "done", artifact_id: "a1" } } }}
+        node={node}
+        type="chunk_set"
+        data={recursiveJson}
+        status={{ kind: "ready" }}
+        agreement={null}
+        embeddings={null}
+      />,
+    )
+    expect(screen.getByTestId("chunk-numbers")).toBeTruthy()
+    expect(document.querySelector("[data-reading]")).toBeNull()
+  })
+
   it("shows the question a Retrieve sweep answers", async () => {
     openAt("?node=retrieve")
     render(<Compare />)
@@ -149,7 +168,7 @@ describe("the Compare stage picker", () => {
 
   it("uses no sm: class in the files this patch touched, since the theme has no sm breakpoint", async () => {
     const { readFileSync } = await import("node:fs")
-    const files = ["routes/Compare.tsx", "routes/useColumnsFit.ts", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/ask/AskPanel.tsx", "components/SweepControl.tsx", "components/compare/RecipeHead.tsx"]
+    const files = ["routes/Compare.tsx", "routes/useColumnsFit.ts", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/ask/AskPanel.tsx", "components/SweepControl.tsx", "components/compare/RecipeHead.tsx", "components/compare/ChunkEvidence.tsx"]
     for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(/(^|[\s"'`])sm:/m)
   })
 

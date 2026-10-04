@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
 import { ApiKeyControl } from "./ApiKeyControl"
+import { DocumentControl } from "./DocumentControl"
 import { DisplaySettings } from "./ThemeToggle"
 
 const PRIMARY = [
@@ -96,9 +97,11 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
   // With the lessons hidden, there is no Lessons link and the brand opens Build.
   const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/")
   return (
-    // Below md: the brand and the controls share the first row, and the nav
-    // takes the second (wrapping inside its own box at most once). From md up
-    // it is one row. The page itself never scrolls sideways.
+    // Below md: three rows. The brand and the controls share the first, the
+    // nav takes the second (wrapping inside its own box at most once), and the
+    // Document control the third, at full width. From md up it is one row,
+    // the Document control pushed to the right before the controls. The page
+    // itself never scrolls sideways.
     <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-4">
       <a href={lessonsEnabled ? "/" : "/build"} className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
         RAG Playground
@@ -112,7 +115,10 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         </a>
       </nav>
       {demo ? null : <DevMenu path={path} />}
-      <div data-testid="header-controls" className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-4">
+      <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto">
+        <DocumentControl />
+      </div>
+      <div data-testid="header-controls" className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5 md:ml-0">
         <ApiKeyControl />
         <DisplaySettings />
       </div>

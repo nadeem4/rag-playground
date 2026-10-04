@@ -35,6 +35,8 @@ export interface PipelineColumnProps {
   selected: string | null
   busy: boolean
   errors: Record<string, NodeErrors>
+  /** The Upload card's file is known to be gone from this browser (an expired upload). */
+  missingSource?: boolean
   /** A card's id, or null when the selected card's head closes it. */
   onSelect: (id: string | null) => void
   onTransform: (id: string, transform: string) => void
@@ -114,6 +116,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
               busy={p.busy}
               fieldErrors={errs?.fields}
               message={errs?.message}
+              missing={node.stage === "source" && p.missingSource}
               onSelect={() => p.onSelect(node.id)}
               onDeselect={() => p.onSelect(null)}
               onTransform={(t) => p.onTransform(node.id, t)}

@@ -48,6 +48,8 @@ export interface NodeCardProps {
   busy: boolean
   fieldErrors?: FieldErrors
   message?: string
+  /** The Upload card's file is gone from this browser (an expired upload): say so on the closed card. */
+  missing?: boolean
   onSelect: () => void
   /** Clicking the head of the selected card closes it. */
   onDeselect?: () => void
@@ -479,7 +481,14 @@ export function NodeCard(p: NodeCardProps) {
       </header>
 
       {isSource ? (
-        filename ? <p className="m-0 text-xs break-words text-fg-muted">{filename}</p> : null
+        <>
+          {filename ? <p className="m-0 text-xs break-words text-fg-muted">{filename}</p> : null}
+          {p.missing ? (
+            <p role="status" data-testid="missing-file" className="m-0 mt-1 self-start rounded-swatch bg-stale-wash px-2 py-px text-xs break-words text-stale">
+              Missing. Uploads expire on the demo. Upload it again or load a sample.
+            </p>
+          ) : null}
+        </>
       ) : (
         <p data-testid="step-transform" className="m-0 text-xs break-words text-fg-muted">
           {plain === p.node.transform ? null : `${plain}, `}

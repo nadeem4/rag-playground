@@ -112,6 +112,13 @@ describe("the run strip", () => {
     const strip = show(segs("done", "failed"), { kind: "failed", title: "Parse" })
     expect(within(strip).getByTestId("run-line").textContent).toBe("Parse failed")
   })
+
+  it("a run refused before it started says so in the failed style, pointing at the note above the cards", () => {
+    const strip = show(segs(), { kind: "refused" })
+    const line = within(strip).getByTestId("run-line")
+    expect(line.textContent).toBe("Could not start. See the note above the cards.")
+    expect(line.className).toContain("text-danger")
+  })
 })
 
 describe("stripSegments", () => {

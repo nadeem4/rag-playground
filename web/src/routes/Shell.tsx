@@ -140,6 +140,12 @@ function Build({ registry }: { registry: Registry }) {
   useEffect(() => {
     api.sources().then(setUploaded, () => undefined)
   }, [])
+  // Files the Upload card's picker handed over in this tab (an upload just now
+  // included): they exist on the server, so they are never flagged as missing.
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set())
+  const notePicked = (c: Record<string, unknown>) => {
+    if (typeof c.sha === "string" && c.sha) setPicked((p) => (p.has(c.sha as string) ? p : new Set(p).add(c.sha as string)))
+  }
 
   // Which keys the server has. Null until it answers, and if it fails: then
   // Ask is left alone.
@@ -294,7 +300,7 @@ function Build({ registry }: { registry: Registry }) {
   const known =
     uploaded === null || (samples === null && !samplesError)
       ? null
-      : uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
+      : picked.has(sourceSha) || uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
   const missing = Boolean(sourceSha) && known === false
 
   function loadSample(src: Source, question: string) {
@@ -330,6 +336,8 @@ function Build({ registry }: { registry: Registry }) {
   let stripLine: StripLine = null
   if (building) stripLine = { kind: "building", title: runningTitle, startedAt: runningSince }
   else if (runningStep && runningTitle) stripLine = { kind: "running", title: runningTitle, startedAt: runningSince }
+  // Refused before it started: no step ran, so the strip points at the note above the cards.
+  else if (!busy && columnError) stripLine = { kind: "refused" }
   else if (!busy && failedStep) stripLine = { kind: "failed", title: stripTitle(failedStep.id) }
   else if (built && segments.length && segments.every((s) => s.state === "done" || s.state === "reused"))
     stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
@@ -374,7 +382,7 @@ function Build({ registry }: { registry: Registry }) {
           These five steps build the index. Retrieval, reranking and answering live in the Ask panel.
         </p>
         {missing ? (
-          <p role="status" data-testid="missing-document" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
+          <p role="status" data-testid="missing-document" className="border-b border-hairline bg-stale-wash px-3 py-2 text-xs text-stale">
             This pipeline was built on {sourceName}. Load a sample, or upload that file, to run it.
           </p>
         ) : null}
@@ -406,7 +414,13 @@ function Build({ registry }: { registry: Registry }) {
             not at the Upload card's scroll position. Below md the page scrolls as one. */}
         <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" data-scroll-box className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {firstRun && sourceNode ? (
-            <FirstRun onSource={(v) => edit(setConfig(graph, sourceNode.id, { ...v }), sourceNode.id)} onSample={loadSample} />
+            <FirstRun
+              onSource={(v) => {
+                notePicked({ ...v })
+                edit(setConfig(graph, sourceNode.id, { ...v }), sourceNode.id)
+              }}
+              onSample={loadSample}
+            />
           ) : (
             <>
               <PipelineColumn
@@ -417,9 +431,13 @@ function Build({ registry }: { registry: Registry }) {
                 selected={selected}
                 busy={busy}
                 errors={errors}
+                missingSource={missing}
                 onSelect={setSelected}
                 onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
-                onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
+                onConfig={(id, c) => {
+                  if (id === sourceNode?.id) notePicked(c)
+                  edit(setConfig(graph, id, c), id)
+                }}
                 onSample={pickSample}
                 onRun={(id, force) => void start(id, force)}
                 onAddCleaner={() => edit(addCleaner(graph, registry))}

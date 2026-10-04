@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -142,13 +143,19 @@ def build_setup(page: Page, base: str) -> None:
     page.get_by_role("button", name="Build the index").wait_for()
     page.get_by_role("button", name="Build the index").click()
     ask = page.get_by_role("button", name="Ask", exact=True)
-    page.get_by_role("button", name="Cross-encoder").click()
+    pick_reranker(page, "Cross-encoder")
     ask.click(timeout=600_000)  # waits until the build lets it
     page.get_by_text("Search order against the reranked order").wait_for(timeout=600_000)
     # Back to no reranker, so the recorded pass shows the switch.
     page.get_by_role("button", name="Change settings").click()
-    page.get_by_role("button", name="None", exact=True).nth(1).click()
+    pick_reranker(page, "No reranker")
     page.wait_for_timeout(500)
+
+
+def pick_reranker(page: Page, name: str) -> None:
+    """Choose `name` in the Ask panel's Rerank picker: open its list, then press the option."""
+    page.get_by_role("button", name=re.compile(r"^Reranker")).click()
+    page.get_by_role("listbox").get_by_role("option", name=re.compile("^" + re.escape(name))).click()
 
 
 def build_scene(page: Page, base: str, poster: Path) -> float:
@@ -161,7 +168,7 @@ def build_scene(page: Page, base: str, poster: Path) -> float:
     build.click()
     page.get_by_text("Index ready", exact=False).wait_for(timeout=60_000)
     page.wait_for_timeout(1400)
-    page.get_by_role("button", name="Cross-encoder").click()
+    pick_reranker(page, "Cross-encoder")
     page.wait_for_timeout(900)
     page.get_by_role("button", name="Ask", exact=True).click()
     slope = page.get_by_text("Search order against the reranked order")

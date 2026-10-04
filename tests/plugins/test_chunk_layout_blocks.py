@@ -522,7 +522,8 @@ def test_section_level_help_says_where_levels_come_from():
     texts = [description, *cls.learn["section_level"]["more"]]
     joined = " ".join(texts)
     assert "Docling" in joined and "heading_hierarchy" in joined
-    assert "3 keeps a section whole" in description
+    assert "A title is 1 and section headings start at 2" in description
+    assert "3 kept a section whole" in description
     assert "Experience section" not in joined
     top = cls().explain(cls.config_model(section_level=1)).settings
     assert "only headings at level 1 start a new section" in top

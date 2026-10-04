@@ -8,8 +8,8 @@ reads them in order and groups them in three steps.
 - *Sections.* A new section starts at a heading that follows a body, as in
   `markdown_header`, when the heading's level is at or above `section_level`
   (a heading with no level counts as level 1). Levels come from the parser:
-  with Docling's heading_hierarchy on, a typical document has its title at 2,
-  sections at 3 and subsections at 4. Headings in a row open one
+  a title is 1 and section headings start at 2; with Docling's heading_hierarchy
+  on, subsections nest below their section. Headings in a row open one
   section together. A deeper heading stays inside the section as text, joined
   to the block below it, and still extends the heading path.
 - *Pieces.* Units are packed in order up to `max_tokens`. A table unit that is
@@ -64,10 +64,11 @@ class LayoutBlocksConfig(BaseModel):
             "section_level: how deep a heading can be and still start a new "
             "section, from 1 to 6. A new section starts only at a heading whose "
             "level is at or above this depth; 6 means every heading starts "
-            "one. Levels are Docling's heading levels. With heading_hierarchy "
-            "on, a typical document has its title at 2, sections at 3 and "
-            "roles or subsections at 4, so 3 keeps a section whole. With it "
-            "off, every heading is at 2. A deeper heading stays inside the "
+            "one. Levels are Docling's heading levels. A title is 1 and section "
+            "headings start at 2; with heading_hierarchy on, subsections nest "
+            "below their section (on the sample resume, sections sat at 3 and "
+            "roles at 4, so 3 kept a section whole). With it off, section "
+            "headings share one level. A deeper heading stays inside the "
             "piece as text and still names the pieces below it in their "
             "heading path. The run note lists the levels in the document."
         ),
@@ -296,11 +297,12 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
             "more": [
                 "A new section starts only at a heading whose level is at or "
                 "above this depth. At 6, every heading starts one.",
-                "Levels are Docling's heading levels. With heading_hierarchy "
-                "on, a typical document has its title at 2, sections at 3 and "
-                "roles or subsections at 4, so 3 keeps a section whole. With "
-                "it off, every heading is at 2. The run note lists the levels "
-                "in your document.",
+                "Levels are Docling's heading levels. A title is 1 and section "
+                "headings start at 2; with heading_hierarchy on, subsections "
+                "nest below their section (on the sample resume, sections sat "
+                "at 3 and roles at 4, so 3 kept a section whole). With it off, "
+                "section headings share one level. The run note lists the "
+                "levels in your document.",
                 "A deeper heading stays inside the piece as text, and the "
                 "pieces below it still carry it in their heading path.",
             ],

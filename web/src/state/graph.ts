@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
+
 import type { Graph, GraphEdge, GraphNode, PortSchema, Registry, Stage, TransformInfo } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
 
@@ -560,19 +562,76 @@ export function loadGraph(raw: string | null, registry: Registry): PipelineGraph
 
 const STORAGE_KEY = "rag-playground:graph:v1"
 
-/** The graph is shared between Build and Compare through per-viewer storage. */
-export function readStoredGraph(registry: Registry): PipelineGraph | null {
+/**
+ * The working graph is a small store every page reads: Build edits it, the
+ * header's Document control and Compare and Evaluate follow it. Navigation is
+ * a full page load, so localStorage is what carries it between pages; within
+ * a page, `storeGraph` tells every subscriber.
+ *
+ * Storage is read on each snapshot, so a test (or another tab) that clears it
+ * is seen. When a write fails (a private window, blocked storage) the graph
+ * lives in memory for the rest of the page.
+ */
+let memory: string | null = null
+let storageFailed = false
+const listeners = new Set<() => void>()
+
+/** The stored JSON: a string, so a snapshot comparison is cheap. */
+export function storedGraphJson(): string | null {
+  if (storageFailed) return memory
   try {
-    return loadGraph(window.localStorage.getItem(STORAGE_KEY), registry)
+    return window.localStorage.getItem(STORAGE_KEY)
   } catch {
-    return null
+    return memory
   }
 }
 
-export function storeGraph(g: PipelineGraph): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(g))
-  } catch {
-    // Private window or blocked storage: the page still works, it just forgets.
+export function subscribeGraph(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
   }
+}
+
+/** The graph is shared between Build, Compare and Evaluate through per-viewer storage. */
+export function readStoredGraph(registry: Registry): PipelineGraph | null {
+  return loadGraph(storedGraphJson(), registry)
+}
+
+export function storeGraph(g: PipelineGraph): void {
+  const json = JSON.stringify(g)
+  memory = json
+  try {
+    window.localStorage.setItem(STORAGE_KEY, json)
+    storageFailed = false
+  } catch {
+    // Private window or blocked storage: the page still works, it just forgets on reload.
+    storageFailed = true
+  }
+  for (const l of [...listeners]) l()
+}
+
+/**
+ * The stored working graph, kept up to date with `storeGraph`. The graph keeps
+ * its identity until its JSON changes. With a `fallback` and nothing usable
+ * stored, it returns the fallback (built once) and stores it.
+ */
+export function useStoredGraph(registry: Registry): PipelineGraph | null
+export function useStoredGraph(registry: Registry, fallback: () => PipelineGraph): PipelineGraph
+export function useStoredGraph(registry: Registry, fallback?: () => PipelineGraph): PipelineGraph | null {
+  const json = useSyncExternalStore(subscribeGraph, storedGraphJson)
+  const stored = useMemo(() => loadGraph(json, registry), [json, registry])
+  const seed = useRef<PipelineGraph | null>(null)
+  if (!stored && fallback && !seed.current) seed.current = fallback()
+  const graph = stored ?? (fallback ? seed.current : null)
+  useEffect(() => {
+    if (!stored && seed.current) storeGraph(seed.current)
+  }, [stored])
+  return graph
+}
+
+/** Tests only: forget the in-memory copy. */
+export function resetStoredGraphForTests(): void {
+  memory = null
+  storageFailed = false
 }

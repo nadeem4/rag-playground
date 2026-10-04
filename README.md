@@ -80,15 +80,25 @@ real. If you already have a document, it is kept. See [Home](#home).
 
 The column on the left of **Build** is the index pipeline: Upload, Parse, Clean, Chunk and
 Index, one card each with its own settings. **Build the index** runs those five steps, and
-selecting a card shows its output on the right, with **Back to Ask** to return.
+selecting a card shows its output in the main pane beside the column. Until a card is
+selected, the main pane says to pick a step.
 
-The Ask panel on the right holds the question and the retrieval, rerank and answer
+The Ask panel is docked at the right edge of Build, and the main pane shrinks to make room;
+nothing is covered. Drag its inner edge to resize it (or focus the edge and use the arrow
+keys), move it to the left edge with the button in its head, or close it. Closed, a round
+**Ask** button sits at the bottom right and shows how many results the last question
+found. **Alt+A** opens and closes the panel from anywhere on Build. Closing keeps the
+question and the results, and the side, the width and open or closed are remembered in
+this browser. On a phone the panel is a bottom sheet over the page instead.
+
+The Ask panel holds the question and the retrieval, rerank and answer
 settings, summed up in one recipe line. **Ask** runs the question against the index and
 shows the ranked pieces, the search order against the reranked order when a reranker is
 on, a written answer when the answer is Chat, and the questions asked earlier in the tab.
 The rerank is drawn as a slope between the search order and the reranked order: one
-line per kept piece, rising in the accent and falling in grey. On a phone or tablet the
-reranked list comes first and the search order folds under Show search order.
+line per kept piece, rising in the accent and falling in grey. When the panel is narrower
+than 640 px (always on a phone), the reranked list comes first and the search order folds
+under Show search order; widen the panel to see the two side by side.
 The **Rewrite** control in the Retrieval block can widen the keyword search with words
 borrowed from the top dense hits (PRF, no key) or have a model restate the question in
 the document's words (LLM, needs a key); a **Searched for** line under the question then

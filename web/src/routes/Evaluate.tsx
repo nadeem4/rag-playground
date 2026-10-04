@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
@@ -72,6 +73,8 @@ export function Evaluate() {
   const [choice, setChoice] = useState<string | null>(null)
   // True while an evaluation runs, so the pipeline under it cannot change (M8).
   const [busy, setBusy] = useState(false)
+  // The header's slot for the body's two controls: set by the slot's ref callback.
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
   if (reg.kind !== "ready") return <RegistryScreen state={reg} />
   const registry = reg.registry
   // A saved pipeline this server cannot run is listed but treated as absent (M7).
@@ -92,39 +95,56 @@ export function Evaluate() {
     ? chosen.name
     : current && currentGraph && !unedited
       ? `${current.name} (edited)`
-      : "The pipeline on Build"
+      : "the pipeline on Build"
+  const filename = String(graph?.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
   return (
-    <main className="flex min-h-0 flex-1 flex-col bg-surface">
-      {/* Outside the keyed body, so switching pipelines keeps this select, and its focus (F5). */}
-      <div className="flex min-h-row shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-3 py-1">
-        <label htmlFor={pickerId} className="text-sm text-fg-muted">
-          Pipeline
-        </label>
-        <select
-          id={pickerId}
-          aria-label="Pipeline"
-          className={cn(CONTROL, "w-auto")}
-          value={chosen ? chosen.id : ""}
-          disabled={busy}
-          onChange={(e) => setChoice(e.target.value)}
-        >
-          <option value="">The pipeline on Build</option>
-          {pipelines.map((p) => (
-            <option key={p.id} value={p.id} disabled={!usable.get(p.id)}>
-              {usable.get(p.id) ? p.name : `${p.name} (not usable here)`}
-            </option>
-          ))}
-        </select>
+    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface">
+      <div className="flex flex-col gap-5 px-4 pt-4 pb-8 md:px-6">
+        <header data-testid="evaluate-header" className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-2xl font-semibold">Evaluate</h1>
+            {filename ? (
+              <p className="text-sm text-fg-muted">
+                How often {pipelineName} finds the answer in <span className="font-mono break-all text-fg">{filename}</span>.
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-end gap-2.5">
+            {/* Outside the keyed body, so switching pipelines keeps this select, and its focus (F5). */}
+            <div className="flex flex-col gap-1">
+              <label htmlFor={pickerId} className="text-xs font-semibold text-fg-muted">
+                Pipeline
+              </label>
+              <select
+                id={pickerId}
+                aria-label="Pipeline"
+                className={cn(CONTROL, "w-auto max-w-full")}
+                value={chosen ? chosen.id : ""}
+                disabled={busy}
+                onChange={(e) => setChoice(e.target.value)}
+              >
+                <option value="">The pipeline on Build</option>
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.id} disabled={!usable.get(p.id)}>
+                    {usable.get(p.id) ? p.name : `${p.name} (not usable here)`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {/* The body renders Pieces checked and the run button here, through a portal. */}
+            <div ref={setSlot} className="flex flex-wrap items-end gap-2.5" />
+          </div>
+        </header>
+        {/* Keyed by what is scored, not by the score key: an edited A and A share a key but not a graph. */}
+        <EvaluateBody
+          key={chosen ? chosen.id : "working"}
+          graph={graph}
+          pipelineKey={pipelineKey}
+          registry={registry}
+          onBusy={setBusy}
+          slot={slot}
+        />
       </div>
-      {/* Keyed by what is scored, not by the score key: an edited A and A share a key but not a graph. */}
-      <EvaluateBody
-        key={chosen ? chosen.id : "working"}
-        graph={graph}
-        pipelineKey={pipelineKey}
-        pipelineName={pipelineName}
-        registry={registry}
-        onBusy={setBusy}
-      />
     </main>
   )
 }
@@ -138,15 +158,15 @@ export function Evaluate() {
 function EvaluateBody({
   graph,
   pipelineKey,
-  pipelineName,
   registry,
   onBusy,
+  slot,
 }: {
   graph: PipelineGraph | null
   pipelineKey: string
-  pipelineName: string
   registry: Registry
   onBusy: (busy: boolean) => void
+  slot: HTMLElement | null
 }) {
   const source = graph?.nodes.find((n) => n.stage === "source")
   const sourceSha = String(source?.config.sha ?? "")
@@ -181,15 +201,15 @@ function EvaluateBody({
       useCaseId={useCase.id}
       sourceSha={sourceSha}
       pipelineKey={pipelineKey}
-      pipelineName={pipelineName}
       onBusy={onBusy}
+      slot={slot}
     />
   )
 }
 
 function Blocked({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col">
       <EmptyState title={title}>
         {children}{" "}
         <a href="/build" className="text-fg underline">
@@ -219,8 +239,8 @@ function Evaluation({
   useCaseId,
   sourceSha,
   pipelineKey,
-  pipelineName,
   onBusy,
+  slot,
 }: {
   registry: Registry
   graph: PipelineGraph
@@ -228,8 +248,9 @@ function Evaluation({
   useCaseId: string
   sourceSha: string
   pipelineKey: string
-  pipelineName: string
   onBusy: (busy: boolean) => void
+  /** The header's slot, where Pieces checked and the run button go. */
+  slot: HTMLElement | null
 }) {
   const topKId = useId()
   const query = graph.nodes.find((n) => n.id === queryId)!
@@ -387,71 +408,67 @@ function Evaluation({
     }
   }
 
+  const controls = (
+    <>
+      <div className="flex flex-col gap-1">
+        <label htmlFor={topKId} className="text-xs font-semibold text-fg-muted">
+          Pieces checked
+        </label>
+        <input
+          id={topKId}
+          type="number"
+          min={1}
+          value={topK}
+          disabled={busy}
+          title="Top k: how many of the returned pieces are checked for the answer"
+          onChange={(e) => setTopK(Math.max(1, Math.round(Number(e.target.value)) || 1))}
+          className={cn(CONTROL, "w-[76px] font-mono tabular-nums")}
+        />
+      </div>
+      {busy && runId ? (
+        <Button variant="outline" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+          Cancel
+        </Button>
+      ) : null}
+      <Button disabled={busy || !questions?.length} onClick={() => void evaluate()}>
+        {busy ? "Evaluating" : runId ? "Evaluate again" : "Evaluate"}
+      </Button>
+    </>
+  )
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-xl font-semibold">Evaluate</h1>
-          {/* Wraps rather than truncates, so the bar never pushes the page sideways at phone width. */}
-          <p className="text-sm text-fg-muted">
-            {pipelineName}, over <span className="font-mono">{filename}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={topKId} className="text-sm text-fg-muted">
-            Top k
-          </label>
-          <input
-            id={topKId}
-            type="number"
-            min={1}
-            value={topK}
-            disabled={busy}
-            onChange={(e) => setTopK(Math.max(1, Math.round(Number(e.target.value)) || 1))}
-            className={cn(CONTROL, "w-[72px]")}
-          />
-          {busy && runId ? (
-            <Button variant="outline" size="sm" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
-              Cancel
-            </Button>
-          ) : null}
-          <Button size="sm" disabled={busy || !questions?.length} onClick={() => void evaluate()}>
-            {busy ? "Evaluating" : runId ? "Evaluate again" : "Run evaluation"}
-          </Button>
-        </div>
+    <div className="flex flex-col gap-5">
+      {slot ? createPortal(controls, slot) : null}
+
+      <div className="flex flex-col gap-2">
+        <QuestionSetPanel
+          inUse={which}
+          set={uploaded.set}
+          count={questions?.length ?? null}
+          filename={filename}
+          sampleName={matched?.title ?? null}
+          report={uploaded.report}
+          tabOnly={uploaded.tabOnly}
+          error={uploaded.error}
+          busy={uploaded.busy}
+          disabled={busy}
+          onUpload={(file) => void uploaded.upload(file)}
+          onRemove={() => void uploaded.remove()}
+        />
+        {/* The recipe in one line: each step by its plain name, beside its code name. */}
+        <p data-testid="recipe-line" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
+          {steps.map((s) => (
+            <span key={s.label}>
+              {s.label}: <strong className="font-semibold text-fg">{s.name}</strong>, <span className="font-mono">{s.transform}</span>
+            </span>
+          ))}
+          <a href="/build" className="inline-flex items-center text-primary underline underline-offset-4">
+            Change a step on Build
+          </a>
+        </p>
       </div>
 
-      <QuestionSetPanel
-        inUse={which}
-        set={uploaded.set}
-        count={questions?.length ?? null}
-        filename={filename}
-        sampleName={matched?.title ?? null}
-        report={uploaded.report}
-        tabOnly={uploaded.tabOnly}
-        error={uploaded.error}
-        busy={uploaded.busy}
-        disabled={busy}
-        onUpload={(file) => void uploaded.upload(file)}
-        onRemove={() => void uploaded.remove()}
-      />
-
-      <p className="shrink-0 border-b border-hairline px-3 py-1 text-xs text-fg-muted">
-        Evaluating{" "}
-        {steps.map((s, i) => (
-          <span key={s.label}>
-            {i > 0 ? ", " : ""}
-            {s.label} <span className="font-mono text-fg">{s.transform}</span>
-          </span>
-        ))}
-        . A question counts as found when one of the top {topK} pieces contains the sentence that answers it.{" "}
-        <a href="/build" className="text-fg underline">
-          Change a setting on Build
-        </a>{" "}
-        and run this again to see what it did.
-      </p>
-
-      <div className="flex min-h-row shrink-0 flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-hairline px-3 py-2" aria-live="polite">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1" aria-live="polite">
         {error || questionsError || samplesError ? (
           <p role="alert" className="font-mono text-xs break-words text-danger">
             {error ?? questionsError ?? samplesError}
@@ -460,7 +477,7 @@ function Evaluation({
           <>
             <p className="text-sm text-fg-muted">
               {questions
-                ? `${questions.length} ${questions.length === 1 ? "question" : "questions"} ready. Press Run evaluation to score this pipeline.`
+                ? `${questions.length} ${questions.length === 1 ? "question" : "questions"} ready. Press Evaluate to score this pipeline.`
                 : noBundledSet
                   ? "No question set for this document. Upload one to evaluate it."
                   : "Loading the questions"}
@@ -501,7 +518,7 @@ function Evaluation({
         </p>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div>
         {runId === null ? (
           <EmptyState title="Nothing scored yet">
             Every question runs the whole pipeline once. The steps above the question are shared, so they run once and the rest come from the

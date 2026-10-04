@@ -76,14 +76,14 @@ describe("the graph an evaluation runs", () => {
     expect(hasRetriever(removeNode(g, "retrieve"))).toBe(false)
   })
 
-  it("names the steps being evaluated, in column order", () => {
+  it("names the steps being evaluated, in column order, plain name beside the code name", () => {
     expect(pipelineSteps(e2eSampleGraph(LIVE, SRC))).toEqual([
-      { label: "Parse", transform: "docling" },
-      { label: "Clean", transform: "dedupe_blocks" },
-      { label: "Chunk", transform: "recursive_character" },
-      { label: "Index", transform: "lancedb" },
-      { label: "Retrieve", transform: "hybrid_rrf" },
-      { label: "Rerank", transform: "mmr" },
+      { label: "Parse", transform: "docling", name: "Docling" },
+      { label: "Clean", transform: "dedupe_blocks", name: "Remove duplicate blocks" },
+      { label: "Chunk", transform: "recursive_character", name: "Recursive (natural breaks)" },
+      { label: "Index", transform: "lancedb", name: "LanceDB" },
+      { label: "Retrieve", transform: "hybrid_rrf", name: "Hybrid (RRF)" },
+      { label: "Rerank", transform: "mmr", name: "MMR (variety)" },
     ])
   })
 })

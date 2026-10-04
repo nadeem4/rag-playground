@@ -1,5 +1,7 @@
 import type { EvalOutput, EvalPayload, GraphNode, Registry, SampleQuestion, Stage, Variant } from "@/api/types"
+import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import type { HitRowData } from "@/components/inspectors/hits"
+import { strategyLabel } from "@/learn/challenges"
 
 import { columnOrder, setConfig, setTransform, titleFor, type PipelineGraph } from "./graph"
 import type { Question } from "./goldSet"
@@ -58,10 +60,22 @@ export function questionVariants(query: Pick<GraphNode, "transform" | "config">,
 /** The steps an evaluation is a verdict on, top to bottom. */
 const DESCRIBED: Stage[] = ["parse", "clean", "chunk", "index", "retrieve", "rerank"]
 
-export function pipelineSteps(g: PipelineGraph): { label: string; transform: string }[] {
+/** One step of the recipe: its column title, its code name and its plain name (`Docling`, `docling`). */
+export interface RecipeStep {
+  label: string
+  transform: string
+  name: string
+}
+
+export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
   return columnOrder(g)
     .filter((n) => DESCRIBED.includes(n.stage))
-    .map((n) => ({ label: titleFor(n), transform: n.transform }))
+    .map((n) => ({
+      label: titleFor(n),
+      transform: n.transform,
+      // Retrieve goes by the Ask panel's name, every other step by Build's.
+      name: (n.stage === "retrieve" ? RETRIEVAL_LABEL[n.transform] : undefined) ?? strategyLabel(n.transform),
+    }))
 }
 
 // ------------------------------------------------- too few pieces, a miss --

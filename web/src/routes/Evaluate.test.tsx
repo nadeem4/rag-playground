@@ -161,6 +161,12 @@ function setup(): { sweeps: RecordedSweep[] } {
   return { sweeps }
 }
 
+/** Opens the Use your own questions fold, where the upload, the templates and the notes live. */
+function openOwn() {
+  const own = screen.getByText("Use your own questions").closest("details")!
+  own.open = true
+}
+
 /** A file dropped into the hidden input, which jsdom will not build for us. */
 function chooseFile(input: HTMLElement, name: string) {
   const file = new File(["id,question\n"], name, { type: "text/csv" })
@@ -206,12 +212,45 @@ describe("Evaluate", () => {
     await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Evaluate" })).toBeTruthy())
     const text = () => document.body.textContent ?? ""
     await waitFor(() => expect(text()).toMatch(/2 questions ready/))
-    expect(text()).toMatch(/Parse\s*docling/)
-    expect(text()).toMatch(/Chunk\s*recursive_character/)
-    expect(text()).toMatch(/Retrieve\s*hybrid_rrf/)
+    expect(text()).toMatch(/How often the pipeline on Build finds the answer in chunking-primer\.pdf\./)
     expect(screen.getByText("Nothing scored yet")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Run evaluation" })).toBeTruthy()
-    expect(screen.getByLabelText("Top k").getAttribute("value")).toBe("5")
+    expect(screen.getByRole("button", { name: "Evaluate" })).toBeTruthy()
+    expect(screen.getByLabelText("Pieces checked").getAttribute("value")).toBe("5")
+    expect(screen.getByLabelText("Pieces checked").getAttribute("title")).toBe("Top k: how many of the returned pieces are checked for the answer")
+  })
+
+  it("holds the title, the pipeline, Pieces checked and the run button in one header", async () => {
+    setup()
+    const header = await screen.findByTestId("evaluate-header")
+    expect(within(header).getByRole("heading", { level: 1, name: "Evaluate" }).className).toContain("text-2xl")
+    expect(within(header).getByLabelText("Pipeline")).toBeTruthy()
+    expect((within(header).getByLabelText("Pieces checked") as HTMLInputElement).value).toBe("5")
+    expect(within(header).getByRole("button", { name: "Evaluate" })).toBeTruthy()
+  })
+
+  it("says the question set in one line and folds the upload under Use your own questions", async () => {
+    setup()
+    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the A primer on chunking sample."))
+    const own = screen.getByText("Use your own questions").closest("details")!
+    expect(own.open).toBe(false)
+    expect(within(own).getByRole("link", { name: "JSON" }).className).toContain("inline-flex")
+    expect(within(own).getByRole("link", { name: "CSV" }).className).toContain("inline-flex")
+  })
+
+  it("says the recipe in one line, plain name beside the code name", async () => {
+    setup()
+    await waitFor(() => expect(screen.getByTestId("recipe-line").textContent).toMatch(/Parse: Docling, docling/))
+    expect(screen.getByTestId("recipe-line").textContent).toMatch(/Chunk: Recursive \(natural breaks\), recursive_character/)
+    expect(screen.getByTestId("recipe-line").textContent).toMatch(/Retrieve: Hybrid \(RRF\), hybrid_rrf/)
+    const change = within(screen.getByTestId("recipe-line")).getByRole("link", { name: "Change a step on Build" })
+    expect(change.getAttribute("href")).toBe("/build")
+    expect(change.className).toContain("inline-flex")
+  })
+
+  it("uses no sm: class in its files, since the theme has no sm breakpoint", async () => {
+    const { readFileSync } = await import("node:fs")
+    const files = ["routes/Evaluate.tsx", "components/evaluate/QuestionSetPanel.tsx", "components/evaluate/EvalMetrics.tsx"]
+    for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(/(^|[\s"'`])sm:/m)
   })
 
   it("has no em-dashes or en-dashes", async () => {
@@ -245,9 +284,8 @@ describe("the question set panel", () => {
   it("names the matched sample, counts it, and links to a template in both formats", async () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
-    await waitFor(() => expect(screen.getByTestId("question-set").textContent).toMatch(/2 questions/))
-    // F4: the title is capitalised, so it does not sit mid-sentence after "Scoring".
-    expect(screen.getByTestId("question-set").textContent).toMatch(/Scoring the questions for A primer on chunking, 2 questions\./)
+    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the A primer on chunking sample."))
+    openOwn()
     expect(screen.getByRole("link", { name: "JSON" }).getAttribute("href")).toBe("/api/questions/template?format=json")
     expect(screen.getByRole("link", { name: "CSV" }).getAttribute("href")).toBe("/api/questions/template?format=csv")
     expect(screen.getByLabelText("Upload a question set")).toBeTruthy()
@@ -267,14 +305,15 @@ describe("the question set panel", () => {
     expect(await screen.findByText(/No question set for this document/)).toBeTruthy()
     expect(screen.queryByTestId("set-mismatch")).toBeNull()
     // F4: the panel must not contradict that line by claiming a built-in set is in play.
-    await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("No question set yet"))
+    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("No question set yet."))
   })
 
   it("uses the set stored against the document, and asks its questions instead of the sample's", async () => {
     serve({ stored: goldSet() })
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("refunds.csv"))
-    expect(screen.getByTestId("question-set").textContent).toMatch(/2 questions/)
+    expect(screen.getByTestId("set-line").textContent).toBe("2 questions from refunds.csv.")
+    openOwn()
     expect(screen.getByRole("button", { name: "Remove this set" })).toBeTruthy()
     expect(screen.queryByTestId("set-mismatch")).toBeNull()
   })
@@ -291,6 +330,7 @@ describe("the question set panel", () => {
     serve({ stored: goldSet() })
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("refunds.csv"))
+    openOwn()
     fireEvent.click(screen.getByRole("button", { name: "Remove this set" }))
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
   })
@@ -300,6 +340,7 @@ describe("the question set panel", () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    openOwn()
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
     const note = await screen.findByTestId("tab-only", {}, { timeout: 4000 })
     expect(note.textContent).toMatch(/this browser tab only/)
@@ -314,9 +355,11 @@ describe("the question set panel", () => {
   it("says up front that a hosted demo does not keep question sets", async () => {
     serve({ demo: true })
     render(<Evaluate />)
+    await screen.findByText("Use your own questions", {}, { timeout: 4000 })
+    openOwn()
     const note = await screen.findByTestId("demo-note", {}, { timeout: 4000 })
     expect(note.textContent).toMatch(/does not store question sets/)
-    expect(screen.getByRole("link", { name: "Run the playground locally" })).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Run the playground locally" }).className).toContain("inline-flex")
   })
 
   it("explains itself when the server refuses the upload outright", async () => {
@@ -324,6 +367,7 @@ describe("the question set panel", () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    openOwn()
     chooseFile(screen.getByLabelText("Upload a question set"), "mine.csv")
     const err = await screen.findByTestId("set-error", {}, { timeout: 4000 })
     expect(err.textContent).toMatch(/does not store question sets/)
@@ -338,6 +382,7 @@ describe("the upload report", () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    openOwn()
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
 
     const report = await screen.findByTestId("upload-report", {}, { timeout: 4000 })
@@ -357,6 +402,7 @@ describe("the upload report", () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    openOwn()
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
     const report = await screen.findByTestId("upload-report", {}, { timeout: 4000 })
     const slip = report.querySelector("[data-slip]") as HTMLElement
@@ -376,6 +422,7 @@ describe("the upload report", () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name")).toBeTruthy())
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    openOwn()
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
     await screen.findByTestId("upload-report", {}, { timeout: 4000 })
     await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
@@ -399,7 +446,7 @@ describe("Evaluate picks a pipeline", () => {
     expect(picker().value).toBe(saved.id)
     // The name and the filename sit in separate nodes (the filename in its own <span>), so this
     // reads the whole line rather than getByText, which cannot match text split across elements.
-    expect(document.body.textContent).toMatch(/Token chunks, over chunking-primer\.pdf/)
+    expect(document.body.textContent).toMatch(/How often Token chunks finds the answer in chunking-primer\.pdf\./)
   })
 
   it("scores the chosen pipeline's graph", async () => {
@@ -409,8 +456,8 @@ describe("Evaluate picks a pipeline", () => {
     await screen.findByRole("combobox", { name: "Pipeline" })
     expect(picker().value).toBe("")
     fireEvent.change(picker(), { target: { value: readPipelines()[0].id } })
-    await waitFor(() => expect((screen.getByRole("button", { name: "Run evaluation" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }))
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(p.sweeps.length).toBe(1))
     const chunk = p.sweeps[0].graph.nodes.find((n) => n.stage === "chunk")
     expect(chunk?.transform).toBe("token_based")
@@ -431,9 +478,9 @@ describe("Evaluate picks a pipeline", () => {
     const p = setup()
     await screen.findByRole("combobox", { name: "Pipeline" })
     expect(picker().value).toBe("")
-    expect(document.body.textContent).toMatch(/Token chunks \(edited\), over chunking-primer\.pdf/)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Run evaluation" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }))
+    expect(document.body.textContent).toMatch(/How often Token chunks \(edited\) finds the answer in chunking-primer\.pdf\./)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(p.sweeps.length).toBe(1))
     expect(p.sweeps[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("recursive_character")
   })
@@ -455,7 +502,7 @@ describe("Evaluate picks a pipeline", () => {
     const before = picker()
     before.focus()
     fireEvent.change(before, { target: { value: readPipelines()[0].id } })
-    await waitFor(() => expect(document.body.textContent).toMatch(/Token chunks, over/))
+    await waitFor(() => expect(document.body.textContent).toMatch(/How often Token chunks finds/))
     expect(picker()).toBe(before)
     expect(document.activeElement).toBe(before)
   })
@@ -474,8 +521,8 @@ describe("Evaluate picks a pipeline", () => {
     setup()
     await screen.findByRole("combobox", { name: "Pipeline" })
     expect(picker().disabled).toBe(false)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Run evaluation" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }))
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(picker().disabled).toBe(true))
   })
 })
@@ -527,8 +574,8 @@ describe("while and after scoring", () => {
     serve({ artifacts })
     storeGraph(graph)
     render(<Evaluate />)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Run evaluation" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }))
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
     return DrivenEventSource.instances[0]
   }
@@ -565,7 +612,7 @@ describe("while and after scoring", () => {
     }
   })
 
-  it("keeps saying the k that was scored when the Top k input changes after the run", async () => {
+  it("keeps saying the k that was scored when Pieces checked changes after the run", async () => {
     const pieces = Array.from({ length: 7 }, (_, i) => ({ id: `p${i}` }))
     const es = await start({
       c7: { chunks: pieces },
@@ -583,8 +630,8 @@ describe("while and after scoring", () => {
     await waitFor(() => expect(document.body.textContent).toContain("Found at rank 7, below the top 5."))
     await screen.findByTestId("pieces-warning")
 
-    fireEvent.change(screen.getByLabelText("Top k"), { target: { value: "10" } })
-    expect((screen.getByLabelText("Top k") as HTMLInputElement).value).toBe("10")
+    fireEvent.change(screen.getByLabelText("Pieces checked"), { target: { value: "10" } })
+    expect((screen.getByLabelText("Pieces checked") as HTMLInputElement).value).toBe("10")
 
     expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")
     expect(document.body.textContent).not.toContain("below the top 10")

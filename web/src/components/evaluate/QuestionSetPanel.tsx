@@ -91,60 +91,68 @@ export function QuestionSetPanel({
     </>
   )
 
+  const n = count === null ? null : `${count} ${count === 1 ? "question" : "questions"}`
+  const name = (
+    <span data-testid="set-name" className={noSet ? undefined : "text-fg"}>
+      {noSet ? "No question set yet" : uploaded && set ? set.filename : sampleName}
+    </span>
+  )
+
   return (
-    <section aria-label="Question set" data-testid="question-set" className="flex shrink-0 flex-col gap-2 border-b border-hairline px-3 py-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <p className="text-sm text-fg-muted">
+    <section aria-label="Question set" data-testid="question-set" className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        {/* The set in one line: what is scored, and from where. */}
+        <p data-testid="set-line" className="text-sm text-fg-muted">
           {noSet ? (
+            <>{name}.</>
+          ) : uploaded && set ? (
             <>
-              <span data-testid="set-name" className="font-medium text-fg">
-                No question set yet
-              </span>
-              .
+              {n ? <strong className="font-semibold text-fg">{n}</strong> : "The questions"} from {name}.
             </>
           ) : (
             <>
-              Scoring {uploaded && set ? "" : "the questions for "}
-              <span data-testid="set-name" className="font-medium text-fg">
-                {uploaded && set ? set.filename : sampleName}
-              </span>
-              {count === null ? "" : `, ${count} ${count === 1 ? "question" : "questions"}`}.
+              {n ? <strong className="font-semibold text-fg">{n}</strong> : "The questions"} from the {name} sample.
             </>
           )}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {pick}
-          {uploaded ? (
-            <Button variant="outline" size="sm" disabled={locked} onClick={onRemove}>
-              Remove this set
-            </Button>
-          ) : null}
-          <span className="text-xs text-fg-muted">
-            Template as{" "}
-            <a className="text-fg underline" href={api.questionTemplateUrl("json")} download>
-              JSON
-            </a>{" "}
-            or{" "}
-            <a className="text-fg underline" href={api.questionTemplateUrl("csv")} download>
-              CSV
-            </a>
-          </span>
-        </div>
+        <details data-testid="own-questions" className="group text-sm text-fg-muted">
+          <summary className="inline-flex cursor-pointer list-none items-center text-primary underline underline-offset-4">Use your own questions</summary>
+          <div className="mt-2 flex max-w-[70ch] flex-col gap-2 rounded-panel border border-hairline bg-surface-elevated px-3 py-3">
+            <p>
+              Upload a JSON or CSV file with a question and the sentence that answers it on each line. Start from the template as{" "}
+              <a className="inline-flex items-center text-fg underline" href={api.questionTemplateUrl("json")} download>
+                JSON
+              </a>{" "}
+              or{" "}
+              <a className="inline-flex items-center text-fg underline" href={api.questionTemplateUrl("csv")} download>
+                CSV
+              </a>
+              .
+            </p>
+            {tabOnly ? (
+              <p data-testid="tab-only" className="text-xs text-fg-muted">
+                This set is kept in this browser tab only. The server would not store it, so it goes when you close the tab.
+              </p>
+            ) : demo && !uploaded ? (
+              <p data-testid="demo-note" className="text-xs text-fg-muted">
+                This hosted demo does not store question sets, so an uploaded set would not last.{" "}
+                <a href={REPO} target="_blank" rel="noreferrer" className="inline-flex items-center text-fg underline">
+                  Run the playground locally
+                </a>{" "}
+                to evaluate your own document with your own questions.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {pick}
+              {uploaded ? (
+                <Button variant="outline" size="sm" disabled={locked} onClick={onRemove}>
+                  Remove this set
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </details>
       </div>
-
-      {tabOnly ? (
-        <p data-testid="tab-only" className="text-xs text-fg-muted">
-          This set is kept in this browser tab only. The server would not store it, so it goes when you close the tab.
-        </p>
-      ) : demo && !uploaded ? (
-        <p data-testid="demo-note" className="text-xs text-fg-muted">
-          This hosted demo does not store question sets, so an uploaded set would not last.{" "}
-          <a href={REPO} target="_blank" rel="noreferrer" className="text-fg underline">
-            Run the playground locally
-          </a>{" "}
-          to evaluate your own document with your own questions.
-        </p>
-      ) : null}
 
       {warning ? (
         <div

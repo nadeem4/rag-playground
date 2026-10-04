@@ -289,7 +289,7 @@ describe("the slope between the two lists", () => {
     const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
       const column = this.closest("[data-column]")?.getAttribute("data-column")
       const el = this as HTMLElement
-      if (el.hasAttribute("data-gutter")) return new DOMRect(400, 0, 64, 800)
+      if (el.hasAttribute("data-gutter")) return new DOMRect(400, 0, 96, 800)
       if (!column || el.dataset.id === undefined) return new DOMRect(0, 0, 0, 0)
       const i = [...this.closest("[data-column]")!.querySelectorAll("[data-id]")].indexOf(this)
       return new DOMRect(column === "search" ? 0 : 600, 40 + i * 60, 30, 30)
@@ -300,15 +300,17 @@ describe("the slope between the two lists", () => {
     const svg = document.querySelector("svg.slope-lines") as SVGElement
     expect(svg).toBeTruthy()
     expect(svg.getAttribute("aria-hidden")).toBe("true")
+    // A 96 px gutter between the two lists.
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("xl:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)]")
     // Prior ranks 6, 1, 2, 4, 3: up, down, down, stayed, down. The dropped piece has no line.
     const ids = [5, 0, 1, 3, 2].map((i) => hybrid.hits[i].chunk.id)
     await waitFor(() => expect(svg.querySelectorAll("path")).toHaveLength(5))
     const paths = [...svg.querySelectorAll("path")]
     expect(paths.map((p) => p.getAttribute("data-id"))).toEqual(ids)
     expect(paths.map((p) => p.getAttribute("data-kind"))).toEqual(["up", "down", "down", "same", "down"])
-    // The top kept piece was 6th in search: across the gutter (x 400 to 464), from the 6th left swatch's
+    // The top kept piece was 6th in search: across the gutter (x 400 to 496), from the 6th left swatch's
     // centre (y 340 + 15) to the 1st right one's (y 40 + 15). No line reaches into either column.
-    expect(paths[0].getAttribute("d")).toBe("M 402,355 C 442,355 422,55 462,55")
+    expect(paths[0].getAttribute("d")).toBe("M 402,355 C 442,355 454,55 494,55")
   })
 
   it("draws no lines while the comparison is hidden", async () => {
@@ -317,6 +319,97 @@ describe("the slope between the two lists", () => {
     expect(document.querySelector("svg.slope-lines")).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
     expect(document.querySelector("svg.slope-lines")).toBeNull()
+  })
+})
+
+describe("compact slips in the comparison", () => {
+  const passages = (column: string) => [...document.querySelectorAll<HTMLElement>(`[data-column="${column}"] [data-testid=passage]`)]
+
+  it("clamps the passage to two lines on both sides, so the two lists keep the same rhythm", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(passages("search")).toHaveLength(6)
+    expect(passages("reranked")).toHaveLength(6)
+    expect([...passages("search"), ...passages("reranked")].every((p) => p.className.includes("line-clamp-2"))).toBe(true)
+  })
+
+  it("Show more opens one passage in place and Show less closes it", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const top = document.querySelector<HTMLElement>('[data-column="reranked"] [data-hit-row="1"]')!
+    fireEvent.click(within(top).getByRole("button", { name: "Show more" }))
+    expect(within(top).getByTestId("passage").className).not.toContain("line-clamp")
+    expect(passages("reranked").filter((p) => p.className.includes("line-clamp-2"))).toHaveLength(5)
+    fireEvent.click(within(top).getByRole("button", { name: "Show less" }))
+    expect(within(top).getByTestId("passage").className).toContain("line-clamp-2")
+  })
+
+  it("the single list keeps its full passages", async () => {
+    render(<Panel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    await waitFor(() => expect(document.querySelectorAll("[data-testid=passage]").length).toBeGreaterThan(0))
+    expect([...document.querySelectorAll("[data-testid=passage]")].some((p) => p.className.includes("line-clamp"))).toBe(false)
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull()
+  })
+})
+
+describe("the linked highlight", () => {
+  const slipOf = (column: string, id: string) => document.querySelector(`[data-column="${column}"] [data-id="${id}"]`)!.closest<HTMLElement>("[data-slip]")!
+  const litSlips = () => [...document.querySelectorAll<HTMLElement>("[data-slip][data-lit]")]
+  const path = (id: string) => document.querySelector<SVGPathElement>(`svg.slope-lines path[data-id="${id}"]`)!
+  const svg = () => document.querySelector<SVGElement>("svg.slope-lines")!
+  const ready = async () => {
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+  }
+  /** The top reranked piece: 6th in search. */
+  const top = () => hybrid.hits[5].chunk.id
+
+  it("hovering a left slip lights its right twin and its line, and dims the other lines; leaving clears it", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    fireEvent.mouseOver(slipOf("search", top()))
+    expect(litSlips()).toEqual([slipOf("search", top()), slipOf("reranked", top())])
+    expect(path(top()).classList.contains("lit")).toBe(true)
+    expect(svg().hasAttribute("data-active")).toBe(true)
+    expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(1)
+    fireEvent.mouseLeave(document.querySelector("[data-slope-grid]")!)
+    expect(litSlips()).toEqual([])
+    expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(0)
+    expect(svg().hasAttribute("data-active")).toBe(false)
+  })
+
+  it("hovering the gap between slips clears it", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    fireEvent.mouseOver(slipOf("reranked", top()))
+    expect(litSlips()).toHaveLength(2)
+    fireEvent.mouseOver(document.querySelector('[data-column="reranked"]')!)
+    expect(litSlips()).toEqual([])
+  })
+
+  it("focus lights the same way, and blur clears it", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    const id = hybrid.hits[0].chunk.id
+    fireEvent.focus(slipOf("reranked", id))
+    expect(litSlips()).toEqual([slipOf("search", id), slipOf("reranked", id)])
+    expect(path(id).classList.contains("lit")).toBe(true)
+    fireEvent.blur(slipOf("reranked", id))
+    expect(litSlips()).toEqual([])
+  })
+
+  it("a slip without a twin lights only itself, and no line", async () => {
+    // The reranker's top piece is one the search list does not show.
+    const lonely = reranked()
+    lonely.hits[0] = { ...lonely.hits[0], chunk: { ...lonely.hits[0].chunk, id: "lonely" } }
+    payloads.rrLonely = lonely
+    render(<Panel {...props(withCrossEncoder(), { ...RERANKED, rerank_1: done("rerank_1", "rrLonely") })} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(4))
+    fireEvent.mouseOver(slipOf("reranked", "lonely"))
+    expect(litSlips()).toEqual([slipOf("reranked", "lonely")])
+    expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(0)
+    expect(svg().hasAttribute("data-active")).toBe(false)
   })
 })
 
@@ -359,12 +452,6 @@ describe("the two result motions", () => {
     // A new rerank result draws once more.
     rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
     await waitFor(() => expect(animate).toHaveBeenCalledTimes(10))
-  })
-
-  it("does not slide the reranked rows: only the lines move", async () => {
-    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
-    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
-    expect(animate.mock.contexts.every((el) => (el as Element).tagName.toLowerCase() === "path")).toBe(true)
   })
 
   it("draws nothing under reduced motion: the lines are there at full length", async () => {

@@ -280,6 +280,12 @@ function Failed({ node, error }: { node: GraphNode; error: string }) {
   )
 }
 
+/** The piece of the slip an event came from, by its swatch's `data-id`; null outside a slip. */
+function pieceAt(target: EventTarget | null): string | null {
+  const slip = target instanceof Element ? target.closest("[data-slip]") : null
+  return slip?.querySelector<HTMLElement>("[data-id]")?.dataset.id ?? null
+}
+
 /** A kept piece's movement as a slope kind: unmoved is `same`. */
 function slopeKind(row: HitRowData): SlopeKind {
   const m = movement(row)
@@ -330,6 +336,10 @@ function Comparison({
     slopesDrawn.add(id)
     drawSlope(svgRef.current, drawTiming())
   }, [lines, o.rerankId])
+  // The linked highlight: the piece under the pointer or the focus, lit in both lists and on its line.
+  const [lit, setLit] = useState<string | null>(null)
+  const light = (target: EventTarget | null) => setLit(pieceAt(target))
+  const litLine = lit !== null && lines.some((l) => l.id === lit)
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
       {open ? "Hide comparison" : "Show comparison"}
@@ -350,6 +360,8 @@ function Comparison({
         reranker={node.transform}
         kept={kept}
         keepLimit={after.length}
+        compact={open}
+        lit={open ? lit : null}
         facts={
           <>
             {open ? (
@@ -378,10 +390,18 @@ function Comparison({
         <Heading>Search order against the reranked order</Heading>
         {toggle}
       </div>
-      <div ref={gridRef} className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)]">
-        <svg ref={svgRef} className="slope-lines" aria-hidden>
+      <div
+        ref={gridRef}
+        data-slope-grid=""
+        className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)]"
+        onMouseOver={(e) => light(e.target)}
+        onMouseLeave={() => setLit(null)}
+        onFocus={(e) => light(e.target)}
+        onBlur={() => setLit(null)}
+      >
+        <svg ref={svgRef} className="slope-lines" aria-hidden data-active={litLine ? "" : undefined}>
           {lines.map((l) => (
-            <path key={l.id} data-id={l.id} data-kind={l.kind} d={l.d} />
+            <path key={l.id} data-id={l.id} data-kind={l.kind} d={l.d} className={l.id === lit ? "lit" : undefined} />
           ))}
         </svg>
         <div data-column="search" className="min-w-0">
@@ -394,6 +414,8 @@ function Comparison({
             showDetail={false}
             side="search"
             flat
+            compact
+            lit={lit}
             facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
           />
         </div>

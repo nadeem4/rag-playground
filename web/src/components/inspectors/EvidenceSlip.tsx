@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from "react"
+import { useState, type HTMLAttributes } from "react"
 
 import { cn } from "@/lib/utils"
 import { CHUNK_CLASSES } from "@/styles/dataClasses"
@@ -23,8 +23,15 @@ export interface EvidenceSlipProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   piece: number | null
   /** The scale of the row's `score` (`scoreKey(rows)`). */
   scaleKey: string
-  /** Clamp the passage to two lines (the search side of the comparison). */
+  /** Clamp the passage to two lines. */
   clamp?: boolean
+  /**
+   * A slip in the comparison: the passage is clamped to two lines on either
+   * side, and Show more on the meta line opens it in place. Overrides `clamp`.
+   */
+  compact?: boolean
+  /** Lit by the linked highlight: the raised look of a hovered slip, wherever the pointer is. */
+  lit?: boolean
   /** The keep limit a Not kept slip names. */
   keepLimit?: number
   /** The reranker's transform key, for why a Not kept slip was left out. */
@@ -53,6 +60,8 @@ export function EvidenceSlip({
   piece,
   scaleKey,
   clamp = false,
+  compact = false,
+  lit = false,
   keepLimit,
   reranker,
   keys,
@@ -74,10 +83,13 @@ export function EvidenceSlip({
         ]
   const page = pages(row.page_span)
   const where = section ?? row.section
-  const meta = Boolean(page || where || retriever || scores.length || onShowInPdf)
+  const [more, setMore] = useState(false)
+  const clamped = compact ? !more : clamp
+  const meta = Boolean(page || where || retriever || scores.length || onShowInPdf || compact)
   return (
     <div
       data-slip=""
+      data-lit={lit ? "" : undefined}
       tabIndex={bare ? undefined : 0}
       {...rest}
       className={cn(
@@ -85,6 +97,7 @@ export function EvidenceSlip({
         "hover:bg-surface-raised hover:ring-1 hover:ring-hairline focus-within:bg-surface-raised focus-within:ring-1 focus-within:ring-hairline",
         "focus-visible:bg-surface-raised focus-visible:ring-1 focus-visible:ring-hairline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)",
         notKept && "opacity-75",
+        lit && "bg-surface-raised ring-1 ring-hairline",
         className,
       )}
     >
@@ -113,7 +126,7 @@ export function EvidenceSlip({
           </p>
         ) : null}
         {/* Clamped, the passage flows as plain text: a kept blank line would use up a clamped line. */}
-        <p data-testid="passage" className={cn("font-serif text-base leading-[1.55] break-words text-fg", clamp ? "line-clamp-2" : "whitespace-pre-line")}>
+        <p data-testid="passage" className={cn("font-serif text-base leading-[1.55] break-words text-fg", clamped ? "line-clamp-2" : "whitespace-pre-line")}>
           {row.text}
         </p>
         {meta ? (
@@ -131,6 +144,19 @@ export function EvidenceSlip({
                 )}
               </span>
             ))}
+            {compact ? (
+              <button
+                type="button"
+                aria-expanded={more}
+                className={LINK_BUTTON}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMore(!more)
+                }}
+              >
+                {more ? "Show less" : "Show more"}
+              </button>
+            ) : null}
             {onShowInPdf ? (
               <button
                 type="button"

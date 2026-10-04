@@ -73,6 +73,10 @@ export interface RetrievalViewProps {
    * keys the list on its artifact id to get a new one.
    */
   enter?: boolean
+  /** True in the comparison: every slip is compact, its passage clamped with Show more. */
+  compact?: boolean
+  /** The chunk id the linked highlight has lit: its slip takes the raised look. */
+  lit?: string | null
 }
 
 export function RetrievalResultInspector({
@@ -172,7 +176,7 @@ const LABEL = 20 // px for the rank numbers on the spine
 
 export type ListSide = "single" | "search" | "reranked"
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false, compact = false, lit = null }: RetrievalViewProps) {
   const Box = flat ? FlatFrame : Frame
   const [entering] = useState(enter)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -259,6 +263,8 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
             reranker={reranker}
             side={side}
             enter={entering}
+            compact={compact}
+            lit={lit}
             pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? null) : r.ordinal)}
             sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
           />
@@ -323,6 +329,8 @@ function HitList({
   reranker,
   side: list,
   enter,
+  compact,
+  lit,
   pieceOf,
   sectionOf: section,
 }: {
@@ -340,6 +348,8 @@ function HitList({
   reranker?: string
   side: ListSide
   enter: boolean
+  compact: boolean
+  lit: string | null
   pieceOf: (row: HitRowData) => number | null
   sectionOf: (row: HitRowData) => string | null
 }) {
@@ -372,6 +382,8 @@ function HitList({
             keepLimit={limit}
             reranker={reranker}
             clamp={s === "search" && selected !== i}
+            compact={compact}
+            lit={lit === r.chunk_id}
             section={section(r)}
             retriever={showRetriever && r.retriever ? r.retriever : null}
             onShowInPdf={onShowPdf && canPdf(i) ? () => onShowPdf(i) : undefined}

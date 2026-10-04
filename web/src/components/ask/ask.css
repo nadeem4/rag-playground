@@ -1,7 +1,7 @@
 /*
  * The slope between the search order and the reranked order (spec section 6).
  * The overlay fills the comparison grid and takes no pointer; each line runs
- * inside the 64 px gutter, 2 px with round caps: rising solid in the accent,
+ * inside the 96 px gutter, 2 px with round caps: rising solid in the accent,
  * falling solid in grey, stayed dashed in --flat.
  */
 
@@ -18,6 +18,19 @@
   fill: none;
   stroke-width: 2;
   stroke-linecap: round;
+  transition:
+    opacity var(--dur-fast),
+    stroke-width var(--dur-fast);
+}
+
+/* The linked highlight: the lit piece's line thickens, the others dim. */
+.slope-lines[data-active] path {
+  opacity: 0.5;
+}
+
+.slope-lines path.lit {
+  stroke-width: 3;
+  opacity: 1;
 }
 
 .slope-lines path[data-kind="up"] {

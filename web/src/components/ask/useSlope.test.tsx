@@ -140,6 +140,33 @@ describe("useSlope", () => {
     expect(end("a")).toBe("162,85")
   })
 
+  it("does not wait for an endless animation, which never finishes", () => {
+    const endless = { finished: new Promise(() => {}), effect: { getComputedTiming: () => ({ iterations: Infinity }) } }
+    ;(HTMLElement.prototype as { getAnimations?: unknown }).getAnimations = vi.fn(() => [endless])
+    render(<Harness open rerankId="rr1" moves={moves} />)
+    expect(end("a")).toBe("162,55")
+  })
+
+  it("measures nothing when it unmounts while waiting for an animation", async () => {
+    const enter = deferred()
+    const running = [{ finished: enter.promise }]
+    ;(HTMLElement.prototype as { getAnimations?: unknown }).getAnimations = vi.fn(() => running)
+    let reads = 0
+    const { unmount } = render(<Harness open rerankId="rr1" moves={moves} />)
+    document.querySelectorAll<HTMLElement>("[data-id]").forEach((el) => {
+      const read = el.getBoundingClientRect
+      el.getBoundingClientRect = () => {
+        reads++
+        return read()
+      }
+    })
+    unmount()
+    running.length = 0
+    await act(async () => enter.resolve())
+    expect(reads).toBe(0)
+    expect(seen).toEqual([])
+  })
+
   it("stops watching when it unmounts", () => {
     const { unmount } = render(<Harness open rerankId="rr1" moves={moves} />)
     unmount()

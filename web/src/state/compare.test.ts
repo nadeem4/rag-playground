@@ -14,7 +14,9 @@ import {
   recipeNames,
   recipeStatus,
   retrieveFinding,
+  failureSentence,
   retrieveManyFinding,
+  runningFinding,
   sharedTop,
   sortRecipes,
   statusText,
@@ -351,5 +353,45 @@ describe("columnDelta", () => {
   it("says a search column against Your pipeline, the answer only when it is known", () => {
     expect(columnDelta({ kind: "retrieve", shared: 4, top: 5, rank: 2, goldKnown: true, returned: 20 })).toBe("Shares 4 of 5 pieces with Your pipeline. Puts the answer 2nd.")
     expect(columnDelta({ kind: "retrieve", shared: 2, top: 5, rank: null, goldKnown: false, returned: 2 })).toBe("Shares 2 of 5 pieces with Your pipeline. Returns 2, not 5.")
+  })
+})
+
+describe("the baseline's name when no recipe is the pipeline's own", () => {
+  it("names it by its phrase in the search finding and in a column's sentence", () => {
+    const item = (i: number, phrase: string, shared: number | null, returned: number) => ({ i, phrase, own: false, rank: null, shared, returned, transform: "dense", topK: 20 })
+    const f = retrieveManyFinding([item(0, "Dense", null, 20), item(1, "BM25", 5, 20), item(2, "Dense with top 1", 1, 20), item(3, "Hybrid (RRF)", 5, 20)], false, 3, "Dense")!
+    expect(f.finding).toMatch(/^Three of four share all 5 pieces with Dense\./)
+    expect(f.link).toBe("Read Dense beside Dense with top 1")
+    const st = (pieces: number, uncovered: number) => ({ pieces, tokens: 1, median: 1, p95: 1, overlaps: 0, uncovered })
+    expect(columnDelta({ kind: "chunk", stats: st(3, 0), base: st(6, 0), baseName: "Recursive at 300 characters" })).toBe("3 fewer pieces than Recursive at 300 characters.")
+    expect(columnDelta({ kind: "retrieve", shared: 1, top: 1, rank: null, goldKnown: false, returned: 1, topK: 1, baseName: "Dense" })).toBe("Shares 1 of 1 piece with Dense.")
+  })
+
+  it("says a list is short only when it returned fewer than both 5 and its own top k", () => {
+    const item = (i: number, phrase: string, returned: number, topK: number) => ({ i, phrase, own: i === 0, rank: 1, shared: i === 0 ? null : 1, returned, transform: "dense", topK })
+    const f = retrieveManyFinding([item(0, "Your pipeline", 20, 20), item(1, "Dense with top 1", 1, 1), item(2, "Dense", 3, 20)], true)!
+    expect(f.finding).toBe("All three put the answer first. Dense returns only 3.")
+    expect(columnDelta({ kind: "retrieve", shared: 1, top: 5, rank: 1, goldKnown: true, returned: 1, topK: 1 })).toBe("Shares 1 of 5 pieces with Your pipeline. Puts the answer 1st.")
+  })
+})
+
+describe("review wording", () => {
+  it("counts every failed recipe in the finding", () => {
+    expect(failureSentence(["BM25"], false)).toBe("BM25 failed, and its column says why.")
+    expect(failureSentence(["BM25", "Dense"], true)).toBe("BM25 and Dense failed, and their rows say why.")
+    expect(failureSentence(["BM25", "Dense", "Hybrid (RRF)", "Dense with top 1"], false)).toBe("BM25 and three others failed, and their columns say why.")
+    expect(failureSentence(["your pipeline"], false)).toBe("Your pipeline failed, and its column says why.")
+  })
+
+  it("says one recipe, not one recipes", () => {
+    expect(runningFinding(1, 0, false).finding).toBe("Running one recipe. None has finished yet.")
+  })
+
+  it("says a recipe that was running when the run stopped stopped before it finished", () => {
+    const ids = { targetId: "chunk", throughId: "chunk", upstream: ["parse"], stopped: true }
+    const s = recipeStatus({ index: 1, order: ["chunk"], nodes: { chunk: { id: "chunk", status: "running" } } }, 1, ids)
+    expect(s).toEqual({ kind: "stopped", midway: true })
+    expect(statusText(s, 3)).toBe("Stopped before it finished.")
+    expect(statusText(recipeStatus(undefined, 2, ids), null)).toBe("Not run. The run was stopped first.")
   })
 })

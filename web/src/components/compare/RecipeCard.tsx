@@ -93,8 +93,9 @@ export function RecipeCard({
               aria-label={`Change ${p.field === "transform" ? "the strategy" : p.field.replace(/_/g, " ")}, now ${p.text}`}
               onClick={(e) => onOpen(p.field!, e.currentTarget)}
               className={cn(
-                "rounded-control border-b border-dashed border-fg-muted px-1 font-sans text-[1.0625rem] font-medium text-fg hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center",
-                openField === p.field && "bg-accent-wash text-primary",
+                // As in the prototype: the accent wash, accent text and a dashed underline, so a value reads as a button.
+                "rounded-control border-b border-dashed border-primary bg-accent-wash px-1 font-sans text-[1.0625rem] font-medium text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center",
+                openField === p.field && "border-solid outline-1 outline-primary",
               )}
             >
               {p.text}

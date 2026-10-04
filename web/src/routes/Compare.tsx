@@ -63,6 +63,7 @@ import {
   chunkFinding,
   chunkManyFinding,
   columnDelta,
+  failureSentence,
   MAX_RECIPES,
   planSentence,
   RECIPE_TITLES,
@@ -136,9 +137,26 @@ function ComparePage({ registry }: { registry: Registry }) {
     const q = new URLSearchParams(window.location.search)
     q.set("node", id)
     q.delete("read")
-    window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`)
+    const url = `${window.location.pathname}?${q.toString()}`
+    // From the open view, a new step is a new entry, so Back returns to the step it left.
+    if ((window.history.state as { compareRead?: boolean } | null)?.compareRead) window.history.pushState(null, "", url)
+    else window.history.replaceState(null, "", url)
     setWanted(id)
   }
+  const wantedRef = useRef(wanted)
+  wantedRef.current = wanted
+  // Back and Forward can change the step in the URL: follow it.
+  useEffect(() => {
+    const onPop = () => {
+      const node = new URLSearchParams(window.location.search).get("node")
+      if (node === wantedRef.current) return
+      setExperiment(null)
+      setOpening(null)
+      setWanted(node)
+    }
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
   /** Open a saved experiment: its step, its recipes on the cards, and its document in the bar. */
   const openExperiment = (e: SavedExperiment) => {
     const node = graph?.nodes.find((n) => n.stage === e.stage)
@@ -517,7 +535,7 @@ function Sweep({
     return rank === null ? null : (rows?.find((r) => r.rank === rank)?.chunk_id ?? null)
   }
   // Each recipe's place in the run, from its own events; seconds counted by this browser.
-  const clock = useRunClock(run.variants, busy)
+  const clock = useRunClock(run.variants, busy, runId)
   const titles = useMemo(() => Object.fromEntries(graph.nodes.map((n) => [n.id, titleFor(n)])), [graph])
   const upstreamIds = useMemo(() => [...ancestors(graph, target.id, registry)], [graph, target.id, registry])
   const statuses: Status[] = submitted.variants.map((_, i) =>
@@ -687,9 +705,13 @@ function Sweep({
   const submittedOwn = submitted.base
   const submittedPhrases = recipeNames(submitted.variants, target.stage, registry, submittedOwn === -1 ? undefined : submittedOwn)
   const overview = phase === "results" && submitted.variants.length >= 4
-  const failedAt = statuses.findIndex((x) => x.kind === "failed")
-  const failure = failedAt === -1 ? null : `${submittedPhrases[failedAt].phrase.charAt(0).toUpperCase()}${submittedPhrases[failedAt].phrase.slice(1)} failed, and its ${overview ? "row" : "column"} says why.`
+  const failure = failureSentence(
+    statuses.flatMap((x, i) => (x.kind === "failed" ? [submittedPhrases[i].phrase] : [])),
+    overview,
+  )
   const baseAt = submittedOwn === -1 ? 0 : submittedOwn
+  // When no recipe was the pipeline's own, the first is the baseline, named by its phrase everywhere.
+  const runBase = submittedOwn === -1 ? (submittedPhrases[0]?.phrase ?? "Your pipeline") : "Your pipeline"
   const baseTop = hitLists[baseAt] ?? []
   const top = Math.min(5, baseTop.length) || 5
   const rows: OverviewRow[] = submitted.variants.map((v, i) => {
@@ -775,14 +797,15 @@ function Sweep({
           ? `${submittedNames[pendingNext.i].name} is ${pendingNext.status.kind}. Its chip fills in when it finishes; this view stays put.`
           : "This is the last recipe in the table's order."
   /** The sentence an open column says against Your pipeline. */
+  const topKOf = (i: number) => (typeof submitted.variants[i]?.config.top_k === "number" ? (submitted.variants[i].config.top_k as number) : null)
   const deltaFor = (i: number): string | null => {
     if (i === baseAt) return target.stage === "retrieve" ? "The baseline. The other recipes are read against this list." : null
     const r = rows[i]
     const b = rows[baseAt]
     if (!r?.done || !b?.done) return null
-    if (target.stage === "chunk") return columnDelta({ kind: "chunk", stats: chunkStats(r.set as ChunkSet), base: chunkStats(b.set as ChunkSet) })
+    if (target.stage === "chunk") return columnDelta({ kind: "chunk", stats: chunkStats(r.set as ChunkSet), base: chunkStats(b.set as ChunkSet), baseName: runBase })
     if (target.stage === "retrieve")
-      return columnDelta({ kind: "retrieve", shared: r.values.shared ?? 0, top, rank: r.values.rank ?? null, goldKnown: golds !== null, returned: r.values.returned ?? 0 })
+      return columnDelta({ kind: "retrieve", shared: r.values.shared ?? 0, top, rank: r.values.rank ?? null, goldKnown: golds !== null, returned: r.values.returned ?? 0, topK: topKOf(i), baseName: runBase })
     return null
   }
   const manyFinding = (): (Finding & Partial<ManyFinding>) | null => {
@@ -807,6 +830,7 @@ function Sweep({
         })),
         golds !== null,
         side.fit,
+        runBase,
       )
     }
     return findingFor()
@@ -824,7 +848,7 @@ function Sweep({
   // On Retrieve every recipe searches the one chunk set, so a colour is the same piece in every column.
   const note =
     finding && !overview && target.stage === "retrieve" && searched !== null
-      ? `The colours are piece numbers, the same in every column, because ${ran === 2 ? "both" : `all ${NUMBER_WORDS[ran] ?? ran}`} recipes search the same ${searched} ${searched === 1 ? "piece" : "pieces"}.`
+      ? `The colours are piece numbers, the same in every column, because ${ran === 1 ? "the one recipe searches" : ran === 2 ? "both recipes search" : `all ${NUMBER_WORDS[ran] ?? ran} recipes search`} the same ${searched} ${searched === 1 ? "piece" : "pieces"}.`
       : null
   const suggestions = suggestRecipes(target, transforms, variants).map((v) => ({
     name: recipeNames([...variants, v], target.stage, registry)[n].name,
@@ -965,6 +989,8 @@ function Sweep({
           {/* Below md the run buttons take their own full-width row, so Run is never pushed off a phone screen. */}
           <div className="flex basis-full flex-wrap items-center gap-2 md:ml-auto md:basis-auto">
             {busy ? null : (
+              // Below md the experiment buttons take a row of their own, so the run buttons are never squeezed.
+              <div data-testid="experiment-tools" className="flex basis-full md:basis-auto">
               <ExperimentMenu
                 experiments={experiments}
                 usable={(e) => usableExperiment(e, registry) !== null}
@@ -981,18 +1007,19 @@ function Sweep({
                 onSaveAsNew={saveAs}
                 onSaveChanges={saveChanges}
               />
+              </div>
             )}
             {phase === "results" && busy && runId ? (
-              <Button variant="ghost" size="sm" className="flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+              <Button variant="ghost" size="sm" className="min-w-fit flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
                 Stop the run
               </Button>
             ) : phase === "results" ? (
-              <Button variant="outline" size="sm" className="flex-1 md:flex-none" onClick={changeRecipes}>
+              <Button variant="outline" size="sm" className="min-w-fit flex-1 md:flex-none" onClick={changeRecipes}>
                 Change recipes
               </Button>
             ) : null}
             {noDocument ? <span className="self-center text-xs text-fg-muted">Needs a document.</span> : null}
-            <Button size="sm" className="flex-1 md:flex-none" aria-busy={busy || undefined} disabled={busy || n === 0 || noDocument} onClick={() => void sweep()}>
+            <Button size="sm" className="min-w-fit flex-1 md:flex-none" aria-busy={busy || undefined} disabled={busy || n === 0 || noDocument} onClick={() => void sweep()}>
               {busy ? "Running" : `Run ${n} ${n === 1 ? "recipe" : "recipes"}`}
             </Button>
           </div>
@@ -1083,8 +1110,9 @@ function Sweep({
                           {finding.sub}
                         </p>
                       ) : null}
-                      {link && !openIds ? (
-                        <p className="m-0">
+                      {/* Kept mounted while the view is open, so closing it can give the link its focus back. */}
+                      {link ? (
+                        <p className="m-0" hidden={openIds !== null}>
                           <button
                             type="button"
                             onClick={(e) => openRecipes(link.ids.slice(0, side.fit), e.currentTarget)}
@@ -1136,6 +1164,7 @@ function Sweep({
                     : { at: pos + 1, of: stepOrder.length, beside: side.fit > 1, prev: pos > 0, next: nextOne !== undefined }
                 }
                 onStep={(d) => void step(d)}
+                baseName={runBase}
                 note={
                   target.stage === "retrieve" && searched !== null
                     ? `The colours are piece numbers, the same in every column, because every recipe searches the same ${searched} ${searched === 1 ? "piece" : "pieces"}.${golds !== null ? " The ringed piece holds the answer." : ""}`
@@ -1164,6 +1193,8 @@ function Sweep({
                 narrow={side.narrow}
                 goldKnown={golds !== null}
                 top={top}
+                baseAt={baseAt}
+                baseName={runBase}
               />
               </div>
             ) : null}

@@ -23,6 +23,17 @@ describe("useRunClock", () => {
     expect(result.current(1)).toBe(1)
   })
 
+  it("starts every recipe's count again on a new run", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false })
+    const { result, rerender } = renderHook(({ v, run }) => useRunClock(v, true, run), { initialProps: { v: started(0), run: "r1" } })
+    act(() => vi.advanceTimersByTime(5000))
+    expect(result.current(0)).toBe(5)
+    rerender({ v: [], run: "r2" })
+    expect(result.current(0)).toBeNull()
+    rerender({ v: started(0), run: "r2" })
+    expect(result.current(0)).toBe(0)
+  })
+
   it("stops ticking when nothing runs", () => {
     vi.useFakeTimers()
     const spy = vi.spyOn(globalThis, "setInterval")

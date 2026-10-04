@@ -41,6 +41,7 @@ export function OpenView({
   onStep,
   children,
   note,
+  baseName = "Your pipeline",
 }: {
   total: number
   shown: number[]
@@ -54,6 +55,8 @@ export function OpenView({
   onStep: (delta: 1 | -1) => void
   children: ReactNode
   note: string | null
+  /** What the recipes are read beside: Your pipeline, or the baseline's phrase when no recipe was the pipeline's own. */
+  baseName?: string
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-3 py-3">
@@ -96,7 +99,7 @@ export function OpenView({
           </Button>
           <span className="text-sm text-fg-muted">
             {position.at} of {position.of}
-            {position.beside ? ", each beside Your pipeline" : ""}
+            {position.beside ? `, each beside ${baseName}` : ""}
           </span>
           <Button variant="outline" size="sm" disabled={!position.next} onClick={() => onStep(1)} className="pointer-coarse:min-h-[44px]">
             Next

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { SavedExperiment } from "@/state/experiments"
@@ -43,14 +43,34 @@ describe("ExperimentMenu", () => {
     expect(sheet.textContent).toContain("Experiments stay in this browser, like saved pipelines.")
   })
 
-  it("closes a sheet on Escape and gives its button focus back", () => {
+  it("closes a sheet on Escape and gives its button focus back", async () => {
     render(<ExperimentMenu {...props} />)
     const button = screen.getByRole("button", { name: "Save experiment" })
     fireEvent.click(button)
     expect((screen.getByLabelText("Name this experiment") as HTMLInputElement).value).toBe("Chunk sizes on chunking-primer.pdf")
     fireEvent.keyDown(document.activeElement!, { key: "Escape" })
     expect(screen.queryByRole("dialog")).toBeNull()
-    expect(document.activeElement).toBe(button)
+    await waitFor(() => expect(document.activeElement).toBe(button))
+  })
+
+  it("puts each sheet in a popover that keeps it on screen, outside the tools row", () => {
+    const { container } = render(<ExperimentMenu {...props} />)
+    fireEvent.click(screen.getByRole("button", { name: "Save experiment" }))
+    const sheet = screen.getByRole("dialog", { name: "Save experiment" })
+    expect(container.contains(sheet)).toBe(false)
+    expect(sheet.parentElement!.hasAttribute("data-radix-popper-content-wrapper")).toBe(true)
+    expect(sheet.className).toContain("w-[min(360px,calc(100vw-32px))]")
+  })
+
+  it("keeps Escape in the sheet, so it does not also close the view under it", () => {
+    const below = vi.fn()
+    document.addEventListener("keydown", below)
+    render(<ExperimentMenu {...props} />)
+    fireEvent.click(screen.getByRole("button", { name: "Your experiments (2)" }))
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+    document.removeEventListener("keydown", below)
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(below).not.toHaveBeenCalled()
   })
 
   it("deletes an entry and keeps focus on Your experiments", () => {

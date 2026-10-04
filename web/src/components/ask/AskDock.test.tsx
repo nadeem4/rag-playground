@@ -17,11 +17,12 @@ function Probe() {
   return <p data-testid="probe">{useComparisonWide() ? "wide" : "narrow"}</p>
 }
 
-function Harness({ count, buildWidth = BUILD_WIDTH }: { count?: number; buildWidth?: number }) {
+function Harness({ count, buildWidth = BUILD_WIDTH, details = false }: { count?: number; buildWidth?: number; details?: boolean }) {
   const dock = useAskDock()
   return (
     <main>
       <p data-testid="state">{`${dock.open ? "open" : "closed"} ${dock.side} ${dock.width}`}</p>
+      <input aria-label="Chunk size" />
       <AskDock dock={dock} count={count} measure={() => buildWidth}>
         {(head) => (
           <section aria-label="Ask panel">
@@ -34,6 +35,12 @@ function Harness({ count, buildWidth = BUILD_WIDTH }: { count?: number; buildWid
               <textarea />
             </label>
             <button type="button">Change settings</button>
+            {details ? (
+              <details>
+                <summary>Show search order</summary>
+                <button type="button">Folded away</button>
+              </details>
+            ) : null}
             <Probe />
           </section>
         )}
@@ -50,16 +57,41 @@ const question = () => screen.getByLabelText("Question") as HTMLTextAreaElement
 const stored = () => JSON.parse(window.localStorage.getItem(DOCK_KEY) ?? "null") as { open: boolean; side: string; width: number } | null
 const altA = (key = "a") => fireEvent.keyDown(document, { key, code: "KeyA", altKey: true })
 
-/** Stubs matchMedia: `below` is a phone (below md), `desktop` is lg and up. */
+/** The stubbed window: `below` is below lg (the sheet), `desktop` is lg and up. */
+const media = { below: false, desktop: true, listeners: new Set<() => void>() }
+
+/** Stubs matchMedia with the window's size; `resizeTo` changes it later and tells the listeners. */
 function screenSize({ below = false, desktop = true }: { below?: boolean; desktop?: boolean }) {
+  media.below = below
+  media.desktop = desktop
   vi.stubGlobal(
     "matchMedia",
     vi.fn((q: string) => ({
-      matches: q === SHEET_QUERY ? below : q === DESKTOP_QUERY ? desktop : false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
+      get matches() {
+        return q === SHEET_QUERY ? media.below : q === DESKTOP_QUERY ? media.desktop : false
+      },
+      addEventListener: (_: string, f: () => void) => media.listeners.add(f),
+      removeEventListener: (_: string, f: () => void) => media.listeners.delete(f),
     })),
   )
+}
+
+function resizeTo({ below, desktop }: { below: boolean; desktop: boolean }) {
+  media.below = below
+  media.desktop = desktop
+  act(() => media.listeners.forEach((f) => f()))
+}
+
+/** jsdom draws nothing, so `checkVisibility` is stubbed: hidden inside a closed details (its own summary aside) or a hidden box. */
+function stubVisibility() {
+  Object.defineProperty(HTMLElement.prototype, "checkVisibility", {
+    configurable: true,
+    value(this: HTMLElement) {
+      const folded = this.parentElement?.closest("details:not([open])")
+      if (folded && !(this.tagName === "SUMMARY" && this.parentElement === folded)) return false
+      return !this.closest("[hidden]")
+    },
+  })
 }
 
 beforeEach(() => {
@@ -69,6 +101,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  media.listeners.clear()
+  delete (HTMLElement.prototype as { checkVisibility?: unknown }).checkVisibility
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -83,7 +117,8 @@ describe("the docked Ask panel", () => {
     const edge = separator()
     expect(edge.getAttribute("aria-orientation")).toBe("vertical")
     expect(edge.getAttribute("aria-valuemin")).toBe("320")
-    expect(edge.getAttribute("aria-valuemax")).toBe("960")
+    // The most the panel can take here: 1440 - 380 - 360 - 2.
+    expect(edge.getAttribute("aria-valuemax")).toBe(String(MAX))
     expect(edge.getAttribute("aria-valuenow")).toBe("440")
     // The open button shows only while the panel is closed.
     expect(screen.queryByRole("button", { name: /^Ask/, expanded: false })).toBeNull()
@@ -101,12 +136,50 @@ describe("the docked Ask panel", () => {
     expect(css).not.toContain("@media (prefers-reduced-motion: no-preference) and (max-width: 767px)")
   })
 
-  it("at 1024 px the panel stays at its 320 px minimum, the most that leaves the main pane its room", () => {
+  it("at 1024 px the edge reads the 320 px it shows, before any key, and the stored 440 survives the keys", () => {
     render(<Harness buildWidth={1024} />)
-    fireEvent.keyDown(separator(), { key: "End" })
     expect(separator().getAttribute("aria-valuenow")).toBe("320")
+    expect(separator().getAttribute("aria-valuemax")).toBe("320")
+    fireEvent.keyDown(separator(), { key: "ArrowLeft" })
+    expect(separator().getAttribute("aria-valuenow")).toBe("320")
+    fireEvent.keyDown(separator(), { key: "End" })
     fireEvent.keyDown(separator(), { key: "ArrowLeft", shiftKey: true })
     expect(separator().getAttribute("aria-valuenow")).toBe("320")
+    expect(screen.getByTestId("state").textContent).toBe("open right 440")
+    expect(stored()?.width).toBe(440)
+  })
+
+  it("a narrower window narrows what is shown, not what is stored; widening it again gives the width back", () => {
+    const view = render(<Harness />)
+    expect(separator().getAttribute("aria-valuenow")).toBe("440")
+    view.rerender(<Harness buildWidth={1024} />)
+    act(() => {
+      window.dispatchEvent(new Event("resize"))
+    })
+    expect(separator().getAttribute("aria-valuenow")).toBe("320")
+    expect(stored()?.width).toBe(440)
+    view.rerender(<Harness buildWidth={1440} />)
+    act(() => {
+      window.dispatchEvent(new Event("resize"))
+    })
+    expect(separator().getAttribute("aria-valuenow")).toBe("440")
+  })
+
+  it("dragging at a narrow window starts from what is shown", () => {
+    render(<Harness buildWidth={1100} />)
+    // The most here is 1100 - 742 = 358; the stored 440 shows as 358.
+    expect(separator().getAttribute("aria-valuenow")).toBe("358")
+    fireEvent.pointerDown(separator(), { pointerId: 1, clientX: 500, button: 0 })
+    fireEvent.pointerMove(separator(), { pointerId: 1, clientX: 520 })
+    expect(separator().getAttribute("aria-valuenow")).toBe("338")
+    fireEvent.pointerUp(separator(), { pointerId: 1, clientX: 520 })
+  })
+
+  it("on a touch screen, most of the edge's hit area lies outside the panel, so taps inside reach its controls", () => {
+    const css = readFileSync(`${__dirname}/../../styles/tokens.css`, "utf8")
+    const coarse = css.slice(css.indexOf("@media (pointer: coarse) {\n  .ask-edge"))
+    expect(coarse).toMatch(/\[data-side="right"\] > \.ask-edge \{\s*left: -34px;/)
+    expect(coarse).toMatch(/\[data-side="left"\] > \.ask-edge \{\s*right: -34px;/)
   })
 
   it("closing keeps what is inside; reopening shows it again, and focus moves to the question and back to the button", () => {
@@ -227,6 +300,30 @@ describe("Alt+A", () => {
     fireEvent.keyDown(document, { key: "a", code: "KeyA" })
     expect(dockEl().hidden).toBe(false)
   })
+
+  it("does nothing on a held key's repeats", () => {
+    render(<Harness />)
+    fireEvent.keyDown(document, { key: "a", code: "KeyA", altKey: true, repeat: true })
+    expect(dockEl().hidden).toBe(false)
+  })
+
+  it("leaves a field elsewhere on the page alone", () => {
+    render(<Harness />)
+    const field = screen.getByLabelText("Chunk size")
+    field.focus()
+    fireEvent.keyDown(field, { key: "a", code: "KeyA", altKey: true })
+    expect(dockEl().hidden).toBe(false)
+    expect(document.activeElement).toBe(field)
+  })
+
+  it("in the question box it answers only to the a key, so Option+A still types å on a Mac", () => {
+    render(<Harness />)
+    question().focus()
+    fireEvent.keyDown(question(), { key: "å", code: "KeyA", altKey: true })
+    expect(dockEl().hidden).toBe(false)
+    fireEvent.keyDown(question(), { key: "a", code: "KeyA", altKey: true })
+    expect(dockEl().hidden).toBe(true)
+  })
 })
 
 describe("remembered settings", () => {
@@ -268,6 +365,11 @@ describe("remembered settings", () => {
 })
 
 describe("below lg, a bottom sheet", () => {
+  beforeEach(() => {
+    screenSize({ below: true, desktop: false })
+    stubVisibility()
+  })
+
   it("the page behind it stays still while it is open, and scrolls again once it closes", () => {
     document.documentElement.style.overflow = ""
     document.body.style.overflow = "scroll"
@@ -288,8 +390,6 @@ describe("below lg, a bottom sheet", () => {
     render(<Harness />)
     expect(document.body.style.overflow).toBe("")
   })
-
-  beforeEach(() => screenSize({ below: true, desktop: false }))
 
   it("starts closed, even when it was left open, and opens as a modal sheet with a grab line and no resize edge or side switch", () => {
     window.localStorage.setItem(DOCK_KEY, JSON.stringify({ open: true, side: "left", width: 500 }))
@@ -324,11 +424,69 @@ describe("below lg, a bottom sheet", () => {
     expect(document.activeElement).toBe(last)
   })
 
-  it("the backdrop closes it", () => {
+  it("skips what a closed disclosure hides: Tab from its summary goes to the first control", () => {
+    render(<Harness details />)
+    fireEvent.click(fab())
+    const close = screen.getByRole("button", { name: CLOSE })
+    const summary = screen.getByText("Show search order")
+    summary.focus()
+    fireEvent.keyDown(summary, { key: "Tab" })
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true })
+    expect(document.activeElement).toBe(summary)
+  })
+
+  it("brings focus back inside when it has got out", () => {
     render(<Harness />)
     fireEvent.click(fab())
-    fireEvent.click(screen.getByTestId("ask-backdrop"))
+    const field = screen.getByLabelText("Chunk size")
+    field.focus()
+    expect(dockEl().contains(document.activeElement)).toBe(true)
+  })
+
+  it("the backdrop closes it, over the scrim colour", () => {
+    render(<Harness />)
+    fireEvent.click(fab())
+    const backdrop = screen.getByTestId("ask-backdrop")
+    expect(backdrop.className.split(/\s+/)).toContain("bg-(--scrim)")
+    fireEvent.click(backdrop)
     expect(dockEl().hidden).toBe(true)
+  })
+
+  it("the scrim is a token, darker in the dark theme", () => {
+    const css = readFileSync(`${__dirname}/../../styles/tokens.css`, "utf8")
+    const values = [...css.matchAll(/--scrim: ([^;]+);/g)].map((m) => m[1])
+    expect(values[0]).toBe("rgb(0 0 0 / 0.4)")
+    expect(values.slice(1)).toEqual(["rgb(0 0 0 / 0.6)", "rgb(0 0 0 / 0.6)"])
+  })
+})
+
+describe("switching between the dock and the sheet", () => {
+  it("an open dock closes without moving focus when the window drops below lg, and the stored desktop state stays open", () => {
+    screenSize({ below: false, desktop: true })
+    render(<Harness />)
+    const field = screen.getByLabelText("Chunk size")
+    field.focus()
+    resizeTo({ below: true, desktop: false })
+    expect(dockEl().hidden).toBe(true)
+    expect(document.activeElement).toBe(field)
+    expect(stored()?.open).toBe(true)
+    // Opening and closing the sheet does not touch the desktop state.
+    fireEvent.click(fab())
+    fireEvent.keyDown(question(), { key: "Escape" })
+    expect(stored()?.open).toBe(true)
+    // Back at lg, the dock is open again, as it was left there.
+    resizeTo({ below: false, desktop: true })
+    expect(dockEl().hidden).toBe(false)
+  })
+
+  it("a dock closed on a desktop stays closed in storage after a sheet is opened below lg", () => {
+    window.localStorage.setItem(DOCK_KEY, JSON.stringify({ open: false, side: "right", width: 440 }))
+    screenSize({ below: true, desktop: false })
+    render(<Harness />)
+    fireEvent.click(fab())
+    expect(dockEl().hidden).toBe(false)
+    expect(stored()?.open).toBe(false)
   })
 })
 

@@ -53,3 +53,12 @@ def test_compare_takes_start_cold_so_the_recipes_run_on_camera():
 
 def test_has_a_compare_clip_ready_for_the_new_page():
     assert set(_mod.CLIPS) == {"build", "compare", "evaluate"}
+
+
+def test_build_clip_is_wide_enough_for_the_slope_beside_the_docked_panel():
+    # 16:10 like the other clips, so Home's frame fits; wide enough that the dock can take 698 px,
+    # over the 640 px the comparison needs to set the two lists side by side with the slope.
+    assert _mod.size_for("build") == {"width": 1440, "height": 900}
+    assert _mod.size_for("compare") == _mod.size_for("evaluate") == {"width": 1280, "height": 800}
+    assert _mod.DOCK_SEED == {"open": True, "side": "right", "width": 698}
+    assert 1440 - 380 - 360 - 2 == _mod.DOCK_SEED["width"]

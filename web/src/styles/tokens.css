@@ -61,6 +61,7 @@
   --shadow-raised: 0 1px 2px rgb(22 25 23 / 0.06), 0 6px 16px rgb(22 25 23 / 0.06);
   --shadow-raised-phone: 0 1px 2px rgb(22 25 23 / 0.06);
   --shadow-sheet: 0 2px 4px rgb(22 25 23 / 0.06), 0 12px 32px rgb(22 25 23 / 0.10); /* the options sheet only */
+  --scrim: rgb(0 0 0 / 0.4); /* the backdrop behind the Ask sheet */
 
   /* Rows: sizes, not spacing, so outside the spacing cap. */
   --row: 2.25rem; /* 36px at the default root size; rem, so rows follow the type */
@@ -136,6 +137,7 @@
   --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.3);
   --shadow-raised-phone: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-sheet: 0 2px 4px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.5);
+  --scrim: rgb(0 0 0 / 0.6); /* the backdrop behind the Ask sheet */
   --field-border: #71717a;
   --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
   --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
@@ -178,6 +180,7 @@
     --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.3);
     --shadow-raised-phone: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-sheet: 0 2px 4px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.5);
+    --scrim: rgb(0 0 0 / 0.6); /* the backdrop behind the Ask sheet */
     --field-border: #71717a;
     --chunk-1: oklch(0.64 0.11 9);    --chunk-1-text: oklch(0.16 0.03 9);
     --chunk-2: oklch(0.64 0.11 234);  --chunk-2-text: oklch(0.16 0.03 234);
@@ -499,7 +502,7 @@
 
 /*
  * The docked Ask panel (AskDock.tsx). Its resize edge is a 12px strip over the
- * panel's inner side (44px on a touch screen), drawn as a short line on hover,
+ * panel's inner side (44px on a touch screen, 34px of it outside the panel so taps inside reach its controls), drawn as a short line on hover,
  * focus or drag. Opening fades the dock in over --dur-mid; below lg the sheet
  * rises 24px as it fades, and its backdrop fades. Only opacity and transform
  * move; under reduced motion the panel simply appears.
@@ -540,10 +543,10 @@
     width: 44px;
   }
   [data-side="right"] > .ask-edge {
-    left: -22px;
+    left: -34px;
   }
   [data-side="left"] > .ask-edge {
-    right: -22px;
+    right: -34px;
   }
 }
 @keyframes ask-dock-in {

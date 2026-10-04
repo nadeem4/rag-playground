@@ -144,6 +144,8 @@ function Build({ registry }: { registry: Registry }) {
   // The Ask panel's dock: open or closed, its side and its width, remembered in this browser.
   const dock = useAskDock()
   const mainRef = useRef<HTMLElement>(null)
+  // Build's width, which bounds how wide the dock may be. Stable, so the dock measures only on a resize.
+  const measureBuild = useCallback(() => mainRef.current?.getBoundingClientRect().width || window.innerWidth, [])
 
   // Which keys the server has. Null until it answers, and if it fails: then
   // Ask is left alone.
@@ -450,9 +452,10 @@ function Build({ registry }: { registry: Registry }) {
         stale={stale}
         selected={selected}
         failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
+        roomForButton={!dock.open}
       />
 
-      <AskDock dock={dock} count={transcript[0]?.rows.length} measure={() => mainRef.current?.getBoundingClientRect().width || window.innerWidth}>
+      <AskDock dock={dock} count={transcript[0]?.rows.length} measure={measureBuild}>
         {(head) => (
           <AskPanel
             head={head}
@@ -512,6 +515,7 @@ function InspectorPanel({
   stale,
   selected,
   failedHint,
+  roomForButton,
 }: {
   graph: PipelineGraph
   registry: Registry
@@ -519,18 +523,24 @@ function InspectorPanel({
   stale: Set<string>
   selected: string | null
   failedHint?: string
+  /** Ask is closed: the round button sits over the foot of the pane. */
+  roomForButton: boolean
 }) {
   const picked = graph.nodes.find((n) => n.id === selected)
   // The retrieval, rerank and answer steps are edited in the Ask panel, not here.
   if (!picked || ASK_STAGES.includes(picked.stage)) {
     return (
-      <section aria-label="Inspector" className="flex min-w-0 flex-col bg-surface md:min-h-0 md:overflow-y-auto">
+      <section
+        aria-label="Inspector"
+        data-testid="main-scroll"
+        className={cn("flex min-w-0 flex-col bg-surface md:min-h-0 md:overflow-y-auto", roomForButton && "pb-[72px]")}
+      >
         {failedHint ? <p className="px-3 pt-3 text-sm text-fg-muted">Select the {failedHint} card to see why it failed.</p> : null}
         <EmptyState title="Pick a step">Click a step card to see its output here.</EmptyState>
       </section>
     )
   }
-  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} />
+  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} roomForButton={roomForButton} />
 }
 
 function CardInspector({
@@ -539,12 +549,15 @@ function CardInspector({
   results,
   stale,
   node,
+  roomForButton,
 }: {
   graph: PipelineGraph
   registry: Registry
   results: Record<string, NodeState>
   stale: Set<string>
   node: GraphNode
+  /** Ask is closed: the round button sits over the foot of the pane. */
+  roomForButton: boolean
 }) {
   const result = results[node.id]
   const usable = result && (result.status === "done" || result.status === "cached") && !stale.has(result.id)
@@ -631,7 +644,10 @@ function CardInspector({
           </div>
         ) : null}
       </div>
-      <div className="p-3 md:min-h-0 md:flex-1 md:overflow-y-auto">{body}</div>
+      {/* While Ask is closed, room at the foot so the round Ask button never covers the last line. */}
+      <div data-testid="main-scroll" className={cn("p-3 md:min-h-0 md:flex-1 md:overflow-y-auto", roomForButton && "pb-[72px]")}>
+        {body}
+      </div>
     </section>
   )
 }

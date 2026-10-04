@@ -48,6 +48,8 @@ export type DockSide = "left" | "right"
 
 export interface Dock {
   open: boolean
+  /** Below lg: the panel is a bottom sheet. */
+  sheet: boolean
   side: DockSide
   width: number
   setOpen: (open: boolean) => void
@@ -78,30 +80,39 @@ function readStored(): { open?: boolean; side?: DockSide; width?: number } {
 
 /**
  * The dock's state, read once from this browser and saved as it changes. A
- * first visit opens it from lg up. Below lg it always starts with the sheet
- * closed, so a page never loads behind a sheet.
+ * first visit opens it from lg up. Open or closed is kept apart for the dock
+ * and the sheet: only the dock's is remembered, so a visit below lg never
+ * changes it, and the sheet always starts closed, so a page never loads
+ * behind a sheet. When the window drops below lg an open dock becomes a
+ * closed sheet; back at lg the dock is as it was left.
  */
 export function useAskDock(): Dock {
+  const sheet = useSheet()
   const [initial] = useState(() => {
     const s = readStored()
-    const sheet = matches(SHEET_QUERY, false)
     return {
-      open: sheet ? false : (s.open ?? matches(DESKTOP_QUERY, true)),
+      open: s.open ?? matches(DESKTOP_QUERY, true),
       side: s.side ?? "right",
       width: s.width ?? DEFAULT_WIDTH,
     }
   })
-  const [open, setOpen] = useState(initial.open)
+  const [dockOpen, setDockOpen] = useState(initial.open)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [side, setSide] = useState<DockSide>(initial.side)
   const [width, setWidth] = useState(initial.width)
+  // Leaving the sheet closes it, so the next time the window drops below lg it starts closed.
+  useEffect(() => {
+    if (!sheet) setSheetOpen(false)
+  }, [sheet])
   useEffect(() => {
     try {
-      window.localStorage.setItem(DOCK_KEY, JSON.stringify({ open, side, width }))
+      window.localStorage.setItem(DOCK_KEY, JSON.stringify({ open: dockOpen, side, width }))
     } catch {
       // Storage is blocked: the dock still works, it is only not remembered.
     }
-  }, [open, side, width])
-  return { open, side, width, setOpen, setSide, setWidth }
+  }, [dockOpen, side, width])
+  const setOpen = useCallback((next: boolean) => (sheet ? setSheetOpen(next) : setDockOpen(next)), [sheet])
+  return { open: sheet ? sheetOpen : dockOpen, sheet, side, width, setOpen, setSide, setWidth }
 }
 
 function subscribeSheet(onChange: () => void): () => void {
@@ -134,6 +145,17 @@ function usePanelWidth(el: HTMLElement | null): number | null {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+/** What Tab can reach inside `root`: its controls and disclosures, leaving out what is not drawn (inside a closed disclosure, say). */
+function tabbable(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(`${FOCUSABLE}, summary`)].filter((el) => el.checkVisibility?.() ?? el.offsetParent !== null)
+}
+
+/** A place where Alt+A may be typing: a field, a select or editable text. */
+function isField(el: EventTarget | null): el is HTMLElement {
+  if (!(el instanceof HTMLElement)) return false
+  return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.closest('[contenteditable=""], [contenteditable="true"]') !== null
+}
+
 export function AskDock({
   dock,
   count,
@@ -148,8 +170,7 @@ export function AskDock({
   /** The Ask panel, given the head's buttons to show beside its title. */
   children: (head: ReactNode) => ReactNode
 }) {
-  const { open, side, width, setOpen, setSide, setWidth } = dock
-  const sheet = useSheet()
+  const { open, sheet, side, width, setOpen, setSide, setWidth } = dock
   const [aside, setAside] = useState<HTMLElement | null>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
   // Where focus goes once the panel has opened or closed: set only by the reader's own action.
@@ -183,19 +204,52 @@ export function AskDock({
     return () => boxes.forEach((el, i) => (el.style.overflow = before[i]))
   }, [locked, aside])
 
-  // Alt+A opens and closes the panel from anywhere on Build. The key code, so Option+A on a Mac works too.
+  // Alt+A opens and closes the panel from anywhere on Build, once per press. It
+  // leaves a field alone, except the question box; there only the a key counts,
+  // so Option+A still types å on a Mac. Elsewhere the key code, so it works there too.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey || (e.code !== "KeyA" && e.key.toLowerCase() !== "a")) return
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.repeat) return
+      const inQuestion = e.target !== null && e.target === aside?.querySelector("textarea")
+      if (isField(e.target) && !inQuestion) return
+      const isA = inQuestion ? e.key === "a" || e.key === "A" : e.code === "KeyA" || e.key.toLowerCase() === "a"
+      if (!isA) return
       e.preventDefault()
       if (open) hide()
       else show()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [open, show, hide])
+  }, [open, show, hide, aside])
 
-  const clamp = (w: number) => between(Math.round(w), DOCK_MIN, Math.max(DOCK_MIN, Math.min(DOCK_MAX, measure() - COLUMN - MAIN_MIN - GAPS)))
+  // The sheet is modal: focus that gets out is brought back to its first control.
+  useEffect(() => {
+    if (!locked || !aside) return
+    const onFocus = (e: FocusEvent) => {
+      if (aside.hidden || aside.contains(e.target as Node)) return
+      tabbable(aside)[0]?.focus()
+    }
+    document.addEventListener("focusin", onFocus)
+    return () => document.removeEventListener("focusin", onFocus)
+  }, [locked, aside])
+
+  // Build's width, kept current as the window resizes: what the panel may take depends on it.
+  const [buildWidth, setBuildWidth] = useState(measure)
+  useLayoutEffect(() => {
+    const update = () => setBuildWidth(measure())
+    update()
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
+  }, [measure])
+  // The most the panel may take, and the width it shows. A narrow window narrows what is
+  // shown, never what is stored: widen the window and the stored width comes back.
+  const most = Math.min(DOCK_MAX, Math.max(DOCK_MIN, Math.round(buildWidth) - COLUMN - MAIN_MIN - GAPS))
+  const shown = between(width, DOCK_MIN, most)
+  const clamp = (w: number) => between(Math.round(w), DOCK_MIN, most)
+  // Only a change the reader can see is stored, so a larger stored width survives a narrow window.
+  const resize = (next: number) => {
+    if (next !== shown) setWidth(next)
+  }
 
   // The sheet is modal: Escape closes it, and Tab stays inside it.
   function onSheetKey(e: KeyboardEvent<HTMLElement>) {
@@ -206,16 +260,18 @@ export function AskDock({
       return
     }
     if (e.key !== "Tab") return
-    const all = [...aside.querySelectorAll<HTMLElement>(FOCUSABLE)]
+    const all = tabbable(aside)
     if (!all.length) return
-    const first = all[0]
-    const last = all[all.length - 1]
-    if (e.shiftKey && document.activeElement === first) {
+    const at = all.indexOf(document.activeElement as HTMLElement)
+    if (at === -1) {
       e.preventDefault()
-      last.focus()
-    } else if (!e.shiftKey && document.activeElement === last) {
+      ;(e.shiftKey ? all[all.length - 1] : all[0]).focus()
+    } else if (e.shiftKey && at === 0) {
       e.preventDefault()
-      first.focus()
+      all[all.length - 1].focus()
+    } else if (!e.shiftKey && at === all.length - 1) {
+      e.preventDefault()
+      all[0].focus()
     }
   }
 
@@ -223,10 +279,10 @@ export function AskDock({
   const dir = side === "right" ? 1 : -1
   function onEdgeKey(e: KeyboardEvent<HTMLElement>) {
     const step = e.shiftKey ? 80 : 20
-    if (e.key === "ArrowLeft") setWidth(clamp(width + step * dir))
-    else if (e.key === "ArrowRight") setWidth(clamp(width - step * dir))
-    else if (e.key === "Home") setWidth(DOCK_MIN)
-    else if (e.key === "End") setWidth(clamp(DOCK_MAX))
+    if (e.key === "ArrowLeft") resize(clamp(shown + step * dir))
+    else if (e.key === "ArrowRight") resize(clamp(shown - step * dir))
+    else if (e.key === "Home") resize(DOCK_MIN)
+    else if (e.key === "End") resize(most)
     else return
     e.preventDefault()
   }
@@ -236,14 +292,14 @@ export function AskDock({
   function onEdgeDown(e: PointerEvent<HTMLElement>) {
     if (e.button !== 0) return
     e.preventDefault()
-    drag.current = { id: e.pointerId, x: e.clientX, width }
+    drag.current = { id: e.pointerId, x: e.clientX, width: shown }
     e.currentTarget.setPointerCapture?.(e.pointerId)
     setDragging(true)
   }
   function onEdgeMove(e: PointerEvent<HTMLElement>) {
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
-    setWidth(clamp(d.width + (d.x - e.clientX) * dir))
+    resize(clamp(d.width + (d.x - e.clientX) * dir))
   }
   function onEdgeUp(e: PointerEvent<HTMLElement>) {
     if (!drag.current || drag.current.id !== e.pointerId) return
@@ -269,7 +325,7 @@ export function AskDock({
   return (
     <>
       {sheet && open ? (
-        <div data-testid="ask-backdrop" aria-hidden="true" className="ask-backdrop fixed inset-0 z-40" style={{ background: "rgb(0 0 0 / 0.4)" }} onClick={hide} />
+        <div data-testid="ask-backdrop" aria-hidden="true" className="ask-backdrop fixed inset-0 z-40 bg-(--scrim)" onClick={hide} />
       ) : null}
       <aside
         id="ask-dock"
@@ -293,8 +349,8 @@ export function AskDock({
             aria-orientation="vertical"
             aria-label="Resize the Ask panel"
             aria-valuemin={DOCK_MIN}
-            aria-valuemax={DOCK_MAX}
-            aria-valuenow={width}
+            aria-valuemax={most}
+            aria-valuenow={shown}
             tabIndex={0}
             data-dragging={dragging || undefined}
             className="ask-edge"

@@ -15,6 +15,7 @@ from providers import llm
 from providers.llm import CHAT_MODELS, ChatModel, Completion, complete
 
 KEY = "sk-test-SECRET-0123456789"
+OPENROUTER = ChatModel("openrouter", "openrouter", "OpenRouter", False)
 
 
 # --- the registry -------------------------------------------------------------
@@ -338,7 +339,13 @@ def test_importing_the_module_does_not_import_either_sdk():
 def test_key_for_reads_the_providers_credential():
     from providers.llm import key_for
 
-    creds = {"anthropic_api_key": "a", "openai_api_key": "o", "custom_api_key": "c"}
+    creds = {
+        "anthropic_api_key": "a",
+        "openai_api_key": "o",
+        "custom_api_key": "c",
+        "openrouter_api_key": "r",
+    }
+    assert key_for(OPENROUTER, creds) == "r"
     assert key_for(CHAT_MODELS["claude-opus-5"], creds) == "a"
     assert key_for(CHAT_MODELS["gpt-6-astra"], creds) == "o"
     assert key_for(CHAT_MODELS["custom"], creds) == "c"
@@ -401,3 +408,85 @@ def test_in_demo_mode_a_custom_client_does_not_follow_redirects(monkeypatch):
 def test_outside_demo_mode_the_client_keeps_the_sdk_default(monkeypatch):
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
     assert "http_client" not in llm.openai_client_kwargs(None, "http://localhost:1/v1")
+
+
+# --- OpenRouter ---------------------------------------------------------------
+
+
+def test_openrouter_uses_its_fixed_url_and_the_model_id(fake_openai):
+    out = complete(
+        OPENROUTER, system="S", user="U", api_key=KEY,
+        model_name="anthropic/claude-sonnet-4", max_tokens=300,
+    )
+    assert out.text == "An answer [1.1]."
+    assert fake_openai.built == [{"api_key": KEY, "base_url": "https://openrouter.ai/api/v1"}]
+    [req] = fake_openai.client.requests
+    assert req["model"] == "anthropic/claude-sonnet-4"
+    assert req["max_tokens"] == 300 and "max_completion_tokens" not in req
+
+
+def test_openrouter_requires_its_own_key(fake_openai):
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY") as info:
+        complete(
+            OPENROUTER, system="s", user="u", api_key=None,
+            model_name="openai/gpt-4o-mini",
+        )
+    assert str(info.value) == llm.NO_KEY["openrouter"]
+    assert fake_openai.built == []
+
+
+@pytest.mark.parametrize("model_name", ["", "   ", None])
+def test_openrouter_requires_a_model_id(fake_openai, model_name):
+    with pytest.raises(ValueError, match="model id"):
+        complete(
+            OPENROUTER, system="s", user="u", api_key=KEY,
+            model_name=model_name,
+        )
+    assert fake_openai.built == []
+
+
+def test_openrouter_is_not_a_custom_endpoint_on_the_demo(fake_openai, monkeypatch):
+    """The URL is fixed, so the demo check has nothing to look up."""
+
+    def no_dns(host):
+        raise AssertionError("OpenRouter's fixed URL needs no check")
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    monkeypatch.setattr("providers.endpoints._resolve", no_dns)
+    complete(
+        OPENROUTER, system="s", user="u", api_key=KEY,
+        model_name="google/gemini-2.5-flash",
+    )
+    assert fake_openai.built[0]["base_url"] == llm.OPENROUTER_BASE_URL
+
+
+def test_openrouter_errors_name_openrouter_and_never_carry_the_key(fake_openai):
+    import httpx2
+    import openai
+
+    req = httpx2.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    fake_openai.error = openai.AuthenticationError(
+        f"bad key {KEY}", response=httpx2.Response(401, request=req), body=None
+    )
+    with pytest.raises(RuntimeError) as info:
+        complete(
+            OPENROUTER, system="s", user="u", api_key=KEY,
+            model_name="openai/gpt-4o-mini",
+        )
+    assert str(info.value).startswith("OpenRouter rejected the API key")
+    assert KEY not in str(info.value)
+
+
+def test_openrouter_client_sends_the_app_attribution_headers(monkeypatch):
+    import openai
+
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+    kwargs = llm.openai_client_kwargs(KEY, llm.OPENROUTER_BASE_URL)
+    assert kwargs["default_headers"] == {
+        "HTTP-Referer": "https://github.com/nadeem4/rag-playground",
+        "X-Title": "RAG Playground",
+    }
+    client = openai.OpenAI(**kwargs)
+    assert client.default_headers["X-Title"] == "RAG Playground"
+    assert "default_headers" not in llm.openai_client_kwargs(KEY, None)
+    assert "default_headers" not in llm.openai_client_kwargs(KEY, "http://localhost:1/v1")

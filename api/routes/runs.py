@@ -3,7 +3,7 @@
 Requests are validated *before* a run is created: an invalid graph is a 400 and
 an invalid node config a 422, rather than a run that dies in its worker thread.
 
-Every provider's key (Anthropic, OpenAI, custom endpoint) is resolved once per
+Every provider's key (Anthropic, OpenAI, custom endpoint, OpenRouter) is resolved once per
 request (`api.credentials`) and handed to the executor as `context_extras`. The
 keys live only in the job's closure for the run's duration, never on
 `RunState`, and every event the run emits is passed through `redact`, so a
@@ -141,10 +141,15 @@ def _is_custom_endpoint(stage: Stage, transform: str, cfg: dict[str, Any]) -> bo
 
 
 def _credentials(
-    anthropic: str | None, openai: str | None, custom: str | None
+    anthropic: str | None,
+    openai: str | None,
+    custom: str | None,
+    openrouter: str | None = None,
 ) -> tuple[list[str], dict[str, Any] | None]:
     """(keys, context_extras). No key resolved means no credentials entry."""
-    creds = resolve_all({"anthropic": anthropic, "openai": openai, "custom": custom})
+    creds = resolve_all(
+        {"anthropic": anthropic, "openai": openai, "custom": custom, "openrouter": openrouter}
+    )
     if not creds:
         return [], None
     return list(creds.values()), {"credentials": creds}
@@ -174,12 +179,15 @@ async def create_run(
     x_anthropic_api_key: str | None = Header(default=None),
     x_openai_api_key: str | None = Header(default=None),
     x_custom_api_key: str | None = Header(default=None),
+    x_openrouter_api_key: str | None = Header(default=None),
 ) -> dict[str, str]:
     deps = request.app.state.deps
     graph = body.graph.to_graph()
     _check(graph, deps.registry, request, body.overrides)
     _unknown(graph, body.targets or [], "target")
-    keys, extras = _credentials(x_anthropic_api_key, x_openai_api_key, x_custom_api_key)
+    keys, extras = _credentials(
+        x_anthropic_api_key, x_openai_api_key, x_custom_api_key, x_openrouter_api_key
+    )
 
     def job(emit, cancelled):
         seen: list[bool] = []
@@ -216,6 +224,7 @@ async def create_sweep(
     x_anthropic_api_key: str | None = Header(default=None),
     x_openai_api_key: str | None = Header(default=None),
     x_custom_api_key: str | None = Header(default=None),
+    x_openrouter_api_key: str | None = Header(default=None),
 ) -> dict[str, str]:
     """Start a sweep: one node of the graph run over each recipe in turn.
 
@@ -248,7 +257,9 @@ async def create_sweep(
         )
         _check(variant_graph, deps.registry, request)
     variants = [{"transform": v.transform, "config": v.config} for v in body.variants]
-    keys, extras = _credentials(x_anthropic_api_key, x_openai_api_key, x_custom_api_key)
+    keys, extras = _credentials(
+        x_anthropic_api_key, x_openai_api_key, x_custom_api_key, x_openrouter_api_key
+    )
 
     def job(emit, cancelled):
         seen: list[bool] = []

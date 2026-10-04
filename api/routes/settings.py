@@ -2,8 +2,9 @@
 provider, and whether a key works.
 
 Neither endpoint ever returns a key. `GET` reports only the source the *server*
-can supply, per provider; `check` makes one `models.list()` call, which costs
-no tokens.
+can supply, per provider; `check` makes one call that costs no tokens:
+`models.list()`, or for OpenRouter, whose model list is public, `GET /key`,
+which needs a valid key.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from pydantic import BaseModel
 from api import demo, visitor
 from api.credentials import PROVIDERS, redact, resolve_key, server_source
 from providers.endpoints import EndpointRefused, guard_endpoint
-from providers.llm import openai_client_kwargs
+from providers.llm import OPENROUTER_BASE_URL, openai_client_kwargs
 
 router = APIRouter()
 
@@ -29,6 +30,10 @@ NO_KEY = {
         "no API key: type one in the UI, set OPENAI_API_KEY for the server "
         "process, or put it in .env at the repo root"
     ),
+    "openrouter": (
+        "no API key: type one in the UI, set OPENROUTER_API_KEY for the server "
+        "process, or put it in .env at the repo root"
+    ),
 }
 NO_BASE_URL = "no base URL: send the custom endpoint's base URL to check it"
 REJECTED = "authentication failed: the API key was rejected"
@@ -36,7 +41,7 @@ DEMO_NO_CUSTOM = "custom endpoints are disabled in this hosted demo"
 
 
 class CheckIn(BaseModel):
-    provider: Literal["anthropic", "openai", "custom"] = "anthropic"
+    provider: Literal["anthropic", "openai", "custom", "openrouter"] = "anthropic"
     #: Only for `custom`: the OpenAI-compatible server to check.
     base_url: str | None = None
 
@@ -60,12 +65,14 @@ def check_llm_key(
     x_anthropic_api_key: str | None = Header(default=None),
     x_openai_api_key: str | None = Header(default=None),
     x_custom_api_key: str | None = Header(default=None),
+    x_openrouter_api_key: str | None = Header(default=None),
 ) -> dict[str, Any]:
     body = body or CheckIn()
     headers = {
         "anthropic": x_anthropic_api_key,
         "openai": x_openai_api_key,
         "custom": x_custom_api_key,
+        "openrouter": x_openrouter_api_key,
     }
     provider = body.provider
     if provider == "custom" and demo.enabled():
@@ -91,14 +98,19 @@ def check_llm_key(
             import openai
 
             auth_error = openai.AuthenticationError
-            base_url = body.base_url if provider == "custom" else None
+            base_url = {"custom": body.base_url, "openrouter": OPENROUTER_BASE_URL}.get(
+                provider
+            )
             kwargs: dict[str, Any] = {
                 **openai_client_kwargs(key, base_url),
                 "max_retries": 0,
                 "timeout": 15.0,
             }
             client = openai.OpenAI(**kwargs)
-        client.models.list()
+        if provider == "openrouter":
+            client.get("/key", cast_to=dict)
+        else:
+            client.models.list()
     except Exception as exc:
         if isinstance(exc, auth_error):
             return {"ok": False, "source": source, "error": REJECTED}

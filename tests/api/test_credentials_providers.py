@@ -23,12 +23,14 @@ from tests.api.test_credentials import (
 
 OPENAI_KEY = "sk-openai-test-DO-NOT-LEAK-0123456789"
 CUSTOM_KEY = "custom-test-DO-NOT-LEAK-0123456789"
+OPENROUTER_KEY = "sk-or-test-DO-NOT-LEAK-0123456789"
 ENV_OPENAI = "sk-openai-test-ENV-0123456789"
 DOTENV_OPENAI = "sk-openai-test-DOTENV-0123456789"
 ALL_HEADERS = {
     "X-Anthropic-Api-Key": FAKE_KEY,
     "X-OpenAI-Api-Key": OPENAI_KEY,
     "X-Custom-Api-Key": CUSTOM_KEY,
+    "X-OpenRouter-Api-Key": OPENROUTER_KEY,
 }
 
 
@@ -42,7 +44,11 @@ def write_dotenv(**values: str) -> None:
 
 @pytest.mark.parametrize(
     "provider,env_var",
-    [("openai", "OPENAI_API_KEY"), ("custom", "OPENAI_COMPATIBLE_API_KEY")],
+    [
+        ("openai", "OPENAI_API_KEY"),
+        ("custom", "OPENAI_COMPATIBLE_API_KEY"),
+        ("openrouter", "OPENROUTER_API_KEY"),
+    ],
 )
 def test_order_is_header_then_env_then_dotenv(monkeypatch, provider, env_var):
     assert credentials.resolve_key(None, provider) == (None, "none")
@@ -67,7 +73,7 @@ def test_unknown_provider_is_refused():
         credentials.resolve_key(None, "gemini")
 
 
-@pytest.mark.parametrize("provider", ["anthropic", "openai", "custom"])
+@pytest.mark.parametrize("provider", ["anthropic", "openai", "custom", "openrouter"])
 def test_demo_mode_is_header_only_for_every_provider(monkeypatch, provider):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     env_var = credentials.PROVIDERS[provider].env_var
@@ -92,13 +98,15 @@ def test_redact_scrubs_several_keys():
 
 def test_settings_report_one_source_per_provider(client, monkeypatch):
     assert client.get("/api/settings/llm").json() == {
-        "anthropic": "none", "openai": "none", "custom": "none",
+        "anthropic": "none", "openai": "none", "custom": "none", "openrouter": "none",
     }
     write_dotenv(OPENAI_COMPATIBLE_API_KEY=DOTENV_OPENAI)
     monkeypatch.setenv("OPENAI_API_KEY", ENV_OPENAI)
     r = client.get("/api/settings/llm", headers=ALL_HEADERS)
-    assert r.json() == {"anthropic": "none", "openai": "env", "custom": "dotenv"}
-    for secret in (ENV_OPENAI, DOTENV_OPENAI, OPENAI_KEY, CUSTOM_KEY, FAKE_KEY):
+    assert r.json() == {
+        "anthropic": "none", "openai": "env", "custom": "dotenv", "openrouter": "none",
+    }
+    for secret in (ENV_OPENAI, DOTENV_OPENAI, OPENAI_KEY, CUSTOM_KEY, OPENROUTER_KEY, FAKE_KEY):
         assert secret not in r.text
 
 
@@ -107,7 +115,7 @@ def test_demo_settings_report_none_for_every_provider(client, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", ENV_OPENAI)
     write_dotenv(OPENAI_COMPATIBLE_API_KEY=DOTENV_OPENAI)
     assert client.get("/api/settings/llm").json() == {
-        "anthropic": "none", "openai": "none", "custom": "none",
+        "anthropic": "none", "openai": "none", "custom": "none", "openrouter": "none",
     }
 
 
@@ -124,6 +132,10 @@ class FakeModels:
         return []
 
 
+#: Every `client.get(path)` a fake client was asked for.
+GETS: list[str] = []
+
+
 def fake_openai(monkeypatch, exc=None) -> list[dict]:
     import openai
 
@@ -133,6 +145,10 @@ def fake_openai(monkeypatch, exc=None) -> list[dict]:
         def __init__(self, **kwargs):
             calls.append(kwargs)
             self.models = FakeModels(exc)
+
+        def get(self, path, *, cast_to):
+            GETS.append(path)
+            return self.models.list() or {}
 
     monkeypatch.setattr(openai, "OpenAI", FakeClient)
     return calls
@@ -214,6 +230,49 @@ def test_check_custom_is_refused_in_demo_mode(client, monkeypatch):
     assert calls == []
 
 
+def test_check_openrouter_asks_openrouter_about_the_key(client, monkeypatch):
+    from providers.llm import OPENROUTER_BASE_URL
+
+    GETS.clear()
+    calls = fake_openai(monkeypatch)
+    r = client.post(
+        "/api/settings/llm/check", json={"provider": "openrouter"}, headers=ALL_HEADERS
+    )
+    assert r.json() == {"ok": True, "source": "header", "error": None}
+    [call] = calls
+    assert call["api_key"] == OPENROUTER_KEY
+    assert call["base_url"] == OPENROUTER_BASE_URL == "https://openrouter.ai/api/v1"
+    assert call["default_headers"]["X-Title"] == "RAG Playground"
+    # The model list is public on OpenRouter, so only the key endpoint checks a key.
+    assert GETS == ["/key"]
+    assert OPENROUTER_KEY not in r.text
+
+
+def test_check_openrouter_with_no_key_makes_no_call(client, monkeypatch):
+    calls = fake_openai(monkeypatch)
+    body = client.post("/api/settings/llm/check", json={"provider": "openrouter"}).json()
+    assert body["ok"] is False and "OPENROUTER_API_KEY" in body["error"]
+    assert calls == []
+
+
+def test_check_openrouter_rejected_key_is_readable_and_redacted(client, monkeypatch):
+    import httpx2
+    import openai
+
+    req = httpx2.Request("GET", "https://openrouter.ai/api/v1/key")
+    fake_openai(
+        monkeypatch,
+        openai.AuthenticationError(
+            f"bad {OPENROUTER_KEY}", response=httpx2.Response(401, request=req), body=None
+        ),
+    )
+    r = client.post(
+        "/api/settings/llm/check", json={"provider": "openrouter"}, headers=ALL_HEADERS
+    )
+    assert r.json()["ok"] is False and "rejected" in r.json()["error"]
+    assert OPENROUTER_KEY not in r.text
+
+
 def test_check_unknown_provider_is_a_422(client):
     r = client.post("/api/settings/llm/check", json={"provider": "gemini"})
     assert r.status_code == 422
@@ -270,6 +329,7 @@ def test_every_provider_key_reaches_the_transform(kclient):
             "anthropic_api_key": FAKE_KEY,
             "openai_api_key": OPENAI_KEY,
             "custom_api_key": CUSTOM_KEY,
+            "openrouter_api_key": OPENROUTER_KEY,
         }
         for s in SEEN
     )
@@ -308,6 +368,6 @@ def test_every_key_is_redacted_from_a_failing_run(kclient, tmp_path, monkeypatch
     snapshot = kclient.get(f"/api/runs/{run_id}").text
     files = all_file_bytes(tmp_path)
     state = repr(vars(kclient.app.state.runs.get(run_id)))
-    for secret in (FAKE_KEY, OPENAI_KEY, CUSTOM_KEY):
+    for secret in (FAKE_KEY, OPENAI_KEY, CUSTOM_KEY, OPENROUTER_KEY):
         assert secret not in stream and secret not in snapshot and secret not in state
         assert secret.encode() not in files

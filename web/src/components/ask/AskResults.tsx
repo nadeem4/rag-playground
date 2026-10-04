@@ -481,7 +481,7 @@ function Comparison({
         <div
           ref={gridRef}
           data-slope-grid=""
-          className="flex flex-col gap-3"
+          className="flex flex-col gap-3 [&_[data-slip]]:cursor-pointer"
           onClick={(e) => tap(e.target)}
           onKeyDown={(e) => {
             if ((e.key === "Enter" || e.key === " ") && e.target instanceof Element && e.target.matches("[data-slip]")) tap(e.target)

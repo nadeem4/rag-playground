@@ -373,6 +373,13 @@ describe("compact slips in the comparison", () => {
 })
 
 describe("the linked highlight", () => {
+  it("shows no hand cursor on a slip in the wide layout, where a click does nothing", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(slipOf("reranked", top()).className).not.toContain("cursor-pointer")
+    expect(document.querySelector("[data-slope-grid]")!.className).not.toContain("cursor-pointer")
+  })
+
   const slipOf = (column: string, id: string) => document.querySelector(`[data-column="${column}"] [data-id="${id}"]`)!.closest<HTMLElement>("[data-slip]")!
   const litSlips = () => [...document.querySelectorAll<HTMLElement>("[data-slip][data-lit]")]
   const path = (id: string) => document.querySelector<SVGPathElement>(`svg.slope-lines path[data-id="${id}"]`)!
@@ -515,6 +522,13 @@ describe("below the wide layout (phone and tablet)", () => {
     fireEvent.keyDown(slip, { key: "Enter" })
     fireEvent.keyDown(slip, { key: "Enter" })
     expect(slip.className).not.toContain("bg-selection")
+  })
+
+  it("shows the hand cursor on a slip only where a tap does something", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("[&_[data-slip]]:cursor-pointer")
+    expect(slipOf("reranked", top()).className).not.toContain("cursor-pointer")
   })
 
   it("scrolls to the twin without motion under reduced motion", async () => {

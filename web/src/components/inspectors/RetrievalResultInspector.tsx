@@ -399,7 +399,7 @@ function HitList({
               e.preventDefault()
               if (!compact) onSelect(i)
             }}
-            className={cn("cursor-pointer", k !== undefined && `ri-mark h${k}`, selected === i && "bg-selection hover:bg-selection focus-visible:bg-selection focus-within:bg-selection")}
+            className={cn(!compact && "cursor-pointer", k !== undefined && `ri-mark h${k}`, selected === i && "bg-selection hover:bg-selection focus-visible:bg-selection focus-within:bg-selection")}
           />
         )
       })}

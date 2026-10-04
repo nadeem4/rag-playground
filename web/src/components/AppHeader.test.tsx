@@ -42,12 +42,12 @@ function header(path = "/", lessonsEnabled = true) {
 const devButton = () => screen.getByRole("button", { name: "Dev" })
 
 describe("AppHeader", () => {
-  it("shows Home, Lessons, Build, Compare, Evaluate and Read as primary navigation", () => {
+  it("shows Home, Lessons, Build, Compare, Evaluate, Read and Library as primary navigation", () => {
     header()
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Home", "Lessons", "Build", "Compare", "Evaluate", "Read"])
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/learn", "/build", "/compare", "/evaluate", "/read"])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Lessons", "Build", "Compare", "Evaluate", "Read", "Library"])
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/learn", "/build", "/compare", "/evaluate", "/read", "/library"])
     expect(screen.queryByText("Forms")).toBeNull()
     expect(screen.queryByText("Tokens")).toBeNull()
   })
@@ -235,11 +235,11 @@ describe("AppHeader with the lessons hidden", () => {
     expect(screen.getByTestId("document-trigger").className).not.toContain("bg-stale-wash")
   })
 
-  it("shows Home first, then Build, Compare, Evaluate and Read, with no Lessons", () => {
+  it("shows Home first, then Build, Compare, Evaluate, Read and Library, with no Lessons", () => {
     header("/build", false)
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Home", "Build", "Compare", "Evaluate", "Read"])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Build", "Compare", "Evaluate", "Read", "Library"])
     expect(links[0].getAttribute("href")).toBe("/")
     expect(screen.queryByText("Lessons")).toBeNull()
   })
@@ -262,6 +262,11 @@ describe("AppHeader with the lessons hidden", () => {
   it("marks Build as current on /build", () => {
     header("/build", false)
     expect(screen.getByRole("link", { name: "Build" }).getAttribute("aria-current")).toBe("page")
+  })
+
+  it("marks Library as current on /library", () => {
+    header("/library", false)
+    expect(screen.getByRole("link", { name: "Library" }).getAttribute("aria-current")).toBe("page")
   })
 
   it("marks Read as current on /read", () => {

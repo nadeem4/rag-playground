@@ -6,6 +6,7 @@ import { Home } from "@/routes/Home"
 import { Inspect } from "@/routes/Inspect"
 import { Learn } from "@/routes/Learn"
 import { Lessons } from "@/routes/Lessons"
+import { Library } from "@/routes/Library"
 import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
 import { Specimen } from "@/routes/Specimen"
@@ -18,7 +19,8 @@ import { LESSONS_ENABLED } from "@/state/lessons"
 // page with a sample already loaded. "/build" is Build (the pipeline column,
 // Shell), /compare is the sweep view and /evaluate scores the pipeline against
 // the sample question set. /read lists the deep-dive posts in pipeline order,
-// each stage with a link that opens Build. Navigation is a full page load, so
+// each stage with a link that opens Build. /library lists the saved pipelines
+// and experiments, with export and import. Navigation is a full page load, so
 // Build, Compare and Evaluate share the pipeline graph through per-viewer
 // storage (state/graph.ts). Within a page the graph is a store: the header's
 // Document control and the page both read it, so a document chosen in the bar
@@ -36,6 +38,7 @@ const ROUTES: Record<string, () => React.JSX.Element> = {
   "/compare": Compare,
   "/evaluate": Evaluate,
   "/read": Read,
+  "/library": Library,
   "/design": Specimen,
   "/specimen": Specimen,
   "/inspect": Inspect,

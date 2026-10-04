@@ -17,9 +17,11 @@ import { LESSONS_ENABLED } from "@/state/lessons"
 // pipeline column, Shell), /compare is the sweep view and /evaluate scores the
 // pipeline against the sample question set. /read lists the deep-dive posts
 // in pipeline order, each stage with a link that opens Build. Each lesson has
-// its own page under /learn; /learn itself redirects to Home. Build, Compare
-// and Evaluate share the pipeline graph through per-viewer storage
-// (state/graph.ts).
+// its own page under /learn; /learn itself redirects to Home. Navigation is a
+// full page load, so Build, Compare and Evaluate share the pipeline graph
+// through per-viewer storage (state/graph.ts). Within a page the graph is a
+// store: the header's Document control and the page both read it, so a
+// document chosen in the bar shows on the page at once (state/document.ts).
 //
 // /inspect and /design are development pages, reached from the header's Dev
 // menu. /specimen is the design page's old path, kept so no old link breaks.

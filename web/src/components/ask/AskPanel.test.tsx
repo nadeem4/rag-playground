@@ -10,6 +10,15 @@ import { e2eSampleGraph, sampleGraph, setReranker, setRewrite, type PipelineGrap
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
 
+/** A start time `ago` seconds before a frozen clock, so a slow machine cannot tick the shown seconds over. */
+const FROZEN_MS = 1_800_000_000_000
+function startedAgo(ago: number): number {
+  vi.useFakeTimers({ now: FROZEN_MS, toFake: ["Date"] })
+  return FROZEN_MS / 1000 - ago
+}
+afterEach(() => vi.useRealTimers())
+
+
 const LIVE = liveRegistry as unknown as Registry
 const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
 const SAMPLE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
@@ -115,7 +124,7 @@ describe("the Ask panel header", () => {
   })
 
   it("while a build runs, says which step it is on and for how long", () => {
-    const startedAt = Math.floor(Date.now() / 1000) - 5
+    const startedAt = startedAgo(5)
     setup({ results: {}, busy: true, buildingStep: { title: "Parse", startedAt } })
     expect(screen.getByTestId("index-status").textContent).toBe("Building the index: Parse, 5 s")
   })

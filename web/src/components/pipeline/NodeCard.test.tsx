@@ -9,6 +9,15 @@ import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
 import { describeResult, NodeCard, type NodeCardProps } from "./NodeCard"
 
+/** A start time `ago` seconds before a frozen clock, so a slow machine cannot tick the shown seconds over. */
+const FROZEN_MS = 1_800_000_000_000
+function startedAgo(ago: number): number {
+  vi.useFakeTimers({ now: FROZEN_MS, toFake: ["Date"] })
+  return FROZEN_MS / 1000 - ago
+}
+afterEach(() => vi.useRealTimers())
+
+
 /** Payloads by artifact id. Ids are unique per test: payloads are cached for the session. */
 let payloads: Record<string, unknown> = {}
 
@@ -390,7 +399,7 @@ describe("a running card keeps its status in view", () => {
   })
 
   it("the Run button reads Running and is busy only while this card's own step runs", () => {
-    const now = Math.floor(Date.now() / 1000) - 4
+    const now = startedAgo(4)
     const card = renderCard({ selected: true, busy: true, result: { id: "chunk", status: "running", started_at: now } })
     const run = within(card).getByRole("button", { name: "Running" }) as HTMLButtonElement
     expect(run.disabled).toBe(true)
@@ -401,7 +410,7 @@ describe("a running card keeps its status in view", () => {
   })
 
   it("the running card's title line says running and the seconds, and goes back to the name after", () => {
-    const now = Math.floor(Date.now() / 1000) - 7
+    const now = startedAgo(7)
     const card = renderCard({ busy: true, result: { id: "chunk", status: "running", started_at: now } })
     expect(card.querySelector("h3")!.textContent).toBe("Chunk, running, 7 s")
     // One inline label, so the flex gap never opens before the comma; the ticking seconds stay out of the name.

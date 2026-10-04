@@ -24,6 +24,8 @@ export type StripLine =
   | { kind: "running"; title: string; startedAt?: number }
   | { kind: "built"; totalMs: number }
   | { kind: "failed"; title: string }
+  /** The server refused the run before it started; the reason is in the note above the cards. */
+  | { kind: "refused" }
   | null
 
 /**
@@ -116,6 +118,8 @@ function LineText({ line }: { line: Exclude<StripLine, null> }) {
       )
     case "failed":
       return <>{line.title} failed</>
+    case "refused":
+      return <>Could not start. See the note above the cards.</>
   }
 }
 
@@ -150,7 +154,7 @@ export function RunStrip({ segments, line }: { segments: StripSegment[]; line: S
         ))}
       </ol>
       {line ? (
-        <p data-testid="run-line" className={cn("m-0 text-xs whitespace-nowrap", line.kind === "failed" ? "text-danger" : "text-fg")}>
+        <p data-testid="run-line" className={cn("m-0 text-xs whitespace-nowrap", line.kind === "failed" || line.kind === "refused" ? "text-danger" : "text-fg")}>
           <LineText line={line} />
         </p>
       ) : null}

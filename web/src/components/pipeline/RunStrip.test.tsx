@@ -1,10 +1,19 @@
 import { cleanup, render, screen, within } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { addCleaner, columnOrder, INDEX_STAGES, initialGraph } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
 import { RunStrip, stripSegments, type StripLine, type StripSegment } from "./RunStrip"
+
+/** A start time `ago` seconds before a frozen clock, so a slow machine cannot tick the shown seconds over. */
+const FROZEN_MS = 1_800_000_000_000
+function startedAgo(ago: number): number {
+  vi.useFakeTimers({ now: FROZEN_MS, toFake: ["Date"] })
+  return FROZEN_MS / 1000 - ago
+}
+afterEach(() => vi.useRealTimers())
+
 
 afterEach(cleanup)
 
@@ -87,13 +96,13 @@ describe("the run strip", () => {
   })
 
   it("while a build runs, the line names the step and its seconds", () => {
-    const startedAt = Math.floor(Date.now() / 1000) - 3
+    const startedAt = startedAgo(3)
     const strip = show(segs("done", "running"), { kind: "building", title: "Parse", startedAt })
     expect(within(strip).getByTestId("run-line").textContent).toBe("Building: Parse, 3 s")
   })
 
   it("while a single card runs, the line says Running", () => {
-    const startedAt = Math.floor(Date.now() / 1000) - 2
+    const startedAt = startedAgo(2)
     const strip = show(segs("done", "done", "running"), { kind: "running", title: "Clean", startedAt })
     expect(within(strip).getByTestId("run-line").textContent).toBe("Running Clean, 2 s")
   })
@@ -111,6 +120,13 @@ describe("the run strip", () => {
   it("after a failure, the line names the failed step", () => {
     const strip = show(segs("done", "failed"), { kind: "failed", title: "Parse" })
     expect(within(strip).getByTestId("run-line").textContent).toBe("Parse failed")
+  })
+
+  it("a run refused before it started says so in the failed style, pointing at the note above the cards", () => {
+    const strip = show(segs(), { kind: "refused" })
+    const line = within(strip).getByTestId("run-line")
+    expect(line.textContent).toBe("Could not start. See the note above the cards.")
+    expect(line.className).toContain("text-danger")
   })
 })
 

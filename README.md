@@ -202,7 +202,8 @@ unsafe to share:
   pipelines from the bar under the Index pipeline header of the column, and edit any of them. Once a
   pipeline is saved, Copy link puts the whole configuration in a URL: whoever opens it gets the pipeline on their Build page, and if it was
   built on a bundled sample, Build the index and Ask work at once. Your own uploads do not travel with the
-  link; the page says which file to load. Pipelines live in your browser.
+  link; the page says which file to load. Pipelines live in your browser. When a saved pipeline's upload has
+  expired or is not in this browser, its Upload card says the file is missing, and a run it refuses shows in the run strip too.
 - **Score a pipeline instead of guessing.** The Evaluate page takes the pipeline on Build, or
   any saved pipeline you pick, asks it every question in the loaded sample's question set, and
   says how many of them found their answer, at what rank, and in which chunk. Each question

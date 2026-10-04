@@ -1018,6 +1018,100 @@ describe("saved pipelines on Build", () => {
       await act(async () => settle.reject(new Error("down")))
       await waitFor(() => expect(notice()).toBeTruthy())
     })
+
+    const cardWarning = () => card("source")?.querySelector("[data-testid=missing-file]") ?? null
+
+    it("the collapsed Upload card warns that the file is missing, and the column notice reads as a warning", async () => {
+      stored("ef".repeat(32))
+      setup()
+      await screen.findByRole("group", { name: "Saved pipelines" })
+      await act(async () => settle.reject(new Error("down")))
+      const warning = await waitFor(() => {
+        const w = cardWarning()
+        expect(w).toBeTruthy()
+        return w as HTMLElement
+      })
+      expect(card("source").getAttribute("aria-current")).toBeNull()
+      expect(warning.getAttribute("role")).toBe("status")
+      expect(warning.textContent).toBe("Missing. Uploads expire on the demo. Upload it again or load a sample.")
+      expect(warning.className).toContain("text-stale")
+      expect(warning.className).toContain("bg-stale-wash")
+      expect(notice()!.className).toContain("text-stale")
+      expect(notice()!.className).toContain("bg-stale-wash")
+      expect(notice()!.className).not.toContain("text-fg-muted")
+    })
+
+    it("the Upload card shows no warning while the lists are still loading", async () => {
+      stored("ef".repeat(32))
+      setup()
+      await screen.findByRole("group", { name: "Saved pipelines" })
+      await act(async () => {})
+      expect(card("source")).toBeTruthy()
+      expect(cardWarning()).toBeNull()
+    })
+
+    it("the Upload card shows no warning when the file is present", async () => {
+      stored(SAMPLE_SHA)
+      setup()
+      await screen.findByRole("group", { name: "Saved pipelines" })
+      await act(async () => settle.resolve(new Response(JSON.stringify([sample]), { status: 200 })))
+      await act(async () => {})
+      expect(card("source")).toBeTruthy()
+      expect(cardWarning()).toBeNull()
+    })
+  })
+
+  it("a file uploaded just now is never flagged as missing", async () => {
+    const fresh = { sha: "12".repeat(32), filename: "my-notes.pdf", size: 7451, content_type: "application/pdf" }
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        url === "/api/sources" && init?.method === "POST" ? Promise.resolve(new Response(JSON.stringify(fresh), { status: 201 })) : base(url, init),
+      ),
+    )
+    setup()
+    const upload = await screen.findByLabelText("Upload a file")
+    await act(async () => {
+      fireEvent.change(upload, { target: { files: [new File(["%PDF-1.4"], "my-notes.pdf", { type: "application/pdf" })] } })
+    })
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    await act(async () => {})
+    expect(screen.queryByTestId("missing-document")).toBeNull()
+    expect(card("source").querySelector("[data-testid=missing-file]")).toBeNull()
+  })
+
+  describe("a run refused before it starts", () => {
+    let refuse = true
+
+    beforeEach(() => {
+      refuse = true
+      const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((url: string, init?: RequestInit) => {
+          if (url === "/api/runs" && init?.method === "POST" && refuse) {
+            return Promise.resolve(new Response(JSON.stringify({ detail: "The document is not on this server." }), { status: 400 }))
+          }
+          return base(url, init)
+        }),
+      )
+    })
+
+    it("shows in the run strip as well as above the cards, and clears when the next run starts", async () => {
+      await ready()
+      const build = screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement
+      await waitFor(() => expect(build.disabled).toBe(false))
+      fireEvent.click(build)
+      await waitFor(() => expect(screen.getByText("The pipeline cannot run")).toBeTruthy())
+      const line = within(screen.getByTestId("run-strip")).getByTestId("run-line")
+      expect(line.textContent).toBe("Could not start. See the note above the cards.")
+      expect(line.className).toContain("text-danger")
+      refuse = false
+      fireEvent.click(build)
+      await waitFor(() => expect(screen.queryByText("The pipeline cannot run")).toBeNull())
+      expect(within(screen.getByTestId("run-strip")).queryByText("Could not start. See the note above the cards.")).toBeNull()
+    })
   })
 })
 

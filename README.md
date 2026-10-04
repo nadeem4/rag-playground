@@ -207,10 +207,14 @@ unsafe to share:
   any saved pipeline you pick, asks it every question in the loaded sample's question set, and
   says how many of them found their answer, at what rank, and in which chunk. Each question
   carries the sentence in the document that answers it, so a run counts as a hit when a
-  retrieved chunk contains that sentence. A row opens to show the chunks that came back, so a
-  miss can be understood. The previous score of each pipeline in this tab is kept, so after changing one setting
-  the page reads "4 of 10, was 10 of 10" and marks the questions that changed. It needs no API
-  key.
+  retrieved chunk contains that sentence. The score reads as a sentence with the last run beside
+  it ("3 of 5 questions found the answer. The last run found 5 of 5."), and the line under it
+  names what changed when one step did ("Both misses are new since Parse changed to Fast text.").
+  One mark per question sits under the score, and pressing a mark jumps to its row. Each row says
+  its verdict in a word and why in a sentence ("Not in any of the 6 pieces that came back, so no
+  number of pieces checked would find it."). An open row shows the sentence that answers the
+  question and the top three pieces that came back, so a miss can be understood. The previous
+  score of each pipeline in this tab is kept. It needs no API key.
 - **Bring your own questions.** The bundled question sets are about the bundled samples, so
   scoring your own PDF against one of them would be meaningless. Download the template
   ([`GET /api/questions/template?format=json`](http://127.0.0.1:8000/api/questions/template?format=json),

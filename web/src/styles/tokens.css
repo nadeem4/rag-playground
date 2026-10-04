@@ -498,6 +498,85 @@
 }
 
 /*
+ * The docked Ask panel (AskDock.tsx). Its resize edge is a 12px strip over the
+ * panel's inner side (44px on a touch screen), drawn as a short line on hover,
+ * focus or drag. Opening fades the dock in over --dur-mid; below md the sheet
+ * rises 24px as it fades, and its backdrop fades. Only opacity and transform
+ * move; under reduced motion the panel simply appears.
+ */
+.ask-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 12px;
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+[data-side="right"] > .ask-edge {
+  left: -6px;
+}
+[data-side="left"] > .ask-edge {
+  right: -6px;
+}
+.ask-edge::after {
+  content: "";
+  width: 3px;
+  height: 40px;
+  border-radius: 2px;
+  background: var(--field-border);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-in);
+}
+.ask-edge:hover::after,
+.ask-edge:focus-visible::after,
+.ask-edge[data-dragging]::after {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .ask-edge {
+    width: 44px;
+  }
+  [data-side="right"] > .ask-edge {
+    left: -22px;
+  }
+  [data-side="left"] > .ask-edge {
+    right: -22px;
+  }
+}
+@keyframes ask-dock-in {
+  from {
+    opacity: 0.4;
+  }
+}
+@keyframes ask-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+@keyframes ask-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ask-dock:not([hidden]) {
+    animation: ask-dock-in var(--dur-mid) var(--ease-in);
+  }
+  .ask-backdrop {
+    animation: ask-fade-in var(--dur-mid) var(--ease-in);
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (max-width: 767px) {
+  .ask-dock:not([hidden]) {
+    animation-name: ask-sheet-in;
+  }
+}
+
+/*
  * The phone keeps only the raised card's first shadow layer (spec section 9).
  * Each theme and contrast block names its own --shadow-raised-phone; this swap
  * outranks all of them (three :root, specificity 0,3,0), so the phone value of

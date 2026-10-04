@@ -50,6 +50,9 @@ const FILES = [
   "components/pipeline/TransformSelect.tsx",
   "lib/sentence.ts",
   "components/pipeline/PipelineBar.tsx",
+  "components/ask/AskDock.tsx",
+  "components/ask/AskResults.tsx",
+  "components/ask/useWide.ts",
 ]
 
 const offScale =

@@ -88,6 +88,7 @@ export function DocumentControl() {
         <DropdownMenu.Trigger
           data-testid="document-trigger"
           aria-label={label}
+          title={name}
           aria-busy={busy ? true : undefined}
           className={cn(
             "flex h-row w-full min-w-0 items-center gap-2 rounded-control border px-2 text-left text-sm md:w-auto md:max-w-[240px] xl:max-w-[360px]",

@@ -4,6 +4,8 @@ import type { Registry } from "@/api/types"
 import type { PipelineGraph } from "@/state/graph"
 import { CONTROL } from "@/components/fields/types"
 import { Button } from "@/components/ui/button"
+import { Picker, type PickerOption } from "@/components/ui/Picker"
+import { pipelineLine } from "@/state/evaluate"
 import {
   deletePipeline,
   droppedText,
@@ -82,32 +84,39 @@ export function PipelineBar({
     }
   }
 
+  // The working copy, then each saved pipeline with its steps as the help line (M7: one this server cannot run is disabled).
+  const options: PickerOption[] = [
+    { value: "", name: "Working copy", help: pipelineLine(graph) },
+    ...pipelines.map((p) => {
+      const usable = usableGraph(p, registry)
+      return {
+        value: p.id,
+        name: p.name,
+        help: pipelineLine(usable ?? p.graph),
+        lock: usable ? undefined : { kind: "hard" as const, reason: "This server does not have every step this pipeline uses." },
+        tags: p.id === current?.id && edited ? [{ label: "Edited since saved", tone: "soft" as const }] : undefined,
+      }
+    }),
+  ]
+
   return (
     <div role="group" aria-label="Saved pipelines" className="flex flex-col gap-2 border-b border-hairline px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={`${id}-pick`} className="text-sm text-fg-muted">Pipeline</label>
-        <select
+        <label id={`${id}-label`} htmlFor={`${id}-pick`} className="text-sm text-fg-muted">Pipeline</label>
+        <Picker
           id={`${id}-pick`}
-          className={`${CONTROL} w-auto`}
+          labelledBy={`${id}-label`}
+          className="w-[min(320px,100%)]"
+          options={options}
           value={currentId ?? ""}
-          onChange={(e) => {
-            const picked = pipelines.find((p) => p.id === e.target.value) ?? null
+          onChange={(value) => {
+            const picked = pipelines.find((p) => p.id === value) ?? null
             const loaded = picked ? usableGraph(picked, registry) : null
             if (picked && !loaded) return
             setCurrentId(picked?.id ?? null)
             if (loaded) onLoad(loaded)
           }}
-        >
-          <option value="">Working copy</option>
-          {pipelines.map((p) => {
-            const usable = usableGraph(p, registry) !== null
-            return (
-              <option key={p.id} value={p.id} disabled={!usable}>
-                {usable ? p.name : `${p.name} (not usable here)`}
-              </option>
-            )
-          })}
-        </select>
+        />
         {edited ? <span className="meta">edited</span> : null}
         {current ? (
           <Button size="sm" variant="outline" disabled={!edited} onClick={() => setFlash(updatePipeline(current.id, graph) ? "Saved" : "The pipeline could not be saved in this browser.")}>Save changes</Button>

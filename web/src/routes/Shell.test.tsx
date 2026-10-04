@@ -11,7 +11,7 @@ import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/sta
 import { addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
-import { choose, optionOf } from "@/components/ui/pickerTesting"
+import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
 
 import { Shell } from "./Shell"
 
@@ -776,14 +776,16 @@ describe("saved pipelines on Build", () => {
   // A pipeline with no file shows the first-visit card, so these start with one.
   const withFile = () => setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename })
   const bar = () => screen.getByRole("group", { name: "Saved pipelines" })
-  const picker = () => within(bar()).getByRole("combobox", { name: "Pipeline" }) as HTMLSelectElement
+  const picker = () => within(bar()).getByRole("button", { name: /^Pipeline/ })
+  const picked = () => picker().getAttribute("data-picked")
+  const pickedName = () => picker().firstElementChild?.textContent
   const chunkPicker = () => within(card("chunk")).getByRole("button", { name: /^Transform/ })
   const chunkTransform = () => chunkPicker().getAttribute("data-picked")
 
   it("starts on the working copy with nothing saved", async () => {
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
-    expect([...picker().options].map((o) => o.textContent)).toEqual(["Working copy"])
+    expect(optionNames(picker())).toEqual(["Working copy"])
     expect(within(bar()).queryByRole("button", { name: "Save changes" })).toBeNull()
   })
 
@@ -795,8 +797,8 @@ describe("saved pipelines on Build", () => {
     expect(within(bar()).getByText("Give the pipeline a name.")).toBeTruthy()
     fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "Recursive chunks" } })
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
-    expect([...picker().options].map((o) => o.textContent)).toEqual(["Working copy", "Recursive chunks"])
-    expect(picker().selectedOptions[0].textContent).toBe("Recursive chunks")
+    expect(optionNames(picker())).toEqual(["Working copy", "Recursive chunks"])
+    expect(pickedName()).toBe("Recursive chunks")
     expect(readPipelines()[0].name).toBe("Recursive chunks")
   })
 
@@ -807,11 +809,14 @@ describe("saved pipelines on Build", () => {
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
     expect(chunkTransform()).toBe("recursive_character")
-    fireEvent.change(picker(), { target: { value: saved.id } })
+    choose(picker(), "Token chunks")
+    expect(picked()).toBe(saved.id)
     expect(chunkTransform()).toBe("token_based")
     expect(within(bar()).queryByText("edited")).toBeNull()
     choose(chunkPicker(), "By heading")
     expect(within(bar()).getByText("edited")).toBeTruthy()
+    expect(optionOf(picker(), "Token chunks").textContent).toContain("Edited since saved")
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" })
     expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("token_based")
     fireEvent.click(within(bar()).getByRole("button", { name: "Save changes" }))
     expect(within(bar()).queryByText("edited")).toBeNull()
@@ -822,10 +827,10 @@ describe("saved pipelines on Build", () => {
     const saved = savePipeline("Token chunks", setTransform(withFile(), "chunk", "token_based", TEST_REGISTRY))!.saved
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
-    expect(picker().value).toBe(saved.id)
+    expect(picked()).toBe(saved.id)
     fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }))
-    expect(picker().value).toBe("")
-    expect([...picker().options].map((o) => o.textContent)).toEqual(["Working copy"])
+    expect(picked()).toBe("")
+    expect(optionNames(picker())).toEqual(["Working copy"])
     expect(chunkTransform()).toBe("token_based")
   })
 
@@ -837,7 +842,7 @@ describe("saved pipelines on Build", () => {
     fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "New" } })
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
     expect(readPipelines().find((p) => p.id === saved.id)?.name).toBe("New")
-    expect(picker().selectedOptions[0].textContent).toBe("New")
+    expect(pickedName()).toBe("New")
   })
 
   it("Copy link puts the share URL on the clipboard and says so", async () => {
@@ -861,7 +866,7 @@ describe("saved pipelines on Build", () => {
     await screen.findByRole("group", { name: "Saved pipelines" })
     await waitFor(() => expect(readPipelines()).toHaveLength(1))
     expect(readPipelines()[0].name).toBe("From a friend")
-    expect(picker().selectedOptions[0].textContent).toBe("From a friend")
+    expect(pickedName()).toBe("From a friend")
     expect(chunkTransform()).toBe("token_based")
     expect(window.location.search).toBe("")
   })
@@ -920,7 +925,7 @@ describe("saved pipelines on Build", () => {
     await screen.findByRole("group", { name: "Saved pipelines" })
     await waitFor(() => expect(readPipelines()).toHaveLength(1))
     expect(readPipelines()[0].name).toBe("x".repeat(60))
-    expect(picker().selectedOptions[0].textContent).toBe("x".repeat(60))
+    expect(pickedName()).toBe("x".repeat(60))
   })
 
   it("a share link that cannot be saved loads as the working copy, never over the current pipeline (M2)", async () => {
@@ -931,7 +936,7 @@ describe("saved pipelines on Build", () => {
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
     expect(within(bar()).getByText("The shared pipeline could not be saved in this browser. It is loaded as the working copy.")).toBeTruthy()
-    expect(picker().value).toBe("")
+    expect(picked()).toBe("")
     expect(chunkTransform()).toBe("token_based")
   })
 
@@ -962,13 +967,13 @@ describe("saved pipelines on Build", () => {
   })
 
   it("switching pipelines closes an open name box (M5)", async () => {
-    const a = savePipeline("A", withFile())!.saved
+    savePipeline("A", withFile())
     savePipeline("B", withFile())
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
     fireEvent.click(within(bar()).getByRole("button", { name: "Rename" }))
     expect(within(bar()).getByRole("textbox", { name: "Pipeline name" })).toBeTruthy()
-    fireEvent.change(picker(), { target: { value: a.id } })
+    choose(picker(), "A")
     expect(within(bar()).queryByRole("textbox", { name: "Pipeline name" })).toBeNull()
   })
 
@@ -979,9 +984,11 @@ describe("saved pipelines on Build", () => {
     setCurrentId(null)
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
-    const option = [...picker().options].find((o) => o.textContent === "Semantic (not usable here)")
-    expect(option).toBeTruthy()
-    expect(option!.disabled).toBe(true)
+    const option = optionOf(picker(), "Semantic")
+    expect(option.textContent).toContain("Cannot run")
+    expect(option.getAttribute("aria-disabled")).toBe("true")
+    fireEvent.click(option)
+    expect(picked()).toBe("")
   })
 
   describe("the missing document notice while samples load (M1)", () => {

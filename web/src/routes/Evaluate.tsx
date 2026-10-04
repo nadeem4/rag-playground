@@ -19,6 +19,7 @@ import { EvidenceSlip, LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { ordinal, rowsFromResult, scoreKey, type FindingPart } from "@/components/inspectors/hits"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { Button } from "@/components/ui/button"
+import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { cn } from "@/lib/utils"
 import {
   changeFor,
@@ -29,6 +30,7 @@ import {
   metrics,
   metricsByTag,
   piecesWarning,
+  pipelineLine,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
@@ -110,6 +112,23 @@ function EvaluatePage({ registry }: { registry: Registry }) {
       ? `${current.name} (edited)`
       : "the pipeline on Build"
   const filename = String(graph?.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
+  // Saved pipelines, then the one on Build, each with its steps as the help line.
+  const pipelineOptions: PickerOption[] = [
+    ...pipelines.map((p) => ({
+      value: p.id,
+      name: p.name,
+      help: pipelineLine(usable.get(p.id) ?? p.graph),
+      group: "Saved",
+      lock: usable.get(p.id) ? undefined : { kind: "hard" as const, reason: "This server does not have every step this pipeline uses." },
+    })),
+    {
+      value: "",
+      name: "The pipeline on Build",
+      help: working ? pipelineLine(working) : undefined,
+      group: "On Build",
+      tags: current && currentGraph && !unedited ? [{ label: "Edited since saved", tone: "soft" as const }] : undefined,
+    },
+  ]
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface">
       <div className="flex flex-col gap-6 px-4 pt-4 pb-8 md:px-6">
@@ -123,26 +142,19 @@ function EvaluatePage({ registry }: { registry: Registry }) {
             ) : null}
           </div>
           <div className="flex flex-wrap items-end gap-3">
-            {/* Outside the keyed body, so switching pipelines keeps this select, and its focus (F5). */}
-            <div className="flex flex-col gap-1">
-              <label htmlFor={pickerId} className="text-xs font-semibold text-fg-muted">
+            {/* Outside the keyed body, so switching pipelines keeps this picker, and its focus (F5). */}
+            <div className="flex w-[min(360px,100%)] min-w-0 flex-col gap-1">
+              <label id={`${pickerId}-label`} htmlFor={pickerId} className="text-xs font-semibold text-fg-muted">
                 Pipeline
               </label>
-              <select
+              <Picker
                 id={pickerId}
-                aria-label="Pipeline"
-                className={cn(CONTROL, "w-auto max-w-full")}
+                labelledBy={`${pickerId}-label`}
+                options={pipelineOptions}
                 value={chosen ? chosen.id : ""}
                 disabled={busy}
-                onChange={(e) => setChoice(e.target.value)}
-              >
-                <option value="">The pipeline on Build</option>
-                {pipelines.map((p) => (
-                  <option key={p.id} value={p.id} disabled={!usable.get(p.id)}>
-                    {usable.get(p.id) ? p.name : `${p.name} (not usable here)`}
-                  </option>
-                ))}
-              </select>
+                onChange={setChoice}
+              />
             </div>
             {/* The body renders Pieces checked and the run button here, through a portal. */}
             <div ref={setSlot} className="flex flex-wrap items-end gap-3" />

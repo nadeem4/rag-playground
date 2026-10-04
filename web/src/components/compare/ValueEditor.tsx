@@ -2,22 +2,28 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import type { JsonSchema } from "@/api/types"
 import { SchemaForm } from "@/components/SchemaForm"
+import { OPTION_GRID, OptionFace } from "@/components/ui/Picker"
+import type { Compat } from "@/state/compat"
 import { RECIPE_TITLES } from "@/state/compare"
 import { fieldTitle } from "@/state/recipeSentence"
 import { cn } from "@/lib/utils"
 
-/** A strategy the editor offers: its plain name, a one-line gloss and its code name. */
+/** A strategy the editor offers: its plain name, a one-line gloss, its code name, and how it sits behind its upstream. */
 export interface StrategyChoice {
   name: string
   plain: string
   gloss: string
+  /** Soft: tagged Falls back. Hard: tagged Cannot run, and disabled. */
+  lock?: Compat
 }
 
 /**
  * The one floating editor on the recipe cards. It sits under the value that
  * opened it, laid over the card, so no card changes size. A setting is a
  * SchemaForm over that one field, plus a range when the schema gives both
- * bounds; the strategy is a list of the stage's strategies. Escape, or a
+ * bounds; the strategy is a list of the stage's strategies, each laid out as
+ * the Picker's options are: a tick, the name and code name, any tags, and one
+ * line of help. Escape, or a
  * press outside the editor and outside a value, closes it; Escape gives focus
  * back to the value.
  */
@@ -103,15 +109,11 @@ export function ValueEditor({
                 key={s.name}
                 type="button"
                 aria-pressed={s.name === transform}
+                disabled={s.lock?.kind === "hard"}
                 onClick={() => onPick(s.name)}
-                className={cn(
-                  "flex min-h-row flex-col items-start gap-px rounded-control px-2 py-1 text-left hover:bg-muted pointer-coarse:min-h-[44px]",
-                  s.name === transform && "bg-accent-wash",
-                )}
+                className={cn(OPTION_GRID, "hover:bg-muted disabled:cursor-not-allowed disabled:hover:bg-transparent", s.name === transform && "bg-accent-wash")}
               >
-                <span className="text-sm font-medium">{s.plain}</span>
-                <small className="text-xs text-fg-muted">{s.gloss}</small>
-                <span className="font-mono text-2xs text-fg-muted">{s.name}</span>
+                <OptionFace option={{ value: s.name, name: s.plain, code: s.name, help: s.gloss || undefined, lock: s.lock }} selected={s.name === transform} />
               </button>
             ))}
           </div>

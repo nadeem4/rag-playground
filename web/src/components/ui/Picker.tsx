@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react"
+import { Fragment, useRef, useState, type KeyboardEvent } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Popover } from "radix-ui"
 
@@ -110,14 +110,26 @@ export function OptionFace({ option, selected }: { option: PickerOption; selecte
         <span data-name className={cn("text-sm font-semibold", isDisabled(option) ? "text-fg-muted" : "text-fg")}>
           {option.name}
         </span>
-        {option.code ? <span className="font-mono text-xs break-all text-fg-muted">{option.code}</span> : null}
+        {/* The spaces keep the words apart in the option's accessible name; flex ignores them. */}
+        {option.code ? (
+          <>
+            {" "}
+            <span className="font-mono text-xs break-all text-fg-muted">{option.code}</span>
+          </>
+        ) : null}
         {tags.map((t) => (
-          <span key={t.label} className={cn("rounded-swatch px-[7px] py-px text-2xs font-bold whitespace-nowrap", TAG[t.tone])}>
-            {t.label}
-          </span>
+          <Fragment key={t.label}>
+            {" "}
+            <span className={cn("rounded-swatch px-[7px] py-px text-2xs font-bold whitespace-nowrap", TAG[t.tone])}>{t.label}</span>
+          </Fragment>
         ))}
       </span>
-      {option.help ? <span className="col-start-2 text-xs leading-[1.4] text-fg-muted">{option.help}</span> : null}
+      {option.help ? (
+        <>
+          {" "}
+          <span className="col-start-2 text-xs leading-[1.4] text-fg-muted">{option.help}</span>
+        </>
+      ) : null}
     </>
   )
 }
@@ -236,7 +248,10 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
             <span className="truncate font-semibold">{current?.name ?? value}</span>
             <ChevronDown aria-hidden className="row-span-2 size-[16px] text-fg-muted" strokeWidth={1.75} />
             {current?.code ?? current?.help ? (
-              <span className="col-start-1 truncate font-mono text-xs text-fg-muted">{current?.code ?? current?.help}</span>
+              <>
+                {" "}
+                <span className="col-start-1 truncate font-mono text-xs text-fg-muted">{current?.code ?? current?.help}</span>
+              </>
             ) : null}
           </button>
         </Popover.Trigger>

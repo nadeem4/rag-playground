@@ -46,6 +46,7 @@ const FILES = [
   "routes/Library.tsx",
   "routes/Privacy.tsx",
   "components/SiteFooter.tsx",
+  "components/ui/Picker.tsx",
 ]
 
 const offScale =

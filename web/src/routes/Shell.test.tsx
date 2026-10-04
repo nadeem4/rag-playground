@@ -319,6 +319,19 @@ describe("the main pane", () => {
     expect(tokens()).toContain("md:grid-cols-[380px_minmax(0,1fr)]")
     expect(tokens().filter((t) => t.startsWith("lg:grid-cols-"))).toEqual([])
   })
+
+  it("while Ask is closed, the main pane's scroll box leaves room at its foot, so the round button never covers its last line", async () => {
+    await ready()
+    const padded = () => screen.getByTestId("main-scroll").className.split(/\s+/).includes("pb-[72px]")
+    // The empty state first, then a step's output.
+    expect(padded()).toBe(false)
+    fireEvent.click(screen.getByRole("button", { name: CLOSE_ASK }))
+    expect(padded()).toBe(true)
+    fireEvent.click(card("parse"))
+    expect(padded()).toBe(true)
+    altA()
+    expect(padded()).toBe(false)
+  })
 })
 
 describe("the page on a phone", () => {

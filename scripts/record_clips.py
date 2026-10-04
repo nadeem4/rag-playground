@@ -23,7 +23,8 @@ moment its page has loaded; the recording is cut to start there, so no blank
 frame opens the loop, and re-encoded to WebM VP9 with the ffmpeg binary that
 the imageio-ffmpeg package ships (`imageio_ffmpeg.get_ffmpeg_exe()`).
 
-Writes `web/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800), and a
+Writes `web/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800; Build at
+1440x900, with the Ask dock seeded open at 698 px so the slope shows), and a
 `.jpg` poster for each, taken with Playwright's screenshot at the clip's
 telling moment.
 
@@ -37,6 +38,7 @@ shared steps come from the cache.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import socket
@@ -54,6 +56,17 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "web" / "public" / "clips"
 SIZE = {"width": 1280, "height": 800}
+#: Build is recorded wider, still 16:10, so the docked Ask panel can take 698 px:
+#: over the 640 px its comparison needs to set the lists side by side with the slope.
+SIZES = {"build": {"width": 1440, "height": 900}}
+#: The Ask dock as the Build clip shows it: open on the right at 1440 - 380 - 360 - 2 px.
+DOCK_SEED = {"open": True, "side": "right", "width": 698}
+DOCK_KEY = "rag-playground:ask-dock:v1"
+
+
+def size_for(name: str) -> dict[str, int]:
+    """The viewport and video size of clip `name`."""
+    return SIZES.get(name, SIZE)
 FAST_TEXT = "Parse: Fast text"
 THEMES = {"light": "", "dark": "-dark"}
 #: Past the load, so the first frame kept is a painted one.
@@ -123,6 +136,10 @@ def evaluate(page: Page) -> None:
 
 def build_setup(page: Page, base: str) -> None:
     pick_sample(page, base, None)
+    # The dock wide open on the right; the stored state carries it into the recorded pass.
+    page.evaluate("([key, value]) => localStorage.setItem(key, value)", [DOCK_KEY, json.dumps(DOCK_SEED)])
+    page.reload()
+    page.get_by_role("button", name="Build the index").wait_for()
     page.get_by_role("button", name="Build the index").click()
     ask = page.get_by_role("button", name="Ask", exact=True)
     page.get_by_role("button", name="Cross-encoder").click()
@@ -271,7 +288,8 @@ class Server:
 
 def record(browser, server: Server, base: str, name: str, videos: Path) -> None:
     setup, scene = CLIPS[name]
-    ctx = browser.new_context(viewport=SIZE)
+    frame = size_for(name)
+    ctx = browser.new_context(viewport=frame)
     setup(ctx.new_page(), base)
     state = ctx.storage_state()
     ctx.close()
@@ -284,7 +302,7 @@ def record(browser, server: Server, base: str, name: str, videos: Path) -> None:
             shutil.copytree(snapshot, take)
             server.start(take)
         ctx = browser.new_context(
-            viewport=SIZE, color_scheme=theme, storage_state=state, record_video_dir=str(videos), record_video_size=SIZE
+            viewport=frame, color_scheme=theme, storage_state=state, record_video_dir=str(videos), record_video_size=frame
         )
         # The recording starts with the page.
         started = time.time()

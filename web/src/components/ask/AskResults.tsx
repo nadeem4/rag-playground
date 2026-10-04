@@ -99,7 +99,7 @@ export function SearchedFor({ outputs: o }: { outputs: AskOutputs }) {
   const original = o.query?.original?.trim()
   if (o.query && original) {
     return (
-      <div className="flex flex-col gap-[2px] text-xs text-fg-muted">
+      <div className="flex flex-col gap-0 text-xs text-fg-muted">
         <p data-testid="searched-for">
           {"Searched for: "}
           <span className="text-fg">{o.query.text}</span>

@@ -627,7 +627,9 @@ uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_cli
 uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py compare   # one clip
 ```
 
-Build builds the index, asks with the cross-encoder and ends on the rerank slope. Compare shows
+Build builds the index, asks with the cross-encoder and ends on the rerank slope. It is recorded
+at 1440x900 (still 16:10, so Home's frame fits) with the Ask panel docked open on the right at
+698 px, wide enough for the two orders to sit side by side with the slope. Compare shows
 the setup cards, runs three recipes and ends on the finding sentence. Evaluate scores the
 pipeline, scores it again with Parse set to Fast text and opens a miss.
 
@@ -637,7 +639,7 @@ when done. It refuses to start if something already answers on that port, so it 
 against another server. It uses the Chromium that Playwright
 has installed (in `%LOCALAPPDATA%\ms-playwright` on Windows); pin the Playwright package to the
 version that matches that browser. Each clip has a setup pass that is not recorded, which loads
-the sample and runs every step once, then a recorded pass at 1280x800 on warm results, once in
+the sample and runs every step once, then a recorded pass at 1280x800 (Build at 1440x900) on warm results, once in
 the light theme and once in the dark. Each clip is cut to start at the first frame after the
 page has loaded and re-encoded to WebM VP9 with the ffmpeg that imageio-ffmpeg ships, so no
 system ffmpeg is needed. The pauses in the script set the length, 8 to 15 seconds, and it prints

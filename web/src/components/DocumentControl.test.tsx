@@ -78,6 +78,8 @@ describe("DocumentControl", () => {
     serve({ sources: [UP], samples: [SAMPLE] })
     render(<DocumentControl />)
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: chunking-primer.pdf. Change it."))
+    // A narrow bar cuts the name; hovering shows it whole.
+    expect(trigger().getAttribute("title")).toBe("chunking-primer.pdf")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     const items = within(menu).getAllByRole("menuitemradio")

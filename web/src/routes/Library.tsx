@@ -2,6 +2,7 @@ import { useRef, useState, type DragEvent } from "react"
 
 import { api, ApiError } from "@/api/client"
 import { useAppSettings } from "@/api/useDemo"
+import { SiteFooter } from "@/components/SiteFooter"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { refreshUploads, useDocument } from "@/state/document"
@@ -448,6 +449,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
           </p>
         </div>
       </div>
+      <SiteFooter />
     </main>
   )
 }

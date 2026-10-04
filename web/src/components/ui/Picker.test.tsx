@@ -73,6 +73,8 @@ describe("Picker, closed", () => {
     const note = screen.getByTestId("lock-reason")
     expect(note.getAttribute("role")).toBe("status")
     expect(note.textContent).toBe("Needs headings from the parse step. Fast text does not find any, so it cuts by size.")
+    // The stale tone, as in the approved design.
+    expect(note.className).toContain("text-stale")
   })
 
   it("puts a hard lock's reason under itself as an alert", () => {
@@ -80,6 +82,7 @@ describe("Picker, closed", () => {
     const note = screen.getByTestId("lock-reason")
     expect(note.getAttribute("role")).toBe("alert")
     expect(note.textContent).toMatch(/cannot run/)
+    expect(note.className).toContain("text-danger")
   })
 
   it("says a key strategy needs a key", () => {

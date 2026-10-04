@@ -264,6 +264,7 @@ describe("locked transforms", () => {
   it("tags a soft lock in the dropdown and says why, but keeps it selectable and runnable", () => {
     setup({ graph: setTransform(initialGraph(R), "chunk", "markdown_header", R) })
     const chunk = within(card("chunk"))
+    expect(chunk.getByRole("status").className).toContain("text-stale")
     expect(chunk.getByRole("status").textContent).toBe(
       "Needs headings from the parse step. pdfium does not find any, so the whole document is treated as one section and cut by size.",
     )

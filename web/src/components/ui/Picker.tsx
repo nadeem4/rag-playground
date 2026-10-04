@@ -79,7 +79,7 @@ export function PickerNote({ option }: { option?: PickerOption }) {
   const lock = option?.lock
   if (lock?.kind === "soft")
     return (
-      <p role="status" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-fg-muted">
+      <p role="status" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-stale">
         {lock.reason}
       </p>
     )

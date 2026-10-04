@@ -3,8 +3,11 @@ import { useId, type ReactNode } from "react"
 import type { GraphNode, JsonSchema, Registry } from "@/api/types"
 import type { NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { TransformSelect } from "@/components/pipeline/TransformSelect"
+import { needsApiKey } from "@/api/apiKey"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
+import { Picker, type PickerOption } from "@/components/ui/Picker"
+import { firstSentence } from "@/lib/sentence"
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl"
 import { askNodes, infoFor, rewriteOf, transformsFor, upstreamFor, type PipelineGraph, type RewriteMode } from "@/state/graph"
 
@@ -231,14 +234,20 @@ function Retrieval({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
 
 function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
   // No reranker is the empty value, since the control's values are strings.
-  const choices = RERANKERS.filter((r) => r.name === null || p.registry.rerank?.[r.name]).map((r) => {
-    const disabled = r.name === "llm_rerank" && p.hasKey === false
-    return { value: r.name ?? "", label: r.label, disabled, title: disabled ? LLM_REASON : undefined }
+  const labelId = useId()
+  const choices: PickerOption[] = RERANKERS.filter((r) => r.name === null || p.registry.rerank?.[r.name]).map((r) => {
+    const summary = r.name ? p.registry.rerank?.[r.name]?.summary : undefined
+    return r.name === null
+      ? { value: "", name: "No reranker", help: "Keeps the search order as it is." }
+      : { value: r.name, name: r.label, code: r.name, help: summary ? firstSentence(summary) : undefined, needsKey: p.hasKey === false && needsApiKey(r.name) }
   })
   const gloss = node ? infoFor(p.registry, node)?.summary : "No reranker. The candidates keep their search order."
   return (
     <Block title="Rerank" stage="rerank">
-      <SegmentedControl label="Reranker" options={choices} value={node?.transform ?? ""} onChange={(v) => p.onReranker(v || null)} />
+      <label id={labelId} htmlFor={`${labelId}-picker`} className="text-sm font-medium">
+        Reranker
+      </label>
+      <Picker id={`${labelId}-picker`} labelledBy={labelId} options={choices} value={node?.transform ?? ""} onChange={(v) => p.onReranker(v || null)} />
       {p.hasKey === false && p.registry.rerank?.llm_rerank ? <p className={GLOSS}>{LLM_REASON}</p> : null}
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}
       {node ? (

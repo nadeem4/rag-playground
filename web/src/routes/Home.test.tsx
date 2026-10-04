@@ -154,7 +154,10 @@ describe("Home", () => {
   it("shows the Build and Evaluate clips, and a still for Compare with Clip coming soon", () => {
     render(<Home navigate={vi.fn()} />)
     const videos = document.querySelectorAll("video")
-    expect([...videos].map((v) => v.getAttribute("src"))).toEqual(["/clips/build.webm", "/clips/evaluate.webm"])
+    expect([...videos].map((v) => [...v.querySelectorAll("source")].map((s) => s.getAttribute("src")))).toEqual([
+      ["/clips/build-dark.webm", "/clips/build.webm"],
+      ["/clips/evaluate-dark.webm", "/clips/evaluate.webm"],
+    ])
     expect([...videos].map((v) => v.getAttribute("poster"))).toEqual(["/clips/build.jpg", "/clips/evaluate.jpg"])
     const compare = screen.getByRole("region", { name: "Compare recipes on the same document" })
     expect(within(compare).getByText("Clip coming soon")).toBeTruthy()

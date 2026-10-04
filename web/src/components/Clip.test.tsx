@@ -34,6 +34,83 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe("Clip in light and dark", () => {
+  function media({ dark }: { dark: boolean }) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({ matches: dark && q === "(prefers-color-scheme: dark)", media: q, addEventListener() {}, removeEventListener() {} })),
+    )
+  }
+  const both = () =>
+    render(
+      <Clip
+        src="/clips/build.webm"
+        srcDark="/clips/build-dark.webm"
+        poster="/clips/build.jpg"
+        posterDark="/clips/build-dark.jpg"
+        label={LABEL}
+        caption="Build the index"
+      />,
+    )
+
+  afterEach(() => {
+    delete document.documentElement.dataset.theme
+  })
+
+  it("follows the system theme with a dark source by media query and the light file as the fallback", () => {
+    media({ dark: false })
+    both()
+    const v = video()
+    expect(v.hasAttribute("src")).toBe(false)
+    const sources = [...v.querySelectorAll("source")].map((s) => [s.getAttribute("media"), s.getAttribute("src")])
+    expect(sources).toEqual([
+      ["(prefers-color-scheme: dark)", "/clips/build-dark.webm"],
+      [null, "/clips/build.webm"],
+    ])
+    expect(v.getAttribute("poster")).toBe("/clips/build.jpg")
+  })
+
+  it("shows the dark poster when the system theme is dark", () => {
+    media({ dark: true })
+    both()
+    expect(video().getAttribute("poster")).toBe("/clips/build-dark.jpg")
+  })
+
+  it("plays the dark file when the site's theme is set to Dark, whatever the system says", () => {
+    media({ dark: false })
+    document.documentElement.dataset.theme = "dark"
+    both()
+    const v = video()
+    expect(v.getAttribute("src")).toBe("/clips/build-dark.webm")
+    expect(v.querySelectorAll("source")).toHaveLength(0)
+    expect(v.getAttribute("poster")).toBe("/clips/build-dark.jpg")
+  })
+
+  it("plays the light file when the site's theme is set to Light on a dark system", () => {
+    media({ dark: true })
+    document.documentElement.dataset.theme = "light"
+    both()
+    const v = video()
+    expect(v.getAttribute("src")).toBe("/clips/build.webm")
+    expect(v.getAttribute("poster")).toBe("/clips/build.jpg")
+  })
+
+  it("switches file when the theme is changed while the page is open", async () => {
+    media({ dark: false })
+    document.documentElement.dataset.theme = "light"
+    both()
+    document.documentElement.dataset.theme = "dark"
+    await vi.waitFor(() => expect(video().getAttribute("src")).toBe("/clips/build-dark.webm"))
+  })
+
+  it("shows the dark still when the site's theme is Dark and there is no video", () => {
+    media({ dark: false })
+    document.documentElement.dataset.theme = "dark"
+    render(<Clip poster="/clips/compare.jpg" posterDark="/clips/compare-dark.jpg" label="A still of the Compare page" caption="Clip coming soon" />)
+    expect(document.querySelector("figure img")!.getAttribute("src")).toBe("/clips/compare-dark.jpg")
+  })
+})
+
 const clip = () => render(<Clip src="/clips/build.webm" poster="/clips/build.jpg" label={LABEL} caption="Build the index" />)
 const video = () => document.querySelector("video")!
 

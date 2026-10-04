@@ -32,7 +32,7 @@ interface PageSection {
   heading: string
   what: string
   points: [string, string]
-  clip: { src?: string; poster: string; label: string; caption: string }
+  clip: { src?: string; srcDark?: string; poster: string; posterDark: string; label: string; caption: string }
 }
 
 const PAGES: PageSection[] = [
@@ -45,7 +45,9 @@ const PAGES: PageSection[] = [
     points: ["Every step names the real library and setting it uses.", "The rerank is drawn as lines from search order to final order."],
     clip: {
       src: "/clips/build.webm",
+      srcDark: "/clips/build-dark.webm",
       poster: "/clips/build.jpg",
+      posterDark: "/clips/build-dark.jpg",
       label: "Clip: building the index and asking a question on Build",
       caption: "Build the index, ask, and watch the rerank",
     },
@@ -59,6 +61,7 @@ const PAGES: PageSection[] = [
     points: ["Steps the recipes share run once.", "Save the set as an experiment and come back to it."],
     clip: {
       poster: "/clips/compare.jpg",
+      posterDark: "/clips/compare-dark.jpg",
       label: "A still of the Compare page",
       caption: "Clip coming soon",
     },
@@ -72,7 +75,9 @@ const PAGES: PageSection[] = [
     points: ["Change one step and it says which questions moved.", "Every miss gives its reason in a sentence."],
     clip: {
       src: "/clips/evaluate.webm",
+      srcDark: "/clips/evaluate-dark.webm",
       poster: "/clips/evaluate.jpg",
+      posterDark: "/clips/evaluate-dark.jpg",
       label: "Clip: scoring the pipeline and opening a miss on Evaluate",
       caption: "Run the questions, change Parse, open a miss",
     },

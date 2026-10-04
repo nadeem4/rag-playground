@@ -323,7 +323,7 @@ function Build({ registry }: { registry: Registry }) {
               size="sm"
               busy={building}
               disabled={busy || Boolean(blocker) || firstRun}
-              title={blocker ? blockedTitle(blocker) : undefined}
+              title={blocker ? blockedTitle(blocker) : BUILD_TITLE}
               onClick={() => void start(indexNode(graph)?.id, false, false)}
             >
               {building ? "Building" : "Build the index"}
@@ -456,6 +456,9 @@ function Build({ registry }: { registry: Registry }) {
 
 /** The id of a node that may be absent, as a list to spread into `edit`. */
 const ids = (n: GraphNode | undefined) => (n ? [n.id] : [])
+
+/** What the Build the index button does, for its tooltip. */
+const BUILD_TITLE = "Runs Upload, Parse, Clean, Chunk and Index with their current settings. A step whose settings have not changed is reused."
 
 /** Stages whose output is placed on the upstream chunk set's document. */
 const RETRIEVAL = new Set(["retrieve", "rerank", "use_case"])

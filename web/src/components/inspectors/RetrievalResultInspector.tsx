@@ -77,6 +77,8 @@ export interface RetrievalViewProps {
   compact?: boolean
   /** The chunk id the linked highlight has lit: its slip takes the raised look. */
   lit?: string | null
+  /** True when a tap toggles the highlight (the stacked comparison): each slip says whether it is lit with `aria-pressed`. */
+  pressable?: boolean
 }
 
 export function RetrievalResultInspector({
@@ -176,7 +178,7 @@ const LABEL = 20 // px for the rank numbers on the spine
 
 export type ListSide = "single" | "search" | "reranked"
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false, compact = false, lit = null }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false, compact = false, lit = null, pressable = false }: RetrievalViewProps) {
   const Box = flat ? FlatFrame : Frame
   const [entering] = useState(enter)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -265,6 +267,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
             enter={entering}
             compact={compact}
             lit={lit}
+            pressable={pressable}
             pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? null) : r.ordinal)}
             sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
           />
@@ -331,6 +334,7 @@ function HitList({
   enter,
   compact,
   lit,
+  pressable,
   pieceOf,
   sectionOf: section,
 }: {
@@ -350,6 +354,7 @@ function HitList({
   enter: boolean
   compact: boolean
   lit: string | null
+  pressable: boolean
   pieceOf: (row: HitRowData) => number | null
   sectionOf: (row: HitRowData) => string | null
 }) {
@@ -384,6 +389,7 @@ function HitList({
             clamp={s === "search" && selected !== i}
             compact={compact}
             lit={lit === r.chunk_id}
+            aria-pressed={pressable ? lit === r.chunk_id : undefined}
             section={section(r)}
             retriever={showRetriever && r.retriever ? r.retriever : null}
             onShowInPdf={onShowPdf && canPdf(i) ? () => onShowPdf(i) : undefined}

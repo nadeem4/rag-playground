@@ -73,19 +73,69 @@ export function EvidenceSlip({
   ...rest
 }: EvidenceSlipProps) {
   const notKept = side === "notKept"
-  const parts = bare ? [] : findingLine(row, side, scaleKey, keepLimit, reranker)
+  const full = bare ? [] : findingLine(row, side, scaleKey, keepLimit, reranker)
+  // Compact, both sides of the comparison share one anatomy: the place line has no score, and the meta line has the side's one score.
+  const parts = compact && side === "search" ? [full[0], { text: " in search" }] : full
   const scores: { name: string; value: number | undefined; missed?: string }[] =
     notKept || bare
       ? []
-      : [
-          ...(side === "search" ? [] : [{ name: scaleName(scaleKey), value: row.score }]),
-          ...(keys ?? componentKeys([row])).map((k) => ({ name: scaleName(k), value: row.component_scores[k], missed: MISSED[k] ?? "no match" })),
-        ]
+      : compact
+        ? [{ name: scaleName(scaleKey), value: row.score }]
+        : [
+            ...(side === "search" ? [] : [{ name: scaleName(scaleKey), value: row.score }]),
+            ...(keys ?? componentKeys([row])).map((k) => ({ name: scaleName(k), value: row.component_scores[k], missed: MISSED[k] ?? "no match" })),
+          ]
   const page = pages(row.page_span)
   const where = section ?? row.section
   const [more, setMore] = useState(false)
   const clamped = compact ? !more : clamp
   const meta = Boolean(page || where || retriever || scores.length || onShowInPdf || compact)
+  const place = (
+    <>
+      {page ? <span className="tabular-nums">{page}</span> : null}
+      {where ? <span>{where}</span> : null}
+      {retriever ? <span className="font-mono">{retriever}</span> : null}
+    </>
+  )
+  const tail = (
+    <>
+      {scores.map((s) => (
+        <span key={s.name} data-score={s.name} className="whitespace-nowrap">
+          {s.name}{" "}
+          {s.value === undefined ? (
+            <span className="font-sans whitespace-nowrap">{s.missed ?? ""}</span>
+          ) : (
+            <span className="font-mono text-fg tabular-nums">{fmtScore(s.value)}</span>
+          )}
+        </span>
+      ))}
+      {compact ? (
+        <button
+          type="button"
+          aria-expanded={more}
+          className={LINK_BUTTON}
+          onClick={(e) => {
+            e.stopPropagation()
+            setMore(!more)
+          }}
+        >
+          {more ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+      {onShowInPdf ? (
+        <button
+          type="button"
+          className={LINK_BUTTON}
+          onClick={(e) => {
+            e.stopPropagation()
+            onShowInPdf()
+          }}
+        >
+          Show in PDF
+        </button>
+      ) : null}
+    </>
+  )
   return (
     <div
       data-slip=""
@@ -131,44 +181,18 @@ export function EvidenceSlip({
         </p>
         {meta ? (
           <p data-testid="meta" className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-fg-muted">
-            {page ? <span className="tabular-nums">{page}</span> : null}
-            {where ? <span>{where}</span> : null}
-            {retriever ? <span className="font-mono">{retriever}</span> : null}
-            {scores.map((s) => (
-              <span key={s.name} data-score={s.name} className="whitespace-nowrap">
-                {s.name}{" "}
-                {s.value === undefined ? (
-                  <span className="font-sans whitespace-nowrap">{s.missed ?? ""}</span>
-                ) : (
-                  <span className="font-mono text-fg tabular-nums">{fmtScore(s.value)}</span>
-                )}
-              </span>
-            ))}
             {compact ? (
-              <button
-                type="button"
-                aria-expanded={more}
-                className={LINK_BUTTON}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setMore(!more)
-                }}
-              >
-                {more ? "Show less" : "Show more"}
-              </button>
-            ) : null}
-            {onShowInPdf ? (
-              <button
-                type="button"
-                className={LINK_BUTTON}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onShowInPdf()
-                }}
-              >
-                Show in PDF
-              </button>
-            ) : null}
+              <>
+                {/* Below md, where the piece is takes one line and its score and the two buttons the next. */}
+                {page || where || retriever ? <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-x-3 md:basis-auto">{place}</span> : null}
+                <span className="flex flex-wrap items-baseline gap-x-3">{tail}</span>
+              </>
+            ) : (
+              <>
+                {place}
+                {tail}
+              </>
+            )}
           </p>
         ) : null}
       </div>

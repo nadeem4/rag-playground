@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
@@ -300,6 +300,8 @@ describe("the slope between the two lists", () => {
     const svg = document.querySelector("svg.slope-lines") as SVGElement
     expect(svg).toBeTruthy()
     expect(svg.getAttribute("aria-hidden")).toBe("true")
+    // Each list is as tall as its own slips, so opening a passage resizes it and the lines follow.
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("xl:items-start")
     // A 96 px gutter between the two lists.
     expect(document.querySelector("[data-slope-grid]")!.className).toContain("xl:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)]")
     // Prior ranks 6, 1, 2, 4, 3: up, down, down, stayed, down. The dropped piece has no line.
@@ -344,6 +346,24 @@ describe("compact slips in the comparison", () => {
     expect(within(top).getByTestId("passage").className).toContain("line-clamp-2")
   })
 
+  it("both sides share one slip anatomy: a place line, two lines of passage, one meta line with one score", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const slip = (column: string) => document.querySelector<HTMLElement>(`[data-column="${column}"] [data-hit-row="1"]`)!
+    const anatomy = (el: HTMLElement) => ({
+      parts: [...el.querySelectorAll("[data-testid]")].map((n) => n.getAttribute("data-testid")),
+      scores: el.querySelectorAll("[data-score]").length,
+      buttons: within(el)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    })
+    expect(anatomy(slip("search"))).toEqual(anatomy(slip("reranked")))
+    expect(anatomy(slip("search")).scores).toBe(1)
+    // The search side's score moves from the place line to the meta line.
+    expect(within(slip("search")).getByTestId("finding").textContent).toBe("1st in search")
+    expect(slip("search").querySelector("[data-score]")!.textContent).toMatch(/^RRF /)
+  })
+
   it("the single list keeps its full passages", async () => {
     render(<Panel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
     await waitFor(() => expect(document.querySelectorAll("[data-testid=passage]").length).toBeGreaterThan(0))
@@ -363,6 +383,11 @@ describe("the linked highlight", () => {
   }
   /** The top reranked piece: 6th in search. */
   const top = () => hybrid.hits[5].chunk.id
+  /** The highlight's grace before it clears. */
+  const grace = (ms = 80) => act(() => vi.advanceTimersByTime(ms))
+
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
+  afterEach(() => vi.useRealTimers())
 
   it("hovering a left slip lights its right twin and its line, and dims the other lines; leaving clears it", async () => {
     render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
@@ -373,17 +398,33 @@ describe("the linked highlight", () => {
     expect(svg().hasAttribute("data-active")).toBe(true)
     expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(1)
     fireEvent.mouseLeave(document.querySelector("[data-slope-grid]")!)
+    grace()
     expect(litSlips()).toEqual([])
     expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(0)
     expect(svg().hasAttribute("data-active")).toBe(false)
   })
 
-  it("hovering the gap between slips clears it", async () => {
+  it("crossing the gap to the next slip does not flicker: the highlight holds for 80 ms", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    const next = hybrid.hits[0].chunk.id
+    fireEvent.mouseOver(slipOf("reranked", top()))
+    expect(litSlips()).toHaveLength(2)
+    // The 4 px gap: still lit, then the next slip takes over with no dark frame.
+    fireEvent.mouseOver(document.querySelector('[data-column="reranked"]')!)
+    grace(79)
+    expect(litSlips()).toEqual([slipOf("search", top()), slipOf("reranked", top())])
+    fireEvent.mouseOver(slipOf("reranked", next))
+    grace(200)
+    expect(litSlips()).toEqual([slipOf("search", next), slipOf("reranked", next)])
+  })
+
+  it("resting on the gap clears it after the grace", async () => {
     render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
     await ready()
     fireEvent.mouseOver(slipOf("reranked", top()))
-    expect(litSlips()).toHaveLength(2)
     fireEvent.mouseOver(document.querySelector('[data-column="reranked"]')!)
+    grace()
     expect(litSlips()).toEqual([])
   })
 
@@ -395,6 +436,7 @@ describe("the linked highlight", () => {
     expect(litSlips()).toEqual([slipOf("search", id), slipOf("reranked", id)])
     expect(path(id).classList.contains("lit")).toBe(true)
     fireEvent.blur(slipOf("reranked", id))
+    grace()
     expect(litSlips()).toEqual([])
   })
 
@@ -410,6 +452,63 @@ describe("the linked highlight", () => {
     expect(litSlips()).toEqual([slipOf("reranked", "lonely")])
     expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(0)
     expect(svg().hasAttribute("data-active")).toBe(false)
+  })
+})
+
+describe("below the wide layout (phone and tablet)", () => {
+  /** A window narrower than 1280 px: the min-width query fails, reduced motion is off. */
+  const narrow = () => vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+  const slipOf = (column: string, id: string) => document.querySelector(`[data-column="${column}"] [data-id="${id}"]`)!.closest<HTMLElement>("[data-slip]")!
+  const top = () => hybrid.hits[5].chunk.id
+  let scrolled: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    narrow()
+    scrolled = vi.fn()
+    Object.assign(Element.prototype, { scrollIntoView: scrolled })
+  })
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+  })
+
+  it("shows the reranked list first, draws no lines, and folds the search order under a closed disclosure", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(document.querySelector("svg.slope-lines")).toBeNull()
+    expect(document.querySelector('[data-column="search"]')).toBeNull()
+    const disclosure = screen.getByRole("button", { name: "Show search order" })
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false")
+    fireEvent.click(disclosure)
+    const search = document.querySelector('[data-column="search"]')!
+    expect(search).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Hide search order" }).getAttribute("aria-expanded")).toBe("true")
+    // The reranked list comes first.
+    const reranked = document.querySelector('[data-column="reranked"]')!
+    expect(reranked.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("a tap lights a slip and its twin and brings the twin into view; a second tap clears it; hover does nothing", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(screen.getByRole("button", { name: "Show search order" }))
+    fireEvent.mouseOver(slipOf("reranked", top()))
+    expect(document.querySelectorAll("[data-slip][data-lit]")).toHaveLength(0)
+    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("false")
+    fireEvent.click(slipOf("reranked", top()))
+    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("true")
+    expect([...document.querySelectorAll("[data-slip][data-lit]")]).toEqual([slipOf("reranked", top()), slipOf("search", top())])
+    expect(scrolled).toHaveBeenCalledWith({ block: "nearest" })
+    expect(scrolled.mock.contexts[0]).toBe(slipOf("search", top()))
+    fireEvent.click(slipOf("reranked", top()))
+    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("false")
+    expect(document.querySelectorAll("[data-slip][data-lit]")).toHaveLength(0)
+  })
+
+  it("Show more does not toggle the highlight", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(within(slipOf("reranked", top())).getByRole("button", { name: "Show more" }))
+    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("false")
   })
 })
 
@@ -508,8 +607,21 @@ describe("the note under a reranker that only reorders", () => {
     const mmr = setReranker(p.graph, LIVE, "mmr")
     render(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
     const note = await screen.findByText("Ordered by MMR; the scores are the search's.")
-    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(true)
     expect(note.className).toContain("text-fg-muted")
+    // Above the two lists, not inside the right one, so both lists start level.
+    expect(note.closest("[data-column]")).toBeNull()
+    const grid = document.querySelector("[data-slope-grid]")!
+    expect(note.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("keeps the note with the right list when the comparison is hidden", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const mmr = setReranker(p.graph, LIVE, "mmr")
+    render(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
+    await screen.findByText("Ordered by MMR; the scores are the search's.")
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    const note = screen.getByText("Ordered by MMR; the scores are the search's.")
+    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(true)
   })
 
   it("says nothing when the reranker wrote its own scores", async () => {

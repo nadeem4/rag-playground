@@ -15,7 +15,7 @@ const NONE: SlopePath[] = []
  * The slope's lines, measured from the swatches the browser drew inside
  * `containerRef` (the grid, holding the two `[data-column]` lists and the
  * `[data-gutter]` between them): on mount, when the rerank result changes,
- * when the grid or either list resizes, and once the fonts have landed (line
+ * when the grid, either list or any slip resizes, and once the fonts have landed (line
  * breaks move with them). While anything inside is still animating (the lists'
  * enter rise) it waits for that to finish, so a line joins the final places.
  * Nothing while the comparison is closed, and nothing measured for an older
@@ -63,7 +63,8 @@ export function useSlope(
     const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure)
     if (ro) {
       ro.observe(root)
-      root.querySelectorAll("[data-column]").forEach((el) => ro.observe(el))
+      // Each list and each slip: a passage that opens in the column with room to spare resizes only its slip.
+      root.querySelectorAll("[data-column], [data-slip]").forEach((el) => ro.observe(el))
     }
     return () => {
       cancelled = true

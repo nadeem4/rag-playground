@@ -36,7 +36,7 @@ function Harness({ open, rerankId, moves }: { open: boolean; rerankId: string; m
   const ref = useRef<HTMLDivElement>(null)
   seen = useSlope(ref, open, rerankId, moves)
   const swatch = (column: "search" | "reranked", id: string) => (
-    <div key={id}>
+    <div key={id} data-slip="">
       <span
         data-id={id}
         ref={(el) => {
@@ -105,6 +105,8 @@ describe("useSlope", () => {
     expect(observed).toContain(root)
     expect(observed).toContain(root.querySelector('[data-column="search"]'))
     expect(observed).toContain(root.querySelector('[data-column="reranked"]'))
+    // Each slip too: a passage that opens in the column with room to spare resizes only its slip.
+    root.querySelectorAll("[data-slip]").forEach((slip) => expect(observed).toContain(slip))
     tops.reranked.a = 140
     fire()
     expect(end("a")).toBe("162,155")

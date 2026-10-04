@@ -46,10 +46,3 @@
   stroke: var(--flat);
   stroke-dasharray: 4 4;
 }
-
-/* Below the two-column width the lists stack, so a line would cross a list: none is drawn. */
-@media (width < 80rem) {
-  .slope-lines {
-    display: none;
-  }
-}

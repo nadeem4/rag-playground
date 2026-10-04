@@ -17,6 +17,7 @@ import { errorHeadline } from "@/state/pipeline"
 import { RERANKERS, RETRIEVAL_LABEL } from "./AskSettings"
 import { Finding } from "./Finding"
 import { useSlope } from "./useSlope"
+import { useWide } from "./useWide"
 
 import "./ask.css"
 
@@ -280,6 +281,9 @@ function Failed({ node, error }: { node: GraphNode; error: string }) {
   )
 }
 
+/** How long the linked highlight holds after the pointer or the focus leaves a slip, in ms. */
+const LIT_GRACE_MS = 80
+
 /** The piece of the slip an event came from, by its swatch's `data-id`; null outside a slip. */
 function pieceAt(target: EventTarget | null): string | null {
   const slip = target instanceof Element ? target.closest("[data-slip]") : null
@@ -322,10 +326,14 @@ function Comparison({
   const kept = new Set(after.map((r) => r.chunk_id))
   // The candidates the reranker dropped, each with its search place, follow the kept ones as Not kept slips.
   const dropped = before.filter((r) => !kept.has(r.chunk_id)).map((r) => ({ ...r, prior_rank: r.rank }))
+  // At 1280 px and up the lists sit side by side with the slope between them;
+  // below, they stack, no line is drawn, and the search order folds away.
+  const wide = useWide()
+  const sideBySide = open && wide
   // The slope: one line per kept piece, coloured by how it moved.
   const gridRef = useRef<HTMLDivElement>(null)
   const moves = new Map<string, SlopeKind>(after.map((r) => [r.chunk_id, slopeKind(r)]))
-  const lines = useSlope(gridRef, open, o.rerankId, moves)
+  const lines = useSlope(gridRef, sideBySide, o.rerankId, moves)
   // Motion 4: once per rerank result, the lines draw from left to right, once
   // they are measured at the final places. Never on a rerender, a collapse, an
   // expand or a remount.
@@ -336,9 +344,47 @@ function Comparison({
     slopesDrawn.add(id)
     drawSlope(svgRef.current, drawTiming())
   }, [lines, o.rerankId])
-  // The linked highlight: the piece under the pointer or the focus, lit in both lists and on its line.
+  // The linked highlight: the piece under the pointer or the focus, lit in both
+  // lists and on its line. It clears after a short grace, so crossing the gap
+  // between two slips does not flash everything off and on.
   const [lit, setLit] = useState<string | null>(null)
-  const light = (target: EventTarget | null) => setLit(pieceAt(target))
+  const grace = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settle = () => {
+    if (grace.current) clearTimeout(grace.current)
+    grace.current = null
+  }
+  const lightNow = (id: string) => {
+    settle()
+    setLit(id)
+  }
+  const clearSoon = () => {
+    if (grace.current) return
+    grace.current = setTimeout(() => {
+      grace.current = null
+      setLit(null)
+    }, LIT_GRACE_MS)
+  }
+  const hover = (target: EventTarget | null) => {
+    const id = pieceAt(target)
+    if (id) lightNow(id)
+    else clearSoon()
+  }
+  useEffect(() => settle, [])
+  // Stacked, the twin is a screen away and hover shows nothing: a tap lights a
+  // slip, brings its twin into view, and a second tap clears it.
+  const tap = (target: EventTarget | null) => {
+    if (!(target instanceof Element) || target.closest("button, a")) return
+    const id = pieceAt(target)
+    if (!id) return
+    const next = lit === id ? null : id
+    setLit(next)
+    if (!next) return
+    const slip = target.closest("[data-slip]")
+    const twin = [...(gridRef.current?.querySelectorAll("[data-slip]") ?? [])].find((el) => el !== slip && el.querySelector<HTMLElement>("[data-id]")?.dataset.id === id)
+    twin?.scrollIntoView?.({ block: "nearest" })
+  }
+  const pressable = open && !wide
+  const [searchShown, setSearchShown] = useState(false)
   const litLine = lit !== null && lines.some((l) => l.id === lit)
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
@@ -346,6 +392,10 @@ function Comparison({
     </Button>
   )
   const title = <Heading>{`After rerank, ${rerankLabel(node.transform)}, ${after.length} kept`}</Heading>
+  // MMR and the LLM reranker reorder without rescoring: say why the scores are not in order.
+  const note = reorderedOnly(after) ? (
+    <p className="basis-full text-xs text-fg-muted">{`Ordered by ${rerankLabel(node.transform)}; the scores are the search's.`}</p>
+  ) : null
   const reranked = (
     <div data-column="reranked" className="flex min-w-0 flex-col gap-2">
       <RetrievalView
@@ -362,21 +412,19 @@ function Comparison({
         keepLimit={after.length}
         compact={open}
         lit={open ? lit : null}
+        pressable={pressable}
         facts={
-          <>
-            {open ? (
-              title
-            ) : (
+          open ? (
+            title
+          ) : (
+            <>
               <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
                 {title}
                 {toggle}
               </div>
-            )}
-            {/* MMR and the LLM reranker reorder without rescoring: say why the scores are not in order. */}
-            {reorderedOnly(after) ? (
-              <p className="basis-full text-xs text-fg-muted">{`Ordered by ${rerankLabel(node.transform)}; the scores are the search's.`}</p>
-            ) : null}
-          </>
+              {note}
+            </>
+          )
         }
       />
       {/* The reranker's run note is the sub line above the results; without one, What it did says the outcome here. */}
@@ -384,45 +432,71 @@ function Comparison({
     </div>
   )
   if (!open) return reranked
+  const search = (
+    <div data-column="search" className="min-w-0">
+      <RetrievalView
+        key={o.retrieveId}
+        enter={enterSearch}
+        rows={before}
+        chunkSet={o.chunkSet}
+        doc={o.doc}
+        showDetail={false}
+        side="search"
+        flat
+        compact
+        lit={lit}
+        pressable={pressable}
+        facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
+      />
+    </div>
+  )
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Heading>Search order against the reranked order</Heading>
         {toggle}
       </div>
-      <div
-        ref={gridRef}
-        data-slope-grid=""
-        className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)]"
-        onMouseOver={(e) => light(e.target)}
-        onMouseLeave={() => setLit(null)}
-        onFocus={(e) => light(e.target)}
-        onBlur={() => setLit(null)}
-      >
-        <svg ref={svgRef} className="slope-lines" aria-hidden data-active={litLine ? "" : undefined}>
-          {lines.map((l) => (
-            <path key={l.id} data-id={l.id} data-kind={l.kind} d={l.d} className={l.id === lit ? "lit" : undefined} />
-          ))}
-        </svg>
-        <div data-column="search" className="min-w-0">
-          <RetrievalView
-            key={o.retrieveId}
-            enter={enterSearch}
-            rows={before}
-            chunkSet={o.chunkSet}
-            doc={o.doc}
-            showDetail={false}
-            side="search"
-            flat
-            compact
-            lit={lit}
-            facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
-          />
+      {/* Above both lists, so the two start level and a stayed piece's line runs flat. */}
+      {note}
+      {wide ? (
+        <div
+          ref={gridRef}
+          data-slope-grid=""
+          className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)] xl:items-start"
+          onMouseOver={(e) => hover(e.target)}
+          onMouseLeave={clearSoon}
+          onFocus={(e) => hover(e.target)}
+          onBlur={clearSoon}
+        >
+          <svg ref={svgRef} className="slope-lines" aria-hidden data-active={litLine ? "" : undefined}>
+            {lines.map((l) => (
+              <path key={l.id} data-id={l.id} data-kind={l.kind} d={l.d} className={l.id === lit ? "lit" : undefined} />
+            ))}
+          </svg>
+          {search}
+          {/* The gutter the lines cross. */}
+          <div data-gutter="" aria-hidden className="hidden xl:block" />
+          {reranked}
         </div>
-        {/* The gutter the lines cross; stacked, it takes no room. */}
-        <div data-gutter="" aria-hidden className="hidden xl:block" />
-        {reranked}
-      </div>
+      ) : (
+        <div
+          ref={gridRef}
+          data-slope-grid=""
+          className="flex flex-col gap-3"
+          onClick={(e) => tap(e.target)}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === " ") && e.target instanceof Element && e.target.matches("[data-slip]")) tap(e.target)
+          }}
+        >
+          {reranked}
+          <div>
+            <Button variant="outline" size="sm" aria-expanded={searchShown} onClick={() => setSearchShown(!searchShown)}>
+              {searchShown ? "Hide search order" : "Show search order"}
+            </Button>
+          </div>
+          {searchShown ? search : null}
+        </div>
+      )}
     </div>
   )
 }

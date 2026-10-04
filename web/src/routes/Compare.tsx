@@ -14,6 +14,7 @@ import { goldRank } from "@/components/ask/Transcript"
 import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
 import { RecipeHead } from "@/components/compare/RecipeHead"
 import { RetrieveEvidence } from "@/components/compare/RetrieveEvidence"
+import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
 import { agreementText, compareLists, hitRows, type HitRowData } from "@/components/inspectors/hits"
@@ -31,13 +32,14 @@ import {
   columnOrder,
   defaultConfig,
   infoFor,
-  readStoredGraph,
   terminalNode,
   titleFor,
   transformsFor,
   upstreamOfStage,
+  useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
+import { useDocument } from "@/state/document"
 import { chunkFinding, recipeNames, rejectedRecipe, retrieveFinding, type Finding } from "@/state/compare"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
@@ -55,17 +57,25 @@ import { useColumnsFit } from "./useColumnsFit"
 
 export function Compare() {
   const reg = useRegistry()
+  if (reg.kind !== "ready") return <RegistryScreen state={reg} />
+  return <ComparePage registry={reg.registry} />
+}
+
+/**
+ * Reads the working graph as a store, so a document chosen in the header's
+ * bar on this page re-renders the comparison on it, with no reload.
+ */
+function ComparePage({ registry }: { registry: Registry }) {
   // The node under comparison: from the URL on arrival, then from the picker.
   const [wanted, setWanted] = useState<string | null>(() => new URLSearchParams(window.location.search).get("node"))
-  if (reg.kind !== "ready") return <RegistryScreen state={reg} />
+  const graph = useStoredGraph(registry)
   const params = new URLSearchParams(window.location.search)
-  const graph = readStoredGraph(reg.registry)
   const target = graph?.nodes.find((n) => n.id === wanted) ?? graph?.nodes.find((n) => n.stage === "chunk")
-  if (!graph || !target || !graph.nodes.some((n) => n.stage === "source" && n.config.sha)) {
+  if (!graph || !target) {
     return (
       <main className="flex min-h-0 flex-1 flex-col bg-surface">
         <EmptyState title="No pipeline to compare">
-          Build a pipeline with a file first, then press Sweep on a card.{" "}
+          Build a pipeline first, then press Sweep on a card.{" "}
           <a href="/build" className="text-fg underline">
             Go to Build
           </a>
@@ -85,7 +95,7 @@ export function Compare() {
     setWanted(id)
   }
   // Keyed on the target: a new node means fresh variants, no results and `through` back at the node itself.
-  return <Sweep key={target.id} registry={reg.registry} graph={graph} target={target} choices={choices} onChoose={choose} preset={preset} native={native} />
+  return <Sweep key={target.id} registry={registry} graph={graph} target={target} choices={choices} onChoose={choose} preset={preset} native={native} />
 }
 
 /** Per chunker: its size field, then its overlap field when it has one. */
@@ -171,7 +181,8 @@ function Sweep({
     (preset || target.stage === "index" || target.stage === "retrieve") && terminal && downstream.includes(terminal) ? terminal.id : target.id,
   )
   const [variants, setVariants] = useState<Variant[]>(() => (preset ? matryoshkaVariants(target, native) : seedVariants(target, transforms)))
-  const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string }>({ variants: [], through })
+  // What the last run ran: its recipes, where it stopped, and on which document.
+  const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string; sha: string }>({ variants: [], through, sha: "" })
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -192,6 +203,9 @@ function Sweep({
   const labels = variantLabels(submitted.variants, registry, target.stage)
   const upstream = order.filter((n) => n.stage !== "source" && ancestors(graph, target.id, registry).has(n.id) && n.stage !== "query")
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
+  // The document is the header bar's. Missing or none blocks a run; a new one leaves the results on the old.
+  const { status: docStatus } = useDocument()
+  const noDocument = needsDocument(docStatus)
 
   // Per variant: the through node's output, the chunk set to place hits on,
   // and the index descriptor (for its embedding counts).
@@ -271,7 +285,7 @@ function Sweep({
         },
         { keys },
       )
-      setSubmitted({ variants, through })
+      setSubmitted({ variants, through, sha })
       setRunId(run_id)
     } catch (err) {
       // The run never started: open the recipe the error belongs to, or every recipe when it cannot be told.
@@ -301,7 +315,7 @@ function Sweep({
     // A different number of variants no longer lines up with the results.
     if (next.length !== variants.length) {
       setRunId(null)
-      setSubmitted({ variants: [], through })
+      setSubmitted({ variants: [], through, sha: "" })
     }
   }
 
@@ -331,7 +345,7 @@ function Sweep({
           <h1 className="text-xl font-semibold">Compare</h1>
           {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
           <p className="text-sm text-fg-muted">
-            The {verb} step over <span className="font-mono">{filename}</span>
+            The {verb} step over {filename ? <span className="font-mono">{filename}</span> : "no document yet"}
             {upstream.length ? (
               <>
                 , after <span className="font-mono">{upstream.map((n) => n.transform).join(", ")}</span>
@@ -396,7 +410,8 @@ function Sweep({
                 Cancel
               </Button>
             ) : null}
-            <Button size="sm" className="flex-1 md:flex-none" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
+            {noDocument ? <span className="self-center text-xs text-fg-muted">Needs a document.</span> : null}
+            <Button size="sm" className="flex-1 md:flex-none" disabled={busy || variants.length === 0 || noDocument} onClick={() => void sweep()}>
               {busy ? "Running" : `Run ${variants.length} ${variants.length === 1 ? "recipe" : "recipes"}`}
             </Button>
           </div>
@@ -404,6 +419,7 @@ function Sweep({
       </div>
 
       <div ref={scroller} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <DocumentNote action="run these recipes" changed={runId !== null && submitted.sha !== "" && submitted.sha !== sha} className="mx-3 mt-3" />
         {/* The finding says what differs before any column does; the tally under it is the quiet fact of what ran. */}
         <div className="flex flex-col gap-1 border-b border-hairline px-3 py-3" aria-live="polite">
           {error ? (

@@ -4,6 +4,7 @@ import type { GraphNode, JsonSchema, Registry } from "@/api/types"
 import type { NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { TransformSelect } from "@/components/pipeline/TransformSelect"
 import { SchemaForm } from "@/components/SchemaForm"
+import { Button } from "@/components/ui/button"
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl"
 import { askNodes, infoFor, rewriteOf, transformsFor, upstreamFor, type PipelineGraph, type RewriteMode } from "@/state/graph"
 
@@ -43,6 +44,8 @@ export interface AskSettingsProps {
   onUseCase: (transform: "search" | "chat") => void
   /** Set how the question is rewritten before retrieval: `setRewrite` on the graph. */
   onRewrite: (mode: RewriteMode) => void
+  /** Open Compare on a node. When given, the Retrieval block offers Compare searches. */
+  onSweep?: (id: string) => void
 }
 
 function Block({ title, stage, children }: { title: string; stage: string; children: ReactNode }) {
@@ -216,6 +219,11 @@ function Retrieval({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
         primary={RETRIEVAL_PRIMARY}
         hide={PRF_FIELDS}
       />
+      {p.onSweep ? (
+        <Button variant="ghost" size="sm" className="self-start" title="Run this search beside the other strategies on the Compare page" onClick={() => p.onSweep!(node.id)}>
+          Compare searches
+        </Button>
+      ) : null}
     </Block>
   )
 }

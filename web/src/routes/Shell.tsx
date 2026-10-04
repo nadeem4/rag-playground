@@ -472,6 +472,7 @@ function Build({ registry }: { registry: Registry }) {
             }}
             onUseCase={(t) => edit(setUseCase(graph, registry, t), ...ids(askNodes(graph).useCase))}
             onRewrite={(m) => edit(setRewrite(graph, registry, m), ...ids(askNodes(graph).query), ...ids(askNodes(graph).retrieve))}
+            onSweep={(id) => void openSweep(id)}
             onAsk={() => {
               setComparisonHidden(null)
               const snap = askSnapshot(graph, registry, pipelineName)

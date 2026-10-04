@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
-import { sampleGraph, storeGraph } from "@/state/graph"
+import { sampleGraph, storeGraph, transformsFor } from "@/state/graph"
 
-import { COLUMN_MIN, Compare, VariantResult } from "./Compare"
+import { COLUMN_MIN, Compare, seedVariants, VariantResult } from "./Compare"
 
 const registry = liveRegistry as unknown as Registry
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
@@ -61,7 +61,7 @@ describe("the Compare stage picker", () => {
     expect(options).toEqual(["Parse", "Chunk"])
     expect(picker().value).toBe("chunk")
     expect(text()).toMatch(/The Chunk step over chunking-primer\.pdf/)
-    expect(columns()).toEqual(["recursive_character", "layout_blocks", "markdown_header"])
+    expect(columns()).toEqual(["recursive_character", "recursive_character", "sentence_window"])
   })
 
   it("moves the comparison to Parse: the parsers, the sentence and the URL follow", async () => {
@@ -144,5 +144,29 @@ describe("the Compare stage picker", () => {
     render(<Compare />)
     await waitFor(() => expect(picker().value).toBe("chunk"))
     expect(text()).not.toMatch(/[–—]/)
+  })
+})
+
+describe("seedVariants", () => {
+  const chunk = () => sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "chunk")!
+
+  it("seeds a Chunk sweep with the node's recipe, the same recipe at half the size, and By sentence on defaults", () => {
+    const v = seedVariants(chunk(), transformsFor(registry, "chunk"))
+    expect(v.map((x) => x.transform)).toEqual(["recursive_character", "recursive_character", "sentence_window"])
+    expect(v[0].config).toEqual(chunk().config)
+    expect(v[1].config).toMatchObject({ chunk_size: 200, chunk_overlap: 40 })
+    expect(v[2].config).toMatchObject({ sentences_per_chunk: 5, overlap_sentences: 1 })
+  })
+
+  it("seeds Recursive on defaults as the third recipe when the node already cuts by sentence", () => {
+    const node = { ...chunk(), transform: "sentence_window", config: { sentences_per_chunk: 6, overlap_sentences: 2 } }
+    const v = seedVariants(node, transformsFor(registry, "chunk"))
+    expect(v.map((x) => x.transform)).toEqual(["sentence_window", "sentence_window", "recursive_character"])
+    expect(v[1].config).toMatchObject({ sentences_per_chunk: 3, overlap_sentences: 1 })
+  })
+
+  it("keeps the old rule for Parse: the node's parser, then the others", () => {
+    const parse = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "parse")!
+    expect(seedVariants(parse, transformsFor(registry, "parse")).map((x) => x.transform)).toEqual(["docling", "pdfium"])
   })
 })

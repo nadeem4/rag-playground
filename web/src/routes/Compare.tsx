@@ -80,9 +80,38 @@ export function Compare() {
   return <Sweep key={target.id} registry={reg.registry} graph={graph} target={target} choices={choices} onChoose={choose} preset={preset} native={native} />
 }
 
-/** At most three columns: the node's own variant first, then the next two transforms of its stage in registry order, on defaults. */
+/** Per chunker: its size field, then its overlap field when it has one. */
+const SIZE_FIELDS: Record<string, string[]> = {
+  recursive_character: ["chunk_size", "chunk_overlap"],
+  token_based: ["max_tokens", "overlap"],
+  sentence_window: ["sentences_per_chunk", "overlap_sentences"],
+  layout_blocks: ["max_tokens"],
+  markdown_header: ["max_tokens"],
+}
+
+/** The config with its size halved (at least 1) and its overlap halved (at least 0); null when a field is not a number. */
+function halved(transform: string, config: Record<string, unknown>): Record<string, unknown> | null {
+  const [size, overlap] = SIZE_FIELDS[transform] ?? []
+  if (!size || typeof config[size] !== "number") return null
+  const next = { ...config, [size]: Math.max(1, Math.floor((config[size] as number) / 2)) }
+  if (overlap && typeof config[overlap] === "number") next[overlap] = Math.max(0, Math.floor((config[overlap] as number) / 2))
+  return next
+}
+
+/**
+ * At most three columns, the node's own recipe first. A Chunk node then gets
+ * the same recipe at half the size, and By sentence on defaults (Recursive when
+ * it already cuts by sentence), so the columns differ on the sample. Any other
+ * node, or a chunker without a known size field, gets the next two transforms
+ * of its stage in registry order, on defaults.
+ */
 export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Variant[] {
   const own: Variant = { transform: target.transform, config: target.config }
+  if (target.stage === "chunk") {
+    const half = halved(target.transform, target.config)
+    const third = transforms.find((t) => t.name === (target.transform === "sentence_window" ? "recursive_character" : "sentence_window"))
+    if (half && third) return [own, { transform: target.transform, config: half }, { transform: third.name, config: defaultConfig(third) }]
+  }
   const others = transforms.filter((t) => t.name !== target.transform).map((t) => ({ transform: t.name, config: defaultConfig(t) }))
   return [own, ...others].slice(0, 3)
 }

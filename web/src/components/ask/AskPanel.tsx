@@ -58,6 +58,8 @@ export interface AskPanelProps {
   onReranker: (transform: string | null) => void
   onUseCase: (transform: "search" | "chat") => void
   onRewrite: (mode: RewriteMode) => void
+  /** Open Compare on a node: the Retrieval block's Compare searches. */
+  onSweep?: (id: string) => void
   onAsk: () => void
   /** Set while Build the index runs: the step it is on (when one has started) and when that step started, epoch seconds. */
   buildingStep?: { title?: string; startedAt?: number }
@@ -282,6 +284,7 @@ export function AskPanel(p: AskPanelProps) {
             onReranker={p.onReranker}
             onUseCase={p.onUseCase}
             onRewrite={p.onRewrite}
+            onSweep={p.onSweep}
           />
         ) : null}
         <AskResults

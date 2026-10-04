@@ -119,6 +119,10 @@ export const api = {
     form.append("file", file)
     return request<Source>("/sources", { method: "POST", body: form })
   },
+  /** Delete this browser's own upload now (on the demo), or any upload (locally). 403 for a sample. */
+  deleteSource: (source: string) => request<{ sha: string; deleted: boolean }>(`/sources/${sha(source)}`, { method: "DELETE" }),
+  /** A source's own bytes, for exporting a saved item with its document. */
+  sourceFileUrl: (source: string) => `${API_BASE}/sources/${sha(source)}/file`,
   /** The bundled sample cards offered on the first-visit card and in the Document menu, default first. */
   samples: () => request<SampleCard[]>("/samples"),
   /** Plan I-14: registers a bundled sample PDF like an upload. Idempotent. Omit `name` for the default sample. */

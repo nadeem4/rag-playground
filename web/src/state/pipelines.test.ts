@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { initialGraph, setTransform } from "./graph"
 import {
   MAX_PIPELINES,
+  clearPipelines,
+  importPipelines,
   decodePipeline,
   deletePipeline,
   encodePipeline,
@@ -150,5 +152,31 @@ describe("the share link codec", () => {
   it("keeps non-ASCII names intact", () => {
     const code = encodePipeline("Résumé étape", g())
     expect(decodePipeline(code, R)?.name).toBe("Résumé étape")
+  })
+})
+
+describe("importing and clearing for the Library", () => {
+  const saved = (id: string, savedAt: string) => ({ id, name: `P ${id}`, graph: g(), savedAt })
+
+  it("merges by id, never duplicates, keeps the newest twenty and reports what it dropped", () => {
+    const mine = savePipeline("Mine", g())!.saved
+    const incoming = [
+      { ...mine, name: "Same id from the file" },
+      ...Array.from({ length: MAX_PIPELINES }, (_, i) => saved(`n${i}`, `2026-09-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`)),
+    ]
+    const r = importPipelines(incoming)!
+    const list = readPipelines()
+    expect(list).toHaveLength(MAX_PIPELINES)
+    expect(list.filter((p) => p.id === mine.id).map((p) => p.name)).toEqual(["Mine"])
+    expect(r.skipped).toBe(1)
+    expect(r.added).toBe(MAX_PIPELINES - 1)
+    expect(r.dropped.map((p) => p.id)).toEqual(["n0"])
+  })
+
+  it("clears every saved pipeline and the selection", () => {
+    savePipeline("One", g())
+    clearPipelines()
+    expect(readPipelines()).toEqual([])
+    expect(readCurrentId()).toBeNull()
   })
 })

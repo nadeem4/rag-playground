@@ -283,6 +283,8 @@ export interface Source {
   filename: string
   size: number
   content_type: string
+  /** `GET /api/sources` only: when this browser uploaded it (the demo's hours count from it). Absent for a sample. */
+  uploaded_at?: string
 }
 
 /** One entry of `GET /api/samples`: a bundled sample document offered on the first-visit card and in the Document menu. */

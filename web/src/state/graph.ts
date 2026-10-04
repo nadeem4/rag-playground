@@ -28,7 +28,7 @@ export const ASK_STAGES: Stage[] = ["query", "retrieve", "rerank", "use_case"]
 export const DEFAULT_STAGES: Stage[] = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
 
 export const STAGE_VERB: Partial<Record<Stage, string>> = {
-  source: "Upload",
+  source: "Document",
   parse: "Parse",
   clean: "Clean",
   chunk: "Chunk",

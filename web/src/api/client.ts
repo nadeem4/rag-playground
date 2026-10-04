@@ -119,7 +119,7 @@ export const api = {
     form.append("file", file)
     return request<Source>("/sources", { method: "POST", body: form })
   },
-  /** The bundled sample cards offered on the Load card, default first. */
+  /** The bundled sample cards offered on the first-visit card and in the Document menu, default first. */
   samples: () => request<SampleCard[]>("/samples"),
   /** Plan I-14: registers a bundled sample PDF like an upload. Idempotent. Omit `name` for the default sample. */
   sampleSource: (name?: string) =>

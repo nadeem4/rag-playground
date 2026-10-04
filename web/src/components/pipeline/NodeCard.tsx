@@ -48,7 +48,7 @@ export interface NodeCardProps {
   busy: boolean
   fieldErrors?: FieldErrors
   message?: string
-  /** The Upload card's file is gone from this browser (an expired upload): say so on the closed card. */
+  /** The Document card's file is gone from this browser (an expired upload): say so on the closed card. */
   missing?: boolean
   onSelect: () => void
   /** Clicking the head of the selected card closes it. */
@@ -57,8 +57,6 @@ export interface NodeCardProps {
   onConfig: (config: Record<string, unknown>) => void
   onRun: (force: boolean) => void
   onRemove?: () => void
-  /** Replaces the schema form (the Load card's source picker). */
-  body?: ReactNode
   /** Show the node id beside the title: stacked cards need telling apart. */
   showId?: boolean
   /** Extra actions in the footer (Sweep). */
@@ -204,8 +202,9 @@ function revealIfHidden(el: HTMLElement | null) {
 
 export function NodeCard(p: NodeCardProps) {
   const id = useId()
-  // The Upload card is deliberately plain: no run status, no explain button,
-  // no transform picker and no footer. It is just "pick or upload a file".
+  // The Document card is deliberately plain: no run status, no explain button,
+  // no transform picker, no fields and no footer. It only says which document
+  // is in use; the header's Document control changes it.
   const isSource = p.node.stage === "source"
   const info = p.transforms.find((t) => t.name === p.node.transform)
   // The picker tags locked options; the run note needs the current pick's lock too.
@@ -403,7 +402,7 @@ export function NodeCard(p: NodeCardProps) {
           </h3>
           {p.showId ? <span className="font-mono text-xs whitespace-nowrap text-fg-muted">{p.node.id}</span> : null}
           {/* The explicit open and close, on the title line so it never wraps away.
-              It follows selection, as clicking does. The Upload card has nothing to open. */}
+              It follows selection, as clicking does. The Document card has nothing to open. */}
           {isSource ? null : (
             <Button
               variant="ghost"
@@ -481,14 +480,16 @@ export function NodeCard(p: NodeCardProps) {
       </header>
 
       {isSource ? (
-        <>
-          {filename ? <p className="m-0 text-xs break-words text-fg-muted">{filename}</p> : null}
-          {p.missing ? (
+        p.missing ? (
+          <>
+            <p className="m-0 text-xs break-words text-fg-muted">{filename}</p>
             <p role="status" data-testid="missing-file" className="m-0 mt-1 self-start rounded-swatch bg-stale-wash px-2 py-px text-xs break-words text-stale">
-              Missing. Uploads expire on the demo. Upload it again or load a sample.
+              Missing. Pick a document in the bar above.
             </p>
-          ) : null}
-        </>
+          </>
+        ) : (
+          <p className="m-0 text-xs break-words text-fg-muted">{filename ? `${filename}. Change it in the bar above.` : "None yet. Pick one in the bar above."}</p>
+        )
       ) : (
         <p data-testid="step-transform" className="m-0 text-xs break-words text-fg-muted">
           {plain === p.node.transform ? null : `${plain}, `}
@@ -553,8 +554,7 @@ export function NodeCard(p: NodeCardProps) {
       </div>
       )}
 
-      {p.body ??
-        (info ? (
+      {isSource ? null : info ? (
           <SchemaForm
             key={`${p.node.id}:${info.name}`}
             schema={info.config_schema}
@@ -563,7 +563,7 @@ export function NodeCard(p: NodeCardProps) {
             errors={p.fieldErrors}
             learn={info.learn}
           />
-        ) : null)}
+        ) : null}
 
       {isSource ? null : (
       <div className="-mx-3 flex flex-col gap-2 border-t border-hairline px-3 pt-3">

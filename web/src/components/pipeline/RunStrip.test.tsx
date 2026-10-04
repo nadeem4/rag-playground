@@ -17,7 +17,7 @@ afterEach(() => vi.useRealTimers())
 
 afterEach(cleanup)
 
-const TITLES = ["Upload", "Parse", "Clean", "Chunk", "Index"]
+const TITLES = ["Document", "Parse", "Clean", "Chunk", "Index"]
 
 function segs(...states: StripSegment["state"][]): StripSegment[] {
   return TITLES.map((title, i) => ({ id: title.toLowerCase(), title, state: states[i] ?? "todo" }))
@@ -42,8 +42,8 @@ describe("the run strip", () => {
 
   it("a done step is an accent fill; a reused one has a dashed accent border", () => {
     const strip = show(segs("done", "reused"))
-    expect(seg(strip, "upload").dataset.state).toBe("done")
-    expect(bar(strip, "upload").className).toContain("bg-primary")
+    expect(seg(strip, "document").dataset.state).toBe("done")
+    expect(bar(strip, "document").className).toContain("bg-primary")
     expect(bar(strip, "parse").className).toContain("border-dashed")
     expect(bar(strip, "parse").className).toContain("border-primary")
   })
@@ -52,7 +52,7 @@ describe("the run strip", () => {
     const strip = show(segs("done", "running"))
     expect(bar(strip, "parse").className).toContain("bg-primary")
     expect(bar(strip, "parse").className).toContain("step-running-edge")
-    expect(bar(strip, "upload").className).not.toContain("step-running-edge")
+    expect(bar(strip, "document").className).not.toContain("step-running-edge")
   })
 
   it("under reduced motion the running step is a still half fill in a hairline outline, unlike a done one", () => {
@@ -63,7 +63,7 @@ describe("the run strip", () => {
     const half = within(running).getByTestId("strip-half")
     expect(half.className).toContain("motion-reduce:block")
     expect(half.className).toContain("w-1/2")
-    expect(within(bar(strip, "upload")).queryByTestId("strip-half")).toBeNull()
+    expect(within(bar(strip, "document")).queryByTestId("strip-half")).toBeNull()
   })
 
   it("labels wrap rather than truncate, and the line takes its own row when the bars need it", () => {
@@ -76,7 +76,7 @@ describe("the run strip", () => {
   it("each segment says its step and its state to a screen reader", () => {
     const strip = show(segs("done", "reused", "running"))
     expect(within(strip).getAllByRole("listitem").map((li) => li.getAttribute("aria-label"))).toEqual([
-      "Upload, done",
+      "Document, done",
       "Parse, reused",
       "Clean, running",
       "Chunk, to go",
@@ -138,12 +138,12 @@ describe("stripSegments", () => {
 
   it("stacked cleaners are told apart by position, so no two segments share a label", () => {
     const titles = stripSegments(twoCleaners(), {}, new Set()).map((s) => s.title)
-    expect(titles).toEqual(["Upload", "Parse", "Clean 1", "Clean 2", "Chunk", "Index"])
+    expect(titles).toEqual(["Document", "Parse", "Clean 1", "Clean 2", "Chunk", "Index"])
   })
 
   it("one cleaner is just Clean", () => {
     const steps = columnOrder(addCleaner(initialGraph(R), R)).filter((n) => INDEX_STAGES.includes(n.stage))
-    expect(stripSegments(steps, {}, new Set()).map((s) => s.title)).toEqual(["Upload", "Parse", "Clean", "Chunk", "Index"])
+    expect(stripSegments(steps, {}, new Set()).map((s) => s.title)).toEqual(["Document", "Parse", "Clean", "Chunk", "Index"])
   })
 
   it("during a run, its steps follow this run only: not reached yet is to go, whatever they showed before", () => {

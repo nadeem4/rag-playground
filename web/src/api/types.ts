@@ -285,7 +285,7 @@ export interface Source {
   content_type: string
 }
 
-/** One entry of `GET /api/samples`: a bundled sample document offered on the Load card. */
+/** One entry of `GET /api/samples`: a bundled sample document offered on the first-visit card and in the Document menu. */
 export interface SampleCard {
   name: string
   title: string

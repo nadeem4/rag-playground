@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AppHeader } from "@/components/AppHeader"
 import { NodeCard } from "@/components/pipeline/NodeCard"
 import { Shell } from "@/routes/Shell"
+import { resetDocumentForTests } from "@/state/document"
+import { initialGraph, readStoredGraph, resetStoredGraphForTests, setConfig, storeGraph } from "@/state/graph"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
 import { ApiKeyProvider, checkMessage, hasAnyKey, keyShortLabel, keySourceLabel, needsKey } from "./apiKey"
@@ -60,6 +62,8 @@ beforeEach(() => {
   servers = { anthropic: "none", openai: "none", custom: "none" }
   window.localStorage.clear()
   window.sessionStorage.clear()
+  resetStoredGraphForTests()
+  resetDocumentForTests()
   vi.stubGlobal("EventSource", SilentEventSource)
   vi.stubGlobal("ResizeObserver", NoopResizeObserver)
   vi.stubGlobal(
@@ -99,24 +103,15 @@ function storageText(s: Storage): string {
 const card = (id: string) => document.querySelector(`[data-node-id="${id}"]`) as HTMLElement
 
 async function page() {
+  // The document comes from the bar: a first visit starts on report.pdf, and a
+  // remount keeps the stored file, so the column shows straight away.
+  if (!readStoredGraph(TEST_REGISTRY)) storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename }))
   render(
     <ApiKeyProvider>
       <AppHeader path="/" />
       <Shell />
     </ApiKeyProvider>,
   )
-  // With no file the pipeline shows the first-visit card; its picker lists the
-  // uploads. A remount keeps the stored file, so the column shows straight away.
-  const first = await waitFor(() => {
-    const el = card("parse") ?? document.querySelector('[aria-label="Upload"]')
-    if (!el) throw new Error("no pipeline yet")
-    return el as HTMLElement
-  })
-  if (!card("parse")) {
-    const pick = await waitFor(() => within(first).getByLabelText("File") as HTMLSelectElement)
-    await waitFor(() => expect(within(pick).getByRole("option", { name: /report\.pdf/ })).toBeTruthy())
-    fireEvent.change(pick, { target: { value: SOURCE.sha } })
-  }
   await waitFor(() => expect(card("parse")).toBeTruthy())
 }
 

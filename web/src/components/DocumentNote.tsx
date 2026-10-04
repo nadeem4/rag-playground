@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { openDocumentMenu, useDocument, type DocStatus } from "@/state/document"
 
 /** A run needs a document that exists: none, or a missing one, blocks it. */
@@ -12,7 +13,7 @@ export function needsDocument(status: DocStatus): boolean {
  * a document" button that opens the bar's menu. Changed since the results on
  * the page were made: says so, with no button. Otherwise nothing.
  */
-export function DocumentNote({ action, changed = false }: { action: string; changed?: boolean }) {
+export function DocumentNote({ action, changed = false, className }: { action: string; changed?: boolean; className?: string }) {
   const { doc, status } = useDocument()
   const blocked = needsDocument(status)
   if (!blocked && !(changed && doc)) return null
@@ -20,7 +21,7 @@ export function DocumentNote({ action, changed = false }: { action: string; chan
     <div
       role="status"
       data-testid="document-note"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-stale-wash px-3 py-2 text-sm text-stale"
+      className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-stale-wash px-3 py-2 text-sm text-stale", className)}
     >
       <p className="min-w-0 flex-[1_1_260px]">
         {status === "missing" ? (

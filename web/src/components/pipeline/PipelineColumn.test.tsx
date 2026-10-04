@@ -45,10 +45,10 @@ describe("PipelineColumn", () => {
   it("titles cards with plain verbs, in graph order", () => {
     setup()
     const titles = [...document.querySelectorAll("article h3")].map((h) => h.textContent)
-    expect(titles).toEqual(["Upload", "Parse", "Clean", "Chunk", "Index"])
+    expect(titles).toEqual(["Document", "Parse", "Clean", "Chunk", "Index"])
   })
 
-  it("the Upload card is plain: no explain button, no Transform, no Run; Parse keeps all three", () => {
+  it("the Document card is plain: no explain button, no Transform, no Run; Parse keeps all three", () => {
     setup()
     const upload = within(card("source"))
     expect(upload.queryByRole("button", { name: "Explain the Upload step" })).toBeNull()
@@ -173,7 +173,7 @@ describe("PipelineColumn", () => {
 
   it("a stage with one transform shows its name as text, not a one-option picker", () => {
     setup()
-    // Parse has only `pdfium` in the test registry. The Upload card shows no
+    // Parse has only `pdfium` in the test registry. The Document card shows no
     // Transform at all (it is plain: pick or upload a file, nothing else).
     for (const [id, name] of [["parse", "Fast text, pdfium"]]) {
       const shown = within(card(id)).getByLabelText("Transform")

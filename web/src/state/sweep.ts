@@ -48,9 +48,10 @@ const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1)
  * `Parse ran 1 time, Index ran 5 times. Load came from the cache.` Plain
  * words, no glyphs, nodes in column order. A node that finished but never
  * executed is named as coming from the cache rather than as "ran 0 times".
- * Then the slowest step's time, and how many recipes failed.
+ * Then the slowest step's time, and how many recipes failed. While the run is
+ * still going (`finished: false`), it never says "Nothing ran".
  */
-export function tallyLine(t: SweepTally, column: { id: string; title: string }[]): string {
+export function tallyLine(t: SweepTally, column: { id: string; title: string }[], opts: { finished?: boolean } = {}): string {
   const titles = column.map((n) => n.title)
   const name = (n: { id: string; title: string }) => (titles.filter((x) => x === n.title).length > 1 ? `${n.title} ${n.id}` : n.title)
   const seen = column.filter((n) => n.id in t.executed)
@@ -59,6 +60,8 @@ export function tallyLine(t: SweepTally, column: { id: string; title: string }[]
   const failed = t.failed ? ` ${t.failed} ${t.failed === 1 ? "recipe" : "recipes"} failed.` : ""
   if (!ran.length) {
     if (!cached.length) return t.failed ? failed.trim() : "Nothing has finished yet."
+    // Mid-run, the shared steps arrive from the cache before any recipe runs: say only that.
+    if (opts.finished === false) return `${list(cached)} came from the cache.` + failed
     return (t.failed ? "Every step that finished came from the cache." : "Nothing ran: every step came from the cache.") + failed
   }
   const slow = t.slowest ? column.find((n) => n.id === t.slowest!.id) : undefined

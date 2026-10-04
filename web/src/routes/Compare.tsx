@@ -1141,7 +1141,7 @@ function Sweep({
                     </div>
                   ) : null}
                   <p data-testid="tally" className="m-0 text-xs text-fg-muted">
-                    <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))} />
+                    <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })), { finished: run.closed })} />
                     {running !== null ? ` Running recipe ${running + 1} of ${submitted.variants.length}.` : run.closed ? "" : " Starting."}
                   </p>
                   {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}

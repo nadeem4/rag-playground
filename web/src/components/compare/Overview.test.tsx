@@ -74,4 +74,10 @@ describe("Overview", () => {
     expect(screen.getByRole("button", { name: "Answer" }).className).toContain("pointer-coarse:min-h-[44px]")
     expect(screen.getByRole("button", { name: "Open Dense beside Your pipeline" }).className).toContain("pointer-coarse:min-h-[44px]")
   })
+
+  it("says one piece, not one pieces, in the narrow list", () => {
+    const row = (i: number, pieces: number): OverviewRow => ({ i, name: `R${i}`, code: "token_based", own: i === 0, status: { kind: "done" }, seconds: null, done: true, values: { pieces, tokens: 9, median: 9, p95: 9, uncovered: 0 } })
+    render(<Overview {...props} stage="chunk" goldKnown={false} narrow rows={[row(0, 1), row(1, 3), row(2, 2), row(3, 2)]} />)
+    expect(screen.getByRole("list").textContent).toMatch(/1 piece \(fewest\), 9 tokens/)
+  })
 })

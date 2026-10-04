@@ -41,6 +41,7 @@ export const RECIPE_TITLES: Record<string, string> = {
   query_expansion: "Query expansion",
   prf_docs: "PRF pieces",
   prf_terms: "PRF terms",
+  content_layers: "Content layers",
 }
 
 /** A recipe's names: in words, its code name, and the short forms a tab or a sentence uses. */
@@ -391,7 +392,7 @@ export type RecipeStatus =
   | { kind: "running"; shared: boolean; cached: boolean }
   | { kind: "done" }
   | { kind: "failed"; step: string; error: string }
-  | { kind: "stopped" }
+  | { kind: "stopped"; midway?: boolean }
 
 /**
  * One recipe's status from its `VariantState`. A failed node names its step
@@ -411,7 +412,8 @@ export function recipeStatus(
   if (failed) return { kind: "failed", step: ids.titles?.[failed.id] ?? cap(failed.id), error: errorHeadline(failed.error ?? "") }
   const through = state.nodes[ids.throughId]
   if (through && (through.status === "done" || through.status === "cached")) return { kind: "done" }
-  if (through?.status === "skipped" || ids.stopped) return { kind: "stopped" }
+  if (ids.stopped) return { kind: "stopped", midway: true }
+  if (through?.status === "skipped") return { kind: "stopped" }
   const up = ids.upstream.map((id) => state.nodes[id]).filter((n) => n !== undefined)
   const shared = up.some((n) => n.status === "running")
   const cached = up.length > 0 && up.every((n) => n.status === "cached" || n.cache_hit === true)
@@ -430,7 +432,7 @@ export function statusText(s: RecipeStatus, seconds: number | null): string {
     case "failed":
       return `Failed at ${s.step}. ${s.error}`
     case "stopped":
-      return "Not run. The run was stopped first."
+      return s.midway ? "Stopped before it finished." : "Not run. The run was stopped first."
     case "done":
       return "Finished."
   }
@@ -439,7 +441,7 @@ export function statusText(s: RecipeStatus, seconds: number | null): string {
 /** The finding while a run goes: how many have finished, and what to do meanwhile. */
 export function runningFinding(total: number, finishedCount: number, overview: boolean): Finding {
   const count = finishedCount === 0 ? "None has finished yet." : `${cap(word(finishedCount))} ${finishedCount === 1 ? "has" : "have"} finished.`
-  const f = `Running ${word(total)} recipes. ${count}`
+  const f = `Running ${word(total)} ${total === 1 ? "recipe" : "recipes"}. ${count}`
   const sub = `The sentence that compares them appears when every recipe has finished.${overview && finishedCount > 0 ? " You can open a finished one now." : ""}`
   return { finding: f, sub }
 }
@@ -543,11 +545,13 @@ export interface RetrieveManyItem {
  * that shares the fewest and one that returns fewer. The link reads Your
  * pipeline beside the recipe the finding names first.
  */
-export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolean, fit = 3): ManyFinding | null {
+export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolean, fit = 3, baseName = "Your pipeline"): ManyFinding | null {
   if (items.length < 2) return null
   const base = items.find((x) => x.own) ?? items[0]
   const others = items.filter((x) => x !== base)
   const n = items.length
+  // Short means fewer than both the 5 the page reads and the recipe's own top k.
+  const isShort = (x: RetrieveManyItem) => x.returned < Math.min(5, x.topK ?? 5)
   let finding: string
   let named: RetrieveManyItem | undefined
   if (goldKnown) {
@@ -556,17 +560,17 @@ export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolea
     const notes: { t: string; x: RetrieveManyItem }[] = [
       ...items.filter((x) => x.rank === null).map((x) => ({ t: `${x.phrase} does not return it`, x })),
       ...items.filter((x) => x.rank !== null && x.rank > 1).map((x) => ({ t: `${x.phrase} puts it ${ordinal(x.rank!)}`, x })),
-      ...items.filter((x) => x.rank !== null && x.returned < 5).map((x) => ({ t: `${x.phrase} returns only ${x.returned}`, x })),
+      ...items.filter((x) => x.rank !== null && isShort(x)).map((x) => ({ t: `${x.phrase} returns only ${x.returned}`, x })),
     ]
     if (notes.length) finding += ` ${cap(notes.slice(0, 2).map((x) => x.t).join(", and "))}.`
     named = notes.find((x) => x.x !== base)?.x
   } else {
     const top = Math.min(5, base.returned)
     const all = items.filter((x) => x === base || x.shared === top).length
-    finding = `${cap(word(all))} of ${word(n)} share all ${top} ${top === 1 ? "piece" : "pieces"} with Your pipeline.`
+    finding = `${cap(word(all))} of ${word(n)} share ${top === 1 ? "its one piece" : `all ${top} pieces`} with ${baseName}.`
     const least = Math.min(...others.map((x) => x.shared ?? top))
     const fewest = least < top ? others.find((x) => (x.shared ?? top) === least) : undefined
-    const short = others.find((x) => x !== fewest && x.returned < 5)
+    const short = others.find((x) => x !== fewest && isShort(x))
     const parts: string[] = []
     if (fewest) parts.push(`${fewest.phrase} shares the fewest, ${least} of ${top}`)
     if (short) parts.push(`${short.phrase} returns only ${short.returned}`)
@@ -579,7 +583,7 @@ export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolea
     finding,
     sub: keyword ? `Keyword search only returns pieces that share a word with the question. ${pick}` : pick,
     extremes: named ? [base.i, named.i] : null,
-    link: named && fit > 1 ? `Read Your pipeline beside ${named.phrase}` : null,
+    link: named && fit > 1 ? `Read ${baseName} beside ${named.phrase}` : null,
   }
 }
 
@@ -592,18 +596,30 @@ export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolea
  */
 export function columnDelta(
   d:
-    | { kind: "chunk"; stats: ChunkStats; base: ChunkStats }
-    | { kind: "retrieve"; shared: number; top: number; rank: number | null; goldKnown: boolean; returned: number },
+    | { kind: "chunk"; stats: ChunkStats; base: ChunkStats; baseName?: string }
+    | { kind: "retrieve"; shared: number; top: number; rank: number | null; goldKnown: boolean; returned: number; topK?: number | null; baseName?: string },
 ): string {
+  // The baseline: Your pipeline, or the run's first recipe by its phrase when none was the pipeline's own.
+  const baseName = d.baseName ?? "Your pipeline"
   if (d.kind === "chunk") {
     const dp = d.stats.pieces - d.base.pieces
     const dl = d.stats.uncovered - d.base.uncovered
-    const a = dp === 0 ? "The same number of pieces as Your pipeline" : `${Math.abs(dp)} ${dp > 0 ? "more" : "fewer"} ${Math.abs(dp) === 1 ? "piece" : "pieces"} than Your pipeline`
+    const a = dp === 0 ? `The same number of pieces as ${baseName}` : `${Math.abs(dp)} ${dp > 0 ? "more" : "fewer"} ${Math.abs(dp) === 1 ? "piece" : "pieces"} than ${baseName}`
     const b = dl === 0 ? "" : d.stats.uncovered === 0 ? ", and nothing left out" : `, and ${Math.abs(dl)} ${dl > 0 ? "more" : "fewer"} characters left out`
     return `${a}${b}.`
   }
-  let out = `Shares ${d.shared} of ${d.top} pieces with Your pipeline.`
+  let out = `Shares ${d.shared} of ${d.top} ${d.top === 1 ? "piece" : "pieces"} with ${baseName}.`
   if (d.goldKnown) out += d.rank ? ` Puts the answer ${ordinal(d.rank)}.` : " Does not return the answer."
-  if (d.returned < 5) out += ` Returns ${d.returned}, not 5.`
+  if (d.returned < Math.min(5, d.topK ?? 5)) out += ` Returns ${d.returned}, not ${Math.min(5, d.topK ?? 5)}.`
   return out
+}
+
+/** The finding's line about failed recipes, by their phrases: every one counted, the first named. */
+export function failureSentence(phrases: string[], overview: boolean): string | null {
+  if (!phrases.length) return null
+  const where = overview ? "row" : "column"
+  const first = cap(phrases[0])
+  if (phrases.length === 1) return `${first} failed, and its ${where} says why.`
+  const who = phrases.length === 2 ? `${first} and ${phrases[1]}` : `${first} and ${word(phrases.length - 1)} others`
+  return `${who} failed, and their ${where}s say why.`
 }

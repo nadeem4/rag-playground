@@ -45,7 +45,7 @@ const SORTS: Partial<Record<Stage, [SortKey, string, string][]>> = {
   retrieve: [
     ["order", "Recipe order", "recipe order"],
     ["rank", "Answer", "the answer's place"],
-    ["shared", "Shared with Your pipeline", "pieces shared with Your pipeline"],
+    ["shared", "Shared with the baseline", "pieces shared with the baseline"],
     ["returned", "Returned", "pieces returned"],
   ],
 }
@@ -89,6 +89,8 @@ export function Overview({
   narrow,
   goldKnown,
   top,
+  baseAt = 0,
+  baseName = "Your pipeline",
 }: {
   stage: Stage
   /** In recipe order. */
@@ -108,6 +110,10 @@ export function Overview({
   goldKnown: boolean
   /** How many places Shared counts against: Your pipeline's top 5, or fewer when it returned fewer. */
   top: number
+  /** The recipe the others are read against. */
+  baseAt?: number
+  /** Its name in sentences: Your pipeline, or its phrase when no recipe was the pipeline's own. */
+  baseName?: string
 }) {
   const sortId = useId()
   const sorts = (SORTS[stage] ?? []).filter(([k]) => k !== "rank" || goldKnown)
@@ -127,8 +133,9 @@ export function Overview({
   const helperKey = sorts.find(([k]) => k === sort.key)?.[2] ?? "recipe order"
   const helper = plain
     ? "Open any recipe to read it."
-    : `Sorted by ${helperKey}. ${fit > 1 ? `Tap a name to open it beside Your pipeline, or tick up to ${word(fit)} to read side by side.` : "Open any recipe to read it."}`
-  const openLabel = (r: OverviewRow) => (r.own ? "Open Your pipeline" : fit > 1 ? `Open ${r.name} beside Your pipeline` : `Open ${r.name}`)
+    : `Sorted by ${helperKey}. ${fit > 1 ? `Tap a name to open it beside ${baseName}, or tick up to ${word(fit)} to read side by side.` : "Open any recipe to read it."}`
+  const openLabel = (r: OverviewRow) =>
+    r.i === baseAt ? (r.own ? "Open Your pipeline" : `Open ${r.name}`) : fit > 1 ? `Open ${r.name} beside ${baseName}` : `Open ${r.name}`
 
   const tick = (r: OverviewRow) => {
     if (!ticks || !r.done) return null
@@ -146,10 +153,10 @@ export function Overview({
     const v = r.values
     if (stage === "chunk") {
       const ext = extreme(r)
-      return [`${v.pieces} pieces${ext ? ` (${ext})` : ""}`, `${v.tokens} tokens`, ...(v.median != null ? [`median ${v.median}`] : []), `${v.uncovered} characters left out`].join(", ")
+      return [`${v.pieces} ${v.pieces === 1 ? "piece" : "pieces"}${ext ? ` (${ext})` : ""}`, `${v.tokens} tokens`, ...(v.median != null ? [`median ${v.median}`] : []), `${v.uncovered} characters left out`].join(", ")
     }
     const answer = goldKnown ? `Answer ${v.rank ? ordinal(v.rank) : "not found"}. ` : ""
-    return `${answer}${r.own ? "The baseline." : `Shares ${v.shared ?? 0} of ${top} with Your pipeline.`}`
+    return `${answer}${r.i === baseAt ? "The baseline." : `Shares ${v.shared ?? 0} of ${top} with ${baseName}.`}`
   }
   const picture = (r: OverviewRow) => (stage === "chunk" ? <ChunkBar data={r.set} size="bar" /> : r.pieces ? <Swatches pieces={r.pieces} /> : null)
 
@@ -225,7 +232,7 @@ export function Overview({
                           </span>
                         )
                       ) : k === "shared" ? (
-                        r.own ? (
+                        r.i === baseAt ? (
                           <span className="font-sans text-sm text-fg-muted">baseline</span>
                         ) : (
                           `${r.values.shared ?? 0} of ${top}`

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry, Stage } from "@/api/types"
 
-import { recipeSentence, type SentencePart } from "./recipeSentence"
+import { fieldTitle, recipeSentence, valueText, type SentencePart } from "./recipeSentence"
 
 const registry = liveRegistry as unknown as Registry
 const say = (parts: SentencePart[]) => parts.map((p) => p.text).join("")
@@ -34,5 +34,12 @@ describe("recipeSentence", () => {
     expect(say(recipeSentence({ transform: "hybrid_rrf", config: { top_k: 20, rrf_k: 60, query_expansion: "none", prf_docs: 2, prf_terms: 6 } }, schemaOf("retrieve", "hybrid_rrf"), "Hybrid (RRF)"))).toMatch(
       /^Search with Hybrid \(RRF\), keeping 20 pieces, fused with RRF k 60\. Query rewrite is off\./,
     )
+  })
+
+  it("names Docling's content layers and says a list of them in words", () => {
+    const schema = schemaOf("parse", "docling")
+    expect(fieldTitle("content_layers", schema)).toBe("Content layers")
+    expect(valueText("content_layers", ["body", "furniture"], schema)).toBe("body and furniture")
+    expect(valueText("content_layers", ["body", "furniture", "notes"], schema)).toBe("body, furniture and notes")
   })
 })

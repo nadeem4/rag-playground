@@ -66,7 +66,10 @@ export function valueText(key: string, value: unknown, schema: JsonSchema): stri
     const prop = schema.properties?.[key]
     return prop ? optionLabel(prop, value) : value
   }
-  if (Array.isArray(value)) return value.map(String).join(", ")
+  if (Array.isArray(value)) {
+    const xs = value.map(String)
+    return xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`
+  }
   return JSON.stringify(value)
 }
 

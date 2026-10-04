@@ -93,7 +93,7 @@ const statusOf = (i: number) => within(column(i)).getByTestId("recipe-status").t
  * suggestion, then a run in which the first `finish` recipes finish (the next
  * one is left running), served from the three fixtures.
  */
-async function runFive(stage: "chunk" | "retrieve", finish = 5) {
+async function runFive(stage: "chunk" | "retrieve", finish = 5, before?: () => void) {
   const graph = sampleGraph(registry, SOURCE)
   const through = terminalNode(graph)!.id
   if (stage === "retrieve") {
@@ -106,6 +106,7 @@ async function runFive(stage: "chunk" | "retrieve", finish = 5) {
     fireEvent.click(within(add).getAllByRole("button")[0])
     fireEvent.keyDown(document.activeElement!, { key: "Escape" })
   }
+  before?.()
   fireEvent.click(screen.getByRole("button", { name: "Run 5 recipes" }))
   const es = await driven()
   let seq = 1
@@ -725,6 +726,53 @@ describe("the open view", () => {
     expect(screen.getByText("Two of five, side by side")).toBeTruthy()
   })
 
+  it("gives focus back to the finding's link, and to Read side by side, when the view closes", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk")
+    await screen.findByRole("table")
+    const link = await screen.findByRole("button", { name: "Read the two extremes side by side" })
+    fireEvent.click(link)
+    fireEvent.click(screen.getByRole("button", { name: "Back to all five recipes" }))
+    await waitFor(() => expect(screen.getByRole("table")).toBeTruthy())
+    await waitFor(() => expect(document.activeElement).toBe(link))
+    screen.getAllByRole("checkbox").slice(1, 3).forEach((b) => fireEvent.click(b))
+    const read = screen.getByRole("button", { name: "Read two side by side" })
+    fireEvent.click(read)
+    fireEvent.keyDown(document.body, { key: "Escape" })
+    await waitFor(() => expect(document.activeElement).toBe(read))
+  })
+
+  it("names the baseline by its phrase when no recipe is the pipeline's own", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk", 5, () => {
+      fireEvent.click(screen.getByRole("button", { name: "Change chunk size, now 400 characters" }))
+      fireEvent.change(screen.getByLabelText("Chunk size"), { target: { value: "300" } })
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+    })
+    await screen.findByRole("table")
+    expect(text()).not.toMatch(/Your pipeline/)
+    expect(screen.getByText(/^Sorted by recipe order\. Tap a name to open it beside Recursive at 300 characters,/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole("button", { name: /^Open .* beside Recursive at 300 characters$/ })[0])
+    expect(screen.getByText(/^1 of 4, each beside Recursive at 300 characters$/)).toBeTruthy()
+    expect(text()).toMatch(/(more|fewer) pieces? than Recursive at 300 characters|The same number of pieces as Recursive at 300 characters/)
+    expect(text()).not.toMatch(/Your pipeline/)
+  })
+
+  it("keeps the browser's Back true when the step changes from the open view", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk")
+    await screen.findByRole("table")
+    fireEvent.click(screen.getAllByRole("button", { name: /^Open .* beside Your pipeline$/ })[0])
+    choose("Retrieve")
+    await waitFor(() => expect(pressed()).toBe("Retrieve"))
+    expect(new URLSearchParams(window.location.search).get("node")).toBe("retrieve")
+    expect(new URLSearchParams(window.location.search).get("read")).toBeNull()
+    act(() => window.history.back())
+    await waitFor(() => expect(pressed()).toBe("Chunk"))
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("read")).toBeNull())
+    expect(new URLSearchParams(window.location.search).get("node")).not.toBe("retrieve")
+  })
+
   it("shows one recipe at a time on a phone, with Previous and Next", async () => {
     FakeResizeObserver.width = 358
     await runFive("chunk")
@@ -756,6 +804,18 @@ describe("the open view", () => {
 })
 
 describe("experiments", () => {
+  it("keeps the run buttons at their full text width and gives the experiment buttons their own row below md", async () => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    ;(await driven()).emit(1, { event: "stream_end", status: "finished", ok: true })
+    for (const name of ["Change recipes", "Run 3 recipes"]) expect(screen.getByRole("button", { name }).className.split(" ")).toContain("min-w-fit")
+    const menu = screen.getByTestId("experiment-tools")
+    expect(menu.className.split(" ")).toContain("basis-full")
+    expect(menu.className.split(" ")).toContain("md:basis-auto")
+  })
+
   it("saves an experiment, says when it is edited, and offers Save changes or Save as new", async () => {
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Save experiment" }))

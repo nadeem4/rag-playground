@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { X } from "lucide-react"
+import { Popover } from "radix-ui"
 
 import { CONTROL } from "@/components/fields/types"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
@@ -58,56 +59,34 @@ export function ExperimentMenu({
   const [sheet, setSheet] = useState<"list" | "save" | null>(null)
   const [name, setName] = useState("")
   const listButton = useRef<HTMLButtonElement>(null)
-  const saveButton = useRef<HTMLButtonElement>(null)
-  const sheetRef = useRef<HTMLDivElement>(null)
   const nameId = useId()
 
-  const close = (focus: boolean) => {
-    const back = sheet === "list" ? listButton.current : saveButton.current
-    setSheet(null)
-    if (focus) back?.focus({ preventScroll: true })
-  }
-  const closeRef = useRef(close)
-  closeRef.current = close
-
-  useEffect(() => {
-    if (!sheet) return
-    sheetRef.current?.querySelector<HTMLElement>("input, button")?.focus({ preventScroll: true })
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        closeRef.current(true)
-      }
-    }
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Node | null
-      if (!t || sheetRef.current?.contains(t) || listButton.current?.contains(t) || saveButton.current?.contains(t)) return
-      closeRef.current(false)
-    }
-    document.addEventListener("keydown", onKey)
-    document.addEventListener("pointerdown", onDown)
-    return () => {
-      document.removeEventListener("keydown", onKey)
-      document.removeEventListener("pointerdown", onDown)
-    }
-  }, [sheet])
-
-  const toggle = (which: "list" | "save") => {
-    if (sheet === which) return close(false)
-    if (which === "save") setName(current?.name ?? suggestedName)
-    setSheet(which)
+  const toggle = (which: "list" | "save", open: boolean) => {
+    if (open && which === "save") setName(current?.name ?? suggestedName)
+    setSheet(open ? which : null)
   }
 
-  const SHEET = "absolute top-full right-0 z-30 mt-1 flex w-[min(360px,calc(100vw-32px))] flex-col gap-3 rounded-panel border border-hairline bg-surface-raised p-3 text-fg shadow-sheet"
+  // A popover keeps the sheet inside the screen at every width; it closes on Escape or a press outside and gives its button focus back.
+  const SHEET = "z-30 flex w-[min(360px,calc(100vw-32px))] flex-col gap-3 rounded-panel border border-hairline bg-surface-raised p-3 text-fg shadow-sheet"
+  const content = {
+    align: "end" as const,
+    sideOffset: 6,
+    collisionPadding: 16,
+    className: SHEET,
+    // Escape belongs to the sheet: it must not also close the open view under it.
+    onEscapeKeyDown: (e: KeyboardEvent) => e.stopPropagation(),
+  }
 
   return (
     <div className="flex items-center gap-2">
-      <div className="relative">
-        <Button ref={listButton} variant="ghost" size="sm" aria-expanded={sheet === "list"} onClick={() => toggle("list")} className="pointer-coarse:min-h-[44px]">
-          {experiments.length ? `Your experiments (${experiments.length})` : "Your experiments"}
-        </Button>
-        {sheet === "list" ? (
-          <div ref={sheetRef} role="dialog" aria-label="Your experiments" className={SHEET}>
+      <Popover.Root open={sheet === "list"} onOpenChange={(o) => toggle("list", o)}>
+        <Popover.Trigger asChild>
+          <Button ref={listButton} variant="ghost" size="sm" className="pointer-coarse:min-h-[44px]">
+            {experiments.length ? `Your experiments (${experiments.length})` : "Your experiments"}
+          </Button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content aria-label="Your experiments" {...content}>
             <h2 className="m-0 text-sm font-semibold">Your experiments</h2>
             {experiments.length ? (
               <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -153,15 +132,17 @@ export function ExperimentMenu({
               <p className="m-0 text-sm text-fg-muted">None yet. Set up some recipes, then press Save experiment.</p>
             )}
             <p className="m-0 text-xs text-fg-muted">Experiments stay in this browser, like saved pipelines.</p>
-          </div>
-        ) : null}
-      </div>
-      <div className="relative">
-        <Button ref={saveButton} variant="outline" size="sm" aria-expanded={sheet === "save"} onClick={() => toggle("save")} className="pointer-coarse:min-h-[44px]">
-          {current && !edited ? "Saved" : "Save experiment"}
-        </Button>
-        {sheet === "save" ? (
-          <div ref={sheetRef} role="dialog" aria-label="Save experiment" className={SHEET}>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      <Popover.Root open={sheet === "save"} onOpenChange={(o) => toggle("save", o)}>
+        <Popover.Trigger asChild>
+          <Button variant="outline" size="sm" className="pointer-coarse:min-h-[44px]">
+            {current && !edited ? "Saved" : "Save experiment"}
+          </Button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content aria-label="Save experiment" {...content}>
             <label htmlFor={nameId} className="text-sm font-medium">
               Name this experiment
             </label>
@@ -172,18 +153,18 @@ export function ExperimentMenu({
             </p>
             <div className="flex flex-wrap justify-end gap-2">
               {current ? (
-                <Button variant="ghost" size="sm" className="pointer-coarse:min-h-[44px]" onClick={() => (close(true), onSaveAsNew(name.trim() || suggestedName))}>
+                <Button variant="ghost" size="sm" className="pointer-coarse:min-h-[44px]" onClick={() => (setSheet(null), onSaveAsNew(name.trim() || suggestedName))}>
                   Save as new
                 </Button>
               ) : null}
-              <Button variant="outline" size="sm" className="pointer-coarse:min-h-[44px]" onClick={() => close(true)}>
+              <Button variant="outline" size="sm" className="pointer-coarse:min-h-[44px]" onClick={() => setSheet(null)}>
                 Cancel
               </Button>
               <Button
                 size="sm"
                 className="pointer-coarse:min-h-[44px]"
                 onClick={() => {
-                  close(true)
+                  setSheet(null)
                   if (current) onSaveChanges()
                   else onSave(name.trim() || suggestedName)
                 }}
@@ -191,9 +172,9 @@ export function ExperimentMenu({
                 {current ? "Save changes" : "Save experiment"}
               </Button>
             </div>
-          </div>
-        ) : null}
-      </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
     </div>
   )
 }

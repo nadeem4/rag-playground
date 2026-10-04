@@ -38,4 +38,10 @@ describe("RecipeCard", () => {
     render(<RecipeCard {...props} />)
     expect(screen.getByRole("button", { name: /^Change chunk size/ }).className.split(" ")).toContain("pointer-coarse:min-h-[44px]")
   })
+
+  it("tints each value with the accent wash, accent text and a dashed underline, so it reads as a button", () => {
+    render(<RecipeCard {...props} />)
+    const cls = screen.getByRole("button", { name: /^Change chunk size/ }).className.split(" ")
+    for (const c of ["bg-accent-wash", "text-primary", "border-dashed", "border-b"]) expect(cls).toContain(c)
+  })
 })

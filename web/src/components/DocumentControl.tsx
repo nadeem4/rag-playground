@@ -98,7 +98,7 @@ export function DocumentControl() {
           )}
         >
           <FileText aria-hidden strokeWidth={1.75} className="size-[18px] shrink-0" />
-          <span className={cn("hidden shrink-0 text-2xs whitespace-nowrap lg:inline", missing ? "text-stale" : "text-fg-muted")}>
+          <span className={cn("hidden shrink-0 text-2xs whitespace-nowrap lg:inline", missing ? "text-stale" : "text-fg-muted xl:hidden")}>
             {missing ? "Missing" : "Document"}
           </span>
           <span className={cn("min-w-0 flex-1 truncate", empty && !busy ? "font-normal text-fg-muted" : "font-semibold")}>{name}</span>

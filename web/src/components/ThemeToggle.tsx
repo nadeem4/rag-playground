@@ -19,8 +19,8 @@ const CONTRASTS = [
 ]
 
 /**
- * The theme and contrast switches. From xl up they sit in the header with a
- * small caption each; below xl they wait behind a Display button, so the
+ * The theme and contrast switches. From xl up they sit in the header, named
+ * by their aria-label with no caption so the Document control keeps its room; below xl they wait behind a Display button, so the
  * header stays one row from md up and three rows on a phone. One state feeds
  * both places.
  */
@@ -28,7 +28,7 @@ export function DisplaySettings() {
   const [theme, setTheme] = useState<ThemeChoice>(readTheme)
   const [contrast, setContrast] = useState<ContrastChoice>(readContrast)
 
-  const switches = (caption: "md" | "always") => (
+  const switches = (caption?: "always") => (
     <>
       <SegmentedControl
         label="Theme"
@@ -57,7 +57,7 @@ export function DisplaySettings() {
 
   return (
     <>
-      <div className="hidden items-center gap-3 xl:flex">{switches("md")}</div>
+      <div className="hidden items-center gap-3 xl:flex">{switches()}</div>
       <Popover.Root>
         <Popover.Trigger asChild>
           <Button variant="outline" size="sm" className="xl:hidden">

@@ -80,6 +80,9 @@ describe("DocumentControl", () => {
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: chunking-primer.pdf. Change it."))
     // A narrow bar cuts the name; hovering shows it whole.
     expect(trigger().getAttribute("title")).toBe("chunking-primer.pdf")
+    // The small "Document" word gives its room to the file name from xl up; "Missing" always stays.
+    const word = within(trigger()).getByText("Document")
+    expect(word.className.split(/\s+/)).toContain("xl:hidden")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     const items = within(menu).getAllByRole("menuitemradio")

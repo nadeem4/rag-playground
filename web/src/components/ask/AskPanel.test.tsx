@@ -276,12 +276,12 @@ describe("the recipe line and the settings toggle", () => {
     setup({ results: { ...INDEX_DONE } })
     // Only the Index has a result: the Ask steps have not run, so the settings are open.
     expect(screen.getByRole("button", { name: "Hide settings" })).toBeTruthy()
-    expect(screen.getByRole("group", { name: "Reranker" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /^Reranker/ })).toBeTruthy()
     fireEvent.click(askButton())
     expect(screen.getByRole("button", { name: "Change settings" })).toBeTruthy()
-    expect(screen.queryByRole("group", { name: "Reranker" })).toBeNull()
+    expect(screen.queryByRole("button", { name: /^Reranker/ })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Change settings" }))
-    expect(screen.getByRole("group", { name: "Reranker" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /^Reranker/ })).toBeTruthy()
   })
 
   it("settings start folded once the question has an answer", () => {
@@ -301,9 +301,9 @@ describe("the recipe line and the settings toggle", () => {
     cleanup()
     const { rerender } = render(<AskPanel {...p} />)
     fireEvent.click(askButton())
-    expect(screen.queryByRole("group", { name: "Reranker" })).toBeNull()
+    expect(screen.queryByRole("button", { name: /^Reranker/ })).toBeNull()
     rerender(<AskPanel {...p} errors={{ use_case: { message: "The search step could not run." } }} />)
-    expect(screen.getByRole("group", { name: "Reranker" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /^Reranker/ })).toBeTruthy()
     expect(screen.getByText("The search step could not run.")).toBeTruthy()
   })
 
@@ -314,7 +314,7 @@ describe("the recipe line and the settings toggle", () => {
     expect(toggle.getAttribute("aria-disabled")).toBe("true")
     expect(toggle.title).toBe("Fix the error below first.")
     fireEvent.click(toggle)
-    expect(screen.getByRole("group", { name: "Reranker" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /^Reranker/ })).toBeTruthy()
   })
 
   it("labels the recipe line", () => {
@@ -331,17 +331,17 @@ describe("the recipe line and the settings toggle", () => {
 })
 
 describe("the Rerank block reflects the graph (Review Focus 1)", () => {
-  const pressed = (name: string) => within(screen.getByRole("group", { name: "Reranker" })).getByRole("button", { name }).getAttribute("aria-pressed")
+  const picked = () => screen.getByRole("button", { name: /^Reranker/ }).getAttribute("data-picked")
 
   it("a graph with a cross-encoder shows Cross-encoder", () => {
     setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "cross_encoder") })
-    expect(pressed("Cross-encoder")).toBe("true")
-    expect(pressed("None")).toBe("false")
+    expect(picked()).toBe("cross_encoder")
+    expect(screen.getByRole("button", { name: /^Reranker/ }).textContent).toContain("Cross-encoder")
   })
 
   it("a graph without a reranker shows None", () => {
     setup()
-    expect(pressed("None")).toBe("true")
-    expect(pressed("MMR")).toBe("false")
+    expect(picked()).toBe("")
+    expect(screen.getByRole("button", { name: /^Reranker/ }).textContent).toContain("No reranker")
   })
 })

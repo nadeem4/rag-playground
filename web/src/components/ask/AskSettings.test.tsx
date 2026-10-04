@@ -35,6 +35,7 @@ function setup(over: Partial<AskSettingsProps> = {}) {
 }
 
 const block = (name: string) => within(screen.getByRole("region", { name }))
+const reranker = () => block("Rerank").getByRole("button", { name: /^Reranker/ })
 const segment = (group: string, name: string) => within(screen.getByRole("group", { name: group })).getByRole("button", { name }) as HTMLButtonElement
 
 describe("the Retrieval block", () => {
@@ -176,12 +177,23 @@ describe("the Rewrite control", () => {
 })
 
 describe("the Rerank block", () => {
-  it("None removes the reranker and Cross-encoder adds one", () => {
+  it("No reranker removes the reranker and Cross-encoder adds one", () => {
     const p = setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "mmr") })
-    fireEvent.click(segment("Reranker", "None"))
+    choose(reranker(), "No reranker")
     expect(p.onReranker).toHaveBeenCalledWith(null)
-    fireEvent.click(segment("Reranker", "Cross-encoder"))
+    choose(reranker(), "Cross-encoder")
     expect(p.onReranker).toHaveBeenCalledWith("cross_encoder")
+  })
+
+  it("is a picker: each reranker by its name, code name and the first sentence of its summary", () => {
+    setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "cross_encoder") })
+    expect(reranker().textContent).toContain("Cross-encoder")
+    expect(reranker().textContent).toContain("cross_encoder")
+    expect(optionNames(reranker())).toEqual(["No reranker", "Cross-encoder", "MMR", "LLM"])
+    const mmr = optionOf(reranker(), "MMR")
+    expect(mmr.textContent).toContain("mmr")
+    expect(mmr.textContent).toContain("Maximal Marginal Relevance picks results one at a time, each time taking the piece the retriever scored highest while being least like the pieces already picked.")
+    expect(mmr.textContent).not.toContain("It trades relevance for variety")
   })
 
   it("shows the chosen reranker's summary and its schema form", () => {
@@ -195,18 +207,23 @@ describe("the Rerank block", () => {
     expect(p.onConfig).toHaveBeenCalledWith(id, expect.objectContaining({ top_k: 3 }))
   })
 
-  it("LLM is disabled without a key, with the reason", () => {
+  it("LLM is tagged Needs a key without a key, with the reason", () => {
     setup({ hasKey: false })
-    expect(segment("Reranker", "LLM").disabled).toBe(true)
     expect(screen.getByText("Add a key to use the LLM reranker")).toBeTruthy()
+    expect(optionOf(reranker(), "LLM").textContent).toContain("Needs a key")
   })
 
-  it("LLM is enabled with a key, and while keys are unknown", () => {
+  it("a picked LLM reranker with no key says so under the picker", () => {
+    setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "llm_rerank"), hasKey: false })
+    expect(block("Rerank").getByTestId("key-note").textContent).toBe("Needs an API key. Add one under Key.")
+  })
+
+  it("LLM is not tagged with a key, nor while keys are unknown", () => {
     setup({ hasKey: true })
-    expect(segment("Reranker", "LLM").disabled).toBe(false)
+    expect(optionOf(reranker(), "LLM").textContent).not.toContain("Needs a key")
     cleanup()
     setup({ hasKey: null })
-    expect(segment("Reranker", "LLM").disabled).toBe(false)
+    expect(optionOf(reranker(), "LLM").textContent).not.toContain("Needs a key")
     expect(screen.queryByText("Add a key to use the LLM reranker")).toBeNull()
   })
 })
@@ -292,22 +309,20 @@ describe("primary fields and the More disclosure", () => {
 describe("the pressed segment", () => {
   it("takes the accent border and text of the primary button; the others do not", () => {
     setup()
-    expect(segment("Reranker", "None").className).toContain("border-primary")
-    expect(segment("Reranker", "None").className).toContain("text-primary")
-    expect(segment("Reranker", "MMR").className).not.toContain("border-primary")
     expect(segment("Answer with", "Search").className).toContain("border-primary")
+    expect(segment("Answer with", "Search").className).toContain("text-primary")
+    expect(segment("Rewrite", "PRF").className).not.toContain("border-primary")
   })
 
   it("is the shared segmented control: the accent wash fill on the pressed option only", () => {
     setup()
-    expect(segment("Reranker", "None").className).toContain("bg-accent-wash")
-    expect(segment("Reranker", "MMR").className).not.toContain("bg-accent-wash")
     expect(segment("Answer with", "Search").className).toContain("bg-accent-wash")
+    expect(segment("Rewrite", "PRF").className).not.toContain("bg-accent-wash")
   })
 
-  it("a disabled LLM or Chat carries its reason as a title", () => {
+  it("a disabled Chat carries its reason as a title; the LLM reranker is tagged in its picker instead", () => {
     setup({ hasKey: false })
-    expect(segment("Reranker", "LLM").title).toBe("Add a key to use the LLM reranker")
     expect(segment("Answer with", "Chat with a model").title).toBe("Add a key to turn Chat on")
+    expect(optionOf(reranker(), "LLM").textContent).toContain("Needs a key")
   })
 })

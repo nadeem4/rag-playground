@@ -246,8 +246,8 @@ describe("Ask with a chat card and no API key", () => {
 
 describe("the Ask panel on Build", () => {
   const withFile = () => setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename })
-  const reranker = () => within(panel().getByRole("group", { name: "Reranker" }))
-  const pressed = (name: string) => reranker().getByRole("button", { name }).getAttribute("aria-pressed")
+  const reranker = () => panel().getByRole("button", { name: /^Reranker/ })
+  const picked = () => reranker().getAttribute("data-picked")
 
   it("a pipeline whose Index has not run asks for the index first, with Ask disabled (Review Focus 5)", async () => {
     storeGraph(withFile())
@@ -259,25 +259,23 @@ describe("the Ask panel on Build", () => {
   it("a share link with a reranker opens with that reranker in the Rerank block (Review Focus 1)", async () => {
     window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("Reranked", addReranker(withFile(), TEST_REGISTRY))}`)
     setup()
-    await waitFor(() => expect(pressed("MMR")).toBe("true"))
-    expect(pressed("None")).toBe("false")
+    await waitFor(() => expect(picked()).toBe("mmr"))
   })
 
   it("a saved pipeline without a reranker opens with None (Review Focus 1)", async () => {
     const saved = savePipeline("Plain", withFile())!.saved
     setCurrentId(saved.id)
     setup()
-    await waitFor(() => expect(pressed("None")).toBe("true"))
-    expect(pressed("MMR")).toBe("false")
+    await waitFor(() => expect(picked()).toBe(""))
   })
 
   it("None and a reranker change the graph", async () => {
     storeGraph(withFile())
     setup()
-    await waitFor(() => expect(pressed("None")).toBe("true"))
-    fireEvent.click(reranker().getByRole("button", { name: "MMR" }))
+    await waitFor(() => expect(picked()).toBe(""))
+    choose(reranker(), "MMR")
     await waitFor(() => expect(storedStages()).toContain("rerank"))
-    fireEvent.click(reranker().getByRole("button", { name: "None" }))
+    choose(reranker(), "No reranker")
     await waitFor(() => expect(storedStages()).not.toContain("rerank"))
   })
 })
@@ -1346,7 +1344,7 @@ describe("the Ask panel results on Build", () => {
     emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
     // None while the reranker is still working.
     fireEvent.click(panel().getByRole("button", { name: "Change settings" }))
-    fireEvent.click(within(panel().getByRole("group", { name: "Reranker" })).getByRole("button", { name: "None" }))
+    choose(panel().getByRole("button", { name: /^Reranker/ }), "No reranker")
     emit({ event: "node_finished", node_id: rerankId, artifact_id: "rr1", cache_hit: false, duration_ms: 1 }, "2")
     emit({ event: "node_finished", node_id: "use_case", artifact_id: "out1", cache_hit: false, duration_ms: 1 }, "3")
     emit({ event: "stream_end", status: "finished", ok: true }, "4")

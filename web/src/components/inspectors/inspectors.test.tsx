@@ -313,7 +313,7 @@ describe("RetrievalResultInspector", () => {
   it("states rank movement after rerank in the finding line, the rise in weight", () => {
     const { container } = render(<RetrievalResultInspector result={mmr} />)
     const lines = [...container.querySelectorAll<HTMLElement>("[data-testid=finding]")].map((m) => m.textContent)
-    expect(lines).toEqual(["1st, stayed in place", "2nd, moved up from 5th", "3rd, moved down from 2nd", "4th, moved down from 3rd", "5th, moved up from 6th"])
+    expect(lines).toEqual(["1st, stayed in place", "2nd, moved up from 5th", "3rd, stayed in place", "4th, moved down from 2nd", "5th, moved down from 4th"])
     // The count lives in the run note, once: no header chip repeats it.
     expect(screen.queryByTestId("fact-moved")).toBeNull()
     const rose = container.querySelectorAll<HTMLElement>("[data-testid=finding]")[1]

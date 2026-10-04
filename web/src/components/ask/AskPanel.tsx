@@ -12,9 +12,9 @@ import { QuestionField } from "@/components/pipeline/QuestionField"
 import { useElapsed } from "@/components/pipeline/useElapsed"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { ASK_STAGES, askNodes, indexNode, infoFor, terminalNode, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
+import { ASK_STAGES, askNodes, indexNode, infoFor, rewriteOf, terminalNode, titleFor, upstreamOfStage, type PipelineGraph, type RewriteMode } from "@/state/graph"
 
-import { AskResults, finalRows, fresh, rerankLabel, useAskOutputs } from "./AskResults"
+import { AskResults, finalRows, fresh, rerankLabel, SearchedFor, useAskOutputs } from "./AskResults"
 import { AskSettings, RETRIEVAL_LABEL } from "./AskSettings"
 import { askSignature, goldRank, Transcript, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
@@ -57,6 +57,7 @@ export interface AskPanelProps {
   onTransform: (id: string, transform: string) => void
   onReranker: (transform: string | null) => void
   onUseCase: (transform: "search" | "chat") => void
+  onRewrite: (mode: RewriteMode) => void
   onAsk: () => void
   /** Set while Build the index runs: the step it is on (when one has started) and when that step started, epoch seconds. */
   buildingStep?: { title?: string; startedAt?: number }
@@ -64,13 +65,17 @@ export interface AskPanelProps {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** `Hybrid (RRF), top 20 candidates. Rerank: MMR, keep 5. Answer: Search.` */
+/** How the recipe line names a rewrite, after the retrieval part. */
+const REWRITE_SUFFIX: Record<RewriteMode, string> = { none: "", prf: ", rewritten by PRF", llm: ", rewritten by the model" }
+
+/** `Hybrid (RRF), top 20 candidates, rewritten by PRF. Rerank: MMR, keep 5. Answer: Search.` */
 export function recipeLine(graph: PipelineGraph, registry: Registry): string {
   const { retrieve, rerank, useCase } = askNodes(graph)
   const parts: string[] = []
   if (retrieve) {
     const label = RETRIEVAL_LABEL[retrieve.transform] ?? retrieve.transform
-    parts.push(typeof retrieve.config.top_k === "number" ? `${label}, top ${retrieve.config.top_k} candidates.` : `${label}.`)
+    const rewrite = REWRITE_SUFFIX[rewriteOf(graph)]
+    parts.push(typeof retrieve.config.top_k === "number" ? `${label}, top ${retrieve.config.top_k} candidates${rewrite}.` : `${label}${rewrite}.`)
   }
   if (rerank) {
     const label = rerankLabel(rerank.transform)
@@ -208,6 +213,7 @@ export function AskPanel(p: AskPanelProps) {
             }
           />
         ) : null}
+        {askStale ? null : <SearchedFor outputs={outputs} />}
         {queryErrors?.message ? <p className="text-xs break-words text-danger">{queryErrors.message}</p> : null}
         {indexId && blocker ? <p className="text-xs text-danger">Fix the {titleFor(blocker)} settings to ask.</p> : null}
         {p.runError ? (
@@ -275,6 +281,7 @@ export function AskPanel(p: AskPanelProps) {
             onTransform={p.onTransform}
             onReranker={p.onReranker}
             onUseCase={p.onUseCase}
+            onRewrite={p.onRewrite}
           />
         ) : null}
         <AskResults

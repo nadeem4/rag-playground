@@ -210,6 +210,20 @@ export interface RetrievalResult {
   fetch_k: number
   total_candidates: number
   timings_ms: Record<string, number>
+  /** The full keyword query that ran when hybrid search expanded it (PRF); null when the question ran as written. */
+  expanded_query?: string | null
+  /** The words PRF added, best first. Empty without an expansion. */
+  expansion_terms?: string[]
+}
+
+/** The query node's payload. Only the fields the client reads. */
+export interface Query {
+  /** What retrieval searches with: the question, or the model's rewrite of it. */
+  text: string
+  /** The question as typed, when `llm_rewrite` replaced `text`. Empty otherwise. */
+  original?: string
+  gold_answer?: string
+  gold_answers?: string[]
 }
 
 // ------------------------------------------------------------------ graph ---

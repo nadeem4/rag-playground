@@ -37,7 +37,7 @@ describe("rank movement", () => {
 
   it("the real MMR fixture moved its fifth hit to second", () => {
     const rows = rowsFromResult(mmr)
-    expect(rows.map((r) => movement(r).kind)).toEqual(["none", "up", "down", "down", "up"])
+    expect(rows.map((r) => movement(r).kind)).toEqual(["none", "up", "none", "down", "down"])
     expect(movement(rows[1])).toEqual({ kind: "up", from: 5 })
   })
 })
@@ -153,10 +153,11 @@ describe("top-k agreement", () => {
     expect(topKAgreement([], ["a"])).toEqual({ match: 0, of: 1 })
   })
 
-  it("MMR chooses from hybrid's wider pool: four of its five are in hybrid's top five", () => {
+  // MMR version 2 takes relevance from hybrid's own scores, so on this sample it keeps hybrid's top five, reordered.
+  it("MMR chooses from hybrid's wider pool: all five are in hybrid's top five", () => {
     const ids = (r: RetrievalResult) => r.hits.map((h) => h.chunk.id)
     expect(hybrid.hits.length).toBeGreaterThan(mmr.hits.length)
-    expect(topKAgreement(ids(hybrid), ids(mmr))).toEqual({ match: 4, of: 5 })
+    expect(topKAgreement(ids(hybrid), ids(mmr))).toEqual({ match: 5, of: 5 })
   })
 })
 

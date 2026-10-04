@@ -56,6 +56,8 @@ _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
 def system_prompt(style: str) -> str:
     return (
         f"You rewrite a question for a search over one document. {_ASK[style]} "
+        "Prefer the document's section and date words (such as Experience, "
+        "Present, years) over general words. Never use a person's name. "
         "Reply with one line only. Do not answer the question."
     )
 

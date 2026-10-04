@@ -9,7 +9,9 @@ import {
   INDEX_STAGES,
   indexNode,
   rerankerOf,
+  rewriteOf,
   setReranker,
+  setRewrite,
   setUseCase,
   ancestors,
   columnOrder,
@@ -439,6 +441,54 @@ describe("ask panel helpers", () => {
     expect(rerankerOf(back)).toBe("cross_encoder")
     expect(edited(back)).toEqual(before)
     expect(edited(off)).toEqual(before)
+  })
+
+  it("an old graph, with no rewrite fields, loads as no rewrite", () => {
+    const g = sampleGraph(LIVE, SRC)
+    const retrieve = askNodes(g).retrieve!
+    const { query_expansion: _q, prf_docs: _d, prf_terms: _t, ...old } = retrieve.config
+    const stored = JSON.stringify(setConfig(g, retrieve.id, old))
+    expect(rewriteOf(loadGraph(stored, LIVE)!)).toBe("none")
+    expect(rewriteOf(g)).toBe("none")
+  })
+
+  it("setRewrite prf turns on query_expansion and keeps the question", () => {
+    const g0 = sampleGraph(LIVE, SRC, "Who is my current employer?")
+    const g = setRewrite(g0, LIVE, "prf")
+    expect(rewriteOf(g)).toBe("prf")
+    expect(askNodes(g).retrieve!.config.query_expansion).toBe("prf")
+    expect(askNodes(g).query).toEqual(askNodes(g0).query)
+  })
+
+  it("setRewrite prf switches the strategy to hybrid search first", () => {
+    const g0 = sampleGraph(LIVE, SRC)
+    const dense = setTransform(g0, askNodes(g0).retrieve!.id, "dense", LIVE)
+    const g = setRewrite(dense, LIVE, "prf")
+    expect(askNodes(g).retrieve!.transform).toBe("hybrid_rrf")
+    expect(rewriteOf(g)).toBe("prf")
+  })
+
+  it("setRewrite llm swaps the query transform and keeps the question and gold answers", () => {
+    const g0 = sampleGraph(LIVE, SRC, "Who is my current employer?")
+    const q = askNodes(g0).query!
+    const withGold = setConfig(g0, q.id, { ...q.config, gold_answer: "Present" })
+    const g = setRewrite(setRewrite(withGold, LIVE, "prf"), LIVE, "llm")
+    expect(rewriteOf(g)).toBe("llm")
+    const query = askNodes(g).query!
+    expect(query.transform).toBe("llm_rewrite")
+    expect(query.config.text).toBe("Who is my current employer?")
+    expect(query.config.gold_answer).toBe("Present")
+    expect(query.config.style).toBe("document words")
+    expect(askNodes(g).retrieve!.config.query_expansion).toBe("none")
+  })
+
+  it("setRewrite none puts back the plain question and turns PRF off", () => {
+    const g0 = sampleGraph(LIVE, SRC, "Who is my current employer?")
+    const back = setRewrite(setRewrite(g0, LIVE, "llm"), LIVE, "none")
+    expect(rewriteOf(back)).toBe("none")
+    expect(askNodes(back).query).toEqual(askNodes(g0).query)
+    const off = setRewrite(setRewrite(g0, LIVE, "prf"), LIVE, "none")
+    expect(askNodes(off).retrieve!.config.query_expansion).toBe("none")
   })
 
   it("setUseCase switches between search and chat", () => {

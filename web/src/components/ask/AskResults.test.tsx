@@ -11,7 +11,7 @@ import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry, RetrievalResult } from "@/api/types"
 import { play } from "@/lib/flip"
-import { sampleGraph, setReranker, setUseCase, type PipelineGraph } from "@/state/graph"
+import { sampleGraph, setReranker, setRewrite, setUseCase, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
 import { resetMotionMemory, slideTiming } from "./AskResults"
@@ -91,6 +91,7 @@ function props(graph: PipelineGraph, results: Record<string, NodeState>): AskPan
     onTransform: vi.fn(),
     onReranker: vi.fn(),
     onUseCase: vi.fn(),
+    onRewrite: vi.fn(),
     onAsk: vi.fn(),
   }
 }
@@ -462,7 +463,7 @@ describe("the finding sentence", () => {
       return base(url)
     })
     render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD, "What should I measure?"), SEARCH_ONLY)} />)
-    await waitFor(() => expect(screen.getByTestId("finding-sentence").textContent).toBe("Found in the 4th piece: compare strategies on the same parsed document"))
+    await waitFor(() => expect(screen.getByTestId("finding-sentence").textContent).toBe("Found in the 3rd piece: compare strategies on the same parsed document"))
     const q = screen.getByTestId("finding-sentence").querySelector("q") as HTMLElement
     expect(q.className).toContain("font-serif")
     expect(q.className).toContain("italic")
@@ -480,6 +481,62 @@ describe("the finding sentence", () => {
     render(<AskPanel {...props(chat, { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "chat1") })} />)
     await waitFor(() => expect(document.querySelector("[data-chat-inspector]")).toBeTruthy())
     expect(screen.queryByTestId("finding-sentence")).toBeNull()
+  })
+})
+
+describe("the Searched for line", () => {
+  const QUESTION = "Who is my current employer?"
+  const REWRITE = "current employer company present role"
+
+  it("is absent without a rewrite", async () => {
+    render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD, QUESTION), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    await screen.findByTestId("finding-sentence")
+    expect(screen.queryByTestId("searched-for")).toBeNull()
+  })
+
+  it("shows PRF's expanded query, with the added terms in the data face", async () => {
+    payloads.retPrf = { ...hybrid, expanded_query: `${QUESTION} present experience`, expansion_terms: ["present", "experience"] }
+    const g = setRewrite(sampleGraph(LIVE, UPLOAD, QUESTION), LIVE, "prf")
+    render(<AskPanel {...props(g, { retrieve: done("retrieve", "retPrf"), use_case: done("use_case", "out1") })} />)
+    const line = await screen.findByTestId("searched-for")
+    expect(line.textContent).toBe(`Searched for: ${QUESTION} present experience`)
+    const terms = within(line).getByText("present experience")
+    expect(terms.className).toContain("font-mono")
+    expect(screen.queryByText(/^Asked:/)).toBeNull()
+  })
+
+  it("shows the model's rewrite and the question as asked", async () => {
+    payloads.q1 = { text: REWRITE, original: QUESTION }
+    const g = setRewrite(sampleGraph(LIVE, UPLOAD, QUESTION), LIVE, "llm")
+    render(<AskPanel {...props(g, { query: done("query", "q1"), retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    const line = await screen.findByTestId("searched-for")
+    expect(line.textContent).toBe(`Searched for: ${REWRITE}`)
+    expect(screen.getByTestId("asked-as").textContent).toBe(`Asked: ${QUESTION}`)
+  })
+
+  it("is absent when the model gave no usable rewrite", async () => {
+    payloads.q2 = { text: QUESTION, original: "" }
+    const g = setRewrite(sampleGraph(LIVE, UPLOAD, QUESTION), LIVE, "llm")
+    render(<AskPanel {...props(g, { query: done("query", "q2"), retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    await screen.findByTestId("finding-sentence")
+    expect(screen.queryByTestId("searched-for")).toBeNull()
+  })
+
+  it("the finding sentence keeps the question as asked, not the rewrite (Review Focus 1)", async () => {
+    const card = { name: "primer", title: "t", blurb: "b", shows: "s", stresses: "chunk", pages: 3, default: false, filename: UPLOAD.filename, sha: UPLOAD.sha, question: "q" }
+    const golds = [{ id: "q1", question: "What should I measure?", gold_answer: "compare strategies on the same parsed document" }]
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+      if (url === "/api/samples") return ok([card])
+      if (url === "/api/samples/primer/questions") return ok(golds)
+      return base(url)
+    })
+    payloads.q3 = { text: "measure compare strategies", original: "What should I measure?" }
+    const g = setRewrite(sampleGraph(LIVE, UPLOAD, "What should I measure?"), LIVE, "llm")
+    render(<AskPanel {...props(g, { query: done("query", "q3"), retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    await waitFor(() => expect(screen.getByTestId("finding-sentence").textContent).toBe("Found in the 3rd piece: compare strategies on the same parsed document"))
+    expect(screen.getByTestId("searched-for").textContent).toBe("Searched for: measure compare strategies")
   })
 })
 

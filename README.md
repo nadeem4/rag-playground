@@ -86,6 +86,10 @@ The Ask panel on the right holds the question and the retrieval, rerank and answ
 settings, summed up in one recipe line. **Ask** runs the question against the index and
 shows the ranked pieces, the search order against the reranked order when a reranker is
 on, a written answer when the answer is Chat, and the questions asked earlier in the tab.
+The **Rewrite** control in the Retrieval block can widen the keyword search with words
+borrowed from the top dense hits (PRF, no key) or have a model restate the question in
+the document's words (LLM, needs a key); a **Searched for** line under the question then
+shows what retrieval searched with, while the answer still uses the question as typed.
 
 1. On **Build**, upload a PDF, or press Load on one of the samples the Upload card lists.
    - The sample, `samples/chunking-primer/chunking-primer.pdf`, is three pages of notes on

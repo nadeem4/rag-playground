@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
-import { askNodes, initialGraph, sampleGraph, setReranker, setTransform, setUseCase } from "@/state/graph"
+import { askNodes, initialGraph, sampleGraph, setReranker, setRewrite, setTransform, setUseCase } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
-import { AskSettings, type AskSettingsProps } from "./AskSettings"
+import { AskSettings, LLM_GLOSS, PRF_GLOSS, type AskSettingsProps } from "./AskSettings"
 
 const LIVE = liveRegistry as unknown as Registry
 const SAMPLE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
@@ -26,6 +26,7 @@ function setup(over: Partial<AskSettingsProps> = {}) {
     onTransform: vi.fn(),
     onReranker: vi.fn(),
     onUseCase: vi.fn(),
+    onRewrite: vi.fn(),
     ...over,
   }
   render(<AskSettings {...props} />)
@@ -78,6 +79,77 @@ describe("the Retrieval block", () => {
     expect(option.disabled).toBe(true)
     expect(b.getByTestId("lock-reason").getAttribute("role")).toBe("alert")
     expect(b.getByRole("alert").textContent).toBe("Needs text search from the index step. lancedb does not provide it, so this cannot run.")
+  })
+})
+
+describe("the Rewrite control", () => {
+  const QUESTION = "Who is my current employer?"
+  const base = () => sampleGraph(LIVE, SAMPLE, QUESTION)
+
+  it("sits in the Retrieval block with None, PRF and LLM, None chosen on an old graph", () => {
+    setup()
+    const group = block("Retrieval").getByRole("group", { name: "Rewrite" })
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["None", "PRF", "LLM"])
+    expect(segment("Rewrite", "None").getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("each choice calls onRewrite with its mode", () => {
+    const p = setup()
+    fireEvent.click(segment("Rewrite", "PRF"))
+    expect(p.onRewrite).toHaveBeenCalledWith("prf")
+    fireEvent.click(segment("Rewrite", "LLM"))
+    expect(p.onRewrite).toHaveBeenCalledWith("llm")
+    cleanup()
+    const q = setup({ graph: setRewrite(base(), LIVE, "prf") })
+    fireEvent.click(segment("Rewrite", "None"))
+    expect(q.onRewrite).toHaveBeenCalledWith("none")
+  })
+
+  it("PRF shows its gloss and its two fields, and they are absent otherwise", () => {
+    setup()
+    expect(block("Retrieval").queryByLabelText("Pieces to borrow from")).toBeNull()
+    expect(block("Retrieval").queryByLabelText("Terms to add")).toBeNull()
+    expect(block("Retrieval").queryByText("Query Expansion")).toBeNull()
+    cleanup()
+    const g = setRewrite(base(), LIVE, "prf")
+    const p = setup({ graph: g })
+    const b = block("Retrieval")
+    expect(segment("Rewrite", "PRF").getAttribute("aria-pressed")).toBe("true")
+    expect(b.getByText(PRF_GLOSS)).toBeTruthy()
+    expect((b.getByLabelText("Pieces to borrow from") as HTMLInputElement).value).toBe("2")
+    fireEvent.change(b.getByLabelText("Terms to add"), { target: { value: "4" } })
+    expect(p.onConfig).toHaveBeenCalledWith("retrieve", expect.objectContaining({ prf_terms: 4, query_expansion: "prf" }))
+  })
+
+  it("LLM shows its gloss and the query node's model and style, not its question", () => {
+    const g = setRewrite(base(), LIVE, "llm")
+    const p = setup({ graph: g, hasKey: true })
+    const b = block("Retrieval")
+    expect(segment("Rewrite", "LLM").getAttribute("aria-pressed")).toBe("true")
+    expect(b.getByText(LLM_GLOSS)).toBeTruthy()
+    expect(b.queryByLabelText("Pieces to borrow from")).toBeNull()
+    const style = b.getByLabelText("Style") as HTMLSelectElement
+    expect(style.value).toBe("document words")
+    expect(b.getByLabelText("Model")).toBeTruthy()
+    expect(b.queryByDisplayValue(QUESTION)).toBeNull()
+    fireEvent.change(style, { target: { value: "keywords" } })
+    expect(p.onConfig).toHaveBeenCalledWith(askNodes(g).query!.id, expect.objectContaining({ style: "keywords", text: QUESTION }))
+  })
+
+  it("LLM is disabled with the reason only when there is surely no key", () => {
+    setup({ hasKey: false })
+    expect(segment("Rewrite", "LLM").disabled).toBe(true)
+    expect(segment("Rewrite", "LLM").title).toBe("Add a key to rewrite with a model")
+    expect(screen.getByText("Add a key to rewrite with a model")).toBeTruthy()
+    cleanup()
+    setup({ hasKey: null })
+    expect(segment("Rewrite", "LLM").disabled).toBe(false)
+    expect(screen.queryByText("Add a key to rewrite with a model")).toBeNull()
+  })
+
+  it("is absent when the registry has neither rewrite", () => {
+    setup({ graph: initialGraph(R), registry: R })
+    expect(screen.queryByRole("group", { name: "Rewrite" })).toBeNull()
   })
 })
 

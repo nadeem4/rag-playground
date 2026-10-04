@@ -10,7 +10,7 @@ import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry, RetrievalResult } from "@/api/types"
 import { rowsFromResult } from "@/components/inspectors/hits"
-import { sampleGraph, setReranker, type PipelineGraph } from "@/state/graph"
+import { sampleGraph, setReranker, setRewrite, type PipelineGraph } from "@/state/graph"
 import { resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
@@ -120,6 +120,7 @@ function base(graph: PipelineGraph, results: Record<string, NodeState>, asked: A
     onTransform: vi.fn(),
     onReranker: vi.fn(),
     onUseCase: vi.fn(),
+    onRewrite: vi.fn(),
     onAsk: vi.fn(),
   }
 }
@@ -128,6 +129,11 @@ const RERANKED = { retrieve: done("retrieve", "ret1"), rerank_1: done("rerank_1"
 const summary = () => screen.queryByText(/^Earlier questions in this tab/)
 
 describe("the transcript", () => {
+  it("logs the question as typed when the model rewrote it for retrieval", () => {
+    const graph = setRewrite(sampleGraph(LIVE, SAMPLE, "Who is my current employer?"), LIVE, "llm")
+    expect(askSnapshot(graph, LIVE, "Working copy").question).toBe("Who is my current employer?")
+  })
+
   it("grows after a finished run, once per run, and Ask again refills the box", async () => {
     const graph = setReranker(sampleGraph(LIVE, SAMPLE, "What does overlap cost?"), LIVE, "cross_encoder")
     const p = base(graph, RERANKED, null)

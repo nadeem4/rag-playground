@@ -6,7 +6,7 @@ import type { Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry } from "@/api/types"
-import { e2eSampleGraph, sampleGraph, setReranker, type PipelineGraph } from "@/state/graph"
+import { e2eSampleGraph, sampleGraph, setReranker, setRewrite, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
 
@@ -73,6 +73,7 @@ function setup(over: Partial<AskPanelProps> = {}) {
     onTransform: vi.fn(),
     onReranker: vi.fn(),
     onUseCase: vi.fn(),
+    onRewrite: vi.fn(),
     onAsk: vi.fn(),
     ...over,
   }
@@ -239,6 +240,20 @@ describe("the recipe line and the settings toggle", () => {
     const chat: PipelineGraph = { ...g, nodes: g.nodes.map((n) => (n.stage === "use_case" ? { ...n, transform: "chat", config: { model: "claude-opus-5" } } : n)) }
     setup({ graph: chat })
     expect(screen.getByTestId("recipe").textContent).toBe("Hybrid (RRF), top 20 candidates. Rerank: none. Answer: Chat with Claude Opus 5.")
+  })
+
+  it("names the rewrite after the retrieval part", () => {
+    setup({ graph: setRewrite(sampleGraph(LIVE, SAMPLE), LIVE, "prf") })
+    expect(screen.getByTestId("recipe").textContent).toBe("Hybrid (RRF), top 20 candidates, rewritten by PRF. Rerank: none. Answer: Search.")
+    cleanup()
+    setup({ graph: setRewrite(sampleGraph(LIVE, SAMPLE), LIVE, "llm") })
+    expect(screen.getByTestId("recipe").textContent).toBe("Hybrid (RRF), top 20 candidates, rewritten by the model. Rerank: none. Answer: Search.")
+  })
+
+  it("the Rewrite control reaches onRewrite", () => {
+    const p = setup()
+    fireEvent.click(within(screen.getByRole("group", { name: "Rewrite" })).getByRole("button", { name: "PRF" }))
+    expect(p.onRewrite).toHaveBeenCalledWith("prf")
   })
 
   it("settings are open on a fresh pipeline and fold when Ask is pressed", () => {

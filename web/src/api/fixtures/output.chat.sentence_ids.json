@@ -19,7 +19,7 @@
         "grounding": "cited"
       },
       {
-        "text": " Boundary placement is therefore a recall decision disguised as a preprocessing step. ",
+        "text": " It is also blind to structure: a window will happily start in the middle of a table row or end halfway through a definition. ",
         "citations": [
           2
         ],
@@ -31,7 +31,7 @@
         "grounding": "none"
       },
       {
-        "text": ". This only works when the parser reports headings.",
+        "text": ". Count chunks, look at the token distribution, and check recall at ten on a fixed question set.",
         "citations": [
           3
         ],
@@ -75,22 +75,22 @@
         ],
         "verified": true,
         "method": "id",
-        "support": -0.0082
+        "support": -0.0113
       },
       {
         "n": 3,
-        "cited_text": "This only works when the parser reports headings.",
-        "chunk_id": "34f119b0321a0705",
+        "cited_text": "Count chunks, look at the token distribution, and check recall at ten on a fixed question set.",
+        "chunk_id": "862225532f622ea7",
         "source_sha": "ecc4a0ba83e6e17a0e7d8cfee7c1048b5217e38d4ddc8075a4b2851fe0bfdd5c",
-        "doc_start": 1250,
-        "doc_end": 1299,
-        "page": 2,
-        "element_id": "e00011",
+        "doc_start": 1809,
+        "doc_end": 1903,
+        "page": 3,
+        "element_id": "e00018",
         "bbox": [
           72.0,
-          493.4679870605469,
-          492.20391845703125,
-          554.8599853515625
+          465.4679870605469,
+          490.2119140625,
+          526.8599853515625
         ],
         "verified": true,
         "method": "similarity",

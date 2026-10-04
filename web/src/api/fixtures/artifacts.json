@@ -19,6 +19,7 @@
     "id": "907dd7de2d0debd0e322d4b79bf2870ed25db3fda6b32fa2dc6b9fa5a07e286c",
     "type": "parsed_doc",
     "meta": {
+      "note": "Removed 6 blocks: 3 running headers and 3 page numbers.",
       "transform": "header_footer_strip",
       "node_id": "clean_strip"
     }
@@ -27,6 +28,7 @@
     "id": "d5d15bc9e799d57645037c6f5558c2b6dc70f52193d4c63a06a6adcaa40ada05",
     "type": "parsed_doc",
     "meta": {
+      "note": "Removed 1 block: 1 paragraph from page 3 that repeats one from page 1.",
       "transform": "dedupe_blocks",
       "node_id": "clean_dedupe"
     }

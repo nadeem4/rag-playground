@@ -59,6 +59,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   mmr: "MMR (variety)",
   cross_encoder: "Cross-encoder",
   llm_rerank: "LLM",
+  llm_rewrite: "LLM rewrite",
   // The index column's other transforms, for the step cards.
   pdfium: "Fast text",
   docling: "Docling",

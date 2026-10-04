@@ -40,6 +40,10 @@ describe("strategyLabel", () => {
     expect(strategyLabel("cross_encoder")).toBe("Cross-encoder")
     expect(strategyLabel("llm_rerank")).toBe("LLM")
   })
+
+  it("names the LLM rewrite of the question", () => {
+    expect(strategyLabel("llm_rewrite")).toBe("LLM rewrite")
+  })
 })
 
 describe("challengePrompt", () => {

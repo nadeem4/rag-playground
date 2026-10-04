@@ -209,11 +209,13 @@
       "highlights": []
     }
   ],
-  "query_id": "10971489ca9b3341",
+  "query_id": "d5172214f785b8f9",
   "fetch_k": 20,
   "total_candidates": 6,
   "timings_ms": {
-    "embed": 1.0489000706002116,
-    "search": 16.81319996714592
-  }
+    "embed": 3.613000037148595,
+    "search": 63.49369999952614
+  },
+  "expanded_query": null,
+  "expansion_terms": []
 }

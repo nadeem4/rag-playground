@@ -226,12 +226,14 @@
       "highlights": []
     }
   ],
-  "query_id": "10971489ca9b3341",
+  "query_id": "d5172214f785b8f9",
   "fetch_k": 20,
   "total_candidates": 6,
   "timings_ms": {
-    "dense": 5.361699964851141,
-    "bm25": 5.10860001668334,
-    "fuse": 0.13160007074475288
-  }
+    "dense": 4.262200091034174,
+    "bm25": 5.062800133600831,
+    "fuse": 0.13369997031986713
+  },
+  "expanded_query": null,
+  "expansion_terms": []
 }

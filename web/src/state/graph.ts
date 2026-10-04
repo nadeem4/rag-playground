@@ -478,6 +478,51 @@ export function setUseCase(g: PipelineGraph, registry: Registry, transform: "sea
   return node ? setTransform(g, node.id, transform, registry) : g
 }
 
+export type RewriteMode = "none" | "prf" | "llm"
+
+/**
+ * How the question is rewritten before retrieval: by the model (the query node
+ * is `llm_rewrite`), by PRF (hybrid search's `query_expansion`), or not at all.
+ * A graph saved before the option existed has neither, so it reads as none.
+ */
+export function rewriteOf(g: PipelineGraph): RewriteMode {
+  const { query, retrieve } = askNodes(g)
+  if (query?.transform === "llm_rewrite") return "llm"
+  if (retrieve?.transform === "hybrid_rrf" && retrieve.config.query_expansion === "prf") return "prf"
+  return "none"
+}
+
+/** Swap the query node's transform, keeping the question and gold answers it shares with the new one. */
+function setQueryTransform(g: PipelineGraph, registry: Registry, transform: string): PipelineGraph {
+  const old = askNodes(g).query
+  if (!old || old.transform === transform || !registry.query?.[transform]) return g
+  const swapped = setTransform(g, old.id, transform, registry)
+  const node = swapped.nodes.find((n) => n.id === old.id)!
+  const kept = Object.fromEntries(Object.entries(old.config).filter(([k]) => k in node.config))
+  return setConfig(swapped, old.id, { ...node.config, ...kept })
+}
+
+/** Set `query_expansion` on hybrid search; other strategies have no such option. */
+function setExpansion(g: PipelineGraph, value: "none" | "prf"): PipelineGraph {
+  const node = askNodes(g).retrieve
+  if (node?.transform !== "hybrid_rrf" || (node.config.query_expansion ?? "none") === value) return g
+  return setConfig(g, node.id, { ...node.config, query_expansion: value })
+}
+
+/**
+ * Set the rewrite. `none`: the plain question, no PRF. `prf`: hybrid search
+ * (switched to if needed) with `query_expansion: "prf"`. `llm`: the query node
+ * becomes `llm_rewrite`, with PRF off so one rewrite is measured at a time.
+ */
+export function setRewrite(g: PipelineGraph, registry: Registry, mode: RewriteMode): PipelineGraph {
+  if (mode === "llm") return setExpansion(setQueryTransform(g, registry, "llm_rewrite"), "none")
+  g = setQueryTransform(g, registry, "text")
+  if (mode === "none") return setExpansion(g, "none")
+  const retrieve = askNodes(g).retrieve
+  if (retrieve && retrieve.transform !== "hybrid_rrf") g = setTransform(g, retrieve.id, "hybrid_rrf", registry)
+  return setExpansion(g, "prf")
+}
+
 /** The last card of the column: the use case, the node a question runs through. */
 export function terminalNode(g: PipelineGraph): GraphNode | undefined {
   const order = columnOrder(g)

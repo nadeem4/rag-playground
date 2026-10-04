@@ -131,6 +131,16 @@ def test_the_prompt_asks_for_one_line_in_the_documents_words(reply, tmp_path):
     assert call["api_key"] == "sk-ant-test"
 
 
+@pytest.mark.parametrize("style", ["document words", "keywords"])
+def test_the_prompt_prefers_section_and_date_words_and_never_a_name(reply, tmp_path, style):
+    fake = reply(REWRITE)
+    rewrite(tmp_path, style=style)
+    system = fake.calls[0]["system"]
+    assert "section and date words" in system
+    assert "Experience, Present" in system
+    assert "Never use a person's name." in system
+
+
 def test_the_keywords_style_asks_for_six_to_ten_search_words(reply, tmp_path):
     fake = reply(REWRITE)
     rewrite(tmp_path, style="keywords")

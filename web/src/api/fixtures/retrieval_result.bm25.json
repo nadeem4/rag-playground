@@ -175,10 +175,12 @@
       "highlights": []
     }
   ],
-  "query_id": "10971489ca9b3341",
+  "query_id": "d5172214f785b8f9",
   "fetch_k": 20,
   "total_candidates": 5,
   "timings_ms": {
-    "search": 37.36269997898489
-  }
+    "search": 56.03450001217425
+  },
+  "expanded_query": null,
+  "expansion_terms": []
 }

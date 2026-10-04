@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefO
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
-import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
+import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Query, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
 import { loadMeta, useArtifactPayload } from "@/api/useArtifact"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
@@ -32,6 +32,8 @@ export function fresh(results: Record<string, NodeState>, stale: Set<string>, no
 
 /** What the Ask steps produced, loaded. */
 export interface AskOutputs {
+  /** The query node's payload: with an LLM rewrite, `text` is the rewrite and `original` the question. */
+  query?: Query
   retrieve?: RetrievalResult
   retrieveId?: string
   rerank?: RetrievalResult
@@ -54,6 +56,7 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
   // The chunk set and the parsed document behind the hits: chunk hues and Show in PDF.
   const chunkNode = retrieve && retrieveId ? upstreamOfStage(graph, retrieve.id, "chunk") : undefined
   const docNode = retrieve && retrieveId ? upstreamOfStage(graph, retrieve.id, ["clean", "parse"]) : undefined
+  const q = useArtifactPayload(fresh(results, stale, query))
   const r = useArtifactPayload(retrieveId)
   const rr = useArtifactPayload(rerankId)
   const out = useArtifactPayload(fresh(results, stale, useCase))
@@ -61,6 +64,7 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
   const doc = useArtifactPayload(fresh(results, stale, docNode))
   const failedNode = [query, retrieve, rerank, useCase].find((n) => n && results[n.id]?.status === "failed" && !stale.has(n.id))
   return {
+    query: typeof (q.data as Query | undefined)?.text === "string" ? (q.data as Query) : undefined,
     retrieve: asResult(r.data),
     retrieveId,
     rerank: asResult(rr.data),
@@ -80,6 +84,38 @@ export function finalRows(o: AskOutputs, reranked: boolean): HitRowData[] | null
   if (reranked) return o.rerank ? rowsFromResult(o.rerank) : null
   if (isSearch(o.output)) return rowsFromSearch(o.output)
   return o.retrieve ? rowsFromResult(o.retrieve) : null
+}
+
+/**
+ * What retrieval actually searched for, once an Ask has run with a rewrite:
+ * PRF's expanded keyword query, the borrowed terms in the data face, or the
+ * model's rewrite with the question as asked under it. Nothing without one.
+ */
+export function SearchedFor({ outputs: o }: { outputs: AskOutputs }) {
+  const original = o.query?.original?.trim()
+  if (o.query && original) {
+    return (
+      <div className="flex flex-col gap-0.5 text-xs text-fg-muted">
+        <p data-testid="searched-for">
+          {"Searched for: "}
+          <span className="text-fg">{o.query.text}</span>
+        </p>
+        <p data-testid="asked-as">{`Asked: ${original}`}</p>
+      </div>
+    )
+  }
+  const expanded = o.retrieve?.expanded_query
+  const terms = o.retrieve?.expansion_terms ?? []
+  if (!expanded || !terms.length) return null
+  const added = terms.join(" ")
+  const asked = expanded.endsWith(added) ? expanded.slice(0, expanded.length - added.length).trimEnd() : expanded
+  return (
+    <p data-testid="searched-for" className="text-xs text-fg-muted">
+      {"Searched for: "}
+      <span className="text-fg">{asked} </span>
+      <span className="font-mono text-fg">{added}</span>
+    </p>
+  )
 }
 
 export const rerankLabel = (transform: string) => RERANKERS.find((r) => r.name === transform)?.label ?? transform

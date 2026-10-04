@@ -3,37 +3,50 @@ import { X } from "lucide-react"
 
 import type { TransformInfo, Variant } from "@/api/types"
 import { CONTROL } from "@/components/fields/types"
+import { transformLabel } from "@/components/pipeline/NodeCard"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { defaultConfig } from "@/state/graph"
 
+/** The fields' titles in sentence case, in place of the schemas' own ("Chunk Size", "Rrf K"). */
+export const RECIPE_TITLES: Record<string, string> = {
+  chunk_size: "Chunk size",
+  chunk_overlap: "Chunk overlap",
+  max_tokens: "Most tokens per piece",
+  overlap: "Overlap tokens",
+  sentences_per_chunk: "Sentences per piece",
+  overlap_sentences: "Overlap sentences",
+  top_k: "Candidates, top k",
+  rrf_k: "RRF k",
+  truncate_dim: "Dimensions",
+}
+
 /**
- * One sweep variant: a transform and its config. The transform is part of the
- * variant, because comparing two chunkers is a transform change, not a config
- * change.
+ * One Compare recipe's editor: a strategy and its settings. The strategy is
+ * part of the recipe, because comparing two chunkers is a strategy change,
+ * not a settings change. `labelFor` names a strategy in the picker.
  */
 export function SweepControl({
   variant,
   transforms,
   onChange,
   onRemove,
-  changed,
+  labelFor = transformLabel,
 }: {
   variant: Variant
   transforms: TransformInfo[]
   onChange: (v: Variant) => void
   onRemove?: () => void
-  /** The variant was edited after the sweep that produced the result below it. */
-  changed?: boolean
+  labelFor?: (name: string) => string
 }) {
   const id = useId()
   const info = transforms.find((t) => t.name === variant.transform)
   return (
-    <div className="flex min-w-0 flex-col gap-3 bg-surface p-3">
+    <div className="flex min-w-0 flex-col gap-3">
       <div className="flex min-w-0 items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <label htmlFor={`${id}-t`} className="text-sm font-medium">
-            Transform
+            Strategy
           </label>
           <select
             id={`${id}-t`}
@@ -46,21 +59,20 @@ export function SweepControl({
           >
             {transforms.map((t) => (
               <option key={t.name} value={t.name}>
-                {t.name}
+                {labelFor(t.name)}
               </option>
             ))}
           </select>
         </div>
         {onRemove ? (
-          <Button variant="ghost" size="icon" aria-label={`Remove variant ${variant.transform}`} title="Remove this variant" onClick={onRemove}>
+          <Button variant="ghost" size="icon" aria-label="Remove this recipe" title="Remove this recipe" onClick={onRemove}>
             <X aria-hidden strokeWidth={1.75} />
           </Button>
         ) : null}
       </div>
       {info ? (
-        <SchemaForm key={info.name} schema={info.config_schema} value={variant.config} onChange={(config) => onChange({ ...variant, config })} />
+        <SchemaForm key={info.name} schema={info.config_schema} value={variant.config} titles={RECIPE_TITLES} onChange={(config) => onChange({ ...variant, config })} />
       ) : null}
-      {changed ? <p className="text-xs text-fg-muted">Edited since the last sweep. Run the sweep again to update the result below.</p> : null}
     </div>
   )
 }

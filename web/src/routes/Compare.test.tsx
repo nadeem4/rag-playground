@@ -25,6 +25,7 @@ function serve() {
     "fetch",
     vi.fn(async (url: string) => {
       if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/sweeps") return ok({ run_id: "r1" })
       return missing()
     }),
   )
@@ -36,7 +37,7 @@ function openAt(query: string) {
 }
 
 const picker = () => screen.getByLabelText("Compare") as HTMLSelectElement
-const columns = () => (screen.getAllByLabelText("Transform") as HTMLSelectElement[]).map((s) => s.value)
+const columns = () => (screen.queryAllByLabelText("Strategy") as HTMLSelectElement[]).map((s) => s.value)
 const text = () => document.body.textContent ?? ""
 
 beforeEach(() => {
@@ -105,21 +106,11 @@ describe("the Compare stage picker", () => {
     expect(src).toContain("<MonoNumbers text={tallyLine(")
   })
 
-  it("sets the column's provenance in sans, with mono only on the duration", async () => {
-    const { readFileSync } = await import("node:fs")
-    const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")
-    const line = src.match(/<span[^>]*>\s*\{titleFor\(node\)\}[^]*?<\/span>\s*\) : null\}/)?.[0] ?? ""
-    expect(line).not.toBe("")
-    expect(line.split("\n")[0]).not.toContain("font-mono")
-    expect(line).toContain('<span className="font-mono">{fmtMs(n!.duration_ms)}</span>')
-  })
-
   it("sets the agreement line in sans with only its numbers in mono", async () => {
     const node = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "retrieve")!
     render(
       <VariantResult
         pending={false}
-        label={{ transform: "bm25", fields: [] }}
         node={node}
         type="retrieval_result"
         status={{ kind: "ready" }}
@@ -158,7 +149,7 @@ describe("the Compare stage picker", () => {
 
   it("uses no sm: class in the files this patch touched, since the theme has no sm breakpoint", async () => {
     const { readFileSync } = await import("node:fs")
-    const files = ["routes/Compare.tsx", "routes/useColumnsFit.ts", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/ask/AskPanel.tsx"]
+    const files = ["routes/Compare.tsx", "routes/useColumnsFit.ts", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/ask/AskPanel.tsx", "components/SweepControl.tsx", "components/compare/RecipeHead.tsx"]
     for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(/(^|[\s"'`])sm:/m)
   })
 
@@ -194,12 +185,12 @@ describe("Compare's widths", () => {
     expect(columns()).toEqual(["sentence_window"])
   })
 
-  it("names each recipe in the control by its transform and first distinguishing value", async () => {
+  it("names each recipe in the control by its short name", async () => {
     FakeResizeObserver.width = 753
     vi.stubGlobal("ResizeObserver", FakeResizeObserver)
     render(<Compare />)
     const group = await screen.findByRole("group", { name: "Recipe shown" })
-    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["recursive_character 400", "recursive_character 200", "sentence_window"])
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["400 characters", "200 characters", "By sentence"])
   })
 
   it("keeps a recipe shown when the one chosen is removed", async () => {
@@ -208,7 +199,7 @@ describe("Compare's widths", () => {
     render(<Compare />)
     const group = await screen.findByRole("group", { name: "Recipe shown" })
     fireEvent.click(within(group).getAllByRole("button")[2])
-    fireEvent.click(screen.getByRole("button", { name: "Remove variant sentence_window" }))
+    fireEvent.click(screen.getByRole("button", { name: "Remove this recipe" }))
     expect(columns()).toEqual(["recursive_character"])
     expect(within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button")[1].getAttribute("aria-pressed")).toBe("true")
   })
@@ -219,6 +210,62 @@ describe("Compare's widths", () => {
     openAt("?node=index&preset=matryoshka&native=1024")
     render(<Compare />)
     expect(await screen.findByRole("group", { name: "Recipe shown" })).toBeTruthy()
+  })
+})
+
+describe("Compare's recipes", () => {
+  const run = () => fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+
+  it("makes each column one region named by its recipe, the node's own tagged Your pipeline", async () => {
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    const names = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))
+    expect(names).toEqual(["Recursive (natural breaks), 400 characters", "Recursive (natural breaks), 200 characters", "By sentence"])
+    expect(within(screen.getByRole("region", { name: names[0]! })).getByText("Your pipeline")).toBeTruthy()
+    expect(within(screen.getByRole("region", { name: names[1]! })).queryByText("Your pipeline")).toBeNull()
+  })
+
+  it("says recipe, not variant, on its buttons", async () => {
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    expect(screen.getByRole("button", { name: "Add a recipe" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Run 3 recipes" })).toBeTruthy()
+    expect(screen.getAllByRole("button", { name: "Remove this recipe" })).toHaveLength(3)
+    expect(text()).not.toMatch(/variant/i)
+  })
+
+  it("names strategies as Build does and gives the fields sentence-case titles", async () => {
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    const select = screen.getAllByLabelText("Strategy")[0] as HTMLSelectElement
+    expect([...select.options].map((o) => o.textContent)).toContain("Recursive (natural breaks), recursive_character")
+    expect(screen.getAllByLabelText("Chunk size")).toHaveLength(2)
+    expect(screen.getAllByLabelText("Sentences per piece")).toHaveLength(1)
+  })
+
+  it("folds every editor into its recipe sentence once a run starts, and unfolds one on request", async () => {
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    run()
+    await waitFor(() => expect(columns()).toHaveLength(0))
+    const change = screen.getAllByRole("button", { name: "Change this recipe" })
+    expect(change).toHaveLength(3)
+    fireEvent.click(change[1])
+    expect(change[1].getAttribute("aria-expanded")).toBe("true")
+    expect(columns()).toEqual(["recursive_character"])
+  })
+
+  it("still says a recipe was edited since the last run once its editor is folded again", async () => {
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    run()
+    await waitFor(() => expect(columns()).toHaveLength(0))
+    fireEvent.click(screen.getAllByRole("button", { name: "Change this recipe" })[1])
+    fireEvent.change(screen.getByLabelText("Chunk size"), { target: { value: "300" } })
+    fireEvent.click(screen.getByRole("button", { name: "Done" }))
+    expect(columns()).toHaveLength(0)
+    const edited = screen.getByRole("region", { name: "Recursive (natural breaks), 300 characters" })
+    expect(within(edited).getByText(/Edited since the last run/)).toBeTruthy()
   })
 })
 

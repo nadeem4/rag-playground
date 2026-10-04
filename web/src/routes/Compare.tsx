@@ -9,13 +9,14 @@ import { usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
+import { RecipeHead } from "@/components/compare/RecipeHead"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
 import { agreementText, compareLists, hitIds } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import type { InspectorStatus } from "@/components/inspectors/status"
-import { fmtMs } from "@/components/pipeline/NodeCard"
+import { transformLabel } from "@/components/pipeline/NodeCard"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
@@ -32,6 +33,7 @@ import {
   upstreamOfStage,
   type PipelineGraph,
 } from "@/state/graph"
+import { recipeNames } from "@/state/compare"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
@@ -39,11 +41,11 @@ import { RegistryScreen } from "./Shell"
 import { useColumnsFit } from "./useColumnsFit"
 
 /**
- * Compare: sweep one node of the Build pipeline over N variants and show the
- * results side by side. Each variant sits in its own column, its editor above
- * the output of the node the sweep runs through, so a config and what it
- * produced read together. Where the columns do not fit side by side, one
- * recipe shows at a time, chosen above the grid.
+ * Compare: run one node of the Build pipeline over N recipes and show the
+ * results side by side. Each recipe is a column: its name in words, its
+ * editor (folded once a run starts), then the output of the node the run goes
+ * through, so a recipe and what it produced read together. Where the columns
+ * do not fit side by side, one recipe shows at a time, chosen above the grid.
  */
 
 export function Compare() {
@@ -176,6 +178,9 @@ function Sweep({
   // The recipe shown when the columns do not fit, clamped when one is removed.
   const [chosen, setChosen] = useState(0)
   const shown = Math.min(chosen, variants.length - 1)
+  // Which editors are unfolded: all of them before the first run, none once Run is pressed.
+  const [open, setOpen] = useState<boolean[]>(() => variants.map(() => true))
+  const editorId = useId()
 
   const shownThrough = graph.nodes.find((n) => n.id === submitted.through) ?? target
   const tally = runId ? tallySweep(run.variants) : null
@@ -208,6 +213,7 @@ function Sweep({
   async function sweep() {
     setError(null)
     setSubmitting(true)
+    setOpen(variants.map(() => false))
     try {
       const { run_id } = await api.createSweep(
         {
@@ -232,8 +238,9 @@ function Sweep({
     }
   }
 
-  const reshape = (next: Variant[]) => {
+  const reshape = (next: Variant[], nextOpen: boolean[]) => {
     setVariants(next)
+    setOpen(nextOpen)
     // A different number of variants no longer lines up with the results.
     if (next.length !== variants.length) {
       setRunId(null)
@@ -243,7 +250,9 @@ function Sweep({
 
   const visible = fit ? variants.map((_, i) => i) : [shown]
   const grid: CSSProperties = { gridTemplateColumns: `repeat(${Math.max(visible.length, 1)}, minmax(0, 1fr))` }
-  const tabLabels = variantLabels(variants, registry, target.stage)
+  const names = recipeNames(variants, target.stage, registry)
+  const own = (v: Variant) => same(v, { transform: target.transform, config: target.config })
+  const labelFor = target.stage === "retrieve" ? (name: string) => RETRIEVAL_LABEL[name] ?? name : transformLabel
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
 
@@ -310,13 +319,13 @@ function Sweep({
             size="sm"
             disabled={busy}
             onClick={() => {
-              reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }])
+              reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }], [...open, true])
               // Where one recipe shows at a time, show the new one.
               setChosen(variants.length)
             }}
           >
             <Plus aria-hidden strokeWidth={1.75} />
-            Add variant
+            Add a recipe
           </Button>
           {/* Below md the run buttons take their own full-width row, so Sweep is never pushed off a phone screen. */}
           <div className="flex basis-full gap-2 md:basis-auto">
@@ -326,7 +335,7 @@ function Sweep({
               </Button>
             ) : null}
             <Button size="sm" className="flex-1 md:flex-none" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
-              {busy ? "Sweeping" : `Sweep ${variants.length} ${variants.length === 1 ? "variant" : "variants"}`}
+              {busy ? "Running" : `Run ${variants.length} ${variants.length === 1 ? "recipe" : "recipes"}`}
             </Button>
           </div>
         </div>
@@ -343,13 +352,13 @@ function Sweep({
               <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))} />
             </p>
             <p className="text-xs text-fg-muted">
-              {running !== null ? `Running variant ${running + 1} of ${submitted.variants.length}.` : run.closed ? "Steps above the swept one ran once; the rest came from the cache." : "Starting."}
+              {running !== null ? `Running recipe ${running + 1} of ${submitted.variants.length}.` : run.closed ? "Steps above the swept one ran once; the rest came from the cache." : "Starting."}
             </p>
             {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
           </>
         ) : (
           <p className="text-sm text-fg-muted">
-            Each variant runs the pipeline through the {titleFor(graph.nodes.find((n) => n.id === through) ?? target)} step. Steps above {verb} are shared, so they run once and the rest come from the cache.
+            Each recipe runs the pipeline through the {titleFor(graph.nodes.find((n) => n.id === through) ?? target)} step. Steps above {verb} are shared, so they run once and the rest come from the cache.
           </p>
         )}
       </div>
@@ -358,7 +367,7 @@ function Sweep({
         <div className="flex shrink-0 border-b border-hairline px-3 py-2">
           <SegmentedControl
             label="Recipe shown"
-            options={tabLabels.map((l, i) => ({ value: String(i), label: l.fields.length ? `${l.transform} ${l.fields[0][1]}` : l.transform }))}
+            options={names.map((n, i) => ({ value: String(i), label: n.short }))}
             value={String(shown)}
             onChange={(v) => setChosen(Number(v))}
           />
@@ -367,16 +376,6 @@ function Sweep({
 
       <div ref={scroller} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
-          {visible.map((i) => (
-            <SweepControl
-              key={i}
-              variant={variants[i]}
-              transforms={transforms}
-              changed={submitted.variants[i] !== undefined && !same(submitted.variants[i], variants[i])}
-              onChange={(nv) => setVariants(variants.map((x, j) => (j === i ? nv : x)))}
-              onRemove={variants.length > 1 && !busy ? () => reshape(variants.filter((_, j) => j !== i)) : undefined}
-            />
-          ))}
           {visible.map((i) => {
             const s = stateOf(i)
             const out = payload(ids[i]?.through)
@@ -384,26 +383,55 @@ function Sweep({
             const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
             const agreement =
               base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
+            const unfolded = open[i] ?? true
             return (
-              <VariantResult
-                key={i}
-                state={s}
-                pending={runId !== null && i < submitted.variants.length}
-                label={labels[i]}
-                node={shownThrough}
-                type={
-                  shownThrough.id === target.id
-                    ? (infoFor(registry, { stage: target.stage, transform: submitted.variants[i]?.transform ?? target.transform })?.output ?? "unknown")
-                    : (infoFor(registry, shownThrough)?.output ?? "unknown")
-                }
-                data={out.data}
-                status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
-                chunks={chunks.data}
-                agreement={
-                  agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
-                }
-                embeddings={embeddingCounts(descriptor)}
-              />
+              <section key={i} aria-label={names[i].name} className="flex min-w-0 flex-col gap-3 bg-surface p-3">
+                <RecipeHead
+                  name={names[i].name}
+                  code={names[i].code}
+                  own={own(variants[i])}
+                  edited={submitted.variants[i] !== undefined && !same(submitted.variants[i], variants[i])}
+                  open={unfolded}
+                  controls={`${editorId}-${i}`}
+                  onToggle={() => setOpen(variants.map((_, j) => (j === i ? !unfolded : (open[j] ?? true))))}
+                />
+                <div id={`${editorId}-${i}`}>
+                  {unfolded ? (
+                    <SweepControl
+                      variant={variants[i]}
+                      transforms={transforms}
+                      labelFor={labelFor}
+                      onChange={(nv) => setVariants(variants.map((x, j) => (j === i ? nv : x)))}
+                      onRemove={
+                        variants.length > 1 && !busy
+                          ? () =>
+                              reshape(
+                                variants.filter((_, j) => j !== i),
+                                variants.map((_, j) => open[j] ?? true).filter((_, j) => j !== i),
+                              )
+                          : undefined
+                      }
+                    />
+                  ) : null}
+                </div>
+                <VariantResult
+                  state={s}
+                  pending={runId !== null && i < submitted.variants.length}
+                  node={shownThrough}
+                  type={
+                    shownThrough.id === target.id
+                      ? (infoFor(registry, { stage: target.stage, transform: submitted.variants[i]?.transform ?? target.transform })?.output ?? "unknown")
+                      : (infoFor(registry, shownThrough)?.output ?? "unknown")
+                  }
+                  data={out.data}
+                  status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
+                  chunks={chunks.data}
+                  agreement={
+                    agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
+                  }
+                  embeddings={embeddingCounts(descriptor)}
+                />
+              </section>
             )
           })}
         </div>
@@ -415,7 +443,6 @@ function Sweep({
 export function VariantResult({
   state,
   pending,
-  label,
   node,
   type,
   data,
@@ -426,13 +453,12 @@ export function VariantResult({
 }: {
   state?: VariantState
   pending: boolean
-  label?: VariantLabel
   node: GraphNode
   type: string
   data?: unknown
   status: InspectorStatus
   chunks?: unknown
-  /** How this variant's top 5 differs from the baseline's, in a sentence: the finding a sweep is for. */
+  /** How this recipe's top 5 differs from the baseline's, in a sentence: the finding a run is for. */
   agreement: string | null
   /** `384 embedded, 0 from cache`, when the index descriptor reports it. */
   embeddings: string | null
@@ -442,11 +468,11 @@ export function VariantResult({
 
   let body
   if (!pending) {
-    body = <EmptyState title="Not swept yet">Press Sweep to run this variant.</EmptyState>
+    body = <EmptyState title="Not run yet">Press Run to run this recipe.</EmptyState>
   } else if (failed && (!n || n.status !== "done")) {
     body = (
-      <div role="alert" className="flex flex-col gap-1 p-4">
-        <p className="text-sm font-medium text-danger">This variant failed at {failed.id}</p>
+      <div role="alert" className="flex flex-col gap-1">
+        <p className="text-sm font-medium text-danger">This recipe failed at {failed.id}</p>
         <p className="font-mono text-xs break-words text-fg-muted">{errorHeadline(failed.error ?? "")}</p>
         <details className="rounded-control border border-hairline">
           <summary className="flex h-row-compact items-center px-2 text-xs text-fg-muted select-none hover:bg-muted">Traceback</summary>
@@ -456,52 +482,33 @@ export function VariantResult({
     )
   } else if (!n || n.status === "pending" || n.status === "running") {
     body = (
-      <p role="status" className="p-4 text-sm text-fg-muted">
-        {state ? "Running" : "Waiting for earlier variants"}
+      <p role="status" className="text-sm text-fg-muted">
+        {state ? "Running" : "Waiting for earlier recipes"}
       </p>
     )
   } else if (n.status === "skipped") {
-    body = <EmptyState title="Skipped">A step above it failed, or the sweep was cancelled.</EmptyState>
+    body = <EmptyState title="Skipped">A step above it failed, or the run was cancelled.</EmptyState>
   } else {
     body = <ArtifactInspector type={type} data={data} status={status} context={chunks ? { chunks: chunks as never } : undefined} />
   }
 
   return (
-    <section aria-label={`Result ${label?.transform ?? ""}`} className="flex min-w-0 flex-col bg-surface">
-      {label ? (
-        <header className="flex min-h-row flex-col justify-center gap-1 border-b border-hairline px-3 py-1">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
-              <h2 className="font-mono text-sm font-semibold">{label.transform}</h2>
-              {label.fields.map(([k, v]) => (
-                <span key={k} className="font-mono text-xs text-fg-muted">
-                  {k} <span className="text-fg">{v}</span>
-                </span>
-              ))}
-            </div>
-            {finished(n) ? (
-              <span className="text-xs text-fg-muted">
-                {titleFor(node)} {n!.cache_hit ? "cached" : "computed"} <span className="font-mono">{fmtMs(n!.duration_ms)}</span>
-              </span>
-            ) : null}
-          </div>
-          {agreement || embeddings ? (
-            <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
-              {agreement ? (
-                <span data-testid="agreement" className="font-medium text-fg">
-                  <MonoNumbers text={agreement} />
-                </span>
-              ) : null}
-              {embeddings ? (
-                <span data-testid="embeddings" className="text-xs text-fg-muted">
-                  {embeddings}
-                </span>
-              ) : null}
-            </p>
+    <div className="flex min-w-0 flex-col gap-2">
+      {agreement || embeddings ? (
+        <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
+          {agreement ? (
+            <span data-testid="agreement" className="font-medium text-fg">
+              <MonoNumbers text={agreement} />
+            </span>
           ) : null}
-        </header>
+          {embeddings ? (
+            <span data-testid="embeddings" className="text-xs text-fg-muted">
+              {embeddings}
+            </span>
+          ) : null}
+        </p>
       ) : null}
-      <div className="min-w-0 p-3">{body}</div>
-    </section>
+      <div className="min-w-0">{body}</div>
+    </div>
   )
 }

@@ -121,3 +121,30 @@ export function p95(values: readonly number[]): number | null {
   const s = [...values].sort((a, b) => a - b)
   return s[Math.max(0, Math.ceil(0.95 * s.length) - 1)]
 }
+
+/** The numbers that sum up a chunk set, as the chunk inspector and Compare show them. */
+export interface ChunkStats {
+  pieces: number
+  tokens: number
+  median: number | null
+  /** The largest 5%: the nearest-rank 95th percentile of the token counts. */
+  p95: number | null
+  /** Distinct pairs of pieces that share text. */
+  overlaps: number
+  /** Characters of the source that no piece covers. */
+  uncovered: number
+}
+
+/** A chunk set's numbers, from its pieces' token counts and their spans over the source. */
+export function chunkStats(set: { source_text: string; chunks: readonly (SpanChunk & { token_count: number })[] }, segments?: readonly Segment[]): ChunkStats {
+  const segs = segments ?? projectSpans(set.source_text, set.chunks)
+  const tokens = set.chunks.map((c) => c.token_count)
+  return {
+    pieces: set.chunks.length,
+    tokens: tokens.reduce((a, b) => a + b, 0),
+    median: median(tokens),
+    p95: p95(tokens),
+    overlaps: overlapPairs(segs).length,
+    uncovered: segs.filter((s) => s.chunks.length === 0).reduce((n, s) => n + s.end - s.start, 0),
+  }
+}

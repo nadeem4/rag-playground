@@ -137,6 +137,16 @@ describe("Home", () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
   })
 
+  it("shows the Build and Evaluate clips, and a still for Compare with Clip coming soon", () => {
+    render(<Home navigate={vi.fn()} />)
+    const videos = document.querySelectorAll("video")
+    expect([...videos].map((v) => v.getAttribute("src"))).toEqual(["/clips/build.webm", "/clips/evaluate.webm"])
+    expect([...videos].map((v) => v.getAttribute("poster"))).toEqual(["/clips/build.jpg", "/clips/evaluate.jpg"])
+    const compare = screen.getByRole("region", { name: "Compare recipes on the same document" })
+    expect(within(compare).getByText("Clip coming soon")).toBeTruthy()
+    expect(compare.querySelector("figure img")!.getAttribute("src")).toBe("/clips/compare.jpg")
+  })
+
   it("links Read, running it on your machine and the source, then the footer", () => {
     render(<Home navigate={vi.fn()} />)
     const more = screen.getByRole("region", { name: "More" })
@@ -159,7 +169,7 @@ describe("Home", () => {
 })
 
 describe("Home's files", () => {
-  const files = ["routes/Home.tsx"]
+  const files = ["routes/Home.tsx", "components/Clip.tsx"]
 
   it("uses only spacing steps the theme defines (0, 1, 2, 3, 4, 6, 8), since any other step compiles to nothing", async () => {
     const { readFileSync } = await import("node:fs")

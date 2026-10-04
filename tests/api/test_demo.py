@@ -278,6 +278,21 @@ def test_a_custom_llm_rerank_variant_is_refused_in_sweeps(client, monkeypatch):
     assert r.status_code == 403
 
 
+def test_a_custom_llm_rewrite_node_is_refused_in_runs(client, monkeypatch):
+    demo_on(monkeypatch)
+    graph = {
+        "nodes": [
+            {"id": "q", "stage": "query", "transform": "llm_rewrite",
+             "config": {"text": "q", "model": "custom",
+                        "custom_base_url": "http://169.254.169.254/", "custom_model": "m"}},
+        ],
+        "edges": [],
+    }
+    r = client.post("/api/runs", json={"graph": graph})
+    assert r.status_code == 403
+    assert "custom" in r.json()["detail"].lower()
+
+
 def test_outside_demo_a_custom_chat_node_is_not_refused(client):
     r = client.post("/api/runs", json={"graph": chat_graph("custom")})
     assert r.status_code != 403  # the one-node graph is invalid for other reasons

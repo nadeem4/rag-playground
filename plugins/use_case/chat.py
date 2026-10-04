@@ -267,7 +267,7 @@ def _native(
         raise ValueError(NO_KEY_MESSAGE)
 
     hits = RetrievalResult.model_validate(inputs["result"]).hits[: config.max_chunks]
-    question = Query.model_validate(inputs["query"]).text
+    question = Query.model_validate(inputs["query"]).asked
     doc = ParsedDoc.model_validate(inputs["doc"])
 
     request: dict[str, Any] = {
@@ -394,7 +394,7 @@ def _sentence_ids(
         )
 
     hits = RetrievalResult.model_validate(inputs["result"]).hits[: config.max_chunks]
-    question = Query.model_validate(inputs["query"]).text
+    question = Query.model_validate(inputs["query"]).asked
     doc = ParsedDoc.model_validate(inputs["doc"])
     block, table = number_sources([hit.chunk for hit in hits])
 

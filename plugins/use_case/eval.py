@@ -204,7 +204,7 @@ class EvalUseCase(Transform[EvalConfig]):
         return Output(
             kind="eval",
             payload={
-                "question": query.text,
+                "question": query.asked,
                 "gold_answer": golds[0],
                 "hit": match != "none",
                 "rank": rank,

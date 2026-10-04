@@ -129,7 +129,11 @@ def _check(
 
 
 #: Transforms that call a chat model, and so could call a visitor's custom endpoint.
-_MODEL_CALLERS = {(Stage.USE_CASE, "chat"), (Stage.RERANK, "llm_rerank")}
+_MODEL_CALLERS = {
+    (Stage.USE_CASE, "chat"),
+    (Stage.RERANK, "llm_rerank"),
+    (Stage.QUERY, "llm_rewrite"),
+}
 
 
 def _is_custom_endpoint(stage: Stage, transform: str, cfg: dict[str, Any]) -> bool:

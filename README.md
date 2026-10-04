@@ -281,7 +281,7 @@ several times, for example two cleaners in a row.
 | Stage | What it is for | Strategies |
 |---|---|---|
 | **source** | The document you work on | `upload` |
-| **query** | The question you ask, and optionally the sentence or sentences in the document that answer it | `text` |
+| **query** | The question you ask, and optionally the sentence or sentences in the document that answer it | `text`, `llm_rewrite` |
 | **parse** | Turns the PDF into text elements (headings, paragraphs, lists, tables) with their pages and positions | `pdfium`, `docling` |
 | **clean** \* | Removes text that would pollute retrieval, such as page numbers and repeated boilerplate | `header_footer_strip`, `dedupe_blocks`, `drop_matching` |
 | **chunk** | Cuts the text into the pieces that get indexed and retrieved | `recursive_character`, `markdown_header`, `token_based`, `layout_blocks`, `sentence_window` |
@@ -321,6 +321,7 @@ several times, for example two cleaners in a row.
 
 | Stage | Strategy | How it works |
 |---|---|---|
+| query | `llm_rewrite` | Asks the chat model to restate the question in the words the document would use (`style: document words`) or as six to ten search words (`style: keywords`), reading the first 1,500 characters of the parsed document. Retrieval searches with the rewrite; the answer still uses the question as typed. It needs an API key and makes one model call per question. Claude Haiku 4.5 by default; any chat model can be chosen. |
 | index | `lancedb` | Embeds every chunk and stores it in a LanceDB table with a keyword index over the same rows. |
 | retrieve | `dense` | Vector search: finds chunks whose meaning is closest to the question, including paraphrases. |
 | retrieve | `bm25` | Keyword search: scores chunks by shared words, weighting rare words higher. Finds exact names and codes. |

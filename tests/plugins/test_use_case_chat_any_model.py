@@ -213,6 +213,21 @@ def test_native_path_adds_provider_method_and_stats(fake, pipeline):
     assert any(b["type"] == "document" for b in fake.client.requests[0]["messages"][0]["content"])
 
 
+def test_a_rewritten_question_still_asks_the_model_the_original(fake, pipeline):
+    """Only retrieval sees an LLM rewrite; the answer is to the question asked."""
+    doc, chunks = pipeline
+    fake.reply = response(text_block("An answer."))
+    inputs = {
+        "result": result_of(chunks),
+        "query": {"text": "rewritten search words", "original": QUESTION},
+        "doc": doc,
+    }
+    ChatUseCase().apply(inputs, ChatConfig(), context())
+    sent = json.dumps(fake.client.requests[0])
+    assert QUESTION in sent
+    assert "rewritten search words" not in sent
+
+
 # --- the sentence-id path -----------------------------------------------------
 
 

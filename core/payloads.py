@@ -168,9 +168,18 @@ class Query(BaseModel):
     gold_answers: list[str] = []
     variants: list[str] = []
     embed_text: str | None = None
+    #: The question as the person typed it, when a transform such as
+    #: `llm_rewrite` replaced `text` with a rewrite for retrieval. Empty means
+    #: `text` is the question as typed. The answer always uses `asked`.
+    original: str = ""
     filters: dict | None = None
     history: list[dict] = []
     transform_trace: list[dict] = []
+
+    @property
+    def asked(self) -> str:
+        """The question as typed: `original` when a rewrite replaced `text`."""
+        return self.original or self.text
 
     @property
     def golds(self) -> list[str]:

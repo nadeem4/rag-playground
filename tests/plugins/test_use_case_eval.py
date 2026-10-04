@@ -296,6 +296,15 @@ def test_the_question_and_gold_answer_are_carried_into_the_report():
     assert payload["gold_answer"] == GOLD
 
 
+def test_a_rewritten_question_reports_the_question_as_asked():
+    result = RetrievalResult(hits=[hit(GOLD)], query_id="q" * 16).model_dump(mode="json")
+    query = Query(text="chunk score words", original="How is a chunk scored?", gold_answer=GOLD)
+    out = EvalUseCase().apply(
+        {"result": result, "query": query.model_dump(mode="json")}, EvalConfig(), None
+    )
+    assert Output.model_validate(out).payload["question"] == "How is a chunk scored?"
+
+
 def test_surrounding_whitespace_in_the_gold_answer_is_ignored():
     payload = run(hit(GOLD), gold=f"  {GOLD}\n").payload
     assert payload["hit"] is True

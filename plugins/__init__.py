@@ -24,6 +24,7 @@ import importlib
 PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.source.upload",
     "plugins.query.text",
+    "plugins.query.llm_rewrite",
     "plugins.parse.pdfium",
     "plugins.parse.docling",
     "plugins.clean.header_footer_strip",

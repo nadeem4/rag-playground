@@ -1,5 +1,7 @@
 import type { EvalOutput, EvalPayload, GraphNode, Registry, SampleQuestion, Stage, Variant } from "@/api/types"
-import type { HitRowData } from "@/components/inspectors/hits"
+import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
+import { ordinal, type HitRowData } from "@/components/inspectors/hits"
+import { strategyLabel } from "@/learn/challenges"
 
 import { columnOrder, setConfig, setTransform, titleFor, type PipelineGraph } from "./graph"
 import type { Question } from "./goldSet"
@@ -58,37 +60,66 @@ export function questionVariants(query: Pick<GraphNode, "transform" | "config">,
 /** The steps an evaluation is a verdict on, top to bottom. */
 const DESCRIBED: Stage[] = ["parse", "clean", "chunk", "index", "retrieve", "rerank"]
 
-export function pipelineSteps(g: PipelineGraph): { label: string; transform: string }[] {
+/** One step of the recipe: its column title, its code name and its plain name (`Docling`, `docling`). */
+export interface RecipeStep {
+  label: string
+  transform: string
+  name: string
+  /** The step's settings as JSON, so the next run can tell a settings change from none. Absent on older entries. */
+  config?: string
+}
+
+export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
   return columnOrder(g)
     .filter((n) => DESCRIBED.includes(n.stage))
-    .map((n) => ({ label: titleFor(n), transform: n.transform }))
+    .map((n) => ({
+      label: titleFor(n),
+      transform: n.transform,
+      // Retrieve goes by the Ask panel's name, every other step by Build's.
+      name: (n.stage === "retrieve" ? RETRIEVAL_LABEL[n.transform] : undefined) ?? strategyLabel(n.transform),
+      config: JSON.stringify(n.config),
+    }))
 }
 
 // ------------------------------------------------- too few pieces, a miss --
 
 /**
  * A score over a handful of pieces is flattered: when the top k is most of
- * the pieces, the answer is found by chance. Null when the count is unknown
- * or there are enough pieces for the score to mean something.
+ * the pieces, the answer is found by chance. A miss still says a lot, so a run
+ * with misses is worded for them. "The answer was in none of the pieces" is
+ * said only when every miss was absent from everything that came back and
+ * everything the pipeline made came back; otherwise the miss is only known to
+ * be below the top k. Null when the count is unknown or there are enough
+ * pieces for the score to mean something.
  */
-export function piecesWarning(pieces: number | null, topK: number): string | null {
-  if (pieces === null) return null
+export function piecesWarning(pieces: number | null, topK: number, misses: readonly EvalPayload[]): string | null {
+  if (pieces === null || pieces > 2 * topK) return null
+  if (misses.length > 0) {
+    const nowhere = misses.every((p) => p.found_at === null && p.returned === pieces)
+    const where = nowhere ? `the answer was in none of the ${pieces} pieces` : `its answer was not in the top ${topK}`
+    return `With ${pieces} ${pieces === 1 ? "piece" : "pieces"} and ${topK} checked, a hit says little. A miss still says a lot: ${where}.`
+  }
   if (pieces <= topK) {
     return `This pipeline makes only ${pieces} ${pieces === 1 ? "piece" : "pieces"}, so every question finds its answer. The score says nothing here.`
   }
-  if (pieces <= 2 * topK) {
-    return `This pipeline makes only ${pieces} pieces and the top ${topK} are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.`
-  }
-  return null
+  return `This pipeline makes only ${pieces} pieces and checks ${topK} of them, so a question can find its answer by chance. Use smaller pieces or check fewer to make the score mean more.`
 }
 
 /**
- * Why a question missed: ranked too low, or not among the pieces that came
- * back at all. An older payload has no `returned`, so it says what was checked.
+ * Why a row reads as it does, in one sentence: where a hit was found, or why
+ * a question missed (ranked below the pieces checked, or not among the pieces
+ * that came back at all). An older payload has no `returned`, so it says what
+ * was checked.
  */
-export function missText(p: EvalPayload, topK: number): string {
-  if (typeof p.found_at === "number") return `Found at rank ${p.found_at}, below the top ${topK}.`
-  if (typeof p.returned === "number") return `Not in any of the ${p.returned} pieces that came back.`
+export function reasonText(p: EvalPayload, topK: number): string {
+  if (p.hit) {
+    const where = typeof p.rank === "number" ? `Found in the ${ordinal(p.rank)} piece.` : `Found in the top ${topK} pieces.`
+    return p.match === "normalized" ? `${where} The match ignores case and spacing.` : where
+  }
+  if (typeof p.found_at === "number") return `Found ${ordinal(p.found_at)}, below the ${topK} ${topK === 1 ? "piece" : "pieces"} checked.`
+  if (typeof p.returned === "number") {
+    return `Not in any of the ${p.returned} ${p.returned === 1 ? "piece" : "pieces"} that came back, so no number of pieces checked would find it.`
+  }
   return `${p.considered} of ${p.total_candidates} checked`
 }
 
@@ -113,10 +144,69 @@ export function summarize(payloads: readonly (EvalPayload | undefined)[]): EvalS
   }
 }
 
-/** `9 of 10 found the answer, was 7 of 10`. */
-export function summaryLine(now: EvalSummary, before?: EvalSummary | null): string {
-  const head = `${now.hits} of ${now.total} found the answer`
-  return before ? `${head}, was ${before.hits} of ${before.total}` : head
+/** The score as a finding sentence, and the line under it. */
+export interface ScoreFinding {
+  /** `3 of 5 questions found the answer. The last run found 5 of 5.` */
+  finding: string
+  /** `Hit rate at 5 pieces: 60%.` and, when it says something, why. */
+  sub: string
+}
+
+/**
+ * What changed since the last run, when it was one step and nothing else:
+ * `Parse changed to Fast text`, or `Chunk's settings changed` when only its
+ * settings did. Null when nothing, several steps, or the pieces checked
+ * changed. Settings are compared only when both runs stored them.
+ */
+function changedStep(previous: PreviousEvaluation, now: readonly RecipeStep[], k: number): string | null {
+  const before = previous.steps
+  if (!before || before.length !== now.length || now.some((s, i) => s.label !== before[i].label)) return null
+  if (previous.k !== undefined && previous.k !== k) return null
+  const settings = (s: RecipeStep, i: number) => s.config !== undefined && before[i].config !== undefined && s.config !== before[i].config
+  const changed = now.flatMap((s, i) => (s.transform !== before[i].transform || settings(s, i) ? [i] : []))
+  if (changed.length !== 1) return null
+  const i = changed[0]
+  return now[i].transform !== before[i].transform ? `${now[i].label} changed to ${now[i].name}` : `${now[i].label}'s settings changed`
+}
+
+const COUNT_WORDS: Record<number, string> = { 2: "Both" }
+
+/**
+ * The score as one sentence with the last run beside it, then the hit rate and
+ * the one thing worth saying about it: every answer came back first, or how
+ * many misses are new and since what. A change is named only when exactly one
+ * step's transform differs from the last run's recipe; an older stored run
+ * has no recipe, so it reads "since the last run".
+ */
+export function scoreFinding(
+  summary: EvalSummary,
+  previous: PreviousEvaluation | null,
+  rows: readonly { now?: EvalPayload; before?: EvalPayload }[],
+  steps: readonly RecipeStep[],
+  k: number,
+): ScoreFinding {
+  const noun = summary.total === 1 ? "question" : "questions"
+  const head = `${summary.hits} of ${summary.total} ${noun} found the answer.`
+  const finding = previous ? `${head} The last run found ${previous.summary.hits} of ${previous.summary.total}.` : head
+  const rate = percent(summary.total ? summary.hits / summary.total : null) ?? "not yet"
+  const base = `Hit rate at ${k} ${k === 1 ? "piece" : "pieces"}: ${rate}.`
+
+  const scored = rows.filter((r): r is { now: EvalPayload; before?: EvalPayload } => r.now !== undefined)
+  if (scored.length > 0 && scored.length === rows.length && scored.every((r) => r.now.hit && r.now.rank === 1)) {
+    return { finding, sub: `${base} Every answer came back as the top piece.` }
+  }
+  const misses = scored.filter((r) => !r.now.hit)
+  const lost = misses.filter((r) => changeFor(r.now, r.before) === "lost").length
+  if (!previous || lost === 0) return { finding, sub: base }
+  const step = changedStep(previous, steps, k)
+  const since = step ? `since ${step}.` : "since the last run."
+  const count =
+    lost < misses.length
+      ? `${lost} of the ${misses.length} misses ${lost === 1 ? "is" : "are"} new`
+      : lost === 1
+        ? "The miss is new"
+        : `${COUNT_WORDS[lost] ?? `All ${lost}`} misses are new`
+  return { finding, sub: `${base} ${count} ${since}` }
 }
 
 // ------------------------------------------------------------- the metrics --
@@ -230,6 +320,10 @@ export interface PreviousEvaluation {
   pipelineKey: string
   byId: Record<string, EvalPayload>
   summary: EvalSummary
+  /** The recipe it was scored with, so the next run can name the one step that changed. Absent on older entries. */
+  steps?: RecipeStep[]
+  /** The pieces checked it was scored at. Absent on older entries. */
+  k?: number
 }
 
 const PREVIOUS_KEY = "rag-playground:evaluation:previous"
@@ -256,7 +350,9 @@ const isPrevious = (p: unknown): p is PreviousEvaluation => {
     typeof e?.byId === "object" &&
     e.byId !== null &&
     !Array.isArray(e.byId) &&
-    typeof e?.summary?.total === "number"
+    typeof e?.summary?.total === "number" &&
+    (e.steps === undefined || (Array.isArray(e.steps) && e.steps.every((x) => typeof x?.label === "string" && typeof x?.transform === "string" && typeof x?.name === "string" && (x.config === undefined || typeof x.config === "string")))) &&
+    (e.k === undefined || typeof e.k === "number")
   )
 }
 
@@ -313,10 +409,11 @@ export function changeFor(now?: EvalPayload, before?: EvalPayload): RowChange {
   return "none"
 }
 
+/** What the row was last run: `Was found 1st`, `Was missed`. */
 export function changeText(change: RowChange, before?: EvalPayload): string | null {
   if (change === "none") return null
-  if (change === "found") return "was a miss"
-  return before?.rank === null || before?.rank === undefined ? "was a miss" : `was rank ${before.rank}`
+  if (change === "found") return "Was missed"
+  return before?.rank === null || before?.rank === undefined ? "Was missed" : `Was found ${ordinal(before.rank)}`
 }
 
 // ------------------------------------------------------------ the reranker --

@@ -21,6 +21,7 @@ support and no scaling story.
 
 - [Quick start](#quick-start)
 - [Run with Docker](#run-with-docker)
+- [Home](#home)
 - [What you can do](#what-you-can-do)
 - [Lessons](#lessons)
 - [Stages and supported strategies](#stages-and-supported-strategies)
@@ -72,11 +73,10 @@ no auth, so only do that on a network you trust.
 
 **First steps in the UI:**
 
-The playground opens on **Lessons** (`/`): four short lessons on the sample PDFs, in order.
-The first one follows one question through a recorded real run of the pipeline, from the
-answer back to the PDF. Your progress is kept in your browser. To work on your own
-document, open **Build** (`/build`). For now the lessons are hidden (see [Lessons](#lessons)),
-so the playground opens on **Build**.
+The playground opens on **Home** (`/`). It says what the playground shows and gives Build,
+Compare and Evaluate a section each, with a short clip of the page. Each **Try it yourself**
+button opens its page with the first sample already loaded, so the first click runs something
+real. If you already have a document, it is kept. See [Home](#home).
 
 The column on the left of **Build** is the index pipeline: Upload, Parse, Clean, Chunk and
 Index, one card each with its own settings. **Build the index** runs those five steps, and
@@ -163,6 +163,25 @@ unsafe to share:
   a request to any URL a visitor chose.
 
 `GET /api/settings/app` returns `{"demo": true, "limits": {...}}` so the UI can say so and state the limits.
+
+## Home
+
+Home (`/`) is the first tab. It has:
+
+- the promise, a **Try it on a sample** button and three facts: no sign in, samples or your
+  own PDF, and a key only for chat answers;
+- the six steps you can look inside, from Document to Ask;
+- one section each for **Build**, **Compare** and **Evaluate**, with a short clip and a
+  **Try it yourself** button. With no document yet, the button loads the first sample, then
+  opens the page;
+- links to **Read**, running it on your machine and the source, and a footer.
+
+The clips are muted and loop. Each has a Pause and Play button, and with reduced motion
+turned on they hold still on their poster until you press Play. Compare shows a still of the
+page for now. Any path the app does not know opens Home.
+
+The clips are recorded from a real session by a script. See [Recording the Home
+clips](#recording-the-home-clips).
 
 ## What you can do
 
@@ -274,10 +293,11 @@ unsafe to share:
 
 ## Lessons
 
-The lessons are hidden on the demo for now while they are reworked, so the playground opens on
-**Build**. One switch, `LESSONS_ENABLED` in `web/src/state/lessons.ts`, brings them back.
+The lessons are hidden on the demo for now while they are reworked. One switch,
+`LESSONS_ENABLED` in `web/src/state/lessons.ts`, brings them back, with a **Lessons** tab after
+Home. While they are hidden, `/learn` and every lesson open Home.
 
-The playground opens on **Lessons**. Each one is a few short steps, with the sample document
+The lessons are listed at `/learn`. Each one is a few short steps, with the sample document
 beside you the whole time, and ends with a recap.
 
 | Lesson | What you do |
@@ -556,6 +576,25 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
   numbers and ids. No font is fetched from the network at run time.
 - The UI tests use JSON fixtures generated from the real engine. Regenerate them with
   `uv run python web/scripts/export_fixtures.py`.
+
+### Recording the Home clips
+
+Home's clips live in `web/public/clips/`: `build.webm` and `evaluate.webm` with a `.jpg`
+poster each, and `compare.jpg`, a still of Compare until it has a clip. To record them again:
+
+```bash
+cd web && npm run build && cd ..
+uv run --with playwright==1.55.0 python scripts/record_clips.py           # build and evaluate
+uv run --with playwright==1.55.0 python scripts/record_clips.py compare   # the Compare still
+```
+
+The script starts its own server on port 8231 (`--port` changes it), with a fresh artifact and
+source folder in a temp directory, and stops it when done. It uses the Chromium that Playwright
+has installed (in `%LOCALAPPDATA%\ms-playwright` on Windows); pin the Playwright package to the
+version that matches that browser. Each clip has a setup pass that is not recorded, which loads
+the sample and runs every step once, then a recorded pass at 1280x800 on warm results. The
+pauses in the script set the length, 8 to 15 seconds, and it prints each clip's length and
+size. The poster is a screenshot taken at the clip's telling moment.
 
 ## Where your data goes
 

@@ -196,6 +196,13 @@ describe("the Compare stage picker", () => {
     expect(screen.queryByTestId("sweep-question")).toBeNull()
   })
 
+  it("uses only spacing steps the theme defines (0, 1, 2, 3, 4, 6, 8), since any other step compiles to nothing", async () => {
+    const { readFileSync } = await import("node:fs")
+    const files = ["routes/Compare.tsx", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/SweepControl.tsx", "components/compare/RecipeHead.tsx", "components/compare/ChunkEvidence.tsx", "components/compare/RetrieveEvidence.tsx"]
+    const offScale = /(^|[\s"'`:])-?(?:gap|gap-x|gap-y|p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|space-x|space-y|inset|top|bottom|left|right)-(?!(?:0|1|2|3|4|6|8)(?![0-9.]))[0-9][0-9.]*/m
+    for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(offScale)
+  })
+
   it("uses no sm: class in the files this patch touched, since the theme has no sm breakpoint", async () => {
     const { readFileSync } = await import("node:fs")
     const files = ["routes/Compare.tsx", "routes/useColumnsFit.ts", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/ask/AskPanel.tsx", "components/SweepControl.tsx", "components/compare/RecipeHead.tsx", "components/compare/ChunkEvidence.tsx", "components/compare/RetrieveEvidence.tsx"]

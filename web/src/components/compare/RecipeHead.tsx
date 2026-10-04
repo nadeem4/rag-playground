@@ -31,7 +31,7 @@ export function RecipeHead({
     <div className="flex min-w-0 flex-col gap-1">
       {own ? (
         <span>
-          <span className="inline-block rounded-swatch bg-surface-elevated px-2 py-0.5 text-xs font-semibold text-fg-muted">Your pipeline</span>
+          <span className="inline-block rounded-swatch bg-surface-elevated px-2 py-px text-xs font-semibold text-fg-muted">Your pipeline</span>
         </span>
       ) : null}
       <h2 className="text-base font-semibold break-words">{name}</h2>
@@ -48,7 +48,7 @@ export function RecipeHead({
         </button>
       </span>
       {/* Marked as Build marks a setting changed since its run. */}
-      {edited ? <p className="self-start rounded-swatch bg-stale-wash px-2 py-0.5 text-xs text-stale">Edited since the last run. Run again to update the result below.</p> : null}
+      {edited ? <p className="self-start rounded-swatch bg-stale-wash px-2 py-px text-xs text-stale">Edited since the last run. Run again to update the result below.</p> : null}
     </div>
   )
 }

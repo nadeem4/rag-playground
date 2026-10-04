@@ -10,6 +10,7 @@ import "./inspectors.css"
 import { EvidenceSlip } from "./EvidenceSlip"
 import {
   componentKeys,
+  findingLine,
   layoutHits,
   pdfTarget,
   rowsFromResult,
@@ -77,6 +78,8 @@ export interface RetrievalViewProps {
   compact?: boolean
   /** The chunk id the linked highlight has lit: its slip takes the raised look. */
   lit?: string | null
+  /** The chunk id of the piece that holds the known answer: its finding line says so. */
+  answer?: string | null
 }
 
 export function RetrievalResultInspector({
@@ -176,7 +179,7 @@ const LABEL = 20 // px for the rank numbers on the spine
 
 export type ListSide = "single" | "search" | "reranked"
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false, compact = false, lit = null }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false, compact = false, lit = null, answer = null }: RetrievalViewProps) {
   const Box = flat ? FlatFrame : Frame
   const [entering] = useState(enter)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -265,6 +268,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
             enter={entering}
             compact={compact}
             lit={lit}
+            answer={answer}
             pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? null) : r.ordinal)}
             sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
           />
@@ -331,6 +335,7 @@ function HitList({
   enter,
   compact,
   lit,
+  answer,
   pieceOf,
   sectionOf: section,
 }: {
@@ -350,6 +355,7 @@ function HitList({
   enter: boolean
   compact: boolean
   lit: string | null
+  answer: string | null
   pieceOf: (row: HitRowData) => number | null
   sectionOf: (row: HitRowData) => string | null
 }) {
@@ -384,6 +390,7 @@ function HitList({
             clamp={s === "search" && selected !== i}
             compact={compact}
             lit={lit === r.chunk_id}
+            finding={answer === r.chunk_id && s !== "notKept" ? [...findingLine(r, s, scale, limit, reranker, !compact), { text: ", holds the answer" }] : undefined}
             section={section(r)}
             retriever={showRetriever && r.retriever ? r.retriever : null}
             onShowInPdf={onShowPdf && canPdf(i) ? () => onShowPdf(i) : undefined}

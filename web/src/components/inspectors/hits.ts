@@ -118,13 +118,18 @@ export function rowsFromSearch(out: SearchOutput): HitRowData[] {
   }))
 }
 
+/** Hit rows in rank order, from a retrieval result or a Search output; null for anything else. */
+export function hitRows(data: unknown): HitRowData[] | null {
+  if (!data || typeof data !== "object") return null
+  if (Array.isArray((data as RetrievalResult).hits)) return rowsFromResult(data as RetrievalResult)
+  const out = data as SearchOutput
+  if (out.kind === "search" && Array.isArray(out.payload?.results)) return rowsFromSearch(out)
+  return null
+}
+
 /** Hit chunk ids in rank order, from a retrieval result or a Search output. */
 export function hitIds(data: unknown): string[] | null {
-  if (!data || typeof data !== "object") return null
-  if (Array.isArray((data as RetrievalResult).hits)) return rowsFromResult(data as RetrievalResult).map((h) => h.chunk_id)
-  const out = data as SearchOutput
-  if (out.kind === "search" && Array.isArray(out.payload?.results)) return rowsFromSearch(out).map((h) => h.chunk_id)
-  return null
+  return hitRows(data)?.map((h) => h.chunk_id) ?? null
 }
 
 const KNOWN = ["dense", "bm25"]

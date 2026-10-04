@@ -667,6 +667,91 @@ describe("four recipes or more", () => {
   })
 })
 
+describe("the open view", () => {
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+  })
+
+  it("opens a recipe beside Your pipeline, and Escape goes back with the sort, the ticks and focus kept", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk")
+    await screen.findByRole("table")
+    fireEvent.click(screen.getByRole("button", { name: "Pieces" }))
+    fireEvent.click(screen.getAllByRole("checkbox")[2])
+    const name = screen.getAllByRole("button", { name: /^Open .* beside Your pipeline$/ })[1]
+    fireEvent.click(name)
+    expect(screen.getByRole("button", { name: "Back to all five recipes" })).toBeTruthy()
+    expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(2)
+    expect(new URLSearchParams(window.location.search).get("read")).toMatch(/^1,\d$/)
+    fireEvent.keyDown(document.body, { key: "Escape" })
+    await waitFor(() => expect(screen.getByRole("table")).toBeTruthy())
+    expect(screen.getByRole("button", { name: "Pieces" }).closest("th")!.getAttribute("aria-sort")).toBe("descending")
+    expect((screen.getAllByRole("checkbox")[2] as HTMLInputElement).checked).toBe(true)
+    expect(document.activeElement).toBe(name)
+  })
+
+  it("steps with Next and the arrow keys in the table's order, and the browser's Back returns to the table", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk")
+    await screen.findByRole("table")
+    fireEvent.click(screen.getAllByRole("button", { name: /^Open .* beside Your pipeline$/ })[0])
+    expect(screen.getByText(/^1 of 4, each beside Your pipeline$/)).toBeTruthy()
+    expect(screen.getByText(/^Next: .+\. Press Next or the right arrow key\.$/)).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Next" }))
+    fireEvent.keyDown(document.body, { key: "ArrowRight" })
+    expect(screen.getByText(/^3 of 4, each beside Your pipeline$/)).toBeTruthy()
+    expect(screen.getAllByRole("region").filter((r) => r.closest("[hidden]") === null).map((r) => r.getAttribute("aria-label"))[0]).toMatch(/^Recursive/)
+    act(() => window.history.back())
+    await waitFor(() => expect(screen.getByRole("table")).toBeTruthy())
+  })
+
+  it("reads three ticked recipes side by side at 1440, and the two extremes from the finding's link", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk")
+    await screen.findByRole("table")
+    screen.getAllByRole("checkbox").slice(1, 4).forEach((b) => fireEvent.click(b))
+    fireEvent.click(screen.getByRole("button", { name: "Read three side by side" }))
+    expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(3)
+    expect(screen.getByText("Three of five, side by side")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Back to all five recipes" }))
+    await waitFor(() => expect(screen.getByRole("table")).toBeTruthy())
+    fireEvent.click(await screen.findByRole("button", { name: "Read the two extremes side by side" }))
+    expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(2)
+    expect(screen.getByText("Two of five, side by side")).toBeTruthy()
+  })
+
+  it("shows one recipe at a time on a phone, with Previous and Next", async () => {
+    FakeResizeObserver.width = 358
+    await runFive("chunk")
+    await screen.findByLabelText("Sort by")
+    fireEvent.click(screen.getByRole("button", { name: /^Open Your pipeline$/ }))
+    expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(1)
+    expect(screen.getByText(/^1 of 5$/)).toBeTruthy()
+    expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole("button", { name: "Next" }))
+    expect(screen.getByText(/^2 of 5$/)).toBeTruthy()
+  })
+
+  it("marks unfinished recipes in the chip strip and never moves the view when one finishes", async () => {
+    FakeResizeObserver.width = 1409
+    const es = await runFive("chunk", 2)
+    fireEvent.click(await screen.findByRole("button", { name: /^Open .* beside Your pipeline$/ }))
+    const strip = screen.getByRole("group", { name: "All five recipes" })
+    const running = within(strip).getAllByRole("button").find((b) => b.getAttribute("aria-label")?.endsWith(", running"))!
+    expect((running as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/ is running\. Its chip fills in when it finishes; this view stays put\.$/)).toBeTruthy()
+    const back = screen.getByRole("button", { name: "Back to all five recipes" })
+    back.focus()
+    const before = screen.getAllByTestId("chunk-numbers").length
+    es.emit(50, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
+    await waitFor(() => expect((within(strip).getAllByRole("button").find((b) => b.textContent === running.textContent) as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(before)
+    expect(document.activeElement).toBe(back)
+  })
+})
+
 describe("a run the server rejects", () => {
   const rejected = (loc: string[], msg: string) =>
     new Response(JSON.stringify({ detail: { node_id: "chunk", errors: [{ loc, msg, type: "value_error" }] } }), { status: 422 })

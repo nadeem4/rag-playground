@@ -35,6 +35,8 @@ const FILES = [
   "routes/useRunClock.ts",
   "components/compare/Overview.tsx",
   "components/compare/Swatches.tsx",
+  "components/compare/OpenView.tsx",
+  "routes/useOpenRecipes.ts",
   "state/compare.ts",
 ]
 

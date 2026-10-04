@@ -26,3 +26,30 @@ def test_demo_mode_is_a_space_variable_not_a_baked_in_image():
     """Whoever duplicates the Space can turn demo mode off; the image stays neutral."""
     assert DEMO_VAR == ("RAG_PLAYGROUND_DEMO", "1")
     assert "RAG_PLAYGROUND_DEMO" not in (_mod.ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+
+def test_a_publish_removes_files_no_longer_in_the_repo(monkeypatch):
+    """A file deleted from the repo must leave the Space too.
+
+    On 2026-10-04 a component deleted in v0.21.0 stayed on the Space; v0.24.0
+    removed a helper it imported, and the Space's own build failed on it.
+    """
+    import sys
+    import types
+
+    calls: dict[str, dict] = {}
+
+    class FakeApi:
+        def create_repo(self, *a, **k):
+            pass
+
+        def add_space_variable(self, *a, **k):
+            pass
+
+        def upload_folder(self, **kwargs):
+            calls["upload"] = kwargs
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(HfApi=FakeApi))
+    monkeypatch.setattr(sys, "argv", ["publish_space.py", "--repo", "someone/space"])
+    _mod.main()
+    assert calls["upload"]["delete_patterns"] == ["*"]

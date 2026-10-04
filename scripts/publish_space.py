@@ -3,7 +3,8 @@
     uv run --no-sync python scripts/publish_space.py --repo <user>/rag-playground [--dry-run]
 
 Only files committed at HEAD are published (`git archive`), so `sources/`,
-`.env` and `docs/` can never go up. The Space copy differs from the repo in
+`.env` and `docs/` can never go up, and files no longer at HEAD are removed
+from the Space. The Space copy differs from the repo in
 one place: the README starts with the header Spaces require. Demo mode is set
 as a Space variable, so anyone who duplicates the Space can turn it off.
 Log in first with `hf auth login`.
@@ -74,7 +75,16 @@ def main() -> None:
         api = HfApi()
         api.create_repo(args.repo, repo_type="space", space_sdk="docker", exist_ok=True)
         api.add_space_variable(args.repo, *DEMO_VAR, description="Demo mode: no uploads, sample document only, visitor's API key only.")
-        api.upload_folder(repo_id=args.repo, repo_type="space", folder_path=tmp, commit_message="Publish from GitHub HEAD")
+        # Mirror HEAD: a file deleted from the repo is deleted from the Space too.
+        # Hugging Face always keeps .gitattributes. Without this, a stale file
+        # once broke the Space's build (2026-10-04).
+        api.upload_folder(
+            repo_id=args.repo,
+            repo_type="space",
+            folder_path=tmp,
+            commit_message="Publish from GitHub HEAD",
+            delete_patterns=["*"],
+        )
         print(f"Published: https://huggingface.co/spaces/{args.repo}")
 
 

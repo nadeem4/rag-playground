@@ -50,20 +50,21 @@ class HybridRrfConfig(BaseModel):
     )
     # 2 hits and 6 words, measured: on a resume question that shares no word
     # with the document, this was the one setting that lifted the right piece
-    # to rank 3 under all four chunkers. More hits or more words borrow from
+    # to rank 3 under all four chunkers in the measurement script, and to rank 4 in
+    # the app's default pipeline. More hits or more words borrow from
     # pieces that are off topic and pull the keyword search after them.
     prf_docs: int = Field(
         default=2,
         ge=1,
         le=10,
-        description="With query_expansion 'prf': how many of the top dense hits "
+        description="When PRF is on: how many of the top dense hits "
         "the added words are borrowed from.",
     )
     prf_terms: int = Field(
         default=6,
         ge=1,
         le=20,
-        description="With query_expansion 'prf': how many words are added to the "
+        description="When PRF is on: how many words are added to the "
         "keyword search, chosen by tf-idf (frequent in those hits, rare in the "
         "whole document).",
     )

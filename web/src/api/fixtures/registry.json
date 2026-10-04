@@ -1201,7 +1201,7 @@
           },
           "prf_docs": {
             "default": 2,
-            "description": "With query_expansion 'prf': how many of the top dense hits the added words are borrowed from.",
+            "description": "When PRF is on: how many of the top dense hits the added words are borrowed from.",
             "maximum": 10,
             "minimum": 1,
             "title": "Prf Docs",
@@ -1209,7 +1209,7 @@
           },
           "prf_terms": {
             "default": 6,
-            "description": "With query_expansion 'prf': how many words are added to the keyword search, chosen by tf-idf (frequent in those hits, rare in the whole document).",
+            "description": "When PRF is on: how many words are added to the keyword search, chosen by tf-idf (frequent in those hits, rare in the whole document).",
             "maximum": 20,
             "minimum": 1,
             "title": "Prf Terms",

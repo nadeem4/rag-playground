@@ -378,13 +378,17 @@ export function NodeCard(p: NodeCardProps) {
                   {shown.look === "done" ? <span data-testid="ring-dot" className="size-[6px] rounded-full bg-primary" /> : null}
                 </span>
               )}
-              {p.title}
-              {/* While it runs, the title line itself says so, with the seconds. */}
-              {running && !isSource ? (
-                <span className="font-normal text-fg-muted">
-                  , running{elapsed !== undefined ? <span className="font-mono">, {elapsed} s</span> : null}
-                </span>
-              ) : null}
+              {/* One inline label, so the button's flex gap never opens before the comma.
+                  While it runs, the title line says so, with the seconds (kept out of the
+                  button's name, which would otherwise change every second). */}
+              <span data-testid="card-title">
+                {p.title}
+                {running && !isSource ? (
+                  <span className="font-normal text-fg-muted">
+                    , running{elapsed !== undefined ? <span aria-hidden className="font-mono">, {elapsed} s</span> : null}
+                  </span>
+                ) : null}
+              </span>
             </button>
           </h3>
           {p.showId ? <span className="font-mono text-xs whitespace-nowrap text-fg-muted">{p.node.id}</span> : null}

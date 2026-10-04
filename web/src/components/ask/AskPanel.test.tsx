@@ -119,6 +119,11 @@ describe("the Ask panel header", () => {
     expect(screen.getByTestId("index-status").textContent).toBe("Building the index: Parse, 5 s")
   })
 
+  it("before a build's first step starts, says Building the index", () => {
+    setup({ results: {}, busy: true, buildingStep: {} })
+    expect(screen.getByTestId("index-status").textContent).toBe("Building the index")
+  })
+
   it("a stale Index result counts as not built", () => {
     setup({ stale: new Set(["index"]) })
     expect(screen.getByTestId("index-status").textContent).toBe("Build the index first.")

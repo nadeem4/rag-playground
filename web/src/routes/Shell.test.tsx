@@ -397,6 +397,58 @@ describe("the run strip", () => {
     await waitFor(() => expect(line()).toBe("Built in 3.4 s"))
   })
 
+  it("a rebuild after editing Chunk: steps show this run's progress, not the last run's look", async () => {
+    let n = 0
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/runs" && init?.method === "POST") {
+          await base(url, init)
+          n += 1
+          return new Response(JSON.stringify({ run_id: `run${n}` }), { status: 202 })
+        }
+        return base(url, init)
+      }),
+    )
+    await ready()
+    const state = (id: string) => (document.querySelector(`[data-testid=run-strip] [data-segment="${id}"]`) as HTMLElement).dataset.state
+    const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(build.disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams.length).toBe(1))
+    const ts = Date.now() / 1000
+    ;["source", "parse", "chunk", "index"].forEach((id, i) =>
+      emit({ event: "node_finished", node_id: id, artifact_id: `${id}1`, cache_hit: false, duration_ms: 10 }, String(i + 1)),
+    )
+    emit({ event: "stream_end", status: "finished", ok: true }, "9")
+    await waitFor(() => expect(line()).toMatch(/^Built in/))
+    expect(state("chunk")).toBe("done")
+
+    fireEvent.change(within(card("chunk")).getByLabelText("Chunk Size"), { target: { value: "300" } })
+    await waitFor(() => expect(state("chunk")).toBe("stale"))
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
+    await waitFor(() => expect(streams.length).toBe(2))
+    // Nothing reported yet: every step of this run is still to go.
+    for (const id of ["source", "parse", "chunk", "index"]) expect(state(id)).toBe("todo")
+    emit({ event: "node_started", node_id: "parse", ts }, "1")
+    emit({ event: "node_finished", node_id: "parse", artifact_id: "parse1", cache_hit: true, duration_ms: 1 }, "2")
+    expect(state("parse")).toBe("reused")
+    expect(state("chunk")).toBe("todo")
+    expect(state("index")).toBe("todo")
+    emit({ event: "node_started", node_id: "chunk", ts }, "3")
+    expect(state("chunk")).toBe("running")
+    expect(state("index")).toBe("todo")
+  })
+
+  it("a card's own Run says Running and that step", async () => {
+    await ready()
+    fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    emit({ event: "node_started", node_id: "parse", ts: Date.now() / 1000 }, "1")
+    await waitFor(() => expect(line()).toMatch(/^Running Parse/))
+  })
+
   it("names a failed step after the build stops", async () => {
     await ready()
     const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement

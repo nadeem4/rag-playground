@@ -19,7 +19,7 @@ import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
-import { RunStrip, stripSegments, type StripLine } from "@/components/pipeline/RunStrip"
+import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
 import { Button } from "@/components/ui/button"
 import {
   addCleaner,
@@ -122,6 +122,9 @@ function Build({ registry }: { registry: Registry }) {
   const [fromAsk, setFromAsk] = useState(false)
   // The node the last run was started for: Build the index says Building only for its own run.
   const [runTarget, setRunTarget] = useState<string | undefined>(undefined)
+  // The steps the run in flight covers, and its id once it has one: the run strip
+  // shows that run's own progress, not the last run's look.
+  const [runSteps, setRunSteps] = useState<{ ids: Set<string>; runId: string | null } | null>(null)
   const { pipelines, currentId } = usePipelines()
   const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
@@ -234,11 +237,13 @@ function Build({ registry }: { registry: Registry }) {
     }
     setErrors({})
     setColumnError(null)
+    const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
+    setRunSteps({ ids: new Set(covered), runId: null })
     setSubmitting(true)
     try {
       const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }), { keys })
       setKeyNotice(notice)
-      const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
+      setRunSteps({ ids: new Set(covered), runId: run_id })
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       if (select) setSelected(target ?? order[order.length - 1]?.id ?? null)
       setRunId(run_id)
@@ -310,9 +315,13 @@ function Build({ registry }: { registry: Registry }) {
 
   // The run strip: the index steps in column order, and the one running now.
   const indexSteps = order.filter((n) => INDEX_STAGES.includes(n.stage))
-  const segments = stripSegments(indexSteps, results, stale)
+  // Until the new run has its id, its steps have reported nothing: all to go.
+  const live: LiveRun | undefined = busy && runSteps ? { ids: runSteps.ids, nodes: runSteps.runId === runId ? run.nodes : {} } : undefined
+  const segments = stripSegments(indexSteps, results, stale, live)
   const runningStep = busy ? indexSteps.find((n) => results[n.id]?.status === "running") : undefined
-  const runningTitle = runningStep ? titleFor(runningStep) : undefined
+  // The strip's own titles, so a stacked cleaner is named as its segment is (Clean 2).
+  const stripTitle = (id: string) => segments.find((x) => x.id === id)?.title ?? ""
+  const runningTitle = runningStep ? stripTitle(runningStep.id) : undefined
   const runningSince = runningStep ? results[runningStep.id]?.started_at : undefined
   const failedStep = indexSteps.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
   // The last run was Build the index, and it has ended.
@@ -320,7 +329,7 @@ function Build({ registry }: { registry: Registry }) {
   let stripLine: StripLine = null
   if (building) stripLine = { kind: "building", title: runningTitle, startedAt: runningSince }
   else if (runningStep && runningTitle) stripLine = { kind: "running", title: runningTitle, startedAt: runningSince }
-  else if (!busy && failedStep) stripLine = { kind: "failed", title: titleFor(failedStep) }
+  else if (!busy && failedStep) stripLine = { kind: "failed", title: stripTitle(failedStep.id) }
   else if (built && segments.length && segments.every((s) => s.state === "done" || s.state === "reused"))
     stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
 

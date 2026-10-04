@@ -404,6 +404,10 @@ describe("a running card keeps its status in view", () => {
     const now = Math.floor(Date.now() / 1000) - 7
     const card = renderCard({ busy: true, result: { id: "chunk", status: "running", started_at: now } })
     expect(card.querySelector("h3")!.textContent).toBe("Chunk, running, 7 s")
+    // One inline label, so the flex gap never opens before the comma; the ticking seconds stay out of the name.
+    const label = within(card).getByTestId("card-title")
+    expect(label.textContent).toBe("Chunk, running, 7 s")
+    expect(label.querySelector("[aria-hidden]")!.textContent).toBe(", 7 s")
     expect(within(card).queryByTestId("status-chip")).toBeNull()
     cleanup()
     const after = renderCard({ result: done("title1") })

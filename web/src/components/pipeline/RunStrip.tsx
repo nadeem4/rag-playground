@@ -26,32 +26,65 @@ export type StripLine =
   | { kind: "failed"; title: string }
   | null
 
-/** Each bar's look. The running bar breathes like the card edge; under reduced motion it is a still fill. */
+/**
+ * Each bar's look. The running bar breathes like the card edge; under reduced
+ * motion it is a still half fill in a hairline outline, so it never reads as done.
+ */
 const BAR: Record<SegmentState, string> = {
   todo: "bg-hairline",
-  running: "bg-primary step-running-edge",
+  running: "relative overflow-hidden bg-primary step-running-edge motion-reduce:border motion-reduce:border-hairline motion-reduce:bg-transparent",
   done: "bg-primary",
   reused: "border border-dashed border-primary bg-primary/40",
   failed: "bg-danger",
   stale: "bg-stale",
 }
 
-/** One segment per index step, with the state of its latest result. */
-export function stripSegments(steps: GraphNode[], results: Record<string, NodeState>, stale: Set<string>): StripSegment[] {
+const STATE_WORD: Record<SegmentState, string> = {
+  todo: "to go",
+  running: "running",
+  done: "done",
+  reused: "reused",
+  failed: "failed",
+  stale: "changed",
+}
+
+/** The run in flight: the steps it covers, and its own node states (not the last run's). */
+export interface LiveRun {
+  ids: Set<string>
+  nodes: Record<string, NodeState>
+}
+
+function stateOf(r: NodeState | undefined, stale: boolean, live: boolean): SegmentState {
+  if (r?.status === "running") return live ? "running" : "todo"
+  if (r?.status === "failed") return stale ? "stale" : "failed"
+  if (r?.status === "done" || r?.status === "cached") return stale ? "stale" : r.status === "cached" ? "reused" : "done"
+  return "todo"
+}
+
+/**
+ * One segment per index step. While a run is in flight, a step it covers shows
+ * that run's own state, so a step not reached yet is to go; other steps keep
+ * their last look. Stacked cleaners are numbered by position (Clean 1, Clean 2).
+ */
+export function stripSegments(steps: GraphNode[], results: Record<string, NodeState>, stale: Set<string>, live?: LiveRun): StripSegment[] {
+  const count = new Map<string, number>()
+  for (const n of steps) count.set(titleFor(n), (count.get(titleFor(n)) ?? 0) + 1)
+  const seen = new Map<string, number>()
   return steps.map((n) => {
-    const r = results[n.id]
-    let state: SegmentState = "todo"
-    if (r?.status === "running") state = "running"
-    else if (r?.status === "failed") state = stale.has(n.id) ? "stale" : "failed"
-    else if (r?.status === "done" || r?.status === "cached") state = stale.has(n.id) ? "stale" : r.status === "cached" ? "reused" : "done"
-    return { id: n.id, title: titleFor(n), state }
+    const base = titleFor(n)
+    const nth = (seen.get(base) ?? 0) + 1
+    seen.set(base, nth)
+    const title = (count.get(base) ?? 0) > 1 ? `${base} ${nth}` : base
+    const state = live?.ids.has(n.id) ? stateOf(live.nodes[n.id], false, true) : stateOf(results[n.id], stale.has(n.id), false)
+    return { id: n.id, title, state }
   })
 }
 
-/** "3.4 s" under ten seconds, whole seconds above. */
+/** "under 0.1 s", "3.4 s" under ten seconds, whole seconds above. */
 function seconds(ms: number): string {
   const s = ms / 1000
-  return s < 10 ? s.toFixed(1) : String(Math.round(s))
+  if (s < 0.1) return "under 0.1 s"
+  return `${s < 10 ? s.toFixed(1) : String(Math.round(s))} s`
 }
 
 function LineText({ line }: { line: Exclude<StripLine, null> }) {
@@ -78,7 +111,7 @@ function LineText({ line }: { line: Exclude<StripLine, null> }) {
     case "built":
       return (
         <>
-          Built in <span className="font-mono">{seconds(line.totalMs)} s</span>
+          Built in <span className="font-mono">{seconds(line.totalMs)}</span>
         </>
       )
     case "failed":
@@ -89,11 +122,27 @@ function LineText({ line }: { line: Exclude<StripLine, null> }) {
 export function RunStrip({ segments, line }: { segments: StripSegment[]; line: StripLine }) {
   return (
     <div data-testid="run-strip" className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-hairline px-3 py-2">
-      <ol aria-label="Index steps" className="m-0 grid min-w-[180px] flex-1 auto-cols-fr grid-flow-col gap-1 p-0">
+      {/* Each segment keeps room for its label; when the line does not fit beside the
+          bars it takes its own row, so labels never truncate and bars never jump. */}
+      <ol
+        aria-label="Index steps"
+        style={{ minWidth: `${segments.length * 3.25}rem` }}
+        className="m-0 grid flex-1 auto-cols-fr grid-flow-col gap-1 p-0"
+      >
         {segments.map((s) => (
-          <li key={s.id} data-segment={s.id} data-state={s.state} className="flex min-w-0 list-none flex-col gap-1">
-            <span aria-hidden data-testid="strip-bar" className={cn("block h-[4px] rounded-full", BAR[s.state])} />
-            <span className={cn("truncate text-2xs", s.state === "failed" ? "text-danger" : "text-fg-muted")}>
+          <li
+            key={s.id}
+            data-segment={s.id}
+            data-state={s.state}
+            aria-label={`${s.title}, ${STATE_WORD[s.state]}`}
+            className="flex min-w-0 list-none flex-col gap-1"
+          >
+            <span aria-hidden data-testid="strip-bar" className={cn("block h-[4px] rounded-full", BAR[s.state])}>
+              {s.state === "running" ? (
+                <span data-testid="strip-half" className="absolute inset-y-0 left-0 hidden w-1/2 bg-primary motion-reduce:block" />
+              ) : null}
+            </span>
+            <span aria-hidden className={cn("text-2xs break-words", s.state === "failed" ? "text-danger" : "text-fg-muted")}>
               {s.title}
               {s.state === "failed" ? " failed" : null}
             </span>

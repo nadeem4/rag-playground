@@ -184,7 +184,7 @@ export function AskPanel(p: AskPanelProps) {
           {p.buildingStep
             ? p.buildingStep.title
               ? `Building the index: ${p.buildingStep.title}${buildElapsed !== undefined ? `, ${buildElapsed} s` : ""}`
-              : "Building the index."
+              : "Building the index"
             : indexId
             ? `Index ready: ${ready.join(", ")}`
             : sha

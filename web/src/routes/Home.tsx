@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { api } from "@/api/client"
+import { Clip } from "@/components/Clip"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { loadSampleDocument, useDocument } from "@/state/document"
@@ -31,7 +32,7 @@ interface PageSection {
   heading: string
   what: string
   points: [string, string]
-  clip: { poster: string; label: string; caption: string }
+  clip: { src?: string; poster: string; label: string; caption: string }
 }
 
 const PAGES: PageSection[] = [
@@ -43,6 +44,7 @@ const PAGES: PageSection[] = [
     what: "Pick how each step works, build the index, then ask a question. You see the pieces it found and how the reranker reordered them.",
     points: ["Every step names the real library and setting it uses.", "The rerank is drawn as lines from search order to final order."],
     clip: {
+      src: "/clips/build.webm",
       poster: "/clips/build.jpg",
       label: "Clip: building the index and asking a question on Build",
       caption: "Build the index, ask, and watch the rerank",
@@ -69,6 +71,7 @@ const PAGES: PageSection[] = [
     what: "Score the pipeline on the sample's questions, or your own, and open any miss to see the sentence it should have found.",
     points: ["Change one step and it says which questions moved.", "Every miss gives its reason in a sentence."],
     clip: {
+      src: "/clips/evaluate.webm",
       poster: "/clips/evaluate.jpg",
       label: "Clip: scoring the pipeline and opening a miss on Evaluate",
       caption: "Run the questions, change Parse, open a miss",
@@ -106,18 +109,6 @@ function useOpenWithSample(navigate: (href: string) => void) {
     navigate(href)
   }
   return { open, busy }
-}
-
-/** The clip's place: the poster still and its caption. */
-function ClipSlot({ poster, label, caption }: PageSection["clip"]) {
-  return (
-    <figure aria-label={label} className="relative m-0 aspect-[16/10] overflow-hidden rounded-panel border border-hairline bg-surface-raised shadow-(--shadow-raised)">
-      <img src={poster} alt="" className="block size-full object-cover object-top-left" />
-      <figcaption className="absolute bottom-3 left-3 right-[64px] w-fit max-w-full rounded-control border border-hairline bg-surface-raised/90 px-3 py-1 text-sm font-semibold">
-        {caption}
-      </figcaption>
-    </figure>
-  )
 }
 
 export function Home({ navigate = goTo }: { navigate?: (href: string) => void } = {}) {
@@ -192,7 +183,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                   Try it yourself on {p.page}
                 </Button>
               </div>
-              <ClipSlot {...p.clip} />
+              <Clip {...p.clip} />
             </section>
           )
         })}

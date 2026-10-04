@@ -98,17 +98,17 @@ export function Evaluate() {
   const filename = String(graph?.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface">
-      <div className="flex flex-col gap-5 px-4 pt-4 pb-8 md:px-6">
+      <div className="flex flex-col gap-6 px-4 pt-4 pb-8 md:px-6">
         <header data-testid="evaluate-header" className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-2xl font-semibold">Evaluate</h1>
             {filename ? (
               <p className="text-sm text-fg-muted">
-                How often {pipelineName} finds the answer in <span className="font-mono break-all text-fg">{filename}</span>.
+                How often {pipelineName} finds the answer in <span className="font-mono break-words text-fg">{filename}</span>.
               </p>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-end gap-2.5">
+          <div className="flex flex-wrap items-end gap-3">
             {/* Outside the keyed body, so switching pipelines keeps this select, and its focus (F5). */}
             <div className="flex flex-col gap-1">
               <label htmlFor={pickerId} className="text-xs font-semibold text-fg-muted">
@@ -131,7 +131,7 @@ export function Evaluate() {
               </select>
             </div>
             {/* The body renders Pieces checked and the run button here, through a portal. */}
-            <div ref={setSlot} className="flex flex-wrap items-end gap-2.5" />
+            <div ref={setSlot} className="flex flex-wrap items-end gap-3" />
           </div>
         </header>
         {/* Keyed by what is scored, not by the score key: an edited A and A share a key but not a graph. */}
@@ -386,7 +386,7 @@ function Evaluation({
   // setting means a trip to Build and a fresh page.
   const done = runId !== null && run.closed && rows.length > 0 && rows.every((r) => r.payload !== undefined)
   const finishedRun: PreviousEvaluation | null = done
-    ? { sourceSha, pipelineKey, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary, steps }
+    ? { sourceSha, pipelineKey, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary, steps, k: shownK }
     : null
   const fingerprint = finishedRun ? JSON.stringify(finishedRun.summary) + rows.map((r) => r.payload!.rank).join(",") : ""
   const latest = useRef<PreviousEvaluation | null>(null)
@@ -454,7 +454,7 @@ function Evaluation({
   )
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {slot ? createPortal(controls, slot) : null}
 
       <div className="flex flex-col gap-2">
@@ -485,7 +485,7 @@ function Evaluation({
         </p>
       </div>
 
-      <section aria-label="Score" aria-live="polite" className="flex flex-col gap-2.5">
+      <section aria-label="Score" aria-live="polite" className="flex flex-col gap-3">
         {error || questionsError || samplesError ? (
           <p role="alert" className="font-mono text-xs break-words text-danger">
             {error ?? questionsError ?? samplesError}
@@ -508,7 +508,7 @@ function Evaluation({
         ) : (
           <>
             {busy ? null : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <p data-testid="summary" className="max-w-[52ch] text-[1.375rem] leading-snug text-balance text-fg">
                   <MonoNumbers text={score.finding} />
                 </p>
@@ -517,7 +517,7 @@ function Evaluation({
                 </p>
               </div>
             )}
-            <div role="list" aria-label="One mark per question" className="flex flex-wrap gap-1.5">
+            <div role="list" aria-label="One mark per question" className="flex flex-wrap gap-2">
               {rows.map((row, i) => (
                 <span role="listitem" key={row.question.id} className="flex">
                   <Mark n={i + 1} verdict={verdictOf(row)} onPress={() => openRow(row.question.id)} />
@@ -633,7 +633,7 @@ const CHANGE_TONE: Record<RowChange, string> = {
 
 const VERDICT: Record<Verdict, { word: string; tone: string }> = {
   found: { word: "\u2713 Found", tone: "text-kept-text" },
-  missed: { word: "\u2715 Missed", tone: "text-removed-text" },
+  missed: { word: "\u2715 Missed", tone: "text-removed-mark" },
   failed: { word: "Failed", tone: "text-danger" },
   waiting: { word: "Waiting", tone: "text-fg-muted" },
   running: { word: "Running", tone: "text-fg-muted" },
@@ -668,7 +668,7 @@ function QuestionRow({
       data-question={row.question.id}
       data-change={change === "none" ? undefined : change}
     >
-      <summary className="grid cursor-pointer list-none grid-cols-1 items-baseline gap-x-3.5 gap-y-1 rounded-panel px-2 py-3 hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring) md:grid-cols-[92px_minmax(0,1fr)_auto]">
+      <summary className="grid cursor-pointer list-none grid-cols-1 items-baseline gap-x-[14px] gap-y-1 rounded-panel px-2 py-3 hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring) md:grid-cols-[92px_minmax(0,1fr)_auto]">
         <span data-verdict="" className={cn("font-sans font-semibold", verdict.tone)}>
           {verdict.word}
         </span>
@@ -712,7 +712,7 @@ function OpenRow({ row }: { row: Row }) {
   return (
     <div data-open-row="" className="flex max-w-[72ch] flex-col gap-3 px-2 pb-4 md:pl-[114px]">
       {gold ? (
-        <div className="border-l-[3px] border-primary py-0.5 pl-3">
+        <div className="border-l-[3px] border-primary py-[2px] pl-3">
           <p className="text-xs text-fg-muted">The sentence that answers it</p>
           <p className="font-serif text-base leading-[1.55] break-words text-fg">{gold}</p>
         </div>
@@ -723,7 +723,7 @@ function OpenRow({ row }: { row: Row }) {
             <p className="text-sm text-fg-muted">
               {hits.length > TOP ? `What came back, top ${TOP} of ${hits.length}.` : `What came back, ${hits.length} ${hits.length === 1 ? "piece" : "pieces"}.`}
             </p>
-            <div role="list" className="flex flex-col gap-2.5">
+            <div role="list" className="flex flex-col gap-3">
               {shown.map((h) => (
                 <EvidenceSlip
                   key={h.chunk_id}

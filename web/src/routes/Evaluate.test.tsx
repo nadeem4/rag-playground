@@ -235,6 +235,10 @@ describe("Evaluate", () => {
     expect(own.open).toBe(false)
     expect(within(own).getByRole("link", { name: "JSON" }).className).toContain("inline-flex")
     expect(within(own).getByRole("link", { name: "CSV" }).className).toContain("inline-flex")
+    // The 44 px touch box grows without pushing the line apart, and the full stop sits against CSV.
+    expect(within(own).getByRole("link", { name: "CSV" }).className).toContain("-my-[11px]")
+    expect(within(own).getByRole("link", { name: "CSV" }).parentElement!.textContent).toMatch(/CSV\.$/)
+    expect(within(own).getByRole("link", { name: "CSV" }).parentElement!.textContent).not.toMatch(/CSV \.$/)
   })
 
   it("says the recipe in one line, plain name beside the code name", async () => {
@@ -245,6 +249,21 @@ describe("Evaluate", () => {
     const change = within(screen.getByTestId("recipe-line")).getByRole("link", { name: "Change a step on Build" })
     expect(change.getAttribute("href")).toBe("/build")
     expect(change.className).toContain("inline-flex")
+  })
+
+  it("uses only spacing steps the theme defines (0, 1, 2, 3, 4, 6, 8), since any other step compiles to nothing", async () => {
+    const { readFileSync } = await import("node:fs")
+    const files = ["routes/Evaluate.tsx", "components/evaluate/QuestionSetPanel.tsx", "components/evaluate/EvalMetrics.tsx"]
+    const offScale = /(^|[\s"'`:])-?(?:gap|gap-x|gap-y|p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|space-x|space-y|inset|top|bottom|left|right)-(?!(?:0|1|2|3|4|6|8)(?![0-9.]))[0-9][0-9.]*/m
+    for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(offScale)
+  })
+
+  it("breaks the filename only where it cannot fit", async () => {
+    setup()
+    const header = await screen.findByTestId("evaluate-header")
+    const name = within(header).getByText("chunking-primer.pdf")
+    expect(name.className).toContain("break-words")
+    expect(name.className).not.toContain("break-all")
   })
 
   it("uses no sm: class in its files, since the theme has no sm breakpoint", async () => {
@@ -324,6 +343,8 @@ describe("the question set panel", () => {
     const warning = await screen.findByTestId("set-mismatch", {}, { timeout: 4000 })
     expect(warning.textContent).toMatch(/uploaded for a different document/)
     expect(warning.querySelector("button")!.textContent).toBe("Remove this set")
+    // Folding never hides state: the warning stays outside Use your own questions.
+    expect(screen.getByTestId("own-questions").contains(warning)).toBe(false)
   })
 
   it("goes back to the sample set when the uploaded one is removed", async () => {
@@ -386,6 +407,7 @@ describe("the upload report", () => {
     chooseFile(screen.getByLabelText("Upload a question set"), "refunds.csv")
 
     const report = await screen.findByTestId("upload-report", {}, { timeout: 4000 })
+    expect(screen.getByTestId("own-questions").contains(report)).toBe(false)
     expect(report.textContent).toMatch(/Read 2 questions from refunds.csv/)
     expect(report.textContent).toMatch(/1 of 2 gold passages was not found/)
     expect(report.textContent).toMatch(/The duty manager approves it\./)
@@ -683,10 +705,21 @@ describe("while and after scoring", () => {
     expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
   })
 
+  it("brings the row into view at once when reduced motion is on", async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q === "(prefers-reduced-motion: reduce)", media: q, addEventListener() {}, removeEventListener() {} }))
+    await finishTwo()
+    const marks = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    fireEvent.click(marks[1])
+    expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "auto" })
+  })
+
   it("says the verdict in a word and the reason in a sentence, with no hash id", async () => {
     await finishTwo()
     const row = document.querySelector<HTMLElement>('[data-question="b"] summary')!
     expect(row.textContent).toContain("\u2715 Missed")
+    expect(row.querySelector("[data-verdict]")!.className).toContain("text-removed-mark")
     expect(row.textContent).toContain("Not in any of the 3 pieces that came back")
     expect(row.textContent).not.toMatch(/[0-9a-f]{8}/)
     expect(row.textContent).not.toMatch(/checked$/)
@@ -773,7 +806,9 @@ describe("while and after scoring", () => {
     expect(screen.getByTestId("summary").textContent).toBe("1 of 2 questions found the answer. The last run found 2 of 2.")
     // An older stored run has no recipe, so the miss is new since the last run.
     expect(screen.getByTestId("hit-rate").textContent).toBe("Hit rate at 5 pieces: 50%. The miss is new since the last run.")
-    await waitFor(() => expect(readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0]).toEqual({ label: "Parse", transform: "docling", name: "Docling" }))
+    await waitFor(() => expect(readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0]).toMatchObject({ label: "Parse", transform: "docling", name: "Docling" }))
+    expect(typeof readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0].config).toBe("string")
+    expect(readPreviousEvaluation(SOURCE.sha, "working")?.k).toBe(5)
   })
 
   it("warns that the score says nothing when the pipeline makes fewer pieces than the top k", async () => {

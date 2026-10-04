@@ -120,14 +120,13 @@ export function QuestionSetPanel({
           <div className="mt-2 flex max-w-[70ch] flex-col gap-2 rounded-panel border border-hairline bg-surface-elevated px-3 py-3">
             <p>
               Upload a JSON or CSV file with a question and the sentence that answers it on each line. Start from the template as{" "}
-              <a className="inline-flex items-center text-fg underline" href={api.questionTemplateUrl("json")} download>
+              <a className="-my-[11px] inline-flex items-center justify-center text-fg underline" href={api.questionTemplateUrl("json")} download>
                 JSON
               </a>{" "}
               or{" "}
-              <a className="inline-flex items-center text-fg underline" href={api.questionTemplateUrl("csv")} download>
+              <a className="-my-[11px] inline-flex items-center justify-center text-fg underline" href={api.questionTemplateUrl("csv")} download>
                 CSV
-              </a>
-              .
+              </a>.
             </p>
             {tabOnly ? (
               <p data-testid="tab-only" className="text-xs text-fg-muted">

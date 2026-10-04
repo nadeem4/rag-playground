@@ -65,6 +65,8 @@ export interface RecipeStep {
   label: string
   transform: string
   name: string
+  /** The step's settings as JSON, so the next run can tell a settings change from none. Absent on older entries. */
+  config?: string
 }
 
 export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
@@ -75,6 +77,7 @@ export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
       transform: n.transform,
       // Retrieve goes by the Ask panel's name, every other step by Build's.
       name: (n.stage === "retrieve" ? RETRIEVAL_LABEL[n.transform] : undefined) ?? strategyLabel(n.transform),
+      config: JSON.stringify(n.config),
     }))
 }
 
@@ -149,11 +152,21 @@ export interface ScoreFinding {
   sub: string
 }
 
-/** The one step whose transform changed since the last run, or null when none or several did. */
-function changedStep(before: readonly RecipeStep[] | undefined, now: readonly RecipeStep[]): RecipeStep | null {
+/**
+ * What changed since the last run, when it was one step and nothing else:
+ * `Parse changed to Fast text`, or `Chunk's settings changed` when only its
+ * settings did. Null when nothing, several steps, or the pieces checked
+ * changed. Settings are compared only when both runs stored them.
+ */
+function changedStep(previous: PreviousEvaluation, now: readonly RecipeStep[], k: number): string | null {
+  const before = previous.steps
   if (!before || before.length !== now.length || now.some((s, i) => s.label !== before[i].label)) return null
-  const changed = now.filter((s, i) => s.transform !== before[i].transform)
-  return changed.length === 1 ? changed[0] : null
+  if (previous.k !== undefined && previous.k !== k) return null
+  const settings = (s: RecipeStep, i: number) => s.config !== undefined && before[i].config !== undefined && s.config !== before[i].config
+  const changed = now.flatMap((s, i) => (s.transform !== before[i].transform || settings(s, i) ? [i] : []))
+  if (changed.length !== 1) return null
+  const i = changed[0]
+  return now[i].transform !== before[i].transform ? `${now[i].label} changed to ${now[i].name}` : `${now[i].label}'s settings changed`
 }
 
 const COUNT_WORDS: Record<number, string> = { 2: "Both" }
@@ -176,7 +189,7 @@ export function scoreFinding(
   const head = `${summary.hits} of ${summary.total} ${noun} found the answer.`
   const finding = previous ? `${head} The last run found ${previous.summary.hits} of ${previous.summary.total}.` : head
   const rate = percent(summary.total ? summary.hits / summary.total : null) ?? "not yet"
-  const base = `Hit rate at ${k} pieces: ${rate}.`
+  const base = `Hit rate at ${k} ${k === 1 ? "piece" : "pieces"}: ${rate}.`
 
   const scored = rows.filter((r): r is { now: EvalPayload; before?: EvalPayload } => r.now !== undefined)
   if (scored.length > 0 && scored.length === rows.length && scored.every((r) => r.now.hit && r.now.rank === 1)) {
@@ -185,8 +198,8 @@ export function scoreFinding(
   const misses = scored.filter((r) => !r.now.hit)
   const lost = misses.filter((r) => changeFor(r.now, r.before) === "lost").length
   if (!previous || lost === 0) return { finding, sub: base }
-  const step = changedStep(previous.steps, steps)
-  const since = step ? `since ${step.label} changed to ${step.name}.` : "since the last run."
+  const step = changedStep(previous, steps, k)
+  const since = step ? `since ${step}.` : "since the last run."
   const count =
     lost < misses.length
       ? `${lost} of the ${misses.length} misses ${lost === 1 ? "is" : "are"} new`
@@ -309,6 +322,8 @@ export interface PreviousEvaluation {
   summary: EvalSummary
   /** The recipe it was scored with, so the next run can name the one step that changed. Absent on older entries. */
   steps?: RecipeStep[]
+  /** The pieces checked it was scored at. Absent on older entries. */
+  k?: number
 }
 
 const PREVIOUS_KEY = "rag-playground:evaluation:previous"
@@ -336,7 +351,8 @@ const isPrevious = (p: unknown): p is PreviousEvaluation => {
     e.byId !== null &&
     !Array.isArray(e.byId) &&
     typeof e?.summary?.total === "number" &&
-    (e.steps === undefined || (Array.isArray(e.steps) && e.steps.every((x) => typeof x?.label === "string" && typeof x?.transform === "string" && typeof x?.name === "string")))
+    (e.steps === undefined || (Array.isArray(e.steps) && e.steps.every((x) => typeof x?.label === "string" && typeof x?.transform === "string" && typeof x?.name === "string" && (x.config === undefined || typeof x.config === "string")))) &&
+    (e.k === undefined || typeof e.k === "number")
   )
 }
 

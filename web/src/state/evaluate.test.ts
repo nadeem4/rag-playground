@@ -77,7 +77,10 @@ describe("the graph an evaluation runs", () => {
   })
 
   it("names the steps being evaluated, in column order, plain name beside the code name", () => {
-    expect(pipelineSteps(e2eSampleGraph(LIVE, SRC))).toEqual([
+    const named = pipelineSteps(e2eSampleGraph(LIVE, SRC))
+    // Each step carries its config, so the next run can tell a settings change from none.
+    for (const s of named) expect(typeof s.config).toBe("string")
+    expect(named.map(({ config: _config, ...s }) => s)).toEqual([
       { label: "Parse", transform: "docling", name: "Docling" },
       { label: "Clean", transform: "dedupe_blocks", name: "Remove duplicate blocks" },
       { label: "Chunk", transform: "recursive_character", name: "Recursive (natural breaks)" },
@@ -333,6 +336,35 @@ describe("the score as a finding", () => {
     ]
     expect(scoreFinding(summarize(now), prev(), [{ now: now[0], before: pay(true, 1) }], two, 5).sub).toBe(
       "Hit rate at 5 pieces: 0%. The miss is new since the last run.",
+    )
+  })
+
+  it("says piece, not pieces, when one is checked", () => {
+    expect(scoreFinding(summarize([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 1).sub).toBe("Hit rate at 1 piece: 100%.")
+  })
+
+  it("names a step only when its settings are the one change, and the pieces checked did not change", () => {
+    const now = [pay(false, null)]
+    const rows = [{ now: now[0], before: pay(true, 1) }]
+    const withConfig = (parse: string, name: string, size: number) => [
+      { label: "Parse", transform: parse, name, config: "{}" },
+      { label: "Chunk", transform: "recursive_character", name: "Recursive (natural breaks)", config: JSON.stringify({ chunk_size: size }) },
+    ]
+    const before = prev({ steps: withConfig("docling", "Docling", 400), k: 5 })
+    expect(scoreFinding(summarize(now), before, rows, withConfig("pdfium", "Fast text", 400), 5).sub).toBe(
+      "Hit rate at 5 pieces: 0%. The miss is new since Parse changed to Fast text.",
+    )
+    // The chunk size changed in the same trip to Build, so Parse alone is not the cause.
+    expect(scoreFinding(summarize(now), before, rows, withConfig("pdfium", "Fast text", 200), 5).sub).toBe(
+      "Hit rate at 5 pieces: 0%. The miss is new since the last run.",
+    )
+    // Only a setting changed, so the step is named without a new name.
+    expect(scoreFinding(summarize(now), before, rows, withConfig("docling", "Docling", 200), 5).sub).toBe(
+      "Hit rate at 5 pieces: 0%. The miss is new since Chunk's settings changed.",
+    )
+    // Pieces checked changed between the runs.
+    expect(scoreFinding(summarize(now), before, rows, withConfig("pdfium", "Fast text", 400), 3).sub).toBe(
+      "Hit rate at 3 pieces: 0%. The miss is new since the last run.",
     )
   })
 

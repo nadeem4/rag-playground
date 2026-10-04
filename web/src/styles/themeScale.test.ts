@@ -24,10 +24,14 @@ const FILES = [
   "routes/useColumnsFit.ts",
   "components/ask/AskSettings.tsx",
   "components/ask/AskPanel.tsx",
-  "components/SweepControl.tsx",
   "components/compare/RecipeHead.tsx",
   "components/compare/ChunkEvidence.tsx",
   "components/compare/RetrieveEvidence.tsx",
+  "components/compare/RecipeCard.tsx",
+  "components/compare/ValueEditor.tsx",
+  "components/compare/AddRecipeCard.tsx",
+  "state/recipeSentence.ts",
+  "state/compare.ts",
 ]
 
 const offScale =

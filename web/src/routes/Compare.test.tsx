@@ -52,7 +52,10 @@ const picker = () => screen.getByRole("group", { name: "Step to compare" })
 const steps = () => within(picker()).getAllByRole("button").map((b) => b.textContent)
 const pressed = () => within(picker()).getAllByRole("button").find((b) => b.getAttribute("aria-pressed") === "true")?.textContent
 const choose = (step: string) => fireEvent.click(within(picker()).getByRole("button", { name: step }))
-const columns = () => (screen.queryAllByLabelText("Strategy") as HTMLSelectElement[]).map((s) => s.value)
+/** The recipes on the cards before a run, by code name; none once the results show. */
+const columns = () => screen.queryAllByRole("article").map((a) => within(a).getByTestId("recipe-code").textContent)
+/** The result columns after a run, by name. */
+const regions = () => screen.queryAllByRole("region").map((r) => r.getAttribute("aria-label"))
 const text = () => document.body.textContent ?? ""
 
 beforeEach(() => {
@@ -207,12 +210,12 @@ describe("the Compare stage picker", () => {
 })
 
 describe("Compare's widths", () => {
-  it("puts three recipes side by side at 1024, each at least 300 px, with nothing to scroll sideways", async () => {
+  it("puts three recipes side by side at 1024 after a run, each at least 300 px, with nothing to scroll sideways", async () => {
     FakeResizeObserver.width = 993
     vi.stubGlobal("ResizeObserver", FakeResizeObserver)
     render(<Compare />)
-    await waitFor(() => expect(columns()).toHaveLength(3))
-    const grid = screen.getByTestId("recipe-grid")
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    const grid = await screen.findByTestId("recipe-grid")
     expect(grid.style.gridTemplateColumns).toBe("repeat(3, minmax(0, 1fr))")
     expect(grid.className).not.toContain("min-w-min")
     expect(screen.queryByRole("group", { name: "Recipe shown" })).toBeNull()
@@ -222,32 +225,23 @@ describe("Compare's widths", () => {
     FakeResizeObserver.width = 753
     vi.stubGlobal("ResizeObserver", FakeResizeObserver)
     render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const group = await screen.findByRole("group", { name: "Recipe shown" })
     const options = within(group).getAllByRole("button")
     expect(options).toHaveLength(3)
     expect(options[0].getAttribute("aria-pressed")).toBe("true")
-    expect(columns()).toEqual(["recursive_character"])
+    expect(regions()).toEqual(["Recursive (natural breaks), 400 characters"])
     fireEvent.click(options[2])
-    expect(columns()).toEqual(["sentence_window"])
+    expect(regions()).toEqual(["By sentence"])
   })
 
   it("names each recipe in the control by its short name", async () => {
     FakeResizeObserver.width = 753
     vi.stubGlobal("ResizeObserver", FakeResizeObserver)
     render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const group = await screen.findByRole("group", { name: "Recipe shown" })
     expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["400 characters", "200 characters", "By sentence"])
-  })
-
-  it("keeps a recipe shown when the one chosen is removed", async () => {
-    FakeResizeObserver.width = 753
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
-    render(<Compare />)
-    const group = await screen.findByRole("group", { name: "Recipe shown" })
-    fireEvent.click(within(group).getAllByRole("button")[2])
-    fireEvent.click(screen.getByRole("button", { name: "Remove this recipe" }))
-    expect(columns()).toEqual(["recursive_character"])
-    expect(within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button")[1].getAttribute("aria-pressed")).toBe("true")
   })
 
   it("falls back to one at a time when five recipes do not fit at 1440", async () => {
@@ -255,17 +249,17 @@ describe("Compare's widths", () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver)
     openAt("?node=index&preset=matryoshka&native=1024")
     render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 5 recipes" }))
     expect(await screen.findByRole("group", { name: "Recipe shown" })).toBeTruthy()
   })
 })
 
 describe("Compare's recipes", () => {
-  const run = () => fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
-
-  it("makes each column one region named by its recipe, the node's own tagged Your pipeline", async () => {
+  it("makes each column after a run one region named by its recipe, the node's own tagged Your pipeline", async () => {
     render(<Compare />)
-    await waitFor(() => expect(columns()).toHaveLength(3))
-    const names = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    await waitFor(() => expect(regions()).toHaveLength(3))
+    const names = regions()
     expect(names).toEqual(["Recursive (natural breaks), 400 characters", "Recursive (natural breaks), 200 characters", "By sentence"])
     expect(within(screen.getByRole("region", { name: names[0]! })).getByText("Your pipeline")).toBeTruthy()
     expect(within(screen.getByRole("region", { name: names[1]! })).queryByText("Your pipeline")).toBeNull()
@@ -274,48 +268,98 @@ describe("Compare's recipes", () => {
   it("says recipe, not variant, on its buttons", async () => {
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
-    expect(screen.getByRole("button", { name: "Add a recipe" })).toBeTruthy()
+    expect(screen.getByRole("region", { name: "Add a recipe" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Run 3 recipes" })).toBeTruthy()
-    expect(screen.getAllByRole("button", { name: "Remove this recipe" })).toHaveLength(3)
+    expect(screen.getAllByRole("button", { name: /^Remove recipe \d$/ }).map((b) => b.getAttribute("aria-label"))).toEqual(["Remove recipe 2", "Remove recipe 3"])
     expect(text()).not.toMatch(/variant/i)
   })
 
-  it("names strategies as Build does and gives the fields sentence-case titles", async () => {
+  it("names strategies as Build does in the strategy editor, and gives the fields sentence-case titles", async () => {
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
-    const select = screen.getAllByLabelText("Strategy")[0] as HTMLSelectElement
-    expect([...select.options].map((o) => o.textContent)).toContain("Recursive (natural breaks), recursive_character")
-    expect(screen.getAllByLabelText("Chunk size")).toHaveLength(2)
-    expect(screen.getAllByLabelText("Sentences per piece")).toHaveLength(1)
-    expect(screen.getAllByLabelText("Heading context")).toHaveLength(2)
+    const second = screen.getByRole("article", { name: "Recipe 2" })
+    fireEvent.click(within(second).getByRole("button", { name: /^Change the strategy/ }))
+    const list = screen.getByRole("dialog", { name: "Strategy" })
+    expect(within(list).getByRole("button", { name: /^Recursive \(natural breaks\).*recursive_character$/ }).getAttribute("aria-pressed")).toBe("true")
+    fireEvent.click(within(list).getByRole("button", { name: /^By heading/ }))
+    expect(within(second).getByTestId("recipe-code").textContent).toBe("markdown_header")
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Change the strategy, now By heading")
+    fireEvent.click(within(screen.getByRole("article", { name: "Recipe 3" })).getByRole("button", { name: /^Change sentences per chunk/ }))
+    expect(screen.getByLabelText("Sentences per piece")).toBeTruthy()
     choose("Parse")
     await waitFor(() => expect(pressed()).toBe("Parse"))
-    for (const t of ["Read text in images (OCR)", "Find table structure", "Heading levels", "Join lines"]) expect(screen.getAllByLabelText(t).length).toBeGreaterThan(0)
+    expect(text()).toContain("Read text in images (OCR) is off.")
+    fireEvent.click(screen.getAllByRole("button", { name: /^Change do ocr/ })[0])
+    expect(screen.getByLabelText("Read text in images (OCR)")).toBeTruthy()
+  })
+})
+
+describe("before the run", () => {
+  it("shows each recipe as a card of the same size, three to a row from lg, then Add a recipe", async () => {
+    render(<Compare />)
+    const grid = await screen.findByTestId("recipe-cards")
+    expect(grid.className).toContain("auto-rows-fr")
+    expect(grid.className).toContain("lg:grid-cols-3")
+    expect(within(grid).getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(["Your pipeline", "Recipe 2", "Recipe 3"])
+    expect(within(grid).getByRole("region", { name: "Add a recipe" }).textContent).toContain("3 of 10 recipes.")
+    expect(screen.getByTestId("plan").textContent).toMatch(/^You are about to compare your pipeline/)
   })
 
-  it("folds every editor into its recipe sentence once a run starts, and unfolds one on request", async () => {
+  it("opens one editor at a time under its value, and Escape closes it and gives focus back", async () => {
     render(<Compare />)
-    await waitFor(() => expect(columns()).toHaveLength(3))
-    run()
-    await waitFor(() => expect(columns()).toHaveLength(0))
-    const change = screen.getAllByRole("button", { name: "Change this recipe" })
-    expect(change).toHaveLength(3)
-    fireEvent.click(change[1])
-    expect(change[1].getAttribute("aria-expanded")).toBe("true")
-    expect(columns()).toEqual(["recursive_character"])
+    fireEvent.click(await screen.findByRole("button", { name: "Change chunk size, now 400 characters" }))
+    expect(screen.getByRole("dialog", { name: "Chunk size" })).toBeTruthy()
+    const overlap = screen.getAllByRole("button", { name: /^Change chunk overlap/ })[1]
+    fireEvent.click(overlap)
+    expect(screen.getAllByRole("dialog")).toHaveLength(1)
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(document.activeElement).toBe(overlap)
   })
 
-  it("still says a recipe was edited since the last run once its editor is folded again", async () => {
+  it("updates the sentence, the plan and the Edited tag as a number changes, without redrawing the card", async () => {
     render(<Compare />)
-    await waitFor(() => expect(columns()).toHaveLength(3))
-    run()
-    await waitFor(() => expect(columns()).toHaveLength(0))
-    fireEvent.click(screen.getAllByRole("button", { name: "Change this recipe" })[1])
+    const card = await screen.findByRole("article", { name: "Recipe 2" })
+    fireEvent.click(within(card).getByRole("button", { name: /^Change chunk size/ }))
     fireEvent.change(screen.getByLabelText("Chunk size"), { target: { value: "300" } })
-    fireEvent.click(screen.getByRole("button", { name: "Done" }))
-    expect(columns()).toHaveLength(0)
-    const edited = screen.getByRole("region", { name: "Recursive (natural breaks), 300 characters" })
-    expect(within(edited).getByText(/Edited since the last run/)).toBeTruthy()
+    expect(screen.getByRole("article", { name: "Recipe 2" })).toBe(card)
+    expect(within(card).getByRole("button", { name: "Change chunk size, now 300 characters" })).toBeTruthy()
+    expect(within(card).getByText("Edited")).toBeTruthy()
+    expect(screen.getByTestId("plan").textContent).toContain("Recursive at 300 characters")
+  })
+
+  it("stops at ten recipes and says why", async () => {
+    render(<Compare />)
+    const add = await screen.findByRole("region", { name: "Add a recipe" })
+    for (let i = 0; i < 7; i++) {
+      fireEvent.click(within(add).getByRole("button", { name: /Start from defaults/ }))
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+    }
+    expect(screen.getAllByRole("article")).toHaveLength(10)
+    expect(add.textContent).toContain("Ten recipes is the most one run takes. Remove one to add another.")
+    expect(within(add).queryByRole("button")).toBeNull()
+    expect(screen.getByRole("button", { name: "Run 10 recipes" })).toBeTruthy()
+  })
+
+  it("adds a suggestion as a New card with its strategy editor open, and removes a card", async () => {
+    render(<Compare />)
+    const add = await screen.findByRole("region", { name: "Add a recipe" })
+    const first = within(add).getAllByRole("button")[0]
+    expect(first.textContent).toMatch(/^By layout block/)
+    fireEvent.click(first)
+    const card = screen.getByRole("article", { name: "Recipe 4" })
+    expect(within(card).getByText("New")).toBeTruthy()
+    expect(within(card).getByRole("dialog", { name: "Strategy" })).toBeTruthy()
+    fireEvent.click(within(card).getByRole("button", { name: "Remove recipe 4" }))
+    expect(screen.getAllByRole("article")).toHaveLength(3)
+  })
+
+  it("swaps the cards for the results on Run, and Change recipes brings them back", async () => {
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    await waitFor(() => expect(screen.queryByTestId("recipe-cards")).toBeNull())
+    fireEvent.click(screen.getByRole("button", { name: "Change recipes" }))
+    expect(screen.getByTestId("recipe-cards")).toBeTruthy()
   })
 })
 
@@ -433,37 +477,39 @@ describe("a run the server rejects", () => {
   const rejected = (loc: string[], msg: string) =>
     new Response(JSON.stringify({ detail: { node_id: "chunk", errors: [{ loc, msg, type: "value_error" }] } }), { status: 422 })
 
-  it("opens only the recipe the error belongs to, and names it and its field in plain words", async () => {
+  it("puts the message under the recipe it belongs to, in plain words, with that field's editor open", async () => {
     serve({}, { "/api/sweeps": rejected(["overlap_sentences"], "Overlap must be smaller than the number of sentences per chunk.") })
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
-    const alert = await screen.findByRole("alert")
-    expect(alert.textContent).toBe("Recipe 3, By sentence, Overlap sentences: Overlap must be smaller than the number of sentences per chunk.")
-    expect(alert.className).not.toContain("font-mono")
-    expect(columns()).toEqual(["sentence_window"])
-    expect(screen.getByLabelText("Overlap sentences")).toBeTruthy()
+    const card = screen.getByRole("article", { name: "Recipe 3" })
+    const alert = await within(card).findByRole("alert")
+    expect(alert.textContent).toBe("Overlap sentences: Overlap must be smaller than the number of sentences per chunk.")
+    expect(alert.className).toContain("text-danger")
+    expect(within(card).getByRole("dialog", { name: "Overlap sentences" })).toBeTruthy()
+    expect(screen.getAllByRole("dialog")).toHaveLength(1)
+    expect(columns()).toHaveLength(3)
   })
 
-  it("below 820 px, shows the failing recipe's tab", async () => {
+  it("below 820 px, returns to the cards with the failing recipe's editor open", async () => {
     FakeResizeObserver.width = 753
     vi.stubGlobal("ResizeObserver", FakeResizeObserver)
     serve({}, { "/api/sweeps": rejected(["overlap_sentences"], "Overlap must be smaller than the number of sentences per chunk.") })
     render(<Compare />)
-    const group = await screen.findByRole("group", { name: "Recipe shown" })
-    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     await screen.findByRole("alert")
-    const pressed = [...group.querySelectorAll("button")].findIndex((b) => b.getAttribute("aria-pressed") === "true")
-    expect(pressed).toBe(2)
+    expect(screen.getByTestId("recipe-cards")).toBeTruthy()
+    expect(within(screen.getByRole("article", { name: "Recipe 3" })).getByRole("dialog")).toBeTruthy()
   })
 
-  it("opens every recipe when the error cannot be tied to one", async () => {
+  it("says an error it cannot tie to one recipe above the cards, and opens no editor", async () => {
     serve({}, { "/api/sweeps": rejected(["chunk_size"], "Input should be greater than 0.") })
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
     const alert = await screen.findByRole("alert")
     expect(alert.textContent).toBe("Chunk, Chunk size: Input should be greater than 0.")
+    expect(screen.queryByRole("dialog")).toBeNull()
     expect(columns()).toHaveLength(3)
   })
 })

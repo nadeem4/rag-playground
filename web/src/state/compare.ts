@@ -76,6 +76,11 @@ const NAME_PARTS: Record<string, (v: unknown) => { text: string; joined?: boolea
 /** A setting's value in a name: on or off for a switch, the value itself otherwise. */
 const valueWord = (v: unknown) => (typeof v === "boolean" ? (v ? "on" : "off") : v === null ? "native" : typeof v === "string" ? v : JSON.stringify(v))
 
+/** A strategy's plain name: Build's, or the Ask panel's on Retrieve. */
+export function strategyName(stage: Stage, transform: string): string {
+  return (stage === "retrieve" ? RETRIEVAL_LABEL[transform] : undefined) ?? strategyLabel(transform)
+}
+
 /** The short phrase a chunk recipe goes by in a finding, from its own settings. */
 function chunkPhrase(v: Variant): string | null {
   const c = v.config
@@ -104,7 +109,7 @@ function chunkPhrase(v: Variant): string | null {
  */
 export function recipeNames(variants: Variant[], stage: Stage, registry: Registry, own?: number): RecipeName[] {
   const labels = variantLabels(variants, registry, stage)
-  const plainOf = (v: Variant) => (stage === "retrieve" ? RETRIEVAL_LABEL[v.transform] : undefined) ?? strategyLabel(v.transform)
+  const plainOf = (v: Variant) => strategyName(stage, v.transform)
   const sizeOf = (i: number) => {
     const field = labels[i].fields.find(([k]) => k in SIZE_UNITS)?.[0]
     return { field, size: field ? sized(field, variants[i].config[field]) : null }
@@ -160,6 +165,69 @@ export function rejectedRecipe(variants: Variant[], previous: Variant[], fields:
     if (changed.length) found = changed
   }
   return found.length === 1 ? found[0] : null
+}
+
+// ------------------------------------------------------------------- plan --
+
+/** How the results open: as columns, one tab at a time, or as an overview to sort. */
+export type ResultsMode = "columns" | "tabs" | "overview"
+
+/** Three or fewer that fit: columns. Three or fewer that do not: tabs. Four or more: the overview. */
+export function resultsMode(n: number, columnsFit: boolean): ResultsMode {
+  return n <= 3 ? (columnsFit ? "columns" : "tabs") : "overview"
+}
+
+/** A recipe as the plan sentence needs it: its phrase and its settings. */
+export interface PlanItem {
+  phrase: string
+  transform: string
+  config: Record<string, unknown>
+}
+
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+const numberWord = (n: number) => NUMBER_WORDS[n] ?? String(n)
+/** "Your pipeline" inside a sentence, after its first word. */
+const inSentence = (phrase: string) => (phrase === "Your pipeline" ? "your pipeline" : phrase)
+
+const WAYS: Partial<Record<Stage, string>> = {
+  parse: "read the same document",
+  chunk: "cut the same document",
+  index: "index the same pieces",
+  retrieve: "search the same pieces",
+}
+
+const WHAT: Partial<Record<Stage, string>> = {
+  chunk: "its pieces, numbers and a chunk bar",
+  retrieve: "its five best pieces",
+}
+
+/**
+ * The sentence over the cards before a run: what the run is about to show,
+ * and the line under it, how the results will open. With three or more
+ * Recursive sizes on Chunk it names that pattern instead of every recipe.
+ */
+export function planSentence(stage: Stage, items: PlanItem[], mode: ResultsMode, fit: number): { plan: string; sub: string | null } {
+  const n = items.length
+  if (n === 0) return { plan: "Add a recipe to run.", sub: null }
+  if (n === 1) return { plan: `You are about to run ${inSentence(items[0].phrase)} on its own. Add a recipe to compare it with.`, sub: null }
+  const sizes = items.filter((x) => x.transform === "recursive_character" && typeof x.config.chunk_size === "number").map((x) => x.config.chunk_size as number)
+  let plan: string
+  if (stage === "chunk" && sizes.length >= 3) {
+    const rest = n - sizes.length
+    const others = rest === 0 ? "" : `, and how ${numberWord(rest)} other ${rest === 1 ? "strategy compares" : "strategies compare"}`
+    plan = `You are about to see how size changes the pieces, from ${Math.min(...sizes)} to ${Math.max(...sizes)} characters${others}.`
+  } else if (n <= 3) {
+    const phrases = items.map((x) => inSentence(x.phrase))
+    plan = `You are about to compare ${phrases.slice(0, -1).join(", ")} and ${phrases[n - 1]}.`
+  } else plan = `You are about to compare ${numberWord(n)} ways to ${WAYS[stage] ?? "run the same step"}.`
+  const what = WHAT[stage] ?? "its output"
+  const sub =
+    mode === "columns"
+      ? `After the run, each recipe becomes a column with ${what}, and a sentence up here says what changed.`
+      : mode === "tabs"
+        ? `After the run, each recipe gets a tab with ${what}, and a sentence up here says what changed.`
+        : `After the run, the ${numberWord(n)} recipes open as a table you can sort, and ${fit > 1 ? `you pick up to ${numberWord(fit)} to read side by side` : "you open any one to read it"}.`
+  return { plan, sub }
 }
 
 // ---------------------------------------------------------------- findings --

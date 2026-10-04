@@ -10,16 +10,18 @@ sharply the top of each list dominates.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import Query
-from core.ports import PortSpec, RunContext, Stage
+from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
 from core.transform import Explanation, Transform
-from plugins.retrieve import _base
+from plugins.retrieve import _base, _prf
+
+NO_EXPANSION_NOTE = "No expansion: the dense pass found nothing to borrow from."
 
 
 class HybridRrfConfig(BaseModel):
@@ -32,10 +34,37 @@ class HybridRrfConfig(BaseModel):
     #: smaller makes rank 1 dominate, larger flattens the lists together.
     rrf_k: int = 60
 
+    query_expansion: Literal["none", "prf"] = Field(
+        default="none",
+        description="'none' runs the keyword search on the question as written. "
+        "'prf' (pseudo-relevance feedback) adds the most distinctive words of "
+        "the top dense hits to the keyword search; the dense search is unchanged.",
+    )
+    # 2 hits and 6 words, measured: on a resume question that shares no word
+    # with the document, this was the one setting that lifted the right piece
+    # to rank 3 under all four chunkers. More hits or more words borrow from
+    # pieces that are off topic and pull the keyword search after them.
+    prf_docs: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="With query_expansion 'prf': how many of the top dense hits "
+        "the added words are borrowed from.",
+    )
+    prf_terms: int = Field(
+        default=6,
+        ge=1,
+        le=20,
+        description="With query_expansion 'prf': how many words are added to the "
+        "keyword search, chosen by tf-idf (frequent in those hits, rare in the "
+        "whole document).",
+    )
+
 
 @register
 class HybridRrfRetriever(Transform[HybridRrfConfig]):
     name = "hybrid_rrf"
+    version = "2"
     stage = Stage.RETRIEVE
     inputs = {
         "index": PortSpec(ArtifactType.INDEX),
@@ -64,13 +93,20 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
             f"Takes the top {top} from each search, merges them, and keeps the "
             f"best {top}. Each piece scores 1/({k} + its place) in every list it "
             f"appears in (rrf_k = {k}), so first place is worth 1/{k + 1} and "
-            f"tenth place 1/{k + 10}. {_base.pool_words(top)}"
+            f"tenth place 1/{k + 10}. {_base.pool_words(top)} "
+            + _expansion_words(config)
         )
         tradeoff = (
             "A small rrf_k lets the first few places of each list dominate; a "
             "large one, such as the usual 60, flattens the lists so pieces found "
             "by both searches rise. " + _base.TOP_K_TRADEOFF
         )
+        if config.query_expansion == "prf":
+            tradeoff += (
+                " Borrowed words help a question that shares no word with the "
+                "document, but when the top dense hits are off topic, their "
+                "words pull the keyword search off topic too."
+            )
         return Explanation(
             settings=settings, tradeoff=tradeoff, warning=warning, blocking=blocking
         )
@@ -87,8 +123,24 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         with _base.timed(timings, "dense"):
             vector = _base.embed_query(descriptor, query)
             dense = _base.dense_rows(table, vector, descriptor, config.top_k)
+
+        expanded: str | None = None
+        terms: list[str] = []
+        if config.query_expansion == "prf":
+            with _base.timed(timings, "expand"):
+                expanded, terms = self._expand(table, dense, query, config)
+            if terms:
+                set_note(
+                    ctx,
+                    f"Expanded the keyword search with {len(terms)} terms from "
+                    f"the top {min(config.prf_docs, len(dense))} dense hits: "
+                    f"{', '.join(terms)}.",
+                )
+            else:
+                set_note(ctx, NO_EXPANSION_NOTE)
+
         with _base.timed(timings, "bm25"):
-            lexical = _base.fts_rows(table, query, config.top_k)
+            lexical = _base.fts_rows(table, query, config.top_k, text=expanded)
 
         with _base.timed(timings, "fuse"):
             hits = self._fuse(dense, lexical, descriptor, config)
@@ -101,7 +153,32 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
             # from, which is more than either list contributed on its own.
             total_candidates=len({row["id"] for row in dense + lexical}),
             timings_ms=timings,
+            expanded_query=expanded,
+            expansion_terms=terms,
         )
+
+    def _expand(
+        self,
+        table: Any,
+        dense: list[dict[str, Any]],
+        query: Query,
+        config: HybridRrfConfig,
+    ) -> tuple[str | None, list[str]]:
+        """The expanded keyword query and the words it added, or `(None, [])`.
+
+        Words come from the indexed text of the top dense rows, weighed against
+        the indexed text of every row, so the idf is the document's own. The
+        question's words go first, so the search still looks for them.
+        """
+        if not dense:
+            return None, []
+        top = [row[_base.TEXT_COLUMN] for row in dense[: config.prf_docs]]
+        terms = _prf.select_terms(
+            top, _base.indexed_texts(table), query.text, config.prf_terms
+        )
+        if not terms:
+            return None, []
+        return f"{query.text} {' '.join(terms)}", terms
 
     def _fuse(
         self,
@@ -143,3 +220,23 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
             )
             for rank, doc in enumerate(order[: config.top_k], start=1)
         ]
+
+
+def _expansion_words(config: HybridRrfConfig) -> str:
+    """What `query_expansion` does with these settings, by the parameters' names."""
+    if config.query_expansion != "prf":
+        return (
+            "query_expansion is none, so the keyword search uses the question "
+            f"as written. Set it to prf to add the {config.prf_terms} most "
+            f"distinctive words (prf_terms) of the top {config.prf_docs} dense "
+            "hits (prf_docs) to the keyword search."
+        )
+    return (
+        f"query_expansion is prf: the keyword search also looks for the "
+        f"{config.prf_terms} most distinctive words (prf_terms) of the top "
+        f"{config.prf_docs} dense hits (prf_docs), chosen by tf-idf against "
+        "the whole document, skipping common words, numbers and the "
+        "question's own words. The dense pass is unchanged and always "
+        "searches the question as written. When the dense pass finds nothing, "
+        "the keyword search uses the question as written."
+    )

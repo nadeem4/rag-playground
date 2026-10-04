@@ -292,7 +292,13 @@ def test_rrf_k_changes_the_fusion(tmp_path):
 @pytest.mark.parametrize("transform", ALL, ids=ALL_IDS)
 def test_no_config_field_names_an_embedder(transform):
     """The retriever must have no way to disagree with the index about vectors."""
-    assert set(transform.config_model.model_fields) <= {"top_k", "rrf_k"}
+    assert set(transform.config_model.model_fields) <= {
+        "top_k",
+        "rrf_k",
+        "query_expansion",
+        "prf_docs",
+        "prf_terms",
+    }
 
 
 def test_the_query_vector_uses_the_indexed_dimensionality(tmp_path, monkeypatch):
@@ -573,3 +579,168 @@ def test_explain_describes_a_pool_for_the_next_step(transform):
     assert "20" in exp.settings
     assert "pool" in exp.settings.lower()
     assert "top 5" not in exp.settings
+
+
+# --------------------------------------------------------------------------
+# hybrid rrf: pseudo-relevance feedback (PRF) query expansion
+# --------------------------------------------------------------------------
+
+from plugins.retrieve import _prf  # noqa: E402
+
+
+def test_prf_skips_stopwords_digits_short_tokens_and_the_questions_words():
+    text = "The engineer at Contoso since 2022 is an engineer of note, go"
+
+    terms = _prf.select_terms([text], [text], "Who is the engineer?", 10)
+
+    assert "engineer" not in terms  # the question's own word
+    assert "the" not in terms and "since" not in terms  # stopwords
+    assert "2022" not in terms  # digits
+    assert "go" not in terms  # under three characters
+    assert set(terms) == {"contoso", "note"}
+
+
+def test_prf_orders_terms_by_tf_times_idf():
+    top = ["alpha alpha alpha beta beta gamma", "gamma delta"]
+    everything = top + ["gamma beta", "gamma", "gamma"]
+
+    # alpha: tf 3, in one chunk. beta: tf 2, in two chunks. delta: tf 1, in one
+    # chunk. gamma: tf 2 but in every chunk, so its idf is the lowest of all.
+    assert _prf.select_terms(top, everything, "", 3) == ["alpha", "beta", "delta"]
+    assert _prf.select_terms(top, everything, "", 4)[-1] == "gamma"
+
+
+def test_prf_returns_nothing_from_nothing():
+    assert _prf.select_terms([], ["anything here"], "question", 8) == []
+
+
+def _run_hybrid(tmp_path, index_dir, query, **config):
+    cfg = HybridRrfConfig(**config)
+    ctx = _ctx(tmp_path / "prf-scratch")
+    payload = HybridRrfRetriever().apply(
+        {"index": index_dir, "query": query.model_dump(mode="json")}, cfg, ctx
+    )
+    note = ctx.extras.get("meta", {}).get("note")
+    return RetrievalResult.model_validate(payload), note
+
+
+def test_prf_config_defaults_and_bounds():
+    from pydantic import ValidationError
+
+    cfg = HybridRrfConfig()
+    # 2 and 6, not the spec's first guess of 3 and 8: measured on the owner's
+    # resume question, 2/6 is the only setting that reached rank 3 on all four
+    # chunkers (.superpowers/diagnosis/employer_prf_grid.py).
+    assert (cfg.query_expansion, cfg.prf_docs, cfg.prf_terms) == ("none", 2, 6)
+    for field in ("query_expansion", "prf_docs", "prf_terms"):
+        assert HybridRrfConfig.model_fields[field].description
+    for bad in ({"prf_docs": 0}, {"prf_docs": 11}, {"prf_terms": 0}, {"prf_terms": 21}):
+        with pytest.raises(ValidationError):
+            HybridRrfConfig(**bad)
+
+
+def test_prf_runs_the_dense_pass_once_on_the_original_question(tmp_path, monkeypatch):
+    index_dir = build_index(tmp_path, *CORPUS)
+    embedded: list[str] = []
+    lexical: list[str | None] = []
+    real_embed, real_fts = _base.embed_query, _base.fts_rows
+
+    def spy_embed(descriptor, query):
+        embedded.append(query.text)
+        return real_embed(descriptor, query)
+
+    def spy_fts(table, query, limit, text=None):
+        lexical.append(text)
+        return real_fts(table, query, limit, text=text)
+
+    monkeypatch.setattr(_base, "embed_query", spy_embed)
+    monkeypatch.setattr(_base, "fts_rows", spy_fts)
+
+    result, note = _run_hybrid(
+        tmp_path, index_dir, Query(text="Which place?"), query_expansion="prf"
+    )
+
+    assert embedded == ["Which place?"]
+    assert lexical == [result.expanded_query]
+    assert result.expanded_query == "Which place? " + " ".join(result.expansion_terms)
+    n = len(result.expansion_terms)
+    assert 1 <= n <= 6
+    assert note == (
+        f"Expanded the keyword search with {n} terms from the top 2 dense hits: "
+        f"{', '.join(result.expansion_terms)}."
+    )
+
+
+def test_prf_lets_the_keyword_search_match_a_question_with_no_shared_word(tmp_path):
+    index_dir = build_index(tmp_path, *CORPUS)
+    query = Query(text="Which place?")
+
+    plain, _ = _run_hybrid(tmp_path, index_dir, query)
+    expanded, _ = _run_hybrid(
+        tmp_path, index_dir, query, query_expansion="prf", prf_docs=1
+    )
+
+    assert not any("bm25" in hit.component_scores for hit in plain.hits)
+    assert any("bm25" in hit.component_scores for hit in expanded.hits)
+
+
+def test_prf_with_an_empty_dense_pass_searches_the_question_as_written(
+    tmp_path, monkeypatch
+):
+    index_dir = build_index(tmp_path, *CORPUS)
+    lexical: list[str | None] = []
+    real_fts = _base.fts_rows
+
+    def spy_fts(table, query, limit, text=None):
+        lexical.append(text)
+        return real_fts(table, query, limit, text=text)
+
+    monkeypatch.setattr(_base, "dense_rows", lambda *a, **k: [])
+    monkeypatch.setattr(_base, "fts_rows", spy_fts)
+
+    result, note = _run_hybrid(
+        tmp_path, index_dir, Query(text="bananas"), query_expansion="prf"
+    )
+
+    assert lexical == [None]
+    assert result.expanded_query is None
+    assert result.expansion_terms == []
+    assert note == "No expansion: the dense pass found nothing to borrow from."
+    assert texts(result) == ["Bananas are a yellow tropical fruit"]
+
+
+def test_no_expansion_behaves_exactly_as_before(tmp_path):
+    index_dir = build_index(tmp_path, *CORPUS)
+    query = Query(text="bananas")
+
+    default, note = _run_hybrid(tmp_path, index_dir, query)
+    explicit, _ = _run_hybrid(tmp_path, index_dir, query, query_expansion="none")
+
+    assert note is None
+    assert default.expanded_query is None and default.expansion_terms == []
+    pairs = [(h.chunk.id, h.score, h.component_scores) for h in default.hits]
+    assert pairs == [(h.chunk.id, h.score, h.component_scores) for h in explicit.hits]
+    # Rank 1 in dense and rank 1 in bm25, as before the option existed.
+    assert default.hits[0].score == pytest.approx(2 / 61)
+
+
+def test_an_old_retrieval_result_loads_without_the_expansion_fields():
+    old = RetrievalResult.model_validate({"hits": [], "query_id": "q"})
+    assert (old.expanded_query, old.expansion_terms) == (None, [])
+
+
+def test_explain_names_the_expansion_parameters():
+    off = HybridRrfRetriever().explain(HybridRrfConfig())
+    assert "query_expansion" in off.settings
+
+    on = HybridRrfRetriever().explain(
+        HybridRrfConfig(query_expansion="prf", prf_docs=2, prf_terms=5)
+    )
+    for name in ("query_expansion", "prf_docs", "prf_terms"):
+        assert name in on.settings
+    assert "dense pass is unchanged" in on.settings
+    assert "finds nothing" in on.settings  # the fallback is named
+
+
+def test_hybrid_version_is_bumped_for_the_expansion():
+    assert HybridRrfRetriever.version == "2"

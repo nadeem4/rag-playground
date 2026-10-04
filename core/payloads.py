@@ -207,6 +207,11 @@ class RetrievalResult(BaseModel):
     fetch_k: int = 0
     total_candidates: int = 0
     timings_ms: dict[str, float] = {}
+    #: The full keyword query that ran when the retriever expanded it (PRF on
+    #: hybrid search); `None` when the question ran as written.
+    expanded_query: str | None = None
+    #: The words the expansion added, best first. Empty without an expansion.
+    expansion_terms: list[str] = []
 
 
 class Output(BaseModel):

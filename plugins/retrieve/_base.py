@@ -29,7 +29,7 @@ import lancedb
 
 from core.ids import canonical_json
 from core.payloads import Chunk, Hit, Query, RetrievalResult
-from plugins.index.lancedb_store import DESCRIPTOR, TABLE
+from plugins.index.lancedb_store import DESCRIPTOR, TABLE, TEXT_COLUMN
 from providers.embedding_cache import embed_cached
 from providers.embeddings import EmbedKind, EmbeddingProvider, get_embedder
 
@@ -156,15 +156,25 @@ def dense_rows(
     )
 
 
-def fts_rows(table: Any, query: Query, limit: int) -> list[dict[str, Any]]:
+def fts_rows(
+    table: Any, query: Query, limit: int, text: str | None = None
+) -> list[dict[str, Any]]:
     """Full-text search on the same rows the vectors were built from.
 
     Lexical matching runs on `query.text`, never on `embed_text`: a hypothetical
     document is useful as a vector and actively harmful as a bag of keywords.
+    `text` overrides it for this search only, for an expanded keyword query
+    (PRF); a blank question still searches nothing.
     """
     if not query.text.strip():
         return []
-    return table.search(query.text, query_type="fts").limit(limit).to_list()
+    terms = query.text if text is None else text
+    return table.search(terms, query_type="fts").limit(limit).to_list()
+
+
+def indexed_texts(table: Any) -> list[str]:
+    """Every row's indexed text: the chunk set the full-text index was built on."""
+    return table.to_arrow().column(TEXT_COLUMN).to_pylist()
 
 
 def similarity(distance: float, metric: str) -> float:
@@ -224,6 +234,8 @@ def result(
     total_candidates: int,
     fetch_k: int,
     timings_ms: dict[str, float],
+    expanded_query: str | None = None,
+    expansion_terms: list[str] | None = None,
 ) -> dict[str, Any]:
     return RetrievalResult(
         hits=hits,
@@ -231,4 +243,6 @@ def result(
         fetch_k=fetch_k,
         total_candidates=total_candidates,
         timings_ms=timings_ms,
+        expanded_query=expanded_query,
+        expansion_terms=expansion_terms or [],
     ).model_dump(mode="json")

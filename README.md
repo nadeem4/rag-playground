@@ -324,7 +324,7 @@ several times, for example two cleaners in a row.
 | index | `lancedb` | Embeds every chunk and stores it in a LanceDB table with a keyword index over the same rows. |
 | retrieve | `dense` | Vector search: finds chunks whose meaning is closest to the question, including paraphrases. |
 | retrieve | `bm25` | Keyword search: scores chunks by shared words, weighting rare words higher. Finds exact names and codes. |
-| retrieve | `hybrid_rrf` | Runs both searches and merges the two rankings by position (reciprocal rank fusion). |
+| retrieve | `hybrid_rrf` | Runs both searches and merges the two rankings by position (reciprocal rank fusion). With `query_expansion: prf` (pseudo-relevance feedback), the keyword search also looks for the `prf_terms` most distinctive words of the top `prf_docs` dense hits (6 and 2 by default), and the result records the expanded query. |
 | rerank | `mmr` | Maximal Marginal Relevance: picks its top 5 from the retriever's pool of 20, trading a little relevance for variety, so it can drop near-duplicates instead of only reordering them. |
 | rerank | `cross_encoder` | A sentence-transformers CrossEncoder reads the question and each candidate together and scores the pair, then keeps its top 5. MiniLM, the default, is small and fast and is loaded in the background when a sample opens; bge-reranker-base is stronger; bge-reranker-v2-m3 is strongest and slow on a CPU. |
 | rerank | `llm_rerank` | Asks the chat model to put the candidates in order of relevance, reading the first 600 characters of each, then keeps its top 5. It needs an API key, makes one model call per question, and its order can change between runs. Claude Haiku 4.5 by default; any chat model can be chosen. |

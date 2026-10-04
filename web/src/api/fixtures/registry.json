@@ -1047,7 +1047,7 @@
     },
     "hybrid_rrf": {
       "name": "hybrid_rrf",
-      "version": "1",
+      "version": "2",
       "summary": "Runs vector search and keyword search side by side, then merges the two ranked lists by position rather than by score (reciprocal rank fusion). A piece near the top of both lists wins, so it gets the strengths of both searches.",
       "stage": "retrieve",
       "output": "retrieval_result",
@@ -1089,6 +1089,32 @@
           "rrf_k": {
             "default": 60,
             "title": "Rrf K",
+            "type": "integer"
+          },
+          "query_expansion": {
+            "default": "none",
+            "description": "'none' runs the keyword search on the question as written. 'prf' (pseudo-relevance feedback) adds the most distinctive words of the top dense hits to the keyword search; the dense search is unchanged.",
+            "enum": [
+              "none",
+              "prf"
+            ],
+            "title": "Query Expansion",
+            "type": "string"
+          },
+          "prf_docs": {
+            "default": 2,
+            "description": "With query_expansion 'prf': how many of the top dense hits the added words are borrowed from.",
+            "maximum": 10,
+            "minimum": 1,
+            "title": "Prf Docs",
+            "type": "integer"
+          },
+          "prf_terms": {
+            "default": 6,
+            "description": "With query_expansion 'prf': how many words are added to the keyword search, chosen by tf-idf (frequent in those hits, rare in the whole document).",
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Prf Terms",
             "type": "integer"
           }
         },

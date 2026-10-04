@@ -10,7 +10,8 @@ import { DocumentControl } from "./DocumentControl"
 import { DisplaySettings } from "./ThemeToggle"
 
 const PRIMARY = [
-  { href: "/", label: "Lessons" },
+  { href: "/", label: "Home" },
+  { href: "/learn", label: "Lessons" },
   { href: "/build", label: "Build" },
   { href: "/compare", label: "Compare" },
   { href: "/evaluate", label: "Evaluate" },
@@ -29,8 +30,8 @@ const DEV = [
 const DEV_PATHS = new Set(["/inspect", "/design", "/specimen"])
 
 function NavLink({ href, label, path }: { href: string; label: string; path: string }) {
-  // Home lists the lessons; each lesson has its own page under /learn.
-  const current = path === href || (href === "/" && path.startsWith("/learn/"))
+  // /learn lists the lessons; each lesson has its own page under it.
+  const current = path === href || (href === "/learn" && path.startsWith("/learn/"))
   return (
     <a
       href={href}
@@ -94,8 +95,8 @@ function DevMenu({ path }: { path: string }) {
 export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: string; lessonsEnabled?: boolean }) {
   // The dev pages are for working on the app, not for demo visitors.
   const demo = useDemo()
-  // With the lessons hidden, there is no Lessons link and the brand opens Build.
-  const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/")
+  // With the lessons hidden, there is no Lessons link. Home is always first.
+  const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/learn")
   return (
     // Below md: three rows. The brand and the controls share the first, the
     // nav takes the second (wrapping inside its own box at most once), and the
@@ -104,7 +105,7 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
     // zero basis, so it shrinks rather than wrapping) and holds the trigger at
     // its right end, before the controls. The page itself never scrolls sideways.
     <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-4">
-      <a href={lessonsEnabled ? "/" : "/build"} className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
+      <a href="/" className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
         RAG Playground
       </a>
       <nav className="order-3 flex w-full min-w-0 flex-wrap items-center gap-1 md:order-2 md:w-auto" aria-label="Main">

@@ -3,44 +3,54 @@ import { describe, expect, it } from "vitest"
 import { canonicalPath, pageFor, routeFor } from "@/App"
 import { Home } from "@/routes/Home"
 import { Learn } from "@/routes/Learn"
+import { Lessons } from "@/routes/Lessons"
 import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
-describe("routeFor with the lessons on", () => {
-  it("keeps Home at / and sends /learn to Home", () => {
+describe("routes with the lessons on", () => {
+  it("keeps Home at / and the lessons list at /learn", () => {
     expect(routeFor("/", true)).toBe("/")
-    expect(routeFor("/learn", true)).toBe("/")
+    expect(routeFor("/learn", true)).toBe("/learn")
     expect(routeFor("/learn/chunking", true)).toBe("/learn/chunking")
     expect(routeFor("/build", true)).toBe("/build")
   })
 
-  it("renders Home and the lesson pages", () => {
+  it("renders Home, the lessons list and the lesson pages", () => {
     expect(pageFor("/", true)).toBe(Home)
+    expect(pageFor("/learn", true)).toBe(Lessons)
     expect(pageFor("/learn/chunking", true)).toBe(Learn)
     expect(pageFor("/build", true)).toBe(Shell)
     expect(pageFor("/nope", true)).toBe(Home)
   })
 })
 
-describe("routeFor with the lessons off", () => {
-  it("sends /, /learn and every lesson to /build", () => {
-    expect(routeFor("/", false)).toBe("/build")
-    expect(routeFor("/learn", false)).toBe("/build")
-    expect(routeFor("/learn/chunking", false)).toBe("/build")
-    expect(routeFor("/learn/end-to-end", false)).toBe("/build")
+describe("routes with the lessons off", () => {
+  it("renders Home at /", () => {
+    expect(routeFor("/", false)).toBe("/")
+    expect(pageFor("/", false)).toBe(Home)
+  })
+
+  it("sends /learn and every lesson to Home", () => {
+    expect(routeFor("/learn", false)).toBe("/")
+    expect(routeFor("/learn/chunking", false)).toBe("/")
+    expect(routeFor("/learn/end-to-end", false)).toBe("/")
     expect(routeFor("/build", false)).toBe("/build")
     expect(routeFor("/compare", false)).toBe("/compare")
   })
 
-  it("never renders Home or Learn", () => {
+  it("never renders the lessons list or a lesson", () => {
     for (const path of ["/", "/learn", "/learn/chunking", "/build", "/nope"]) {
       const page = pageFor(path, false)
-      expect(page).not.toBe(Home)
+      expect(page).not.toBe(Lessons)
       expect(page).not.toBe(Learn)
     }
     expect(pageFor("/build", false)).toBe(Shell)
-    expect(pageFor("/nope", false)).toBe(Shell)
+  })
+
+  it("falls through to Home on an unknown path", () => {
+    expect(pageFor("/nope", false)).toBe(Home)
+    expect(pageFor("/forms", false)).toBe(Home)
   })
 
   it("renders the Read page at /read", () => {

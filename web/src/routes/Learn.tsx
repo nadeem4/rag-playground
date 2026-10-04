@@ -15,7 +15,7 @@ import { RegistryScreen } from "./Shell"
 import "@/components/learn/learn.css"
 
 /**
- * One lesson at a time, at /learn/<slug>. Home lists them in order. Each
+ * One lesson at a time, at /learn/<slug>. /learn lists them in order. Each
  * lesson works on the bundled sample, registered here like an upload
  * (idempotent).
  */
@@ -57,7 +57,7 @@ export function Learn() {
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-surface">
       <div className="learn-page learn-page-wide flex flex-col gap-4 py-6">
-        <a href="/" className="w-fit text-base font-medium text-fg underline decoration-fg-muted underline-offset-2">
+        <a href="/learn" className="w-fit text-base font-medium text-fg underline decoration-fg-muted underline-offset-2">
           All lessons
         </a>
         {sampleError ? (

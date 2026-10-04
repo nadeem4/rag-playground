@@ -47,7 +47,7 @@ function write(key: string, value: string | null): boolean {
   }
 }
 
-const isPipeline = (p: unknown): p is SavedPipeline =>
+export const isPipeline = (p: unknown): p is SavedPipeline =>
   typeof p === "object" && p !== null &&
   typeof (p as SavedPipeline).id === "string" && typeof (p as SavedPipeline).name === "string" &&
   typeof (p as SavedPipeline).savedAt === "string" &&
@@ -132,6 +132,47 @@ export function renamePipeline(id: string, name: string): boolean {
 export function deletePipeline(id: string): void {
   const ok = persist(freshPipelines().filter((p) => p.id !== id))
   if (ok && readCurrentId() === id) setCurrentId(null)
+}
+
+/** What an import did: new ones added, ones already here by id, and any the cap pushed out. */
+export interface ImportResult<T> {
+  added: number
+  skipped: number
+  dropped: T[]
+}
+
+/**
+ * Merge `incoming` into a newest-first list of at most `max`, by id. A copy
+ * already here wins, so an import never duplicates and never overwrites.
+ * Shared with the experiments adapter (state/libraryExperiments.ts).
+ */
+export function mergeById<T extends { id: string; savedAt: string }>(current: T[], incoming: T[], max: number): { next: T[]; result: ImportResult<T> } {
+  const have = new Set(current.map((x) => x.id))
+  const fresh: T[] = []
+  for (const x of incoming) {
+    if (have.has(x.id)) continue
+    have.add(x.id)
+    fresh.push(x)
+  }
+  const merged = [...current, ...fresh].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+  const next = merged.slice(0, max)
+  const kept = new Set(next.map((x) => x.id))
+  return {
+    next,
+    result: { added: fresh.filter((x) => kept.has(x.id)).length, skipped: incoming.length - fresh.length, dropped: merged.slice(max) },
+  }
+}
+
+/** Library import: add saved pipelines from a file (I3 cap, I4 fresh read). Null when storage refused the write. */
+export function importPipelines(incoming: SavedPipeline[]): ImportResult<SavedPipeline> | null {
+  const { next, result } = mergeById(freshPipelines(), incoming.filter(isPipeline), MAX_PIPELINES)
+  return persist(next) ? result : null
+}
+
+/** Delete every saved pipeline, and the selection with them. The working copy on Build stays. */
+export function clearPipelines(): void {
+  persist([])
+  setCurrentId(null)
 }
 
 export function readCurrentId(): string | null {

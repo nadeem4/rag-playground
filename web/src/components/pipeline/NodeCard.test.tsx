@@ -266,6 +266,21 @@ describe("click to close, and scroll into view", () => {
     expect(onDeselect2).not.toHaveBeenCalled()
   })
 
+  it("the chevron follows selection: a card open only for a field error still reads Expand", () => {
+    const card = renderCard({ selected: false, fieldErrors: { chunk_size: ["Too small"] } })
+    const chevron = within(card).getByRole("button", { name: "Expand Chunk" })
+    expect(chevron.getAttribute("aria-expanded")).toBe("false")
+  })
+
+  it("the chevron sits on the title row, not in the group that wraps", () => {
+    const card = renderCard({ selected: false, showId: true, onRemove: vi.fn(), result: { id: "chunk", status: "failed", error: "x" } })
+    const chevron = within(card).getByRole("button", { name: "Expand Chunk" })
+    const row = chevron.parentElement!
+    expect(row.querySelector("h3")).not.toBeNull()
+    expect(row.contains(within(card).getByTestId("status-chip"))).toBe(false)
+    expect(row.className.split(/\s+/)).not.toContain("flex-wrap")
+  })
+
   it("the Upload card has no chevron", () => {
     const source = initialGraph(R).nodes.find((n) => n.stage === "source")!
     const card = renderCard({ node: source, title: "Upload", transforms: transformsFor(R, "source") })

@@ -397,6 +397,36 @@ export function NodeCard(p: NodeCardProps) {
             </button>
           </h3>
           {p.showId ? <span className="font-mono text-xs whitespace-nowrap text-fg-muted">{p.node.id}</span> : null}
+          {/* The explicit open and close, on the title line so it never wraps away.
+              It follows selection, as clicking does. The Upload card has nothing to open. */}
+          {isSource ? null : (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`${p.selected ? "Collapse" : "Expand"} ${p.title}`}
+              aria-expanded={p.selected}
+              aria-controls={`${id}-options`}
+              onClick={toggle}
+            >
+              <svg
+                aria-hidden
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={cn(
+                  "size-[16px] transition-transform duration-(--dur-fast) motion-reduce:transition-none",
+                  p.selected && "rotate-180 motion-reduce:rotate-0",
+                )}
+              >
+                <path d="M4 6l4 4 4-4" />
+              </svg>
+            </Button>
+          )}
         </div>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2" aria-live="polite">
           {isSource ? null : (
@@ -447,35 +477,6 @@ export function NodeCard(p: NodeCardProps) {
               <X aria-hidden strokeWidth={1.75} />
             </Button>
           ) : null}
-          {/* The explicit open and close; the Upload card has no options to open. */}
-          {isSource ? null : (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`${open ? "Collapse" : "Expand"} ${p.title}`}
-              aria-expanded={open}
-              aria-controls={`${id}-options`}
-              onClick={toggle}
-            >
-              <svg
-                aria-hidden
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={cn(
-                  "size-[16px] transition-transform duration-(--dur-fast) motion-reduce:transition-none",
-                  open && "rotate-180 motion-reduce:rotate-0",
-                )}
-              >
-                <path d="M4 6l4 4 4-4" />
-              </svg>
-            </Button>
-          )}
         </div>
       </header>
 

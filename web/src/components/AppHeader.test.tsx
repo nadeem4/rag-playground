@@ -150,16 +150,12 @@ describe("the theme and contrast switches", () => {
     expect(option("Contrast", "More contrast").getAttribute("aria-pressed")).toBe("true")
   })
 
-  it("each switch is named by a small label before it: visible from md up, hidden from sight below", () => {
+  it("in the header row each switch carries no caption, so the Document control keeps its room at 1280; each is still named", () => {
     header()
     for (const name of ["Theme", "Contrast"]) {
       const group = screen.getByRole("group", { name })
-      const caption = group.firstElementChild!
-      expect(caption.textContent).toBe(name)
-      expect(group.getAttribute("aria-labelledby")).toBe(caption.id)
-      const c = caption.className.split(/\s+/)
-      expect(c).toContain("sr-only")
-      expect(c).toContain("md:not-sr-only")
+      expect(group.getAttribute("aria-label")).toBe(name)
+      expect(group.textContent).not.toContain(name)
     }
   })
 })

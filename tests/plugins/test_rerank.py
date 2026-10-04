@@ -1,9 +1,10 @@
 """Contract tests for the MMR reranker.
 
-Relevance is recomputed in the embedder's space, so the fixtures pin the numbers
-they depend on rather than assuming them: `test_the_fixture_is_strictly_ordered`
-fails loudly if the fake embedder ever changes and quietly invalidates the
-ordering the rest of the file asserts on.
+Relevance is the retriever's own score, normalised to 0..1 across the pool.
+Redundancy is the cosine between candidates in the embedder's space, so the
+fixtures pin the numbers they depend on rather than assuming them:
+`test_the_fixture_is_strictly_ordered` fails loudly if the fake embedder ever
+changes and quietly invalidates the ordering the rest of the file asserts on.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import pytest
 
 from core.artifacts import ArtifactType
 from core.payloads import Chunk, Hit, Query, RetrievalResult
-from core.ports import Stage
+from core.ports import RunContext, Stage
 from core.registry import registry
 from plugins.index.lancedb_store import DESCRIPTOR
 from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
@@ -47,12 +48,16 @@ def relevance(text: str) -> float:
 
 
 def result(
-    candidates: list[tuple[str, str]] = CANDIDATES, **extra
+    candidates: list[tuple[str, str]] = CANDIDATES,
+    scores: list[float] | None = None,
+    retriever: str = "dense",
 ) -> dict:
     """A retrieval result as the executor delivers it: a plain JSON dict.
 
-    Scores are the true query-document cosines, so the incoming ranking is the
-    one a dense retriever over this embedder would really have produced.
+    By default the scores are the true query-document cosines, so the incoming
+    ranking is the one a dense retriever over this embedder would really have
+    produced. `scores` replaces them, for a hybrid or keyword list whose order
+    is not the dense order.
     """
     hits = [
         Hit(
@@ -64,9 +69,9 @@ def result(
                 source_element_ids=[f"el-{key}"],
                 page_span=(1, 1),
             ),
-            score=relevance(text),
+            score=relevance(text) if scores is None else scores[i],
             rank=i + 1,
-            retriever="dense",
+            retriever=retriever,
         )
         for i, (key, text) in enumerate(candidates)
     ]
@@ -111,6 +116,7 @@ def rerank(
     payload: dict | None = None,
     query: str | Query = QUERY_TEXT,
     index: Path | None = None,
+    ctx: RunContext | None = None,
     **config,
 ) -> RetrievalResult:
     payload = result() if payload is None else payload
@@ -122,7 +128,7 @@ def rerank(
             "index": index or INDEX["dir"],
         },
         MmrRerankConfig(**config),
-        None,
+        ctx,
     )
     return RetrievalResult.model_validate(out)
 
@@ -186,24 +192,23 @@ def recorder(monkeypatch, tmp_path) -> Path:
     return write_index(tmp_path / "rec-index", embedding_model=KindRecorder.name)
 
 
-def test_mmr_embeds_with_the_index_embedder(recorder):
+def test_mmr_embeds_the_hits_with_the_index_embedder(recorder):
     rerank(index=recorder)
     embedded = {text for text, _ in KindRecorder.calls}
-    assert embedded == {text for _, text in CANDIDATES} | {QUERY_TEXT}
+    assert embedded == {text for _, text in CANDIDATES}
 
 
-def test_mmr_embeds_hits_as_documents_and_the_question_as_a_query(recorder):
+def test_mmr_embeds_hits_as_documents(recorder):
     rerank(index=recorder)
-    kinds = dict(KindRecorder.calls)
-    assert kinds[QUERY_TEXT] == "query"
-    assert all(kinds[text] == "document" for _, text in CANDIDATES)
+    assert all(kind == "document" for _, kind in KindRecorder.calls)
 
 
-def test_mmr_embeds_a_hyde_document_as_a_document(recorder):
+def test_mmr_does_not_embed_the_question(recorder):
+    """Relevance comes from the retriever, so the question is never re-embedded."""
     rerank(query=Query(text=QUERY_TEXT, embed_text="Paris is in France."), index=recorder)
-    kinds = dict(KindRecorder.calls)
-    assert kinds["Paris is in France."] == "document"
-    assert QUERY_TEXT not in kinds
+    embedded = {text for text, _ in KindRecorder.calls}
+    assert QUERY_TEXT not in embedded
+    assert "Paris is in France." not in embedded
 
 
 def test_mmr_works_at_the_index_truncated_width(tmp_path, monkeypatch):
@@ -219,7 +224,7 @@ def test_mmr_works_at_the_index_truncated_width(tmp_path, monkeypatch):
     monkeypatch.setattr(mmr, "embed_cached", spy)
     reranked = rerank(index=write_index(tmp_path / "ix64", dim=64), lambda_mult=1.0)
 
-    assert seen == [64, 64]
+    assert seen == [64]
     assert keys(reranked) == ["a", "b", "c", "d"]
 
 
@@ -251,6 +256,43 @@ def test_lambda_one_is_pure_relevance_order():
 def test_lambda_one_preserves_relevance_order_from_a_shuffled_input():
     shuffled = [CANDIDATES[2], CANDIDATES[0], CANDIDATES[3], CANDIDATES[1]]
     assert keys(rerank(result(shuffled), lambda_mult=1.0)) == ["a", "b", "c", "d"]
+
+
+#: Reciprocal-rank-fusion scores, small and close, in an order that is not the
+#: dense order: the distinct passage `d` sits third, above the duplicate `c`.
+HYBRID_ORDER: list[tuple[str, str]] = [CANDIDATES[0], CANDIDATES[1], DISTINCT, CANDIDATES[2]]
+RRF_SCORES = [1 / 61, 1 / 62, 1 / 63, 1 / 64]
+
+
+def test_lambda_one_reproduces_a_hybrid_order_that_is_not_the_dense_order():
+    payload = result(HYBRID_ORDER, scores=RRF_SCORES, retriever="hybrid_rrf")
+    assert keys(rerank(payload, lambda_mult=1.0)) == ["a", "b", "d", "c"]
+
+
+def test_lambda_one_keeps_a_hybrid_top_hit_that_dense_ranks_last():
+    """The employer-question defect: a hybrid rank 1 must stay rank 1."""
+    order = [DISTINCT, *NEAR_DUPLICATES]
+    payload = result(order, scores=RRF_SCORES, retriever="hybrid_rrf")
+    assert keys(rerank(payload, lambda_mult=1.0)) == ["d", "a", "b", "c"]
+
+
+def test_lambda_one_reproduces_a_bm25_order():
+    order = [CANDIDATES[2], DISTINCT, CANDIDATES[0], CANDIDATES[1]]
+    payload = result(order, scores=[7.5, 4.0, 2.25, 1.0], retriever="bm25")
+    assert keys(rerank(payload, lambda_mult=1.0)) == ["c", "d", "a", "b"]
+
+
+def test_lambda_half_demotes_a_near_duplicate_of_the_top_hit():
+    """`b` is second by the retriever but nearly repeats `a`; `d` says something else."""
+    payload = result(HYBRID_ORDER, scores=RRF_SCORES, retriever="hybrid_rrf")
+    reranked = keys(rerank(payload, lambda_mult=0.5))
+    assert reranked[0] == "a"
+    assert reranked.index("d") < reranked.index("b")
+
+
+def test_equal_scores_keep_the_retriever_order():
+    payload = result(scores=[0.5, 0.5, 0.5, 0.5])
+    assert keys(rerank(payload, lambda_mult=1.0)) == ["a", "b", "c", "d"]
 
 
 def test_lambda_zero_promotes_the_distinct_candidate():
@@ -328,7 +370,7 @@ def test_empty_input_returns_empty_without_raising():
 
 
 def test_a_single_hit_is_returned_unchanged():
-    reranked = rerank(result([CANDIDATES[0]]))
+    reranked = rerank(result([CANDIDATES[0]], scores=[0.016], retriever="hybrid_rrf"))
     assert len(reranked.hits) == 1
     hit = reranked.hits[0]
     assert hit.chunk.id == "chunk-a"
@@ -349,15 +391,16 @@ def test_chunks_are_carried_through_untouched():
     assert hit.retriever == "dense"
 
 
-def test_embeds_the_augmented_text_not_the_cited_text():
+def test_judges_redundancy_on_the_augmented_text_not_the_cited_text(recorder):
     """`embed_text` is the contextual-retrieval seam and must win here too."""
     payload = result()
-    # Give the unrelated passage an augmented form that is pure query text: it
-    # is now the most relevant candidate even though its cited text is not.
-    payload["hits"][3]["chunk"]["embed_text"] = QUERY_TEXT
-    reranked = rerank(payload, lambda_mult=1.0)
-    assert keys(reranked)[0] == "d"
-    assert reranked.hits[0].chunk.text == DISTINCT[1]
+    payload["hits"][3]["chunk"]["embed_text"] = "Paris is in France."
+    reranked = rerank(payload, index=recorder, lambda_mult=0.5)
+    embedded = {text for text, _ in KindRecorder.calls}
+    assert "Paris is in France." in embedded
+    assert DISTINCT[1] not in embedded
+    moved = next(h for h in reranked.hits if h.chunk.id == "chunk-d")
+    assert moved.chunk.text == DISTINCT[1]
 
 
 # --------------------------------------------------------------------------
@@ -382,3 +425,41 @@ def test_explain_says_it_picks_top_k_from_the_pool():
     assert "pool" in exp.settings.lower()
     # The old wording described the bug: the retriever passing on only top_k.
     assert "give the retriever a top_k" not in (exp.tradeoff or "")
+
+
+# --------------------------------------------------------------------------
+# the run note and the explanation
+# --------------------------------------------------------------------------
+
+
+def run_context(tmp_path) -> RunContext:
+    return RunContext(output_dir=tmp_path, emit=lambda _: None, tmp=tmp_path)
+
+
+def test_the_note_says_how_many_moved_and_where_relevance_came_from(tmp_path):
+    ctx = run_context(tmp_path)
+    payload = result(HYBRID_ORDER, scores=RRF_SCORES, retriever="hybrid_rrf")
+    reranked = rerank(payload, ctx=ctx, lambda_mult=0.5, top_k=4)
+    moved = sum(1 for hit in reranked.hits if hit.rank != hit.prior_rank)
+    assert moved > 0
+    assert ctx.extras["meta"]["note"] == (
+        f"Reordered {moved} of the top 4 by variety, relevance from the "
+        "retriever's scores."
+    )
+
+
+def test_the_note_says_when_nothing_moved(tmp_path):
+    ctx = run_context(tmp_path)
+    rerank(ctx=ctx, lambda_mult=1.0, top_k=2)
+    assert ctx.extras["meta"]["note"] == (
+        "Kept the retriever's order for the top 2, relevance from the "
+        "retriever's scores."
+    )
+
+
+def test_explain_says_relevance_comes_from_the_retriever():
+    exp = MmrRerank().explain(MmrRerankConfig())
+    text = f"{exp.settings} {exp.tradeoff}".lower()
+    assert "retriever's score" in text
+    assert "recomput" not in text
+    assert "\u2014" not in text and "\u2013" not in text

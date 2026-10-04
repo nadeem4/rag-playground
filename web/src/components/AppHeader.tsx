@@ -118,6 +118,19 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         <DocumentControl />
       </div>
       <div data-testid="header-controls" className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5 md:ml-0">
+        <a
+          href="/privacy"
+          aria-label="Your data and privacy"
+          aria-current={path === "/privacy" ? "page" : undefined}
+          className={cn(
+            "flex h-row-compact items-center rounded-control px-1 text-sm underline underline-offset-4 whitespace-nowrap",
+            path === "/privacy" ? "font-semibold text-fg" : "text-fg-muted hover:text-fg",
+          )}
+        >
+          {/* Short below lg, where the one header row has little room. */}
+          <span aria-hidden className="lg:hidden">Privacy</span>
+          <span aria-hidden className="hidden lg:inline">Your data and privacy</span>
+        </a>
         <ApiKeyControl />
         <DisplaySettings />
       </div>

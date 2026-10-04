@@ -269,6 +269,13 @@ describe("AppHeader with the lessons hidden", () => {
     expect(screen.getByRole("link", { name: "Library" }).getAttribute("aria-current")).toBe("page")
   })
 
+  it("links Your data and privacy from its right side, current on /privacy", () => {
+    header("/privacy", false)
+    const link = within(screen.getByTestId("header-controls")).getByRole("link", { name: "Your data and privacy" })
+    expect(link.getAttribute("href")).toBe("/privacy")
+    expect(link.getAttribute("aria-current")).toBe("page")
+  })
+
   it("marks Read as current on /read", () => {
     header("/read", false)
     expect(screen.getByRole("link", { name: "Read" }).getAttribute("aria-current")).toBe("page")

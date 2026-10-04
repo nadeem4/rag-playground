@@ -5,6 +5,7 @@ import { Home } from "@/routes/Home"
 import { Learn } from "@/routes/Learn"
 import { Lessons } from "@/routes/Lessons"
 import { Library } from "@/routes/Library"
+import { Privacy } from "@/routes/Privacy"
 import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
 import { LESSONS_ENABLED } from "@/state/lessons"
@@ -57,6 +58,11 @@ describe("routes with the lessons off", () => {
   it("renders Library at /library", () => {
     expect(pageFor("/library", false)).toBe(Library)
     expect(pageFor("/library", true)).toBe(Library)
+  })
+
+  it("renders the privacy page at /privacy", () => {
+    expect(pageFor("/privacy", false)).toBe(Privacy)
+    expect(pageFor("/privacy", true)).toBe(Privacy)
   })
 
   it("renders the Read page at /read", () => {

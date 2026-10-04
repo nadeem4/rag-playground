@@ -1,6 +1,7 @@
 import { useSamples } from "@/api/samples"
 import type { Registry, SampleCard } from "@/api/types"
 import { useRegistry } from "@/api/useRegistry"
+import { SiteFooter } from "@/components/SiteFooter"
 import { Button } from "@/components/ui/button"
 import { postsFor, type Post, type PostStage } from "@/learn/posts"
 import { sampleGraph } from "@/state/graph"
@@ -118,6 +119,7 @@ export function Read() {
           <StageSection key={s.stage} section={s} registry={reg.registry} samples={samples} />
         ))}
       </div>
+      <SiteFooter />
     </main>
   )
 }

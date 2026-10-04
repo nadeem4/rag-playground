@@ -1,5 +1,4 @@
-import { useId, useMemo, useRef, useState, type CSSProperties } from "react"
-import { Plus } from "lucide-react"
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import { useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
@@ -12,8 +11,11 @@ import { useRun } from "@/api/useRun"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { goldRank } from "@/components/ask/Transcript"
 import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
+import { AddRecipeCard } from "@/components/compare/AddRecipeCard"
+import { RecipeCard, type CardTag } from "@/components/compare/RecipeCard"
 import { RecipeHead } from "@/components/compare/RecipeHead"
 import { RetrieveEvidence } from "@/components/compare/RetrieveEvidence"
+import { ValueEditor } from "@/components/compare/ValueEditor"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
@@ -22,9 +24,7 @@ import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/I
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { chunkStats } from "@/components/inspectors/spans"
 import type { InspectorStatus } from "@/components/inspectors/status"
-import { transformLabel } from "@/components/pipeline/NodeCard"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
-import { SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/SegmentedControl"
 import {
@@ -40,7 +40,20 @@ import {
   type PipelineGraph,
 } from "@/state/graph"
 import { useDocument } from "@/state/document"
-import { chunkFinding, RECIPE_TITLES, recipeNames, rejectedRecipe, retrieveFinding, type Finding } from "@/state/compare"
+import {
+  chunkFinding,
+  MAX_RECIPES,
+  planSentence,
+  RECIPE_TITLES,
+  recipeNames,
+  rejectedRecipe,
+  resultsMode,
+  retrieveFinding,
+  strategyName,
+  type Finding,
+  type ResultsMode,
+} from "@/state/compare"
+import { recipeSentence } from "@/state/recipeSentence"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
@@ -48,11 +61,12 @@ import { RegistryScreen } from "./Shell"
 import { useColumnsFit } from "./useColumnsFit"
 
 /**
- * Compare: run one node of the Build pipeline over N recipes and show the
- * results side by side. Each recipe is a column: its name in words, its
- * editor (folded once a run starts), then the output of the node the run goes
- * through, so a recipe and what it produced read together. Where the columns
- * do not fit side by side, one recipe shows at a time, chosen above the grid.
+ * Compare: run one node of the Build pipeline over up to ten recipes. Before
+ * the run the recipes are equal cards, each a sentence whose values open one
+ * floating editor, under a plan sentence. After it, each recipe is a column:
+ * its name in words, then the output of the node the run goes through. Where
+ * the columns do not fit side by side, one recipe shows at a time, chosen
+ * above the grid.
  */
 
 export function Compare() {
@@ -153,6 +167,87 @@ const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven
 
 const finished = (n?: NodeState) => n !== undefined && (n.status === "done" || n.status === "cached")
 
+/** A recipe on the cards: a stable key, so editing never redraws its card, and what it was seeded or opened as. */
+interface Item {
+  key: number
+  variant: Variant
+  /** The recipe as seeded or opened; null for one added on the page. */
+  seed: Variant | null
+}
+
+/** One line on a strategy for the strategy editor, from the prototype; the registry's summary otherwise. */
+const GLOSS: Record<string, string> = {
+  recursive_character: "Cuts at paragraphs, then lines, then spaces, to a size in characters.",
+  sentence_window: "Groups whole sentences, so no sentence is ever cut.",
+  layout_blocks: "Follows the blocks the parser found, and keeps tables whole.",
+  token_based: "Cuts every so many tokens, wherever that falls.",
+  markdown_header: "Starts a new piece at each heading.",
+  hybrid_rrf: "Meaning and keyword search, fused into one list.",
+  dense: "Meaning only.",
+  bm25: "Keywords only.",
+}
+
+/** The prototype's example recipes per stage, in its order, as changes to each strategy's defaults. */
+const EXAMPLES: Partial<Record<string, [string, Record<string, unknown>][]>> = {
+  chunk: [
+    ["recursive_character", { chunk_size: 200, chunk_overlap: 40 }],
+    ["sentence_window", {}],
+    ["layout_blocks", {}],
+    ["recursive_character", { chunk_size: 800, chunk_overlap: 160 }],
+    ["recursive_character", { chunk_size: 100, chunk_overlap: 20 }],
+    ["sentence_window", { sentences_per_chunk: 2, overlap_sentences: 0 }],
+    ["token_based", {}],
+    ["markdown_header", {}],
+    ["token_based", { max_tokens: 32, overlap: 8 }],
+  ],
+  retrieve: [
+    ["hybrid_rrf", {}],
+    ["dense", {}],
+    ["bm25", {}],
+    ["hybrid_rrf", { rrf_k: 10 }],
+    ["hybrid_rrf", { query_expansion: "prf" }],
+    ["hybrid_rrf", { rrf_k: 200 }],
+    ["dense", { top_k: 3 }],
+    ["bm25", { top_k: 1 }],
+    ["dense", { top_k: 1 }],
+    ["hybrid_rrf", { rrf_k: 20, query_expansion: "prf" }],
+  ],
+}
+
+/** Why someone would add a suggested recipe, in one line. */
+function reasonFor(v: Variant, gloss: string): string {
+  const c = v.config
+  if (v.transform === "recursive_character" && typeof c.chunk_size === "number") return c.chunk_size > 400 ? "Fewer, longer pieces." : "More, shorter pieces."
+  if (v.transform === "dense") return typeof c.top_k === "number" && c.top_k < 5 ? "Meaning only, and a short list." : "Meaning only. No keyword match."
+  if (v.transform === "bm25") return "Keywords only. Finds exact words."
+  if (v.transform === "hybrid_rrf") return c.query_expansion === "prf" ? "Adds words to the question first." : "Changes how the two lists are fused."
+  return gloss
+}
+
+/** Up to three recipes not already on the page: the stage's seeds, then the prototype's examples. */
+function suggestRecipes(target: GraphNode, transforms: TransformInfo[], have: Variant[]): Variant[] {
+  const known = new Set(have.map((v) => JSON.stringify(v)))
+  const examples = (EXAMPLES[target.stage] ?? []).flatMap(([t, c]): Variant[] => {
+    const info = transforms.find((x) => x.name === t)
+    return info ? [{ transform: t, config: { ...defaultConfig(info), ...c } }] : []
+  })
+  const out: Variant[] = []
+  for (const v of [...seedVariants(target, transforms), ...examples, ...transforms.map((t) => ({ transform: t.name, config: defaultConfig(t) }))]) {
+    const k = JSON.stringify(v)
+    if (known.has(k)) continue
+    known.add(k)
+    out.push(v)
+    if (out.length === 3) break
+  }
+  return out
+}
+
+const PLACEHOLDER: Record<ResultsMode, string> = {
+  columns: "After the run, this recipe becomes a column.",
+  tabs: "After the run, this recipe gets its own tab.",
+  overview: "After the run, this recipe is a row in the results table.",
+}
+
 function Sweep({
   registry,
   graph,
@@ -180,7 +275,17 @@ function Sweep({
   const [through, setThrough] = useState<string>(() =>
     (preset || target.stage === "index" || target.stage === "retrieve") && terminal && downstream.includes(terminal) ? terminal.id : target.id,
   )
-  const [variants, setVariants] = useState<Variant[]>(() => (preset ? matryoshkaVariants(target, native) : seedVariants(target, transforms)))
+  const nextKey = useRef(0)
+  const [items, setItems] = useState<Item[]>(() =>
+    (preset ? matryoshkaVariants(target, native) : seedVariants(target, transforms)).map((v) => ({ key: nextKey.current++, variant: v, seed: v })),
+  )
+  const variants = items.map((x) => x.variant)
+  // Before the run the recipes are cards; after it, the results.
+  const [phase, setPhase] = useState<"setup" | "results">("setup")
+  // The one open editor: which card, which value.
+  const [editing, setEditing] = useState<{ key: number; field: string } | null>(null)
+  // The server's message about one recipe, under that card's sentence.
+  const [cardErrors, setCardErrors] = useState<Record<number, string>>({})
   // What the last run ran: its recipes, where it stopped, and on which document.
   const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string; sha: string }>({ variants: [], through, sha: "" })
   const [runId, setRunId] = useState<string | null>(null)
@@ -190,13 +295,21 @@ function Sweep({
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
   const scroller = useRef<HTMLDivElement>(null)
-  const fit = useColumnsFit(scroller, Math.max(variants.length, 1))
-  // The recipe shown when the columns do not fit, clamped when one is removed.
+  const addRef = useRef<HTMLDivElement>(null)
+  const cards = useRef(new Map<number, HTMLElement>())
+  // A value to focus once the next render has drawn it (after a strategy is picked).
+  const focusNext = useRef<{ key: number; field: string } | null>(null)
+  const n = variants.length
+  const fitAll = useColumnsFit(scroller, Math.max(phase === "results" ? submitted.variants.length : n, 1))
+  // The recipe shown when the columns do not fit.
   const [chosen, setChosen] = useState(0)
-  const shown = Math.min(chosen, variants.length - 1)
-  // Which editors are unfolded: all of them before the first run, none once Run is pressed.
-  const [open, setOpen] = useState<boolean[]>(() => variants.map(() => true))
-  const editorId = useId()
+
+  useEffect(() => {
+    const want = focusNext.current
+    if (!want) return
+    focusNext.current = null
+    cards.current.get(want.key)?.querySelector<HTMLElement>(`[data-value="${want.field}"]`)?.focus({ preventScroll: true })
+  })
 
   const shownThrough = graph.nodes.find((n) => n.id === submitted.through) ?? target
   const tally = runId ? tallySweep(run.variants) : null
@@ -273,8 +386,9 @@ function Sweep({
 
   async function sweep() {
     setError(null)
+    setCardErrors({})
+    setEditing(null)
     setSubmitting(true)
-    setOpen(variants.map(() => false))
     try {
       const { run_id } = await api.createSweep(
         {
@@ -287,8 +401,11 @@ function Sweep({
       )
       setSubmitted({ variants, through, sha })
       setRunId(run_id)
+      setChosen(0)
+      setPhase("results")
     } catch (err) {
-      // The run never started: open the recipe the error belongs to, or every recipe when it cannot be told.
+      // The run never started: back on the cards, the message goes under the recipe it belongs to, with that editor open.
+      setPhase("setup")
       const routed = routeRunError(err, graph)
       if (routed.kind === "fields") {
         const fields = Object.keys(routed.errors)
@@ -296,34 +413,59 @@ function Sweep({
         const node = graph.nodes.find((x) => x.id === routed.nodeId)
         const schema = at === null ? undefined : infoFor(registry, { stage: target.stage, transform: variants[at].transform })?.config_schema
         const title = (k: string) => RECIPE_TITLES[k] ?? schema?.properties?.[k]?.title ?? k
-        const where = at === null ? (node ? titleFor(node) : routed.nodeId) : `Recipe ${at + 1}, ${names[at].name}`
-        setError(Object.entries(routed.errors).map(([k, m]) => (k ? `${where}, ${title(k)}: ${m.join(" ")}` : `${where}: ${m.join(" ")}`)).join(" "))
-        setOpen(variants.map((_, i) => at === null || i === at))
-        if (at !== null) setChosen(at)
+        if (at === null) {
+          const where = node ? titleFor(node) : routed.nodeId
+          setError(Object.entries(routed.errors).map(([k, m]) => (k ? `${where}, ${title(k)}: ${m.join(" ")}` : `${where}: ${m.join(" ")}`)).join(" "))
+        } else {
+          const key = items[at].key
+          const field = fields[0]?.split(".")[0]
+          setCardErrors({ [key]: Object.entries(routed.errors).map(([k, m]) => (k ? `${title(k)}: ${m.join(" ")}` : m.join(" "))).join(" ") })
+          setEditing({ key, field: field && schema?.properties?.[field] ? field : "transform" })
+        }
       } else {
         setError(routed.message)
-        setOpen(variants.map(() => true))
       }
     } finally {
       setSubmitting(false)
     }
   }
 
-  const reshape = (next: Variant[], nextOpen: boolean[]) => {
-    setVariants(next)
-    setOpen(nextOpen)
-    // A different number of variants no longer lines up with the results.
-    if (next.length !== variants.length) {
-      setRunId(null)
-      setSubmitted({ variants: [], through, sha: "" })
-    }
+  const own = (v: Variant) => same(v, { transform: target.transform, config: target.config })
+  const ownAt = variants.findIndex(own)
+  const phrases = recipeNames(variants, target.stage, registry, ownAt === -1 ? undefined : ownAt)
+  const mode = resultsMode(n, fitAll)
+  const plan = planSentence(
+    target.stage,
+    variants.map((v, i) => ({ phrase: phrases[i].phrase, transform: v.transform, config: v.config })),
+    mode,
+    3,
+  )
+  const strategies = transforms.map((t) => ({ name: t.name, plain: strategyName(target.stage, t.name), gloss: GLOSS[t.name] ?? t.summary ?? "" }))
+
+  const setVariant = (key: number, v: Variant) => {
+    setItems((xs) => xs.map((x) => (x.key === key ? { ...x, variant: v } : x)))
+    setCardErrors((e) => (key in e ? Object.fromEntries(Object.entries(e).filter(([k]) => Number(k) !== key)) : e))
+  }
+  const add = (v: Variant) => {
+    const key = nextKey.current++
+    setItems((xs) => [...xs, { key, variant: v, seed: null }])
+    // A recipe added opens on its strategy, the first choice to make.
+    setEditing({ key, field: "transform" })
+  }
+  const remove = (key: number) => {
+    setItems((xs) => xs.filter((x) => x.key !== key))
+    if (editing?.key === key) setEditing(null)
+    addRef.current?.querySelector<HTMLElement>("button:last-of-type")?.focus({ preventScroll: true })
+  }
+  const changeRecipes = () => {
+    setPhase("setup")
+    setRunId(null)
+    setSubmitted({ variants: [], through, sha: "" })
   }
 
-  const visible = fit ? variants.map((_, i) => i) : [shown]
+  const visible = fitAll ? submitted.variants.map((_, i) => i) : [Math.min(chosen, Math.max(submitted.variants.length - 1, 0))]
+  const shown = visible[0] ?? 0
   const grid: CSSProperties = { gridTemplateColumns: `repeat(${Math.max(visible.length, 1)}, minmax(0, 1fr))` }
-  const names = recipeNames(variants, target.stage, registry)
-  const own = (v: Variant) => same(v, { transform: target.transform, config: target.config })
-  const labelFor = target.stage === "retrieve" ? (name: string) => RETRIEVAL_LABEL[name] ?? name : transformLabel
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
   const finding = run.closed ? findingFor() : null
@@ -331,17 +473,23 @@ function Sweep({
     const rank = answerRank(rows)
     return rank === null ? null : (rows?.find((r) => r.rank === rank)?.chunk_id ?? null)
   }
-  const n = submitted.variants.length
+  const ran = submitted.variants.length
   // On Retrieve every recipe searches the one chunk set, so a colour is the same piece in every column.
   const note =
     finding && target.stage === "retrieve" && searched !== null
-      ? `The colours are piece numbers, the same in every column, because ${n === 2 ? "both" : `all ${NUMBER_WORDS[n] ?? n}`} recipes search the same ${searched} ${searched === 1 ? "piece" : "pieces"}.`
+      ? `The colours are piece numbers, the same in every column, because ${ran === 2 ? "both" : `all ${NUMBER_WORDS[ran] ?? ran}`} recipes search the same ${searched} ${searched === 1 ? "piece" : "pieces"}.`
       : null
+  const suggestions = suggestRecipes(target, transforms, variants).map((v) => ({
+    name: recipeNames([...variants, v], target.stage, registry)[n].name,
+    reason: reasonFor(v, GLOSS[v.transform] ?? transforms.find((t) => t.name === v.transform)?.summary ?? ""),
+    variant: v,
+  }))
+  const firstDefaults = () => add({ transform: transforms[0].name, config: defaultConfig(transforms[0]) })
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-surface">
-      <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
-        <div className="flex min-w-0 basis-full flex-wrap items-baseline gap-x-3 md:basis-auto">
+      <div ref={scroller} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <div className="flex min-w-0 flex-col gap-1 px-3 pt-3 pb-2">
           <h1 className="text-xl font-semibold">Compare</h1>
           {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
           <p className="text-sm text-fg-muted">
@@ -367,7 +515,9 @@ function Sweep({
             ) : null}
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+
+        {/* The tools stay in reach while ten cards scroll under them. */}
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
           <SegmentedControl
             label="Step to compare"
             options={choices.map((n) => ({ value: n.id, label: titleFor(n), disabled: busy }))}
@@ -380,7 +530,7 @@ function Sweep({
               <label htmlFor={throughId} className="text-sm whitespace-nowrap text-fg-muted">
                 Show through
               </label>
-              <select id={throughId} className={`${CONTROL} w-auto min-w-[10rem]`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
+              <select id={throughId} className={`${CONTROL} w-auto min-w-[10rem]`} value={through} disabled={busy || phase === "results"} onChange={(e) => setThrough(e.target.value)}>
                 {downstream.map((n) => (
                   <option key={n.id} value={n.id}>
                     {titleFor(n)}
@@ -390,143 +540,169 @@ function Sweep({
               </select>
             </div>
           ) : null}
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => {
-              reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }], [...open, true])
-              // Where one recipe shows at a time, show the new one.
-              setChosen(variants.length)
-            }}
-          >
-            <Plus aria-hidden strokeWidth={1.75} />
-            Add a recipe
-          </Button>
-          {/* Below md the run buttons take their own full-width row, so Sweep is never pushed off a phone screen. */}
-          <div className="flex basis-full gap-2 md:basis-auto">
-            {busy && runId ? (
+          {/* Below md the run buttons take their own full-width row, so Run is never pushed off a phone screen. */}
+          <div className="flex basis-full items-center gap-2 md:ml-auto md:basis-auto">
+            {phase === "results" && busy && runId ? (
               <Button variant="outline" size="sm" className="flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
                 Cancel
               </Button>
             ) : null}
+            {phase === "results" ? (
+              <Button variant="outline" size="sm" className="flex-1 md:flex-none" onClick={changeRecipes}>
+                Change recipes
+              </Button>
+            ) : null}
             {noDocument ? <span className="self-center text-xs text-fg-muted">Needs a document.</span> : null}
-            <Button size="sm" className="flex-1 md:flex-none" disabled={busy || variants.length === 0 || noDocument} onClick={() => void sweep()}>
-              {busy ? "Running" : `Run ${variants.length} ${variants.length === 1 ? "recipe" : "recipes"}`}
+            <Button size="sm" className="flex-1 md:flex-none" disabled={busy || n === 0 || noDocument} onClick={() => void sweep()}>
+              {busy ? "Running" : `Run ${n} ${n === 1 ? "recipe" : "recipes"}`}
             </Button>
           </div>
         </div>
-      </div>
 
-      <div ref={scroller} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <DocumentNote action="run these recipes" changed={runId !== null && submitted.sha !== "" && submitted.sha !== sha} className="mx-3 mt-3" />
-        {/* The finding says what differs before any column does; the tally under it is the quiet fact of what ran. */}
-        <div className="flex flex-col gap-1 border-b border-hairline px-3 py-3" aria-live="polite">
-          {error ? (
-            <p role="alert" className="text-sm break-words text-danger">
-              {error}
-            </p>
-          ) : tally ? (
-            <>
-              {finding ? (
+
+        {phase === "setup" ? (
+          <>
+            <div className="flex flex-col gap-1 px-3 py-3" aria-live="polite">
+              {error ? (
+                <p role="alert" className="text-sm break-words text-danger">
+                  {error}
+                </p>
+              ) : null}
+              <p data-testid="plan" className="m-0 max-w-[52ch] font-sans text-lg text-balance">
+                {plan.plan}
+              </p>
+              {plan.sub ? <p className="m-0 max-w-[70ch] text-sm text-fg-muted">{plan.sub}</p> : null}
+            </div>
+            <div data-testid="recipe-cards" className="grid auto-rows-auto grid-cols-1 gap-4 px-3 pb-6 md:auto-rows-fr md:grid-cols-2 lg:grid-cols-3">
+              {items.map((item, i) => {
+                const v = item.variant
+                const info = infoFor(registry, { stage: target.stage, transform: v.transform })
+                const schema = info?.config_schema ?? { type: "object", properties: {} }
+                const mine = own(v)
+                const tag: CardTag = mine ? "Your pipeline" : item.seed === null ? "New" : !same(item.seed, v) ? "Edited" : `Recipe ${i + 1}`
+                const open = editing?.key === item.key ? editing.field : null
+                return (
+                  <RecipeCard
+                    key={item.key}
+                    cardRef={(el) => {
+                      if (el) cards.current.set(item.key, el)
+                      else cards.current.delete(item.key)
+                    }}
+                    index={i}
+                    own={mine}
+                    tag={tag}
+                    parts={recipeSentence(v, schema, strategyName(target.stage, v.transform))}
+                    code={v.transform}
+                    stage={target.stage}
+                    placeholder={PLACEHOLDER[mode]}
+                    openField={open}
+                    onOpen={(field) => setEditing(open === field ? null : { key: item.key, field })}
+                    onRemove={mine || n < 2 || busy ? undefined : () => remove(item.key)}
+                    error={cardErrors[item.key] ?? null}
+                    editor={
+                      open ? (
+                        <ValueEditor
+                          key={open}
+                          field={open}
+                          schema={schema}
+                          config={v.config}
+                          onChange={(config) => setVariant(item.key, { ...v, config })}
+                          transform={v.transform}
+                          strategies={strategies}
+                          onPick={(name) => {
+                            const next = transforms.find((t) => t.name === name)
+                            if (next && name !== v.transform) setVariant(item.key, { transform: name, config: defaultConfig(next) })
+                            setEditing(null)
+                            focusNext.current = { key: item.key, field: "transform" }
+                          }}
+                          onClose={() => setEditing(null)}
+                        />
+                      ) : null
+                    }
+                  />
+                )
+              })}
+              <div ref={addRef} className="contents">
+                <AddRecipeCard count={n} max={MAX_RECIPES} suggestions={suggestions} onAdd={add} onDefaults={firstDefaults} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* The finding says what differs before any column does; the tally under it is the quiet fact of what ran. */}
+            <div className="flex flex-col gap-1 border-b border-hairline px-3 py-3" aria-live="polite">
+              {tally ? (
                 <>
-                  <p data-testid="compare-finding" className="m-0 max-w-[52ch] font-sans text-lg text-balance">
-                    {finding.finding}
-                  </p>
-                  {finding.sub ? (
-                    <p data-testid="compare-sub" className="m-0 max-w-[70ch] text-sm text-fg-muted">
-                      {finding.sub}
-                    </p>
+                  {finding ? (
+                    <>
+                      <p data-testid="compare-finding" className="m-0 max-w-[52ch] font-sans text-lg text-balance">
+                        {finding.finding}
+                      </p>
+                      {finding.sub ? (
+                        <p data-testid="compare-sub" className="m-0 max-w-[70ch] text-sm text-fg-muted">
+                          {finding.sub}
+                        </p>
+                      ) : null}
+                    </>
                   ) : null}
+                  <p data-testid="tally" className="m-0 text-xs text-fg-muted">
+                    <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))} />
+                    {running !== null ? ` Running recipe ${running + 1} of ${submitted.variants.length}.` : run.closed ? "" : " Starting."}
+                  </p>
+                  {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
                 </>
               ) : null}
-              <p data-testid="tally" className="m-0 text-xs text-fg-muted">
-                <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))} />
-                {running !== null ? ` Running recipe ${running + 1} of ${submitted.variants.length}.` : run.closed ? "" : " Starting."}
-              </p>
-              {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
-            </>
-          ) : (
-            <p className="text-sm text-fg-muted">
-              Each recipe runs the pipeline through the {titleFor(graph.nodes.find((n) => n.id === through) ?? target)} step. Steps above {verb} are shared, so they run once and the rest come from the cache.
-            </p>
-          )}
-        </div>
+            </div>
 
-        {fit ? null : (
-          <div className="flex border-b border-hairline px-3 py-2">
-            <SegmentedControl
-              label="Recipe shown"
-              options={names.map((n, i) => ({ value: String(i), label: n.short }))}
-              value={String(shown)}
-              onChange={(v) => setChosen(Number(v))}
-            />
-          </div>
-        )}
-
-        <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
-          {visible.map((i) => {
-            const s = stateOf(i)
-            const out = payload(ids[i]?.through)
-            const chunks = payload(ids[i]?.chunks)
-            const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
-            const agreement =
-              base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
-            const unfolded = open[i] ?? true
-            return (
-              <section key={i} aria-label={names[i].name} className="flex min-w-0 flex-col gap-3 bg-surface p-3">
-                <RecipeHead
-                  name={names[i].name}
-                  code={names[i].code}
-                  own={own(variants[i])}
-                  edited={submitted.variants[i] !== undefined && !same(submitted.variants[i], variants[i])}
-                  open={unfolded}
-                  controls={`${editorId}-${i}`}
-                  onToggle={() => setOpen(variants.map((_, j) => (j === i ? !unfolded : (open[j] ?? true))))}
+            {fitAll ? null : (
+              <div className="flex border-b border-hairline px-3 py-2">
+                <SegmentedControl
+                  label="Recipe shown"
+                  options={submittedNames.map((n, i) => ({ value: String(i), label: n.short }))}
+                  value={String(shown)}
+                  onChange={(v) => setChosen(Number(v))}
                 />
-                <div id={`${editorId}-${i}`}>
-                  {unfolded ? (
-                    <SweepControl
-                      variant={variants[i]}
-                      transforms={transforms}
-                      labelFor={labelFor}
-                      onChange={(nv) => setVariants(variants.map((x, j) => (j === i ? nv : x)))}
-                      onRemove={
-                        variants.length > 1 && !busy
-                          ? () =>
-                              reshape(
-                                variants.filter((_, j) => j !== i),
-                                variants.map((_, j) => open[j] ?? true).filter((_, j) => j !== i),
-                              )
-                          : undefined
+              </div>
+            )}
+
+            <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
+              {visible.map((i) => {
+                const s = stateOf(i)
+                const out = payload(ids[i]?.through)
+                const chunks = payload(ids[i]?.chunks)
+                const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
+                const agreement =
+                  base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
+                return (
+                  <section key={i} aria-label={submittedNames[i].name} className="flex min-w-0 flex-col gap-3 bg-surface p-3">
+                    <RecipeHead name={submittedNames[i].name} code={submittedNames[i].code} own={own(submitted.variants[i])} />
+                    <VariantResult
+                      state={s}
+                      pending
+                      node={shownThrough}
+                      type={
+                        shownThrough.id === target.id
+                          ? (infoFor(registry, { stage: target.stage, transform: submitted.variants[i]?.transform ?? target.transform })?.output ?? "unknown")
+                          : (infoFor(registry, shownThrough)?.output ?? "unknown")
                       }
+                      data={out.data}
+                      status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
+                      chunks={chunks.data}
+                      agreement={
+                        agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
+                      }
+                      embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
+                      hits={hitRowLists[i]}
+                      answer={answerId(hitRowLists[i])}
                     />
-                  ) : null}
-                </div>
-                <VariantResult
-                  state={s}
-                  pending={runId !== null && i < submitted.variants.length}
-                  node={shownThrough}
-                  type={
-                    shownThrough.id === target.id
-                      ? (infoFor(registry, { stage: target.stage, transform: submitted.variants[i]?.transform ?? target.transform })?.output ?? "unknown")
-                      : (infoFor(registry, shownThrough)?.output ?? "unknown")
-                  }
-                  data={out.data}
-                  status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
-                  chunks={chunks.data}
-                  agreement={
-                    agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
-                  }
-                  embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
-                  hits={hitRowLists[i]}
-                  answer={answerId(hitRowLists[i])}
-                />
-              </section>
-            )
-          })}
-        </div>
-        {note ? <p className="px-3 py-3 text-sm text-fg-muted">{note}</p> : null}
+                  </section>
+                )
+              })}
+            </div>
+            {note ? <p className="px-3 py-3 text-sm text-fg-muted">{note}</p> : null}
+          </>
+        )}
       </div>
     </main>
   )

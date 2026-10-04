@@ -131,7 +131,7 @@ describe("no em-dashes or en-dashes in visible text", () => {
     serve([SOURCE])
     render(<Compare />)
     await waitFor(() => expect(visibleText()).toMatch(/Run \d+ recipes?/))
-    expect(visibleText()).toMatch(/Not run yet/)
+    expect(visibleText()).toMatch(/You are about to compare/)
     expect(visibleText()).not.toMatch(DASH)
   })
 

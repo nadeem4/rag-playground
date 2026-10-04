@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
-import { chunkFinding, MAX_RECIPES, recipeNames, retrieveFinding } from "./compare"
+import { chunkFinding, MAX_RECIPES, planSentence, recipeNames, retrieveFinding } from "./compare"
 import { defaultConfig } from "./graph"
 
 const registry = liveRegistry as unknown as Registry
@@ -190,5 +190,32 @@ describe("measured counts only", () => {
     expect(f!.finding).toMatch(/^Neither returns the answer\. /)
     const three = retrieveFinding(lists, names, [null, null, null], 6, transforms, { goldKnown: true })
     expect(three!.finding).toMatch(/^None of them returns the answer\. /)
+  })
+})
+
+describe("planSentence", () => {
+  const rc = (size: number, own = false) => ({ phrase: own ? "Your pipeline" : `Recursive at ${size} characters`, transform: "recursive_character", config: { chunk_size: size } })
+  const other = (phrase: string, transform: string) => ({ phrase, transform, config: {} })
+  const sevenChunkItems = [rc(400, true), rc(200), other("By sentence at 5", "sentence_window"), other("By layout block", "layout_blocks"), rc(800), rc(100), other("Fixed 96-token pieces", "token_based")]
+
+  it("names the pattern when many recipes vary the size, and says the results open as a table", () => {
+    const p = planSentence("chunk", sevenChunkItems, "overview", 3)
+    expect(p.plan).toBe("You are about to see how size changes the pieces, from 100 to 800 characters, and how three other strategies compare.")
+    expect(p.sub).toBe("After the run, the seven recipes open as a table you can sort, and you pick up to three to read side by side.")
+    expect(planSentence("chunk", sevenChunkItems, "overview", 1).sub).toBe("After the run, the seven recipes open as a table you can sort, and you open any one to read it.")
+  })
+
+  it("lists three recipes or fewer, and says each becomes a column or a tab", () => {
+    const three = [rc(400, true), rc(200), other("By sentence at 5", "sentence_window")]
+    const p = planSentence("chunk", three, "columns", 3)
+    expect(p.plan).toBe("You are about to compare your pipeline, Recursive at 200 characters and By sentence at 5.")
+    expect(p.sub).toBe("After the run, each recipe becomes a column with its pieces, numbers and a chunk bar, and a sentence up here says what changed.")
+    expect(planSentence("chunk", three, "tabs", 1).sub).toMatch(/^After the run, each recipe gets a tab with its pieces/)
+  })
+
+  it("counts the ways on Retrieve, and runs one recipe on its own", () => {
+    const five = ["Your pipeline", "Dense", "BM25", "Dense with top 3", "BM25 with top 1"].map((x) => other(x, "dense"))
+    expect(planSentence("retrieve", five, "overview", 2).plan).toBe("You are about to compare five ways to search the same pieces.")
+    expect(planSentence("chunk", [rc(400, true)], "columns", 3)).toEqual({ plan: "You are about to run your pipeline on its own. Add a recipe to compare it with.", sub: null })
   })
 })

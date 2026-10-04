@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type CSSProperties } from "react"
+import { useId, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Plus } from "lucide-react"
 
 import { useApiKey } from "@/api/apiKey"
@@ -8,9 +8,10 @@ import type { GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
 import { usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
+import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
-import { hitIds, topKAgreement } from "@/components/inspectors/hits"
+import { agreementText, compareLists, hitIds } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import type { InspectorStatus } from "@/components/inspectors/status"
@@ -18,6 +19,7 @@ import { fmtMs } from "@/components/pipeline/NodeCard"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
+import { SegmentedControl } from "@/components/ui/SegmentedControl"
 import {
   ancestors,
   columnOrder,
@@ -34,15 +36,15 @@ import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
 import { RegistryScreen } from "./Shell"
+import { useColumnsFit } from "./useColumnsFit"
 
 /**
  * Compare: sweep one node of the Build pipeline over N variants and show the
  * results side by side. Each variant sits in its own column, its editor above
  * the output of the node the sweep runs through, so a config and what it
- * produced read together.
+ * produced read together. Where the columns do not fit side by side, one
+ * recipe shows at a time, chosen above the grid.
  */
-/** A column's minimum width in px: room for a slip, so a passage keeps about 40 characters a line at 1440 with three columns. */
-export const COLUMN_MIN = 420
 
 export function Compare() {
   const reg = useRegistry()
@@ -80,11 +82,53 @@ export function Compare() {
   return <Sweep key={target.id} registry={reg.registry} graph={graph} target={target} choices={choices} onChoose={choose} preset={preset} native={native} />
 }
 
-/** At most three columns: the node's own variant first, then the next two transforms of its stage in registry order, on defaults. */
+/** Per chunker: its size field, then its overlap field when it has one. */
+const SIZE_FIELDS: Record<string, string[]> = {
+  recursive_character: ["chunk_size", "chunk_overlap"],
+  token_based: ["max_tokens", "overlap"],
+  sentence_window: ["sentences_per_chunk", "overlap_sentences"],
+  layout_blocks: ["max_tokens"],
+  markdown_header: ["max_tokens"],
+}
+
+/** The config with its size halved (at least 1) and its overlap halved (at least 0); null when a field is not a number. */
+function halved(transform: string, config: Record<string, unknown>): Record<string, unknown> | null {
+  const [size, overlap] = SIZE_FIELDS[transform] ?? []
+  if (!size || typeof config[size] !== "number") return null
+  const next = { ...config, [size]: Math.max(1, Math.floor((config[size] as number) / 2)) }
+  if (overlap && typeof config[overlap] === "number") next[overlap] = Math.max(0, Math.floor((config[overlap] as number) / 2))
+  return next
+}
+
+/**
+ * At most three columns, the node's own recipe first. A Chunk node then gets
+ * the same recipe at half the size, and By sentence on defaults (Recursive when
+ * it already cuts by sentence), so the columns differ on the sample. Any other
+ * node, or a chunker without a known size field, gets the next two transforms
+ * of its stage in registry order, on defaults.
+ */
 export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Variant[] {
   const own: Variant = { transform: target.transform, config: target.config }
+  if (target.stage === "chunk") {
+    const half = halved(target.transform, target.config)
+    const third = transforms.find((t) => t.name === (target.transform === "sentence_window" ? "recursive_character" : "sentence_window"))
+    if (half && third) return [own, { transform: target.transform, config: half }, { transform: third.name, config: defaultConfig(third) }]
+  }
   const others = transforms.filter((t) => t.name !== target.transform).map((t) => ({ transform: t.name, config: defaultConfig(t) }))
   return [own, ...others].slice(0, 3)
+}
+
+/**
+ * The baseline's plain name in the agreement sentence: the strategy's name on
+ * Retrieve (`Hybrid (RRF)`) when no other recipe uses it, `the 1024-dimension
+ * index` for a Matryoshka baseline, else its distinguishing values.
+ */
+function plainName(variants: Variant[], base: number, stage: string, labels: VariantLabel[], dim: number | undefined): string {
+  const v = variants[base]
+  if ("truncate_dim" in v.config && typeof dim === "number") return `the ${dim}-dimension index`
+  const alone = variants.filter((x) => x.transform === v.transform).length === 1
+  if (stage === "retrieve" && alone && RETRIEVAL_LABEL[v.transform]) return RETRIEVAL_LABEL[v.transform]
+  return variantName(labels[base])
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
@@ -127,6 +171,11 @@ function Sweep({
   const { keys } = useApiKey()
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
+  const scroller = useRef<HTMLDivElement>(null)
+  const fit = useColumnsFit(scroller, Math.max(variants.length, 1))
+  // The recipe shown when the columns do not fit, clamped when one is removed.
+  const [chosen, setChosen] = useState(0)
+  const shown = Math.min(chosen, variants.length - 1)
 
   const shownThrough = graph.nodes.find((n) => n.id === submitted.through) ?? target
   const tally = runId ? tallySweep(run.variants) : null
@@ -151,7 +200,10 @@ function Sweep({
   // A Matryoshka baseline is named by the width its index was built at, which
   // the descriptor knows even when the variant asked for "native".
   const baseDim = base === null ? undefined : (payload(ids[base]?.index).data as IndexDescriptor | undefined)?.dim
-  const baseName = base === null ? "" : "truncate_dim" in submitted.variants[base].config && typeof baseDim === "number" ? String(baseDim) : variantName(labels[base])
+  const baseName = base === null ? "" : plainName(submitted.variants, base, target.stage, labels, baseDim)
+  // The question a sweep answers, when the step it runs through reads it.
+  const query = graph.nodes.find((n) => n.stage === "query")
+  const question = query && ancestors(graph, through, registry).has(query.id) ? String(query.config.text ?? "") : ""
 
   async function sweep() {
     setError(null)
@@ -189,15 +241,16 @@ function Sweep({
     }
   }
 
-  const cols = Math.max(variants.length, 1)
-  const grid: CSSProperties = { gridTemplateColumns: `repeat(${cols}, minmax(${COLUMN_MIN}px, 1fr))` }
+  const visible = fit ? variants.map((_, i) => i) : [shown]
+  const grid: CSSProperties = { gridTemplateColumns: `repeat(${Math.max(visible.length, 1)}, minmax(0, 1fr))` }
+  const tabLabels = variantLabels(variants, registry, target.stage)
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-surface">
       <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
-        <div className="flex min-w-0 items-baseline gap-3">
+        <div className="flex min-w-0 basis-full flex-wrap items-baseline gap-x-3 md:basis-auto">
           <h1 className="text-xl font-semibold">Compare</h1>
           {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
           <p className="text-sm text-fg-muted">
@@ -208,14 +261,27 @@ function Sweep({
               </>
             ) : null}
             {preset ? ", at Matryoshka dimensions" : null}
+            {question ? (
+              <>
+                , for{" "}
+                <q data-testid="sweep-question" className="font-serif text-fg" style={{ quotes: '"“" "”"' }}>
+                  {question}
+                </q>
+                .{" "}
+                {/* Inline in the sentence, so the touch rule's min height needs an inline-flex box to apply. */}
+                <a href="/build" className="text-fg underline pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center">
+                  Change the question on Build
+                </a>
+              </>
+            ) : null}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
           <div className="flex items-center gap-2">
-            <label htmlFor={stageId} className="text-sm text-fg-muted">
+            <label htmlFor={stageId} className="text-sm whitespace-nowrap text-fg-muted">
               Compare
             </label>
-            <select id={stageId} className={`${CONTROL} w-auto`} value={target.id} disabled={busy} onChange={(e) => onChoose(e.target.value)}>
+            <select id={stageId} className={`${CONTROL} w-auto min-w-[10rem]`} value={target.id} disabled={busy} onChange={(e) => onChoose(e.target.value)}>
               {choices.map((n) => (
                 <option key={n.id} value={n.id}>
                   {titleFor(n)}
@@ -226,10 +292,10 @@ function Sweep({
           {/* Parse and Chunk columns show their own output; only a later stage has a choice of where to stop. */}
           {downstream.length > 1 && target.stage !== "parse" && target.stage !== "chunk" ? (
             <div className="flex items-center gap-2">
-              <label htmlFor={throughId} className="text-sm text-fg-muted">
+              <label htmlFor={throughId} className="text-sm whitespace-nowrap text-fg-muted">
                 Show through
               </label>
-              <select id={throughId} className={`${CONTROL} w-auto`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
+              <select id={throughId} className={`${CONTROL} w-auto min-w-[10rem]`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
                 {downstream.map((n) => (
                   <option key={n.id} value={n.id}>
                     {titleFor(n)}
@@ -239,18 +305,30 @@ function Sweep({
               </select>
             </div>
           ) : null}
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }])}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }])
+              // Where one recipe shows at a time, show the new one.
+              setChosen(variants.length)
+            }}
+          >
             <Plus aria-hidden strokeWidth={1.75} />
             Add variant
           </Button>
-          {busy && runId ? (
-            <Button variant="outline" size="sm" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
-              Cancel
+          {/* Below md the run buttons take their own full-width row, so Sweep is never pushed off a phone screen. */}
+          <div className="flex basis-full gap-2 md:basis-auto">
+            {busy && runId ? (
+              <Button variant="outline" size="sm" className="flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+                Cancel
+              </Button>
+            ) : null}
+            <Button size="sm" className="flex-1 md:flex-none" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
+              {busy ? "Sweeping" : `Sweep ${variants.length} ${variants.length === 1 ? "variant" : "variants"}`}
             </Button>
-          ) : null}
-          <Button size="sm" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
-            {busy ? "Sweeping" : `Sweep ${variants.length} ${variants.length === 1 ? "variant" : "variants"}`}
-          </Button>
+          </div>
         </div>
       </div>
 
@@ -276,25 +354,36 @@ function Sweep({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="grid min-w-min gap-px bg-hairline" style={grid}>
-          {variants.map((v, i) => (
+      {fit ? null : (
+        <div className="flex shrink-0 border-b border-hairline px-3 py-2">
+          <SegmentedControl
+            label="Recipe shown"
+            options={tabLabels.map((l, i) => ({ value: String(i), label: l.fields.length ? `${l.transform} ${l.fields[0][1]}` : l.transform }))}
+            value={String(shown)}
+            onChange={(v) => setChosen(Number(v))}
+          />
+        </div>
+      )}
+
+      <div ref={scroller} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
+          {visible.map((i) => (
             <SweepControl
               key={i}
-              variant={v}
+              variant={variants[i]}
               transforms={transforms}
-              changed={submitted.variants[i] !== undefined && !same(submitted.variants[i], v)}
+              changed={submitted.variants[i] !== undefined && !same(submitted.variants[i], variants[i])}
               onChange={(nv) => setVariants(variants.map((x, j) => (j === i ? nv : x)))}
               onRemove={variants.length > 1 && !busy ? () => reshape(variants.filter((_, j) => j !== i)) : undefined}
             />
           ))}
-          {variants.map((_, i) => {
+          {visible.map((i) => {
             const s = stateOf(i)
             const out = payload(ids[i]?.through)
             const chunks = payload(ids[i]?.chunks)
             const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
             const agreement =
-              base !== null && i !== base && hitLists[i] && hitLists[base] ? topKAgreement(hitLists[base]!, hitLists[i]!) : null
+              base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
             return (
               <VariantResult
                 key={i}
@@ -311,11 +400,7 @@ function Sweep({
                 status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
                 chunks={chunks.data}
                 agreement={
-                  agreement
-                    ? `${agreement.match} of ${agreement.of} match ${baseName}`
-                    : i === base && hitLists.some((h, j) => j !== i && h)
-                      ? "the baseline the others are matched against"
-                      : null
+                  agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
                 }
                 embeddings={embeddingCounts(descriptor)}
               />
@@ -347,7 +432,7 @@ export function VariantResult({
   data?: unknown
   status: InspectorStatus
   chunks?: unknown
-  /** Top-5 agreement with the baseline variant: the number a sweep is for. */
+  /** How this variant's top 5 differs from the baseline's, in a sentence: the finding a sweep is for. */
   agreement: string | null
   /** `384 embedded, 0 from cache`, when the index descriptor reports it. */
   embeddings: string | null

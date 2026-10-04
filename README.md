@@ -184,10 +184,15 @@ unsafe to share:
   Each sample has its own question set, so Evaluate scores the sample you loaded.
 - **Change one setting and rerun cheaply.** Results are cached by recipe, so changing the
   chunker never re-parses the PDF.
-- **Compare strategies.** On the Compare page you pick a stage (Parse or Chunk for now),
-  and it lists that stage's strategies side by side with what each one produced. The Sweep
-  button on a Build card opens Compare on that card. The page also says how many steps were
-  reused from the cache.
+- **Compare strategies.** On the Compare page you pick a stage, Parse, Chunk or Retrieve,
+  and it lists that stage's recipes side by side with what each one produced. The Sweep
+  button on a Build card opens Compare on that card, and Compare searches in the Retrieval
+  block of Build's Ask panel opens it on Retrieve, with the question it answers shown at the
+  top. The default Chunk sweep compares the pipeline's own size with half of it and with By
+  sentence. On a retrieval sweep each column says how its ranking differs from the baseline:
+  the same order, two places swapped, a shorter list, or how many pieces they share. Below
+  tablet width the page shows one recipe at a time. It also says how many steps were reused
+  from the cache.
 - **Save and share pipelines.** Name the pipeline on Build and keep it; switch between saved
   pipelines from the bar under the Index pipeline header of the column, and edit any of them. Once a
   pipeline is saved, Copy link puts the whole configuration in a URL: whoever opens it gets the pipeline on their Build page, and if it was

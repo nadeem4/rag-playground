@@ -281,11 +281,63 @@ export function layoutHits(source: string, chunks: readonly Chunk[], rows: reado
 
 // ------------------------------------------------------------- agreement --
 
-/** How many of `ids`' top k are also in `base`'s top k. */
-export function topKAgreement(base: readonly string[], ids: readonly string[], k = 5): { match: number; of: number } {
-  const want = new Set(base.slice(0, k))
-  const top = ids.slice(0, k)
-  return { match: top.filter((id) => want.has(id)).length, of: top.length }
+/** What changed between two ranked lists of chunk ids, read at their top k. Places are 1-based. */
+export type ListChange =
+  | { kind: "same"; of: number }
+  | { kind: "swap"; places: [number, number]; of: number }
+  | { kind: "moved"; count: number; of: number }
+  | { kind: "shorter"; returned: number; of: number; shared: number; samePlaces: number }
+  | { kind: "different"; shared: number; of: number; top: number }
+
+/**
+ * Compare `ids` with the baseline `base`, both cut at their top k: the same
+ * pieces in the same order, two places swapped, the same pieces with more
+ * places changed, a shorter list, or a different set. A swap is said as a
+ * swap and a shorter list as shorter, which a plain overlap count hides.
+ */
+export function compareLists(base: readonly string[], ids: readonly string[], k = 5): ListChange {
+  const a = base.slice(0, k)
+  const b = ids.slice(0, k)
+  const inBase = new Set(a)
+  const shared = b.filter((id) => inBase.has(id)).length
+  if (b.length < a.length) return { kind: "shorter", returned: b.length, of: a.length, shared, samePlaces: b.filter((id, i) => a[i] === id).length }
+  if (b.length > a.length || shared < b.length) return { kind: "different", shared, of: b.length, top: a.length }
+  const moved = a.flatMap((id, i) => (b[i] === id ? [] : [i]))
+  if (moved.length === 0) return { kind: "same", of: a.length }
+  if (moved.length === 2) return { kind: "swap", places: [moved[0] + 1, moved[1] + 1], of: a.length }
+  return { kind: "moved", count: moved.length, of: a.length }
+}
+
+const pieces = (n: number) => `${n} ${n === 1 ? "piece" : "pieces"}`
+
+/** A `ListChange` in a sentence, read against the baseline's plain name. */
+export function agreementText(c: ListChange, baseName: string): string {
+  switch (c.kind) {
+    case "same":
+      return `Same ${pieces(c.of)}, in the same order.`
+    case "swap":
+      return `Same ${pieces(c.of)}. The ${ordinal(c.places[0])} and ${ordinal(c.places[1])} swap places.`
+    case "moved":
+      return `Same ${pieces(c.of)}. ${c.count} of them are in a different place.`
+    case "different":
+      return `${c.shared} of the ${pieces(c.of)} ${c.shared === 1 ? "is" : "are"} also in the top ${c.top} of ${baseName}.`
+    case "shorter": {
+      const head = c.returned === 0 ? `Returned no pieces, not ${c.of}.` : `Returned ${pieces(c.returned)}, not ${c.of}.`
+      if (c.returned === 0) return head
+      const all = c.returned === 1 ? "It" : c.returned === 2 ? "Both" : `All ${c.returned}`
+      const top = `the top ${c.of} of ${baseName}`
+      if (c.shared === c.returned && c.samePlaces === c.returned) {
+        return `${head} ${all} ${c.returned === 1 ? "sits where" : "sit where"} ${baseName} ${c.returned === 1 ? "puts it" : "puts them"}.`
+      }
+      if (c.shared === c.returned) {
+        const verb = c.returned === 1 ? "is" : "are"
+        if (c.samePlaces === 0) return `${head} ${all} ${verb} in ${top}, ${c.returned === 1 ? "in another place" : "in other places"}.`
+        return `${head} ${all} ${verb} in ${top}, and ${c.samePlaces} ${c.samePlaces === 1 ? "sits" : "sit"} in the same place.`
+      }
+      if (c.shared === 0) return `${head} None of them is in ${top}.`
+      return `${head} ${c.shared} of them ${c.shared === 1 ? "is" : "are"} in ${top}.`
+    }
+  }
 }
 
 /**

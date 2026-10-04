@@ -1,11 +1,12 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
-import { sampleGraph, storeGraph } from "@/state/graph"
+import { sampleGraph, storeGraph, transformsFor } from "@/state/graph"
 
-import { COLUMN_MIN, Compare, VariantResult } from "./Compare"
+import { Compare, seedVariants, VariantResult } from "./Compare"
+import { FakeResizeObserver } from "./fakeResizeObserver"
 
 const registry = liveRegistry as unknown as Registry
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
@@ -50,6 +51,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  FakeResizeObserver.reset()
   window.history.replaceState(null, "", "/")
 })
 
@@ -61,7 +63,7 @@ describe("the Compare stage picker", () => {
     expect(options).toEqual(["Parse", "Chunk"])
     expect(picker().value).toBe("chunk")
     expect(text()).toMatch(/The Chunk step over chunking-primer\.pdf/)
-    expect(columns()).toEqual(["recursive_character", "layout_blocks", "markdown_header"])
+    expect(columns()).toEqual(["recursive_character", "recursive_character", "sentence_window"])
   })
 
   it("moves the comparison to Parse: the parsers, the sentence and the URL follow", async () => {
@@ -112,14 +114,6 @@ describe("the Compare stage picker", () => {
     expect(line).toContain('<span className="font-mono">{fmtMs(n!.duration_ms)}</span>')
   })
 
-  it("gives each column room for a slip: 420 px minimum so a passage keeps 40 characters a line at 1440", async () => {
-    render(<Compare />)
-    await waitFor(() => expect(columns()).toHaveLength(3))
-    const grid = [...document.querySelectorAll<HTMLElement>("div")].find((d) => d.style.gridTemplateColumns)!
-    expect(grid.style.gridTemplateColumns).toBe(`repeat(3, minmax(${COLUMN_MIN}px, 1fr))`)
-    expect(COLUMN_MIN).toBe(420)
-  })
-
   it("sets the agreement line in sans with only its numbers in mono", async () => {
     const node = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "retrieve")!
     render(
@@ -129,20 +123,125 @@ describe("the Compare stage picker", () => {
         node={node}
         type="retrieval_result"
         status={{ kind: "ready" }}
-        agreement="3 of 5 match hybrid_rrf"
+        agreement="Same 5 pieces. The 2nd and 3rd swap places."
         embeddings={null}
       />,
     )
     const line = screen.getByTestId("agreement")
-    expect(line.textContent).toBe("3 of 5 match hybrid_rrf")
+    expect(line.textContent).toBe("Same 5 pieces. The 2nd and 3rd swap places.")
     expect(line.className).not.toContain("font-mono")
     const mono = [...line.querySelectorAll(".font-mono")].map((m) => m.textContent)
-    expect(mono).toEqual(["3", "5"])
+    expect(mono).toEqual(["5", "2", "3"])
+  })
+
+  it("shows the question a Retrieve sweep answers", async () => {
+    openAt("?node=retrieve")
+    render(<Compare />)
+    await waitFor(() => expect(picker().value).toBe("retrieve"))
+    const asked = String(sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "query")!.config.text)
+    expect(screen.getByTestId("sweep-question").textContent).toBe(asked)
+    expect(screen.getByRole("link", { name: "Change the question on Build" }).getAttribute("href")).toBe("/build")
+  })
+
+  it("gives the Change the question link a 44 px box under a coarse pointer, though it sits in a sentence", async () => {
+    openAt("?node=retrieve")
+    render(<Compare />)
+    const link = await screen.findByRole("link", { name: "Change the question on Build" })
+    for (const c of ["pointer-coarse:inline-flex", "pointer-coarse:min-h-[44px]", "pointer-coarse:items-center"]) expect(link.className.split(" ")).toContain(c)
+  })
+
+  it("shows no question on a Chunk sweep", async () => {
+    render(<Compare />)
+    await waitFor(() => expect(picker().value).toBe("chunk"))
+    expect(screen.queryByTestId("sweep-question")).toBeNull()
+  })
+
+  it("uses no sm: class in the files this patch touched, since the theme has no sm breakpoint", async () => {
+    const { readFileSync } = await import("node:fs")
+    const files = ["routes/Compare.tsx", "routes/useColumnsFit.ts", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/ask/AskPanel.tsx"]
+    for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(/(^|[\s"'`])sm:/m)
   })
 
   it("has no em-dashes or en-dashes", async () => {
     render(<Compare />)
     await waitFor(() => expect(picker().value).toBe("chunk"))
     expect(text()).not.toMatch(/[–—]/)
+  })
+})
+
+describe("Compare's widths", () => {
+  it("puts three recipes side by side at 1024, each at least 300 px, with nothing to scroll sideways", async () => {
+    FakeResizeObserver.width = 993
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    const grid = screen.getByTestId("recipe-grid")
+    expect(grid.style.gridTemplateColumns).toBe("repeat(3, minmax(0, 1fr))")
+    expect(grid.className).not.toContain("min-w-min")
+    expect(screen.queryByRole("group", { name: "Recipe shown" })).toBeNull()
+  })
+
+  it("shows one recipe at a time below 820 px, chosen with a segmented control", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    const group = await screen.findByRole("group", { name: "Recipe shown" })
+    const options = within(group).getAllByRole("button")
+    expect(options).toHaveLength(3)
+    expect(options[0].getAttribute("aria-pressed")).toBe("true")
+    expect(columns()).toEqual(["recursive_character"])
+    fireEvent.click(options[2])
+    expect(columns()).toEqual(["sentence_window"])
+  })
+
+  it("names each recipe in the control by its transform and first distinguishing value", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    const group = await screen.findByRole("group", { name: "Recipe shown" })
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["recursive_character 400", "recursive_character 200", "sentence_window"])
+  })
+
+  it("keeps a recipe shown when the one chosen is removed", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    const group = await screen.findByRole("group", { name: "Recipe shown" })
+    fireEvent.click(within(group).getAllByRole("button")[2])
+    fireEvent.click(screen.getByRole("button", { name: "Remove variant sentence_window" }))
+    expect(columns()).toEqual(["recursive_character"])
+    expect(within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button")[1].getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("falls back to one at a time when five recipes do not fit at 1440", async () => {
+    FakeResizeObserver.width = 1409
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    openAt("?node=index&preset=matryoshka&native=1024")
+    render(<Compare />)
+    expect(await screen.findByRole("group", { name: "Recipe shown" })).toBeTruthy()
+  })
+})
+
+describe("seedVariants", () => {
+  const chunk = () => sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "chunk")!
+
+  it("seeds a Chunk sweep with the node's recipe, the same recipe at half the size, and By sentence on defaults", () => {
+    const v = seedVariants(chunk(), transformsFor(registry, "chunk"))
+    expect(v.map((x) => x.transform)).toEqual(["recursive_character", "recursive_character", "sentence_window"])
+    expect(v[0].config).toEqual(chunk().config)
+    expect(v[1].config).toMatchObject({ chunk_size: 200, chunk_overlap: 40 })
+    expect(v[2].config).toMatchObject({ sentences_per_chunk: 5, overlap_sentences: 1 })
+  })
+
+  it("seeds Recursive on defaults as the third recipe when the node already cuts by sentence", () => {
+    const node = { ...chunk(), transform: "sentence_window", config: { sentences_per_chunk: 6, overlap_sentences: 2 } }
+    const v = seedVariants(node, transformsFor(registry, "chunk"))
+    expect(v.map((x) => x.transform)).toEqual(["sentence_window", "sentence_window", "recursive_character"])
+    expect(v[1].config).toMatchObject({ sentences_per_chunk: 3, overlap_sentences: 1 })
+  })
+
+  it("keeps the old rule for Parse: the node's parser, then the others", () => {
+    const parse = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "parse")!
+    expect(seedVariants(parse, transformsFor(registry, "parse")).map((x) => x.transform)).toEqual(["docling", "pdfium"])
   })
 })

@@ -37,6 +37,17 @@ const block = (name: string) => within(screen.getByRole("region", { name }))
 const segment = (group: string, name: string) => within(screen.getByRole("group", { name: group })).getByRole("button", { name }) as HTMLButtonElement
 
 describe("the Retrieval block", () => {
+  it("offers Compare searches, which opens Compare on the retrieve node", () => {
+    const p = setup({ onSweep: vi.fn() })
+    fireEvent.click(block("Retrieval").getByRole("button", { name: "Compare searches" }))
+    expect(p.onSweep).toHaveBeenCalledWith(askNodes(p.graph).retrieve!.id)
+  })
+
+  it("has no Compare searches button when the page cannot open Compare", () => {
+    setup()
+    expect(block("Retrieval").queryByRole("button", { name: "Compare searches" })).toBeNull()
+  })
+
   it("offers the strategies by their technical names, with a gloss and the stage name", () => {
     setup()
     const b = block("Retrieval")

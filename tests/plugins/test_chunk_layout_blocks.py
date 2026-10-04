@@ -6,6 +6,7 @@ in `test_chunk.py`; this file checks what is particular to this strategy.
 
 from __future__ import annotations
 
+import pydantic
 import pytest
 
 from core.artifacts import ArtifactType
@@ -63,7 +64,7 @@ def test_config_defaults():
     assert cfg.max_tokens == 400
     assert cfg.keep_tables_whole is True
     assert cfg.heading_context is True
-    with pytest.raises(Exception):
+    with pytest.raises(pydantic.ValidationError):
         LayoutBlocksChunker.config_model(max_tokens=0)
 
 
@@ -181,7 +182,8 @@ def test_oversized_table_is_kept_whole_and_the_note_says_so(tmp_path):
     assert piece.token_count > 20
     assert note == (
         "Cut 2 blocks into 1 piece along 1 heading, keeping 1 table whole "
-        "although it is over the size limit."
+        "although it is over the size limit. This document has headings at "
+        "level 1."
     )
     assert cs.chunker_meta["tables_kept_whole"] == 1
 
@@ -197,7 +199,8 @@ def test_the_note_names_tables_kept_whole_in_the_plural(tmp_path):
     )
     _, note = _apply(doc, tmp_path, max_tokens=20)
     assert note.endswith(
-        ", keeping 2 tables whole although they are over the size limit."
+        ", keeping 2 tables whole although they are over the size limit. "
+        "This document has headings at level 1."
     )
 
 
@@ -212,7 +215,7 @@ def test_oversized_table_is_split_when_keep_tables_whole_is_off(tmp_path):
     assert not any("| row0 |" in c.text and "| row29 |" in c.text for c in cs.chunks)
     assert all(c.token_count <= 20 for c in cs.chunks)
     assert "keeping" not in note
-    assert note.endswith("along 1 heading.")
+    assert note.endswith("along 1 heading. This document has headings at level 1.")
     assert cs.chunker_meta["tables_kept_whole"] == 0
 
 
@@ -319,14 +322,16 @@ def test_the_note_counts_blocks_pieces_and_headings(tmp_path):
     )
     _, note = _apply(doc, tmp_path)
     assert note == (
-        "Cut 3 blocks into 1 piece along 1 heading."
+        "Cut 3 blocks into 1 piece along 1 heading. This document has "
+        "headings at level 1."
     )
 
 
 def test_the_note_uses_plurals(tmp_path):
     _, note = _apply(DOCS["many_headings"](), tmp_path)
     assert note == (
-        "Cut 9 blocks into 4 pieces along 4 headings."
+        "Cut 9 blocks into 4 pieces along 4 headings. This document has "
+        "headings at levels 1, 2 and 3."
     )
 
 
@@ -395,7 +400,10 @@ def test_headings_in_a_row_join_the_body_below_them():
 def test_a_small_table_is_not_counted_as_kept_whole(tmp_path):
     doc = _doc([("heading", "Data", 1, 1), ("table", _table(2), None, 1)])
     cs, note = _apply(doc, tmp_path, max_tokens=400)
-    assert note == "Cut 2 blocks into 1 piece along 1 heading."
+    assert note == (
+        "Cut 2 blocks into 1 piece along 1 heading. This document has "
+        "headings at level 1."
+    )
     assert cs.chunker_meta["tables_kept_whole"] == 0
 
 
@@ -429,7 +437,7 @@ def _experience_doc():
 def test_section_level_defaults_to_every_heading_and_is_bounded():
     assert LayoutBlocksChunker.config_model().section_level == 6
     for bad in (0, 7):
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LayoutBlocksChunker.config_model(section_level=bad)
 
 
@@ -491,3 +499,48 @@ def test_explain_names_section_level_and_changes_with_it():
     assert top != every
     for text in (top, every):
         assert chr(0x2014) not in text and chr(0x2013) not in text
+
+
+def test_the_note_lists_the_heading_levels_in_the_document(tmp_path):
+    doc = _doc(
+        [
+            ("heading", "Title", 2, 1),
+            ("heading", "Section", 3, 1),
+            ("heading", "Role", 4, 1),
+            ("paragraph", "Body.", None, 1),
+        ]
+    )
+    _, note = _apply(doc, tmp_path, section_level=3)
+    assert note.endswith("This document has headings at levels 2, 3 and 4.")
+
+
+def test_section_level_help_says_where_levels_come_from():
+    cls = LayoutBlocksChunker
+    description = cls.config_model.model_json_schema()["properties"]["section_level"][
+        "description"
+    ]
+    texts = [description, *cls.learn["section_level"]["more"]]
+    joined = " ".join(texts)
+    assert "Docling" in joined and "heading_hierarchy" in joined
+    assert "3 keeps a section whole" in description
+    assert "Experience section" not in joined
+    top = cls().explain(cls.config_model(section_level=1)).settings
+    assert "only headings at level 1 start a new section" in top
+
+
+def test_a_deeper_heading_joins_a_table_kept_whole_below_it():
+    doc = _doc(
+        [
+            ("heading", "TOP", 1, 1),
+            ("paragraph", "Intro line.", None, 1),
+            ("heading", "Sub", 2, 1),
+            ("table", _table(30), None, 1),
+            ("paragraph", "After.", None, 1),
+        ]
+    )
+    cs = run(LayoutBlocksChunker, doc, section_level=1, max_tokens=20)
+    [table] = _holding(cs, "| row0 |")
+    assert table.text.startswith("## Sub")
+    assert "| row29 |" in table.text
+    [after] = _holding(cs, "After.")
+    assert after.heading_path == ["TOP", "Sub"]

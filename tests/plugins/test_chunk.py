@@ -409,6 +409,27 @@ def test_recursive_character_prefixes_the_heading_path_to_embed_text_only():
     assert body.embed_text == "EXPERIENCE > Role one\n\nDid the first thing well."
 
 
+def test_recursive_character_does_not_repeat_the_headings_a_chunk_opens_with():
+    doc = _experience_doc()
+    result = run(RecursiveCharacterChunker, doc, chunk_overlap=0)
+    [chunk] = result.chunks
+    assert chunk.text.startswith("# EXPERIENCE\n\n## Role one")
+    assert chunk.heading_path == ["EXPERIENCE", "Role one"]
+    assert chunk.embed_text is None
+    # A chunk that opens with the role only gets the part of the path above it.
+    doc = _doc(
+        [
+            ("heading", "EXPERIENCE", 1, 1),
+            ("paragraph", "Intro under experience.", None, 1),
+            ("heading", "Role one", 2, 1),
+            ("paragraph", "Did the first thing well.", None, 1),
+        ]
+    )
+    result = run(RecursiveCharacterChunker, doc, chunk_size=40, chunk_overlap=0)
+    [role] = [c for c in result.chunks if c.text.startswith("## Role one")]
+    assert role.embed_text == "EXPERIENCE\n\n" + role.text
+
+
 def test_recursive_character_heading_context_off_leaves_embed_text_unset():
     doc = _experience_doc()
     result = run(
@@ -429,7 +450,9 @@ def test_recursive_character_without_headings_is_unchanged(tmp_path):
     )
     assert [c.text for c in on.chunks] == [c.text for c in off.chunks]
     assert all(c.embed_text is None for c in on.chunks)
-    assert note is not None and "heading" in note
+    assert note == (
+        "There are no headings in this document, so heading_context adds nothing."
+    )
 
 
 def test_recursive_character_schema_and_explain_name_heading_context():

@@ -19,7 +19,7 @@ def test_registry_lists_every_plugin_with_its_contract(client):
 def test_registry_exports_each_plugins_learn_data(client):
     body = client.get("/api/registry").json()
     learn = body["chunk"]["recursive_character"]["learn"]
-    assert set(learn) == {"_strategy", "chunk_size", "chunk_overlap"}
+    assert set(learn) == {"_strategy", "chunk_size", "chunk_overlap", "heading_context"}
     assert learn["chunk_size"]["hint"] == (
         "This is the largest a chunk can be, counted in characters."
     )

@@ -7,7 +7,9 @@ reads them in order and groups them in three steps.
   so are a figure and its caption. Every other block is a unit of its own.
 - *Sections.* A new section starts at a heading that follows a body, as in
   `markdown_header`, when the heading's level is at or above `section_level`
-  (a heading with no level counts as level 1); headings in a row open one
+  (a heading with no level counts as level 1). Levels come from the parser:
+  with Docling's heading_hierarchy on, a typical document has its title at 2,
+  sections at 3 and subsections at 4. Headings in a row open one
   section together. A deeper heading stays inside the section as text, joined
   to the block below it, and still extends the heading path.
 - *Pieces.* Units are packed in order up to `max_tokens`. A table unit that is
@@ -37,8 +39,10 @@ from core.transform import Explanation, Transform
 from plugins.chunk import (
     DocView,
     Span,
+    add_heading_context,
     build_chunk_set,
     count_tokens,
+    heading_path_of,
     normalize,
     token_spans,
 )
@@ -59,11 +63,13 @@ class LayoutBlocksConfig(BaseModel):
         description=(
             "section_level: how deep a heading can be and still start a new "
             "section, from 1 to 6. A new section starts only at a heading whose "
-            "level is at or above this depth. 1 means only the top-level "
-            "headings start sections, so a whole Experience section with its "
-            "roles stays together; 6 means every heading starts one. A deeper "
-            "heading stays inside the piece as text and still names the pieces "
-            "below it in their heading path."
+            "level is at or above this depth; 6 means every heading starts "
+            "one. Levels are Docling's heading levels. With heading_hierarchy "
+            "on, a typical document has its title at 2, sections at 3 and "
+            "roles or subsections at 4, so 3 keeps a section whole. With it "
+            "off, every heading is at 2. A deeper heading stays inside the "
+            "piece as text and still names the pieces below it in their "
+            "heading path. The run note lists the levels in the document."
         ),
     )
 
@@ -105,7 +111,7 @@ def _units(elements: Sequence[Element]) -> list[list[Element]]:
 
 
 def _sections(
-    units: Sequence[list[Element]], section_level: int = 6
+    units: Sequence[list[Element]], section_level: int
 ) -> list[list[list[Element]]]:
     """Break the unit stream at each heading that follows a body.
 
@@ -220,28 +226,17 @@ def _section_pieces(
     return pieces
 
 
-def _leading_headings(view: DocView, span: Span) -> list[Element]:
-    """The heading elements the piece's text opens with, in order."""
-    leading: list[Element] = []
-    for element in view.elements_in(*span):
-        if element.type != "heading":
-            break
-        leading.append(element)
-    return leading
-
-
-def _path_of(view: DocView, span: Span) -> list[str]:
-    """The heading path at the piece's last leading heading.
-
-    A piece that opens with a chapter and then its section is about the
-    section, so its path names both.
-    """
-    leading = _leading_headings(view, span)
-    return view.heading_path_at(leading[-1].md_start if leading else span[0])
-
-
 def _count(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def _levels_sentence(view: DocView) -> str:
+    """Name the heading levels present, for example levels 2, 3 and 4."""
+    levels = sorted({_level(e) for e in view.rendered if e.type == "heading"})
+    if len(levels) == 1:
+        return f"This document has headings at level {levels[0]}."
+    named = ", ".join(str(n) for n in levels[:-1]) + f" and {levels[-1]}"
+    return f"This document has headings at levels {named}."
 
 
 @register
@@ -300,13 +295,14 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
             "hint": "This sets which headings start a new section.",
             "more": [
                 "A new section starts only at a heading whose level is at or "
-                "above this depth. At 1, only the top-level headings start "
-                "sections, so a whole Experience section stays in one piece "
-                "when it fits. At 6, every heading starts one.",
+                "above this depth. At 6, every heading starts one.",
+                "Levels are Docling's heading levels. With heading_hierarchy "
+                "on, a typical document has its title at 2, sections at 3 and "
+                "roles or subsections at 4, so 3 keeps a section whole. With "
+                "it off, every heading is at 2. The run note lists the levels "
+                "in your document.",
                 "A deeper heading stays inside the piece as text, and the "
                 "pieces below it still carry it in their heading path.",
-                "Heading levels come from the parser. Without them, every "
-                "heading counts as level 1.",
             ],
         },
         "heading_context": {
@@ -337,8 +333,8 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
             sections = "With section_level at 6, every heading starts a new section."
         elif config.section_level == 1:
             sections = (
-                "With section_level at 1, only the top-level headings start a "
-                "new section, and deeper headings stay inside the piece."
+                "With section_level at 1, only headings at level 1 start a new "
+                "section, and deeper headings stay inside the piece."
             )
         else:
             sections = (
@@ -379,7 +375,7 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
                 trimmed = normalize(view.text, [piece])
                 if trimmed and (not spans or spans[-1] != trimmed[0]):
                     spans.append(trimmed[0])
-                    paths.append(_path_of(view, trimmed[0]))
+                    paths.append(heading_path_of(view, trimmed[0]))
 
         headings = sum(1 for e in view.rendered if e.type == "heading")
         # Only the tables that were over the limit and kept whole anyway.
@@ -411,13 +407,7 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
             },
         )
         if config.heading_context:
-            for chunk, span in zip(chunk_set.chunks, spans):
-                # The piece already shows its own leading headings, so only
-                # the part of the path above them goes in front.
-                k = len(_leading_headings(view, span))
-                above = chunk.heading_path[:-k] if k else chunk.heading_path
-                if above:
-                    chunk.embed_text = " > ".join(above) + "\n\n" + chunk.text
+            add_heading_context(view, chunk_set)
 
         if view.rendered and not headings:
             set_note(ctx, self.fallback)
@@ -432,6 +422,6 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
                 ctx,
                 f"Cut {_count(len(units), 'block')} into "
                 f"{_count(len(spans), 'piece')} along "
-                f"{_count(headings, 'heading')}{kept}.",
+                f"{_count(headings, 'heading')}{kept}. {_levels_sentence(view)}",
             )
         return chunk_set

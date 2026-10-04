@@ -25,7 +25,15 @@ from core.payloads import ChunkSet
 from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
 from core.transform import Explanation, Transform
-from plugins.chunk import DocView, Span, build_chunk_set, normalize, size_tradeoff
+from plugins.chunk import (
+    DocView,
+    Span,
+    add_heading_context,
+    build_chunk_set,
+    heading_path_of,
+    normalize,
+    size_tradeoff,
+)
 
 #: `(separator, keep)` — `keep` is how many characters of the match stay with
 #: the piece before it. A sentence keeps its full stop; whitespace separators
@@ -252,10 +260,13 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
                 view.text, 0, len(view.text), _SEPARATORS, config.chunk_size
             )
             spans = _merge(leaves, config.chunk_size, overlap)
+        spans = normalize(view.text, spans)
         chunk_set = build_chunk_set(
             view,
-            normalize(view.text, spans),
+            spans,
             chunker=self.name,
+            # A chunk that opens with headings in a row is about the last one.
+            heading_paths=[heading_path_of(view, span) for span in spans],
             meta={
                 "chunk_size": config.chunk_size,
                 "chunk_overlap": config.chunk_overlap,
@@ -269,9 +280,5 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
                     "There are no headings in this document, so heading_context "
                     "adds nothing.",
                 )
-            for chunk in chunk_set.chunks:
-                if chunk.heading_path:
-                    chunk.embed_text = (
-                        " > ".join(chunk.heading_path) + "\n\n" + chunk.text
-                    )
+            add_heading_context(view, chunk_set)
         return chunk_set

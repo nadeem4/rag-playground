@@ -146,6 +146,43 @@ def normalize(text: str, spans: Iterable[Span]) -> list[Span]:
     return out
 
 
+def leading_headings(view: DocView, span: Span) -> list[Element]:
+    """The heading elements the span's text opens with, in order."""
+    leading: list[Element] = []
+    for element in view.elements_in(*span):
+        if element.type != "heading":
+            break
+        leading.append(element)
+    return leading
+
+
+def heading_path_of(view: DocView, span: Span) -> list[str]:
+    """The heading path at the span's last leading heading.
+
+    A piece that opens with a chapter and then its section is about the
+    section, so its path names both.
+    """
+    leading = leading_headings(view, span)
+    return view.heading_path_at(leading[-1].md_start if leading else span[0])
+
+
+def add_heading_context(view: DocView, chunk_set: ChunkSet) -> int:
+    """Put the heading path above each chunk in front of it in `embed_text`.
+
+    A chunk already shows the headings it opens with, so only the part of the
+    path above them goes in front; `text` is never changed. Returns how many
+    chunks got a prefix.
+    """
+    added = 0
+    for chunk in chunk_set.chunks:
+        k = len(leading_headings(view, (chunk.start_char, chunk.end_char)))
+        above = chunk.heading_path[:-k] if k else chunk.heading_path
+        if above:
+            chunk.embed_text = " > ".join(above) + "\n\n" + chunk.text
+            added += 1
+    return added
+
+
 def chunk_id(doc_id: str, chunker: str, ordinal: int, start: int, end: int) -> str:
     """Stable across runs, distinct across chunkers, span and order included."""
     key = f"{doc_id}\x00{chunker}\x00{ordinal}\x00{start}\x00{end}"

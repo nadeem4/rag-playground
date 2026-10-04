@@ -771,7 +771,7 @@
           },
           "section_level": {
             "default": 6,
-            "description": "section_level: how deep a heading can be and still start a new section, from 1 to 6. A new section starts only at a heading whose level is at or above this depth. 1 means only the top-level headings start sections, so a whole Experience section with its roles stays together; 6 means every heading starts one. A deeper heading stays inside the piece as text and still names the pieces below it in their heading path.",
+            "description": "section_level: how deep a heading can be and still start a new section, from 1 to 6. A new section starts only at a heading whose level is at or above this depth; 6 means every heading starts one. Levels are Docling's heading levels. With heading_hierarchy on, a typical document has its title at 2, sections at 3 and roles or subsections at 4, so 3 keeps a section whole. With it off, every heading is at 2. A deeper heading stays inside the piece as text and still names the pieces below it in their heading path. The run note lists the levels in the document.",
             "maximum": 6,
             "minimum": 1,
             "title": "Section Level",
@@ -808,9 +808,9 @@
         "section_level": {
           "hint": "This sets which headings start a new section.",
           "more": [
-            "A new section starts only at a heading whose level is at or above this depth. At 1, only the top-level headings start sections, so a whole Experience section stays in one piece when it fits. At 6, every heading starts one.",
-            "A deeper heading stays inside the piece as text, and the pieces below it still carry it in their heading path.",
-            "Heading levels come from the parser. Without them, every heading counts as level 1."
+            "A new section starts only at a heading whose level is at or above this depth. At 6, every heading starts one.",
+            "Levels are Docling's heading levels. With heading_hierarchy on, a typical document has its title at 2, sections at 3 and roles or subsections at 4, so 3 keeps a section whole. With it off, every heading is at 2. The run note lists the levels in your document.",
+            "A deeper heading stays inside the piece as text, and the pieces below it still carry it in their heading path."
           ]
         },
         "heading_context": {

@@ -587,13 +587,18 @@ to Light or Dark, it plays the matching file. To record them again:
 
 ```bash
 cd web && npm run build && cd ..
-uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py           # build and evaluate
-uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py compare   # the Compare still
+uv run --with playwright==1.55.0 playwright install chromium                                          # once
+uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py                 # build and evaluate
+uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py compare-still   # the Compare still
 ```
+
+`compare` is ready too: it runs three recipes and ends on the finding sentence. It will be
+recorded once the redesigned Compare page lands; until then Home shows the still.
 
 The script starts its own server in demo mode, so the Dev menu is hidden, on port 8231
 (`--port` changes it), with a fresh artifact and source folder in a temp directory, and stops it
-when done. It uses the Chromium that Playwright
+when done. It refuses to start if something already answers on that port, so it never records
+against another server. It uses the Chromium that Playwright
 has installed (in `%LOCALAPPDATA%\ms-playwright` on Windows); pin the Playwright package to the
 version that matches that browser. Each clip has a setup pass that is not recorded, which loads
 the sample and runs every step once, then a recorded pass at 1280x800 on warm results, once in

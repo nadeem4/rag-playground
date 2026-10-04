@@ -103,9 +103,32 @@ describe("Home", () => {
       expect(within(s).getAllByRole("listitem")).toHaveLength(2)
       expect(within(s).getByRole("figure")).toBeTruthy()
     })
-    // The middle section puts its words on the right from md up.
-    expect(sections[1].querySelector("[data-copy]")!.className).toContain("md:order-2")
-    expect(sections[0].querySelector("[data-copy]")!.className).not.toContain("md:order-2")
+    // The middle section puts its words on the right from lg up.
+    expect(sections[1].querySelector("[data-copy]")!.className).toContain("lg:order-2")
+    expect(sections[0].querySelector("[data-copy]")!.className).not.toContain("lg:order-2")
+  })
+
+  it("stacks each section full width until lg, so the clip is readable at 768", () => {
+    render(<Home navigate={vi.fn()} />)
+    for (const name of ["Build a pipeline and ask it", "Compare recipes on the same document", "Evaluate it on real questions"]) {
+      const c = screen.getByRole("region", { name }).className.split(/\s+/)
+      expect(c).toContain("grid-cols-1")
+      expect(c.some((k) => k.startsWith("lg:grid-cols-["))).toBe(true)
+      expect(c.some((k) => k.startsWith("md:grid-cols-"))).toBe(false)
+      const copy = screen.getByRole("region", { name }).querySelector("[data-copy]")!.className
+      expect(copy).not.toContain("md:order-2")
+    }
+  })
+
+  it("lists each section's points as a bulleted list at 1rem", () => {
+    render(<Home navigate={vi.fn()} />)
+    const list = within(screen.getByRole("region", { name: "Build a pipeline and ask it" })).getByRole("list").className.split(/\s+/)
+    for (const k of ["list-disc", "pl-4", "text-[1rem]"]) expect(list).toContain(k)
+  })
+
+  it("sets the eyebrow at weight 700", () => {
+    render(<Home navigate={vi.fn()} />)
+    expect(screen.getByText("Retrieval, made visible").className.split(/\s+/)).toContain("font-[700]")
   })
 
   it.each([
@@ -173,6 +196,13 @@ describe("Home", () => {
     )
     expect(within(more).getByRole("link", { name: "Source on GitHub" }).getAttribute("href")).toBe("https://github.com/nadeem4/rag-playground")
     const footer = screen.getByRole("contentinfo")
+    // A footer inside main is not a contentinfo landmark in a browser.
+    expect(footer.tagName).toBe("FOOTER")
+    expect(footer.closest("main")).toBeNull()
+    for (const name of ["Read", "Run it on your machine", "Source on GitHub"]) {
+      const c = within(more).getByRole("link", { name }).className.split(/\s+/)
+      for (const k of ["inline-flex", "min-h-[44px]", "items-center"]) expect(c).toContain(k)
+    }
     expect(within(footer).getByRole("link", { name: "Your data and privacy" })).toBeTruthy()
     expect(within(footer).getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://github.com/nadeem4/rag-playground")
   })
@@ -186,16 +216,9 @@ describe("Home", () => {
 })
 
 describe("Home's files", () => {
-  const files = ["routes/Home.tsx", "components/Clip.tsx"]
-
-  it("uses only spacing steps the theme defines (0, 1, 2, 3, 4, 6, 8), since any other step compiles to nothing", async () => {
+  it("keeps spacing on the theme's scale, with no arbitrary gap, padding or margin", async () => {
     const { readFileSync } = await import("node:fs")
-    const offScale = /(^|[\s"'`:])-?(?:gap|gap-x|gap-y|p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|space-x|space-y|inset|top|bottom|left|right)-(?!(?:0|1|2|3|4|6|8)(?![0-9.]))[0-9][0-9.]*/m
-    for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(offScale)
-  })
-
-  it("uses no sm: or 2xl: class, since the theme has only md, lg and xl", async () => {
-    const { readFileSync } = await import("node:fs")
-    for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(/(^|[\s"'`])(?:sm|2xl|max-sm):/m)
+    const arbitrary = /(^|[\s"'`:])-?(?:gap|gap-x|gap-y|p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|space-x|space-y)-\[/m
+    for (const f of ["routes/Home.tsx", "components/Clip.tsx"]) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(arbitrary)
   })
 })

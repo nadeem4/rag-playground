@@ -40,6 +40,9 @@ const FILES = [
   "components/compare/ExperimentMenu.tsx",
   "state/experiments.ts",
   "state/compare.ts",
+  "routes/Home.tsx",
+  "components/Clip.tsx",
+  "routes/Lessons.tsx",
 ]
 
 const offScale =

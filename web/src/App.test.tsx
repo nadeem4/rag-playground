@@ -65,6 +65,15 @@ describe("the switch", () => {
     expect(LESSONS_ENABLED).toBe(false)
   })
 
+  it("canonicalPath maps an unknown path to /, so the address bar says Home", () => {
+    expect(canonicalPath("/nope")).toBe("/")
+    expect(canonicalPath("/forms")).toBe("/")
+    expect(routeFor("/nope", true)).toBe("/")
+    expect(canonicalPath("/build")).toBe("/build")
+    expect(canonicalPath("/specimen")).toBe("/specimen")
+    expect(routeFor("/learn/chunking", true)).toBe("/learn/chunking")
+  })
+
   it("canonicalPath follows the switch", () => {
     expect(canonicalPath("/")).toBe(routeFor("/", LESSONS_ENABLED))
     expect(canonicalPath("/learn/chunking")).toBe(routeFor("/learn/chunking", LESSONS_ENABLED))

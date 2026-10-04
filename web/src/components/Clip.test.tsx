@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { Clip } from "./Clip"
@@ -103,6 +103,32 @@ describe("Clip in light and dark", () => {
     await vi.waitFor(() => expect(video().getAttribute("src")).toBe("/clips/build-dark.webm"))
   })
 
+  it("follows a change of the system theme while the page is open", () => {
+    let listener: (() => void) | null = null
+    let dark = false
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({
+        get matches() {
+          return dark && q === "(prefers-color-scheme: dark)"
+        },
+        media: q,
+        addEventListener: (_: string, l: () => void) => {
+          if (q === "(prefers-color-scheme: dark)") listener = l
+        },
+        removeEventListener() {},
+      })),
+    )
+    both()
+    const first = video()
+    expect(first.getAttribute("poster")).toBe("/clips/build.jpg")
+    dark = true
+    act(() => listener!())
+    expect(video().getAttribute("poster")).toBe("/clips/build-dark.jpg")
+    // A new element, so the browser picks the source again.
+    expect(video()).not.toBe(first)
+  })
+
   it("shows the dark still when the site's theme is Dark and there is no video", () => {
     media({ dark: false })
     document.documentElement.dataset.theme = "dark"
@@ -132,6 +158,17 @@ describe("Clip", () => {
     clip()
     expect(screen.getByRole("figure", { name: LABEL })).toBeTruthy()
     expect(screen.getByText("Build the index").tagName).toBe("FIGCAPTION")
+  })
+
+  it("puts the caption under the clip below md and over it from md up", () => {
+    reduceMotion(false)
+    clip()
+    const caption = screen.getByText("Build the index")
+    const c = caption.className.split(/\s+/)
+    expect(c).toContain("md:absolute")
+    expect(c).not.toContain("absolute")
+    // Below md it follows the video box in the figure's flow, not inside it.
+    expect(caption.previousElementSibling!.contains(video())).toBe(true)
   })
 
   it("shows a Pause button while it plays, and the button toggles", () => {

@@ -32,7 +32,7 @@ interface PageSection {
   heading: string
   what: string
   points: [string, string]
-  clip: { src?: string; srcDark?: string; poster: string; posterDark: string; label: string; caption: string }
+  clip: { src: string; srcDark: string; poster: string; posterDark: string; label: string; caption: string }
 }
 
 const PAGES: PageSection[] = [
@@ -58,12 +58,14 @@ const PAGES: PageSection[] = [
     href: "/compare",
     heading: "Compare recipes on the same document",
     what: "Run one step several ways at once, such as three chunk sizes or three searches, and read what changed in one sentence.",
-    points: ["Steps the recipes share run once.", "Save the set as an experiment and come back to it."],
+    points: ["Save the set as an experiment and come back to it.", "Up to ten recipes; open any three side by side."],
     clip: {
+      src: "/clips/compare.webm",
+      srcDark: "/clips/compare-dark.webm",
       poster: "/clips/compare.jpg",
       posterDark: "/clips/compare-dark.jpg",
-      label: "A still of the Compare page",
-      caption: "Clip coming soon",
+      label: "Clip: running three recipes on Compare and reading what changed",
+      caption: "Run three recipes and read what changed",
     },
   },
   {

@@ -18,8 +18,6 @@ const PRIMARY = [
   { href: "/read", label: "Read" },
 ]
 
-const REPO = "https://github.com/nadeem4/rag-playground"
-
 /** Development pages: real components against real-engine fixtures. */
 const DEV = [
   { href: "/inspect", label: "Inspectors" },
@@ -112,9 +110,7 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         {primary.map((l) => (
           <NavLink key={l.href} {...l} path={path} />
         ))}
-        <a href={REPO} className="flex h-row-compact items-center rounded-control px-2 text-sm text-fg-muted hover:text-fg">
-          GitHub
-        </a>
+        {/* GitHub is on Home (More and the footer), so the Home tab costs the Document control no width. */}
       </nav>
       {demo ? null : <DevMenu path={path} />}
       <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto md:flex-1 md:basis-0 md:justify-end">

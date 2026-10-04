@@ -128,13 +128,6 @@ describe("Clip in light and dark", () => {
     // A new element, so the browser picks the source again.
     expect(video()).not.toBe(first)
   })
-
-  it("shows the dark still when the site's theme is Dark and there is no video", () => {
-    media({ dark: false })
-    document.documentElement.dataset.theme = "dark"
-    render(<Clip poster="/clips/compare.jpg" posterDark="/clips/compare-dark.jpg" label="A still of the Compare page" caption="Clip coming soon" />)
-    expect(document.querySelector("figure img")!.getAttribute("src")).toBe("/clips/compare-dark.jpg")
-  })
 })
 
 const clip = () => render(<Clip src="/clips/build.webm" poster="/clips/build.jpg" label={LABEL} caption="Build the index" />)
@@ -200,15 +193,5 @@ describe("Clip", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play clip" }))
     expect(play).toHaveBeenCalledTimes(1)
     expect(screen.getByRole("button", { name: "Pause clip" })).toBeTruthy()
-  })
-
-  it("without a video, shows the poster still with its caption and no button", () => {
-    reduceMotion(false)
-    render(<Clip poster="/clips/compare.jpg" label="A still of the Compare page" caption="Clip coming soon" />)
-    expect(document.querySelector("video")).toBeNull()
-    expect(screen.getByRole("figure", { name: "A still of the Compare page" })).toBeTruthy()
-    expect(document.querySelector("figure img")!.getAttribute("src")).toBe("/clips/compare.jpg")
-    expect(screen.getByText("Clip coming soon")).toBeTruthy()
-    expect(screen.queryByRole("button")).toBeNull()
   })
 })

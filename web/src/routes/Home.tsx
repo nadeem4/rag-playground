@@ -209,7 +209,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
       </main>
       <footer className="mx-auto flex max-w-[1080px] flex-wrap gap-x-4 gap-y-1 border-t border-hairline p-4 text-sm text-fg-muted">
         <span>RAG Playground</span>
-        <a href={`${REPO}#where-your-data-goes`} className="text-fg-muted hover:text-fg">
+        <a href="/privacy" className="text-fg-muted hover:text-fg">
           Your data and privacy
         </a>
         <a href={REPO} className="text-fg-muted hover:text-fg">

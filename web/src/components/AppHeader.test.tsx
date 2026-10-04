@@ -284,6 +284,13 @@ describe("AppHeader with the lessons hidden", () => {
     // Below xl the footer and the Library lead link reach the page. The trigger never shrinks to an icon.
     expect(screen.getByTestId("document-trigger").className.split(/\s+/)).toContain("md:min-w-[7rem]")
     expect(screen.getByTestId("header-document").className.split(/\s+/)).toContain("md:min-w-[7rem]")
+    // From md to lg the tabs and the gaps tighten, so the Library tab still fits the one row at 768 px.
+    const tab = within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Library" }).className.split(/\s+/)
+    for (const k of ["px-2", "md:px-1", "lg:px-2"]) expect(tab).toContain(k)
+    const row = screen.getByRole("banner").className.split(/\s+/)
+    for (const k of ["md:gap-x-3", "lg:gap-x-4"]) expect(row).toContain(k)
+    const nav = screen.getByRole("navigation", { name: "Main" }).className.split(/\s+/)
+    for (const k of ["gap-1", "md:gap-0", "lg:gap-1"]) expect(nav).toContain(k)
   })
 
   it("marks Read as current on /read", () => {

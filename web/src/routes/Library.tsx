@@ -35,7 +35,8 @@ import "@/components/learn/learn.css"
  * Library: every saved pipeline and experiment in one list, with what each
  * one's document is doing, and a way to carry them out of this browser and
  * back in as one file. Pipelines come from state/pipelines.ts, experiments
- * from Compare's store through state/libraryExperiments.ts.
+ * from Compare's store (state/experiments.ts) through state/libraryExperiments.ts,
+ * which writes raw entries back untouched.
  */
 
 type Filter = "all" | "pipeline" | "experiment"

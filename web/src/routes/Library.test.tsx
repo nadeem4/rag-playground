@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
+import { resetExperimentsForTests } from "@/state/experiments"
 import { resetDocumentForTests, withDocument } from "@/state/document"
 import { initialGraph, storedGraphJson } from "@/state/graph"
 import { bytesToBase64 } from "@/state/library"
@@ -66,6 +67,7 @@ beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
   resetPipelinesForTests()
+  resetExperimentsForTests()
   resetDocumentForTests()
   resetAppSettingsForTests()
   demo = true
@@ -241,7 +243,7 @@ describe("Library", () => {
       items: [
         { kind: "pipeline", id: "p1", name: "Resume, sections whole", graph: initialGraph(registry), savedAt: iso(H) },
         { kind: "pipeline", id: "p9", name: "From another browser", graph: initialGraph(registry), savedAt: iso(H) },
-        { kind: "experiment", id: "e9", name: "Reranker trial", stage: "rerank", recipes: [], doc: null, savedAt: iso(H) },
+        { kind: "experiment", id: "e9", name: "Reranker trial", stage: "rerank", recipes: [{ transform: "cross_encoder", config: {} }], doc: null, savedAt: iso(H) },
         { kind: "notes", id: "x" },
       ],
       documents: [

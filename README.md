@@ -277,11 +277,12 @@ clips](#recording-the-home-clips).
   the Library page, in any browser: items are merged by id and never duplicated, and an import never
   removes anything already saved: new items go in newest first while there is room (at most 20
   pipelines and 20 experiments), and the page names any left out, and any item in the file it
-  could not read. An experiment may carry at most 10 recipes. A PDF in the file is uploaded
+  could not read. An experiment is checked as Compare checks its own: 1 to 10 recipes. A PDF in the file is uploaded
   again (the demo's limits still apply, and a refusal is said in plain words). The file's shape is
   `{ format: "rag-playground-library", version: 1, exportedAt, items, documents: [{ sha, filename, pdfBase64 }] }`.
-- **See what is kept, and clean up.** The **Your data and privacy** page, linked as Privacy
-  from the footer and Library at every width, and from the header from 1280 px up, lists what is kept in this browser and on the demo server (or on this
+- **See what is kept, and clean up.** The **Your data and privacy** page, linked from Home's
+  footer, the footer of Read and Library, and Library's opening line at every width, and from the
+  header as Privacy from 1280 px up, lists what is kept in this browser and on the demo server (or on this
   machine), where, and for how long. It can delete your saved pipelines and experiments, and on
   the demo your uploads, at once. It asks on the page before deleting anything.
 - **Read, then try it.** The Read page lists the author's posts on each step, in pipeline

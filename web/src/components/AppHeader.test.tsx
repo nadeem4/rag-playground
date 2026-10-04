@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
+import { resetDocumentForTests } from "@/state/document"
+import { resetStoredGraphForTests } from "@/state/graph"
 import { ApiKeyProvider } from "@/api/apiKey"
 import { pageFor, routeFor } from "@/App"
 import { Home } from "@/routes/Home"
@@ -15,6 +17,8 @@ import { AppHeader } from "./AppHeader"
 beforeEach(() => {
   resetAppSettingsForTests()
   window.localStorage.clear()
+  resetStoredGraphForTests()
+  resetDocumentForTests()
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response(JSON.stringify({ source: "none" }), { status: 200 })),
@@ -168,7 +172,13 @@ describe("the header on a phone", () => {
     const c = nav.className.split(/\s+/)
     for (const k of ["flex-wrap", "min-w-0", "order-3", "w-full", "md:order-2", "md:w-auto"]) expect(c).toContain(k)
     const right = screen.getByTestId("header-controls").className.split(/\s+/)
-    for (const k of ["order-2", "ml-auto", "md:order-4"]) expect(right).toContain(k)
+    for (const k of ["order-2", "ml-auto", "md:order-5", "md:ml-0"]) expect(right).toContain(k)
+  })
+
+  it("gives the Document control its own full-width row under the tabs below md", () => {
+    header()
+    const c = screen.getByTestId("header-document").className.split(/\s+/)
+    for (const k of ["order-4", "w-full", "md:ml-auto", "md:w-auto"]) expect(c).toContain(k)
   })
 
   it("keeps the inline switches for md and up, and a Display menu holds them below md", async () => {
@@ -200,6 +210,21 @@ describe("the header on a phone", () => {
 })
 
 describe("AppHeader with the lessons hidden", () => {
+  it("shows the Document control on every page, Read included", () => {
+    for (const path of ["/build", "/compare", "/evaluate", "/read", "/design"]) {
+      header(path, false)
+      expect(screen.getByTestId("header-document")).toBeTruthy()
+      expect(screen.getByTestId("document-trigger")).toBeTruthy()
+      cleanup()
+    }
+  })
+
+  it("never turns the control amber when the lists cannot be read", async () => {
+    header("/build", false)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.getByTestId("document-trigger").className).not.toContain("bg-stale-wash")
+  })
+
   it("shows Build, Compare, Evaluate, Read and GitHub, with no Lessons", () => {
     header("/build", false)
     const main = screen.getByRole("navigation", { name: "Main" })

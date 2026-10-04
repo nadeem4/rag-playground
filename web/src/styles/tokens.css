@@ -482,6 +482,22 @@
 }
 
 /*
+ * The Document menu's drop: 140 ms of opacity and a 4px slide, played once as
+ * it opens. Under reduced motion it simply appears.
+ */
+@keyframes menu-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .menu-drop[data-state="open"] {
+    animation: menu-drop 140ms var(--ease-in);
+  }
+}
+
+/*
  * The phone keeps only the raised card's first shadow layer (spec section 9).
  * Each theme and contrast block names its own --shadow-raised-phone; this swap
  * outranks all of them (three :root, specificity 0,3,0), so the phone value of

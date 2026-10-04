@@ -89,6 +89,10 @@ def test_heading_hierarchy_is_in_the_schema_with_its_plain_meaning():
         "Docling infers heading levels from the layout, so a role sits under "
         "Experience instead of beside it."
     ) in prop["description"]
+    assert (
+        "Turning it on also turns on Docling's generate_parsed_pages, which "
+        "keeps the parsed pages in memory so font style can be read."
+    ) in prop["description"]
 
 
 def test_converter_key_changes_with_the_heading_hierarchy():

@@ -30,7 +30,9 @@ stays contiguous.
 without a level, so by default every heading is level 1. `heading_hierarchy`
 is Docling's own `HeadingHierarchyOptions.enabled`, which infers levels from
 bookmarks, numbering and font style; the levels pass through `map_label`, so
-the heading path the chunkers read nests.
+the heading path the chunkers read nests. Turning it on also turns on
+Docling's `generate_parsed_pages`, which keeps the parsed pages in memory so
+font style can be read.
 
 **Boxes** use pdfium's convention: (left, bottom, right, top) in PDF points,
 y growing upwards.
@@ -130,7 +132,9 @@ class DoclingConfig(BaseModel):
             "Docling infers heading levels from the layout, so a role sits under "
             "Experience instead of beside it. It reads PDF bookmarks first, then "
             "numbering such as 1. and 1.1, then font size and style. When off, "
-            "every heading is at the same level."
+            "every heading is at the same level. Turning it on also turns on "
+            "Docling's generate_parsed_pages, which keeps the parsed pages in "
+            "memory so font style can be read."
         ),
     )
 

@@ -393,7 +393,7 @@
           },
           "heading_hierarchy": {
             "default": false,
-            "description": "Docling's HeadingHierarchyOptions.enabled, set through PdfPipelineOptions.heading_hierarchy_options. Docling infers heading levels from the layout, so a role sits under Experience instead of beside it. It reads PDF bookmarks first, then numbering such as 1. and 1.1, then font size and style. When off, every heading is at the same level.",
+            "description": "Docling's HeadingHierarchyOptions.enabled, set through PdfPipelineOptions.heading_hierarchy_options. Docling infers heading levels from the layout, so a role sits under Experience instead of beside it. It reads PDF bookmarks first, then numbering such as 1. and 1.1, then font size and style. When off, every heading is at the same level. Turning it on also turns on Docling's generate_parsed_pages, which keeps the parsed pages in memory so font style can be read.",
             "title": "Heading Hierarchy",
             "type": "boolean"
           }

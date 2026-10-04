@@ -82,18 +82,24 @@ export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
 
 /**
  * A score over a handful of pieces is flattered: when the top k is most of
- * the pieces, the answer is found by chance. Null when the count is unknown
- * or there are enough pieces for the score to mean something.
+ * the pieces, the answer is found by chance. A miss still says a lot, so a run
+ * with misses is worded for them. "The answer was in none of the pieces" is
+ * said only when every miss was absent from everything that came back and
+ * everything the pipeline made came back; otherwise the miss is only known to
+ * be below the top k. Null when the count is unknown or there are enough
+ * pieces for the score to mean something.
  */
-export function piecesWarning(pieces: number | null, topK: number): string | null {
-  if (pieces === null) return null
+export function piecesWarning(pieces: number | null, topK: number, misses: readonly EvalPayload[]): string | null {
+  if (pieces === null || pieces > 2 * topK) return null
+  if (misses.length > 0) {
+    const nowhere = misses.every((p) => p.found_at === null && p.returned === pieces)
+    const where = nowhere ? `the answer was in none of the ${pieces} pieces` : `its answer was not in the top ${topK}`
+    return `With ${pieces} ${pieces === 1 ? "piece" : "pieces"} and ${topK} checked, a hit says little. A miss still says a lot: ${where}.`
+  }
   if (pieces <= topK) {
     return `This pipeline makes only ${pieces} ${pieces === 1 ? "piece" : "pieces"}, so every question finds its answer. The score says nothing here.`
   }
-  if (pieces <= 2 * topK) {
-    return `This pipeline makes only ${pieces} pieces and the top ${topK} are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.`
-  }
-  return null
+  return `This pipeline makes only ${pieces} pieces and checks ${topK} of them, so a question can find its answer by chance. Use smaller pieces or check fewer to make the score mean more.`
 }
 
 /**
@@ -127,10 +133,59 @@ export function summarize(payloads: readonly (EvalPayload | undefined)[]): EvalS
   }
 }
 
-/** `9 of 10 found the answer, was 7 of 10`. */
-export function summaryLine(now: EvalSummary, before?: EvalSummary | null): string {
-  const head = `${now.hits} of ${now.total} found the answer`
-  return before ? `${head}, was ${before.hits} of ${before.total}` : head
+/** The score as a finding sentence, and the line under it. */
+export interface ScoreFinding {
+  /** `3 of 5 questions found the answer. The last run found 5 of 5.` */
+  finding: string
+  /** `Hit rate at 5 pieces: 60%.` and, when it says something, why. */
+  sub: string
+}
+
+/** The one step whose transform changed since the last run, or null when none or several did. */
+function changedStep(before: readonly RecipeStep[] | undefined, now: readonly RecipeStep[]): RecipeStep | null {
+  if (!before || before.length !== now.length || now.some((s, i) => s.label !== before[i].label)) return null
+  const changed = now.filter((s, i) => s.transform !== before[i].transform)
+  return changed.length === 1 ? changed[0] : null
+}
+
+const COUNT_WORDS: Record<number, string> = { 2: "Both" }
+
+/**
+ * The score as one sentence with the last run beside it, then the hit rate and
+ * the one thing worth saying about it: every answer came back first, or how
+ * many misses are new and since what. A change is named only when exactly one
+ * step's transform differs from the last run's recipe; an older stored run
+ * has no recipe, so it reads "since the last run".
+ */
+export function scoreFinding(
+  summary: EvalSummary,
+  previous: PreviousEvaluation | null,
+  rows: readonly { now?: EvalPayload; before?: EvalPayload }[],
+  steps: readonly RecipeStep[],
+  k: number,
+): ScoreFinding {
+  const noun = summary.total === 1 ? "question" : "questions"
+  const head = `${summary.hits} of ${summary.total} ${noun} found the answer.`
+  const finding = previous ? `${head} The last run found ${previous.summary.hits} of ${previous.summary.total}.` : head
+  const rate = percent(summary.total ? summary.hits / summary.total : null) ?? "not yet"
+  const base = `Hit rate at ${k} pieces: ${rate}.`
+
+  const scored = rows.filter((r): r is { now: EvalPayload; before?: EvalPayload } => r.now !== undefined)
+  if (scored.length > 0 && scored.length === rows.length && scored.every((r) => r.now.hit && r.now.rank === 1)) {
+    return { finding, sub: `${base} Every answer came back as the top piece.` }
+  }
+  const misses = scored.filter((r) => !r.now.hit)
+  const lost = misses.filter((r) => changeFor(r.now, r.before) === "lost").length
+  if (!previous || lost === 0) return { finding, sub: base }
+  const step = changedStep(previous.steps, steps)
+  const since = step ? `since ${step.label} changed to ${step.name}.` : "since the last run."
+  const count =
+    lost < misses.length
+      ? `${lost} of the ${misses.length} misses ${lost === 1 ? "is" : "are"} new`
+      : lost === 1
+        ? "The miss is new"
+        : `${COUNT_WORDS[lost] ?? `All ${lost}`} misses are new`
+  return { finding, sub: `${base} ${count} ${since}` }
 }
 
 // ------------------------------------------------------------- the metrics --
@@ -244,6 +299,8 @@ export interface PreviousEvaluation {
   pipelineKey: string
   byId: Record<string, EvalPayload>
   summary: EvalSummary
+  /** The recipe it was scored with, so the next run can name the one step that changed. Absent on older entries. */
+  steps?: RecipeStep[]
 }
 
 const PREVIOUS_KEY = "rag-playground:evaluation:previous"
@@ -270,7 +327,8 @@ const isPrevious = (p: unknown): p is PreviousEvaluation => {
     typeof e?.byId === "object" &&
     e.byId !== null &&
     !Array.isArray(e.byId) &&
-    typeof e?.summary?.total === "number"
+    typeof e?.summary?.total === "number" &&
+    (e.steps === undefined || (Array.isArray(e.steps) && e.steps.every((x) => typeof x?.label === "string" && typeof x?.transform === "string" && typeof x?.name === "string")))
   )
 }
 

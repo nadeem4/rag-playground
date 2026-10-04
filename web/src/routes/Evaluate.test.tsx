@@ -5,7 +5,7 @@ import { resetAppSettingsForTests } from "@/api/useDemo"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { GoldQuestion, QuestionSetUpload, Registry, SampleQuestion } from "@/api/types"
 import type { EvalSummary } from "@/state/evaluate"
-import { storePreviousEvaluation } from "@/state/evaluate"
+import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
 import { sampleGraph, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
 import { readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 
@@ -586,6 +586,9 @@ describe("while and after scoring", () => {
       o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }),
     })
     await waitFor(() => expect(document.body.textContent).toContain("Scoring question 1 of 2."))
+    // Every mark is drawn at once, and waits until its row lands.
+    const waiting = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    expect(waiting.map((m) => m.getAttribute("aria-label"))).toEqual(["Question 1, waiting", "Question 2, waiting"])
     expect(screen.queryByTestId("summary")).toBeNull()
     expect(screen.queryByTestId("hit-rate")).toBeNull()
 
@@ -597,6 +600,10 @@ describe("while and after scoring", () => {
     es.emit(5, { event: "stream_end", status: "finished", ok: true })
 
     const summary = await screen.findByTestId("summary")
+    expect(summary.textContent).toBe("1 of 2 questions found the answer.")
+    expect(summary.className).toContain("text-[1.375rem]")
+    expect(summary.className).toContain("max-w-[52ch]")
+    expect(screen.getByTestId("hit-rate").textContent).toBe("Hit rate at 5 pieces: 50%.")
     expect(summary.className).not.toContain("font-mono")
     expect(summary.querySelector("span.font-mono")).not.toBeNull()
     expect(screen.getByTestId("hit-rate")).toBeTruthy()
@@ -637,8 +644,50 @@ describe("while and after scoring", () => {
     expect(document.body.textContent).not.toContain("below the top 10")
     expect(screen.getByTestId("hit-rate").textContent).toMatch(/^Hit rate at 5 /)
     expect(screen.getByTestId("pieces-warning").textContent).toBe(
-      "This pipeline makes only 7 pieces and the top 5 are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.",
+      "With 7 pieces and 5 checked, a hit says little. A miss still says a lot: its answer was not in the top 5.",
     )
+    expect(screen.getByTestId("pieces-warning").className).toContain("bg-warn")
+  })
+
+  /** Runs the two questions to the end: a found one and a missed one. */
+  async function finishTwo(missed: Record<string, unknown> = {}) {
+    const es = await start({ o0: evalOut({}), o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", returned: 3, ...missed }) })
+    const useCase = idOf("use_case")
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: "o0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "variant_started", index: 1, variant: {} })
+    es.emit(4, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
+    es.emit(5, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+  }
+
+  it("draws one mark per question, and a mark opens its row and scrolls it into view", async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    await finishTwo()
+    const marks = within(await screen.findByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(["Question 1, found", "Question 2, missed"])
+    expect(marks.map((m) => m.textContent)).toEqual(["\u2713", "\u2715"])
+    expect(marks[0].className).toContain("bg-kept")
+    expect(marks[1].className).toContain("bg-removed")
+    expect(marks[1].className).toContain("--removed-mark")
+    fireEvent.click(marks[1])
+    expect((document.querySelector('[data-question="b"]') as HTMLDetailsElement).open).toBe(true)
+    expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
+  })
+
+  it("says the last run beside the score, and stores this run with its recipe", async () => {
+    storePreviousEvaluation({
+      sourceSha: SOURCE.sha,
+      pipelineKey: "working",
+      byId: { a: evalOut({}).payload as never, b: evalOut({}).payload as never },
+      summary: { hits: 2, total: 2, averageRank: 1 },
+    })
+    await finishTwo()
+    expect(screen.getByTestId("summary").textContent).toBe("1 of 2 questions found the answer. The last run found 2 of 2.")
+    // An older stored run has no recipe, so the miss is new since the last run.
+    expect(screen.getByTestId("hit-rate").textContent).toBe("Hit rate at 5 pieces: 50%. The miss is new since the last run.")
+    await waitFor(() => expect(readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0]).toEqual({ label: "Parse", transform: "docling", name: "Docling" }))
   })
 
   it("warns that the score says nothing when the pipeline makes fewer pieces than the top k", async () => {

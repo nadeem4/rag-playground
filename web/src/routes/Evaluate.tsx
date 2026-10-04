@@ -28,7 +28,6 @@ import {
   metrics,
   metricsByTag,
   missText,
-  percent,
   piecesWarning,
   pipelineSteps,
   questionVariants,
@@ -36,8 +35,8 @@ import {
   rerankEffect,
   rerankLine,
   storePreviousEvaluation,
+  scoreFinding,
   summarize,
-  summaryLine,
   type PreviousEvaluation,
   type RowChange,
 } from "@/state/evaluate"
@@ -334,7 +333,6 @@ function Evaluation({
       live = false
     }
   }, [chunkArtifact])
-  const warning = piecesWarning(pieces, shownK)
   const payload = usePayloads(ids.flatMap((x) => [x.out, x.result]))
 
   const rows: Row[] = asked.map((question, i) => {
@@ -363,13 +361,31 @@ function Evaluation({
   const firstFailure = rows.find((r) => r.failed)?.failed
   const steps = pipelineSteps(graph)
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
+  const misses = rows.flatMap((r) => (r.payload && !r.payload.hit ? [r.payload] : []))
+  const warning = piecesWarning(pieces, shownK, misses)
+  const score = scoreFinding(
+    summary,
+    previous,
+    rows.map((r) => ({ now: r.payload, before: previous?.byId[r.question.id] })),
+    steps,
+    shownK,
+  )
+
+  // Each row's <details>, so a mark can open its row and bring it into view.
+  const rowEls = useRef(new Map<string, HTMLDetailsElement>())
+  function openRow(id: string) {
+    const el = rowEls.current.get(id)
+    if (!el) return
+    el.open = true
+    el.scrollIntoView?.({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" })
+  }
 
   // The finished evaluation on screen, to compare the next one against. It is
   // written to session storage as soon as it finishes, because changing a
   // setting means a trip to Build and a fresh page.
   const done = runId !== null && run.closed && rows.length > 0 && rows.every((r) => r.payload !== undefined)
   const finishedRun: PreviousEvaluation | null = done
-    ? { sourceSha, pipelineKey, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary }
+    ? { sourceSha, pipelineKey, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary, steps }
     : null
   const fingerprint = finishedRun ? JSON.stringify(finishedRun.summary) + rows.map((r) => r.payload!.rank).join(",") : ""
   const latest = useRef<PreviousEvaluation | null>(null)
@@ -468,13 +484,13 @@ function Evaluation({
         </p>
       </div>
 
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1" aria-live="polite">
+      <section aria-label="Score" aria-live="polite" className="flex flex-col gap-2.5">
         {error || questionsError || samplesError ? (
           <p role="alert" className="font-mono text-xs break-words text-danger">
             {error ?? questionsError ?? samplesError}
           </p>
         ) : runId === null ? (
-          <>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <p className="text-sm text-fg-muted">
               {questions
                 ? `${questions.length} ${questions.length === 1 ? "question" : "questions"} ready. Press Evaluate to score this pipeline.`
@@ -487,30 +503,41 @@ function Evaluation({
                 The last evaluation in this tab found {previous.summary.hits} of {previous.summary.total}.
               </p>
             ) : null}
-          </>
-        ) : busy ? (
-          <p className="text-sm font-medium text-fg">{`Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}</p>
+          </div>
         ) : (
           <>
-            <p data-testid="summary" className="text-sm font-medium text-fg">
-              <MonoNumbers text={summaryLine(summary, previous?.summary)} />
-            </p>
-            <p data-testid="hit-rate" className="text-sm text-fg-muted">
-              Hit rate at {shownK} <span className="font-mono font-medium text-fg tabular-nums">{percent(scores.hitRate) ?? "not yet"}</span>
-            </p>
-            <p className="text-xs text-fg-muted">{`${asked.length} questions, one run each.`}</p>
+            {busy ? null : (
+              <div className="flex flex-col gap-1.5">
+                <p data-testid="summary" className="max-w-[52ch] text-[1.375rem] leading-snug text-balance text-fg">
+                  <MonoNumbers text={score.finding} />
+                </p>
+                <p data-testid="hit-rate" className="max-w-[70ch] text-fg-muted">
+                  <MonoNumbers text={score.sub} />
+                </p>
+              </div>
+            )}
+            <div role="list" aria-label="One mark per question" className="flex flex-wrap gap-1.5">
+              {rows.map((row, i) => (
+                <span role="listitem" key={row.question.id} className="flex">
+                  <Mark n={i + 1} verdict={verdictOf(row)} onPress={() => openRow(row.question.id)} />
+                </span>
+              ))}
+            </div>
+            {busy ? (
+              <p className="text-xs text-fg-muted">{`Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}</p>
+            ) : null}
           </>
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
-      </div>
 
-      {warning ? (
-        <p role="status" data-testid="pieces-warning" className="shrink-0 border-b border-hairline px-3 py-1 text-xs text-fg-muted">
-          {warning}
-        </p>
-      ) : null}
+        {warning ? (
+          <p role="status" data-testid="pieces-warning" className="max-w-[80ch] rounded-panel bg-warn px-3 py-2 text-sm text-warn-text">
+            {warning}
+          </p>
+        ) : null}
 
-      {runId === null ? null : <EvalMetricsDetail metrics={scores} byTag={byTag} topK={shownK} rerank={rerankText} />}
+        {runId === null ? null : <EvalMetricsDetail metrics={scores} byTag={byTag} topK={shownK} rerank={rerankText} />}
+      </section>
 
       {firstFailure ? (
         <p role="alert" className="shrink-0 border-b border-hairline px-3 py-2 font-mono text-xs break-words text-danger">
@@ -532,12 +559,65 @@ function Evaluation({
               <span className="meta">question</span>
             </div>
             {rows.map((row) => (
-              <QuestionRow key={row.question.id} row={row} before={previous?.byId[row.question.id]} topK={shownK} />
+              <QuestionRow
+                key={row.question.id}
+                row={row}
+                before={previous?.byId[row.question.id]}
+                topK={shownK}
+                rowRef={(el) => {
+                  if (el) rowEls.current.set(row.question.id, el)
+                  else rowEls.current.delete(row.question.id)
+                }}
+              />
             ))}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+type Verdict = "waiting" | "running" | "found" | "missed" | "failed"
+
+function verdictOf(row: Row): Verdict {
+  if (!row.started) return "waiting"
+  if (row.failed) return "failed"
+  if (!row.payload) return "running"
+  return row.payload.hit ? "found" : "missed"
+}
+
+function reducedMotion(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+const MARK: Record<Verdict, { glyph: string; tone: string }> = {
+  found: { glyph: "\u2713", tone: "bg-kept text-kept-text" },
+  missed: { glyph: "\u2715", tone: "bg-removed text-removed-text shadow-[inset_0_0_0_2px_var(--removed-mark)]" },
+  failed: { glyph: "!", tone: "bg-removed text-danger" },
+  waiting: { glyph: "", tone: "border border-hairline bg-surface text-fg-muted" },
+  running: { glyph: "", tone: "border border-fg-muted bg-surface text-fg-muted" },
+}
+
+/**
+ * One question as a mark: a tick for found, a cross with a ring for missed, a
+ * neutral outline while it waits or runs. 34 px square; a coarse pointer
+ * grows it to 44 px through the touch rule in tokens.css. Pressing it opens
+ * the question's row.
+ */
+function Mark({ n, verdict, onPress }: { n: number; verdict: Verdict; onPress: () => void }) {
+  const m = MARK[verdict]
+  return (
+    <button
+      type="button"
+      aria-label={`Question ${n}, ${verdict}`}
+      onClick={onPress}
+      className={cn(
+        "grid size-[34px] cursor-pointer place-items-center rounded-[9px] text-[0.9375rem] font-bold transition-transform duration-(--dur-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) active:scale-[0.98] motion-reduce:transition-none",
+        m.tone,
+      )}
+    >
+      <span aria-hidden>{m.glyph}</span>
+    </button>
   )
 }
 
@@ -550,7 +630,17 @@ const CHANGE_RULE: Record<RowChange, string> = {
   down: "border-l-2 border-removed-mark",
 }
 
-function QuestionRow({ row, before, topK }: { row: Row; before?: EvalPayload; topK: number }) {
+function QuestionRow({
+  row,
+  before,
+  topK,
+  rowRef,
+}: {
+  row: Row
+  before?: EvalPayload
+  topK: number
+  rowRef?: (el: HTMLDetailsElement | null) => void
+}) {
   const p = row.payload
   const change = changeFor(p, before)
   const moved = changeText(change, before)
@@ -565,7 +655,7 @@ function QuestionRow({ row, before, topK }: { row: Row; before?: EvalPayload; to
           : "text-fg-muted"
 
   return (
-    <details className={cn("bg-surface", CHANGE_RULE[change])} data-question={row.question.id} data-change={change === "none" ? undefined : change}>
+    <details ref={rowRef} className={cn("bg-surface", CHANGE_RULE[change])} data-question={row.question.id} data-change={change === "none" ? undefined : change}>
       <summary className="grid cursor-pointer list-none grid-cols-[52px_44px_minmax(0,1fr)] items-baseline gap-x-2 px-3 py-2 hover:bg-muted">
         <span className={cn("justify-self-start rounded-control px-1 font-sans text-2xs", tone)}>{verdict}</span>
         <span className="text-right font-mono text-sm text-fg tabular-nums">{p?.rank ?? ""}</span>

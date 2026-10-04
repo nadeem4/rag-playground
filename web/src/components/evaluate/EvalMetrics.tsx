@@ -3,8 +3,8 @@ import type { ReactNode } from "react"
 import { percent, type EvalMetrics, type TagMetrics } from "@/state/evaluate"
 
 /**
- * The numbers behind the headline (plan I-33). Hit rate at k sits in the strip
- * above, where it cannot be missed; everything else is one click away, because
+ * The numbers behind the headline (plan I-33). Hit rate at k sits in the line
+ * under the score, where it cannot be missed; everything else is one click away, because
  * a wall of rates is not a result.
  *
  * Recall appears only when a question has more than one gold passage, and the
@@ -13,9 +13,9 @@ import { percent, type EvalMetrics, type TagMetrics } from "@/state/evaluate"
 
 export function EvalMetricsDetail({ metrics: m, byTag, topK, rerank }: { metrics: EvalMetrics; byTag: TagMetrics[]; topK: number; rerank: string | null }) {
   return (
-    <details data-testid="more-metrics" className="shrink-0 border-b border-hairline">
-      <summary className="cursor-pointer list-none px-3 py-1 text-xs text-fg-muted hover:bg-muted">All the numbers</summary>
-      <div className="flex flex-col gap-3 border-t border-hairline px-3 py-2">
+    <details data-testid="more-metrics">
+      <summary className="inline-flex cursor-pointer list-none items-center text-sm text-primary underline underline-offset-4">All the numbers</summary>
+      <div className="mt-2 flex max-w-[900px] flex-col gap-3">
         <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-4 gap-y-2">
           <Figure label="Mean reciprocal rank" value={m.mrr === null ? null : m.mrr.toFixed(2)}>
             Finding the answer first counts more than finding it fifth.

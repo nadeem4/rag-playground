@@ -18,9 +18,9 @@ import {
   readPreviousEvaluation,
   rerankEffect,
   rerankLine,
+  scoreFinding,
   storePreviousEvaluation,
   summarize,
-  summaryLine,
   type EvalPayload,
 } from "./evaluate"
 import type { Question } from "./goldSet"
@@ -195,25 +195,63 @@ describe("the metrics per tag", () => {
   })
 })
 
+const pay = (hit: boolean, rank: number | null, over: Partial<EvalPayload> = {}): EvalPayload => ({
+  question: "q",
+  gold_answer: "g",
+  hit,
+  rank,
+  matched_chunk_id: hit ? "c" : "",
+  match: hit ? "exact" : "none",
+  considered: 5,
+  total_candidates: 6,
+  found_at: null,
+  returned: 6,
+  ...over,
+})
+const steps = (parse: string, name: string) => [
+  { label: "Parse", transform: parse, name },
+  { label: "Chunk", transform: "recursive_character", name: "Recursive (natural breaks)" },
+]
+
 describe("the warning about too few pieces", () => {
   it("says nothing when the number of pieces is not known", () => {
-    expect(piecesWarning(null, 5)).toBeNull()
+    expect(piecesWarning(null, 5, [])).toBeNull()
   })
 
   it("says the score means nothing when every piece is checked", () => {
-    expect(piecesWarning(1, 5)).toBe("This pipeline makes only 1 piece, so every question finds its answer. The score says nothing here.")
-    expect(piecesWarning(5, 5)).toBe("This pipeline makes only 5 pieces, so every question finds its answer. The score says nothing here.")
+    expect(piecesWarning(1, 5, [])).toBe("This pipeline makes only 1 piece, so every question finds its answer. The score says nothing here.")
+    expect(piecesWarning(5, 5, [])).toBe("This pipeline makes only 5 pieces, so every question finds its answer. The score says nothing here.")
   })
 
-  it("says most questions find the answer by chance when the pieces are few", () => {
-    expect(piecesWarning(7, 5)).toBe(
-      "This pipeline makes only 7 pieces and the top 5 are checked, so most questions find the answer by chance. Use smaller pieces or a lower Top k.",
+  it("does not claim every question finds its answer when one missed", () => {
+    expect(piecesWarning(5, 5, [pay(false, null, { returned: 5 })])).toBe(
+      "With 5 pieces and 5 checked, a hit says little. A miss still says a lot: the answer was in none of the 5 pieces.",
     )
-    expect(piecesWarning(10, 5)).not.toBeNull()
+  })
+
+  it("says a question can find its answer by chance when the pieces are few", () => {
+    expect(piecesWarning(6, 5, [])).toBe(
+      "This pipeline makes only 6 pieces and checks 5 of them, so a question can find its answer by chance. Use smaller pieces or check fewer to make the score mean more.",
+    )
+    expect(piecesWarning(10, 5, [])).not.toBeNull()
+  })
+
+  it("words the pieces caveat for a run with misses, and stays honest about where the answer was", () => {
+    expect(piecesWarning(6, 5, [pay(false, null)])).toBe("With 6 pieces and 5 checked, a hit says little. A miss still says a lot: the answer was in none of the 6 pieces.")
+    expect(piecesWarning(6, 5, [pay(false, null, { found_at: 6 })])).toBe("With 6 pieces and 5 checked, a hit says little. A miss still says a lot: its answer was not in the top 5.")
+    expect(piecesWarning(6, 5, [pay(false, null), pay(false, null, { found_at: 6 })])).toBe(
+      "With 6 pieces and 5 checked, a hit says little. A miss still says a lot: its answer was not in the top 5.",
+    )
+    // Fewer pieces came back than the pipeline made, so "none of the 6" is not known.
+    expect(piecesWarning(6, 5, [pay(false, null, { returned: 5 })])).toBe(
+      "With 6 pieces and 5 checked, a hit says little. A miss still says a lot: its answer was not in the top 5.",
+    )
+    expect(piecesWarning(6, 5, [])).toBe("This pipeline makes only 6 pieces and checks 5 of them, so a question can find its answer by chance. Use smaller pieces or check fewer to make the score mean more.")
   })
 
   it("says nothing when there are enough pieces", () => {
-    expect(piecesWarning(11, 5)).toBeNull()
+    expect(piecesWarning(11, 5, [])).toBeNull()
+    expect(piecesWarning(11, 5, [pay(false, null)])).toBeNull()
   })
 })
 
@@ -247,11 +285,67 @@ describe("the summary", () => {
     expect(summarize([payload(), undefined, undefined])).toEqual({ hits: 1, total: 3, averageRank: 1 })
   })
 
-  it("reads as a sentence, with the previous run beside it", () => {
-    const now = summarize([payload(), payload(), miss()])
-    const before = summarize([payload(), miss(), miss()])
-    expect(summaryLine(now)).toBe("2 of 3 found the answer")
-    expect(summaryLine(now, before)).toBe("2 of 3 found the answer, was 1 of 3")
+})
+
+describe("the score as a finding", () => {
+  const prev = (over: Record<string, unknown> = {}) => ({
+    sourceSha: "s",
+    pipelineKey: "working",
+    byId: {},
+    summary: { hits: 5, total: 5, averageRank: 1 },
+    steps: steps("docling", "Docling"),
+    ...over,
+  })
+
+  it("says the score and the last run's score as one finding", () => {
+    const now = [pay(true, 1), pay(true, 1), pay(false, null), pay(false, null), pay(true, 1)]
+    const before = prev()
+    // Every question was found 1st last time, so both misses are losses.
+    const f = scoreFinding(summarize(now), before, now.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5)
+    expect(f.finding).toBe("3 of 5 questions found the answer. The last run found 5 of 5.")
+    expect(f.sub).toBe("Hit rate at 5 pieces: 60%. Both misses are new since Parse changed to Fast text.")
+  })
+
+  it("says every answer came back first on a clean first run", () => {
+    const now = [pay(true, 1), pay(true, 1)]
+    const f = scoreFinding(summarize(now), null, now.map((p) => ({ now: p })), steps("docling", "Docling"), 5)
+    expect(f.finding).toBe("2 of 2 questions found the answer.")
+    expect(f.sub).toBe("Hit rate at 5 pieces: 100%. Every answer came back as the top piece.")
+  })
+
+  it("counts the new misses, and says since the last run when no single step changed", () => {
+    const one = [pay(true, 1), pay(false, null)]
+    expect(scoreFinding(summarize(one), prev({ steps: undefined }), one.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5).sub).toBe(
+      "Hit rate at 5 pieces: 50%. The miss is new since the last run.",
+    )
+    const three = [pay(false, null), pay(false, null), pay(false, null)]
+    expect(scoreFinding(summarize(three), prev(), three.map((p) => ({ now: p, before: pay(true, 2) })), steps("docling", "Docling"), 5).sub).toBe(
+      "Hit rate at 5 pieces: 0%. All 3 misses are new since the last run.",
+    )
+    const some = three.map((p, i) => ({ now: p, before: i === 2 ? pay(false, null) : pay(true, 1) }))
+    expect(scoreFinding(summarize(three), prev(), some, steps("pdfium", "Fast text"), 5).sub).toBe(
+      "Hit rate at 5 pieces: 0%. 2 of the 3 misses are new since Parse changed to Fast text.",
+    )
+  })
+
+  it("names a change only when exactly one step's transform differs", () => {
+    const now = [pay(false, null)]
+    const two = [
+      { label: "Parse", transform: "pdfium", name: "Fast text" },
+      { label: "Chunk", transform: "token_based", name: "Fixed token count" },
+    ]
+    expect(scoreFinding(summarize(now), prev(), [{ now: now[0], before: pay(true, 1) }], two, 5).sub).toBe(
+      "Hit rate at 5 pieces: 0%. The miss is new since the last run.",
+    )
+  })
+
+  it("says nothing more when the misses are old, or the hits are not all first", () => {
+    const now = [pay(true, 2), pay(false, null)]
+    expect(scoreFinding(summarize(now), prev(), now.map((p) => ({ now: p, before: p })), steps("docling", "Docling"), 5).sub).toBe("Hit rate at 5 pieces: 50%.")
+    expect(scoreFinding(summarize([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 3)).toEqual({
+      finding: "1 of 1 question found the answer.",
+      sub: "Hit rate at 3 pieces: 100%.",
+    })
   })
 })
 
@@ -281,6 +375,22 @@ describe("the change since the previous evaluation", () => {
 })
 
 describe("the previous evaluation of the session", () => {
+  it("reads an older stored run that has no recipe", () => {
+    window.sessionStorage.setItem(
+      "rag-playground:evaluation:previous",
+      JSON.stringify({
+        "s|working": { sourceSha: "s", pipelineKey: "working", byId: {}, summary: { hits: 1, total: 2, averageRank: 1 } },
+      }),
+    )
+    expect(readPreviousEvaluation("s", "working")?.summary.hits).toBe(1)
+    expect(readPreviousEvaluation("s", "working")?.steps).toBeUndefined()
+  })
+
+  it("keeps the recipe it was scored with", () => {
+    storePreviousEvaluation({ sourceSha: "s", pipelineKey: "working", byId: {}, summary: { hits: 1, total: 2, averageRank: 1 }, steps: steps("docling", "Docling") })
+    expect(readPreviousEvaluation("s", "working")?.steps).toEqual(steps("docling", "Docling"))
+  })
+
   const SHA = "cd".repeat(32)
   const OTHER_SHA = "ab".repeat(32)
 

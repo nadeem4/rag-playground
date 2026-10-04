@@ -33,6 +33,15 @@ const show = (rows: { tags: string[]; payload?: EvalPayload }[], rerank: string 
 afterEach(cleanup)
 
 describe("the numbers behind the headline", () => {
+  it("folds under All the numbers, a link-styled disclosure that sits in the score", () => {
+    show([{ tags: [], payload: payload() }])
+    const summary = screen.getByText("All the numbers")
+    expect(summary.tagName).toBe("SUMMARY")
+    expect(summary.className).toContain("inline-flex")
+    expect(summary.className).toContain("text-primary")
+    expect((summary.closest("details") as HTMLDetailsElement).open).toBe(false)
+  })
+
   it("always gives the mean reciprocal rank and the rank of the first hit", () => {
     show([{ tags: [], payload: payload({ rank: 1 }) }, { tags: [], payload: payload({ rank: 3 }) }])
     expect(screen.getByTestId("average-rank").textContent).toMatch(/Average rank of the first hit2\.0/)

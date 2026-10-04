@@ -580,21 +580,28 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 ### Recording the Home clips
 
 Home's clips live in `web/public/clips/`: `build.webm` and `evaluate.webm` with a `.jpg`
-poster each, and `compare.jpg`, a still of Compare until it has a clip. To record them again:
+poster each, and `compare.jpg`, a still of Compare until it has a clip. Each also comes in a
+dark version (`build-dark.webm`, `build-dark.jpg` and so on). On the System theme the page
+serves the dark file by media query, with the light one as the fallback; when the theme is set
+to Light or Dark, it plays the matching file. To record them again:
 
 ```bash
 cd web && npm run build && cd ..
-uv run --with playwright==1.55.0 python scripts/record_clips.py           # build and evaluate
-uv run --with playwright==1.55.0 python scripts/record_clips.py compare   # the Compare still
+uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py           # build and evaluate
+uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py compare   # the Compare still
 ```
 
-The script starts its own server on port 8231 (`--port` changes it), with a fresh artifact and
-source folder in a temp directory, and stops it when done. It uses the Chromium that Playwright
+The script starts its own server in demo mode, so the Dev menu is hidden, on port 8231
+(`--port` changes it), with a fresh artifact and source folder in a temp directory, and stops it
+when done. It uses the Chromium that Playwright
 has installed (in `%LOCALAPPDATA%\ms-playwright` on Windows); pin the Playwright package to the
 version that matches that browser. Each clip has a setup pass that is not recorded, which loads
-the sample and runs every step once, then a recorded pass at 1280x800 on warm results. The
-pauses in the script set the length, 8 to 15 seconds, and it prints each clip's length and
-size. The poster is a screenshot taken at the clip's telling moment.
+the sample and runs every step once, then a recorded pass at 1280x800 on warm results, once in
+the light theme and once in the dark. Each clip is cut to start at the first frame after the
+page has loaded and re-encoded to WebM VP9 with the ffmpeg that imageio-ffmpeg ships, so no
+system ffmpeg is needed. The pauses in the script set the length, 8 to 15 seconds, and it prints
+each clip's length and size and warns above 1.5 MB. The poster is a screenshot taken at the
+clip's telling moment.
 
 ## Where your data goes
 

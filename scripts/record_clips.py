@@ -1,33 +1,37 @@
 """Record the short clips Home shows, from a real session against a local server.
 
     cd web && npm run build && cd ..
-    uv run --with playwright==1.55.0 python scripts/record_clips.py            # build and evaluate
-    uv run --with playwright==1.55.0 python scripts/record_clips.py evaluate   # one clip
+    uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py            # build and evaluate
+    uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py evaluate   # one clip
 
-It starts the server on its own port (8231 unless `--port` says otherwise),
-with a fresh artifact and source directory in a temp folder, and stops it by
-its own process when done. It drives the installed Playwright Chromium (in
+It starts the server in demo mode (`RAG_PLAYGROUND_DEMO=1`, so the Dev menu
+is hidden) on its own port (8231 unless `--port` says otherwise), with a fresh
+artifact and source directory in a temp folder, and stops it by its own
+process when done. It drives the installed Playwright Chromium (in
 %LOCALAPPDATA%\\ms-playwright on Windows); pin the Playwright package to the
 version that matches that browser build (1.55.0 for chromium-1187).
 
 Each clip has a setup pass that is not recorded: it loads the sample, makes
 the changes the clip needs and runs every step once, so the recorded pass
 reads warm results and fits in 8 to 15 seconds. The recorded pass starts from
-the setup's stored state in a fresh browser context. Timing is set by the
-pauses below, not by an editor; nothing is trimmed afterwards.
+the setup's stored state in a fresh browser context, once in the light theme
+and once in the dark. Timing is set by the pauses below. Each scene notes the
+moment its page has loaded; the recording is cut to start there, so no blank
+frame opens the loop, and re-encoded to WebM VP9 with the ffmpeg binary that
+the imageio-ffmpeg package ships (`imageio_ffmpeg.get_ffmpeg_exe()`).
 
-Writes `web/public/clips/<name>.webm` (1280x800) and `<name>.jpg`, a poster
-taken with Playwright's screenshot at the clip's telling moment. ffmpeg is not
-needed beyond the one Playwright ships for recording.
+Writes `web/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800), and a
+`.jpg` poster for each, taken with Playwright's screenshot at the clip's
+telling moment.
 
-Compare has no clip yet: `compare` saves only a poster of the Compare page.
+Compare has no clip yet: `compare` saves only a poster of the Compare page, in
+both themes.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,6 +45,9 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "web" / "public" / "clips"
 SIZE = {"width": 1280, "height": 800}
 FAST_TEXT = "Parse: Fast text"
+THEMES = {"light": "", "dark": "-dark"}
+#: Past the load, so the first frame kept is a painted one.
+LOAD_MARGIN = 0.2
 
 
 def start_server(port: int, data: Path) -> subprocess.Popen:
@@ -48,6 +55,8 @@ def start_server(port: int, data: Path) -> subprocess.Popen:
         **os.environ,
         "RAG_PLAYGROUND_ARTIFACTS": str(data / "artifacts"),
         "RAG_PLAYGROUND_SOURCES": str(data / "sources"),
+        # As on the hosted demo: no Dev menu in the header.
+        "RAG_PLAYGROUND_DEMO": "1",
     }
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", str(port)],
@@ -102,10 +111,12 @@ def build_setup(page: Page, base: str) -> None:
     page.wait_for_timeout(500)
 
 
-def build_scene(page: Page, base: str) -> None:
+def build_scene(page: Page, base: str, poster: Path) -> float:
     page.goto(base + "/build")
     build = page.get_by_role("button", name="Build the index")
     build.wait_for()
+    page.wait_for_load_state("networkidle")
+    loaded = time.time()
     page.wait_for_timeout(1200)
     build.click()
     page.get_by_text("Index ready", exact=False).wait_for(timeout=60_000)
@@ -118,8 +129,9 @@ def build_scene(page: Page, base: str) -> None:
     page.wait_for_timeout(600)
     slope.evaluate("el => el.scrollIntoView({ behavior: 'smooth', block: 'start' })")
     page.wait_for_timeout(2200)
-    page.screenshot(path=OUT / "build.jpg", type="jpeg", quality=80)
-    page.wait_for_timeout(2200)
+    page.screenshot(path=poster, type="jpeg", quality=80)
+    page.wait_for_timeout(2800)
+    return loaded
 
 
 # --------------------------------------------------------------- evaluate --
@@ -145,9 +157,11 @@ def evaluate_setup(page: Page, base: str) -> None:
     evaluate(page)
 
 
-def evaluate_scene(page: Page, base: str) -> None:
+def evaluate_scene(page: Page, base: str, poster: Path) -> float:
     page.goto(base + "/evaluate")
     page.get_by_role("button", name="Evaluate", exact=True).wait_for()
+    page.wait_for_load_state("networkidle")
+    loaded = time.time()
     page.wait_for_timeout(1200)
     evaluate(page)
     page.wait_for_timeout(1800)
@@ -157,23 +171,26 @@ def evaluate_scene(page: Page, base: str) -> None:
     page.wait_for_timeout(1800)
     page.get_by_role("button", name="missed", exact=False).first.click()
     page.wait_for_timeout(1800)
-    page.screenshot(path=OUT / "evaluate.jpg", type="jpeg", quality=80)
-    page.wait_for_timeout(1500)
+    page.screenshot(path=poster, type="jpeg", quality=80)
+    page.wait_for_timeout(1800)
+    return loaded
 
 
 # ---------------------------------------------------------------- compare --
 
 
 def compare_poster(browser, base: str) -> None:
-    """Compare has no clip yet: a still of the page with the sample loaded."""
-    ctx = browser.new_context(viewport=SIZE)
-    page = ctx.new_page()
-    pick_sample(page, base, None)
-    page.goto(base + "/compare")
-    page.wait_for_timeout(2500)
-    page.screenshot(path=OUT / "compare.jpg", type="jpeg", quality=80)
-    ctx.close()
-    print(f"compare.jpg {(OUT / 'compare.jpg').stat().st_size // 1024} KB")
+    """Compare has no clip yet: a still of the page with the sample loaded, in each theme."""
+    for theme, suffix in THEMES.items():
+        ctx = browser.new_context(viewport=SIZE, color_scheme=theme)
+        page = ctx.new_page()
+        pick_sample(page, base, None)
+        page.goto(base + "/compare")
+        page.wait_for_timeout(2500)
+        poster = OUT / f"compare{suffix}.jpg"
+        page.screenshot(path=poster, type="jpeg", quality=80)
+        ctx.close()
+        print(f"{poster.name} {poster.stat().st_size // 1024} KB")
 
 
 CLIPS = {"build": (build_setup, build_scene), "evaluate": (evaluate_setup, evaluate_scene)}
@@ -186,19 +203,40 @@ def record(browser, base: str, name: str, videos: Path) -> None:
     state = ctx.storage_state()
     ctx.close()
 
-    ctx = browser.new_context(viewport=SIZE, storage_state=state, record_video_dir=str(videos), record_video_size=SIZE)
-    page = ctx.new_page()
-    started = time.time()
-    scene(page, base)
-    seconds = time.time() - started
-    video = Path(page.video.path())
-    ctx.close()
-    target = OUT / f"{name}.webm"
-    shutil.copyfile(video, target)
-    size = target.stat().st_size
-    print(f"{name}.webm {seconds:.1f} s, {size / 1048576:.2f} MB")
-    if not 8 <= seconds <= 15:
-        print(f"  warning: {name} runs {seconds:.1f} s, outside 8 to 15 s")
+    for theme, suffix in THEMES.items():
+        ctx = browser.new_context(
+            viewport=SIZE, color_scheme=theme, storage_state=state, record_video_dir=str(videos), record_video_size=SIZE
+        )
+        # The recording starts with the page.
+        started = time.time()
+        page = ctx.new_page()
+        loaded = scene(page, base, OUT / f"{name}{suffix}.jpg") - started + LOAD_MARGIN
+        seconds = time.time() - started - loaded
+        raw = Path(page.video.path())
+        ctx.close()
+        target = OUT / f"{name}{suffix}.webm"
+        encode(raw, target, loaded)
+        size = target.stat().st_size
+        print(f"{target.name} {seconds:.1f} s from the loaded page at {loaded:.1f} s, {size / 1048576:.2f} MB")
+        if not 8 <= seconds <= 15:
+            print(f"  warning: {target.name} runs {seconds:.1f} s, outside 8 to 15 s")
+        if size > 1.5 * 1048576:
+            print(f"  warning: {target.name} is over 1.5 MB")
+
+
+def encode(raw: Path, target: Path, start: float) -> None:
+    """Cut `raw` to start at `start` seconds and re-encode it to WebM VP9, with no audio."""
+    from imageio_ffmpeg import get_ffmpeg_exe
+
+    subprocess.run(
+        [
+            get_ffmpeg_exe(), "-y", "-loglevel", "error",
+            "-i", str(raw), "-ss", f"{start:.2f}",
+            "-c:v", "libvpx-vp9", "-crf", "40", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4",
+            "-an", str(target),
+        ],
+        check=True,
+    )
 
 
 def main() -> None:

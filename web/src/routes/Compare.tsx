@@ -285,6 +285,7 @@ function Sweep({
         const where = at === null ? (node ? titleFor(node) : routed.nodeId) : `Recipe ${at + 1}, ${names[at].name}`
         setError(Object.entries(routed.errors).map(([k, m]) => (k ? `${where}, ${title(k)}: ${m.join(" ")}` : `${where}: ${m.join(" ")}`)).join(" "))
         setOpen(variants.map((_, i) => at === null || i === at))
+        if (at !== null) setChosen(at)
       } else {
         setError(routed.message)
         setOpen(variants.map(() => true))

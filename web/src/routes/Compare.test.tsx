@@ -434,6 +434,18 @@ describe("a run the server rejects", () => {
     expect(screen.getByLabelText("Overlap sentences")).toBeTruthy()
   })
 
+  it("below 820 px, shows the failing recipe's tab", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    serve({}, { "/api/sweeps": rejected(["overlap_sentences"], "Overlap must be smaller than the number of sentences per chunk.") })
+    render(<Compare />)
+    const group = await screen.findByRole("group", { name: "Recipe shown" })
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    await screen.findByRole("alert")
+    const pressed = [...group.querySelectorAll("button")].findIndex((b) => b.getAttribute("aria-pressed") === "true")
+    expect(pressed).toBe(2)
+  })
+
   it("opens every recipe when the error cannot be tied to one", async () => {
     serve({}, { "/api/sweeps": rejected(["chunk_size"], "Input should be greater than 0.") })
     render(<Compare />)

@@ -21,6 +21,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 #: Demo mode is a Space variable, visible and editable in the Space settings.
+#: No persistent storage is requested, so the Space's disk (and the run cache
+#: under /data) starts empty on each restart. The privacy page says so
+#: (web/src/routes/Privacy.tsx); turning persistent storage on makes that line false.
 DEMO_VAR = ("RAG_PLAYGROUND_DEMO", "1")
 
 SPACE_HEADER = """---

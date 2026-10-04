@@ -3,7 +3,7 @@ import type { SampleCard, Source } from "@/api/types"
 import { documentOf } from "./document"
 import { STAGE_VERB, type PipelineGraph } from "./graph"
 import { pipelineSteps } from "./evaluate"
-import { asExperiment, type SavedExperiment } from "./libraryExperiments"
+import { asIncomingExperiment, MAX_EXPERIMENTS, rawExperiment, type SavedExperiment } from "./libraryExperiments"
 import { isPipeline, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
 
 /**
@@ -140,7 +140,7 @@ export function buildExport(items: readonly LibraryItem[], documents: ExportedDo
     format: FORMAT,
     version: VERSION,
     exportedAt: new Date(now).toISOString(),
-    items: items.map((i) => (i.kind === "pipeline" ? { kind: "pipeline" as const, ...i.pipeline } : { kind: "experiment" as const, ...i.experiment })),
+    items: items.map((i) => (i.kind === "pipeline" ? { kind: "pipeline" as const, ...i.pipeline } : ({ kind: "experiment" as const, ...rawExperiment(i.experiment) } as ExportedItem))),
     documents,
   }
 }
@@ -181,9 +181,11 @@ export function parseImport(text: string): ParsedImport {
       pipelines.push({ id, name, graph, savedAt })
       continue
     }
-    const e = item?.kind === "experiment" ? asExperiment(item) : null
-    if (e) experiments.push(e)
-    else skipped += 1
+    if (item?.kind === "experiment" && asIncomingExperiment(item)) {
+      // Kept as it came, so fields Compare added survive the round trip.
+      const { kind: _kind, ...rest } = item as Record<string, unknown>
+      experiments.push(rest as unknown as SavedExperiment)
+    } else skipped += 1
   }
   const docs = Array.isArray(file.documents) ? (file.documents as unknown[]) : []
   const documents = docs.filter(isDocument).map(({ sha, filename, pdfBase64 }) => ({ sha, filename, pdfBase64 }))
@@ -217,12 +219,24 @@ export interface ImportOutcome {
   experiments: number
   /** Items the browser already had, by id. */
   already: number
-  /** Names the cap pushed out. */
-  dropped: string[]
+  /** Incoming names each kind's cap left out. Nothing saved is ever removed. */
+  leftOutPipelines: string[]
+  leftOutExperiments: string[]
+  /** Items in the file that are not a pipeline or an experiment this copy can read. */
+  unreadable: number
   /** Documents uploaded back to the server. */
   restored: string[]
   /** Documents the server refused, with its reason. */
   refused: { filename: string; reason: string }[]
+  /** Documents whose bytes in the file could not be decoded. */
+  damaged: string[]
+  /** Documents that uploaded, but under another fingerprint than the file names. */
+  mismatched: string[]
+}
+
+function leftOutLine(names: readonly string[], word: string, max: number): string {
+  if (!names.length) return ""
+  return `Left out ${plural(names.length, word)}, because this browser keeps at most ${max} ${word}s and never removes saved ones: ${listWords(names)}.`
 }
 
 /** The one plain line an import ends with. */
@@ -237,10 +251,11 @@ export function importResultLine(o: ImportOutcome): string {
   } else {
     parts.push(`${o.fileName} has no saved items in it.`)
   }
-  if (o.dropped.length) {
-    parts.push(`To keep the newest ${MAX_PIPELINES}, ${listWords(o.dropped)} ${o.dropped.length === 1 ? "was" : "were"} removed.`)
-  }
+  parts.push(leftOutLine(o.leftOutPipelines, "pipeline", MAX_PIPELINES), leftOutLine(o.leftOutExperiments, "experiment", MAX_EXPERIMENTS))
+  if (o.unreadable) parts.push(`Skipped ${plural(o.unreadable, "item")} that ${o.unreadable === 1 ? "is" : "are"} not a pipeline or an experiment.`)
   if (o.restored.length) parts.push(`${listWords(o.restored)} ${o.restored.length === 1 ? "is" : "are"} back on the server.`)
   for (const r of o.refused) parts.push(`${r.filename} was not uploaded: ${sentence(r.reason)}`)
-  return parts.join(" ")
+  for (const f of o.damaged) parts.push(`${f}: the document in the file is damaged.`)
+  for (const f of o.mismatched) parts.push(`${f} was uploaded, but it is not the document the file names, so saved items may still ask for it.`)
+  return parts.filter(Boolean).join(" ")
 }

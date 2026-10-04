@@ -135,6 +135,8 @@ def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
 @router.get("/sources")
 def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
     visitor.ensure_visitor(request, response)
+    # Per visitor, with upload times: no browser or proxy may keep a copy.
+    response.headers["Cache-Control"] = "private, no-store"
     meta_dir = request.app.state.deps.sources_dir / META_DIR
     if not meta_dir.is_dir():
         return []
@@ -198,6 +200,8 @@ def delete_source(sha: str, request: Request) -> dict[str, Any]:
             if f.is_file():
                 f.unlink()
         meta_path.unlink(missing_ok=True)
+        # A question set stored beside it (locally only; the demo keeps none).
+        (sources / "questions" / f"{sha}.json").unlink(missing_ok=True)
     return {"sha": sha, "deleted": True}
 
 

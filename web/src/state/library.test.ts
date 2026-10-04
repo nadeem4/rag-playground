@@ -137,37 +137,56 @@ describe("export and import", () => {
     })
   })
 
-  it("skips items and documents it cannot read", () => {
+  it("skips items and documents it cannot read, and an experiment with more than ten recipes", () => {
+    const tooMany = { ...experiment("big", "2026-10-02T00:00:00Z"), kind: "experiment", recipes: Array.from({ length: 11 }, () => ({ transform: "t", config: {} })) }
     const r = parseImport(
       JSON.stringify({
         format: "rag-playground-library",
         version: 1,
-        items: [{ kind: "pipeline", id: 1 }, { kind: "what" }, null],
+        items: [{ kind: "pipeline", id: 1 }, { kind: "what" }, null, tooMany],
         documents: [{ sha: "x" }, null],
       }),
     )
-    expect(r).toEqual({ ok: true, pipelines: [], experiments: [], documents: [], skipped: 3 })
+    expect(r).toEqual({ ok: true, pipelines: [], experiments: [], documents: [], skipped: 4 })
   })
 
+  it("keeps an incoming experiment's own fields, without its kind", () => {
+    const raw = { kind: "experiment", ...experiment("e1", "2026-10-02T00:00:00Z"), question: "Who?" }
+    const r = parseImport(JSON.stringify({ format: "rag-playground-library", version: 1, items: [raw] }))
+    if (!r.ok) throw new Error(r.error)
+    const { kind: _kind, ...rest } = raw
+    expect(r.experiments).toEqual([rest])
+  })
+
+  const none = { fileName: "f.json", pipelines: 0, experiments: 0, already: 0, leftOutPipelines: [], leftOutExperiments: [], unreadable: 0, restored: [], refused: [], damaged: [], mismatched: [] }
+
   it("says what came in, in one plain line", () => {
-    expect(importResultLine({ fileName: "file.json", pipelines: 2, experiments: 1, already: 0, dropped: [], restored: [], refused: [] })).toBe(
-      "Imported 2 pipelines and 1 experiment from file.json.",
-    )
-    expect(importResultLine({ fileName: "f.json", pipelines: 0, experiments: 0, already: 3, dropped: [], restored: [], refused: [] })).toBe(
-      "Nothing new in f.json. You already have all 3 items in it.",
-    )
+    expect(importResultLine({ ...none, fileName: "file.json", pipelines: 2, experiments: 1 })).toBe("Imported 2 pipelines and 1 experiment from file.json.")
+    expect(importResultLine({ ...none, already: 3 })).toBe("Nothing new in f.json. You already have all 3 items in it.")
+    expect(importResultLine(none)).toBe("f.json has no saved items in it.")
     expect(
       importResultLine({
-        fileName: "f.json",
+        ...none,
         pipelines: 1,
-        experiments: 0,
         already: 1,
-        dropped: ["Old one"],
         restored: ["notes.pdf"],
         refused: [{ filename: "big.pdf", reason: "The demo is full right now." }],
       }),
-    ).toBe(
-      "Imported 1 pipeline from f.json. 1 item was already here. To keep the newest 20, Old one was removed. notes.pdf is back on the server. big.pdf was not uploaded: The demo is full right now.",
+    ).toBe("Imported 1 pipeline from f.json. 1 item was already here. notes.pdf is back on the server. big.pdf was not uploaded: The demo is full right now.")
+  })
+
+  it("names what was left out by each kind's own cap, and never says anything saved was removed", () => {
+    const line = importResultLine({ ...none, pipelines: 16, experiments: 1, leftOutPipelines: ["A", "B"], leftOutExperiments: ["C"] })
+    expect(line).toBe(
+      "Imported 16 pipelines and 1 experiment from f.json. Left out 2 pipelines, because this browser keeps at most 20 pipelines and never removes saved ones: A and B. Left out 1 experiment, because this browser keeps at most 20 experiments and never removes saved ones: C.",
+    )
+    expect(line).not.toMatch(/removed\./)
+  })
+
+  it("reports skipped items, a damaged document and one that came back different", () => {
+    expect(importResultLine({ ...none, unreadable: 3 })).toBe("f.json has no saved items in it. Skipped 3 items that are not a pipeline or an experiment.")
+    expect(importResultLine({ ...none, pipelines: 1, unreadable: 1, damaged: ["a.pdf"], mismatched: ["b.pdf"] })).toBe(
+      "Imported 1 pipeline from f.json. Skipped 1 item that is not a pipeline or an experiment. a.pdf: the document in the file is damaged. b.pdf was uploaded, but it is not the document the file names, so saved items may still ask for it.",
     )
   })
 })

@@ -130,3 +130,17 @@ def test_locally_a_sample_is_refused(client, dirs):
     client.post("/api/sources/sample")
     assert client.delete(f"/api/sources/{SAMPLE_SHA}").status_code == 403
     assert files_for(dirs["sources"], SAMPLE_SHA) != []
+
+
+def test_locally_a_delete_also_removes_the_question_set_beside_it(client, dirs):
+    sha = upload_pdf(client)["sha"]
+    questions = dirs["sources"] / "questions"
+    questions.mkdir(parents=True)
+    (questions / f"{sha}.json").write_text("{}", encoding="utf-8")
+    assert client.delete(f"/api/sources/{sha}").status_code == 200
+    assert not (questions / f"{sha}.json").exists()
+
+
+def test_the_sources_list_is_never_cached(client):
+    upload_pdf(client)
+    assert client.get("/api/sources").headers["cache-control"] == "private, no-store"

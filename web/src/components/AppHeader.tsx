@@ -114,7 +114,7 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         {/* GitHub is on Home (More and the footer), so the Home tab costs the Document control no width. */}
       </nav>
       {demo ? null : <DevMenu path={path} />}
-      <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto md:flex-1 md:basis-0 md:justify-end">
+      <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto md:min-w-[7rem] md:flex-1 md:basis-0 md:justify-end">
         <DocumentControl />
       </div>
       <div data-testid="header-controls" className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5 md:ml-0">
@@ -123,13 +123,13 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
           aria-label="Your data and privacy"
           aria-current={path === "/privacy" ? "page" : undefined}
           className={cn(
-            "flex h-row-compact items-center rounded-control px-1 text-sm underline underline-offset-4 whitespace-nowrap",
+            // From xl only: below it the Document control needs the room. The
+            // footer and Library's lead link reach the page at every width.
+            "hidden h-row-compact items-center rounded-control px-1 text-sm underline underline-offset-4 whitespace-nowrap xl:flex",
             path === "/privacy" ? "font-semibold text-fg" : "text-fg-muted hover:text-fg",
           )}
         >
-          {/* Short below lg, where the one header row has little room. */}
-          <span aria-hidden className="lg:hidden">Privacy</span>
-          <span aria-hidden className="hidden lg:inline">Your data and privacy</span>
+          Privacy
         </a>
         <ApiKeyControl />
         <DisplaySettings />

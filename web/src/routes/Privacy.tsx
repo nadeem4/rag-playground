@@ -27,9 +27,12 @@ import "@/components/learn/learn.css"
  *   state/libraryExperiments.ts, state/graph.ts).
  * - Run results: core/storage.py never expires an entry, api/expiry.py deletes
  *   only uploads, and DELETE /api/cache (api/routes/artifacts.py) clears them.
- *   The Space is published with no persistent storage
- *   (scripts/publish_space.py), and the Dockerfile writes them under /data
- *   inside the container, so a restart starts them over.
+ *   The demo runs without persistent storage: scripts/publish_space.py asks
+ *   for none, and the Dockerfile writes them under /data inside the
+ *   container, so a restart starts them over. Turning on persistent storage
+ *   for the Space would make that line false (see the note in publish_space.py).
+ * - Page images: api/routes/pages.py sends an upload's renders as private
+ *   and immutable, so the browser may keep them after the upload is deleted.
  */
 
 type Row = [what: string, where: ReactNode, howLong: ReactNode]
@@ -93,15 +96,23 @@ export function Privacy() {
   const pages = limits?.max_pages ?? 20
   const { pipelines } = usePipelines()
   const experiments = useExperiments()
-  const { uploads } = useDocument()
+  const { uploads, samples } = useDocument()
+  // This browser's own uploads: never a sample, so wait for the samples list,
+  // and only what has an upload time (a sample never has one).
+  const mine = uploads && samples ? uploads.filter((u) => u.uploaded_at && !samples.some((x) => x.sha === u.sha)) : null
   const [asking, setAsking] = useState<"saved" | "uploads" | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<string | null>(null)
 
   const browserRows: Row[] = [
-    ["Saved pipelines and experiments", "In this browser's storage", "Until you delete them here or clear this site's data. They never leave this browser unless you export them."],
+    ["Saved pipelines and experiments", "In this browser's storage", "Until you delete them here or clear this site's data. They never leave this browser unless you export them or share a link."],
     ["The pipeline you are working on", "In this browser's storage", "Until you change it. It is how Build, Compare and Evaluate share one pipeline."],
     ["Theme and contrast", "In this browser's storage", "Until you change them."],
+    [
+      "Page images you viewed",
+      "In this browser's cache",
+      "They may stay in this browser's cache until it is cleared, even after the upload they show is deleted.",
+    ],
     ...(LESSONS_ENABLED ? [["Which lessons you finished", "In this browser's storage", "Until you clear this site's data."] as Row] : []),
     [
       "A question set you upload for Evaluate",
@@ -119,7 +130,7 @@ export function Privacy() {
         [
           "Run results (pieces, indexes, answers)",
           "On the demo server, as a cache shared by recipe",
-          "So a repeat run is quick. Nothing deletes them on a timer, not even when the upload they came from is deleted. They stay until the demo restarts or the cache is cleared, since the demo has no lasting disk.",
+          "So a repeat run is quick. Nothing deletes them on a timer, not even when the upload they came from is deleted. They stay until the demo restarts or the cache is cleared, since the demo runs without persistent storage.",
         ],
       ]
     : [
@@ -143,7 +154,7 @@ export function Privacy() {
 
   function askUploads() {
     setDone(null)
-    if (!uploads?.length) setDone("You have no uploads on the demo.")
+    if (!mine?.length) setDone("You have no uploads on the demo.")
     else setAsking("uploads")
   }
 
@@ -151,7 +162,7 @@ export function Privacy() {
     setBusy(true)
     const gone: string[] = []
     const failed: string[] = []
-    for (const u of uploads ?? []) {
+    for (const u of mine ?? []) {
       try {
         await api.deleteSource(u.sha)
         gone.push(u.filename)
@@ -226,7 +237,7 @@ export function Privacy() {
               Delete saved pipelines and experiments
             </Button>
             {demo ? (
-              <Button variant="outline" disabled={uploads === null} onClick={askUploads}>
+              <Button variant="outline" disabled={mine === null} onClick={askUploads}>
                 Delete my uploads from the demo
               </Button>
             ) : null}
@@ -241,8 +252,8 @@ export function Privacy() {
           ) : null}
           {asking === "uploads" ? (
             <Confirm label="Confirm deleting uploads" busy={busy} onYes={() => void deleteUploads()} onNo={() => setAsking(null)}>
-              This deletes {listWords((uploads ?? []).map((u) => u.filename))} from the demo now, instead of after {ttl} hours. Saved items that use{" "}
-              {(uploads ?? []).length === 1 ? "it" : "them"} stay, and ask for the PDF again when opened.
+              This deletes {listWords((mine ?? []).map((u) => u.filename))} from the demo now, instead of after {ttl} hours. Saved items that use{" "}
+              {(mine ?? []).length === 1 ? "it" : "them"} stay, and ask for the PDF again when opened.
             </Confirm>
           ) : null}
         </section>

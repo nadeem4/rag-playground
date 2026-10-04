@@ -43,6 +43,9 @@ const FILES = [
   "routes/Home.tsx",
   "components/Clip.tsx",
   "routes/Lessons.tsx",
+  "routes/Library.tsx",
+  "routes/Privacy.tsx",
+  "components/SiteFooter.tsx",
 ]
 
 const offScale =

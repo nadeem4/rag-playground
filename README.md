@@ -264,6 +264,24 @@ clips](#recording-the-home-clips).
   closest passage it did find, so a stray curly quote or a typo shows up at once instead of
   looking like a retrieval failure. A question may carry several gold passages when the
   document answers it in more than one place; any of them counts.
+- **Keep everything in the Library.** The Library tab lists every saved pipeline and saved
+  experiment in one list, with All, Pipelines and Experiments filters. Each row says what it
+  runs, when it was saved and where its document stands: a sample (always there), an upload
+  and how many hours it has left on the demo, gone, or on this machine when you run locally.
+  Open sends a pipeline to Build as the working pipeline, or an experiment to Compare. When an
+  upload a saved item uses has under 6 hours left on the demo, an amber notice offers to export
+  those items with the document.
+- **Export and import a file.** Export one item, the ones you tick, or everything, as one
+  `rag-playground-<name>.ragplayground.json` file. On the demo, **Include the document** is on
+  for uploads, so the PDF travels in the file. Import it by choosing the file or dropping it on
+  the Library page, in any browser: items are merged by id and never duplicated, each list keeps
+  its newest 20 and the page names anything that had to go, and a PDF in the file is uploaded
+  again (the demo's limits still apply, and a refusal is said in plain words). The file's shape is
+  `{ format: "rag-playground-library", version: 1, exportedAt, items, documents: [{ sha, filename, pdfBase64 }] }`.
+- **See what is kept, and clean up.** The **Your data and privacy** page, linked from the
+  header and the footer, lists what is kept in this browser and on the demo server (or on this
+  machine), where, and for how long. It can delete your saved pipelines and experiments, and on
+  the demo your uploads, at once. It asks on the page before deleting anything.
 - **Read, then try it.** The Read page lists the author's posts on each step, in pipeline
   order, with the date each was published. The Evaluate section has an "Open Evaluate"
   button. Steps with no post yet say so. The per-step "Try it on Build" buttons are hidden
@@ -620,12 +638,17 @@ clip's telling moment.
 | Models | `~/.cache/huggingface` | Hugging Face's `HF_HOME` |
 
 On the hosted demo, an uploaded file is tied to the `rag_visitor` cookie in your browser and is
-deleted a day after upload. Results derived from it are cached by content hash and are not
-listed anywhere. Files uploaded before uploads had owners have none, so they are hidden from
+deleted a day after upload. `DELETE /api/sources/<sha>` deletes it now instead: on the demo only
+your own upload (a file another browser also uploaded stays for them), locally any upload, and
+never a sample. `GET /api/sources` gives each upload its `uploaded_at` time, and
+`GET /api/sources/<sha>/file` returns its bytes for export, to the same visitors who may see its pages. Results derived from it are cached by content hash and are not
+listed anywhere. Nothing expires them on a timer, even after the upload goes: they stay until the
+demo restarts (the Space has no persistent storage) or the cache is cleared. Files uploaded before uploads had owners have none, so they are hidden from
 every visitor and the daily sweep leaves them in place.
 
-Your browser also keeps three small things of its own: which lessons you have finished, your
-saved pipelines, and the last Evaluate score of each pipeline in the tab. Clearing your browser data removes
+Your browser also keeps small things of its own: which lessons you have finished, your
+saved pipelines and experiments, the pipeline you are working on, and the last Evaluate score of each pipeline in the tab.
+The **Your data and privacy** page in the app lists each of them, where it is and for how long. Clearing your browser data removes
 them, and they never leave your machine.
 
 A key typed into the app is in none of these places. It stays in the browser tab's memory

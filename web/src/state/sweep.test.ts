@@ -66,6 +66,12 @@ describe("tallySweep", () => {
     expect(tallyLine(some, COLUMN)).toBe("Chunk ran 2 times. Upload and Parse came from the cache.")
   })
 
+  it("while the run is still going, steps from the cache are named without claiming nothing ran", () => {
+    const shared = { executed: { source: 0, parse: 0 }, cacheHits: 2, variants: 1, failed: 0, slowest: null }
+    expect(tallyLine(shared, COLUMN, { finished: false })).toBe("Upload and Parse came from the cache.")
+    expect(tallyLine(shared, COLUMN)).toBe("Nothing ran: every step came from the cache.")
+  })
+
   it("an Index sweep through Search: one parse, five indexes, five searches", () => {
     const nodes = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
     const events: RunEvent[] = []

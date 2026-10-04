@@ -1,7 +1,8 @@
 /*
  * The slope between the search order and the reranked order (spec section 6).
- * The overlay fills the comparison grid and takes no pointer; each line is
- * 2 px with round caps, coloured by how its piece moved.
+ * The overlay fills the comparison grid and takes no pointer; each line runs
+ * inside the 64 px gutter, 2 px with round caps: rising solid in the accent,
+ * falling solid in grey, stayed dashed in --flat.
  */
 
 .slope-lines {
@@ -27,8 +28,10 @@
   stroke: var(--text-secondary);
 }
 
+/* A piece that stayed is dashed, so "stayed" reads without colour. The draw's own dash overrides it while it runs. */
 .slope-lines path[data-kind="same"] {
   stroke: var(--flat);
+  stroke-dasharray: 4 4;
 }
 
 /* Below the two-column width the lists stack, so a line would cross a list: none is drawn. */

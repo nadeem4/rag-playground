@@ -13,9 +13,13 @@ const NONE: SlopePath[] = []
 
 /**
  * The slope's lines, measured from the swatches the browser drew inside
- * `containerRef`: on mount, when the rerank result changes, when the container
- * resizes, and once the fonts have landed (line breaks move with them).
- * Nothing while the comparison is closed.
+ * `containerRef` (the grid, holding the two `[data-column]` lists and the
+ * `[data-gutter]` between them): on mount, when the rerank result changes,
+ * when the grid or either list resizes, and once the fonts have landed (line
+ * breaks move with them). While anything inside is still animating (the lists'
+ * enter rise) it waits for that to finish, so a line joins the final places.
+ * Nothing while the comparison is closed, and nothing measured for an older
+ * rerank result.
  */
 export function useSlope(
   containerRef: RefObject<HTMLElement | null>,
@@ -23,35 +27,48 @@ export function useSlope(
   rerankId: string | undefined,
   movements: ReadonlyMap<string, SlopeKind>,
 ): SlopePath[] {
-  const [paths, setPaths] = useState<SlopePath[]>(NONE)
+  const [state, setState] = useState<{ id?: string; paths: SlopePath[] }>({ paths: NONE })
   // The movements follow the rerank result; a ref keeps a new Map each render from remeasuring.
   const moves = useRef(movements)
   moves.current = movements
   useLayoutEffect(() => {
     const root = containerRef.current
-    if (!open || !root) {
-      setPaths(NONE)
-      return
-    }
+    if (!open || !root) return
+    let cancelled = false
     let key = ""
+    let waiting = false
     const measure = () => {
-      const next = pairs(swatches(root, "search"), swatches(root, "reranked"), root.getBoundingClientRect(), moves.current)
+      if (cancelled) return
+      // jsdom has no getAnimations. An endless animation never finishes, so it is not waited for.
+      const running = (root.getAnimations?.({ subtree: true }) ?? []).filter((a) => a.effect?.getComputedTiming?.().iterations !== Infinity)
+      if (running.length) {
+        if (waiting) return
+        waiting = true
+        void Promise.allSettled(running.map((a) => a.finished)).then(() => {
+          waiting = false
+          measure()
+        })
+        return
+      }
+      const gutter = root.querySelector<HTMLElement>("[data-gutter]")
+      if (!gutter) return
+      const next = pairs(swatches(root, "search"), swatches(root, "reranked"), root.getBoundingClientRect(), gutter.getBoundingClientRect(), moves.current)
       const nextKey = next.map((p) => `${p.id} ${p.kind} ${p.d}`).join("|")
       if (nextKey === key) return
       key = nextKey
-      setPaths(next)
+      setState({ id: rerankId, paths: next })
     }
     measure()
-    let cancelled = false
-    document.fonts?.ready.then(() => {
-      if (!cancelled) measure()
-    })
+    document.fonts?.ready.then(measure)
     const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure)
-    ro?.observe(root)
+    if (ro) {
+      ro.observe(root)
+      root.querySelectorAll("[data-column]").forEach((el) => ro.observe(el))
+    }
     return () => {
       cancelled = true
       ro?.disconnect()
     }
   }, [containerRef, open, rerankId])
-  return open ? paths : NONE
+  return open && state.id === rerankId ? state.paths : NONE
 }

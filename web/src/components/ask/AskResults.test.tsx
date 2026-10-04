@@ -10,13 +10,10 @@ import type { Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry, RetrievalResult } from "@/api/types"
-import { play } from "@/lib/flip"
 import { sampleGraph, setReranker, setRewrite, setUseCase, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
-import { resetMotionMemory, slideTiming } from "./AskResults"
-
-vi.mock("@/lib/flip", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/flip")>()), play: vi.fn() }))
+import { resetMotionMemory } from "./AskResults"
 
 const LIVE = liveRegistry as unknown as Registry
 const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
@@ -35,7 +32,6 @@ function reranked(): RetrievalResult {
 let payloads: Record<string, unknown>
 
 beforeEach(() => {
-  vi.mocked(play).mockClear()
   resetMotionMemory()
   resetSampleQuestionsCache()
   payloads = {
@@ -293,6 +289,7 @@ describe("the slope between the two lists", () => {
     const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
       const column = this.closest("[data-column]")?.getAttribute("data-column")
       const el = this as HTMLElement
+      if (el.hasAttribute("data-gutter")) return new DOMRect(400, 0, 64, 800)
       if (!column || el.dataset.id === undefined) return new DOMRect(0, 0, 0, 0)
       const i = [...this.closest("[data-column]")!.querySelectorAll("[data-id]")].indexOf(this)
       return new DOMRect(column === "search" ? 0 : 600, 40 + i * 60, 30, 30)
@@ -309,8 +306,9 @@ describe("the slope between the two lists", () => {
     const paths = [...svg.querySelectorAll("path")]
     expect(paths.map((p) => p.getAttribute("data-id"))).toEqual(ids)
     expect(paths.map((p) => p.getAttribute("data-kind"))).toEqual(["up", "down", "down", "same", "down"])
-    // The top kept piece was 6th in search: from the 6th left swatch (y 340 + 15) to the 1st right one (y 40 + 15).
-    expect(paths[0].getAttribute("d")).toBe("M 30,355 C 70,355 560,55 600,55")
+    // The top kept piece was 6th in search: across the gutter (x 400 to 464), from the 6th left swatch's
+    // centre (y 340 + 15) to the 1st right one's (y 40 + 15). No line reaches into either column.
+    expect(paths[0].getAttribute("d")).toBe("M 402,355 C 442,355 422,55 462,55")
   })
 
   it("draws no lines while the comparison is hidden", async () => {
@@ -324,29 +322,56 @@ describe("the slope between the two lists", () => {
 
 describe("the two result motions", () => {
   const rows = (column: string) => [...document.querySelectorAll<HTMLElement>(`[data-column="${column}"] [data-hit-row]`)]
+  /** The lines the draw has animated so far, by data-id, in call order. */
+  let animate: ReturnType<typeof vi.fn>
+  const drawn = () => animate.mock.contexts.map((el) => (el as Element).getAttribute("data-id"))
 
-  it("slides the reranked hits once per rerank result, from the place of their prior rank", async () => {
+  beforeEach(() => {
+    animate = vi.fn()
+    // jsdom has no Web Animations API and no SVG geometry.
+    Object.assign(Element.prototype, { animate, getTotalLength: () => 100 })
+  })
+
+  afterEach(() => {
+    delete (Element.prototype as { animate?: unknown }).animate
+    delete (Element.prototype as { getTotalLength?: unknown }).getTotalLength
+  })
+
+  it("draws the lines once per rerank result, never on a rerender, a collapse or an expand", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     const { rerender } = render(<Panel {...p} />)
     await waitFor(() => expect(badges()).toHaveLength(5))
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
-    const [container, before, timing] = vi.mocked(play).mock.calls[0]
-    expect(container).toBe(document.querySelector('[data-column="reranked"]'))
-    // Every kept hit has a place to come from; the one from #6 starts below the five.
-    // The Not kept slip stays where it is.
-    const keptRows = rows("reranked").filter((r) => !r.textContent!.includes("Not kept"))
-    expect(keptRows).toHaveLength(5)
-    expect([...before.keys()].sort()).toEqual(keptRows.map((r) => r.dataset.flipKey).sort())
-    expect(timing).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
-    // A rerender, a collapse and an expand do not play it again.
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
+    expect(drawn()).toEqual([5, 0, 1, 3, 2].map((i) => hybrid.hits[i].chunk.id))
+    expect(animate.mock.calls[0]).toEqual([
+      [
+        { strokeDasharray: "100", strokeDashoffset: 100 },
+        { strokeDasharray: "100", strokeDashoffset: 0 },
+      ],
+      { duration: 360, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+    ])
     rerender(<Panel {...p} />)
     fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
     fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
     await screen.findByRole("heading", { name: "Search order, 6 candidates" })
-    expect(play).toHaveBeenCalledTimes(1)
-    // A new rerank result plays once more.
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).toHaveBeenCalledTimes(5)
+    // A new rerank result draws once more.
     rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(10))
+  })
+
+  it("does not slide the reranked rows: only the lines move", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
+    expect(animate.mock.contexts.every((el) => (el as Element).tagName.toLowerCase() === "path")).toBe(true)
+  })
+
+  it("draws nothing under reduced motion: the lines are there at full length", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })))
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).not.toHaveBeenCalled()
   })
 
   it("new lists fade in when they first appear, and not again on collapse or expand", async () => {
@@ -365,42 +390,28 @@ describe("the two result motions", () => {
   it("remembers what it showed across a remount, as Back to Ask does", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     render(<Panel {...p} />)
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
     await waitFor(() => expect(rows("search").length).toBe(6))
     cleanup()
     render(<Panel {...p} />)
     await waitFor(() => expect(badges()).toHaveLength(5))
-    await waitFor(() => expect(rows("search").length).toBe(6))
-    expect(play).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).toHaveBeenCalledTimes(5)
     expect(document.querySelector("[data-enter]")).toBeNull()
   })
 
-  it("plays once per distinct rerank result: X, then Y, then X again plays twice", async () => {
+  it("draws once per distinct rerank result: X, then Y, then X again draws nothing new", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     const { rerender } = render(<Panel {...p} />)
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
     const mmr = setReranker(p.graph, LIVE, "mmr")
     rerender(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
     await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(10))
     rerender(<Panel {...p} />)
     await screen.findByRole("heading", { name: "After rerank, Cross-encoder, 5 kept" })
-    await waitFor(() => expect(badges()).toHaveLength(5))
-    expect(play).toHaveBeenCalledTimes(2)
-  })
-
-  it("reads the slide's duration in its own unit: the built CSS says .32s", () => {
-    const style = (dur: string) =>
-      vi.spyOn(window, "getComputedStyle").mockReturnValue({
-        getPropertyValue: (name: string) => (name === "--dur-slow" ? dur : " cubic-bezier(0.2, 0, 0, 1)"),
-      } as CSSStyleDeclaration)
-    style(".32s")
-    expect(slideTiming()).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
-    style("320ms")
-    expect(slideTiming().duration).toBe(320)
-    style("")
-    expect(slideTiming().duration).toBe(320)
-    vi.restoreAllMocks()
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).toHaveBeenCalledTimes(10)
   })
 })
 

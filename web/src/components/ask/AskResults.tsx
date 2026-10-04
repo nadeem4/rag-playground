@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
@@ -10,8 +10,7 @@ import { movement, reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowDat
 import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
-import { measure, play, type Rect } from "@/lib/flip"
-import type { SlopeKind } from "@/lib/slope"
+import { DRAW_MS, drawSlope, type SlopeKind } from "@/lib/slope"
 import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
@@ -164,44 +163,10 @@ export interface AskResultsProps {
 
 export const STALE_LINE = "The settings changed since the last Ask. Press Ask to see the new results."
 
-/**
- * Where each reranked hit stood before the rerank, as a place in the reranked
- * list itself: the hit that was #3 starts where row 3 is now. A hit from below
- * the kept rows starts just under the last one. The rows mount fresh with the
- * result (the old list is gone while Ask runs), so the slots of the new list
- * are the only "before" there is.
- */
-export function priorPlaces(now: ReadonlyMap<string, Rect>, rows: readonly HitRowData[]): Map<string, Rect> {
-  const slots = rows.map((r) => now.get(r.chunk_id))
-  const last = slots[slots.length - 1]
-  const out = new Map<string, Rect>()
-  for (const r of rows) {
-    const p = r.prior_rank
-    if (p === null || p < 1) continue
-    const slot = p <= slots.length ? slots[p - 1] : last && { left: last.left, top: last.top + (last.height ?? 0) }
-    if (slot) out.set(r.chunk_id, slot)
-  }
-  return out
-}
-
-/**
- * A CSS time in milliseconds. The built stylesheet is minified, so `320ms`
- * reads back as `.32s`: the unit must be read, not assumed.
- */
-export function durationMs(raw: string, fallback: number): number {
-  const v = raw.trim()
-  const n = parseFloat(v)
-  if (!Number.isFinite(n)) return fallback
-  return v.endsWith("ms") ? n : v.endsWith("s") ? n * 1000 : fallback
-}
-
-/** Motion 4's timing from the tokens: `--dur-slow` on `--ease-in`. */
-export function slideTiming(): { duration: number; easing: string } {
-  const css = getComputedStyle(document.documentElement)
-  return {
-    duration: durationMs(css.getPropertyValue("--dur-slow"), 320),
-    easing: css.getPropertyValue("--ease-in").trim() || "cubic-bezier(0.2, 0, 0, 1)",
-  }
+/** The slope's draw: 360 ms on `--ease-in` (spec section 6). */
+export function drawTiming(): { duration: number; easing: string } {
+  const ease = getComputedStyle(document.documentElement).getPropertyValue("--ease-in").trim()
+  return { duration: DRAW_MS, easing: ease || "cubic-bezier(0.2, 0, 0, 1)" }
 }
 
 /*
@@ -211,12 +176,12 @@ export function slideTiming(): { duration: number; easing: string } {
  * neither may replay a motion the reader has seen.
  */
 const listsShown = new Set<string>()
-const reranksPlayed = new Set<string>()
+const slopesDrawn = new Set<string>()
 
 /** Forget both, for tests. */
 export function resetMotionMemory(): void {
   listsShown.clear()
-  reranksPlayed.clear()
+  slopesDrawn.clear()
 }
 
 export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [] }: AskResultsProps) {
@@ -234,17 +199,6 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   }
   useEffect(() => {
     for (const id of shown) listsShown.add(id)
-  })
-
-  // Motion 4: once per rerank result, the reranked hits slide from the place
-  // of their prior rank. Never on a rerender, a collapse, an expand or a remount.
-  const flipRef = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const el = flipRef.current
-    const id = o.rerankId
-    if (!el || !id || !o.rerank || reranksPlayed.has(id)) return
-    reranksPlayed.add(id)
-    play(el, priorPlaces(measure(el, "[data-flip-key]"), rowsFromResult(o.rerank)), slideTiming())
   })
 
   let lists: ReactNode = null
@@ -265,7 +219,6 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
         onToggle={() => onComparison(open ? (o.rerankId ?? null) : null)}
         enterSearch={enter(o.retrieveId)}
         enterReranked={enter(o.rerankId)}
-        flipRef={flipRef}
         whatItDid={note === null}
       />
     )
@@ -346,7 +299,6 @@ function Comparison({
   onToggle,
   enterSearch,
   enterReranked,
-  flipRef,
   whatItDid,
 }: {
   node: GraphNode
@@ -356,8 +308,6 @@ function Comparison({
   onToggle: () => void
   enterSearch: boolean
   enterReranked: boolean
-  /** The reranked column, where motion 4 plays. */
-  flipRef: RefObject<HTMLDivElement | null>
   /** True when the reranker left no run note: What it did says the outcome under the list instead. */
   whatItDid: boolean
 }) {
@@ -370,6 +320,16 @@ function Comparison({
   const gridRef = useRef<HTMLDivElement>(null)
   const moves = new Map<string, SlopeKind>(after.map((r) => [r.chunk_id, slopeKind(r)]))
   const lines = useSlope(gridRef, open, o.rerankId, moves)
+  // Motion 4: once per rerank result, the lines draw from left to right, once
+  // they are measured at the final places. Never on a rerender, a collapse, an
+  // expand or a remount.
+  const svgRef = useRef<SVGSVGElement>(null)
+  useLayoutEffect(() => {
+    const id = o.rerankId
+    if (!svgRef.current || !id || !lines.length || slopesDrawn.has(id)) return
+    slopesDrawn.add(id)
+    drawSlope(svgRef.current, drawTiming())
+  }, [lines, o.rerankId])
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
       {open ? "Hide comparison" : "Show comparison"}
@@ -377,7 +337,7 @@ function Comparison({
   )
   const title = <Heading>{`After rerank, ${rerankLabel(node.transform)}, ${after.length} kept`}</Heading>
   const reranked = (
-    <div ref={flipRef} data-column="reranked" className="flex min-w-0 flex-col gap-2">
+    <div data-column="reranked" className="flex min-w-0 flex-col gap-2">
       <RetrievalView
         key={o.rerankId}
         enter={enterReranked}
@@ -418,8 +378,8 @@ function Comparison({
         <Heading>Search order against the reranked order</Heading>
         {toggle}
       </div>
-      <div ref={gridRef} className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)]">
-        <svg className="slope-lines" aria-hidden>
+      <div ref={gridRef} className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)]">
+        <svg ref={svgRef} className="slope-lines" aria-hidden>
           {lines.map((l) => (
             <path key={l.id} data-id={l.id} data-kind={l.kind} d={l.d} />
           ))}
@@ -438,7 +398,7 @@ function Comparison({
           />
         </div>
         {/* The gutter the lines cross; stacked, it takes no room. */}
-        <div aria-hidden className="hidden xl:block" />
+        <div data-gutter="" aria-hidden className="hidden xl:block" />
         {reranked}
       </div>
     </div>

@@ -195,9 +195,9 @@ unsafe to share:
   pieces they share. The Sweep button on a Build card opens Compare on that card, and Compare
   searches in the Retrieval block of Build's Ask panel opens it on Retrieve, with the question
   it answers shown at the top. The default Chunk run compares the pipeline's own size with
-  half of it and with By sentence. Below tablet width the page shows one recipe at a time. A
+  half of it and with By sentence. Below 820 px, or when the columns do not fit, the page shows one recipe at a time. A
   quiet line says how many steps were reused from the cache, how long the slowest step took
-  and how many recipes failed. A run the server rejects opens the recipe it names.
+  and how many recipes failed. When the server rejects a run, the page opens the recipe the error belongs to.
 - **Save and share pipelines.** Name the pipeline on Build and keep it; switch between saved
   pipelines from the bar under the Index pipeline header of the column, and edit any of them. Once a
   pipeline is saved, Copy link puts the whole configuration in a URL: whoever opens it gets the pipeline on their Build page, and if it was

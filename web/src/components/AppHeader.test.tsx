@@ -181,13 +181,13 @@ describe("the header on a phone", () => {
     for (const k of ["order-4", "w-full", "md:ml-auto", "md:w-auto"]) expect(c).toContain(k)
   })
 
-  it("keeps the inline switches for md and up, and a Display menu holds them below md", async () => {
+  it("keeps the inline switches for xl and up, and a Display menu holds them below xl, so the header is one row from md", async () => {
     header()
     const inline = screen.getByRole("group", { name: "Theme" }).parentElement!.className.split(/\s+/)
     expect(inline).toContain("hidden")
-    expect(inline).toContain("md:flex")
+    expect(inline).toContain("xl:flex")
     const display = screen.getByRole("button", { name: "Display" })
-    expect(display.className.split(/\s+/)).toContain("md:hidden")
+    expect(display.className.split(/\s+/)).toContain("xl:hidden")
     fireEvent.click(display)
     const dialog = await screen.findByRole("dialog", { name: "Display" })
     expect(within(dialog).getByRole("group", { name: "Theme" })).toBeTruthy()
@@ -196,16 +196,27 @@ describe("the header on a phone", () => {
     expect(within(dialog).getByText("Contrast").className.split(/\s+/)).not.toContain("sr-only")
   })
 
-  it("shortens the key button to Key below md, with the full words as its title", async () => {
+  it("shortens the key button to Key at every width, with the full words as its title and its name", async () => {
     serve({ demo: true })
     header()
     const button = screen.getByTestId("api-key-button")
-    await waitFor(() => expect(button.title).toBe("Add a key for chat answers and the LLM reranker (optional)"))
-    const short = within(button).getByText("Key")
-    expect(short.className.split(/\s+/)).toContain("md:hidden")
-    const long = within(button).getByText("Add a key for chat answers and the LLM reranker (optional)")
-    expect(long.className.split(/\s+/)).toContain("hidden")
-    expect(long.className.split(/\s+/)).toContain("md:inline")
+    const words = "Add a key for chat answers and the LLM reranker (optional)"
+    await waitFor(() => expect(button.title).toBe(words))
+    expect(button.textContent).toBe("Key")
+    expect(button.getAttribute("aria-label")).toBe(words)
+    expect(screen.getByRole("button", { name: words })).toBe(button)
+  })
+
+  it("caps the Document control so the header stays one row from md up", () => {
+    header()
+    const c = screen.getByTestId("document-trigger").className.split(/\s+/)
+    for (const k of ["md:max-w-[240px]", "xl:max-w-[360px]"]) expect(c).toContain(k)
+    expect(c).not.toContain("md:max-w-[360px]")
+    // From md up its slot takes what the row has left rather than wrapping to a row of its own.
+    const slot = screen.getByTestId("header-document").className.split(/\s+/)
+    for (const k of ["md:flex-1", "md:basis-0", "md:justify-end"]) expect(slot).toContain(k)
+    // The small Document label shows from lg, where there is room for it.
+    expect(within(screen.getByTestId("document-trigger")).getByText("Document").className.split(/\s+/)).toContain("lg:inline")
   })
 })
 
@@ -280,7 +291,8 @@ describe("the key button", () => {
   it("offers a key for chat answers, as an option, when no key is set", async () => {
     serve({ demo: true })
     header()
-    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toBe("KeyAdd a key for chat answers and the LLM reranker (optional)"))
+    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toBe("Key"))
+    expect(screen.getByTestId("api-key-button").getAttribute("aria-label")).toBe("Add a key for chat answers and the LLM reranker (optional)")
   })
 
   it("stays API key with a count when a key is set in this tab", async () => {

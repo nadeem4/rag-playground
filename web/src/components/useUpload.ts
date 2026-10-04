@@ -1,8 +1,6 @@
-import { useState } from "react"
-
 import { api, ApiError } from "@/api/client"
 import { useAppSettings } from "@/api/useDemo"
-import { chooseDocument, refreshUploads } from "@/state/document"
+import { chooseDocument, documentBusy, refreshUploads, setUploadState, useDocument } from "@/state/document"
 
 /** The server's own sentence when it sent one, so a visitor reads why without the status and path in front. */
 const reason = (err: unknown) =>
@@ -23,18 +21,19 @@ export interface Upload {
  * Upload a PDF (`POST /api/sources`), shared by the Document control's menu
  * and Build's first-visit card. Three checks, in the words the upload card
  * always used: PDF only, the demo's size limit, and the server's own sentence
- * when it refuses.
+ * when it refuses. The busy file and the error live in the document store, so
+ * every caller (and the header's trigger) shows the same one, and a second
+ * upload or a sample cannot start while one runs.
  */
 export function useUpload(): Upload {
   const settings = useAppSettings()
   const limits = settings?.demo === true ? settings.limits : undefined
   const mb = limits ? Math.round(limits.max_bytes / 1048576) : 0
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { uploading: busy, uploadError: error } = useDocument()
 
   async function upload(file: File | undefined) {
-    if (!file) return
-    const refuse = (why: string) => setError(`Upload of ${file.name} failed: ${why}`)
+    if (!file || documentBusy()) return
+    const refuse = (why: string) => setUploadState({ uploadError: `Upload of ${file.name} failed: ${why}` })
     if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
       refuse("Only PDF files can be uploaded.")
       return
@@ -45,8 +44,7 @@ export function useUpload(): Upload {
       )
       return
     }
-    setError(null)
-    setBusy(file.name)
+    setUploadState({ uploading: file.name, uploadError: null })
     try {
       const src = await api.uploadSource(file)
       refreshUploads()
@@ -54,7 +52,7 @@ export function useUpload(): Upload {
     } catch (err) {
       refuse(reason(err))
     } finally {
-      setBusy(null)
+      setUploadState({ uploading: null })
     }
   }
 

@@ -24,7 +24,7 @@ interface Section {
 
 const SECTIONS: Section[] = [
   { stage: "overview", title: "Overview" },
-  { stage: "source", title: "Upload", sample: "two-column-report" },
+  { stage: "source", title: "Document", sample: "two-column-report" },
   { stage: "parse", title: "Parse", sample: "two-column-report" },
   { stage: "clean", title: "Clean", sample: "chunking-primer" },
   { stage: "chunk", title: "Chunk", sample: "chunking-primer" },

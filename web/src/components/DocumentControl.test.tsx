@@ -8,6 +8,7 @@ import { documentOf, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph } from "@/state/graph"
 
 import { DocumentControl } from "./DocumentControl"
+import { FirstRun } from "./pipeline/FirstRun"
 import { DocumentNote } from "./DocumentNote"
 
 const registry = liveRegistry as unknown as Registry
@@ -29,6 +30,8 @@ const LIMITS = { max_bytes: 10485760, max_pages: 20, max_files: 3, max_total_byt
 const never = new Promise<never>(() => {})
 
 let requests: { url: string; method: string; body?: unknown }[] = []
+let holdUpload = false
+let releaseUpload: () => void = () => {}
 
 function serve({ sources, samples, app = { demo: false } }: { sources: unknown; samples: unknown; app?: unknown }) {
   vi.stubGlobal(
@@ -40,7 +43,10 @@ function serve({ sources, samples, app = { demo: false } }: { sources: unknown; 
       if (url === "/api/settings/app") return ok(app)
       if (url === "/api/registry") return ok(liveRegistry)
       if (url === "/api/sources/sample" && method === "POST") return ok({ ...UP, sha: SAMPLE_SHA, filename: "chunking-primer.pdf" })
-      if (url === "/api/sources" && method === "POST") return ok({ ...UP, sha: "34".repeat(32), filename: "fresh.pdf" })
+      if (url === "/api/sources" && method === "POST") {
+        const answer = () => ok({ ...UP, sha: "34".repeat(32), filename: "fresh.pdf" })
+        return holdUpload ? new Promise<Response>((resolve) => (releaseUpload = () => resolve(answer()))) : answer()
+      }
       if (url === "/api/sources") return sources === never ? never : ok(sources)
       if (url === "/api/samples") return samples === never ? never : ok(samples)
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
@@ -54,6 +60,7 @@ const posts = () => requests.filter((r) => r.method === "POST")
 
 beforeEach(() => {
   requests = []
+  holdUpload = false
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
@@ -90,10 +97,57 @@ describe("DocumentControl", () => {
     expect(trigger().getAttribute("aria-label")).toBe("Document NK_Resume.pdf is missing. Pick another or upload it again.")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
-    expect(menu.textContent).toContain(
+    expect(menu.textContent).toContain("NK_Resume.pdf is no longer on the server. Upload it again, or pick a sample.")
+    expect(menu.textContent).not.toContain("Uploads on the demo expire.")
+    expect(within(menu).getByText("None in this browser yet.")).toBeTruthy()
+  })
+
+  it("on the demo, the warning says uploads expire", async () => {
+    stored("ef".repeat(32), "NK_Resume.pdf")
+    serve({ sources: [], samples: [SAMPLE], app: { demo: true } })
+    render(<DocumentControl />)
+    await waitFor(() => expect(trigger().className).toContain("bg-stale-wash"))
+    await waitFor(() => expect(requests.some((r) => r.url === "/api/settings/app")).toBe(true))
+    await act(async () => {})
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    expect((await screen.findByRole("menu")).textContent).toContain(
       "NK_Resume.pdf is no longer on the server. Uploads on the demo expire. Upload it again, or pick a sample.",
     )
-    expect(within(menu).getByText("None in this browser yet.")).toBeTruthy()
+  })
+
+  it("while an upload runs, the samples, your uploads and Upload a PDF wait, so a pick cannot race it", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    serve({ sources: [UP], samples: [SAMPLE] })
+    holdUpload = true
+    render(<DocumentControl />)
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    await waitFor(() => expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(2))
+    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Uploading fresh.pdf"))
+    for (const item of within(menu).getAllByRole("menuitemradio")) expect(item.getAttribute("aria-disabled")).toBe("true")
+    expect(within(menu).getByRole("menuitem", { name: /Uploading fresh\.pdf/ }).getAttribute("aria-disabled")).toBe("true")
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /my-notes\.pdf/ }))
+    expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA)
+    await act(async () => releaseUpload())
+    await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe("34".repeat(32)))
+  })
+
+  it("shows an upload started on the first-visit card in the bar too", async () => {
+    serve({ sources: [], samples: [SAMPLE] })
+    holdUpload = true
+    render(
+      <>
+        <DocumentControl />
+        <FirstRun />
+      </>,
+    )
+    const inputs = screen.getAllByLabelText("Upload a PDF file")
+    fireEvent.change(inputs[inputs.length - 1], { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Uploading fresh.pdf"))
+    expect(trigger().getAttribute("aria-busy")).toBe("true")
+    await act(async () => releaseUpload())
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: fresh.pdf. Change it."))
   })
 
   it("never shows Missing while the lists are still loading", async () => {
@@ -116,7 +170,7 @@ describe("DocumentControl", () => {
     serve({ sources: [], samples: [] })
     render(<DocumentControl />)
     const c = trigger().className.split(/\s+/)
-    for (const k of ["h-row", "w-full", "md:w-auto", "md:max-w-[360px]", "rounded-control", "border-hairline"]) expect(c).toContain(k)
+    for (const k of ["h-row", "w-full", "md:w-auto", "md:max-w-[240px]", "xl:max-w-[360px]", "rounded-control", "border-hairline"]) expect(c).toContain(k)
   })
 
   it("picks an upload without a request, and a sample through the sample endpoint", async () => {

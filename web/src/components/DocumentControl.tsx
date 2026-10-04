@@ -6,7 +6,7 @@ import { ApiError } from "@/api/client"
 import type { SampleCard } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { cn } from "@/lib/utils"
-import { chooseDocument, loadSampleDocument, refreshUploads, setDocumentMenuOpen, useDocument } from "@/state/document"
+import { chooseDocument, documentBusy, loadSampleDocument, refreshUploads, setDocumentMenuOpen, useDocument } from "@/state/document"
 
 import { useUpload } from "./useUpload"
 
@@ -27,7 +27,7 @@ const HEADING = "px-2 pt-2 pb-1 text-2xs text-fg-muted"
  * page's "Pick a document" button opens it too.
  */
 export function DocumentControl() {
-  const { doc, status, samples, uploads, listError, menuOpen } = useDocument()
+  const { doc, status, samples, uploads, listError, menuOpen, sampleLoading } = useDocument()
   const demo = useDemo()
   const { upload, busy, error: uploadError, limitsLine } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -35,6 +35,8 @@ export function DocumentControl() {
   const [pickError, setPickError] = useState<string | null>(null)
 
   const missing = status === "missing"
+  // While an upload, a sample or a pick is in flight, every other choice waits, so two cannot race.
+  const waiting = loading !== null || busy !== null || sampleLoading !== null
   const empty = !doc
   const name = busy ? `Uploading ${busy}` : empty ? "Pick a document" : doc.filename
   const label = busy ? `Uploading ${busy}` : missing ? `Document ${doc?.filename} is missing. Pick another or upload it again.` : empty ? "Pick a document" : `Document: ${doc.filename}. Change it.`
@@ -42,6 +44,7 @@ export function DocumentControl() {
   const current = !missing && doc ? doc.sha : ""
 
   async function pick(key: string, run: () => Promise<void>) {
+    if (documentBusy()) return
     setPickError(null)
     setLoading(key)
     try {
@@ -87,14 +90,14 @@ export function DocumentControl() {
           aria-label={label}
           aria-busy={busy ? true : undefined}
           className={cn(
-            "flex h-row w-full min-w-0 items-center gap-2 rounded-control border px-2 text-left text-sm md:w-auto md:max-w-[360px]",
+            "flex h-row w-full min-w-0 items-center gap-2 rounded-control border px-2 text-left text-sm md:w-auto md:max-w-[240px] xl:max-w-[360px]",
             missing
               ? "border-stale bg-stale-wash text-stale hover:bg-stale-wash"
               : "border-hairline bg-surface-raised text-fg hover:bg-surface-hover",
           )}
         >
           <FileText aria-hidden strokeWidth={1.75} className="size-[18px] shrink-0" />
-          <span className={cn("hidden shrink-0 text-2xs whitespace-nowrap md:inline", missing ? "text-stale" : "text-fg-muted")}>
+          <span className={cn("hidden shrink-0 text-2xs whitespace-nowrap lg:inline", missing ? "text-stale" : "text-fg-muted")}>
             {missing ? "Missing" : "Document"}
           </span>
           <span className={cn("min-w-0 flex-1 truncate", empty && !busy ? "font-normal text-fg-muted" : "font-semibold")}>{name}</span>
@@ -109,7 +112,7 @@ export function DocumentControl() {
           >
             {missing ? (
               <p role="status" className="rounded-control bg-stale-wash p-2 text-xs text-stale">
-                {doc?.filename} is no longer on the server. Uploads on the demo expire. Upload it again, or pick a sample.
+                {doc?.filename} is no longer on the server.{demo ? " Uploads on the demo expire." : ""} Upload it again, or pick a sample.
               </p>
             ) : null}
             <DropdownMenu.RadioGroup value={current}>
@@ -120,8 +123,8 @@ export function DocumentControl() {
                     <DropdownMenu.RadioItem
                       key={s.name}
                       value={s.sha}
-                      disabled={loading !== null}
-                      aria-busy={loading === s.sha ? true : undefined}
+                      disabled={waiting}
+                      aria-busy={sampleLoading === s.name ? true : undefined}
                       className={ITEM}
                       onSelect={(e) => {
                         e.preventDefault()
@@ -133,7 +136,7 @@ export function DocumentControl() {
                       <DropdownMenu.ItemIndicator className="row-span-2 text-primary">
                         <Check aria-hidden strokeWidth={2} className="size-4" />
                       </DropdownMenu.ItemIndicator>
-                      <span className="col-start-1 min-w-0 truncate text-xs text-fg-muted">{loading === s.sha ? "Loading this sample." : s.blurb}</span>
+                      <span className="col-start-1 min-w-0 truncate text-xs text-fg-muted">{sampleLoading === s.name ? "Loading this sample." : s.blurb}</span>
                     </DropdownMenu.RadioItem>
                   ))}
                   <DropdownMenu.Separator className="my-1 h-[1px] bg-hairline" />
@@ -162,7 +165,7 @@ export function DocumentControl() {
                   <DropdownMenu.RadioItem
                     key={u.sha}
                     value={u.sha}
-                    disabled={loading !== null}
+                    disabled={waiting}
                     className={ITEM}
                     onSelect={(e) => {
                       e.preventDefault()
@@ -180,7 +183,7 @@ export function DocumentControl() {
               )}
             </DropdownMenu.RadioGroup>
             <DropdownMenu.Item
-              disabled={busy !== null}
+              disabled={waiting}
               className="mt-1 flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-control border border-dashed border-hairline p-2 text-sm text-fg outline-none data-[highlighted]:bg-surface-hover data-[disabled]:opacity-50"
               onSelect={(e) => {
                 // Stay open: the upload's progress and any refusal show here.

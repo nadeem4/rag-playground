@@ -99,9 +99,10 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
   return (
     // Below md: three rows. The brand and the controls share the first, the
     // nav takes the second (wrapping inside its own box at most once), and the
-    // Document control the third, at full width. From md up it is one row,
-    // the Document control pushed to the right before the controls. The page
-    // itself never scrolls sideways.
+    // Document control the third, at full width. From md up it is one row:
+    // the Document control's slot takes what the row has left (flex-1 from a
+    // zero basis, so it shrinks rather than wrapping) and holds the trigger at
+    // its right end, before the controls. The page itself never scrolls sideways.
     <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-4">
       <a href={lessonsEnabled ? "/" : "/build"} className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
         RAG Playground
@@ -115,7 +116,7 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         </a>
       </nav>
       {demo ? null : <DevMenu path={path} />}
-      <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto">
+      <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto md:flex-1 md:basis-0 md:justify-end">
         <DocumentControl />
       </div>
       <div data-testid="header-controls" className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5 md:ml-0">

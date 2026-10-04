@@ -62,9 +62,25 @@ interface State {
   samplesFailed: boolean
   known: ReadonlySet<string>
   menuOpen: boolean
+  /** The file an upload is sending now, shared by the menu and the first-visit card. */
+  uploading: string | null
+  /** Why the last upload was refused or failed. */
+  uploadError: string | null
+  /** The sample being loaded now, by name. */
+  sampleLoading: string | null
 }
 
-const FRESH: State = { sources: null, sourcesFailed: false, samples: null, samplesFailed: false, known: new Set(), menuOpen: false }
+const FRESH: State = {
+  sources: null,
+  sourcesFailed: false,
+  samples: null,
+  samplesFailed: false,
+  known: new Set(),
+  menuOpen: false,
+  uploading: null,
+  uploadError: null,
+  sampleLoading: null,
+}
 
 let state: State = FRESH
 let started = false
@@ -121,6 +137,16 @@ export function setDocumentMenuOpen(open: boolean): void {
   if (state.menuOpen !== open) set({ menuOpen: open })
 }
 
+/** One upload at a time for the whole page: what is being sent, and why the last one failed. */
+export function setUploadState(patch: { uploading?: string | null; uploadError?: string | null }): void {
+  set(patch)
+}
+
+/** True while an upload or a sample load runs: another pick then waits, so the two cannot race. */
+export function documentBusy(): boolean {
+  return state.uploading !== null || state.sampleLoading !== null
+}
+
 /** A page's "Pick a document" button: open the header's menu. */
 export function openDocumentMenu(): void {
   setDocumentMenuOpen(true)
@@ -163,9 +189,14 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
 
 /** Load a bundled sample on the server (`POST /api/sources/sample`), then make it the document with its own question. */
 export async function loadSampleDocument(card: Pick<SampleCard, "name" | "question">): Promise<void> {
-  const src = await api.sampleSource(card.name)
-  await chooseDocument({ sha: src.sha, filename: src.filename }, card.question)
-  refreshUploads()
+  set({ sampleLoading: card.name })
+  try {
+    const src = await api.sampleSource(card.name)
+    await chooseDocument({ sha: src.sha, filename: src.filename }, card.question)
+    refreshUploads()
+  } finally {
+    set({ sampleLoading: null })
+  }
 }
 
 export interface DocumentState {
@@ -177,6 +208,9 @@ export interface DocumentState {
   /** True when this browser's uploads could not be listed. */
   listError: boolean
   menuOpen: boolean
+  uploading: string | null
+  uploadError: string | null
+  sampleLoading: string | null
 }
 
 export function useDocument(): DocumentState {
@@ -198,6 +232,9 @@ export function useDocument(): DocumentState {
     uploads,
     listError: s.sourcesFailed,
     menuOpen: s.menuOpen,
+    uploading: s.uploading,
+    uploadError: s.uploadError,
+    sampleLoading: s.sampleLoading,
   }
 }
 

@@ -276,6 +276,20 @@ describe("AppHeader with the lessons hidden", () => {
     expect(link.getAttribute("aria-current")).toBe("page")
   })
 
+  it("shows the privacy link as Privacy from xl up only, so the Document control keeps its room", () => {
+    header("/build", false)
+    const link = within(screen.getByTestId("header-controls")).getByRole("link", { name: "Your data and privacy" })
+    expect(link.textContent).toBe("Privacy")
+    const c = link.className.split(/\s+/)
+    expect(c).toContain("hidden")
+    expect(c).toContain("xl:flex")
+    expect(c).not.toContain("md:flex")
+    expect(c).not.toContain("lg:flex")
+    // Below xl the footer and the Library lead link reach the page. The trigger never shrinks to an icon.
+    expect(screen.getByTestId("document-trigger").className.split(/\s+/)).toContain("md:min-w-[7rem]")
+    expect(screen.getByTestId("header-document").className.split(/\s+/)).toContain("md:min-w-[7rem]")
+  })
+
   it("marks Read as current on /read", () => {
     header("/read", false)
     expect(screen.getByRole("link", { name: "Read" }).getAttribute("aria-current")).toBe("page")

@@ -134,38 +134,46 @@ export function deletePipeline(id: string): void {
   if (ok && readCurrentId() === id) setCurrentId(null)
 }
 
-/** What an import did: new ones added, ones already here by id, and any the cap pushed out. */
+/** What an import did: new ones added, ones already here by id, and incoming ones the cap left out. */
 export interface ImportResult<T> {
   added: number
   skipped: number
-  dropped: T[]
+  /** Incoming items that did not fit under the cap, newest first. Nothing already saved is ever removed. */
+  leftOut: T[]
 }
 
 /**
- * Merge `incoming` into a newest-first list of at most `max`, by id. A copy
- * already here wins, so an import never duplicates and never overwrites.
- * Shared with the experiments adapter (state/libraryExperiments.ts).
+ * Merge `incoming` into `current` by id, for a list of at most `max`. Every
+ * item already here stays: an import never removes saved work. New items go
+ * in newest first while there is room, and the rest are left out and named.
+ * A copy already here wins, so an import never duplicates and never overwrites.
+ * `size` is how many places the current list takes (it may hold entries this
+ * caller cannot read). Shared with the experiments adapter.
  */
-export function mergeById<T extends { id: string; savedAt: string }>(current: T[], incoming: T[], max: number): { next: T[]; result: ImportResult<T> } {
-  const have = new Set(current.map((x) => x.id))
+export function mergeById<T extends { id: string; savedAt: string }>(
+  currentIds: ReadonlySet<string>,
+  size: number,
+  incoming: T[],
+  max: number,
+): { add: T[]; result: ImportResult<T> } {
+  const have = new Set(currentIds)
   const fresh: T[] = []
   for (const x of incoming) {
     if (have.has(x.id)) continue
     have.add(x.id)
     fresh.push(x)
   }
-  const merged = [...current, ...fresh].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
-  const next = merged.slice(0, max)
-  const kept = new Set(next.map((x) => x.id))
-  return {
-    next,
-    result: { added: fresh.filter((x) => kept.has(x.id)).length, skipped: incoming.length - fresh.length, dropped: merged.slice(max) },
-  }
+  fresh.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+  const room = Math.max(0, max - size)
+  const add = fresh.slice(0, room)
+  return { add, result: { added: add.length, skipped: incoming.length - fresh.length, leftOut: fresh.slice(room) } }
 }
 
 /** Library import: add saved pipelines from a file (I3 cap, I4 fresh read). Null when storage refused the write. */
 export function importPipelines(incoming: SavedPipeline[]): ImportResult<SavedPipeline> | null {
-  const { next, result } = mergeById(freshPipelines(), incoming.filter(isPipeline), MAX_PIPELINES)
+  const current = freshPipelines()
+  const { add, result } = mergeById(new Set(current.map((p) => p.id)), current.length, incoming.filter(isPipeline), MAX_PIPELINES)
+  const next = [...current, ...add].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
   return persist(next) ? result : null
 }
 

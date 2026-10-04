@@ -59,7 +59,7 @@ function seed() {
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
 let demo = true
-let uploads: { sha: string; filename: string; uploaded_at?: string }[] = []
+let uploads: { sha: string; filename: string; uploaded_at?: string; size?: number }[] = []
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -242,20 +242,47 @@ describe("Library", () => {
         { kind: "pipeline", id: "p1", name: "Resume, sections whole", graph: initialGraph(registry), savedAt: iso(H) },
         { kind: "pipeline", id: "p9", name: "From another browser", graph: initialGraph(registry), savedAt: iso(H) },
         { kind: "experiment", id: "e9", name: "Reranker trial", stage: "rerank", recipes: [], doc: null, savedAt: iso(H) },
+        { kind: "notes", id: "x" },
       ],
       documents: [
         { sha: GONE, filename: "my-notes.pdf", pdfBase64: bytesToBase64(PDF) },
         { sha: "12".repeat(32), filename: "big.pdf", pdfBase64: bytesToBase64(PDF) },
+        { sha: "56".repeat(32), filename: "bad.pdf", pdfBase64: "%%% not base64 %%%" },
+        { sha: "34".repeat(32), filename: "other.pdf", pdfBase64: bytesToBase64(PDF) },
       ],
     }
     const input = screen.getByLabelText("Import a file", { selector: "input" })
     fireEvent.change(input, { target: { files: [new File([JSON.stringify(file)], "lib.json", { type: "application/json" })] } })
     const line = await screen.findByText(/^Imported 1 pipeline and 1 experiment from lib\.json\./)
     expect(line.textContent).toBe(
-      "Imported 1 pipeline and 1 experiment from lib.json. 1 item was already here. my-notes.pdf is back on the server. big.pdf was not uploaded: The demo is full right now.",
+      "Imported 1 pipeline and 1 experiment from lib.json. 1 item was already here. Skipped 1 item that is not a pipeline or an experiment. " +
+        "my-notes.pdf is back on the server. big.pdf was not uploaded: The demo is full right now. bad.pdf: the document in the file is damaged. " +
+        "other.pdf was uploaded, but it is not the document the file names, so saved items may still ask for it.",
     )
     expect(readPipelines().map((p) => p.id).sort()).toEqual(["p1", "p3", "p9"])
-    expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/sources" && i?.method === "POST")).toHaveLength(2)
+    // The damaged one never reaches the server.
+    expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/sources" && i?.method === "POST")).toHaveLength(3)
+  })
+
+  it("states a small document's size in KB", async () => {
+    seed()
+    uploads = [{ sha: UP, filename: "NK_Resume.pdf", uploaded_at: iso(20 * H), size: 5000 } as (typeof uploads)[number]]
+    await ready()
+    fireEvent.click(within(row("Resume, sections whole")).getByRole("button", { name: "Export" }))
+    expect(screen.getByRole("dialog", { name: /Export/ }).textContent).toContain("NK_Resume.pdf, about 5 KB.")
+  })
+
+  it("says Without them when several documents can go in the file", async () => {
+    seed()
+    uploads = [
+      { sha: UP, filename: "NK_Resume.pdf", uploaded_at: iso(20 * H) },
+      { sha: GONE, filename: "my-notes.pdf", uploaded_at: iso(2 * H) },
+    ]
+    await ready()
+    fireEvent.click(screen.getByRole("button", { name: "Export everything" }))
+    const sheet = screen.getByRole("dialog", { name: /Export/ })
+    expect(within(sheet).getByRole("checkbox", { name: /Include the documents/ })).toBeTruthy()
+    expect(sheet.textContent).toContain("Without them, importing later")
   })
 
   it("imports a file dropped on the drop zone, and refuses one that is not ours", async () => {
@@ -274,13 +301,13 @@ describe("Library", () => {
       const src = readFileSync(`${__dirname}/../${f}`, "utf8")
       expect(src, f).not.toMatch(offScale)
       expect(src, f).not.toMatch(/(^|[\s"'`])(?:sm|2xl|max-sm):/m)
-      expect(src, f).not.toMatch(/[–—]/)
+      expect(src, f).not.toMatch(/[\u2013\u2014]/)
     }
   })
 
   it("has no em-dashes or en-dashes on the page", async () => {
     seed()
     await ready()
-    expect(document.body.textContent).not.toMatch(/[–—]/)
+    expect(document.body.textContent).not.toMatch(/[\u2013\u2014]/)
   })
 })

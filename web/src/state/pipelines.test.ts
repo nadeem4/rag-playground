@@ -158,19 +158,40 @@ describe("the share link codec", () => {
 describe("importing and clearing for the Library", () => {
   const saved = (id: string, savedAt: string) => ({ id, name: `P ${id}`, graph: g(), savedAt })
 
-  it("merges by id, never duplicates, keeps the newest twenty and reports what it dropped", () => {
+  it("merges by id and never duplicates", () => {
     const mine = savePipeline("Mine", g())!.saved
-    const incoming = [
-      { ...mine, name: "Same id from the file" },
-      ...Array.from({ length: MAX_PIPELINES }, (_, i) => saved(`n${i}`, `2026-09-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`)),
-    ]
-    const r = importPipelines(incoming)!
-    const list = readPipelines()
-    expect(list).toHaveLength(MAX_PIPELINES)
-    expect(list.filter((p) => p.id === mine.id).map((p) => p.name)).toEqual(["Mine"])
+    const r = importPipelines([{ ...mine, name: "Same id from the file" }, saved("n1", "2026-09-01T00:00:00.000Z")])!
+    expect(readPipelines().filter((p) => p.id === mine.id).map((p) => p.name)).toEqual(["Mine"])
     expect(r.skipped).toBe(1)
-    expect(r.added).toBe(MAX_PIPELINES - 1)
-    expect(r.dropped.map((p) => p.id)).toEqual(["n0"])
+    expect(r.added).toBe(1)
+    expect(r.leftOut).toEqual([])
+  })
+
+  it("never removes a saved pipeline: 4 kept, the 16 newest of 25 incoming added, the other 9 named", () => {
+    // The four already here are older than every incoming one, so a newest-first cut would drop them.
+    const mine = Array.from({ length: 4 }, (_, i) => saved(`m${i}`, `2026-01-0${i + 1}T00:00:00.000Z`))
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(mine))
+    resetPipelinesForTests()
+    const incoming = Array.from({ length: 25 }, (_, i) => saved(`n${String(i).padStart(2, "0")}`, `2026-09-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`))
+    const r = importPipelines(incoming)!
+    const ids = readPipelines().map((p) => p.id)
+    expect(ids).toHaveLength(MAX_PIPELINES)
+    for (const m of mine) expect(ids).toContain(m.id)
+    expect(r.added).toBe(16)
+    // The newest incoming go in; the nine oldest are left out, and named.
+    expect(r.leftOut.map((p) => p.id)).toEqual(["n08", "n07", "n06", "n05", "n04", "n03", "n02", "n01", "n00"])
+    expect(ids).toContain("n24")
+    expect(ids).not.toContain("n08")
+  })
+
+  it("adds nothing when the list is already full, and says so", () => {
+    const full = Array.from({ length: MAX_PIPELINES }, (_, i) => saved(`m${i}`, "2026-01-01T00:00:00.000Z"))
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(full))
+    resetPipelinesForTests()
+    const r = importPipelines([saved("new", "2026-12-01T00:00:00.000Z")])!
+    expect(r.added).toBe(0)
+    expect(r.leftOut.map((p) => p.id)).toEqual(["new"])
+    expect(readPipelines()).toHaveLength(MAX_PIPELINES)
   })
 
   it("clears every saved pipeline and the selection", () => {

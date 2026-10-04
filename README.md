@@ -274,12 +274,14 @@ clips](#recording-the-home-clips).
 - **Export and import a file.** Export one item, the ones you tick, or everything, as one
   `rag-playground-<name>.ragplayground.json` file. On the demo, **Include the document** is on
   for uploads, so the PDF travels in the file. Import it by choosing the file or dropping it on
-  the Library page, in any browser: items are merged by id and never duplicated, each list keeps
-  its newest 20 and the page names anything that had to go, and a PDF in the file is uploaded
+  the Library page, in any browser: items are merged by id and never duplicated, and an import never
+  removes anything already saved: new items go in newest first while there is room (at most 20
+  pipelines and 20 experiments), and the page names any left out, and any item in the file it
+  could not read. An experiment may carry at most 10 recipes. A PDF in the file is uploaded
   again (the demo's limits still apply, and a refusal is said in plain words). The file's shape is
   `{ format: "rag-playground-library", version: 1, exportedAt, items, documents: [{ sha, filename, pdfBase64 }] }`.
-- **See what is kept, and clean up.** The **Your data and privacy** page, linked from the
-  header and the footer, lists what is kept in this browser and on the demo server (or on this
+- **See what is kept, and clean up.** The **Your data and privacy** page, linked as Privacy
+  from the footer and Library at every width, and from the header from 1280 px up, lists what is kept in this browser and on the demo server (or on this
   machine), where, and for how long. It can delete your saved pipelines and experiments, and on
   the demo your uploads, at once. It asks on the page before deleting anything.
 - **Read, then try it.** The Read page lists the author's posts on each step, in pipeline
@@ -639,8 +641,8 @@ clip's telling moment.
 
 On the hosted demo, an uploaded file is tied to the `rag_visitor` cookie in your browser and is
 deleted a day after upload. `DELETE /api/sources/<sha>` deletes it now instead: on the demo only
-your own upload (a file another browser also uploaded stays for them), locally any upload, and
-never a sample. `GET /api/sources` gives each upload its `uploaded_at` time, and
+your own upload (a file another browser also uploaded stays for them), locally any upload (with the question set stored
+beside it), and never a sample. `GET /api/sources` gives each upload its `uploaded_at` time and is never cached, and
 `GET /api/sources/<sha>/file` returns its bytes for export, to the same visitors who may see its pages. Results derived from it are cached by content hash and are not
 listed anywhere. Nothing expires them on a timer, even after the upload goes: they stay until the
 demo restarts (the Space has no persistent storage) or the cache is cleared. Files uploaded before uploads had owners have none, so they are hidden from

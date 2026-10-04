@@ -91,7 +91,7 @@ export function DocumentControl() {
           title={name}
           aria-busy={busy ? true : undefined}
           className={cn(
-            "flex h-row w-full min-w-0 items-center gap-2 rounded-control border px-2 text-left text-sm md:w-auto md:max-w-[240px] xl:max-w-[360px]",
+            "flex h-row w-full min-w-0 items-center gap-2 rounded-control border px-2 text-left text-sm md:w-auto md:min-w-[7rem] md:max-w-[240px] xl:max-w-[360px]",
             missing
               ? "border-stale bg-stale-wash text-stale hover:bg-stale-wash"
               : "border-hairline bg-surface-raised text-fg hover:bg-surface-hover",

@@ -42,7 +42,7 @@ type Filter = "all" | "pipeline" | "experiment"
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
 const hoursWords = (h: number) => (h <= 0 ? "under an hour" : plural(h, "hour"))
-const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+const size = (bytes: number) => (bytes < 0.1 * 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`)
 
 function navigate(path: string) {
   window.location.assign(path)
@@ -218,27 +218,41 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
       }
       const restored: string[] = []
       const refused: { filename: string; reason: string }[] = []
+      const damaged: string[] = []
+      const mismatched: string[] = []
       for (const d of parsed.documents) {
         const there = samples?.some((s) => s.sha === d.sha) || uploads?.some((u) => u.sha === d.sha)
         if (there) continue
+        let bytes: Uint8Array<ArrayBuffer>
         try {
-          const bytes = base64ToBytes(d.pdfBase64) as Uint8Array<ArrayBuffer>
-          await api.uploadSource(new File([bytes], d.filename, { type: "application/pdf" }))
-          restored.push(d.filename)
+          bytes = base64ToBytes(d.pdfBase64) as Uint8Array<ArrayBuffer>
+        } catch {
+          damaged.push(d.filename)
+          continue
+        }
+        try {
+          const stored = await api.uploadSource(new File([bytes], d.filename, { type: "application/pdf" }))
+          // The server names a file by its bytes, so a different sha means different bytes.
+          if (stored.sha === d.sha) restored.push(d.filename)
+          else mismatched.push(d.filename)
         } catch (err) {
           refused.push({ filename: d.filename, reason: reason(err) })
         }
       }
-      if (restored.length) refreshUploads()
+      if (restored.length || mismatched.length) refreshUploads()
       setNotice(
         importResultLine({
           fileName: file.name,
           pipelines: p.added,
           experiments: e.added,
           already: p.skipped + e.skipped,
-          dropped: [...p.dropped, ...e.dropped].map((x) => x.name),
+          leftOutPipelines: p.leftOut.map((x) => x.name),
+          leftOutExperiments: e.leftOut.map((x) => x.name),
+          unreadable: parsed.skipped + e.invalid,
           restored,
           refused,
+          damaged,
+          mismatched,
         }),
       )
     } finally {
@@ -340,10 +354,10 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
                   <b>Include the {exportable.length === 1 ? "document" : "documents"}</b>
                   <br />
                   <span className="text-fg-muted">
-                    {listWords(exportable.map((d) => d.filename))}, about {mb(exportable.reduce((n, d) => n + d.size, 0))}.{" "}
+                    {listWords(exportable.map((d) => d.filename))}, about {size(exportable.reduce((n, d) => n + d.size, 0))}.{" "}
                     {demo
-                      ? `Without it, importing later asks you to upload the PDF again, because the demo keeps uploads for ${ttlHours} hours.`
-                      : "Without it, importing in another copy of RAG Playground asks you to upload the PDF again."}
+                      ? `Without ${exportable.length === 1 ? "it" : "them"}, importing later asks you to upload the ${exportable.length === 1 ? "PDF" : "PDFs"} again, because the demo keeps uploads for ${ttlHours} hours.`
+                      : `Without ${exportable.length === 1 ? "it" : "them"}, importing in another copy of RAG Playground asks you to upload the ${exportable.length === 1 ? "PDF" : "PDFs"} again.`}
                   </span>
                 </span>
               </label>

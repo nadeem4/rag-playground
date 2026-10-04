@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
 import { SiteFooter } from "@/components/SiteFooter"
+import { resetExperimentsForTests } from "@/state/experiments"
 import { resetDocumentForTests } from "@/state/document"
 import { EXPERIMENTS_KEY } from "@/state/libraryExperiments"
 import { readPipelines, resetPipelinesForTests } from "@/state/pipelines"
@@ -20,6 +21,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   window.localStorage.clear()
   resetPipelinesForTests()
+  resetExperimentsForTests()
   resetDocumentForTests()
   resetAppSettingsForTests()
   demo = true
@@ -78,7 +80,7 @@ describe("Your data and privacy", () => {
 
   it("asks on the page before deleting saved pipelines and experiments, then clears both", async () => {
     window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([{ id: "p1", name: "One", graph: { nodes: [], edges: [] }, savedAt: "2026-10-01T00:00:00Z" }]))
-    window.localStorage.setItem(EXPERIMENTS_KEY, JSON.stringify([{ id: "e1", name: "E", stage: "chunk", recipes: [], doc: null, savedAt: "2026-10-01T00:00:00Z" }]))
+    window.localStorage.setItem(EXPERIMENTS_KEY, JSON.stringify([{ id: "e1", name: "E", stage: "chunk", recipes: [{ transform: "recursive_character", config: {} }], doc: null, savedAt: "2026-10-01T00:00:00Z" }]))
     const confirm = vi.fn(() => true)
     vi.stubGlobal("confirm", confirm)
     render(<Privacy />)

@@ -14,6 +14,7 @@ import {
   useExperiments,
   type SavedExperiment,
 } from "./libraryExperiments"
+import { readExperiments as compareList, resetExperimentsForTests, takeOpenRequest } from "./experiments"
 
 const exp = (id: string, savedAt: string, extra: Partial<SavedExperiment> = {}): SavedExperiment => ({
   id,
@@ -30,6 +31,7 @@ const store = (v: unknown) => window.localStorage.setItem(EXPERIMENTS_KEY, JSON.
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
+  resetExperimentsForTests()
 })
 
 describe("the experiments adapter", () => {
@@ -47,12 +49,12 @@ describe("the experiments adapter", () => {
       { id: 3, name: "bad id" },
       { ...exp("b", "2026-10-01T09:00:00Z"), recipes: "nope" },
       { ...exp("c", "2026-10-01T08:00:00Z"), doc: { sha: 1 } },
-      { ...exp("d", "2026-10-01T07:00:00Z"), doc: null, recipes: [{ transform: "x", config: {} }, { transform: 2 }, null] },
+      { ...exp("d", "2026-10-01T07:00:00Z"), doc: null, recipes: [{ transform: "x", config: {} }] },
+      { ...exp("e", "2026-10-01T06:00:00Z"), recipes: [{ transform: "x", config: {} }, { transform: 2 }, null] },
       null,
     ])
     const got = readExperiments()
     expect(got.map((e) => e.id)).toEqual(["a", "d"])
-    expect(got[1].recipes).toEqual([{ transform: "x", config: {} }])
     expect(got[1].doc).toBeNull()
   })
 
@@ -99,9 +101,19 @@ describe("the experiments adapter", () => {
     expect(readExperiments().map((e) => e.id)).toEqual(["ok"])
   })
 
-  it("marks an experiment to open on Compare in sessionStorage", () => {
+  it("marks an experiment to open through Compare's own handoff", () => {
     openExperiment("abc")
     expect(window.sessionStorage.getItem(OPEN_EXPERIMENT_KEY)).toBe("abc")
+    expect(takeOpenRequest()).toBe("abc")
+  })
+
+  it("shares Compare's store, so a Library delete or import shows in Compare's list at once", () => {
+    store([exp("a", "2026-10-01T10:00:00Z"), exp("b", "2026-10-01T09:00:00Z")])
+    expect(compareList().map((e) => e.id)).toEqual(["a", "b"])
+    deleteExperiment("a")
+    expect(compareList().map((e) => e.id)).toEqual(["b"])
+    importExperiments([exp("c", "2026-10-02T00:00:00Z")])
+    expect(compareList().map((e) => e.id).sort()).toEqual(["b", "c"])
   })
 
   it("tells a subscriber about a change", () => {

@@ -36,7 +36,7 @@ function NavLink({ href, label, path }: { href: string; label: string; path: str
       href={href}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "flex h-row-compact items-center rounded-control px-2 text-sm",
+        "flex h-row-compact items-center rounded-control px-2 text-sm md:px-1 lg:px-2",
         current ? "bg-muted text-fg" : "text-fg-muted hover:text-fg",
       )}
     >
@@ -103,11 +103,11 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
     // the Document control's slot takes what the row has left (flex-1 from a
     // zero basis, so it shrinks rather than wrapping) and holds the trigger at
     // its right end, before the controls. The page itself never scrolls sideways.
-    <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-4">
+    <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-3 lg:gap-x-4">
       <a href="/" className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
         RAG Playground
       </a>
-      <nav className="order-3 flex w-full min-w-0 flex-wrap items-center gap-1 md:order-2 md:w-auto" aria-label="Main">
+      <nav className="order-3 flex w-full min-w-0 flex-wrap items-center gap-1 md:order-2 md:w-auto md:gap-0 lg:gap-1" aria-label="Main">
         {primary.map((l) => (
           <NavLink key={l.href} {...l} path={path} />
         ))}

@@ -161,6 +161,29 @@ export function usableExperiment(e: SavedExperiment, registry: Registry): SavedE
   return strategies && e.recipes.every((r) => r.transform in strategies) ? e : null
 }
 
+/**
+ * The stored entries exactly as they are, readable or not. The Library writes
+ * them back with `writeRawExperiments` after a delete or an import, so an
+ * entry it cannot read, or a field it does not know, is never lost.
+ */
+export function readRawExperiments(): unknown[] {
+  const parsed = readRaw()
+  return Array.isArray(parsed) ? parsed : []
+}
+
+/** Write raw entries back untouched; an empty list removes the key. Then every reader sees them. */
+export function writeRawExperiments(entries: unknown[]): boolean {
+  try {
+    if (entries.length) window.localStorage.setItem(LIST_KEY, JSON.stringify(entries))
+    else window.localStorage.removeItem(LIST_KEY)
+  } catch {
+    return false
+  }
+  cache = null
+  notify()
+  return true
+}
+
 /** Ask Compare, on its next mount in this tab, to open the experiment. */
 export function requestOpenExperiment(id: string): void {
   try {

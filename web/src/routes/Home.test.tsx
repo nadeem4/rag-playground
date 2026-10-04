@@ -214,7 +214,7 @@ describe("Home", () => {
       const c = within(more).getByRole("link", { name }).className.split(/\s+/)
       for (const k of ["inline-flex", "min-h-[44px]", "items-center"]) expect(c).toContain(k)
     }
-    expect(within(footer).getByRole("link", { name: "Your data and privacy" })).toBeTruthy()
+    expect(within(footer).getByRole("link", { name: "Your data and privacy" }).getAttribute("href")).toBe("/privacy")
     expect(within(footer).getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://github.com/nadeem4/rag-playground")
   })
 

@@ -5,7 +5,19 @@ import type { Registry } from "@/api/types"
 
 import type { NodeState, VariantState } from "@/api/runState"
 
-import { chunkFinding, MAX_RECIPES, planSentence, recipeNames, recipeStatus, retrieveFinding, statusText } from "./compare"
+import {
+  chunkFinding,
+  chunkManyFinding,
+  MAX_RECIPES,
+  planSentence,
+  recipeNames,
+  recipeStatus,
+  retrieveFinding,
+  retrieveManyFinding,
+  sharedTop,
+  sortRecipes,
+  statusText,
+} from "./compare"
 import { defaultConfig } from "./graph"
 
 const registry = liveRegistry as unknown as Registry
@@ -253,5 +265,75 @@ describe("statusText", () => {
     expect(statusText({ kind: "running", shared: false, cached: false }, 1)).toBe("Running this recipe, 1 s")
     expect(statusText({ kind: "failed", step: "Chunk", error: "ValueError: x" }, null)).toBe("Failed at Chunk. ValueError: x")
     expect(statusText({ kind: "stopped" }, null)).toBe("Not run. The run was stopped first.")
+  })
+})
+
+describe("the many-recipe findings", () => {
+  const st = (pieces: number, uncovered: number) => ({ pieces, tokens: 345, median: 14, p95: 30, overlaps: 0, uncovered })
+  const seven = [
+    { i: 0, phrase: "Your pipeline", stats: st(6, 10) },
+    { i: 1, phrase: "Recursive at 200 characters", stats: st(12, 17) },
+    { i: 2, phrase: "By sentence at 5", stats: st(5, 0) },
+    { i: 3, phrase: "By layout block", stats: st(4, 0) },
+    { i: 4, phrase: "Recursive at 800 characters", stats: st(3, 4) },
+    { i: 5, phrase: "Recursive at 100 characters", stats: st(24, 34) },
+    { i: 6, phrase: "By sentence at 2", stats: st(11, 0) },
+  ]
+
+  it("names the extremes of a chunk run of seven", () => {
+    const f = chunkManyFinding(seven)!
+    expect(f.finding).toBe("From 3 to 24 pieces. Recursive at 100 characters cuts the most, and Recursive at 800 characters makes the fewest. Three of the seven leave nothing out.")
+    expect(f.extremes).toEqual([5, 4])
+    expect(f.link).toBe("Read the two extremes side by side")
+    expect(f.sub).toBe("Smaller pieces match more tightly but carry less context. Pick up to three recipes to read their pieces side by side.")
+    expect(chunkManyFinding(seven, 1)!.sub).toBe("Smaller pieces match more tightly but carry less context. Open any recipe to read its pieces.")
+  })
+
+  it("says who leaves nothing out when one, all or none do", () => {
+    expect(chunkManyFinding(seven.map((x) => ({ ...x, stats: st(x.stats.pieces, x.i === 2 ? 0 : 5) })))!.finding).toMatch(/ Only By sentence at 5 leaves nothing out\.$/)
+    expect(chunkManyFinding(seven.map((x) => ({ ...x, stats: st(x.stats.pieces, 0) })))!.finding).toMatch(/ None leaves anything out\.$/)
+    expect(chunkManyFinding(seven.map((x) => ({ ...x, stats: st(x.stats.pieces, 5) })))!.finding).toMatch(/ Every recipe leaves something out\.$/)
+  })
+
+  const search = (i: number, phrase: string, shared: number | null, returned: number, rank: number | null = null, transform = "dense", topK = 20) => ({ i, phrase, shared, returned, rank, transform, topK, own: i === 0 })
+  const sevenSearches = [
+    search(0, "Your pipeline", null, 20, 1, "hybrid_rrf"),
+    search(1, "Dense", 4, 20, 2),
+    search(2, "BM25", 3, 2, 1, "bm25"),
+    search(3, "Hybrid (RRF) with RRF k 10", 5, 20, 1, "hybrid_rrf"),
+    search(4, "Hybrid (RRF) with PRF", 5, 20, 1, "hybrid_rrf"),
+    search(5, "Dense with top 1", 1, 1, null, "dense", 1),
+    search(6, "Hybrid (RRF) with RRF k 200", 5, 20, 1, "hybrid_rrf"),
+  ]
+
+  it("leads a search run with Shared and Returned when the answer is not known", () => {
+    const f = retrieveManyFinding(sevenSearches, false)!
+    expect(f.finding).toMatch(/^Four of seven share all 5 pieces with Your pipeline\./)
+    expect(f.finding).toBe("Four of seven share all 5 pieces with Your pipeline. Dense with top 1 shares the fewest, 1 of 5, and BM25 returns only 2.")
+    expect(f.finding).not.toMatch(/answer/)
+    expect(f.link).toBe("Read Your pipeline beside Dense with top 1")
+    expect(f.extremes).toEqual([0, 5])
+    expect(f.sub).toBe("Keyword search only returns pieces that share a word with the question. Pick up to three recipes to read their lists side by side.")
+  })
+
+  it("leads with the answer when it is known, then up to two notes", () => {
+    const f = retrieveManyFinding(sevenSearches, true)!
+    expect(f.finding).toBe("Five of seven put the answer first. Dense with top 1 does not return it, and Dense puts it 2nd.")
+    expect(f.link).toBe("Read Your pipeline beside Dense with top 1")
+  })
+})
+
+describe("sortRecipes and sharedTop", () => {
+  const row = (i: number, pieces: number | null, kind: string) => ({ i, done: kind === "done", values: { pieces } })
+
+  it("keeps unfinished rows last in recipe order, and Your pipeline in the sort", () => {
+    const rows = [row(0, 6, "done"), row(1, 12, "done"), row(2, null, "running"), row(3, 24, "done"), row(4, null, "waiting")]
+    expect(sortRecipes(rows, "pieces", -1).map((r) => r.i)).toEqual([3, 1, 0, 2, 4])
+    expect(sortRecipes(rows, "pieces", 1).map((r) => r.i)).toEqual([0, 1, 3, 2, 4])
+    expect(sortRecipes(rows, "order", 1).map((r) => r.i)).toEqual([0, 1, 2, 3, 4])
+  })
+
+  it("counts how many of a list's top 5 are in the baseline's top 5", () => {
+    expect(sharedTop(["a", "b", "c", "d", "e", "f"], ["b", "x", "a", "f", "e"])).toBe(3)
   })
 })

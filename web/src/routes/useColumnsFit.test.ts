@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { FakeResizeObserver } from "./fakeResizeObserver"
-import { useColumnsFit } from "./useColumnsFit"
+import { useColumnsFit, useSideBySide } from "./useColumnsFit"
 
 const box = () => ({ current: document.createElement("div") })
 
@@ -56,5 +56,24 @@ describe("useColumnsFit", () => {
     const { unmount } = renderHook(() => useColumnsFit(ref, 3))
     unmount()
     expect(FakeResizeObserver.all[0].disconnected).toBe(true)
+  })
+})
+
+describe("useSideBySide", () => {
+  const renderSideBySide = () => renderHook(() => useSideBySide(box()))
+
+  it("fits three side by side at 1024, two at 768 and one on a phone, and calls 768 narrow", () => {
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    for (const [w, fit, narrow] of [[993, 3, false], [1409, 3, false], [737, 2, true], [358, 1, true]] as const) {
+      FakeResizeObserver.width = w
+      const { result, unmount } = renderSideBySide()
+      expect(result.current).toEqual({ fit, narrow })
+      unmount()
+    }
+  })
+
+  it("fits three and is not narrow without ResizeObserver", () => {
+    vi.stubGlobal("ResizeObserver", undefined)
+    expect(renderSideBySide().result.current).toEqual({ fit: 3, narrow: false })
   })
 })

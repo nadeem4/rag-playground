@@ -14,6 +14,24 @@ export const TABS_BELOW = 820
  * screen never draws every column for a frame.
  */
 export function useColumnsFit(ref: RefObject<HTMLElement | null>, n: number): boolean {
+  const width = useWidth(ref)
+  return width === null || width >= Math.max(TABS_BELOW, n * COLUMN_MIN)
+}
+
+/**
+ * How many recipes fit side by side in the element, at most three, and
+ * whether it is narrow (below `TABS_BELOW`), where the overview is a list.
+ * Three and not narrow without `ResizeObserver` (jsdom).
+ */
+export function useSideBySide(ref: RefObject<HTMLElement | null>): { fit: 1 | 2 | 3; narrow: boolean } {
+  const width = useWidth(ref)
+  if (width === null) return { fit: 3, narrow: false }
+  const fit = Math.min(3, Math.max(1, Math.floor(width / COLUMN_MIN))) as 1 | 2 | 3
+  return { fit, narrow: width < TABS_BELOW }
+}
+
+/** The element's width, kept current as it resizes; null without `ResizeObserver`. Measured before the first paint. */
+function useWidth(ref: RefObject<HTMLElement | null>): number | null {
   const [width, setWidth] = useState<number | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
@@ -27,5 +45,5 @@ export function useColumnsFit(ref: RefObject<HTMLElement | null>, n: number): bo
     ro.observe(el)
     return () => ro.disconnect()
   }, [ref])
-  return width === null || width >= Math.max(TABS_BELOW, n * COLUMN_MIN)
+  return width
 }

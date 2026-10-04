@@ -86,6 +86,44 @@ const column = (i: number) => screen.getByTestId("recipe-grid").querySelectorAll
 /** The i-th recipe's status sentence. */
 const statusOf = (i: number) => within(column(i)).getByTestId("recipe-status").textContent
 
+/**
+ * Five recipes on the cards, the two added from the Add card's first
+ * suggestion, then a run in which the first `finish` recipes finish (the next
+ * one is left running), served from the three fixtures.
+ */
+async function runFive(stage: "chunk" | "retrieve", finish = 5) {
+  const graph = sampleGraph(registry, SOURCE)
+  const through = terminalNode(graph)!.id
+  if (stage === "retrieve") {
+    serve({ c: recursiveJson, i: indexJson, h0: hybridJson, h1: denseJson, h2: bm25Json, h3: hybridJson, h4: denseJson })
+    openAt("?node=retrieve")
+  } else serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson, a3: recursiveJson, a4: markdownJson })
+  render(<Compare />)
+  const add = await screen.findByRole("region", { name: "Add a recipe" })
+  for (let k = 0; k < 2; k++) {
+    fireEvent.click(within(add).getAllByRole("button")[0])
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Run 5 recipes" }))
+  const es = await driven()
+  let seq = 1
+  for (let i = 0; i < Math.min(finish + 1, 5); i++) {
+    es.emit(seq++, { event: "variant_started", index: i, variant: {} })
+    if (i >= finish) {
+      es.emit(seq++, { event: "node_started", node_id: stage === "chunk" ? "chunk" : through, transform: "x", artifact_id: "x" })
+      break
+    }
+    if (stage === "chunk") es.emit(seq++, { event: "node_finished", node_id: "chunk", artifact_id: `a${i}`, cache_hit: false, duration_ms: 1 })
+    else {
+      es.emit(seq++, { event: "node_finished", node_id: "chunk", artifact_id: "c", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "index", artifact_id: "i", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: through, artifact_id: `h${i}`, cache_hit: false, duration_ms: 1 })
+    }
+  }
+  if (finish >= 5) es.emit(seq, { event: "stream_end", status: "finished", ok: true })
+  return es
+}
+
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -272,14 +310,6 @@ describe("Compare's widths", () => {
     expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["400 characters, waiting", "200 characters, waiting", "By sentence, waiting"])
   })
 
-  it("falls back to one at a time when five recipes do not fit at 1440", async () => {
-    FakeResizeObserver.width = 1409
-    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
-    openAt("?node=index&preset=matryoshka&native=1024")
-    render(<Compare />)
-    fireEvent.click(await screen.findByRole("button", { name: "Run 5 recipes" }))
-    expect(await screen.findByRole("group", { name: "Recipe shown" })).toBeTruthy()
-  })
 })
 
 describe("Compare's recipes", () => {
@@ -561,6 +591,79 @@ describe("during a run", () => {
     es.emit(5, { event: "node_finished", node_id: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 1 })
     await waitFor(() => expect(within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button")[1].textContent).toBe("200 characters"))
     expect(document.activeElement).toBe(stop)
+  })
+})
+
+describe("four recipes or more", () => {
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+  })
+
+  const rowOf = (i: number) => document.querySelector<HTMLElement>(`[data-recipe="${i}"]`)!
+
+  it("opens a five-recipe Chunk run on a table that sorts by its headers", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk")
+    const table = await screen.findByRole("table", { name: "Results for five recipes" })
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Select", "Recipe", "Pieces", "Tokens", "Median", "Largest 5%", "Left out", "The document, to scale"])
+    fireEvent.click(within(table).getByRole("button", { name: "Pieces" }))
+    expect(within(table).getByRole("button", { name: "Pieces" }).closest("th")!.getAttribute("aria-sort")).toBe("descending")
+    expect(within(table).getAllByText(/^(most|fewest)$/)).toHaveLength(2)
+    expect(screen.getByText(/^Sorted by pieces\. Tap a name to open it beside Your pipeline, or tick up to three to read side by side\.$/)).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId("compare-finding").textContent).toMatch(/^From \d+ to \d+ pieces\./))
+  })
+
+  it("lets up to three be ticked at 1440, and two at 768", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk")
+    await screen.findByRole("table")
+    const boxes = screen.getAllByRole("checkbox")
+    boxes.slice(0, 3).forEach((b) => fireEvent.click(b))
+    expect((boxes[3] as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByRole("region", { name: "Selection" }).textContent).toContain("Three picked, the most that fit side by side at this width.")
+    act(() => FakeResizeObserver.all.forEach((o) => o.report(737)))
+    expect(screen.getAllByRole("checkbox").filter((b) => (b as HTMLInputElement).checked)).toHaveLength(2)
+  })
+
+  it("becomes a list with Sort by on a phone, with no ticks", async () => {
+    FakeResizeObserver.width = 358
+    await runFive("chunk")
+    await waitFor(() => expect(screen.getByLabelText("Sort by")).toBeTruthy())
+    expect(screen.queryByRole("table")).toBeNull()
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0)
+    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "pieces" } })
+    expect(screen.getByRole("button", { name: "Highest first" })).toBeTruthy()
+    expect(screen.getByRole("list", { name: "Results for five recipes" }).textContent).toMatch(/\d+ pieces \(most\)/)
+  })
+
+  it("hides the Answer column on Retrieve when the question is not one of the sample's", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("retrieve")
+    const heads = within(await screen.findByRole("table")).getAllByRole("columnheader").map((h) => h.textContent)
+    expect(heads).toEqual(["Select", "Recipe", "Shared", "Returned", "Top 5, by piece"])
+    expect(screen.getAllByRole("img", { name: /^Top \d+: piece \d+/ }).length).toBeGreaterThan(0)
+    expect(text()).not.toMatch(/The colours are piece numbers/)
+  })
+
+  it("lets a finished row be opened while the run goes on", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("chunk", 2)
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Open .* beside Your pipeline$/ })).toBeTruthy())
+    expect(within(rowOf(2)).getByTestId("recipe-status").textContent).toMatch(/^Running/)
+    expect(within(rowOf(2)).queryByRole("checkbox")).toBeNull()
+    expect(screen.getByTestId("compare-sub").textContent).toBe("The sentence that compares them appears when every recipe has finished. You can open a finished one now.")
+  })
+
+  it("lists Index recipes plainly, with nothing to sort", async () => {
+    FakeResizeObserver.width = 1409
+    openAt("?node=index&preset=matryoshka&native=1024")
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 5 recipes" }))
+    expect(await screen.findByRole("list", { name: "Results for five recipes" })).toBeTruthy()
+    expect(screen.queryByRole("table")).toBeNull()
+    expect(screen.queryByLabelText("Sort by")).toBeNull()
   })
 })
 

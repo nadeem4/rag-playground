@@ -5,7 +5,7 @@ import { useSamples } from "@/api/samples"
 import { useAppSettings } from "@/api/useDemo"
 import { useUpload } from "@/components/useUpload"
 import { Button } from "@/components/ui/button"
-import { loadSampleDocument } from "@/state/document"
+import { documentBusy, loadSampleDocument, useDocument } from "@/state/document"
 
 /**
  * The first-visit card on Build (plan I-15): no document yet. Load one of the
@@ -22,6 +22,9 @@ export function FirstRun() {
   const { samples, error: samplesError } = useSamples()
   const { upload, busy: uploading, error: uploadError } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
+  // Shared with the header's menu: while either uploads or loads a sample, the other waits.
+  const { sampleLoading } = useDocument()
+  const waiting = uploading !== null || sampleLoading !== null
   const [busy, setBusy] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const settings = useAppSettings()
@@ -33,6 +36,7 @@ export function FirstRun() {
   const framed = window.self !== window.top
 
   async function load(name: string, title: string, question: string) {
+    if (documentBusy()) return
     setBusy(name)
     setLoadError(null)
     try {
@@ -88,7 +92,7 @@ export function FirstRun() {
             void upload(file)
           }}
         />
-        <Button variant="outline" size="sm" className="self-start" busy={uploading !== null} onClick={() => fileRef.current?.click()}>
+        <Button variant="outline" size="sm" className="self-start" busy={uploading !== null} disabled={waiting} onClick={() => fileRef.current?.click()}>
           <Upload aria-hidden strokeWidth={1.75} />
           {uploading ? `Uploading ${uploading}` : "Upload a PDF"}
         </Button>
@@ -122,7 +126,7 @@ export function FirstRun() {
                   size="sm"
                   variant={s.default ? "default" : "outline"}
                   className="self-start"
-                  disabled={busy !== null}
+                  disabled={busy !== null || waiting}
                   onClick={() => void load(s.name, s.title, s.question)}
                 >
                   {busy === s.name ? "Loading" : "Load"}

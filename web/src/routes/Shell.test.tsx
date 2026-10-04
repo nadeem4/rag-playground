@@ -882,7 +882,7 @@ describe("saved pipelines on Build", () => {
     setup()
     await waitFor(() =>
       expect(screen.getByTestId("document-note").textContent).toContain(
-        "report.pdf is missing. Uploads on the demo expire. Pick a document in the bar above to build the index.",
+        "report.pdf is missing. Pick a document in the bar above to build the index.",
       ),
     )
   })
@@ -1527,5 +1527,11 @@ describe("the document comes from the bar", () => {
     await act(() => chooseDocument({ sha: SAMPLE_SHA, filename: "chunking-primer.pdf" }, "Why do chunk boundaries matter?"))
     await waitFor(() => expect(card("parse")).toBeTruthy())
     expect(card("source").textContent).toContain("chunking-primer.pdf. Change it in the bar above.")
+  })
+  it("asks for a document once on a first visit: the first-visit card, with no note above it", async () => {
+    setup()
+    await screen.findByRole("button", { name: "Upload a PDF" })
+    await act(async () => settle.resolve(new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })))
+    expect(screen.queryByTestId("document-note")).toBeNull()
   })
 })

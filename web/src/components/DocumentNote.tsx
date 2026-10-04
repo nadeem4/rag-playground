@@ -1,3 +1,4 @@
+import { useDemo } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openDocumentMenu, useDocument, type DocStatus } from "@/state/document"
@@ -15,6 +16,7 @@ export function needsDocument(status: DocStatus): boolean {
  */
 export function DocumentNote({ action, changed = false, className }: { action: string; changed?: boolean; className?: string }) {
   const { doc, status } = useDocument()
+  const demo = useDemo()
   const blocked = needsDocument(status)
   if (!blocked && !(changed && doc)) return null
   return (
@@ -26,7 +28,8 @@ export function DocumentNote({ action, changed = false, className }: { action: s
       <p className="min-w-0 flex-[1_1_260px]">
         {status === "missing" ? (
           <>
-            <b className="font-semibold">{doc?.filename} is missing.</b> Uploads on the demo expire. Pick a document in the bar above to {action}.
+            <b className="font-semibold">{doc?.filename} is missing.</b>
+            {demo ? " Uploads on the demo expire." : ""} Pick a document in the bar above to {action}.
           </>
         ) : status === "empty" ? (
           <>Pick a document in the bar above to {action}.</>

@@ -19,9 +19,10 @@ const CONTRASTS = [
 ]
 
 /**
- * The theme and contrast switches. From md up they sit in the header with a
- * small caption each; below md they wait behind a Display button, so the
- * phone header stays two rows. One state feeds both places.
+ * The theme and contrast switches. From xl up they sit in the header with a
+ * small caption each; below xl they wait behind a Display button, so the
+ * header stays one row from md up and three rows on a phone. One state feeds
+ * both places.
  */
 export function DisplaySettings() {
   const [theme, setTheme] = useState<ThemeChoice>(readTheme)
@@ -56,10 +57,10 @@ export function DisplaySettings() {
 
   return (
     <>
-      <div className="hidden items-center gap-3 md:flex">{switches("md")}</div>
+      <div className="hidden items-center gap-3 xl:flex">{switches("md")}</div>
       <Popover.Root>
         <Popover.Trigger asChild>
-          <Button variant="outline" size="sm" className="md:hidden">
+          <Button variant="outline" size="sm" className="xl:hidden">
             Display
           </Button>
         </Popover.Trigger>

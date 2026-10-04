@@ -528,6 +528,14 @@ describe("the stored working graph", () => {
     expect(readStoredGraph(R)).not.toBeNull()
   })
 
+  it("keeps working when reading storage throws: the graph is read from memory", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked")
+    })
+    storeGraph(initialGraph(R))
+    expect(readStoredGraph(R)).toEqual(initialGraph(R))
+  })
+
   it("with a fallback and nothing stored, returns the fallback and stores it", () => {
     const fallback = initialGraph(R)
     const { result } = renderHook(() => useStoredGraph(R, () => fallback))

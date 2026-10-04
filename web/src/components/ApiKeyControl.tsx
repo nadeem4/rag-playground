@@ -57,6 +57,7 @@ export function ApiKeyControl() {
           className="h-auto min-h-(--row-compact) max-w-full py-1 whitespace-normal"
           data-testid="api-key-button"
           title={keysSet ? undefined : NO_KEY}
+          aria-label={keysSet ? undefined : NO_KEY}
         >
           {keysSet ? (
             <>
@@ -65,11 +66,9 @@ export function ApiKeyControl() {
             </>
           ) : (
             // A key is only needed for a written answer, so no key is not a problem.
-            // Below md the words shrink to Key, and the title keeps the whole sentence.
-            <>
-              <span className="md:hidden">Key</span>
-              <span className="hidden md:inline">{NO_KEY}</span>
-            </>
+            // The words are just Key at every width, so the header stays one row from md
+            // up; the title and the accessible name keep the whole sentence.
+            "Key"
           )}
         </Button>
       </Popover.Trigger>

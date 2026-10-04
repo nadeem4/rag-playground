@@ -50,7 +50,7 @@ describe("Read", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Read, then try it" })).toBeTruthy()
     expect(screen.getByText("The posts behind each step, in pipeline order.")).toBeTruthy()
     const titles = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)
-    expect(titles).toEqual(["Overview", "Upload", "Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer", "Evaluate"])
+    expect(titles).toEqual(["Overview", "Document", "Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer", "Evaluate"])
   })
 
   it("sets the page on the scale: 32 px rhythm between sections, text-lg post titles", async () => {

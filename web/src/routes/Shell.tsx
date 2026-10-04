@@ -90,11 +90,11 @@ export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry
 }
 
 /**
- * Why Build the index is disabled: the Document card just needs a file, not a
- * settings fix, so it gets its own calm sentence instead of naming a "Document" setting.
+ * Why Build the index is disabled by a step's settings. A missing document is
+ * said by "Needs a document." instead, which is checked first.
  */
 function blockedTitle(blocker: GraphNode): string {
-  return blocker.stage === "source" ? "Load a sample to start." : `Fix the ${titleFor(blocker)} settings to run the pipeline.`
+  return `Fix the ${titleFor(blocker)} settings to run the pipeline.`
 }
 
 function Build({ registry }: { registry: Registry }) {
@@ -362,7 +362,8 @@ function Build({ registry }: { registry: Registry }) {
         <p className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
           These five steps build the index. Retrieval, reranking and answering live in the Ask panel.
         </p>
-        <DocumentNote action="build the index" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />
+        {/* On a first visit the first-visit card already asks for a document. */}
+        {firstRun ? null : <DocumentNote action="build the index" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />}
         {/* A source blocker is the no-file case, which the first-visit card covers. Right after a
             sample loads, the Document card's old explanation can linger for a moment; no red flash. */}
         {blocker && !firstRun && blocker.stage !== "source" ? (

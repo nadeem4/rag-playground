@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
+import { resetAppSettingsForTests } from "@/api/useDemo"
 import { resetDocumentForTests } from "@/state/document"
 import { resetStoredGraphForTests, sampleGraph, storeGraph } from "@/state/graph"
 
@@ -12,7 +13,11 @@ const registry = liveRegistry as unknown as Registry
 const SAMPLE_SHA = "cd".repeat(32)
 const SAMPLE = { name: "chunking-primer", title: "A primer", blurb: "b", shows: "s", stresses: "chunk", pages: 2, default: true, filename: "chunking-primer.pdf", sha: SAMPLE_SHA, question: "q" }
 
+let demo = false
+
 beforeEach(() => {
+  demo = false
+  resetAppSettingsForTests()
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
@@ -20,6 +25,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+      if (url === "/api/settings/app") return ok({ demo })
       if (url === "/api/sources") return ok([])
       if (url === "/api/samples") return ok([SAMPLE])
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
@@ -39,11 +45,20 @@ describe("DocumentNote", () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     render(<DocumentNote action="build the index" />)
     const note = await screen.findByTestId("document-note")
-    expect(note.textContent).toBe(
-      "NK_Resume.pdf is missing. Uploads on the demo expire. Pick a document in the bar above to build the index.Pick a document",
-    )
+    expect(note.textContent).toBe("NK_Resume.pdf is missing. Pick a document in the bar above to build the index.Pick a document")
     expect(note.getAttribute("role")).toBe("status")
     for (const c of ["bg-stale-wash", "text-stale"]) expect(note.className).toContain(c)
+  })
+
+  it("on the demo, says uploads expire", async () => {
+    demo = true
+    stored("ef".repeat(32), "NK_Resume.pdf")
+    render(<DocumentNote action="build the index" />)
+    await waitFor(() =>
+      expect(screen.getByTestId("document-note").textContent).toBe(
+        "NK_Resume.pdf is missing. Uploads on the demo expire. Pick a document in the bar above to build the index.Pick a document",
+      ),
+    )
   })
 
   it("asks for a document when there is none", async () => {

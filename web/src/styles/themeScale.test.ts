@@ -33,6 +33,8 @@ const FILES = [
   "state/recipeSentence.ts",
   "components/compare/RecipeStatus.tsx",
   "routes/useRunClock.ts",
+  "components/compare/Overview.tsx",
+  "components/compare/Swatches.tsx",
   "state/compare.ts",
 ]
 

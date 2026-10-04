@@ -443,3 +443,142 @@ export function runningFinding(total: number, finishedCount: number, overview: b
   const sub = `The sentence that compares them appears when every recipe has finished.${overview && finishedCount > 0 ? " You can open a finished one now." : ""}`
   return { finding: f, sub }
 }
+
+// ---------------------------------------------------------------- overview --
+
+/** What the overview sorts by: recipe order, a chunk number, or a search number. */
+export type SortKey = "order" | "pieces" | "tokens" | "median" | "p95" | "uncovered" | "rank" | "shared" | "returned"
+
+/** Pressing a header that is not sorted: Answer from the best rank, recipe order from the first, every other number from the most. */
+export const firstDirection = (key: SortKey): 1 | -1 => (key === "order" || key === "rank" ? 1 : -1)
+
+/**
+ * The overview's rows in the order asked for. Recipe order by default. A
+ * number sorts the finished rows by it (a missing value after every number),
+ * ties in recipe order, and keeps the unfinished rows last in recipe order.
+ * Your pipeline sorts like any other row.
+ */
+export function sortRecipes<R extends { i: number; done: boolean; values: Partial<Record<SortKey, number | null>> }>(rows: R[], key: SortKey, dir: 1 | -1): R[] {
+  const byOrder = [...rows].sort((a, b) => a.i - b.i)
+  if (key === "order") return dir === 1 ? byOrder : byOrder.reverse()
+  const val = (r: R) => r.values[key]
+  const ready = byOrder.filter((r) => r.done)
+  const rest = byOrder.filter((r) => !r.done)
+  ready.sort((a, b) => {
+    const x = val(a)
+    const y = val(b)
+    if (x === y || (x == null && y == null)) return a.i - b.i
+    if (x == null) return 1
+    if (y == null) return -1
+    return (x - y) * dir || a.i - b.i
+  })
+  return [...ready, ...rest]
+}
+
+/** How many of a list's top `k` are in the baseline's top `k`. */
+export function sharedTop(base: readonly string[], ids: readonly string[], k = 5): number {
+  const top = new Set(base.slice(0, k))
+  return ids.slice(0, k).filter((id) => top.has(id)).length
+}
+
+/** The overview's finding: the sentence, the line under it, and the link to the recipes it names. */
+export interface ManyFinding extends Finding {
+  /** The two recipes the link opens side by side, or null. */
+  extremes: [number, number] | null
+  link: string | null
+}
+
+/** One finished chunk recipe for the overview's finding. */
+export interface ChunkManyItem {
+  i: number
+  phrase: string
+  stats: ChunkStats
+}
+
+/**
+ * The chunk overview's finding: the range of piece counts and the recipes at
+ * either end, then who leaves nothing out. Null with fewer than two.
+ */
+export function chunkManyFinding(items: ChunkManyItem[], fit = 3): ManyFinding | null {
+  if (items.length < 2) return null
+  const most = items.reduce((a, b) => (b.stats.pieces > a.stats.pieces ? b : a))
+  const few = items.reduce((a, b) => (b.stats.pieces < a.stats.pieces ? b : a))
+  let finding =
+    most.stats.pieces === few.stats.pieces
+      ? `Every recipe makes ${piecesOf(most.stats.pieces)}.`
+      : `From ${few.stats.pieces} to ${most.stats.pieces} pieces. ${cap(most.phrase)} cuts the most, and ${few.phrase} makes the fewest.`
+  const whole = items.filter((x) => x.stats.uncovered === 0)
+  if (whole.length === 0) finding += " Every recipe leaves something out."
+  else if (whole.length === items.length) finding += " None leaves anything out."
+  else if (whole.length === 1) finding += ` Only ${whole[0].phrase} leaves nothing out.`
+  else finding += ` ${cap(word(whole.length))} of the ${word(items.length)} leave nothing out.`
+  const pick = fit > 1 ? ` Pick up to ${word(fit)} recipes to read their pieces side by side.` : " Open any recipe to read its pieces."
+  const apart = most.stats.pieces !== few.stats.pieces
+  return {
+    finding,
+    sub: `Smaller pieces match more tightly but carry less context.${pick}`,
+    extremes: apart ? [most.i, few.i] : null,
+    link: apart && fit > 1 ? "Read the two extremes side by side" : null,
+  }
+}
+
+/** One finished search recipe for the overview's finding. */
+export interface RetrieveManyItem {
+  i: number
+  phrase: string
+  own: boolean
+  /** Where the known answer sits, or null when it is not returned or not known. */
+  rank: number | null
+  /** How many of its top 5 the baseline's top 5 holds; null on the baseline. */
+  shared: number | null
+  returned: number
+  transform: string
+  topK: number | null
+}
+
+/**
+ * The search overview's finding. With a known answer: how many put it first,
+ * then up to two notes (does not return it, puts it lower, returns fewer than
+ * 5). Without one: how many share all of the baseline's top 5, then the one
+ * that shares the fewest and one that returns fewer. The link reads Your
+ * pipeline beside the recipe the finding names first.
+ */
+export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolean, fit = 3): ManyFinding | null {
+  if (items.length < 2) return null
+  const base = items.find((x) => x.own) ?? items[0]
+  const others = items.filter((x) => x !== base)
+  const n = items.length
+  let finding: string
+  let named: RetrieveManyItem | undefined
+  if (goldKnown) {
+    const first = items.filter((x) => x.rank === 1).length
+    finding = first === n ? `All ${word(n)} put the answer first.` : `${cap(word(first))} of ${word(n)} put the answer first.`
+    const notes: { t: string; x: RetrieveManyItem }[] = [
+      ...items.filter((x) => x.rank === null).map((x) => ({ t: `${x.phrase} does not return it`, x })),
+      ...items.filter((x) => x.rank !== null && x.rank > 1).map((x) => ({ t: `${x.phrase} puts it ${ordinal(x.rank!)}`, x })),
+      ...items.filter((x) => x.rank !== null && x.returned < 5).map((x) => ({ t: `${x.phrase} returns only ${x.returned}`, x })),
+    ]
+    if (notes.length) finding += ` ${cap(notes.slice(0, 2).map((x) => x.t).join(", and "))}.`
+    named = notes.find((x) => x.x !== base)?.x
+  } else {
+    const top = Math.min(5, base.returned)
+    const all = items.filter((x) => x === base || x.shared === top).length
+    finding = `${cap(word(all))} of ${word(n)} share all ${top} ${top === 1 ? "piece" : "pieces"} with Your pipeline.`
+    const least = Math.min(...others.map((x) => x.shared ?? top))
+    const fewest = least < top ? others.find((x) => (x.shared ?? top) === least) : undefined
+    const short = others.find((x) => x !== fewest && x.returned < 5)
+    const parts: string[] = []
+    if (fewest) parts.push(`${fewest.phrase} shares the fewest, ${least} of ${top}`)
+    if (short) parts.push(`${short.phrase} returns only ${short.returned}`)
+    if (parts.length) finding += ` ${cap(parts.join(", and "))}.`
+    named = fewest ?? short
+  }
+  const keyword = items.some((x) => x.transform === "bm25" && typeof x.topK === "number" && x.returned < x.topK)
+  const pick = fit > 1 ? `Pick up to ${word(fit)} recipes to read their lists side by side.` : "Open any recipe to read its list."
+  return {
+    finding,
+    sub: keyword ? `Keyword search only returns pieces that share a word with the question. ${pick}` : pick,
+    extremes: named ? [base.i, named.i] : null,
+    link: named && fit > 1 ? `Read Your pipeline beside ${named.phrase}` : null,
+  }
+}

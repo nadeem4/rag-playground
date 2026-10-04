@@ -14,6 +14,7 @@ import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
 import { AddRecipeCard } from "@/components/compare/AddRecipeCard"
 import { RecipeCard, type CardTag } from "@/components/compare/RecipeCard"
 import { RecipeHead } from "@/components/compare/RecipeHead"
+import { Overview, type OverviewRow } from "@/components/compare/Overview"
 import { RecipeStatus } from "@/components/compare/RecipeStatus"
 import { RetrieveEvidence } from "@/components/compare/RetrieveEvidence"
 import { ValueEditor } from "@/components/compare/ValueEditor"
@@ -23,7 +24,7 @@ import { CONTROL } from "@/components/fields/types"
 import { agreementText, compareLists, hitRows, type HitRowData } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
-import { chunkStats } from "@/components/inspectors/spans"
+import { chunkSlot, chunkStats } from "@/components/inspectors/spans"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
@@ -43,6 +44,7 @@ import {
 import { useDocument } from "@/state/document"
 import {
   chunkFinding,
+  chunkManyFinding,
   MAX_RECIPES,
   planSentence,
   RECIPE_TITLES,
@@ -52,17 +54,20 @@ import {
   resultsMode,
   runningFinding,
   retrieveFinding,
+  retrieveManyFinding,
+  sharedTop,
   strategyName,
   type Finding,
   type RecipeStatus as Status,
   type ResultsMode,
+  type SortKey,
 } from "@/state/compare"
 import { recipeSentence } from "@/state/recipeSentence"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
 import { RegistryScreen } from "./Shell"
-import { useColumnsFit } from "./useColumnsFit"
+import { useColumnsFit, useSideBySide } from "./useColumnsFit"
 import { useRunClock } from "./useRunClock"
 
 /**
@@ -347,6 +352,15 @@ function Sweep({
   const fitAll = useColumnsFit(scroller, Math.max(phase === "results" ? submitted.variants.length : n, 1))
   // The recipe shown when the columns do not fit.
   const [chosen, setChosen] = useState(0)
+  // How many recipes fit side by side, at most three, and whether the overview is a list.
+  const side = useSideBySide(scroller)
+  // The overview's sort and ticks.
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "order", dir: 1 })
+  const [ticked, setTicked] = useState<number[]>([])
+  // Fewer fit after a resize: the ticks are cut to what fits.
+  useEffect(() => {
+    if (ticked.length > side.fit) setTicked((t) => t.slice(0, side.fit))
+  }, [side.fit, ticked.length])
 
   useEffect(() => {
     const want = focusNext.current
@@ -394,6 +408,10 @@ function Sweep({
   const golds = asked ? [asked.gold_answer, ...(asked.gold_answers ?? [])] : null
   const answerRank = (rows: HitRowData[] | null) => (golds && rows ? goldRank(rows, golds) : null)
   const submittedNames = recipeNames(submitted.variants, target.stage, registry)
+  const answerId = (rows: HitRowData[] | null) => {
+    const rank = answerRank(rows)
+    return rank === null ? null : (rows?.find((r) => r.rank === rank)?.chunk_id ?? null)
+  }
   // Each recipe's place in the run, from its own events; seconds counted by this browser.
   const clock = useRunClock(run.variants, busy)
   const titles = useMemo(() => Object.fromEntries(graph.nodes.map((n) => [n.id, titleFor(n)])), [graph])
@@ -454,6 +472,8 @@ function Sweep({
       setSubmitted({ variants, through, sha })
       setRunId(run_id)
       setChosen(0)
+      setSort({ key: "order", dir: 1 })
+      setTicked([])
       setPhase("results")
     } catch (err) {
       // The run never started: back on the cards, the message goes under the recipe it belongs to, with that editor open.
@@ -490,7 +510,7 @@ function Sweep({
     target.stage,
     variants.map((v, i) => ({ phrase: phrases[i].phrase, transform: v.transform, config: v.config })),
     mode,
-    3,
+    side.fit,
   )
   const strategies = transforms.map((t) => ({ name: t.name, plain: strategyName(target.stage, t.name), gloss: GLOSS[t.name] ?? t.summary ?? "" }))
 
@@ -528,24 +548,77 @@ function Sweep({
   const verb = titleFor(target)
   const submittedOwn = submitted.variants.findIndex(own)
   const submittedPhrases = recipeNames(submitted.variants, target.stage, registry, submittedOwn === -1 ? undefined : submittedOwn)
+  const overview = phase === "results" && submitted.variants.length >= 4
   const failedAt = statuses.findIndex((x) => x.kind === "failed")
-  const failure = failedAt === -1 ? null : `${submittedPhrases[failedAt].phrase.charAt(0).toUpperCase()}${submittedPhrases[failedAt].phrase.slice(1)} failed, and its column says why.`
-  const done = run.closed ? findingFor() : null
+  const failure = failedAt === -1 ? null : `${submittedPhrases[failedAt].phrase.charAt(0).toUpperCase()}${submittedPhrases[failedAt].phrase.slice(1)} failed, and its ${overview ? "row" : "column"} says why.`
+  const baseAt = submittedOwn === -1 ? 0 : submittedOwn
+  const baseTop = hitLists[baseAt] ?? []
+  const top = Math.min(5, baseTop.length) || 5
+  const rows: OverviewRow[] = submitted.variants.map((v, i) => {
+    const st = statuses[i]
+    const set = payload(ids[i]?.through).data as ChunkSet | undefined
+    const stats = target.stage === "chunk" && typeof set?.source_text === "string" && Array.isArray(set.chunks) ? chunkStats(set) : null
+    const hits = hitRowLists[i]
+    const searchedSet = (payload(ids[i]?.chunks).data as ChunkSet | undefined)?.chunks
+    const answer = answerId(hits)
+    const ready = st.kind === "done" && (target.stage !== "chunk" || stats !== null) && (target.stage !== "retrieve" || hits !== null)
+    return {
+      i,
+      name: submittedNames[i].name,
+      code: v.transform,
+      own: i === submittedOwn,
+      status: st,
+      seconds: clock(i),
+      done: ready,
+      values:
+        target.stage === "chunk"
+          ? { pieces: stats?.pieces ?? null, tokens: stats?.tokens ?? null, median: stats?.median ?? null, p95: stats?.p95 ?? null, uncovered: stats?.uncovered ?? null }
+          : { rank: answerRank(hits), shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? []), returned: hits?.length ?? null },
+      set,
+      pieces: hits?.slice(0, 5).flatMap((h) => {
+        const at = h.ordinal ?? searchedSet?.findIndex((c) => c.id === h.chunk_id) ?? -1
+        return at >= 0 ? [{ piece: at + 1, slot: chunkSlot(at), answer: h.chunk_id === answer }] : []
+      }),
+    }
+  })
+  const manyFinding = (): Finding | null => {
+    const doneRows = rows.filter((r) => r.done)
+    if (target.stage === "chunk") {
+      return chunkManyFinding(
+        doneRows.map((r) => ({ i: r.i, phrase: submittedPhrases[r.i].phrase, stats: chunkStats(r.set as ChunkSet) })),
+        side.fit,
+      )
+    }
+    if (target.stage === "retrieve") {
+      return retrieveManyFinding(
+        doneRows.map((r) => ({
+          i: r.i,
+          phrase: submittedPhrases[r.i].phrase,
+          own: r.own,
+          rank: r.values.rank ?? null,
+          shared: r.values.shared ?? null,
+          returned: r.values.returned ?? 0,
+          transform: submitted.variants[r.i].transform,
+          topK: typeof submitted.variants[r.i].config.top_k === "number" ? (submitted.variants[r.i].config.top_k as number) : null,
+        })),
+        golds !== null,
+        side.fit,
+      )
+    }
+    return findingFor()
+  }
+  const done = run.closed ? (overview ? manyFinding() : findingFor()) : null
   const finding: Finding | null = !runId
     ? null
     : !run.closed
-      ? runningFinding(submitted.variants.length, finishedCount, false)
+      ? runningFinding(submitted.variants.length, finishedCount, overview)
       : done || failure
         ? { finding: [done?.finding, failure].filter(Boolean).join(" "), sub: done?.sub ?? null }
         : null
-  const answerId = (rows: HitRowData[] | null) => {
-    const rank = answerRank(rows)
-    return rank === null ? null : (rows?.find((r) => r.rank === rank)?.chunk_id ?? null)
-  }
   const ran = submitted.variants.length
   // On Retrieve every recipe searches the one chunk set, so a colour is the same piece in every column.
   const note =
-    finding && target.stage === "retrieve" && searched !== null
+    finding && !overview && target.stage === "retrieve" && searched !== null
       ? `The colours are piece numbers, the same in every column, because ${ran === 2 ? "both" : `all ${NUMBER_WORDS[ran] ?? ran}`} recipes search the same ${searched} ${searched === 1 ? "piece" : "pieces"}.`
       : null
   const suggestions = suggestRecipes(target, transforms, variants).map((v) => ({
@@ -739,7 +812,25 @@ function Sweep({
               ) : null}
             </div>
 
-            {fitAll ? null : (
+            {overview ? (
+              <Overview
+                stage={target.stage}
+                rows={rows}
+                sort={sort}
+                onSort={(key, dir) => setSort({ key, dir })}
+                ticked={ticked}
+                onTick={(i, on) => setTicked((t) => (on ? [...t, i] : t.filter((x) => x !== i)))}
+                onClear={() => setTicked([])}
+                onRead={() => undefined}
+                onOpen={() => undefined}
+                onChange={changeThis}
+                fit={side.fit}
+                narrow={side.narrow}
+                goldKnown={golds !== null}
+                top={top}
+              />
+            ) : null}
+            {overview || fitAll ? null : (
               <div className="flex border-b border-hairline px-3 py-2">
                 <SegmentedControl
                   label="Recipe shown"
@@ -750,6 +841,7 @@ function Sweep({
               </div>
             )}
 
+            {overview ? null : (
             <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
               {visible.map((i) => {
                 const s = stateOf(i)
@@ -795,6 +887,7 @@ function Sweep({
                 )
               })}
             </div>
+            )}
             {note ? <p className="px-3 py-3 text-sm text-fg-muted">{note}</p> : null}
           </>
         )}

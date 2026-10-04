@@ -652,6 +652,28 @@ describe("field help behind an info button", () => {
     expect(within(dialog).getByText("Small pieces match precisely.")).toBeTruthy()
   })
 
+  it("the info button is a 20 px square", () => {
+    renderForm(obj({ size: { type: "integer", default: 5, title: "Size", description: LONG } }))
+    const c = screen.getByRole("button", { name: "About Size" }).className.split(/\s+/)
+    expect(c).toContain("h-[20px]")
+    expect(c).toContain("w-[20px]")
+    expect(c).not.toContain("h-control")
+    expect(c).not.toContain("w-(--row-compact)")
+  })
+
+  it("a collapsed group with a lesson but no description still has its info button", () => {
+    const deep = obj({
+      a: {
+        type: "object",
+        title: "A",
+        properties: { b: { type: "object", title: "Deep", properties: { c: { type: "integer", default: 1, title: "C" } } } },
+      },
+    })
+    const learn = { "a.b": { hint: "What the deep group holds.", more: [] } }
+    render(<SchemaForm schema={deep} value={{ a: { b: { c: 1 } } }} onChange={() => {}} learn={learn} />)
+    expect(screen.getByRole("button", { name: "About Deep", hidden: true })).toBeTruthy()
+  })
+
   it("with no description, a lesson's short unit sentence is the hint", () => {
     const learn = { size: { hint: "The largest a chunk can be, counted in characters.", more: ["More."] } }
     render(<SchemaForm schema={obj({ size: { type: "integer", default: 5, title: "Size" } })} value={{ size: 5 }} onChange={() => {}} learn={learn} />)

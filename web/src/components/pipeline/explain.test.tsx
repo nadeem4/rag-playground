@@ -264,3 +264,40 @@ describe("what it did", () => {
     expect(within(card("chunk")).queryByText("Each piece holds up to 1,000 characters.")).toBeNull()
   })
 })
+
+describe("the explanation pop-over's size and side", () => {
+  const panel = () =>
+    render(
+      <Popover.Root open>
+        <Popover.Anchor />
+        <ExplainPanel title="Chunk" stage="chunk" transform="recursive_character" explain={explained("s")} anchor={() => null} />
+      </Popover.Root>,
+    )
+  const wide = (matches: boolean) =>
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({ matches, media: query, addEventListener: () => {}, removeEventListener: () => {} })),
+    )
+
+  it("is never taller than the room it has, and scrolls inside", async () => {
+    panel()
+    const dialog = await screen.findByRole("dialog", { name: "About the Chunk step" })
+    expect(dialog.className).toContain("max-h-(--radix-popover-content-available-height)")
+    expect(dialog.className).toContain("overflow-y-auto")
+    expect(dialog.className).toContain("max-w-[calc(100vw-32px)]")
+  })
+
+  it("opens below the card on a narrow screen", async () => {
+    wide(false)
+    panel()
+    const dialog = await screen.findByRole("dialog", { name: "About the Chunk step" })
+    await waitFor(() => expect(dialog.getAttribute("data-side")).toBe("bottom"))
+  })
+
+  it("opens beside the card on a wide screen", async () => {
+    wide(true)
+    panel()
+    const dialog = await screen.findByRole("dialog", { name: "About the Chunk step" })
+    await waitFor(() => expect(dialog.getAttribute("data-side")).toBe("right"))
+  })
+})

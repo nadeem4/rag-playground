@@ -20,10 +20,11 @@ export function FieldHelp({ title, text, lesson }: { title: string; text?: strin
       <Popover.Trigger asChild>
         <Button
           variant="ghost"
-          size="icon"
+          // No size variant: its h-control would fight the 20 px square.
+          size={null}
           aria-label={`About ${title}`}
           title={`About ${title}`}
-          className="size-[20px] text-fg-muted"
+          className="h-[20px] w-[20px] text-fg-muted"
           onClick={(e) => e.stopPropagation()}
         >
           <Info aria-hidden strokeWidth={1.75} className="size-[16px]" />

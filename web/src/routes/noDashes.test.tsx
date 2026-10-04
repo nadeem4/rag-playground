@@ -78,6 +78,26 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/** Every field description and lesson line in the registry: they show only inside info pop-overs. */
+function helpText(node: unknown, key = "", out: string[] = []): string[] {
+  if (typeof node === "string") {
+    if (key === "description" || key === "hint" || key === "more") out.push(node)
+  } else if (Array.isArray(node)) {
+    for (const v of node) helpText(v, key, out)
+  } else if (node && typeof node === "object") {
+    for (const [k, v] of Object.entries(node)) helpText(v, k, out)
+  }
+  return out
+}
+
+describe("no em-dashes or en-dashes in help behind info buttons", () => {
+  it("every field description and lesson in the registry", () => {
+    const text = helpText(liveRegistry)
+    expect(text.length).toBeGreaterThan(20)
+    expect(text.filter((t) => DASH.test(t))).toEqual([])
+  })
+})
+
 describe("no em-dashes or en-dashes in visible text", () => {
   it("Build, with a file loaded and an explanation open", async () => {
     storeGraph(sampleGraph(registry, SOURCE))

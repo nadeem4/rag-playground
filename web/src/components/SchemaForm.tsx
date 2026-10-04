@@ -207,7 +207,7 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
           </summary>
           <fieldset data-field-kind="object" data-depth={depth + 1} className="m-0 flex min-w-0 flex-col gap-2 border-0 border-t border-hairline p-2">
             <legend className="sr-only">{label}</legend>
-            {description ? <div className="flex justify-end">{info}</div> : null}
+            {description || lesson ? <div className="flex justify-end">{info}</div> : null}
             {body}
           </fieldset>
         </details>

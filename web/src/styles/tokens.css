@@ -67,7 +67,8 @@
   --row-compact: 1.75rem; /* 28px at the default root size */
 
   /* Motion: only transform and opacity animate (and grid-template-rows for
-     one disclosure). Nothing loops except the running step's edge (--dur-breathe). */
+     one disclosure). Nothing loops except the running step's edge and the run strip's
+     running bar (--dur-breathe). */
   --dur-fast: 120ms;
   --dur-mid: 200ms;
   --dur-slow: 320ms;
@@ -460,7 +461,7 @@
 /*
  * Motion 5: the running step card's top edge. The one repeating signal: the
  * accent edge breathes between half and full opacity over --dur-breathe while the
- * step runs, and stops when it finishes. Under reduced motion it is a still
+ * step runs, and stops when it finishes. The run strip's running bar uses it too. Under reduced motion it is a still
  * edge.
  */
 @keyframes step-running {

@@ -211,15 +211,14 @@ describe("PipelineColumn", () => {
         onSweep: vi.fn(),
       }
       const { rerender } = render(<PipelineColumn {...props} results={{ parse: { id: "parse", status: "running", started_at: started } }} />)
-      expect(within(card("parse")).getByText("running")).toBeTruthy()
-      expect(within(card("parse")).getByText("12 s")).toBeTruthy()
+      const title = () => card("parse").querySelector("h3")!.textContent
+      expect(title()).toBe("Parse, running, 12 s")
       act(() => {
         vi.advanceTimersByTime(3000)
       })
-      expect(within(card("parse")).getByText("15 s")).toBeTruthy()
+      expect(title()).toBe("Parse, running, 15 s")
       rerender(<PipelineColumn {...props} results={{ parse: { id: "parse", status: "done", artifact_id: "p", duration_ms: 15000 } }} />)
-      expect(within(card("parse")).queryByText("running")).toBeNull()
-      expect(within(card("parse")).queryByText("15 s")).toBeNull()
+      expect(title()).toBe("Parse")
       expect(vi.getTimerCount()).toBe(0)
     })
 
@@ -243,7 +242,7 @@ describe("PipelineColumn", () => {
           onSweep={vi.fn()}
         />,
       )
-      expect(within(card("chunk")).getByText("0 s")).toBeTruthy()
+      expect(card("chunk").querySelector("h3")!.textContent).toBe("Chunk, running, 0 s")
       expect(vi.getTimerCount()).toBe(1)
       unmount()
       expect(vi.getTimerCount()).toBe(0)

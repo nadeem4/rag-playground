@@ -9,6 +9,7 @@ import type { ExplainState } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { blockingNode, type NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { QuestionField } from "@/components/pipeline/QuestionField"
+import { useElapsed } from "@/components/pipeline/useElapsed"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ASK_STAGES, askNodes, indexNode, infoFor, terminalNode, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
@@ -57,6 +58,8 @@ export interface AskPanelProps {
   onReranker: (transform: string | null) => void
   onUseCase: (transform: "search" | "chat") => void
   onAsk: () => void
+  /** Set while Build the index runs: the step it is on (when one has started) and when that step started, epoch seconds. */
+  buildingStep?: { title?: string; startedAt?: number }
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -165,6 +168,8 @@ export function AskPanel(p: AskPanelProps) {
     if (query) p.onConfig(query.id, { ...query.config, text })
   }
 
+  const buildElapsed = useElapsed(p.buildingStep?.startedAt)
+
   const ready = [
     filename,
     typeof pages === "number" ? plural(pages, "page", "pages") : null,
@@ -176,7 +181,11 @@ export function AskPanel(p: AskPanelProps) {
       <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
         <h2 className="text-xl font-semibold">Ask</h2>
         <span data-testid="index-status" className="text-xs text-fg-muted">
-          {indexId
+          {p.buildingStep
+            ? p.buildingStep.title
+              ? `Building the index: ${p.buildingStep.title}${buildElapsed !== undefined ? `, ${buildElapsed} s` : ""}`
+              : "Building the index."
+            : indexId
             ? `Index ready: ${ready.join(", ")}`
             : sha
               ? "Build the index first."

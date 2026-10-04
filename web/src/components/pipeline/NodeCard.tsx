@@ -21,6 +21,7 @@ import { errorHeadline } from "@/state/pipeline"
 import { ExplainPanel } from "./ExplainPanel"
 import { lockOf, TransformSelect } from "./TransformSelect"
 import { outcomeText, type Outcome } from "./outcome"
+import { useElapsed } from "./useElapsed"
 import { useOutcome } from "./useOutcome"
 import { MonoNumbers, WhatItDid } from "./WhatItDid"
 
@@ -28,9 +29,9 @@ import { MonoNumbers, WhatItDid } from "./WhatItDid"
  * One node of the pipeline column (foundation spec section 7), a tile on the
  * panel. A 14 px status ring before the step name shows the card's look
  * without reading a word: grey when not run, half accent while running (with
- * a breathing top edge), an accent dot when done (dashed when reused from an
- * earlier run), amber when the settings changed since the run, danger when it
- * failed. Under the name: the transform's plain name and code name, then the
+ * a breathing top edge, and the title line reads "Parse, running, 3 s"), an
+ * accent dot when done (dashed when reused from an earlier run), amber when
+ * the settings changed since the run, danger when it failed. Under the name: the transform's plain name and code name, then the
  * result on one line. The options open below when the card is selected, the
  * selected card is the one raised card, and its head closes it again.
  */
@@ -162,22 +163,6 @@ export function plainName(name: string): string {
 export function transformLabel(name: string): string {
   const plain = plainName(name)
   return plain === name ? name : `${plain}, ${name}`
-}
-
-/**
- * Whole seconds since `startedAt` (epoch seconds), ticking once a second while
- * `startedAt` is set. Feedback for a long parse, not decoration: no animation.
- */
-export function useElapsed(startedAt: number | undefined): number | undefined {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (startedAt === undefined) return
-    setNow(Date.now())
-    const t = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(t)
-  }, [startedAt])
-  if (startedAt === undefined) return undefined
-  return Math.max(0, Math.floor(now / 1000 - startedAt))
 }
 
 /** The nearest ancestor that scrolls (the column's box on desktop, `<main>` below md), or null for the window. */
@@ -394,6 +379,12 @@ export function NodeCard(p: NodeCardProps) {
                 </span>
               )}
               {p.title}
+              {/* While it runs, the title line itself says so, with the seconds. */}
+              {running && !isSource ? (
+                <span className="font-normal text-fg-muted">
+                  , running{elapsed !== undefined ? <span className="font-mono">, {elapsed} s</span> : null}
+                </span>
+              ) : null}
             </button>
           </h3>
           {p.showId ? <span className="font-mono text-xs whitespace-nowrap text-fg-muted">{p.node.id}</span> : null}
@@ -431,7 +422,7 @@ export function NodeCard(p: NodeCardProps) {
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2" aria-live="polite">
           {isSource ? null : (
             <>
-              {shown.look === "done" && !reused ? null : (
+              {(shown.look === "done" && !reused) || running ? null : (
                 <span
                   data-testid="status-chip"
                   className={cn(
@@ -442,11 +433,6 @@ export function NodeCard(p: NodeCardProps) {
                   {shown.label}
                 </span>
               )}
-              {elapsed !== undefined ? (
-                <span className="font-mono text-xs text-fg" title="Elapsed since this node started">
-                  {elapsed} s
-                </span>
-              ) : null}
               {shown.duration !== undefined ? <span className="font-mono text-xs text-fg">{fmtMs(shown.duration)}</span> : null}
               <Popover.Trigger asChild>
                 <Button

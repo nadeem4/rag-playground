@@ -113,6 +113,12 @@ describe("the Ask panel header", () => {
     expect(screen.getByTestId("index-status").textContent).toBe("Load a PDF or pick a sample on the Upload card, then build the index.")
   })
 
+  it("while a build runs, says which step it is on and for how long", () => {
+    const startedAt = Math.floor(Date.now() / 1000) - 5
+    setup({ results: {}, busy: true, buildingStep: { title: "Parse", startedAt } })
+    expect(screen.getByTestId("index-status").textContent).toBe("Building the index: Parse, 5 s")
+  })
+
   it("a stale Index result counts as not built", () => {
     setup({ stale: new Set(["index"]) })
     expect(screen.getByTestId("index-status").textContent).toBe("Build the index first.")

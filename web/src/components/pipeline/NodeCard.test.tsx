@@ -400,6 +400,16 @@ describe("a running card keeps its status in view", () => {
     expect(line.closest("footer")).not.toBeNull()
   })
 
+  it("the running card's title line says running and the seconds, and goes back to the name after", () => {
+    const now = Math.floor(Date.now() / 1000) - 7
+    const card = renderCard({ busy: true, result: { id: "chunk", status: "running", started_at: now } })
+    expect(card.querySelector("h3")!.textContent).toBe("Chunk, running, 7 s")
+    expect(within(card).queryByTestId("status-chip")).toBeNull()
+    cleanup()
+    const after = renderCard({ result: done("title1") })
+    expect(after.querySelector("h3")!.textContent).toBe("Chunk")
+  })
+
   it("another card's run leaves this Run button reading Run, not busy, and no running line", () => {
     const card = renderCard({ selected: true, busy: true })
     const run = within(card).getByRole("button", { name: "Run" }) as HTMLButtonElement

@@ -349,6 +349,67 @@ describe("Build the index", () => {
   })
 })
 
+describe("the run strip", () => {
+  let streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[]
+
+  class OpenEventSource {
+    onmessage = null
+    onerror = null
+    onopen = null
+    constructor() {
+      streams.push(this)
+    }
+    close() {}
+  }
+
+  function emit(event: Record<string, unknown>, id: string) {
+    act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data: JSON.stringify(event), lastEventId: id })))
+  }
+
+  beforeEach(() => {
+    streams = []
+    vi.stubGlobal("EventSource", OpenEventSource)
+  })
+
+  const line = () => screen.queryByTestId("run-line")?.textContent ?? null
+
+  it("sits above the column, says which step a build is on, then how long it took", async () => {
+    await ready()
+    const strip = screen.getByTestId("run-strip")
+    expect(within(strip).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Upload", "Parse", "Chunk", "Index"])
+    expect(line()).toBeNull()
+    const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(build.disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    const ts = Date.now() / 1000
+    emit({ event: "node_started", node_id: "source", ts }, "1")
+    emit({ event: "node_finished", node_id: "source", artifact_id: "s1", cache_hit: true, duration_ms: 400 }, "2")
+    emit({ event: "node_started", node_id: "parse", ts }, "3")
+    await waitFor(() => expect(line()).toMatch(/^Building: Parse/))
+    expect(panel().getByTestId("index-status").textContent).toMatch(/^Building the index: Parse/)
+    emit({ event: "node_finished", node_id: "parse", artifact_id: "p1", cache_hit: false, duration_ms: 1000 }, "4")
+    emit({ event: "node_started", node_id: "chunk", ts }, "5")
+    emit({ event: "node_finished", node_id: "chunk", artifact_id: "c1", cache_hit: false, duration_ms: 1000 }, "6")
+    emit({ event: "node_started", node_id: "index", ts }, "7")
+    emit({ event: "node_finished", node_id: "index", artifact_id: "i1", cache_hit: false, duration_ms: 1000 }, "8")
+    emit({ event: "stream_end", status: "finished", ok: true }, "9")
+    await waitFor(() => expect(line()).toBe("Built in 3.4 s"))
+  })
+
+  it("names a failed step after the build stops", async () => {
+    await ready()
+    const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(build.disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    emit({ event: "node_started", node_id: "parse", ts: Date.now() / 1000 }, "1")
+    emit({ event: "node_failed", node_id: "parse", error: "boom" }, "2")
+    emit({ event: "stream_end", status: "finished", ok: false }, "3")
+    await waitFor(() => expect(line()).toBe("Parse failed"))
+  })
+})
+
 describe("Build the index is blocked only by its own steps", () => {
   function stubBlocking(stage: string) {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>

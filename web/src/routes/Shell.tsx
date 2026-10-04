@@ -19,6 +19,7 @@ import { FirstRun } from "@/components/pipeline/FirstRun"
 import { fmtMs } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
+import { RunStrip, stripSegments, type StripLine } from "@/components/pipeline/RunStrip"
 import { Button } from "@/components/ui/button"
 import {
   addCleaner,
@@ -307,6 +308,22 @@ function Build({ registry }: { registry: Registry }) {
 
   const failedNode = order.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
 
+  // The run strip: the index steps in column order, and the one running now.
+  const indexSteps = order.filter((n) => INDEX_STAGES.includes(n.stage))
+  const segments = stripSegments(indexSteps, results, stale)
+  const runningStep = busy ? indexSteps.find((n) => results[n.id]?.status === "running") : undefined
+  const runningTitle = runningStep ? titleFor(runningStep) : undefined
+  const runningSince = runningStep ? results[runningStep.id]?.started_at : undefined
+  const failedStep = indexSteps.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
+  // The last run was Build the index, and it has ended.
+  const built = !busy && runId !== null && !fromAsk && runTarget !== undefined && runTarget === indexNode(graph)?.id
+  let stripLine: StripLine = null
+  if (building) stripLine = { kind: "building", title: runningTitle, startedAt: runningSince }
+  else if (runningStep && runningTitle) stripLine = { kind: "running", title: runningTitle, startedAt: runningSince }
+  else if (!busy && failedStep) stripLine = { kind: "failed", title: titleFor(failedStep) }
+  else if (built && segments.length && segments.every((s) => s.state === "done" || s.state === "reused"))
+    stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
+
   return (
     <main className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
       <section aria-label="Pipeline" className="flex flex-col bg-surface md:min-h-0">
@@ -330,6 +347,7 @@ function Build({ registry }: { registry: Registry }) {
             </Button>
           </div>
         </div>
+        <RunStrip segments={segments} line={stripLine} />
         <PipelineBar
           graph={graph}
           registry={registry}
@@ -424,6 +442,7 @@ function Build({ registry }: { registry: Registry }) {
             stale={stale}
             busy={busy}
             asking={asking}
+            buildingStep={building ? { title: runningTitle, startedAt: runningSince } : undefined}
             keys={keys}
             server={server}
             explanations={explanations}

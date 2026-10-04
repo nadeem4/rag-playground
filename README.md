@@ -239,7 +239,8 @@ clips](#recording-the-home-clips).
   built on a bundled sample, Build the index and Ask work at once. A pipeline carries its document, so loading
   a saved pipeline or opening a link changes the Document control too. Your own uploads do not travel with the
   link: the control reads Missing, and picking a sample keeps every shared setting. A run the server refuses
-  shows in the run strip too. Pipelines live in your browser.
+  shows in the run strip too. Pipelines live in your browser. The pipeline pickers on Build and
+  Evaluate list each pipeline with its steps in one line.
 - **Score a pipeline instead of guessing.** The Evaluate page takes the pipeline on Build, or
   any saved pipeline you pick, scored on the document in the Document control, asks it every
   question in the loaded sample's question set, and
@@ -291,12 +292,14 @@ clips](#recording-the-home-clips).
   until the guided tour can say what the reader is learning.
 - **Learn as you go.** Each card has an info button that explains what the step is for,
   how the chosen strategy works, and what it will do with your current settings, including
-  the trade-off. Settings that make no sense show a warning and disable Run. A strategy
-  that does not fit the step above it is marked in the dropdown before you pick it: one
-  that would still run but fall back is tagged "falls back" and the card says why in
-  grey, and one that could not run at all is greyed out, tagged "locked", and blocks Run
-  with the reason in red. After a run, the card says what the step did compared with the
-  previous run.
+  the trade-off. Settings that make no sense show a warning and disable Run. Each strategy
+  option in the dropdown shows what it does: its plain name, its code name and one line
+  of help from its own description. A strategy that does not fit the step above it is
+  marked before you pick it: one that would still run but fall back is tagged "Falls back"
+  and the card says why in grey, and one that could not run at all is greyed out, tagged
+  "Cannot run", and blocks Run with the reason in red. One that needs an API key when none
+  is set is tagged "Needs a key". After a run, the card says what the step did compared
+  with the previous run.
 - **Get answers with checked citations, from any model.** The chat step asks Claude, an
   OpenAI model, or any OpenAI-compatible server to answer from the retrieved chunks only.
   - Every claim cites the exact passage it relied on. Claude can use its own citations
@@ -539,7 +542,7 @@ a new strategy needs no frontend change.
      `provides` win on the same key;
    - if it runs without something but degrades, `prefers`, same shape, with a one-sentence
      `fallback` saying what happens instead. That is a soft lock: the option stays
-     selectable, tagged "falls back", and the sentence shows under the dropdown.
+     selectable, tagged "Falls back", and the sentence shows under the dropdown.
 2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py`. A test fails if a plugin
    module exists but is not listed.
 3. Run `uv run pytest`. The contract suite checks every plugin automatically, including:

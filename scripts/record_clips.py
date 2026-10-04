@@ -1,14 +1,17 @@
 """Record the short clips Home shows, from a real session against a local server.
 
     cd web && npm run build && cd ..
+    uv run --with playwright==1.55.0 playwright install chromium                                     # once
     uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py            # build and evaluate
     uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py evaluate   # one clip
 
 It starts the server in demo mode (`RAG_PLAYGROUND_DEMO=1`, so the Dev menu
 is hidden) on its own port (8231 unless `--port` says otherwise), with a fresh
 artifact and source directory in a temp folder, and stops it by its own
-process when done. It drives the installed Playwright Chromium (in
-%LOCALAPPDATA%\\ms-playwright on Windows); pin the Playwright package to the
+process when done. It refuses to start when something already answers on
+that port, so it never records against another server. It drives the
+Playwright Chromium that `playwright install chromium` puts in
+%LOCALAPPDATA%\\ms-playwright on Windows; pin the Playwright package to the
 version that matches that browser build (1.55.0 for chromium-1187).
 
 Each clip has a setup pass that is not recorded: it loads the sample, makes
@@ -24,22 +27,26 @@ Writes `web/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800), and a
 `.jpg` poster for each, taken with Playwright's screenshot at the clip's
 telling moment.
 
-Compare has no clip yet: `compare` saves only a poster of the Compare page, in
-both themes.
+`compare` records Compare running its three recipes and ending on the
+finding sentence. Home shows a still of Compare until that clip is recorded
+on the redesigned page; `compare-still` saves that still in both themes.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import socket
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from playwright.sync_api import Page, sync_playwright
+if TYPE_CHECKING:
+    from playwright.sync_api import Page
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "web" / "public" / "clips"
@@ -50,7 +57,18 @@ THEMES = {"light": "", "dark": "-dark"}
 LOAD_MARGIN = 0.2
 
 
+def port_answers(port: int) -> bool:
+    """True when something already listens on `port` on this machine."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
 def start_server(port: int, data: Path) -> subprocess.Popen:
+    if port_answers(port):
+        raise SystemExit(f"port {port} already answers: stop that server or pick another with --port")
     env = {
         **os.environ,
         "RAG_PLAYGROUND_ARTIFACTS": str(data / "artifacts"),
@@ -67,6 +85,8 @@ def start_server(port: int, data: Path) -> subprocess.Popen:
     )
     deadline = time.time() + 120
     while time.time() < deadline:
+        if proc.poll() is not None:
+            raise SystemExit(f"the server exited with code {proc.returncode} before it answered")
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/api/registry", timeout=2)
             return proc
@@ -179,7 +199,34 @@ def evaluate_scene(page: Page, base: str, poster: Path) -> float:
 # ---------------------------------------------------------------- compare --
 
 
-def compare_poster(browser, base: str) -> None:
+def compare_setup(page: Page, base: str) -> None:
+    pick_sample(page, base, None)
+    page.goto(base + "/compare")
+    run_recipes(page)
+
+
+def run_recipes(page: Page) -> None:
+    """Press Run on every recipe and wait for the finding sentence."""
+    page.get_by_role("button", name="Run 3 recipes").click()
+    page.get_by_test_id("compare-finding").wait_for(timeout=600_000)
+
+
+def compare_scene(page: Page, base: str, poster: Path) -> float:
+    page.goto(base + "/compare")
+    page.get_by_role("button", name="Run 3 recipes").wait_for()
+    page.wait_for_load_state("networkidle")
+    loaded = time.time()
+    page.wait_for_timeout(2000)
+    run_recipes(page)
+    finding = page.get_by_test_id("compare-finding")
+    finding.evaluate("el => el.scrollIntoView({ behavior: 'smooth', block: 'center' })")
+    page.wait_for_timeout(2500)
+    page.screenshot(path=poster, type="jpeg", quality=80)
+    page.wait_for_timeout(4500)
+    return loaded
+
+
+def compare_still(browser, base: str) -> None:
     """Compare has no clip yet: a still of the page with the sample loaded, in each theme."""
     for theme, suffix in THEMES.items():
         ctx = browser.new_context(viewport=SIZE, color_scheme=theme)
@@ -193,7 +240,11 @@ def compare_poster(browser, base: str) -> None:
         print(f"{poster.name} {poster.stat().st_size // 1024} KB")
 
 
-CLIPS = {"build": (build_setup, build_scene), "evaluate": (evaluate_setup, evaluate_scene)}
+CLIPS = {
+    "build": (build_setup, build_scene),
+    "compare": (compare_setup, compare_scene),
+    "evaluate": (evaluate_setup, evaluate_scene),
+}
 
 
 def record(browser, base: str, name: str, videos: Path) -> None:
@@ -241,7 +292,7 @@ def encode(raw: Path, target: Path, start: float) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("clips", nargs="*", default=["build", "evaluate"], choices=[*CLIPS, "compare"])
+    ap.add_argument("clips", nargs="*", default=["build", "evaluate"], choices=[*CLIPS, "compare-still"])
     ap.add_argument("--port", type=int, default=8231)
     args = ap.parse_args()
     if not (ROOT / "web" / "dist" / "index.html").exists():
@@ -252,11 +303,13 @@ def main() -> None:
         data = Path(tmp)
         server = start_server(args.port, data)
         try:
+            from playwright.sync_api import sync_playwright
+
             with sync_playwright() as p:
                 browser = p.chromium.launch()
                 for name in args.clips:
-                    if name == "compare":
-                        compare_poster(browser, base)
+                    if name == "compare-still":
+                        compare_still(browser, base)
                     else:
                         record(browser, base, name, data / "videos")
                 browser.close()

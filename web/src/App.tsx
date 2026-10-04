@@ -29,7 +29,7 @@ import { LESSONS_ENABLED } from "@/state/lessons"
 //
 // /inspect and /design are development pages, reached from the header's Dev
 // menu. /specimen is the design page's old path, kept so no old link breaks.
-// Any other path, including the removed /forms, falls through to Home.
+// Any other path, including the removed /forms, is replaced by "/" and shows Home.
 const ROUTES: Record<string, () => React.JSX.Element> = {
   "/": Home,
   "/build": Shell,
@@ -45,8 +45,9 @@ const isLessonPath = (path: string) => path === "/learn" || path.startsWith("/le
 
 /** The path to show for `path`, given whether the lessons are on. */
 export function routeFor(path: string, lessonsEnabled: boolean): string {
-  if (!lessonsEnabled && isLessonPath(path)) return "/"
-  return path
+  if (isLessonPath(path)) return lessonsEnabled ? path : "/"
+  // An unknown path shows Home, and the address bar says so.
+  return Object.hasOwn(ROUTES, path) ? path : "/"
 }
 
 export function canonicalPath(path: string): string {

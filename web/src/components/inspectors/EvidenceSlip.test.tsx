@@ -53,6 +53,10 @@ describe("the evidence slip", () => {
     expect(part("passage")!.className).not.toContain("line-clamp")
     const less = within(part("meta")!).getByRole("button", { name: "Show less" })
     expect(less.getAttribute("aria-expanded")).toBe("true")
+    // Show more and Show in PDF stay together, so a narrow slip wraps the score, not a button.
+    const actions = part("meta")!.querySelector<HTMLElement>("[data-actions]")!
+    expect(actions.className).toContain("whitespace-nowrap")
+    expect(within(actions).getByRole("button", { name: "Show less" })).toBeTruthy()
     // The toggle is its own control: it does not select the slip.
     expect(onClick).not.toHaveBeenCalled()
     fireEvent.click(less)

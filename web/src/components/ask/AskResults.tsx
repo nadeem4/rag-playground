@@ -10,7 +10,7 @@ import { movement, reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowDat
 import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
-import { DRAW_MS, drawSlope, type SlopeKind } from "@/lib/slope"
+import { DRAW_MS, drawSlope, reducedMotion, type SlopeKind } from "@/lib/slope"
 import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
@@ -381,10 +381,11 @@ function Comparison({
     if (!next) return
     const slip = target.closest("[data-slip]")
     const twin = [...(gridRef.current?.querySelectorAll("[data-slip]") ?? [])].find((el) => el !== slip && el.querySelector<HTMLElement>("[data-id]")?.dataset.id === id)
-    twin?.scrollIntoView?.({ block: "nearest" })
+    twin?.scrollIntoView?.({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" })
   }
-  const pressable = open && !wide
+  // The search order starts folded on every switch between the two layouts.
   const [searchShown, setSearchShown] = useState(false)
+  useEffect(() => setSearchShown(false), [wide])
   const litLine = lit !== null && lines.some((l) => l.id === lit)
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
@@ -412,7 +413,6 @@ function Comparison({
         keepLimit={after.length}
         compact={open}
         lit={open ? lit : null}
-        pressable={pressable}
         facts={
           open ? (
             title
@@ -445,7 +445,6 @@ function Comparison({
         flat
         compact
         lit={lit}
-        pressable={pressable}
         facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
       />
     </div>

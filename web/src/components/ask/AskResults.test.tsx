@@ -493,22 +493,71 @@ describe("below the wide layout (phone and tablet)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show search order" }))
     fireEvent.mouseOver(slipOf("reranked", top()))
     expect(document.querySelectorAll("[data-slip][data-lit]")).toHaveLength(0)
-    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("false")
     fireEvent.click(slipOf("reranked", top()))
-    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("true")
     expect([...document.querySelectorAll("[data-slip][data-lit]")]).toEqual([slipOf("reranked", top()), slipOf("search", top())])
-    expect(scrolled).toHaveBeenCalledWith({ block: "nearest" })
+    // A smooth scroll that centres the twin, so the reader keeps their place.
+    expect(scrolled).toHaveBeenCalledWith({ behavior: "smooth", block: "center" })
     expect(scrolled.mock.contexts[0]).toBe(slipOf("search", top()))
     fireEvent.click(slipOf("reranked", top()))
-    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("false")
     expect(document.querySelectorAll("[data-slip][data-lit]")).toHaveLength(0)
+    // A list item takes no aria-pressed: data-lit alone carries the state.
+    expect(slipOf("reranked", top()).hasAttribute("aria-pressed")).toBe(false)
+  })
+
+  it("a tap does not also select the slip: after two taps it has neither the lit nor the selected look", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const slip = slipOf("reranked", top())
+    fireEvent.click(slip)
+    fireEvent.click(slip)
+    expect(slip.hasAttribute("data-lit")).toBe(false)
+    expect(slip.className).not.toContain("bg-selection")
+    fireEvent.keyDown(slip, { key: "Enter" })
+    fireEvent.keyDown(slip, { key: "Enter" })
+    expect(slip.className).not.toContain("bg-selection")
+  })
+
+  it("scrolls to the twin without motion under reduced motion", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((q: string) => ({ matches: q.includes("reduced-motion"), addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(screen.getByRole("button", { name: "Show search order" }))
+    fireEvent.click(slipOf("reranked", top()))
+    expect(scrolled).toHaveBeenCalledWith({ behavior: "auto", block: "center" })
+  })
+
+  it("the search order starts closed on every switch between the wide and the stacked layout", async () => {
+    let isWide = false
+    const listeners = new Set<() => void>()
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({
+        matches: q.includes("min-width") ? isWide : false,
+        addEventListener: (_: string, f: () => void) => listeners.add(f),
+        removeEventListener: (_: string, f: () => void) => listeners.delete(f),
+      })),
+    )
+    const flip = (w: boolean) =>
+      act(() => {
+        isWide = w
+        listeners.forEach((f) => f())
+      })
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(screen.getByRole("button", { name: "Show search order" }))
+    expect(screen.getByRole("button", { name: "Hide search order" })).toBeTruthy()
+    flip(true)
+    expect(document.querySelector("[data-gutter]")).toBeTruthy()
+    flip(false)
+    expect(screen.getByRole("button", { name: "Show search order" }).getAttribute("aria-expanded")).toBe("false")
+    expect(document.querySelector('[data-column="search"]')).toBeNull()
   })
 
   it("Show more does not toggle the highlight", async () => {
     render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
     await waitFor(() => expect(badges()).toHaveLength(5))
     fireEvent.click(within(slipOf("reranked", top())).getByRole("button", { name: "Show more" }))
-    expect(slipOf("reranked", top()).getAttribute("aria-pressed")).toBe("false")
+    expect(slipOf("reranked", top()).hasAttribute("data-lit")).toBe(false)
   })
 })
 

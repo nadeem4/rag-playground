@@ -73,9 +73,8 @@ export function EvidenceSlip({
   ...rest
 }: EvidenceSlipProps) {
   const notKept = side === "notKept"
-  const full = bare ? [] : findingLine(row, side, scaleKey, keepLimit, reranker)
   // Compact, both sides of the comparison share one anatomy: the place line has no score, and the meta line has the side's one score.
-  const parts = compact && side === "search" ? [full[0], { text: " in search" }] : full
+  const parts = bare ? [] : findingLine(row, side, scaleKey, keepLimit, reranker, !compact)
   const scores: { name: string; value: number | undefined; missed?: string }[] =
     notKept || bare
       ? []
@@ -97,6 +96,31 @@ export function EvidenceSlip({
       {retriever ? <span className="font-mono">{retriever}</span> : null}
     </>
   )
+  const showMore = compact ? (
+    <button
+      type="button"
+      aria-expanded={more}
+      className={LINK_BUTTON}
+      onClick={(e) => {
+        e.stopPropagation()
+        setMore(!more)
+      }}
+    >
+      {more ? "Show less" : "Show more"}
+    </button>
+  ) : null
+  const showInPdf = onShowInPdf ? (
+    <button
+      type="button"
+      className={LINK_BUTTON}
+      onClick={(e) => {
+        e.stopPropagation()
+        onShowInPdf()
+      }}
+    >
+      Show in PDF
+    </button>
+  ) : null
   const tail = (
     <>
       {scores.map((s) => (
@@ -109,31 +133,15 @@ export function EvidenceSlip({
           )}
         </span>
       ))}
+      {/* Compact, the two buttons stay together: on a narrow slip the score wraps, not a button. */}
       {compact ? (
-        <button
-          type="button"
-          aria-expanded={more}
-          className={LINK_BUTTON}
-          onClick={(e) => {
-            e.stopPropagation()
-            setMore(!more)
-          }}
-        >
-          {more ? "Show less" : "Show more"}
-        </button>
-      ) : null}
-      {onShowInPdf ? (
-        <button
-          type="button"
-          className={LINK_BUTTON}
-          onClick={(e) => {
-            e.stopPropagation()
-            onShowInPdf()
-          }}
-        >
-          Show in PDF
-        </button>
-      ) : null}
+        <span data-actions="" className="flex gap-x-3 whitespace-nowrap">
+          {showMore}
+          {showInPdf}
+        </span>
+      ) : (
+        showInPdf
+      )}
     </>
   )
   return (

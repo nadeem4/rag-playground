@@ -180,7 +180,9 @@ export interface FindingPart {
  * reranker did not keep says why: past the keep limit, `Not kept. It was 6th
  * in search and the keep limit is 5.`; from inside it, the reranker's choice,
  * `Not kept. It was 5th in search, but MMR chose others for variety.`
- * `reranker` is the reranker's transform key.
+ * `reranker` is the reranker's transform key. `withScore` false leaves the
+ * search side's score out (`1st in search`), for a compact slip that shows it
+ * on its meta line.
  */
 export function findingLine(
   row: Pick<HitRowData, "rank" | "prior_rank" | "score">,
@@ -188,6 +190,7 @@ export function findingLine(
   scaleKey: string,
   keepLimit?: number,
   reranker?: string,
+  withScore = true,
 ): FindingPart[] {
   if (side === "notKept") {
     const searchRank = row.prior_rank ?? row.rank
@@ -197,7 +200,7 @@ export function findingLine(
     return [{ text: `${was}, but ${chose(reranker)}` }]
   }
   const place: FindingPart = { text: ordinal(row.rank), place: true }
-  if (side === "search") return [place, { text: ` in search, ${scaleName(scaleKey)} ` }, { text: fmtScore(row.score), mono: true }]
+  if (side === "search") return withScore ? [place, { text: ` in search, ${scaleName(scaleKey)} ` }, { text: fmtScore(row.score), mono: true }] : [place, { text: " in search" }]
   if (side === "single" || row.prior_rank == null) return [place]
   const move = movement(row)
   if (move.kind === "none") return [place, { text: ", stayed in place" }]

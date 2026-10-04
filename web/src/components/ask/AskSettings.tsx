@@ -283,7 +283,7 @@ function Answer({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
 export function AskSettings(p: AskSettingsProps) {
   const { retrieve, rerank, useCase } = askNodes(p.graph)
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 @min-[840px]:grid-cols-3">
       {retrieve ? <Retrieval {...p} node={retrieve} /> : null}
       {retrieve ? <Rerank {...p} node={rerank} /> : null}
       {useCase ? <Answer {...p} node={useCase} /> : null}

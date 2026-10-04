@@ -647,7 +647,7 @@ describe("the two result motions", () => {
     expect(rows("reranked").some((r) => r.hasAttribute("data-enter"))).toBe(false)
   })
 
-  it("remembers what it showed across a remount, as Back to Ask does", async () => {
+  it("remembers what it showed across a remount", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     render(<Panel {...p} />)
     await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))

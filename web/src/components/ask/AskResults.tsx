@@ -17,7 +17,7 @@ import { errorHeadline } from "@/state/pipeline"
 import { RERANKERS, RETRIEVAL_LABEL } from "./AskSettings"
 import { Finding } from "./Finding"
 import { useSlope } from "./useSlope"
-import { useWide } from "./useWide"
+import { useComparisonWide } from "./useWide"
 
 import "./ask.css"
 
@@ -99,7 +99,7 @@ export function SearchedFor({ outputs: o }: { outputs: AskOutputs }) {
   const original = o.query?.original?.trim()
   if (o.query && original) {
     return (
-      <div className="flex flex-col gap-0.5 text-xs text-fg-muted">
+      <div className="flex flex-col gap-[2px] text-xs text-fg-muted">
         <p data-testid="searched-for">
           {"Searched for: "}
           <span className="text-fg">{o.query.text}</span>
@@ -153,7 +153,7 @@ export interface AskResultsProps {
   graph: PipelineGraph
   registry: Registry
   outputs: AskOutputs
-  /** The rerank result whose comparison the reader hid, or null. Held by Build, so a card and Back to Ask keep it. */
+  /** The rerank result whose comparison the reader hid, or null. Held by Build, so closing and opening the Ask panel keeps it. */
   comparisonHidden: string | null
   onComparison: (hidden: string | null) => void
   /** True when an Ask step's last result no longer matches the settings: the old results are gone, so say why. */
@@ -172,9 +172,9 @@ export function drawTiming(): { duration: number; easing: string } {
 
 /*
  * What the two motions have already shown, by artifact id. Module level, not
- * component state: Back to Ask remounts the panel, and a cached result comes
- * back under the id it had (Cross-encoder, MMR, Cross-encoder again), and
- * neither may replay a motion the reader has seen.
+ * component state: the panel can remount, and a cached result can come back
+ * under the id it had (Cross-encoder, MMR, Cross-encoder again); neither may
+ * replay a motion the reader has seen.
  */
 const listsShown = new Set<string>()
 const slopesDrawn = new Set<string>()
@@ -192,7 +192,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   const note = useRunNote(rerank && o.rerank && o.retrieve ? o.rerankId : undefined)
 
   // Motion 3: a list fades in the first time it appears for its artifact id,
-  // never again when Hide and Show comparison or Back to Ask remount it.
+  // never again when Hide and Show comparison or a remount show it again.
   const shown: string[] = []
   const enter = (id: string | undefined) => {
     if (id) shown.push(id)
@@ -326,9 +326,10 @@ function Comparison({
   const kept = new Set(after.map((r) => r.chunk_id))
   // The candidates the reranker dropped, each with its search place, follow the kept ones as Not kept slips.
   const dropped = before.filter((r) => !kept.has(r.chunk_id)).map((r) => ({ ...r, prior_rank: r.rank }))
-  // At 1280 px and up the lists sit side by side with the slope between them;
-  // below, they stack, no line is drawn, and the search order folds away.
-  const wide = useWide()
+  // In a panel 640 px wide or more (or, outside the Ask panel, a window of
+  // 1280 px and up) the lists sit side by side with the slope between them;
+  // narrower, they stack, no line is drawn, and the search order folds away.
+  const wide = useComparisonWide()
   const sideBySide = open && wide
   // The slope: one line per kept piece, coloured by how it moved.
   const gridRef = useRef<HTMLDivElement>(null)

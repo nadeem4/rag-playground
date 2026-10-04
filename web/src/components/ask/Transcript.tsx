@@ -7,7 +7,7 @@ import { rerankLabel } from "./AskResults"
 
 /**
  * Earlier questions in this tab: one entry per finished Ask, newest first.
- * Build keeps the entries, so they outlive the panel while a card is open.
+ * Build keeps the entries, so they outlive the panel while it is closed.
  */
 
 /** One finished Ask, frozen with the settings and the ranked pieces its run used. */

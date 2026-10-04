@@ -24,6 +24,14 @@ from plugins.retrieve import _base, _prf
 NO_EXPANSION_NOTE = "No expansion: the dense pass found nothing to borrow from."
 
 
+def filtered_out_note(docs: int) -> str:
+    """The dense pass found hits, but none of their words could be added."""
+    return (
+        f"No expansion: every word in the top {docs} dense hits was a common "
+        "word, a number or already in the question."
+    )
+
+
 class HybridRrfConfig(BaseModel):
     #: The candidate pool handed on, and also how deep each search goes before
     #: fusion. A document has to appear in at least one list to be fusable at
@@ -129,15 +137,17 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         if config.query_expansion == "prf":
             with _base.timed(timings, "expand"):
                 expanded, terms = self._expand(table, dense, query, config)
+            docs = min(config.prf_docs, len(dense))
             if terms:
                 set_note(
                     ctx,
                     f"Expanded the keyword search with {len(terms)} terms from "
-                    f"the top {min(config.prf_docs, len(dense))} dense hits: "
-                    f"{', '.join(terms)}.",
+                    f"the top {docs} dense hits: {', '.join(terms)}.",
                 )
-            else:
+            elif not dense:
                 set_note(ctx, NO_EXPANSION_NOTE)
+            else:
+                set_note(ctx, filtered_out_note(docs))
 
         with _base.timed(timings, "bm25"):
             lexical = _base.fts_rows(table, query, config.top_k, text=expanded)

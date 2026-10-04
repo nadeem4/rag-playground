@@ -709,6 +709,38 @@ def test_prf_with_an_empty_dense_pass_searches_the_question_as_written(
     assert texts(result) == ["Bananas are a yellow tropical fruit"]
 
 
+def test_prf_says_when_every_borrowed_word_was_filtered_out(tmp_path, monkeypatch):
+    index_dir = build_index(tmp_path, *CORPUS)
+    monkeypatch.setattr(_prf, "select_terms", lambda *a, **k: [])
+
+    result, note = _run_hybrid(
+        tmp_path, index_dir, Query(text="bananas"), query_expansion="prf"
+    )
+
+    assert result.expanded_query is None
+    assert note == (
+        "No expansion: every word in the top 2 dense hits was a common word, "
+        "a number or already in the question."
+    )
+
+
+def test_indexed_texts_reads_only_the_text_column(tmp_path):
+    index_dir = build_index(tmp_path, *CORPUS)
+    table, _ = _base.open_index(index_dir)
+
+    class NoFullScan:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def to_arrow(self):
+            raise AssertionError("to_arrow loads every column, vectors included")
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    assert sorted(_base.indexed_texts(NoFullScan(table))) == sorted(CORPUS)
+
+
 def test_no_expansion_behaves_exactly_as_before(tmp_path):
     index_dir = build_index(tmp_path, *CORPUS)
     query = Query(text="bananas")

@@ -104,7 +104,7 @@ REVERSED = {t: float(i) for i, t in enumerate(TEXTS)}
 
 def test_registered_under_the_rerank_stage():
     assert registry.get(Stage.RERANK, "cross_encoder") is CrossEncoderRerank
-    assert CrossEncoderRerank.version == "1"
+    assert CrossEncoderRerank.version == "2"
 
 
 def test_ports_match_the_mmr_contract():
@@ -151,6 +151,24 @@ def test_scores_question_and_chunk_text_pairs(fake, tmp_path):
     rerank(TEXTS, tmp_path)
     assert model.calls == [[(QUESTION, t) for t in TEXTS]]
     assert fake.loaded == [MINILM]
+
+
+def test_a_rewritten_question_is_judged_as_asked(fake, tmp_path):
+    """Only retrieval sees an LLM rewrite; the reranker scores the question as typed."""
+    model = fake(REVERSED)
+    query = Query(text="capital France city", original=QUESTION)
+    CrossEncoderRerank().apply(
+        {"result": payload(TEXTS[:2]), "query": query.model_dump(mode="json")},
+        CrossEncoderConfig(),
+        ctx(tmp_path),
+    )
+    assert model.calls == [[(QUESTION, t) for t in TEXTS[:2]]]
+
+
+def test_version_is_bumped_for_the_question_as_asked():
+    assert CrossEncoderRerank.version == "2"
+    settings = CrossEncoderRerank().explain(CrossEncoderConfig()).settings
+    assert "the question as you typed it" in settings
 
 
 def test_loads_the_chosen_model(fake, tmp_path):

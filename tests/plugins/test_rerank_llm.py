@@ -90,6 +90,25 @@ def rerank(texts, tmp_path, run_ctx=None, **config) -> RetrievalResult:
     return RetrievalResult.model_validate(out)
 
 
+def test_a_rewritten_question_is_judged_as_asked(reply, tmp_path):
+    """Only retrieval sees an LLM rewrite; the model ranks for the question as typed."""
+    fake = reply("1")
+    query = Query(text="capital France city", original=QUESTION)
+    LlmRerank().apply(
+        {"result": payload(TEXTS[:2]), "query": query.model_dump(mode="json")},
+        LlmRerankConfig(),
+        ctx(tmp_path),
+    )
+    user = fake.calls[0]["user"]
+    assert f"Question: {QUESTION}" in user
+    assert "capital France city" not in user
+
+
+def test_version_is_bumped_for_the_question_as_asked():
+    assert LlmRerank.version == "2"
+    assert "the question as you typed it" in LlmRerank().explain(LlmRerankConfig()).settings
+
+
 def texts_of(result: RetrievalResult) -> list[str]:
     return [h.chunk.text for h in result.hits]
 
@@ -99,7 +118,7 @@ def texts_of(result: RetrievalResult) -> list[str]:
 
 def test_registered_under_the_rerank_stage():
     assert registry.get(Stage.RERANK, "llm_rerank") is LlmRerank
-    assert LlmRerank.version == "1"
+    assert LlmRerank.version == "2"
 
 
 def test_ports_match_the_mmr_contract():

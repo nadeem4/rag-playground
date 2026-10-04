@@ -1276,7 +1276,7 @@
     },
     "cross_encoder": {
       "name": "cross_encoder",
-      "version": "1",
+      "version": "2",
       "summary": "A cross-encoder reads the question and each candidate piece together and gives the pair one relevance score. It is slower than the retriever's comparison but more accurate, so it only reorders the small pool of candidates the retriever found.",
       "stage": "rerank",
       "output": "retrieval_result",
@@ -1327,7 +1327,7 @@
     },
     "llm_rerank": {
       "name": "llm_rerank",
-      "version": "1",
+      "version": "2",
       "summary": "Asks a chat model to read the question and every candidate piece and put the pieces in order of relevance. It needs an API key and makes one model call per question.",
       "stage": "rerank",
       "output": "retrieval_result",

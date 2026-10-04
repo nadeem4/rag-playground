@@ -89,7 +89,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
     """`retrieval_result -> retrieval_result`, so it stacks with other rerankers."""
 
     name = "llm_rerank"
-    version = "1"
+    version = "2"
     stage = Stage.RERANK
     inputs = {
         "result": PortSpec(ArtifactType.RETRIEVAL_RESULT),
@@ -116,7 +116,9 @@ class LlmRerank(Transform[LlmRerankConfig]):
             f"It asks {_model_name(config)} to put the candidates from the "
             "retriever (20 by default) in order of relevance, reading the first "
             f"{TEXT_BUDGET} characters of each, and keeps the {config.top_k} "
-            f"best. {_KEY_WORDS[model.provider]}"
+            f"best. It judges each piece against the question as you typed it, "
+            "even when the question was rewritten for retrieval. "
+            f"{_KEY_WORDS[model.provider]}"
         )
         tradeoff = (
             "A model can judge relevance well, but it costs one model call per "
@@ -142,7 +144,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
         self, inputs: Mapping[str, Any], config: LlmRerankConfig, ctx: RunContext
     ) -> dict[str, Any]:
         result = RetrievalResult.model_validate(inputs["result"])
-        question = Query.model_validate(inputs["query"]).text
+        question = Query.model_validate(inputs["query"]).asked
         hits = result.hits
         if not hits:
             return result.model_dump(mode="json")

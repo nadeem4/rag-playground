@@ -85,7 +85,7 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
     """`retrieval_result -> retrieval_result`, so it stacks with other rerankers."""
 
     name = "cross_encoder"
-    version = "1"
+    version = "2"
     stage = Stage.RERANK
     inputs = {
         "result": PortSpec(ArtifactType.RETRIEVAL_RESULT),
@@ -108,7 +108,9 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
         settings = (
             f"It scores every candidate with {_SHORT_NAMES[config.model]}, "
             f"{_SIZES[config.model]}, and keeps the {top} best from the pool the "
-            "retriever hands on (20 by default)."
+            "retriever hands on (20 by default). It judges each piece against "
+            "the question as you typed it, even when the question was rewritten "
+            "for retrieval."
         )
         tradeoff = (
             "A stronger model ranks more accurately, but it costs seconds per "
@@ -144,7 +146,7 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
         started = time.perf_counter()
         scores = [
             float(s)
-            for s in model.predict([(query.text, hit.chunk.text) for hit in hits])
+            for s in model.predict([(query.asked, hit.chunk.text) for hit in hits])
         ]
         elapsed = time.perf_counter() - started
 

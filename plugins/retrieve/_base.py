@@ -173,8 +173,16 @@ def fts_rows(
 
 
 def indexed_texts(table: Any) -> list[str]:
-    """Every row's indexed text: the chunk set the full-text index was built on."""
-    return table.to_arrow().column(TEXT_COLUMN).to_pylist()
+    """Every row's indexed text: the chunk set the full-text index was built on.
+
+    A plain scan with only the text column selected, so the vectors are never
+    read: PRF needs the words, and the vectors are most of the table's bytes.
+    """
+    rows = table.count_rows()
+    if not rows:
+        return []
+    scan = table.search().select([TEXT_COLUMN]).limit(rows).to_arrow()
+    return scan.column(TEXT_COLUMN).to_pylist()
 
 
 def similarity(distance: float, metric: str) -> float:

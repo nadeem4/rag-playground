@@ -37,6 +37,8 @@ const FILES = [
   "components/compare/Swatches.tsx",
   "components/compare/OpenView.tsx",
   "routes/useOpenRecipes.ts",
+  "components/compare/ExperimentMenu.tsx",
+  "state/experiments.ts",
   "state/compare.ts",
 ]
 

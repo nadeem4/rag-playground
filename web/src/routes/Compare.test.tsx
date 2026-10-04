@@ -11,12 +11,14 @@ import denseJson from "@/api/fixtures/retrieval_result.dense.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Registry } from "@/api/types"
 import { chooseDocument, resetDocumentForTests } from "@/state/document"
+import { requestOpenExperiment, resetExperimentsForTests, saveExperiment } from "@/state/experiments"
 import { resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, terminalNode, transformsFor } from "@/state/graph"
 
 import { Compare, seedVariants, VariantResult } from "./Compare"
 import { FakeResizeObserver } from "./fakeResizeObserver"
 
 const registry = liveRegistry as unknown as Registry
+const GRAPH_KEY = "rag-playground:graph:v1"
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
 
 class SilentEventSource {
@@ -129,6 +131,7 @@ beforeEach(() => {
   window.sessionStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
+  resetExperimentsForTests()
   vi.stubGlobal("EventSource", SilentEventSource)
   serve()
   storeGraph(sampleGraph(registry, SOURCE))
@@ -749,6 +752,86 @@ describe("the open view", () => {
     await waitFor(() => expect((within(strip).getAllByRole("button").find((b) => b.textContent === running.textContent) as HTMLButtonElement).disabled).toBe(false))
     expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(before)
     expect(document.activeElement).toBe(back)
+  })
+})
+
+describe("experiments", () => {
+  it("saves an experiment, says when it is edited, and offers Save changes or Save as new", async () => {
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Save experiment" }))
+    fireEvent.change(screen.getByLabelText("Name this experiment"), { target: { value: "Primer sizes" } })
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Save experiment" })).getByRole("button", { name: "Save experiment" }))
+    expect(screen.getByTestId("experiment-line").textContent).toMatch(/^Experiment Primer sizes/)
+    expect(screen.getByRole("button", { name: "Saved" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Change chunk size, now 200 characters" }))
+    fireEvent.change(screen.getByLabelText("Chunk size"), { target: { value: "250" } })
+    expect(screen.getByTestId("experiment-line").textContent).toContain("Edited since saved")
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+    fireEvent.click(screen.getByRole("button", { name: "Save experiment" }))
+    const sheet = screen.getByRole("dialog", { name: "Save experiment" })
+    expect(within(sheet).getAllByRole("button").map((b) => b.textContent)).toEqual(["Save as new", "Cancel", "Save changes"])
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save changes" }))
+    expect(screen.getByTestId("experiment-line").textContent).not.toContain("Edited since saved")
+    expect(JSON.parse(window.localStorage.getItem("rag-playground:experiments:v1")!)).toHaveLength(1)
+  })
+
+  it("reopens an experiment with its step, its recipes and its document", async () => {
+    saveExperiment("Searches", { stage: "retrieve", recipes: [{ transform: "dense", config: { top_k: 3 } }, { transform: "bm25", config: { top_k: 20 } }], doc: { sha: "12".repeat(32), filename: "my-notes.pdf" } })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Your experiments (1)" }))
+    fireEvent.click(screen.getByRole("button", { name: "Searches" }))
+    await waitFor(() => expect(pressed()).toBe("Retrieve"))
+    expect(columns()).toEqual(["dense", "bm25"])
+    await waitFor(() => expect(text()).toContain("over my-notes.pdf"))
+    expect(new URLSearchParams(window.location.search).get("node")).toBe("retrieve")
+    expect(screen.getByTestId("experiment-line").textContent).toMatch(/^Experiment Searches/)
+    expect(screen.getByTestId("experiment-line").textContent).not.toContain("Edited since saved")
+    choose("Chunk")
+    await waitFor(() => expect(pressed()).toBe("Chunk"))
+    expect(screen.queryByTestId("experiment-line")).toBeNull()
+  })
+
+  it("opens the experiment another page asked for, once", async () => {
+    const { saved } = saveExperiment("From the Library", { stage: "retrieve", recipes: [{ transform: "bm25", config: { top_k: 5 } }], doc: SOURCE })!
+    requestOpenExperiment(saved.id)
+    render(<Compare />)
+    await waitFor(() => expect(pressed()).toBe("Retrieve"))
+    expect(columns()).toEqual(["bm25"])
+    expect(screen.getByTestId("experiment-line").textContent).toMatch(/^Experiment From the Library/)
+    expect(window.sessionStorage.getItem("rag-playground:experiments:open")).toBeNull()
+  })
+
+  it("puts a finished recipe on Build with Use on Build, and keeps reading against the baseline of the run", async () => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    ;["a0", "a1", "a2"].forEach((id, i) => {
+      es.emit(i * 2 + 1, { event: "variant_started", index: i, variant: {} })
+      es.emit(i * 2 + 2, { event: "node_finished", node_id: "chunk", artifact_id: id, cache_hit: false, duration_ms: 1 })
+    })
+    es.emit(9, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(3))
+    fireEvent.click(within(column(1)).getByRole("button", { name: "Use on Build" }))
+    const chunk = JSON.parse(window.localStorage.getItem(GRAPH_KEY)!).nodes.find((n: { stage: string }) => n.stage === "chunk")
+    expect(chunk.config).toMatchObject({ chunk_size: 200 })
+    expect(within(column(1)).getByText("Now on Build")).toBeTruthy()
+    expect(within(column(0)).queryByRole("button", { name: "Use on Build" })).toBeNull()
+    expect(within(column(0)).getByText("Your pipeline")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Change recipes" }))
+    expect(screen.getAllByRole("article").map((a) => a.getAttribute("aria-label"))).toEqual(["Recipe 1", "Your pipeline", "Recipe 3"])
+  })
+
+  it("hides the experiment buttons while a run goes", async () => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    await driven()
+    expect(screen.queryByRole("button", { name: "Save experiment" })).toBeNull()
+    expect(screen.queryByRole("button", { name: /^Your experiments/ })).toBeNull()
   })
 })
 

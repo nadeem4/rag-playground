@@ -12,6 +12,7 @@ import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { goldRank } from "@/components/ask/Transcript"
 import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
 import { AddRecipeCard } from "@/components/compare/AddRecipeCard"
+import { ExperimentMenu } from "@/components/compare/ExperimentMenu"
 import { RecipeCard, type CardTag } from "@/components/compare/RecipeCard"
 import { RecipeHead } from "@/components/compare/RecipeHead"
 import { OpenView } from "@/components/compare/OpenView"
@@ -36,6 +37,9 @@ import {
   columnOrder,
   defaultConfig,
   infoFor,
+  setConfig,
+  setTransform,
+  storeGraph,
   terminalNode,
   titleFor,
   transformsFor,
@@ -43,7 +47,18 @@ import {
   useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
-import { useDocument } from "@/state/document"
+import { chooseDocument, documentOf, useDocument, type DocRef } from "@/state/document"
+import {
+  deleteExperiment,
+  droppedText,
+  readExperiments,
+  saveExperiment,
+  takeOpenRequest,
+  updateExperiment,
+  usableExperiment,
+  useExperiments,
+  type SavedExperiment,
+} from "@/state/experiments"
 import {
   chunkFinding,
   chunkManyFinding,
@@ -95,10 +110,58 @@ export function Compare() {
  * Reads the working graph as a store, so a document chosen in the header's
  * bar on this page re-renders the comparison on it, with no reload.
  */
+/** The open experiment, as page state: its id and name, and what it holds as saved, to tell an edit. */
+export interface OpenExperiment {
+  id: string
+  name: string
+  /** The step, the recipes and the document as saved, in one string. */
+  sig: string
+  /** Saved just now: the line says Saved until something changes. */
+  justSaved: boolean
+}
+
+/** The step, the recipes and the document, in one string, to tell whether the page differs from a saved experiment. */
+export const experimentSig = (stage: string, recipes: Variant[], doc: DocRef | null) => JSON.stringify({ stage, recipes, doc: doc?.sha ?? null })
+
 function ComparePage({ registry }: { registry: Registry }) {
   // The node under comparison: from the URL on arrival, then from the picker.
   const [wanted, setWanted] = useState<string | null>(() => new URLSearchParams(window.location.search).get("node"))
   const graph = useStoredGraph(registry)
+  const [experiment, setExperiment] = useState<OpenExperiment | null>(null)
+  // The recipes an experiment opened with, and a count that remounts the comparison on them.
+  const [opening, setOpening] = useState<{ n: number; recipes: Variant[] } | null>(null)
+  const opens = useRef(0)
+  const [notice, setNotice] = useState<string | null>(null)
+  const setNode = (id: string) => {
+    const q = new URLSearchParams(window.location.search)
+    q.set("node", id)
+    q.delete("read")
+    window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`)
+    setWanted(id)
+  }
+  /** Open a saved experiment: its step, its recipes on the cards, and its document in the bar. */
+  const openExperiment = (e: SavedExperiment) => {
+    const node = graph?.nodes.find((n) => n.stage === e.stage)
+    if (!graph || !node) {
+      setNotice(`This pipeline has no ${e.stage.charAt(0).toUpperCase()}${e.stage.slice(1)} step.`)
+      return
+    }
+    setNotice(null)
+    opens.current += 1
+    setOpening({ n: opens.current, recipes: structuredClone(e.recipes) })
+    setNode(node.id)
+    if (e.doc && e.doc.sha !== documentOf(graph)?.sha) void chooseDocument(e.doc)
+    setExperiment({ id: e.id, name: e.name, sig: experimentSig(e.stage, e.recipes, e.doc), justSaved: false })
+  }
+  // Another page (the Library) may have asked for an experiment: open it once, as Your experiments does.
+  const asked = useRef(false)
+  useEffect(() => {
+    if (asked.current || !graph) return
+    asked.current = true
+    const id = takeOpenRequest()
+    const e = id ? readExperiments().find((x) => x.id === id) : undefined
+    if (e && usableExperiment(e, registry)) openExperiment(e)
+  })
   const params = new URLSearchParams(window.location.search)
   const target = graph?.nodes.find((n) => n.id === wanted) ?? graph?.nodes.find((n) => n.stage === "chunk")
   if (!graph || !target) {
@@ -118,14 +181,32 @@ function ComparePage({ registry }: { registry: Registry }) {
   // What the step picker offers, in pipeline order: Parse, Chunk and Retrieve, plus the
   // target when it is another stage (Build's Sweep button opens Index here), so it always shows the target.
   const choices = graph.nodes.filter((n) => n.stage === "parse" || n.stage === "chunk" || n.stage === "retrieve" || n === target)
+  // Choosing another step closes the experiment.
   const choose = (id: string) => {
-    const q = new URLSearchParams(window.location.search)
-    q.set("node", id)
-    window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`)
-    setWanted(id)
+    setExperiment(null)
+    setOpening(null)
+    setNotice(null)
+    setNode(id)
   }
-  // Keyed on the target: a new node means fresh variants, no results and `through` back at the node itself.
-  return <Sweep key={target.id} registry={registry} graph={graph} target={target} choices={choices} onChoose={choose} preset={preset} native={native} />
+  // Keyed on the target and on each experiment opened: a new node means fresh variants, no results and `through` back at the node itself.
+  return (
+    <Sweep
+      key={`${target.id}:${opening?.n ?? 0}`}
+      registry={registry}
+      graph={graph}
+      target={target}
+      choices={choices}
+      onChoose={choose}
+      preset={preset}
+      native={native}
+      initial={opening?.recipes}
+      experiment={experiment}
+      onExperiment={setExperiment}
+      onOpenExperiment={openExperiment}
+      notice={notice}
+      onNotice={setNotice}
+    />
+  )
 }
 
 /** Per chunker: its size field, then its overlap field when it has one. */
@@ -311,6 +392,12 @@ function Sweep({
   onChoose,
   preset,
   native,
+  initial,
+  experiment,
+  onExperiment,
+  onOpenExperiment,
+  notice,
+  onNotice,
 }: {
   registry: Registry
   graph: PipelineGraph
@@ -318,6 +405,14 @@ function Sweep({
   /** The nodes the stage picker offers; always includes `target`. */
   choices: GraphNode[]
   onChoose: (id: string) => void
+  /** The recipes an opened experiment starts with, in place of the seeds. */
+  initial?: Variant[]
+  experiment: OpenExperiment | null
+  onExperiment: (e: OpenExperiment | null) => void
+  onOpenExperiment: (e: SavedExperiment) => void
+  /** A line about experiments: one could not open, or a save dropped the oldest. */
+  notice: string | null
+  onNotice: (t: string | null) => void
   preset?: "matryoshka"
   native?: number
 }) {
@@ -332,9 +427,11 @@ function Sweep({
   )
   const nextKey = useRef(0)
   const [items, setItems] = useState<Item[]>(() =>
-    (preset ? matryoshkaVariants(target, native) : seedVariants(target, transforms)).map((v) => ({ key: nextKey.current++, variant: v, seed: v })),
+    (initial ?? (preset ? matryoshkaVariants(target, native) : seedVariants(target, transforms))).map((v) => ({ key: nextKey.current++, variant: v, seed: v })),
   )
   const variants = items.map((x) => x.variant)
+  /** The node's own recipe on Build, as it is now. */
+  const own = (v: Variant) => same(v, { transform: target.transform, config: target.config })
   // Before the run the recipes are cards; after it, the results.
   const [phase, setPhase] = useState<"setup" | "results">("setup")
   // The one open editor: which card, which value.
@@ -342,7 +439,8 @@ function Sweep({
   // The server's message about one recipe, under that card's sentence.
   const [cardErrors, setCardErrors] = useState<Record<number, string>>({})
   // What the last run ran: its recipes, where it stopped, and on which document.
-  const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string; sha: string }>({ variants: [], through, sha: "" })
+  // `base` is the recipe that was the node's own when the run started: the columns read against it until the next run.
+  const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string; sha: string; base: number }>({ variants: [], through, sha: "", base: -1 })
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -441,7 +539,7 @@ function Sweep({
           const v = submitted.variants[i]
           const field = SIZE_FIELDS[v.transform]?.[0]
           const size = field && typeof v.config[field] === "number" ? (v.config[field] as number) : null
-          return { short: submittedNames[i].short, transform: v.transform, size, stats: chunkStats(set), own: own(v) }
+          return { short: submittedNames[i].short, transform: v.transform, size, stats: chunkStats(set), own: i === submitted.base }
         }),
       )
     }
@@ -475,7 +573,7 @@ function Sweep({
         },
         { keys },
       )
-      setSubmitted({ variants, through, sha })
+      setSubmitted({ variants, through, sha, base: variants.findIndex(own) })
       setRunId(run_id)
       setChosen(0)
       setSort({ key: "order", dir: 1 })
@@ -509,7 +607,6 @@ function Sweep({
     }
   }
 
-  const own = (v: Variant) => same(v, { transform: target.transform, config: target.config })
   const ownAt = variants.findIndex(own)
   const phrases = recipeNames(variants, target.stage, registry, ownAt === -1 ? undefined : ownAt)
   const mode = resultsMode(n, fitAll)
@@ -536,11 +633,44 @@ function Sweep({
     if (editing?.key === key) setEditing(null)
     addRef.current?.querySelector<HTMLElement>("button:last-of-type")?.focus({ preventScroll: true })
   }
+  /** Put a finished recipe on Build: the target node takes its strategy and settings. */
+  const putOnBuild = (i: number) => {
+    const v = submitted.variants[i]
+    storeGraph(setConfig(setTransform(graph, target.id, v.transform, registry), target.id, v.config))
+  }
+
+  // Experiments: the step, the recipes and the document, saved by name in this browser.
+  const experiments = useExperiments()
+  const doc = documentOf(graph)
+  const sig = experimentSig(target.stage, variants, doc)
+  const expEdited = experiment !== null && experiment.sig !== sig
+  const body = () => ({ stage: target.stage, recipes: variants, doc })
+  const sizeShared = target.stage === "chunk" && variants.some((v, i) => variants.some((w, j) => j !== i && w.transform === v.transform && !same(w.config, v.config)))
+  const suggestedName = (
+    target.stage === "chunk"
+      ? `${sizeShared ? "Chunk sizes" : "Chunkers"} on ${filename || "this document"}`
+      : target.stage === "retrieve" && question
+        ? `Searches for ${question}`
+        : `${titleFor(target)} recipes on ${filename || "this document"}`
+  ).slice(0, 80)
+  const saveAs = (name: string) => {
+    const r = saveExperiment(name, body())
+    if (!r) return onNotice("This browser would not save the experiment.")
+    onExperiment({ id: r.saved.id, name: r.saved.name, sig, justSaved: true })
+    onNotice(r.dropped ? droppedText(r.dropped) : null)
+  }
+  const saveChanges = () => {
+    if (!experiment) return
+    if (!updateExperiment(experiment.id, body())) return saveAs(experiment.name)
+    onExperiment({ ...experiment, sig, justSaved: true })
+    onNotice(null)
+  }
+
   const changeRecipes = () => {
     opened.reset()
     setPhase("setup")
     setRunId(null)
-    setSubmitted({ variants: [], through, sha: "" })
+    setSubmitted({ variants: [], through, sha: "", base: -1 })
   }
   /** From a failed column: stop what is left of the run, and open that recipe's card on its strategy. */
   const changeThis = (i: number) => {
@@ -554,7 +684,7 @@ function Sweep({
   const grid: CSSProperties = { gridTemplateColumns: `repeat(${Math.max(visible.length, 1)}, minmax(0, 1fr))` }
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
-  const submittedOwn = submitted.variants.findIndex(own)
+  const submittedOwn = submitted.base
   const submittedPhrases = recipeNames(submitted.variants, target.stage, registry, submittedOwn === -1 ? undefined : submittedOwn)
   const overview = phase === "results" && submitted.variants.length >= 4
   const failedAt = statuses.findIndex((x) => x.kind === "failed")
@@ -717,7 +847,13 @@ function Sweep({
       base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
     return (
       <section key={i} aria-label={submittedNames[i].name} className="flex min-w-0 flex-col gap-3 bg-surface p-3">
-        <RecipeHead name={submittedNames[i].name} code={submittedNames[i].code} own={own(submitted.variants[i])} />
+        <RecipeHead
+          name={submittedNames[i].name}
+          code={submittedNames[i].code}
+          own={i === submitted.base}
+          onUse={statuses[i].kind === "done" && i !== submitted.base ? () => putOnBuild(i) : undefined}
+          used={i !== submitted.base && own(submitted.variants[i])}
+        />
       {delta && target.stage !== "retrieve" && statuses[i].kind === "done" ? <p className="m-0 text-sm font-medium text-fg">{delta}</p> : null}
         {statuses[i].kind !== "done" ? (
           <>
@@ -783,6 +919,23 @@ function Sweep({
               </>
             ) : null}
           </p>
+          {experiment ? (
+            <p data-testid="experiment-line" className="m-0 flex flex-wrap items-baseline gap-x-2 text-sm">
+              <span className="text-fg-muted">Experiment</span> <b className="font-semibold">{experiment.name}</b>
+              {expEdited ? (
+                <span className="rounded-swatch bg-stale-wash px-2 py-px text-xs text-stale">Edited since saved</span>
+              ) : experiment.justSaved ? (
+                <span role="status" className="text-xs text-fg-muted">
+                  Saved
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          {notice ? (
+            <p role="status" className="m-0 text-sm text-fg-muted">
+              {notice}
+            </p>
+          ) : null}
         </div>
 
         {/* The tools stay in reach while ten cards scroll under them. */}
@@ -810,7 +963,25 @@ function Sweep({
             </div>
           ) : null}
           {/* Below md the run buttons take their own full-width row, so Run is never pushed off a phone screen. */}
-          <div className="flex basis-full items-center gap-2 md:ml-auto md:basis-auto">
+          <div className="flex basis-full flex-wrap items-center gap-2 md:ml-auto md:basis-auto">
+            {busy ? null : (
+              <ExperimentMenu
+                experiments={experiments}
+                usable={(e) => usableExperiment(e, registry) !== null}
+                current={experiment}
+                edited={expEdited}
+                suggestedName={suggestedName}
+                recipeCount={n}
+                onOpen={onOpenExperiment}
+                onDelete={(e) => {
+                  deleteExperiment(e.id)
+                  if (experiment?.id === e.id) onExperiment(null)
+                }}
+                onSave={saveAs}
+                onSaveAsNew={saveAs}
+                onSaveChanges={saveChanges}
+              />
+            )}
             {phase === "results" && busy && runId ? (
               <Button variant="ghost" size="sm" className="flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
                 Stop the run

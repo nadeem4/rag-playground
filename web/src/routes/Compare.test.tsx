@@ -1,11 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { sampleGraph, storeGraph, transformsFor } from "@/state/graph"
 
-import { COLUMN_MIN, Compare, seedVariants, VariantResult } from "./Compare"
+import { Compare, seedVariants, VariantResult } from "./Compare"
 
 const registry = liveRegistry as unknown as Registry
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
@@ -37,6 +37,20 @@ function openAt(query: string) {
 const picker = () => screen.getByLabelText("Compare") as HTMLSelectElement
 const columns = () => (screen.getAllByLabelText("Transform") as HTMLSelectElement[]).map((s) => s.value)
 const text = () => document.body.textContent ?? ""
+
+/** Reports one width for the recipe grid's container, as the browser's ResizeObserver would. */
+class FakeResizeObserver {
+  static width = 1440
+  private cb: ResizeObserverCallback
+  constructor(cb: ResizeObserverCallback) {
+    this.cb = cb
+  }
+  observe() {
+    this.cb([{ contentRect: { width: FakeResizeObserver.width } } as ResizeObserverEntry], this as unknown as ResizeObserver)
+  }
+  unobserve() {}
+  disconnect() {}
+}
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -112,14 +126,6 @@ describe("the Compare stage picker", () => {
     expect(line).toContain('<span className="font-mono">{fmtMs(n!.duration_ms)}</span>')
   })
 
-  it("gives each column room for a slip: 420 px minimum so a passage keeps 40 characters a line at 1440", async () => {
-    render(<Compare />)
-    await waitFor(() => expect(columns()).toHaveLength(3))
-    const grid = [...document.querySelectorAll<HTMLElement>("div")].find((d) => d.style.gridTemplateColumns)!
-    expect(grid.style.gridTemplateColumns).toBe(`repeat(3, minmax(${COLUMN_MIN}px, 1fr))`)
-    expect(COLUMN_MIN).toBe(420)
-  })
-
   it("sets the agreement line in sans with only its numbers in mono", async () => {
     const node = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "retrieve")!
     render(
@@ -144,6 +150,59 @@ describe("the Compare stage picker", () => {
     render(<Compare />)
     await waitFor(() => expect(picker().value).toBe("chunk"))
     expect(text()).not.toMatch(/[–—]/)
+  })
+})
+
+describe("Compare's widths", () => {
+  it("puts three recipes side by side at 1024, each at least 300 px, with nothing to scroll sideways", async () => {
+    FakeResizeObserver.width = 993
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    const grid = screen.getByTestId("recipe-grid")
+    expect(grid.style.gridTemplateColumns).toBe("repeat(3, minmax(0, 1fr))")
+    expect(grid.className).not.toContain("min-w-min")
+    expect(screen.queryByRole("group", { name: "Recipe shown" })).toBeNull()
+  })
+
+  it("shows one recipe at a time below 820 px, chosen with a segmented control", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    const group = await screen.findByRole("group", { name: "Recipe shown" })
+    const options = within(group).getAllByRole("button")
+    expect(options).toHaveLength(3)
+    expect(options[0].getAttribute("aria-pressed")).toBe("true")
+    expect(columns()).toEqual(["recursive_character"])
+    fireEvent.click(options[2])
+    expect(columns()).toEqual(["sentence_window"])
+  })
+
+  it("names each recipe in the control by its transform and first distinguishing value", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    const group = await screen.findByRole("group", { name: "Recipe shown" })
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["recursive_character 400", "recursive_character 200", "sentence_window"])
+  })
+
+  it("keeps a recipe shown when the one chosen is removed", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    render(<Compare />)
+    const group = await screen.findByRole("group", { name: "Recipe shown" })
+    fireEvent.click(within(group).getAllByRole("button")[2])
+    fireEvent.click(screen.getByRole("button", { name: "Remove variant sentence_window" }))
+    expect(columns()).toEqual(["recursive_character"])
+    expect(within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button")[1].getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("falls back to one at a time when five recipes do not fit at 1440", async () => {
+    FakeResizeObserver.width = 1409
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    openAt("?node=index&preset=matryoshka&native=1024")
+    render(<Compare />)
+    expect(await screen.findByRole("group", { name: "Recipe shown" })).toBeTruthy()
   })
 })
 

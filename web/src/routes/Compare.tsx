@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type CSSProperties } from "react"
+import { useId, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Plus } from "lucide-react"
 
 import { useApiKey } from "@/api/apiKey"
@@ -18,6 +18,7 @@ import { fmtMs } from "@/components/pipeline/NodeCard"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
+import { SegmentedControl } from "@/components/ui/SegmentedControl"
 import {
   ancestors,
   columnOrder,
@@ -34,15 +35,15 @@ import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
 import { RegistryScreen } from "./Shell"
+import { useColumnsFit } from "./useColumnsFit"
 
 /**
  * Compare: sweep one node of the Build pipeline over N variants and show the
  * results side by side. Each variant sits in its own column, its editor above
  * the output of the node the sweep runs through, so a config and what it
- * produced read together.
+ * produced read together. Where the columns do not fit side by side, one
+ * recipe shows at a time, chosen above the grid.
  */
-/** A column's minimum width in px: room for a slip, so a passage keeps about 40 characters a line at 1440 with three columns. */
-export const COLUMN_MIN = 420
 
 export function Compare() {
   const reg = useRegistry()
@@ -156,6 +157,11 @@ function Sweep({
   const { keys } = useApiKey()
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
+  const scroller = useRef<HTMLDivElement>(null)
+  const fit = useColumnsFit(scroller, Math.max(variants.length, 1))
+  // The recipe shown when the columns do not fit, clamped when one is removed.
+  const [chosen, setChosen] = useState(0)
+  const shown = Math.min(chosen, variants.length - 1)
 
   const shownThrough = graph.nodes.find((n) => n.id === submitted.through) ?? target
   const tally = runId ? tallySweep(run.variants) : null
@@ -218,15 +224,16 @@ function Sweep({
     }
   }
 
-  const cols = Math.max(variants.length, 1)
-  const grid: CSSProperties = { gridTemplateColumns: `repeat(${cols}, minmax(${COLUMN_MIN}px, 1fr))` }
+  const visible = fit ? variants.map((_, i) => i) : [shown]
+  const grid: CSSProperties = { gridTemplateColumns: `repeat(${Math.max(visible.length, 1)}, minmax(0, 1fr))` }
+  const tabLabels = variantLabels(variants, registry, target.stage)
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-surface">
       <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
-        <div className="flex min-w-0 items-baseline gap-3">
+        <div className="flex min-w-0 basis-full items-baseline gap-3 md:basis-auto">
           <h1 className="text-xl font-semibold">Compare</h1>
           {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
           <p className="text-sm text-fg-muted">
@@ -239,12 +246,12 @@ function Sweep({
             {preset ? ", at Matryoshka dimensions" : null}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <div className="flex items-center gap-2">
             <label htmlFor={stageId} className="text-sm text-fg-muted">
               Compare
             </label>
-            <select id={stageId} className={`${CONTROL} w-auto`} value={target.id} disabled={busy} onChange={(e) => onChoose(e.target.value)}>
+            <select id={stageId} className={`${CONTROL} w-auto min-w-[10rem]`} value={target.id} disabled={busy} onChange={(e) => onChoose(e.target.value)}>
               {choices.map((n) => (
                 <option key={n.id} value={n.id}>
                   {titleFor(n)}
@@ -258,7 +265,7 @@ function Sweep({
               <label htmlFor={throughId} className="text-sm text-fg-muted">
                 Show through
               </label>
-              <select id={throughId} className={`${CONTROL} w-auto`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
+              <select id={throughId} className={`${CONTROL} w-auto min-w-[10rem]`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
                 {downstream.map((n) => (
                   <option key={n.id} value={n.id}>
                     {titleFor(n)}
@@ -268,18 +275,30 @@ function Sweep({
               </select>
             </div>
           ) : null}
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }])}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              reshape([...variants, { transform: transforms[0].name, config: defaultConfig(transforms[0]) }])
+              // Where one recipe shows at a time, show the new one.
+              setChosen(variants.length)
+            }}
+          >
             <Plus aria-hidden strokeWidth={1.75} />
             Add variant
           </Button>
-          {busy && runId ? (
-            <Button variant="outline" size="sm" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
-              Cancel
+          {/* Below sm the run buttons take their own full-width row, so Sweep is never pushed off a phone screen. */}
+          <div className="flex basis-full gap-2 sm:basis-auto">
+            {busy && runId ? (
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+                Cancel
+              </Button>
+            ) : null}
+            <Button size="sm" className="flex-1 sm:flex-none" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
+              {busy ? "Sweeping" : `Sweep ${variants.length} ${variants.length === 1 ? "variant" : "variants"}`}
             </Button>
-          ) : null}
-          <Button size="sm" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
-            {busy ? "Sweeping" : `Sweep ${variants.length} ${variants.length === 1 ? "variant" : "variants"}`}
-          </Button>
+          </div>
         </div>
       </div>
 
@@ -305,19 +324,30 @@ function Sweep({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="grid min-w-min gap-px bg-hairline" style={grid}>
-          {variants.map((v, i) => (
+      {fit ? null : (
+        <div className="flex shrink-0 border-b border-hairline px-3 py-2">
+          <SegmentedControl
+            label="Recipe shown"
+            options={tabLabels.map((l, i) => ({ value: String(i), label: l.fields.length ? `${l.transform} ${l.fields[0][1]}` : l.transform }))}
+            value={String(shown)}
+            onChange={(v) => setChosen(Number(v))}
+          />
+        </div>
+      )}
+
+      <div ref={scroller} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
+          {visible.map((i) => (
             <SweepControl
               key={i}
-              variant={v}
+              variant={variants[i]}
               transforms={transforms}
-              changed={submitted.variants[i] !== undefined && !same(submitted.variants[i], v)}
+              changed={submitted.variants[i] !== undefined && !same(submitted.variants[i], variants[i])}
               onChange={(nv) => setVariants(variants.map((x, j) => (j === i ? nv : x)))}
               onRemove={variants.length > 1 && !busy ? () => reshape(variants.filter((_, j) => j !== i)) : undefined}
             />
           ))}
-          {variants.map((_, i) => {
+          {visible.map((i) => {
             const s = stateOf(i)
             const out = payload(ids[i]?.through)
             const chunks = payload(ids[i]?.chunks)

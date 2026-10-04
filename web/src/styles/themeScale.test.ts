@@ -31,6 +31,8 @@ const FILES = [
   "components/compare/ValueEditor.tsx",
   "components/compare/AddRecipeCard.tsx",
   "state/recipeSentence.ts",
+  "components/compare/RecipeStatus.tsx",
+  "routes/useRunClock.ts",
   "state/compare.ts",
 ]
 

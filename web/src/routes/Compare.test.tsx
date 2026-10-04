@@ -58,6 +58,34 @@ const columns = () => screen.queryAllByRole("article").map((a) => within(a).getB
 const regions = () => screen.queryAllByRole("region").map((r) => r.getAttribute("aria-label"))
 const text = () => document.body.textContent ?? ""
 
+/** An event stream the test drives. */
+class DrivenEventSource {
+  static instances: DrivenEventSource[] = []
+  onmessage: ((ev: MessageEvent) => void) | null = null
+  onerror = null
+  onopen = null
+  constructor() {
+    DrivenEventSource.instances.push(this)
+  }
+  close() {}
+  emit(seq: number, event: Record<string, unknown>) {
+    act(() => {
+      this.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ ts: seq, ...event }), lastEventId: String(seq) }))
+    })
+  }
+}
+
+/** The stream of the run the page started. */
+async function driven() {
+  await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+  return DrivenEventSource.instances[0]
+}
+
+/** The i-th result column. */
+const column = (i: number) => screen.getByTestId("recipe-grid").querySelectorAll<HTMLElement>(":scope > section")[i]
+/** The i-th recipe's status sentence. */
+const statusOf = (i: number) => within(column(i)).getByTestId("recipe-status").textContent
+
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -187,13 +215,13 @@ describe("the Compare stage picker", () => {
     expect(screen.getByTestId("sweep-question")).toBeTruthy()
   })
 
-  it("shows no finding sentence before a run finishes", async () => {
+  it("shows no comparing sentence before a run finishes, only how many have finished", async () => {
     render(<Compare />)
     await waitFor(() => expect(pressed()).toBe("Chunk"))
     expect(screen.queryByTestId("compare-finding")).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
     await waitFor(() => expect(columns()).toHaveLength(0))
-    expect(screen.queryByTestId("compare-finding")).toBeNull()
+    expect(screen.getByTestId("compare-finding").textContent).toBe("Running three recipes. None has finished yet.")
   })
 
   it("shows no question on a Chunk sweep", async () => {
@@ -241,7 +269,7 @@ describe("Compare's widths", () => {
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const group = await screen.findByRole("group", { name: "Recipe shown" })
-    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["400 characters", "200 characters", "By sentence"])
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["400 characters, waiting", "200 characters, waiting", "By sentence, waiting"])
   })
 
   it("falls back to one at a time when five recipes do not fit at 1440", async () => {
@@ -355,30 +383,16 @@ describe("before the run", () => {
   })
 
   it("swaps the cards for the results on Run, and Change recipes brings them back", async () => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     await waitFor(() => expect(screen.queryByTestId("recipe-cards")).toBeNull())
+    ;(await driven()).emit(1, { event: "stream_end", status: "finished", ok: true })
     fireEvent.click(screen.getByRole("button", { name: "Change recipes" }))
     expect(screen.getByTestId("recipe-cards")).toBeTruthy()
   })
 })
-
-/** An event stream the test drives. */
-class DrivenEventSource {
-  static instances: DrivenEventSource[] = []
-  onmessage: ((ev: MessageEvent) => void) | null = null
-  onerror = null
-  onopen = null
-  constructor() {
-    DrivenEventSource.instances.push(this)
-  }
-  close() {}
-  emit(seq: number, event: Record<string, unknown>) {
-    act(() => {
-      this.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ ts: seq, ...event }), lastEventId: String(seq) }))
-    })
-  }
-}
 
 describe("after a run", () => {
   beforeEach(() => {
@@ -463,14 +477,91 @@ describe("after a run", () => {
     es.emit(6, { event: "variant_started", index: 2, variant: {} })
     es.emit(7, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
     es.emit(8, { event: "stream_end", status: "finished", ok: false })
-    const failed = await screen.findByText("This recipe failed at chunk")
-    expect(columns()).toHaveLength(0)
-    const column = failed.closest("section")!
-    expect(within(column).getByText("ValueError: chunk_size too small")).toBeTruthy()
-    expect(within(column).getByText("Traceback")).toBeTruthy()
+    await waitFor(() => expect(statusOf(1)).toMatch(/^Failed at Chunk\. ValueError: chunk_size too small/))
+    expect(within(column(1)).getByText("Traceback")).toBeTruthy()
     expect(screen.getByTestId("tally").textContent).toMatch(/1 recipe failed\./)
   })
 
+})
+
+describe("during a run", () => {
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  it("shows Waiting, then Running with the seconds the browser counted, then the result", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    serve({ a0: recursiveJson })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_started", node_id: "parse", transform: "docling", artifact_id: "p" })
+    await waitFor(() => expect(statusOf(0)).toBe("Running the shared steps, then this recipe, 0 s"))
+    expect(statusOf(1)).toBe("Waiting. It starts when the recipe before it finishes.")
+    act(() => vi.advanceTimersByTime(3000))
+    expect(statusOf(0)).toBe("Running the shared steps, then this recipe, 3 s")
+    es.emit(3, { event: "node_finished", node_id: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
+    await waitFor(() => expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(1))
+    expect(screen.getByTestId("compare-finding").textContent).toBe("Running three recipes. One has finished.")
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1")
+    vi.useRealTimers()
+  })
+
+  it("lets the others finish when one fails, and offers Change this recipe on the failed one", async () => {
+    serve({ a0: recursiveJson, a2: tokenJson })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "variant_started", index: 1, variant: {} })
+    es.emit(4, { event: "node_started", node_id: "chunk", transform: "recursive_character", artifact_id: "x" })
+    es.emit(5, { event: "node_failed", node_id: "chunk", error: "Traceback (most recent call last):\nValueError: chunk_size too small" })
+    es.emit(6, { event: "variant_started", index: 2, variant: {} })
+    es.emit(7, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
+    es.emit(8, { event: "stream_end", status: "finished", ok: false })
+    const failed = within(column(1)).getByTestId("recipe-status")
+    expect(failed.textContent).toMatch(/^Failed at Chunk\. ValueError: chunk_size too small/)
+    await waitFor(() => expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(2))
+    await waitFor(() => expect(screen.getByTestId("compare-finding").textContent).toMatch(/Recursive at 200 characters failed, and its column says why\.$/))
+    fireEvent.click(within(failed).getByRole("button", { name: "Change this recipe" }))
+    expect(document.activeElement?.closest("article")?.getAttribute("aria-label")).toBe("Recipe 2")
+  })
+
+  it("offers Stop the run in place of Change recipes while it runs, and says what was never run", async () => {
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    expect(screen.queryByRole("button", { name: "Change recipes" })).toBeNull()
+    const busy = screen.getByRole("button", { name: "Running" })
+    expect(busy.getAttribute("aria-busy")).toBe("true")
+    fireEvent.click(screen.getByRole("button", { name: "Stop the run" }))
+    expect(fetch).toHaveBeenCalledWith("/api/runs/r1/cancel", expect.anything())
+    es.emit(9, { event: "stream_end", status: "cancelled", ok: false })
+    await waitFor(() => expect(statusOf(2)).toBe("Not run. The run was stopped first."))
+  })
+
+  it("keeps focus where it is when a recipe finishes, and labels the tabs with each state", async () => {
+    FakeResizeObserver.width = 753
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    serve({ a1: markdownJson })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "variant_started", index: 1, variant: {} })
+    const tabs = within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button").map((b) => b.textContent)
+    expect(tabs).toEqual(["400 characters", "200 characters, running", "By sentence, waiting"])
+    const stop = screen.getByRole("button", { name: "Stop the run" })
+    stop.focus()
+    es.emit(5, { event: "node_finished", node_id: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 1 })
+    await waitFor(() => expect(within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button")[1].textContent).toBe("200 characters"))
+    expect(document.activeElement).toBe(stop)
+  })
 })
 
 describe("a run the server rejects", () => {

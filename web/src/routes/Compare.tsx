@@ -14,6 +14,7 @@ import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
 import { AddRecipeCard } from "@/components/compare/AddRecipeCard"
 import { RecipeCard, type CardTag } from "@/components/compare/RecipeCard"
 import { RecipeHead } from "@/components/compare/RecipeHead"
+import { RecipeStatus } from "@/components/compare/RecipeStatus"
 import { RetrieveEvidence } from "@/components/compare/RetrieveEvidence"
 import { ValueEditor } from "@/components/compare/ValueEditor"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
@@ -46,11 +47,14 @@ import {
   planSentence,
   RECIPE_TITLES,
   recipeNames,
+  recipeStatus,
   rejectedRecipe,
   resultsMode,
+  runningFinding,
   retrieveFinding,
   strategyName,
   type Finding,
+  type RecipeStatus as Status,
   type ResultsMode,
 } from "@/state/compare"
 import { recipeSentence } from "@/state/recipeSentence"
@@ -59,6 +63,7 @@ import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels
 
 import { RegistryScreen } from "./Shell"
 import { useColumnsFit } from "./useColumnsFit"
+import { useRunClock } from "./useRunClock"
 
 /**
  * Compare: run one node of the Build pipeline over up to ten recipes. Before
@@ -242,6 +247,45 @@ function suggestRecipes(target: GraphNode, transforms: TransformInfo[], have: Va
   return out
 }
 
+/** What a tab adds to a recipe's name while the run is not done with it. */
+const STATE_SUFFIX: Record<Status["kind"], string> = { done: "", running: ", running", waiting: ", waiting", failed: ", failed", stopped: ", not run" }
+
+/** The run's traceback for a failed recipe, folded. */
+function Traceback({ text }: { text: string }) {
+  return (
+    <details className="rounded-control border border-hairline">
+      <summary className="flex h-row-compact items-center px-2 text-xs text-fg-muted select-none hover:bg-muted">Traceback</summary>
+      <pre className="m-0 max-h-[240px] overflow-auto border-t border-hairline p-2 font-mono text-2xs text-fg-muted">{text}</pre>
+    </details>
+  )
+}
+
+/** A dashed outline of what a column will show, while its recipe has not finished: the numbers and the bar, or five swatch places. */
+export function ResultPlaceholder({ stage }: { stage: string }) {
+  const labels = stage === "retrieve" ? ["answer", "shared", "returned"] : ["pieces", "tokens", "median", "left out"]
+  return (
+    <div aria-hidden className="flex flex-col gap-2 rounded-panel border border-dashed border-hairline p-3">
+      <div className="flex gap-4">
+        {labels.map((g) => (
+          <span key={g} className="flex flex-col gap-1 text-2xs text-fg-muted">
+            <span className="h-[14px] w-[28px] rounded-swatch bg-surface-elevated" />
+            {g}
+          </span>
+        ))}
+      </div>
+      {stage === "retrieve" ? (
+        <span className="flex gap-1">
+          {[0, 1, 2, 3, 4].map((k) => (
+            <span key={k} className="size-[26px] rounded-swatch border border-dashed border-hairline" />
+          ))}
+        </span>
+      ) : (
+        <span className="h-[10px] rounded-swatch bg-surface-elevated" />
+      )}
+    </div>
+  )
+}
+
 const PLACEHOLDER: Record<ResultsMode, string> = {
   columns: "After the run, this recipe becomes a column.",
   tabs: "After the run, this recipe gets its own tab.",
@@ -350,6 +394,14 @@ function Sweep({
   const golds = asked ? [asked.gold_answer, ...(asked.gold_answers ?? [])] : null
   const answerRank = (rows: HitRowData[] | null) => (golds && rows ? goldRank(rows, golds) : null)
   const submittedNames = recipeNames(submitted.variants, target.stage, registry)
+  // Each recipe's place in the run, from its own events; seconds counted by this browser.
+  const clock = useRunClock(run.variants, busy)
+  const titles = useMemo(() => Object.fromEntries(graph.nodes.map((n) => [n.id, titleFor(n)])), [graph])
+  const upstreamIds = useMemo(() => [...ancestors(graph, target.id, registry)], [graph, target.id, registry])
+  const statuses: Status[] = submitted.variants.map((_, i) =>
+    recipeStatus(stateOf(i), i, { targetId: target.id, throughId: shownThrough.id, upstream: upstreamIds, stopped: run.closed, titles }),
+  )
+  const finishedCount = statuses.filter((x) => x.kind === "done" || x.kind === "failed").length
   const searched = (payload(ids[base ?? 0]?.chunks).data as ChunkSet | undefined)?.chunks?.length ?? null
 
   /** The finding over the recipes that finished, the baseline first; null until there are two. */
@@ -462,13 +514,30 @@ function Sweep({
     setRunId(null)
     setSubmitted({ variants: [], through, sha: "" })
   }
+  /** From a failed column: stop what is left of the run, and open that recipe's card on its strategy. */
+  const changeThis = (i: number) => {
+    if (busy && runId) void api.cancelRun(runId).catch(() => undefined)
+    changeRecipes()
+    if (items[i]) setEditing({ key: items[i].key, field: "transform" })
+  }
 
   const visible = fitAll ? submitted.variants.map((_, i) => i) : [Math.min(chosen, Math.max(submitted.variants.length - 1, 0))]
   const shown = visible[0] ?? 0
   const grid: CSSProperties = { gridTemplateColumns: `repeat(${Math.max(visible.length, 1)}, minmax(0, 1fr))` }
   const running = run.variants.length > 0 && !run.closed ? run.variants[run.variants.length - 1].index : null
   const verb = titleFor(target)
-  const finding = run.closed ? findingFor() : null
+  const submittedOwn = submitted.variants.findIndex(own)
+  const submittedPhrases = recipeNames(submitted.variants, target.stage, registry, submittedOwn === -1 ? undefined : submittedOwn)
+  const failedAt = statuses.findIndex((x) => x.kind === "failed")
+  const failure = failedAt === -1 ? null : `${submittedPhrases[failedAt].phrase.charAt(0).toUpperCase()}${submittedPhrases[failedAt].phrase.slice(1)} failed, and its column says why.`
+  const done = run.closed ? findingFor() : null
+  const finding: Finding | null = !runId
+    ? null
+    : !run.closed
+      ? runningFinding(submitted.variants.length, finishedCount, false)
+      : done || failure
+        ? { finding: [done?.finding, failure].filter(Boolean).join(" "), sub: done?.sub ?? null }
+        : null
   const answerId = (rows: HitRowData[] | null) => {
     const rank = answerRank(rows)
     return rank === null ? null : (rows?.find((r) => r.rank === rank)?.chunk_id ?? null)
@@ -543,17 +612,16 @@ function Sweep({
           {/* Below md the run buttons take their own full-width row, so Run is never pushed off a phone screen. */}
           <div className="flex basis-full items-center gap-2 md:ml-auto md:basis-auto">
             {phase === "results" && busy && runId ? (
-              <Button variant="outline" size="sm" className="flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
-                Cancel
+              <Button variant="ghost" size="sm" className="flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+                Stop the run
               </Button>
-            ) : null}
-            {phase === "results" ? (
+            ) : phase === "results" ? (
               <Button variant="outline" size="sm" className="flex-1 md:flex-none" onClick={changeRecipes}>
                 Change recipes
               </Button>
             ) : null}
             {noDocument ? <span className="self-center text-xs text-fg-muted">Needs a document.</span> : null}
-            <Button size="sm" className="flex-1 md:flex-none" disabled={busy || n === 0 || noDocument} onClick={() => void sweep()}>
+            <Button size="sm" className="flex-1 md:flex-none" aria-busy={busy || undefined} disabled={busy || n === 0 || noDocument} onClick={() => void sweep()}>
               {busy ? "Running" : `Run ${n} ${n === 1 ? "recipe" : "recipes"}`}
             </Button>
           </div>
@@ -646,6 +714,22 @@ function Sweep({
                       ) : null}
                     </>
                   ) : null}
+                  {!run.closed ? (
+                    <div
+                      role="progressbar"
+                      aria-label="Recipes finished"
+                      aria-valuemin={0}
+                      aria-valuenow={finishedCount}
+                      aria-valuemax={submitted.variants.length}
+                      className="mt-1 h-[4px] max-w-[52ch] overflow-hidden rounded-full bg-surface-elevated"
+                    >
+                      {/* The fill grows by scaleX only. */}
+                      <div
+                        className="h-full origin-left rounded-full bg-primary transition-transform duration-(--dur-mid) ease-(--ease-in) motion-reduce:transition-none"
+                        style={{ transform: `scaleX(${submitted.variants.length ? finishedCount / submitted.variants.length : 0})` }}
+                      />
+                    </div>
+                  ) : null}
                   <p data-testid="tally" className="m-0 text-xs text-fg-muted">
                     <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })))} />
                     {running !== null ? ` Running recipe ${running + 1} of ${submitted.variants.length}.` : run.closed ? "" : " Starting."}
@@ -659,7 +743,7 @@ function Sweep({
               <div className="flex border-b border-hairline px-3 py-2">
                 <SegmentedControl
                   label="Recipe shown"
-                  options={submittedNames.map((n, i) => ({ value: String(i), label: n.short }))}
+                  options={submittedNames.map((n, i) => ({ value: String(i), label: n.short + STATE_SUFFIX[statuses[i]?.kind ?? "done"] }))}
                   value={String(shown)}
                   onChange={(v) => setChosen(Number(v))}
                 />
@@ -677,6 +761,16 @@ function Sweep({
                 return (
                   <section key={i} aria-label={submittedNames[i].name} className="flex min-w-0 flex-col gap-3 bg-surface p-3">
                     <RecipeHead name={submittedNames[i].name} code={submittedNames[i].code} own={own(submitted.variants[i])} />
+                    {statuses[i].kind !== "done" ? (
+                      <>
+                        <RecipeStatus status={statuses[i]} seconds={clock(i)} onChange={() => changeThis(i)} />
+                        {statuses[i].kind === "failed" ? (
+                          <Traceback text={Object.values(s?.nodes ?? {}).find((x) => x.status === "failed")?.error ?? ""} />
+                        ) : statuses[i].kind !== "stopped" ? (
+                          <ResultPlaceholder stage={target.stage} />
+                        ) : null}
+                      </>
+                    ) : (
                     <VariantResult
                       state={s}
                       pending
@@ -696,6 +790,7 @@ function Sweep({
                       hits={hitRowLists[i]}
                       answer={answerId(hitRowLists[i])}
                     />
+                    )}
                   </section>
                 )
               })}

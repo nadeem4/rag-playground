@@ -1,3 +1,4 @@
+import type { VariantState } from "@/api/runState"
 import type { Registry, Stage, Variant } from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { compareLists, ordinal, type ListChange } from "@/components/inspectors/hits"
@@ -5,6 +6,7 @@ import type { ChunkStats } from "@/components/inspectors/spans"
 import { strategyLabel } from "@/learn/challenges"
 
 import { defaultConfig } from "./graph"
+import { errorHeadline } from "./pipeline"
 import { variantLabels } from "./sweep"
 
 /**
@@ -379,4 +381,65 @@ export function retrieveFinding(
     if (rest > 0) sub += rest === 1 ? " The other piece shares none." : ` The other ${rest} pieces share none.`
   }
   return { finding: second ? `${cap(first)} ${cap(second)}.` : cap(first), sub }
+}
+
+// -------------------------------------------------------------- run status --
+
+/** Where one recipe of a run is, read from its own events alone. */
+export type RecipeStatus =
+  | { kind: "waiting" }
+  | { kind: "running"; shared: boolean; cached: boolean }
+  | { kind: "done" }
+  | { kind: "failed"; step: string; error: string }
+  | { kind: "stopped" }
+
+/**
+ * One recipe's status from its `VariantState`. A failed node names its step
+ * (by `titles`, else its id) and its error headline. The step the run goes
+ * through done or cached is done. While it runs, `shared` says an upstream
+ * step is running fresh (the first recipe runs them for all), and `cached`
+ * that every upstream step so far came from the cache. With no state, it
+ * waits, or was stopped once the stream ended without reaching it.
+ */
+export function recipeStatus(
+  state: VariantState | undefined,
+  _index: number,
+  ids: { targetId: string; throughId: string; upstream: string[]; stopped: boolean; titles?: Record<string, string> },
+): RecipeStatus {
+  if (!state) return ids.stopped ? { kind: "stopped" } : { kind: "waiting" }
+  const failed = Object.values(state.nodes).find((n) => n.status === "failed")
+  if (failed) return { kind: "failed", step: ids.titles?.[failed.id] ?? cap(failed.id), error: errorHeadline(failed.error ?? "") }
+  const through = state.nodes[ids.throughId]
+  if (through && (through.status === "done" || through.status === "cached")) return { kind: "done" }
+  if (through?.status === "skipped" || ids.stopped) return { kind: "stopped" }
+  const up = ids.upstream.map((id) => state.nodes[id]).filter((n) => n !== undefined)
+  const shared = up.some((n) => n.status === "running")
+  const cached = up.length > 0 && up.every((n) => n.status === "cached" || n.cache_hit === true)
+  return { kind: "running", shared, cached }
+}
+
+/** A recipe's status as a sentence; `seconds` is what the browser counted since it started. */
+export function statusText(s: RecipeStatus, seconds: number | null): string {
+  const secs = `${seconds ?? 0} s`
+  switch (s.kind) {
+    case "waiting":
+      return "Waiting. It starts when the recipe before it finishes."
+    case "running":
+      if (s.shared) return `Running the shared steps, then this recipe, ${secs}`
+      return s.cached ? `Running. The shared steps came from the cache, ${secs}` : `Running this recipe, ${secs}`
+    case "failed":
+      return `Failed at ${s.step}. ${s.error}`
+    case "stopped":
+      return "Not run. The run was stopped first."
+    case "done":
+      return "Finished."
+  }
+}
+
+/** The finding while a run goes: how many have finished, and what to do meanwhile. */
+export function runningFinding(total: number, finishedCount: number, overview: boolean): Finding {
+  const count = finishedCount === 0 ? "None has finished yet." : `${cap(word(finishedCount))} ${finishedCount === 1 ? "has" : "have"} finished.`
+  const f = `Running ${word(total)} recipes. ${count}`
+  const sub = `The sentence that compares them appears when every recipe has finished.${overview && finishedCount > 0 ? " You can open a finished one now." : ""}`
+  return { finding: f, sub }
 }

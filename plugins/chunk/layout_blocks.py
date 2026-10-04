@@ -5,8 +5,11 @@ reads them in order and groups them in three steps.
 
 - *Units.* A table and the caption right before or after it are one unit, and
   so are a figure and its caption. Every other block is a unit of its own.
-- *Sections.* A new section starts at every heading that follows a body, as in
-  `markdown_header`; headings in a row open one section together.
+- *Sections.* A new section starts at a heading that follows a body, as in
+  `markdown_header`, when the heading's level is at or above `section_level`
+  (a heading with no level counts as level 1); headings in a row open one
+  section together. A deeper heading stays inside the section as text, joined
+  to the block below it, and still extends the heading path.
 - *Pieces.* Units are packed in order up to `max_tokens`. A table unit that is
   too big stays whole when `keep_tables_whole` is on. Any other unit that is too
   big is cut at sentence ends, and only a single sentence that is itself too big
@@ -49,6 +52,25 @@ class LayoutBlocksConfig(BaseModel):
     max_tokens: int = Field(default=400, ge=1)
     keep_tables_whole: bool = True
     heading_context: bool = True
+    section_level: int = Field(
+        default=6,
+        ge=1,
+        le=6,
+        description=(
+            "section_level: how deep a heading can be and still start a new "
+            "section, from 1 to 6. A new section starts only at a heading whose "
+            "level is at or above this depth. 1 means only the top-level "
+            "headings start sections, so a whole Experience section with its "
+            "roles stays together; 6 means every heading starts one. A deeper "
+            "heading stays inside the piece as text and still names the pieces "
+            "below it in their heading path."
+        ),
+    )
+
+
+def _level(element: Element) -> int:
+    """A heading's level; a heading with no level counts as level 1."""
+    return element.level or 1
 
 
 def _units(elements: Sequence[Element]) -> list[list[Element]]:
@@ -82,16 +104,23 @@ def _units(elements: Sequence[Element]) -> list[list[Element]]:
     return units
 
 
-def _sections(units: Sequence[list[Element]]) -> list[list[list[Element]]]:
-    """Break the unit stream at every heading that follows a body.
+def _sections(
+    units: Sequence[list[Element]], section_level: int = 6
+) -> list[list[list[Element]]]:
+    """Break the unit stream at each heading that follows a body.
 
-    Headings in a row (a chapter, then its first section) open one section
-    together, so they join the body below them.
+    Only a heading at or above `section_level` breaks it; a deeper one stays in
+    the section. Headings in a row (a chapter, then its first section) open one
+    section together, so they join the body below them.
     """
     sections: list[list[list[Element]]] = []
     current: list[list[Element]] = []
     for unit in units:
-        if unit[0].type == "heading" and any(u[0].type != "heading" for u in current):
+        if (
+            unit[0].type == "heading"
+            and _level(unit[0]) <= section_level
+            and any(u[0].type != "heading" for u in current)
+        ):
             sections.append(current)
             current = []
         current.append(unit)
@@ -153,11 +182,31 @@ def _section_pieces(
             pieces.append(window)
             window = None
 
-    for unit in section:
+    def first_atom_end(index: int) -> int:
+        """Where the first block after the headings from `index` would end."""
+        for unit in section[index:]:
+            span = (unit[0].md_start, unit[-1].md_end)
+            if unit[0].type == "heading":
+                continue
+            if _tokens(view, span) <= config.max_tokens or (
+                config.keep_tables_whole and any(e.type == "table" for e in unit)
+            ):
+                return span[1]
+            return _sentence_atoms(view, span, config.max_tokens)[0][1]
+        return section[-1][-1].md_end
+
+    for index, unit in enumerate(section):
         span = (unit[0].md_start, unit[-1].md_end)
         if unit[0].type == "heading":
+            if window is not None and not bare_heading:
+                # A deeper heading inside the section: it stays in this piece
+                # only if the block below it fits too, so it never dangles.
+                end = first_atom_end(index)
+                if _tokens(view, (window[0], end)) > config.max_tokens:
+                    pieces.append(window)
+                    window = None
             add(span)
-            # Headings only open a section, so the window holds nothing else.
+            # Whatever comes next joins the heading.
             bare_heading = True
         elif _tokens(view, span) <= config.max_tokens:
             add(span)
@@ -198,6 +247,7 @@ def _count(n: int, word: str) -> str:
 @register
 class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
     name = "layout_blocks"
+    version = "2"
     stage = Stage.CHUNK
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.CHUNK_SET
@@ -246,6 +296,19 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
                 "When this is off, a long table is cut between its rows.",
             ],
         },
+        "section_level": {
+            "hint": "This sets which headings start a new section.",
+            "more": [
+                "A new section starts only at a heading whose level is at or "
+                "above this depth. At 1, only the top-level headings start "
+                "sections, so a whole Experience section stays in one piece "
+                "when it fits. At 6, every heading starts one.",
+                "A deeper heading stays inside the piece as text, and the "
+                "pieces below it still carry it in their heading path.",
+                "Heading levels come from the parser. Without them, every "
+                "heading counts as level 1.",
+            ],
+        },
         "heading_context": {
             "hint": "When this is on, the heading path is added to what gets searched.",
             "more": [
@@ -270,10 +333,24 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
             if config.heading_context
             else ""
         )
+        if config.section_level >= 6:
+            sections = "With section_level at 6, every heading starts a new section."
+        elif config.section_level == 1:
+            sections = (
+                "With section_level at 1, only the top-level headings start a "
+                "new section, and deeper headings stay inside the piece."
+            )
+        else:
+            sections = (
+                f"With section_level at {config.section_level}, only headings "
+                f"at level {config.section_level} or above start a new section, "
+                "and deeper headings stay inside the piece."
+            )
         return Explanation(
             settings=(
                 f"Blocks are packed into pieces of up to {size} tokens, and a new "
-                "piece starts at every section. A table keeps its caption. "
+                f"piece starts at every section. {sections} A table keeps its "
+                "caption. "
                 f"{tables}{context} This needs a parser that finds headings and "
                 "tables, such as the Layout parser."
             ),
@@ -295,7 +372,7 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
 
         spans: list[Span] = []
         paths: list[list[str]] = []
-        for section in _sections(units):
+        for section in _sections(units, config.section_level):
             for piece in _section_pieces(view, section, config):
                 # Normalized one at a time so `paths` stays aligned with the
                 # spans that actually survive.
@@ -327,6 +404,7 @@ class LayoutBlocksChunker(Transform[LayoutBlocksConfig]):
                 "max_tokens": config.max_tokens,
                 "keep_tables_whole": config.keep_tables_whole,
                 "heading_context": config.heading_context,
+                "section_level": config.section_level,
                 "blocks": len(units),
                 "headings": headings,
                 "tables_kept_whole": tables_whole,

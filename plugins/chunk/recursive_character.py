@@ -8,6 +8,10 @@ offers no boundary at all. Then pack the resulting leaves into chunks up to
 Leaves are *spans*, never strings, and a chunk's span runs from its first leaf's
 start to its last leaf's end — so the separators between leaves are inside the
 chunk, and the chunk still slices back out of the source text exactly.
+
+With `heading_context` on, each chunk's `embed_text` starts with the heading
+path in force where the chunk starts, so retrieval sees the section's name;
+the shown `text` stays an exact slice of the source.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import ChunkSet
-from core.ports import PortSpec, RunContext, Stage
+from core.ports import PortSpec, RunContext, Stage, set_note
 from core.registry import register
 from core.transform import Explanation, Transform
 from plugins.chunk import DocView, Span, build_chunk_set, normalize, size_tradeoff
@@ -37,6 +41,16 @@ _SEPARATORS: tuple[tuple[str, int], ...] = (
 class RecursiveCharacterConfig(BaseModel):
     chunk_size: int = Field(default=1000, ge=1)
     chunk_overlap: int = Field(default=200, ge=0)
+    heading_context: bool = Field(
+        default=True,
+        description=(
+            "heading_context: when on, the heading path where a chunk starts, "
+            "for example Experience > a role, is put in front of the chunk's "
+            "text before it is turned into a vector. The chunk that is shown "
+            "and cited does not change. A document without headings is not "
+            "affected."
+        ),
+    )
 
 
 def _split_on(text: str, start: int, end: int, sep: str, keep: int) -> list[Span]:
@@ -107,6 +121,7 @@ def _merge(leaves: list[Span], limit: int, overlap: int) -> list[Span]:
 @register
 class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
     name = "recursive_character"
+    version = "2"
     stage = Stage.CHUNK
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.CHUNK_SET
@@ -162,6 +177,18 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
                 "chunks would never move forward through the text.",
             ],
         },
+        "heading_context": {
+            "hint": "When this is on, the heading path is added to what gets searched.",
+            "more": [
+                "The headings above the place where a chunk starts are put in "
+                "front of it before it is turned into a vector, for example "
+                "Experience > a role. The chunk itself, and what is shown and "
+                "cited, does not change.",
+                "This helps a question that names a section find the chunks in "
+                "it. It needs a parser that finds headings. Without them, "
+                "nothing is added.",
+            ],
+        },
     }
 
     def explain(self, config: RecursiveCharacterConfig) -> Explanation:
@@ -196,10 +223,17 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
                 "and sentence breaks where possible, so little is lost, but an "
                 "idea spread over two paragraphs can be split between pieces."
             )
+        context = (
+            " With heading_context on, the heading path where a piece starts "
+            "is added in front of it when it is searched, so the section's "
+            "name helps it match."
+            if config.heading_context
+            else " With heading_context off, only the piece's own text is searched."
+        )
         return Explanation(
             settings=(
                 f"Each piece holds up to {size:,} characters, about {tokens:,} "
-                f"tokens{',' if overlap else '.'} {repeat}"
+                f"tokens{',' if overlap else '.'} {repeat}{context}"
             ),
             tradeoff=size_tradeoff(tokens),
         )
@@ -218,12 +252,26 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
                 view.text, 0, len(view.text), _SEPARATORS, config.chunk_size
             )
             spans = _merge(leaves, config.chunk_size, overlap)
-        return build_chunk_set(
+        chunk_set = build_chunk_set(
             view,
             normalize(view.text, spans),
             chunker=self.name,
             meta={
                 "chunk_size": config.chunk_size,
                 "chunk_overlap": config.chunk_overlap,
+                "heading_context": config.heading_context,
             },
         )
+        if config.heading_context and view.text:
+            if not any(e.type == "heading" for e in view.rendered):
+                set_note(
+                    ctx,
+                    "There are no headings in this document, so heading_context "
+                    "adds nothing.",
+                )
+            for chunk in chunk_set.chunks:
+                if chunk.heading_path:
+                    chunk.embed_text = (
+                        " > ".join(chunk.heading_path) + "\n\n" + chunk.text
+                    )
+        return chunk_set

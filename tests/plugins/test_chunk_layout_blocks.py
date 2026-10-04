@@ -337,6 +337,7 @@ def test_meta_fields():
         "max_tokens": 300,
         "keep_tables_whole": True,
         "heading_context": True,
+        "section_level": 6,
         "blocks": 5,
         "headings": 1,
         "tables_kept_whole": 0,
@@ -404,3 +405,89 @@ def test_without_headings_a_big_table_is_still_kept_whole(tmp_path):
     assert note == "There are no headings to follow, so the text is cut by size."
     assert len(_holding(cs, "| row0 |")) == 1
     assert "| row29 |" in _holding(cs, "| row0 |")[0].text
+
+
+# --------------------------------------------------------------------------- #
+# Section level
+# --------------------------------------------------------------------------- #
+
+
+def _experience_doc():
+    return _doc(
+        [
+            ("heading", "SUMMARY", 1, 1),
+            ("paragraph", "A short summary line.", None, 1),
+            ("heading", "EXPERIENCE", 1, 1),
+            ("heading", "Role one", 2, 1),
+            ("paragraph", "Did the first thing well.", None, 1),
+            ("heading", "Role two", 2, 1),
+            ("paragraph", "Did the second thing well.", None, 1),
+        ]
+    )
+
+
+def test_section_level_defaults_to_every_heading_and_is_bounded():
+    assert LayoutBlocksChunker.config_model().section_level == 6
+    for bad in (0, 7):
+        with pytest.raises(Exception):
+            LayoutBlocksChunker.config_model(section_level=bad)
+
+
+def test_section_level_one_keeps_a_whole_top_section_in_one_piece():
+    cs = run(LayoutBlocksChunker, _experience_doc(), section_level=1)
+    experience = _holding(cs, "# EXPERIENCE")
+    assert len(experience) == 1
+    assert "Role one" in experience[0].text and "Role two" in experience[0].text
+    assert len(cs.chunks) == 2
+
+
+def test_section_level_six_starts_a_piece_at_every_heading():
+    cs = run(LayoutBlocksChunker, _experience_doc(), section_level=6)
+    starts = [c.text.splitlines()[0] for c in cs.chunks]
+    assert starts == ["# SUMMARY", "# EXPERIENCE", "## Role two"]
+    assert len(_holding(cs, "# EXPERIENCE")) == 1
+    assert "Role one" in _holding(cs, "# EXPERIENCE")[0].text
+
+
+def test_a_piece_spanning_deeper_headings_keeps_its_path_from_the_top():
+    cs = run(LayoutBlocksChunker, _experience_doc(), section_level=1)
+    [piece] = _holding(cs, "# EXPERIENCE")
+    # The piece opens with EXPERIENCE then a role, so its path names both.
+    assert piece.heading_path == ["EXPERIENCE", "Role one"]
+    # A piece cut below a role, when the section is too big, still names both.
+    small = run(LayoutBlocksChunker, _experience_doc(), section_level=1, max_tokens=8)
+    [second] = _holding(small, "Did the second thing well.")
+    assert second.heading_path == ["EXPERIENCE", "Role two"]
+
+
+def test_a_heading_with_no_level_counts_as_level_one():
+    doc = _doc(
+        [
+            ("heading", "Top", 1, 1),
+            ("paragraph", "Under top.", None, 1),
+            ("heading", "Loose", None, 1),
+            ("paragraph", "Under loose.", None, 1),
+            ("heading", "Deep", 2, 1),
+            ("paragraph", "Under deep.", None, 1),
+        ]
+    )
+    cs = run(LayoutBlocksChunker, doc, section_level=1)
+    starts = [c.text.splitlines()[0] for c in cs.chunks]
+    assert starts == ["# Top", "# Loose"]
+    assert "Under deep." in cs.chunks[1].text
+
+
+def test_the_schema_description_names_section_level():
+    schema = LayoutBlocksChunker.config_model.model_json_schema()
+    description = schema["properties"]["section_level"]["description"]
+    assert "section_level" in description
+
+
+def test_explain_names_section_level_and_changes_with_it():
+    cls = LayoutBlocksChunker
+    top = cls().explain(cls.config_model(section_level=1)).settings
+    every = cls().explain(cls.config_model(section_level=6)).settings
+    assert "section_level" in top and "section_level" in every
+    assert top != every
+    for text in (top, every):
+        assert chr(0x2014) not in text and chr(0x2013) not in text

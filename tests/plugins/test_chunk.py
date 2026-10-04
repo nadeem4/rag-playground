@@ -16,7 +16,7 @@ import pytest
 
 from core.artifacts import ArtifactType
 from core.payloads import Element, ParsedDoc
-from core.ports import PortSpec, Stage
+from core.ports import PortSpec, RunContext, Stage
 from plugins.chunk.layout_blocks import LayoutBlocksChunker
 from plugins.chunk.markdown_header import MarkdownHeaderChunker
 from plugins.chunk.recursive_character import RecursiveCharacterChunker
@@ -376,6 +376,69 @@ def test_recursive_character_covers_every_word():
     joined = "".join(c.text for c in result.chunks)
     for i in (0, 450, 899):
         assert f"word{i}" in joined
+
+
+def _recursive_note(doc, tmp_path, **cfg):
+    ctx = RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path)
+    out = RecursiveCharacterChunker().apply(
+        {"doc": doc}, RecursiveCharacterChunker.config_model(**cfg), ctx
+    )
+    return out, ctx.extras.get("meta", {}).get("note")
+
+
+def _experience_doc():
+    return _doc(
+        [
+            ("heading", "EXPERIENCE", 1, 1),
+            ("heading", "Role one", 2, 1),
+            ("paragraph", "Did the first thing well.", None, 1),
+        ]
+    )
+
+
+def test_recursive_character_heading_context_is_on_by_default():
+    assert RecursiveCharacterChunker.config_model().heading_context is True
+
+
+def test_recursive_character_prefixes_the_heading_path_to_embed_text_only():
+    doc = _experience_doc()
+    result = run(RecursiveCharacterChunker, doc, chunk_size=26, chunk_overlap=0)
+    [body] = [c for c in result.chunks if "Did the first thing" in c.text]
+    assert body.text == "Did the first thing well."
+    assert body.heading_path == ["EXPERIENCE", "Role one"]
+    assert body.embed_text == "EXPERIENCE > Role one\n\nDid the first thing well."
+
+
+def test_recursive_character_heading_context_off_leaves_embed_text_unset():
+    doc = _experience_doc()
+    result = run(
+        RecursiveCharacterChunker,
+        doc,
+        chunk_size=26,
+        chunk_overlap=0,
+        heading_context=False,
+    )
+    assert all(c.embed_text is None for c in result.chunks)
+
+
+def test_recursive_character_without_headings_is_unchanged(tmp_path):
+    doc = long_paragraph_doc()
+    on, note = _recursive_note(doc, tmp_path, chunk_size=200, chunk_overlap=0)
+    off, _ = _recursive_note(
+        doc, tmp_path, chunk_size=200, chunk_overlap=0, heading_context=False
+    )
+    assert [c.text for c in on.chunks] == [c.text for c in off.chunks]
+    assert all(c.embed_text is None for c in on.chunks)
+    assert note is not None and "heading" in note
+
+
+def test_recursive_character_schema_and_explain_name_heading_context():
+    cls = RecursiveCharacterChunker
+    schema = cls.config_model.model_json_schema()
+    assert "heading_context" in schema["properties"]["heading_context"]["description"]
+    on = cls().explain(cls.config_model()).settings
+    off = cls().explain(cls.config_model(heading_context=False)).settings
+    assert "heading_context" in on and on != off
 
 
 # --------------------------------------------------------------------------- #

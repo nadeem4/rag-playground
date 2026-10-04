@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
-import { chunkFinding, MAX_RECIPES, planSentence, recipeNames, retrieveFinding } from "./compare"
+import type { NodeState, VariantState } from "@/api/runState"
+
+import { chunkFinding, MAX_RECIPES, planSentence, recipeNames, recipeStatus, retrieveFinding, statusText } from "./compare"
 import { defaultConfig } from "./graph"
 
 const registry = liveRegistry as unknown as Registry
@@ -217,5 +219,39 @@ describe("planSentence", () => {
     const five = ["Your pipeline", "Dense", "BM25", "Dense with top 3", "BM25 with top 1"].map((x) => other(x, "dense"))
     expect(planSentence("retrieve", five, "overview", 2).plan).toBe("You are about to compare five ways to search the same pieces.")
     expect(planSentence("chunk", [rc(400, true)], "columns", 3)).toEqual({ plan: "You are about to run your pipeline on its own. Add a recipe to compare it with.", sub: null })
+  })
+})
+
+describe("recipeStatus", () => {
+  const ids = { targetId: "chunk", throughId: "chunk", upstream: ["source", "parse"], stopped: false }
+  const v = (nodes: Record<string, Partial<NodeState>>): VariantState => ({ index: 0, order: Object.keys(nodes), nodes: Object.fromEntries(Object.entries(nodes).map(([id, n]) => [id, { id, status: "pending", ...n }])) })
+
+  it("waits until its variant starts", () => {
+    expect(recipeStatus(undefined, 1, ids)).toEqual({ kind: "waiting" })
+  })
+  it("runs the shared steps on the first recipe, and finds them in the cache after", () => {
+    expect(recipeStatus(v({ parse: { status: "running" } }), 0, ids)).toEqual({ kind: "running", shared: true, cached: false })
+    expect(recipeStatus(v({ parse: { status: "cached", cache_hit: true }, chunk: { status: "running" } }), 1, ids)).toEqual({ kind: "running", shared: false, cached: true })
+  })
+  it("is done when the step it runs through finishes", () => {
+    expect(recipeStatus(v({ parse: { status: "cached" }, chunk: { status: "done" } }), 1, ids)).toEqual({ kind: "done" })
+  })
+  it("names the step that failed and its error headline", () => {
+    const s = recipeStatus(v({ chunk: { status: "failed", error: "Traceback (most recent call last):\nValueError: overlap must be smaller" } }), 2, ids)
+    expect(s).toEqual({ kind: "failed", step: "Chunk", error: "ValueError: overlap must be smaller" })
+  })
+  it("says a recipe the run never reached was stopped", () => {
+    expect(recipeStatus(undefined, 4, { ...ids, stopped: true })).toEqual({ kind: "stopped" })
+  })
+})
+
+describe("statusText", () => {
+  it("says each state in a full sentence, with the seconds the browser counted", () => {
+    expect(statusText({ kind: "waiting" }, null)).toBe("Waiting. It starts when the recipe before it finishes.")
+    expect(statusText({ kind: "running", shared: true, cached: false }, 12)).toBe("Running the shared steps, then this recipe, 12 s")
+    expect(statusText({ kind: "running", shared: false, cached: true }, 1)).toBe("Running. The shared steps came from the cache, 1 s")
+    expect(statusText({ kind: "running", shared: false, cached: false }, 1)).toBe("Running this recipe, 1 s")
+    expect(statusText({ kind: "failed", step: "Chunk", error: "ValueError: x" }, null)).toBe("Failed at Chunk. ValueError: x")
+    expect(statusText({ kind: "stopped" }, null)).toBe("Not run. The run was stopped first.")
   })
 })

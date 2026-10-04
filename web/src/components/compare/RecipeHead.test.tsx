@@ -36,7 +36,10 @@ describe("RecipeHead", () => {
 
   it("says the recipe was edited since the last run, while the editor is folded", () => {
     render(<RecipeHead {...props} edited />)
-    expect(screen.getByText(/Edited since the last run/)).toBeTruthy()
+    const line = screen.getByText(/Edited since the last run/)
+    // Marked as Build marks a changed setting.
+    expect(line.className).toContain("text-stale")
+    expect(line.className).toContain("bg-stale-wash")
   })
 
   it("gives the link button a 44 px box under a coarse pointer", () => {

@@ -75,7 +75,7 @@ export function ChunkEvidence({ set }: { set: ChunkSet }) {
               side="single"
               piece={i}
               scaleKey="score"
-              clamp
+              compact
               scores={false}
               finding={pieceFinding(c, i)}
             />

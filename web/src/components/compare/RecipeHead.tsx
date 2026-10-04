@@ -47,7 +47,8 @@ export function RecipeHead({
           {open ? "Done" : "Change this recipe"}
         </button>
       </span>
-      {edited ? <p className="text-xs text-fg-muted">Edited since the last run. Run again to update the result below.</p> : null}
+      {/* Marked as Build marks a setting changed since its run. */}
+      {edited ? <p className="self-start rounded-swatch bg-stale-wash px-2 py-0.5 text-xs text-stale">Edited since the last run. Run again to update the result below.</p> : null}
     </div>
   )
 }

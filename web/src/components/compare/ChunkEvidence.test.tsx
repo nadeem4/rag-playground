@@ -85,6 +85,15 @@ describe("ChunkEvidence", () => {
     expect(screen.queryByRole("button", { name: "Show all" })).toBeNull()
   })
 
+  it("opens a piece in full with Show more, as a search slip does", () => {
+    render(<ChunkEvidence set={set} />)
+    const more = screen.getAllByRole("button", { name: "Show more" })
+    expect(more).toHaveLength(4)
+    expect(screen.getAllByTestId("passage")[0].className).toContain("line-clamp-2")
+    fireEvent.click(more[0])
+    expect(screen.getAllByTestId("passage")[0].className).not.toContain("line-clamp-2")
+  })
+
   it("never puts the column in a scrolling box of its own", () => {
     const { container } = render(<ChunkEvidence set={set} />)
     expect(container.innerHTML).not.toMatch(/overflow-(y-)?(auto|scroll)|max-h-/)

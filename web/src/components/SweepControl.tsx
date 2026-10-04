@@ -19,6 +19,18 @@ export const RECIPE_TITLES: Record<string, string> = {
   top_k: "Candidates, top k",
   rrf_k: "RRF k",
   truncate_dim: "Dimensions",
+  heading_context: "Heading context",
+  keep_tables_whole: "Keep tables whole",
+  section_level: "Section level",
+  build_fts: "Build the keyword index",
+  do_ocr: "Read text in images (OCR)",
+  do_table_structure: "Find table structure",
+  table_mode: "Table mode",
+  heading_hierarchy: "Heading levels",
+  join_lines: "Join lines",
+  query_expansion: "Query expansion",
+  prf_docs: "PRF pieces",
+  prf_terms: "PRF terms",
 }
 
 /**

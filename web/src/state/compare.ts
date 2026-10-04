@@ -49,6 +49,25 @@ export function recipeNames(variants: Variant[], stage: Stage, registry: Registr
   })
 }
 
+/**
+ * Which recipe a rejected run's field errors belong to: the one recipe whose
+ * strategy has every named field, narrowed to the recipes changed since the
+ * last run when more than one has them. Null when it cannot be told, so the
+ * page opens every recipe rather than guess.
+ */
+export function rejectedRecipe(variants: Variant[], previous: Variant[], fields: string[], stage: Stage, registry: Registry): number | null {
+  const has = (v: Variant) => {
+    const props = registry[stage]?.[v.transform]?.config_schema.properties ?? {}
+    return fields.length > 0 && fields.every((f) => f.split(".")[0] in props)
+  }
+  let found = variants.map((_, i) => i).filter((i) => has(variants[i]))
+  if (found.length > 1) {
+    const changed = found.filter((i) => !previous[i] || JSON.stringify(previous[i]) !== JSON.stringify(variants[i]))
+    if (changed.length) found = changed
+  }
+  return found.length === 1 ? found[0] : null
+}
+
 // ---------------------------------------------------------------- findings --
 
 /** The sentence that says what differs, and the quieter line under it. */
@@ -151,7 +170,9 @@ function listClause(name: string, c: ListChange, baseName: string): string {
  * says where the answer sits, and says "the answer" only when a rank is
  * known; otherwise whether every search put the same piece first. Sentence 2
  * says what each other search did to the baseline's list. The sub line says
- * why a keyword search returned fewer, given the pieces in the set.
+ * why a keyword search returned fewer, and only when it returned fewer than
+ * its own top k: a list cut by a lower top k is not a list of word matches.
+ * How many other pieces share no word is said only when the set is counted.
  */
 export function retrieveFinding(
   lists: readonly (readonly string[])[],
@@ -159,12 +180,19 @@ export function retrieveFinding(
   answerRanks: readonly (number | null)[],
   pieces: number | null,
   transforms: readonly string[],
+  opts: {
+    /** Each recipe's top k, so a short keyword list is read as short only when it returned fewer than it was asked for. */
+    topKs?: readonly (number | null)[]
+    /** The sample's gold answer is known: with every rank null, no list holds it. */
+    goldKnown?: boolean
+  } = {},
 ): Finding | null {
   if (lists.length < 2) return null
   const n = lists.length
   const all = n === 2 ? "Both" : `All ${word(n)}`
   let first: string
   if (answerRanks.every((r) => r === 1)) first = `${all} put the answer first.`
+  else if (opts.goldKnown && answerRanks.every((r) => r === null)) first = n === 2 ? "Neither returns the answer." : "None of them returns the answer."
   else if (answerRanks.some((r) => r !== null)) {
     const at = names.map((name, i) => {
       const r = answerRanks[i]
@@ -177,7 +205,11 @@ export function retrieveFinding(
   const changes = lists.map((l) => compareLists(lists[0], l))
   const clauses = changes.slice(1).map((c, k) => listClause(names[k + 1], c, names[0]))
   const second = clauses.length < 2 ? clauses.join("") : `${clauses.slice(0, -1).join(", ")}, and ${clauses[clauses.length - 1]}`
-  const keyword = changes.findIndex((c, i) => i > 0 && transforms[i] === "bm25" && c.kind === "shorter")
+  const short = (i: number) => {
+    const k = opts.topKs?.[i]
+    return typeof k === "number" && lists[i].length < k
+  }
+  const keyword = changes.findIndex((c, i) => i > 0 && transforms[i] === "bm25" && c.kind === "shorter" && short(i))
   let sub: string | null = null
   if (keyword !== -1) {
     sub = "Keyword search only returns pieces that share a word with the question."

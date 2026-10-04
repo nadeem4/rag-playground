@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import markdownJson from "@/api/fixtures/chunk_set.markdown_header.json"
 import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
 import tokenJson from "@/api/fixtures/chunk_set.token_based.json"
+import indexJson from "@/api/fixtures/index.lancedb.json"
 import liveRegistry from "@/api/fixtures/registry.json"
 import bm25Json from "@/api/fixtures/retrieval_result.bm25.json"
 import denseJson from "@/api/fixtures/retrieval_result.dense.json"
@@ -24,7 +25,7 @@ class SilentEventSource {
   close() {}
 }
 
-/** Artifact payloads by id, served at `/api/artifacts/{id}/payload`; `extra` answers other URLs. */
+/** Artifact payloads by id, served at `/api/artifacts/{id}/payload`; `extra` answers other URLs (a Response as it is). */
 function serve(artifacts: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
   const missing = () => new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
@@ -32,8 +33,8 @@ function serve(artifacts: Record<string, unknown> = {}, extra: Record<string, un
     "fetch",
     vi.fn(async (url: string) => {
       if (url === "/api/registry") return ok(liveRegistry)
+      if (url in extra) return extra[url] instanceof Response ? extra[url] : ok(extra[url])
       if (url === "/api/sweeps") return ok({ run_id: "r1" })
-      if (url in extra) return ok(extra[url])
       const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
       return missing()
@@ -289,6 +290,10 @@ describe("Compare's recipes", () => {
     expect([...select.options].map((o) => o.textContent)).toContain("Recursive (natural breaks), recursive_character")
     expect(screen.getAllByLabelText("Chunk size")).toHaveLength(2)
     expect(screen.getAllByLabelText("Sentences per piece")).toHaveLength(1)
+    expect(screen.getAllByLabelText("Heading context")).toHaveLength(2)
+    choose("Parse")
+    await waitFor(() => expect(pressed()).toBe("Parse"))
+    for (const t of ["Read text in images (OCR)", "Find table structure", "Heading levels", "Join lines"]) expect(screen.getAllByLabelText(t).length).toBeGreaterThan(0)
   })
 
   it("folds every editor into its recipe sentence once a run starts, and unfolds one on request", async () => {
@@ -371,11 +376,11 @@ describe("after a run", () => {
   it("opens a Retrieve run with what each search did, and never says the answer for a question the sample does not have", async () => {
     const graph = sampleGraph(registry, SOURCE)
     const through = terminalNode(graph)!.id
-    serve({ c: recursiveJson, h: hybridJson, d: denseJson, b: bm25Json })
+    serve({ c: recursiveJson, i: indexJson, h: hybridJson, d: denseJson, b: bm25Json })
     openAt("?node=retrieve")
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
-    await runWith({ chunk: ["c", "c", "c"], [through]: ["h", "d", "b"] })
+    await runWith({ chunk: ["c", "c", "c"], index: ["i", "i", "i"], [through]: ["h", "d", "b"] })
     const finding = await screen.findByTestId("compare-finding")
     expect(finding.textContent).not.toMatch(/answer/)
     expect(finding.textContent).toMatch(/Dense|BM25/)
@@ -384,6 +389,59 @@ describe("after a run", () => {
     expect(agreements[0].textContent).toBe("The baseline. The other recipes are read against this list.")
     expect(agreements[0].className).toContain("font-semibold")
     expect(screen.queryByTestId("fact-hits")).toBeNull()
+    // The index is shared on Retrieve, so its embedding counts would say the same thing in every column.
+    expect(screen.queryByTestId("embeddings")).toBeNull()
+  })
+
+  it("keeps a failed recipe's headline and traceback in its column while its editor is folded", async () => {
+    serve({ a0: recursiveJson, a2: tokenJson })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    const es = DrivenEventSource.instances[0]
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "variant_started", index: 1, variant: {} })
+    es.emit(4, { event: "node_started", node_id: "chunk", transform: "recursive_character", artifact_id: "x" })
+    es.emit(5, { event: "node_failed", node_id: "chunk", error: "Traceback (most recent call last):\nValueError: chunk_size too small" })
+    es.emit(6, { event: "variant_started", index: 2, variant: {} })
+    es.emit(7, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
+    es.emit(8, { event: "stream_end", status: "finished", ok: false })
+    const failed = await screen.findByText("This recipe failed at chunk")
+    expect(columns()).toHaveLength(0)
+    const column = failed.closest("section")!
+    expect(within(column).getByText("ValueError: chunk_size too small")).toBeTruthy()
+    expect(within(column).getByText("Traceback")).toBeTruthy()
+    expect(screen.getByTestId("tally").textContent).toMatch(/1 recipe failed\./)
+  })
+
+})
+
+describe("a run the server rejects", () => {
+  const rejected = (loc: string[], msg: string) =>
+    new Response(JSON.stringify({ detail: { node_id: "chunk", errors: [{ loc, msg, type: "value_error" }] } }), { status: 422 })
+
+  it("opens only the recipe the error belongs to, and names it and its field in plain words", async () => {
+    serve({}, { "/api/sweeps": rejected(["overlap_sentences"], "Overlap must be smaller than the number of sentences per chunk.") })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toBe("Recipe 3, By sentence, Overlap sentences: Overlap must be smaller than the number of sentences per chunk.")
+    expect(alert.className).not.toContain("font-mono")
+    expect(columns()).toEqual(["sentence_window"])
+    expect(screen.getByLabelText("Overlap sentences")).toBeTruthy()
+  })
+
+  it("opens every recipe when the error cannot be tied to one", async () => {
+    serve({}, { "/api/sweeps": rejected(["chunk_size"], "Input should be greater than 0.") })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toBe("Chunk, Chunk size: Input should be greater than 0.")
+    expect(columns()).toHaveLength(3)
   })
 })
 

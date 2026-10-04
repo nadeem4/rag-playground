@@ -93,7 +93,7 @@ describe("chunkFinding", () => {
 describe("retrieveFinding", () => {
   it("says all three put the answer first, then what each other search did", () => {
     const hybrid = ["c1", "c4", "c3", "c6", "c5"]
-    const f = retrieveFinding([hybrid, ["c1", "c3", "c4", "c6", "c5"], ["c1", "c4"]], ["Hybrid (RRF)", "Dense", "BM25"], [1, 1, 1], 6, ["hybrid_rrf", "dense", "bm25"])
+    const f = retrieveFinding([hybrid, ["c1", "c3", "c4", "c6", "c5"], ["c1", "c4"]], ["Hybrid (RRF)", "Dense", "BM25"], [1, 1, 1], 6, ["hybrid_rrf", "dense", "bm25"], { topKs: [20, 20, 20] })
     expect(f!.finding).toBe("All three put the answer first. Dense swaps the 2nd and 3rd pieces, and BM25 returns only 2.")
     expect(f!.sub).toBe("Keyword search only returns pieces that share a word with the question. The other 4 pieces share none.")
   })
@@ -128,5 +128,29 @@ describe("sentence case in the findings", () => {
     expect(f!.finding).toBe("Both put the same piece first. 512 dimensions returns only 1.")
     const g = retrieveFinding([["c1", "c2"], ["c2", "c1"]], ["native width", "512 dimensions"], [2, 1], 6, ["lancedb", "lancedb"])
     expect(g!.finding).toMatch(/^Native width puts the answer 2nd and 512 dimensions 1st\./)
+  })
+})
+
+describe("measured counts only", () => {
+  const lists = [["c1", "c4", "c3", "c6", "c5"], ["c1", "c3", "c4", "c6", "c5"], ["c1", "c4"]]
+  const names = ["Hybrid (RRF)", "Dense", "BM25"]
+  const transforms = ["hybrid_rrf", "dense", "bm25"]
+
+  it("says no other piece shares a word only when BM25 returned fewer than it was asked for", () => {
+    const f = retrieveFinding(lists, names, [1, 1, 1], 6, transforms, { topKs: [20, 20, 20] })
+    expect(f!.sub).toBe("Keyword search only returns pieces that share a word with the question. The other 4 pieces share none.")
+  })
+
+  it("says nothing about shared words when BM25 returned all it was asked for", () => {
+    const f = retrieveFinding(lists, names, [1, 1, 1], 6, transforms, { topKs: [20, 20, 2] })
+    expect(f!.finding).toBe("All three put the answer first. Dense swaps the 2nd and 3rd pieces, and BM25 returns only 2.")
+    expect(f!.sub).toBeNull()
+  })
+
+  it("says none of them returns the answer when the answer is known and no list holds it", () => {
+    const f = retrieveFinding([["c1", "c2"], ["c1", "c3"]], ["Hybrid (RRF)", "Dense"], [null, null], 6, ["hybrid_rrf", "dense"], { goldKnown: true })
+    expect(f!.finding).toMatch(/^Neither returns the answer\. /)
+    const three = retrieveFinding(lists, names, [null, null, null], 6, transforms, { goldKnown: true })
+    expect(three!.finding).toMatch(/^None of them returns the answer\. /)
   })
 })

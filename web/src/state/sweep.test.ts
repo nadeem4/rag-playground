@@ -52,17 +52,17 @@ describe("tallySweep", () => {
       ...variantBlock(2, "token_based", { source: true, parse: true, chunk: false }),
     ]
     const t = tallySweep(reduceEvents(events).variants)
-    expect(t).toEqual({ executed: { source: 1, parse: 1, chunk: 3 }, cacheHits: 4, variants: 3 })
-    expect(tallyLine(t, COLUMN)).toBe("Upload ran 1 time, Parse ran 1 time, Chunk ran 3 times.")
+    expect(t).toEqual({ executed: { source: 1, parse: 1, chunk: 3 }, cacheHits: 4, variants: 3, failed: 0, slowest: { id: "source", ms: 1 } })
+    expect(tallyLine(t, COLUMN)).toBe("Upload ran 1 time, Parse ran 1 time, Chunk ran 3 times. The slowest step was Upload, at 1.0 ms.")
   })
 
   it("names a node that never ran as coming from the cache", () => {
     const all = { source: true, parse: true, chunk: true }
     const events = [...variantBlock(0, "recursive_character", all), ...variantBlock(1, "token_based", all)]
     const t = tallySweep(reduceEvents(events).variants)
-    expect(t).toEqual({ executed: { source: 0, parse: 0, chunk: 0 }, cacheHits: 6, variants: 2 })
+    expect(t).toEqual({ executed: { source: 0, parse: 0, chunk: 0 }, cacheHits: 6, variants: 2, failed: 0, slowest: null })
     expect(tallyLine(t, COLUMN)).toBe("Nothing ran: every step came from the cache.")
-    const some = { executed: { source: 0, parse: 0, chunk: 2 }, cacheHits: 4, variants: 2 }
+    const some = { executed: { source: 0, parse: 0, chunk: 2 }, cacheHits: 4, variants: 2, failed: 0, slowest: null }
     expect(tallyLine(some, COLUMN)).toBe("Chunk ran 2 times. Upload and Parse came from the cache.")
   })
 
@@ -79,12 +79,12 @@ describe("tallySweep", () => {
     }
     const column = nodes.map((id) => ({ id, title: { source: "Upload", parse: "Parse", chunk: "Chunk", index: "Index", query: "Ask", retrieve: "Retrieve", use_case: "Search" }[id]! }))
     expect(tallyLine(tallySweep(reduceEvents(events).variants), column)).toBe(
-      "Upload ran 1 time, Parse ran 1 time, Chunk ran 1 time, Index ran 5 times, Ask ran 1 time, Retrieve ran 5 times, Search ran 5 times.",
+      "Upload ran 1 time, Parse ran 1 time, Chunk ran 1 time, Index ran 5 times, Ask ran 1 time, Retrieve ran 5 times, Search ran 5 times. The slowest step was Upload, at 1.0 ms.",
     )
   })
 
   it("tells two nodes with the same title apart by id", () => {
-    const t = { executed: { clean_1: 1, clean_2: 0 }, cacheHits: 0, variants: 1 }
+    const t = { executed: { clean_1: 1, clean_2: 0 }, cacheHits: 0, variants: 1, failed: 0, slowest: null }
     expect(tallyLine(t, [{ id: "clean_1", title: "Clean" }, { id: "clean_2", title: "Clean" }])).toBe(
       "Clean clean_1 ran 1 time. Clean clean_2 came from the cache.",
     )
@@ -149,5 +149,24 @@ describe("variantLabels", () => {
   it("for a lone transform, lists fields that differ from its defaults", () => {
     const labels = variantLabels([{ transform: "token_based", config: { max_tokens: 128, overlap: 32 } }], R, "chunk")
     expect(labels).toEqual([{ transform: "token_based", fields: [["max_tokens", "128"]] }])
+  })
+})
+
+describe("the tally's time and failures", () => {
+  it("names the slowest step that ran, with its time", () => {
+    const t = { executed: { source: 0, parse: 2, chunk: 2 }, cacheHits: 2, variants: 2, failed: 0, slowest: { id: "parse", ms: 3100 } }
+    expect(tallyLine(t, COLUMN)).toBe("Parse ran 2 times, Chunk ran 2 times. Upload came from the cache. The slowest step was Parse, at 3.10 s.")
+  })
+
+  it("says how many recipes failed, and never that nothing ran when one failed", () => {
+    const events: RunEvent[] = [
+      ...variantBlock(0, "recursive_character", { source: true, parse: true, chunk: true }),
+      { event: "variant_started", ts: 0, index: 1, variant: { transform: "token_based", config: {} } },
+      { event: "node_started", ts: 0, node_id: "chunk", transform: "token_based", artifact_id: "chunk-1" },
+      { event: "node_failed", ts: 0, node_id: "chunk", error: "ValueError: no" } as RunEvent,
+    ]
+    const t = tallySweep(reduceEvents(events).variants)
+    expect(t.failed).toBe(1)
+    expect(tallyLine(t, COLUMN)).toBe("Every step that finished came from the cache. 1 recipe failed.")
   })
 })

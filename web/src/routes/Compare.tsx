@@ -23,7 +23,7 @@ import { chunkStats } from "@/components/inspectors/spans"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { transformLabel } from "@/components/pipeline/NodeCard"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
-import { SweepControl } from "@/components/SweepControl"
+import { RECIPE_TITLES, SweepControl } from "@/components/SweepControl"
 import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/SegmentedControl"
 import {
@@ -38,7 +38,7 @@ import {
   upstreamOfStage,
   type PipelineGraph,
 } from "@/state/graph"
-import { chunkFinding, recipeNames, retrieveFinding, type Finding } from "@/state/compare"
+import { chunkFinding, recipeNames, rejectedRecipe, retrieveFinding, type Finding } from "@/state/compare"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
@@ -250,6 +250,10 @@ function Sweep({
       order.map((i) => answerRank(hitRowLists[i])),
       searched,
       order.map((i) => submitted.variants[i].transform),
+      {
+        topKs: order.map((i) => (typeof submitted.variants[i].config.top_k === "number" ? (submitted.variants[i].config.top_k as number) : null)),
+        goldKnown: golds !== null,
+      },
     )
   }
 
@@ -270,12 +274,21 @@ function Sweep({
       setSubmitted({ variants, through })
       setRunId(run_id)
     } catch (err) {
+      // The run never started: open the recipe the error belongs to, or every recipe when it cannot be told.
       const routed = routeRunError(err, graph)
-      setError(
-        routed.kind === "fields"
-          ? `${routed.nodeId}: ` + Object.entries(routed.errors).map(([k, m]) => `${k} ${m.join(", ")}`).join("; ")
-          : routed.message,
-      )
+      if (routed.kind === "fields") {
+        const fields = Object.keys(routed.errors)
+        const at = routed.nodeId === target.id ? rejectedRecipe(variants, submitted.variants, fields, target.stage, registry) : null
+        const node = graph.nodes.find((x) => x.id === routed.nodeId)
+        const schema = at === null ? undefined : infoFor(registry, { stage: target.stage, transform: variants[at].transform })?.config_schema
+        const title = (k: string) => RECIPE_TITLES[k] ?? schema?.properties?.[k]?.title ?? k
+        const where = at === null ? (node ? titleFor(node) : routed.nodeId) : `Recipe ${at + 1}, ${names[at].name}`
+        setError(Object.entries(routed.errors).map(([k, m]) => (k ? `${where}, ${title(k)}: ${m.join(" ")}` : `${where}: ${m.join(" ")}`)).join(" "))
+        setOpen(variants.map((_, i) => at === null || i === at))
+      } else {
+        setError(routed.message)
+        setOpen(variants.map(() => true))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -393,7 +406,7 @@ function Sweep({
         {/* The finding says what differs before any column does; the tally under it is the quiet fact of what ran. */}
         <div className="flex flex-col gap-1 border-b border-hairline px-3 py-3" aria-live="polite">
           {error ? (
-            <p role="alert" className="font-mono text-xs break-words text-danger">
+            <p role="alert" className="text-sm break-words text-danger">
               {error}
             </p>
           ) : tally ? (
@@ -488,7 +501,7 @@ function Sweep({
                   agreement={
                     agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
                   }
-                  embeddings={embeddingCounts(descriptor)}
+                  embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
                   hits={hitRowLists[i]}
                   answer={answerId(hitRowLists[i])}
                 />

@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { RecipeHead } from "./RecipeHead"
 
@@ -16,6 +16,18 @@ describe("RecipeHead", () => {
     expect(screen.getByText("recursive_character").className).toContain("font-mono")
     expect(screen.queryByText("Your pipeline")).toBeNull()
     expect(screen.queryByRole("button")).toBeNull()
+  })
+
+  it("offers Use on Build as a link button, then says Now on Build", () => {
+    const onUse = vi.fn()
+    const { rerender } = render(<RecipeHead {...props} onUse={onUse} />)
+    const use = screen.getByRole("button", { name: "Use on Build" })
+    expect(use.className.split(" ")).toContain("pointer-coarse:min-h-[44px]")
+    fireEvent.click(use)
+    expect(onUse).toHaveBeenCalled()
+    rerender(<RecipeHead {...props} onUse={onUse} used />)
+    expect(screen.queryByRole("button")).toBeNull()
+    expect(screen.getByText("Now on Build")).toBeTruthy()
   })
 
   it("tags the node's own recipe as Your pipeline", () => {

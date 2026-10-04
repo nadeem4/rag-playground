@@ -323,7 +323,7 @@
     },
     "docling": {
       "name": "docling",
-      "version": "3",
+      "version": "4",
       "summary": "Renders each page as an image and runs a layout model that labels every region: title, section heading, list item, table, page header and footer. A reading-order model then puts the regions in sequence. Much slower than pdfium, with far more structure.",
       "stage": "parse",
       "output": "parsed_doc",
@@ -390,6 +390,12 @@
             "x-always": [
               "body"
             ]
+          },
+          "heading_hierarchy": {
+            "default": false,
+            "description": "Docling's HeadingHierarchyOptions.enabled, set through PdfPipelineOptions.heading_hierarchy_options. Docling infers heading levels from the layout, so a role sits under Experience instead of beside it. It reads PDF bookmarks first, then numbering such as 1. and 1.1, then font size and style. When off, every heading is at the same level.",
+            "title": "Heading Hierarchy",
+            "type": "boolean"
           }
         },
         "title": "DoclingConfig",

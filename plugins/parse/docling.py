@@ -26,6 +26,12 @@ sometimes takes real content near a page edge for a footer. Items with no text
 (a picture without text) are skipped, as pdfium skips empty blocks, so `order`
 stays contiguous.
 
+**Heading levels.** The layout model marks a region as a section header
+without a level, so by default every heading is level 1. `heading_hierarchy`
+is Docling's own `HeadingHierarchyOptions.enabled`, which infers levels from
+bookmarks, numbering and font style; the levels pass through `map_label`, so
+the heading path the chunkers read nests.
+
 **Boxes** use pdfium's convention: (left, bottom, right, top) in PDF points,
 y growing upwards.
 
@@ -115,6 +121,17 @@ class DoclingConfig(BaseModel):
             "invisible is hidden text. notes are author or speaker notes."
         ),
         json_schema_extra={"x-always": ["body"]},
+    )
+    heading_hierarchy: bool = Field(
+        default=False,
+        description=(
+            "Docling's HeadingHierarchyOptions.enabled, set through "
+            "PdfPipelineOptions.heading_hierarchy_options. "
+            "Docling infers heading levels from the layout, so a role sits under "
+            "Experience instead of beside it. It reads PDF bookmarks first, then "
+            "numbering such as 1. and 1.1, then font size and style. When off, "
+            "every heading is at the same level."
+        ),
     )
 
     @field_validator("content_layers")
@@ -235,24 +252,50 @@ def _version(package: str) -> str:
 _CONVERTERS: dict[tuple, Any] = {}
 
 
+def converter_key(config: DoclingConfig) -> tuple:
+    """The options that change the constructed converter."""
+    return (
+        config.do_ocr,
+        config.do_table_structure,
+        config.table_mode,
+        config.heading_hierarchy,
+    )
+
+
+def pipeline_options(config: DoclingConfig) -> Any:
+    """Docling's PdfPipelineOptions for this config.
+
+    Docling's style signal for heading levels reads the parsed pages, which it
+    drops early unless `generate_parsed_pages` is set, so the hierarchy turns
+    that on too.
+    """
+    from docling.datamodel.pipeline_options import (
+        HeadingHierarchyOptions,
+        PdfPipelineOptions,
+        TableFormerMode,
+        TableStructureOptions,
+    )
+
+    return PdfPipelineOptions(
+        do_ocr=config.do_ocr,
+        do_table_structure=config.do_table_structure,
+        table_structure_options=TableStructureOptions(
+            mode=TableFormerMode(config.table_mode)
+        ),
+        heading_hierarchy_options=HeadingHierarchyOptions(
+            enabled=config.heading_hierarchy
+        ),
+        generate_parsed_pages=config.heading_hierarchy,
+    )
+
+
 def _converter(config: DoclingConfig) -> Any:
-    key = (config.do_ocr, config.do_table_structure, config.table_mode)
+    key = converter_key(config)
     if key not in _CONVERTERS:
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import (
-            PdfPipelineOptions,
-            TableFormerMode,
-            TableStructureOptions,
-        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
-        options = PdfPipelineOptions(
-            do_ocr=config.do_ocr,
-            do_table_structure=config.do_table_structure,
-            table_structure_options=TableStructureOptions(
-                mode=TableFormerMode(config.table_mode)
-            ),
-        )
+        options = pipeline_options(config)
         _CONVERTERS[key] = DocumentConverter(
             format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
         )
@@ -266,7 +309,7 @@ class DoclingParse(Transform[DoclingConfig]):
     name = "docling"
     #: Headings come out as heading elements, which `markdown_header` prefers.
     provides = {"structure": ["headings"]}
-    version = "3"
+    version = "4"
     stage = Stage.PARSE
     inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
     output = ArtifactType.PARSED_DOC
@@ -310,8 +353,19 @@ class DoclingParse(Transform[DoclingConfig]):
         else:
             named = "; ".join(f"{name}, {LAYERS[name]}" for name in config.content_layers)
             layers = f"These layers are read into the text: {named}."
+        if config.heading_hierarchy:
+            levels = (
+                "heading_hierarchy is on, so Docling infers heading levels from "
+                "bookmarks, numbering and font style, and a section's headings "
+                "nest under it."
+            )
+        else:
+            levels = (
+                "heading_hierarchy is off, so every heading Docling finds is at "
+                "the same level."
+            )
         return Explanation(
-            settings=f"{ocr} {tables} {layers}",
+            settings=f"{ocr} {tables} {layers} {levels}",
             tradeoff=(
                 "The first run downloads the layout models, and each page takes "
                 "seconds rather than milliseconds, but you get headings, which "

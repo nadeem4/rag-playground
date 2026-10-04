@@ -42,7 +42,7 @@ def test_registered_under_the_parse_stage():
     assert cls.output is ArtifactType.PARSED_DOC
     assert set(cls.inputs) == {"file"}
     assert cls.inputs["file"].type is ArtifactType.RAW_FILE
-    assert cls.version == "3"
+    assert cls.version == "4"
     assert cls.deterministic is True
 
 
@@ -52,6 +52,7 @@ def test_config_defaults():
     assert cfg.do_table_structure is True
     assert cfg.table_mode == "fast"
     assert cfg.content_layers == ["body"]
+    assert cfg.heading_hierarchy is False
     assert "keep_furniture" not in type(cfg).model_fields
 
 
@@ -73,6 +74,41 @@ def test_every_option_names_its_docling_parameter():
     assert fields["table_mode"].description.startswith(
         "Docling's TableStructureOptions.mode, fast or accurate. "
     )
+    assert fields["heading_hierarchy"].description.startswith(
+        "Docling's HeadingHierarchyOptions.enabled, "
+        "set through PdfPipelineOptions.heading_hierarchy_options. "
+    )
+
+
+def test_heading_hierarchy_is_in_the_schema_with_its_plain_meaning():
+    schema = registry.get(Stage.PARSE, "docling").config_model.model_json_schema()
+    prop = schema["properties"]["heading_hierarchy"]
+    assert prop["type"] == "boolean"
+    assert prop["default"] is False
+    assert (
+        "Docling infers heading levels from the layout, so a role sits under "
+        "Experience instead of beside it."
+    ) in prop["description"]
+
+
+def test_converter_key_changes_with_the_heading_hierarchy():
+    model = registry.get(Stage.PARSE, "docling").config_model
+    off = docling_plugin.converter_key(model())
+    on = docling_plugin.converter_key(model(heading_hierarchy=True))
+    assert off != on
+
+
+def test_pipeline_options_pass_the_heading_hierarchy_to_docling():
+    model = registry.get(Stage.PARSE, "docling").config_model
+    off = docling_plugin.pipeline_options(model())
+    on = docling_plugin.pipeline_options(model(heading_hierarchy=True))
+    assert off.heading_hierarchy_options.enabled is False
+    assert on.heading_hierarchy_options.enabled is True
+    # Docling's style signal reads the parsed pages, so they are kept when on.
+    assert on.generate_parsed_pages is True
+    assert off.generate_parsed_pages is False
+    # The other options still reach Docling.
+    assert on.do_ocr is False and on.do_table_structure is True
 
 
 def test_content_layers_is_labelled_and_described_in_doclings_terms():
@@ -204,6 +240,22 @@ def test_unknown_labels_fall_back_to_paragraph():
 def test_enum_labels_are_accepted():
     label = SimpleNamespace(value="section_header")
     assert map_label(label, 1) == ("heading", 2)
+
+
+def test_nested_section_headers_give_a_two_level_heading_path():
+    """With the hierarchy on, Docling sets SectionHeaderItem.level; the levels
+    carry through to the heading path the chunkers read."""
+    from plugins.chunk import DocView
+
+    doc = _FakeDoc([
+        _item("section_header", "EXPERIENCE", level=1),
+        _item("section_header", "A role", level=2),
+        _item("text", "Built the thing."),
+    ])
+    parsed = ParsedDoc(elements=elements_from_document(doc)).model_dump(mode="json")
+    view = DocView.of(parsed)
+    body = next(e for e in view.rendered if e.type == "paragraph")
+    assert view.heading_path_at(body.md_start) == ["EXPERIENCE", "A role"]
 
 
 # -- bbox conversion ----------------------------------------------------------
@@ -434,6 +486,16 @@ def test_explain_names_the_layers_read():
         "furniture, page headers and footers; background, watermarks."
     ) in more
     for text in (default, more):
+        assert chr(0x2014) not in text and chr(0x2013) not in text
+
+
+def test_explain_names_the_heading_hierarchy():
+    cls = registry.get(Stage.PARSE, "docling")
+    off = cls().explain(cls.config_model()).settings
+    on = cls().explain(cls.config_model(heading_hierarchy=True)).settings
+    assert "heading_hierarchy is off" in off
+    assert "heading_hierarchy is on" in on
+    for text in (off, on):
         assert chr(0x2014) not in text and chr(0x2013) not in text
 
 

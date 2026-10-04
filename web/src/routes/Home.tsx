@@ -126,10 +126,10 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
             setting and watch the answer move.
           </p>
           <div className="mt-1 flex flex-wrap gap-3">
-            <Button className="h-[44px] px-4 text-base font-semibold" busy={busy === "/build"} onClick={() => void open("/build")}>
+            <Button size={null} className="h-[44px] px-4 text-base font-semibold" busy={busy === "/build"} onClick={() => void open("/build")}>
               Try it on a sample
             </Button>
-            <Button asChild variant="outline" className="h-[44px] px-4 text-base font-semibold">
+            <Button asChild variant="outline" size={null} className="h-[44px] px-4 text-base font-semibold">
               <a href="#build">See how it works</a>
             </Button>
           </div>
@@ -176,6 +176,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                   ))}
                 </ul>
                 <Button
+                  size={null}
                   className="mt-1 h-[44px] justify-self-start px-4 text-base font-semibold"
                   busy={busy === p.href}
                   onClick={() => void open(p.href)}

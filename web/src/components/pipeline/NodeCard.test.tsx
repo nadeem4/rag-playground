@@ -218,6 +218,60 @@ describe("click to close, and scroll into view", () => {
     expect(onSelect2).not.toHaveBeenCalled()
   })
 
+  it("a closed card tints and darkens its hairline on hover; the selected card does not", () => {
+    const flat = renderCard({ selected: false })
+    expect(flat.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(["hover:bg-surface-raised", "hover:border-field-border", "transition-colors", "duration-(--dur-fast)"]),
+    )
+    expect(flat.className).not.toMatch(/hover:(shadow|scale|-?translate)/)
+    cleanup()
+    const raised = renderCard({ selected: true })
+    expect(raised.className).not.toContain("hover:bg-surface-raised")
+    expect(raised.className).not.toContain("hover:border-field-border")
+  })
+
+  it("the chevron at the end of the head says Expand when closed and Collapse when open", () => {
+    const flat = renderCard({ selected: false })
+    const expand = within(flat).getByRole("button", { name: "Expand Chunk" })
+    expect(expand.getAttribute("aria-expanded")).toBe("false")
+    expect(expand.closest("header")).not.toBeNull()
+    const icon = expand.querySelector("svg")!
+    expect(icon.getAttribute("width")).toBe("16")
+    expect(icon.getAttribute("class")).toContain("duration-(--dur-fast)")
+    expect(icon.getAttribute("class")).toContain("motion-reduce:transition-none")
+    expect(icon.getAttribute("class")).not.toContain("rotate-180")
+    expect(within(flat).queryByRole("button", { name: "Collapse Chunk" })).toBeNull()
+    cleanup()
+
+    const open = renderCard({ selected: true })
+    const collapse = within(open).getByRole("button", { name: "Collapse Chunk" })
+    expect(collapse.getAttribute("aria-expanded")).toBe("true")
+    expect(collapse.querySelector("svg")!.getAttribute("class")).toContain("rotate-180")
+  })
+
+  it("the chevron toggles the card the way the head does", () => {
+    const onSelect = vi.fn()
+    const onDeselect = vi.fn()
+    renderCard({ selected: true, onSelect, onDeselect })
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Chunk" }))
+    expect(onDeselect).toHaveBeenCalledTimes(1)
+    expect(onSelect).not.toHaveBeenCalled()
+    cleanup()
+
+    const onSelect2 = vi.fn()
+    const onDeselect2 = vi.fn()
+    renderCard({ selected: false, onSelect: onSelect2, onDeselect: onDeselect2 })
+    fireEvent.click(screen.getByRole("button", { name: "Expand Chunk" }))
+    expect(onSelect2).toHaveBeenCalledTimes(1)
+    expect(onDeselect2).not.toHaveBeenCalled()
+  })
+
+  it("the Upload card has no chevron", () => {
+    const source = initialGraph(R).nodes.find((n) => n.stage === "source")!
+    const card = renderCard({ node: source, title: "Upload", transforms: transformsFor(R, "source") })
+    expect(within(card).queryByRole("button", { name: /^(Expand|Collapse) / })).toBeNull()
+  })
+
   describe("scrolling", () => {
     const scroll = vi.fn()
     beforeEach(() => {

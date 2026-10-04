@@ -167,12 +167,6 @@ export function plainName(name: string): string {
   return strategyLabel(name)
 }
 
-/** The picker's option: the plain name, then the code name, as on the card. */
-export function transformLabel(name: string): string {
-  const plain = plainName(name)
-  return plain === name ? name : `${plain}, ${name}`
-}
-
 /** The nearest ancestor that scrolls (the column's box on desktop, `<main>` below md), or null for the window. */
 function scrollParent(el: HTMLElement): HTMLElement | null {
   for (let n = el.parentElement; n; n = n.parentElement) {
@@ -547,7 +541,7 @@ export function NodeCard(p: NodeCardProps) {
           transforms={p.transforms}
           value={p.node.transform}
           upstream={p.upstream ?? {}}
-          labelFor={transformLabel}
+          labelFor={plainName}
           info={<FieldHelp title="Transform" lesson={info?.learn?._strategy} />}
           onChange={p.onTransform}
         />

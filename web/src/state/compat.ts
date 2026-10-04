@@ -60,9 +60,3 @@ export function compatibility(candidate: TransformInfo, upstream: Record<string,
   }
   return { kind: "ok" }
 }
-
-/** The dropdown option's text: the name, and a short tag when it is not plainly usable. */
-export function optionLabel(name: string, compat: Compat): string {
-  if (compat.kind === "ok") return name
-  return `${name} · ${compat.kind === "soft" ? "falls back" : "locked"}`
-}

@@ -221,6 +221,7 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
             ref={triggerRef}
             id={id}
             type="button"
+            data-picked={value}
             disabled={disabled}
             aria-haspopup="listbox"
             aria-labelledby={`${labelledBy} ${id}`}

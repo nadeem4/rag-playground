@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { TransformInfo } from "@/api/types"
 
-import { compatibility, optionLabel } from "./compat"
+import { compatibility } from "./compat"
 
 function info(over: Partial<TransformInfo>): TransformInfo {
   return {
@@ -79,13 +79,5 @@ describe("compatibility", () => {
       fallback: "Tables are cut like paragraphs.",
     })
     expect(compatibility(both, { doc: pdfium }).kind).toBe("hard")
-  })
-})
-
-describe("optionLabel", () => {
-  it("suffixes the dropdown option by state", () => {
-    expect(optionLabel("markdown_header", { kind: "ok" })).toBe("markdown_header")
-    expect(optionLabel("markdown_header", { kind: "soft", reason: "" })).toBe("markdown_header · falls back")
-    expect(optionLabel("bm25", { kind: "hard", reason: "" })).toBe("bm25 · locked")
   })
 })

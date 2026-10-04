@@ -1,5 +1,6 @@
 import type { SampleQuestion } from "@/api/types"
 import { ordinal, type HitRowData } from "@/components/inspectors/hits"
+import { firstSentence } from "@/lib/sentence"
 
 import { goldRank } from "./Transcript"
 
@@ -10,25 +11,7 @@ import { goldRank } from "./Transcript"
  * for word. With Chat the written answer stands in, so it says nothing.
  */
 
-const MAX = 200
-
-/** Markdown line markers: headings, quotes, list bullets and numbers. */
-const MARKER = /^[ \t]*(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+|\d+[.)][ \t]+)/gm
-
-/**
- * The text up to the first `.`, `?` or `!` followed by a space or the end, or
- * up to the first line break, with leading heading lines skipped and markdown
- * line markers dropped first. At
- * most 200 characters, the ellipsis included.
- */
-export function firstSentence(text: string): string {
-  // A heading is not a sentence: skip leading heading and blank lines, unless nothing else is left.
-  const body = text.replace(/^(?:[ \t]*(?:#{1,6}[ \t].*)?(?:\r?\n|$))+/, "")
-  const t = (body.trim() ? body : text).replace(MARKER, "").trim()
-  const end = /[.?!](?=\s|$)|\n/.exec(t)
-  const s = end ? t.slice(0, end[0] === "\n" ? end.index : end.index + 1).trimEnd() : t
-  return s.length <= MAX ? s : `${s.slice(0, MAX - 1).trimEnd()}…`
-}
+export { firstSentence }
 
 /** Where a sample question's gold answer was found: the piece's rank and the answer it holds. */
 function goldFound(question: string, rows: readonly HitRowData[], questions: readonly SampleQuestion[]): { rank: number; gold: string } | null {

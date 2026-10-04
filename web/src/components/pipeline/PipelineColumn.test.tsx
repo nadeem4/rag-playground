@@ -5,6 +5,7 @@ import { ApiError } from "@/api/client"
 import { addCleaner, columnOrder, initialGraph, setTransform } from "@/state/graph"
 import { routeRunError } from "@/state/pipeline"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
+import { optionNames, optionOf } from "@/components/ui/pickerTesting"
 
 import { PipelineColumn, SWEEPABLE, type PipelineColumnProps } from "./PipelineColumn"
 
@@ -181,8 +182,8 @@ describe("PipelineColumn", () => {
       expect(shown.textContent).toBe(name)
     }
     // Chunk has three: the picker stays.
-    const picker = within(card("chunk")).getByRole("combobox", { name: "Transform" }) as HTMLSelectElement
-    expect(picker.options).toHaveLength(3)
+    const picker = within(card("chunk")).getByRole("button", { name: /^Transform/ })
+    expect(optionNames(picker)).toHaveLength(3)
   })
 
   describe("elapsed time while running", () => {
@@ -254,7 +255,8 @@ describe("locked transforms", () => {
   it("shows nothing extra on a transform that asks nothing of its upstream", () => {
     setup()
     const chunk = within(card("chunk"))
-    expect(chunk.getByRole("option", { name: "Recursive (natural breaks), recursive_character" })).toBeTruthy()
+    expect(optionOf(chunk.getByRole("button", { name: /^Transform/ }), "Recursive (natural breaks)").textContent).not.toMatch(/Falls back|Cannot run/)
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" })
     expect(chunk.queryByRole("status")).toBeNull()
     expect(chunk.queryByRole("alert")).toBeNull()
   })
@@ -262,11 +264,12 @@ describe("locked transforms", () => {
   it("tags a soft lock in the dropdown and says why, but keeps it selectable and runnable", () => {
     setup({ graph: setTransform(initialGraph(R), "chunk", "markdown_header", R) })
     const chunk = within(card("chunk"))
-    const option = chunk.getByRole("option", { name: "By heading, markdown_header · falls back" }) as HTMLOptionElement
-    expect(option.disabled).toBe(false)
     expect(chunk.getByRole("status").textContent).toBe(
       "Needs headings from the parse step. pdfium does not find any, so the whole document is treated as one section and cut by size.",
     )
     expect(chunk.getByRole("button", { name: "Run" }).hasAttribute("disabled")).toBe(false)
+    const option = optionOf(chunk.getByRole("button", { name: /^Transform/ }), "By heading")
+    expect(option.textContent).toContain("Falls back")
+    expect(option.getAttribute("aria-disabled")).toBe("false")
   })
 })

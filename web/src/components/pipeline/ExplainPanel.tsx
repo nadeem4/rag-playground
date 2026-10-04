@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Popover } from "radix-ui"
 
 import type { Stage } from "@/api/types"
@@ -8,8 +8,8 @@ import { postsFor } from "@/learn/posts"
 
 /**
  * The pop-over beside a card (option B): what the step is for, how the chosen
- * transform works, what it will do with the card's current settings, and the
- * trade-off. Rendered inside the card's Popover.Root; Radix supplies Escape,
+ * transform works, what it will do with the card's current settings, the
+ * trade-off, the deep-dive posts, and last the stage's lesson when it has one. Rendered inside the card's Popover.Root; Radix supplies Escape,
  * outside-click dismissal and focus return to the info button.
  */
 
@@ -21,6 +21,9 @@ export interface ExplainPanelProps {
   what?: string
   summary?: string
   explain?: ExplainState
+  /** Plan I-22: the stage's lesson paragraphs, and their heading. */
+  lesson?: string[]
+  lessonTitle?: string
   /** The card: interacting with it keeps the pop-over open, so settings can be edited beside it. */
   anchor: () => HTMLElement | null
 }
@@ -36,9 +39,27 @@ function Part({ label, children }: { label: ReactNode; children: ReactNode }) {
 
 const BODY = "m-0 text-sm leading-[1.55] text-fg-muted"
 
-export function ExplainPanel({ title, stage, transform, what, summary, explain, anchor }: ExplainPanelProps) {
+/** Tailwind's `sm` breakpoint: below it there is no room beside a card, so the pop-over opens below. */
+const WIDE = "(min-width: 640px)"
+
+function useWide(): boolean {
+  const query = () => (typeof window.matchMedia === "function" ? window.matchMedia(WIDE) : null)
+  const [wide, setWide] = useState(() => query()?.matches ?? true)
+  useEffect(() => {
+    const mq = query()
+    if (!mq) return
+    const update = () => setWide(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+  return wide
+}
+
+export function ExplainPanel({ title, stage, transform, what, summary, explain, lesson, lessonTitle, anchor }: ExplainPanelProps) {
   const data = explain?.data
   const posts = postsFor(stage)
+  const wide = useWide()
   const keepOpen = (e: Event) => {
     const card = anchor()
     if (card && e.target instanceof Node && card.contains(e.target)) e.preventDefault()
@@ -46,7 +67,7 @@ export function ExplainPanel({ title, stage, transform, what, summary, explain, 
   return (
     <Popover.Portal>
       <Popover.Content
-        side="right"
+        side={wide ? "right" : "bottom"}
         align="start"
         sideOffset={16}
         collisionPadding={16}
@@ -59,7 +80,7 @@ export function ExplainPanel({ title, stage, transform, what, summary, explain, 
           const active = document.activeElement
           if (active && active !== document.body) e.preventDefault()
         }}
-        className="z-10 flex w-[400px] max-w-[calc(100vw-32px)] flex-col gap-3 rounded-panel border border-fg-muted bg-surface p-3 text-fg"
+        className="z-10 flex max-h-(--radix-popover-content-available-height) w-[400px] max-w-[calc(100vw-32px)] flex-col overflow-y-auto gap-3 rounded-panel border border-fg-muted bg-surface p-3 text-fg"
       >
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">{title}</h3>
@@ -111,6 +132,15 @@ export function ExplainPanel({ title, stage, transform, what, summary, explain, 
                 </li>
               ))}
             </ul>
+          </Part>
+        ) : null}
+        {lesson?.length ? (
+          <Part label={lessonTitle ?? `What does ${title} do?`}>
+            {lesson.map((p) => (
+              <p key={p} className={BODY}>
+                {p}
+              </p>
+            ))}
           </Part>
         ) : null}
       </Popover.Content>

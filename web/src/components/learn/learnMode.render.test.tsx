@@ -36,17 +36,14 @@ afterEach(() => {
 })
 
 describe("SchemaForm with lessons", () => {
-  it("shows each field's hint under it, and Read more opens its paragraphs", () => {
+  it("puts each field's lesson behind its info button, not under the control", async () => {
     render(<SchemaForm schema={rc.config_schema} value={{ chunk_size: 1000, chunk_overlap: 200 }} onChange={() => {}} learn={LEARN} />)
-    expect(screen.getByText(LEARN.chunk_size.hint)).toBeTruthy()
-    expect(screen.getByText(LEARN.chunk_overlap.hint)).toBeTruthy()
-    const more = screen.getAllByText("Read more")
-    expect(more).toHaveLength(2)
-    const details = more[0].closest("details")!
-    expect(details.open).toBe(false)
-    fireEvent.click(more[0])
-    expect(details.open).toBe(true)
-    expect(within(details).getByText("Four characters are roughly one token.")).toBeTruthy()
+    expect(screen.queryByText(LEARN.chunk_overlap.hint)).toBeNull()
+    expect(screen.queryByText("Read more")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "About Chunk Overlap" }))
+    const dialog = await screen.findByRole("dialog", { name: "Chunk Overlap" })
+    expect(within(dialog).getByText(LEARN.chunk_overlap.hint)).toBeTruthy()
+    expect(within(dialog).getByText("It helps at the border.")).toBeTruthy()
   })
 
   it("shows nothing extra without lessons", () => {
@@ -79,13 +76,33 @@ function column() {
 const chunkCard = () => document.querySelector('[data-node-id="chunk"]') as HTMLElement
 
 describe("Build lessons", () => {
-  it("the Chunk card opens with its stage lesson, the strategy hint and each setting's hint", async () => {
+  it("the Chunk card body is only fields: no stage lesson and no strategy hint inline", async () => {
     column()
     const card = chunkCard()
-    await waitFor(() => expect(within(card).getByText(LESSON[0])).toBeTruthy())
-    const lesson = within(card).getByText("What is chunking?").closest("details")!
-    expect(lesson.open).toBe(true)
-    expect(within(card).getByText(LEARN._strategy.hint)).toBeTruthy()
-    expect(within(card).getByText(LEARN.chunk_size.hint)).toBeTruthy()
+    fireEvent.click(within(card).getByRole("button", { name: "Explain the Chunk step" }))
+    await screen.findByRole("dialog", { name: "About the Chunk step" })
+    expect(within(card).queryByText(LESSON[0])).toBeNull()
+    expect(within(card).queryByText("What is chunking?")).toBeNull()
+    expect(within(card).queryByText(LEARN._strategy.hint)).toBeNull()
+    expect(within(card).queryByText("Read more")).toBeNull()
+    expect(card.querySelector("[data-learn]")).toBeNull()
+  })
+
+  it("the stage lesson is the last part of the Chunk card's explain pop-over", async () => {
+    column()
+    fireEvent.click(within(chunkCard()).getByRole("button", { name: "Explain the Chunk step" }))
+    const dialog = await screen.findByRole("dialog", { name: "About the Chunk step" })
+    await waitFor(() => expect(within(dialog).getByText(LESSON[0])).toBeTruthy())
+    const parts = within(dialog).getAllByRole("region")
+    expect(parts.at(-1)!.getAttribute("aria-label")).toBe("What is chunking?")
+    expect(within(parts.at(-1)!).getByText(LESSON[1])).toBeTruthy()
+  })
+
+  it("the strategy lesson opens behind the Transform field's info button", async () => {
+    column()
+    fireEvent.click(within(chunkCard()).getByRole("button", { name: "About Transform" }))
+    const dialog = await screen.findByRole("dialog", { name: "Transform" })
+    expect(within(dialog).getByText(LEARN._strategy.hint)).toBeTruthy()
+    expect(within(dialog).getByText("It first tries to cut between paragraphs.")).toBeTruthy()
   })
 })

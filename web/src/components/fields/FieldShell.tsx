@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { Label } from "@/components/ui/label"
 import type { FieldKind } from "./schema"
 
-/** Ids a control needs to point its `aria-describedby` at the help and error lines. */
+/** Ids a control needs to point its `aria-describedby` at the hint and error lines. */
 export interface FieldIds {
   control: string
   help: string
@@ -16,16 +16,20 @@ export const fieldIds = (base: string): FieldIds => ({
   error: `${base}-error`,
 })
 
-/** `aria-describedby` for a control: help and error, only the ones rendered. */
-export function describedBy(ids: FieldIds, hasHelp: boolean, errors: string[]) {
-  return [hasHelp && ids.help, errors.length > 0 && ids.error].filter(Boolean).join(" ") || undefined
+/**
+ * `aria-describedby` for a control: the visible hint and error lines, only the
+ * ones rendered. The description behind the info button is not among them:
+ * the label and the button name the field, and the pop-over is read when opened.
+ */
+export function describedBy(ids: FieldIds, hasHint: boolean, errors: string[]) {
+  return [hasHint && ids.help, errors.length > 0 && ids.error].filter(Boolean).join(" ") || undefined
 }
 
 /** Descriptions are Python docstrings: render `backticked` names as mono. */
-export function Help({ id, text }: { id: string; text: string }) {
+export function Help({ id, text, className = "text-xs text-fg-muted" }: { id?: string; text: string; className?: string }) {
   const parts = text.split(/`([^`]+)`/)
   return (
-    <p id={id} className="text-xs text-fg-muted">
+    <p id={id} className={className}>
       {parts.map((p, i) =>
         i % 2 ? (
           <code key={i} className="font-mono">
@@ -61,23 +65,29 @@ interface ShellProps {
   kind: FieldKind
   ids: FieldIds
   label: string
-  help?: string
+  /** The info button beside the label (FieldHelp). */
+  info?: ReactNode
+  /** The one visible line under the control: a unit hint, or the raw JSON note. */
+  hint?: string
   errors: string[]
   /** Right side of the label row: range hint, unset toggle, raw JSON tag. */
   aside?: ReactNode
   children: ReactNode
 }
 
-/** Label above, control, help, then errors below. One block per field. */
-export function FieldShell({ kind, ids, label, help, errors, aside, children }: ShellProps) {
+/** Label and info button above, control, hint, then errors below. One block per field. */
+export function FieldShell({ kind, ids, label, info, hint, errors, aside, children }: ShellProps) {
   return (
     <div data-field-kind={kind} className="flex min-w-0 flex-col gap-1">
       <div className="flex min-h-[20px] items-center justify-between gap-2">
-        <Label htmlFor={ids.control}>{label}</Label>
+        <div className="flex min-w-0 items-center gap-1">
+          <Label htmlFor={ids.control}>{label}</Label>
+          {info}
+        </div>
         {aside ? <div className="flex items-center gap-3">{aside}</div> : null}
       </div>
       {children}
-      {help ? <Help id={ids.help} text={help} /> : null}
+      {hint ? <Help id={ids.help} text={hint} /> : null}
       <Errors id={ids.error} errors={errors} />
     </div>
   )

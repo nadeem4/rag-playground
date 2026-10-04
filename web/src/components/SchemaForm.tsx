@@ -5,7 +5,9 @@ import { BooleanField } from "@/components/fields/BooleanField"
 import { ChoiceListField } from "@/components/fields/ChoiceListField"
 import { ConstField } from "@/components/fields/ConstField"
 import { EnumField } from "@/components/fields/EnumField"
+import { FieldHelp } from "@/components/fields/FieldHelp"
 import { describedBy, Errors, FieldShell, fieldIds, Help, UnsetToggle } from "@/components/fields/FieldShell"
+import { hintFor } from "@/components/fields/hint"
 import { JsonField } from "@/components/fields/JsonField"
 import { NumberField } from "@/components/fields/NumberField"
 import {
@@ -21,7 +23,6 @@ import {
 } from "@/components/fields/schema"
 import { StringListField } from "@/components/fields/StringListField"
 import { TextField } from "@/components/fields/TextField"
-import { LearnHint } from "@/components/learn/LearnHint"
 import type { ControlProps } from "@/components/fields/types"
 
 /**
@@ -42,8 +43,8 @@ export interface SchemaFormProps {
   onChange: (value: Record<string, unknown>) => void
   errors?: FieldErrors
   /**
-   * Lessons (plan I-22), keyed by field path. A field with one
-   * shows its hint and a "Read more" under it. Any plugin that ships `learn`
+   * Lessons (plan I-22), keyed by field path. A field with one shows it in
+   * its info pop-over, after the description. Any plugin that ships `learn`
    * gets this; absent, the form is unchanged.
    */
   learn?: Record<string, Lesson>
@@ -135,7 +136,7 @@ function Fields({ schema, value, onValue, ...rest }: FieldsProps) {
       {Object.entries(schema.properties ?? {})
         .filter(([, prop]) => isShown(prop, value))
         .map(([key, prop]) => (
-        <Property
+        <Field
           key={key}
           name={key}
           prop={prop}
@@ -148,26 +149,14 @@ function Fields({ schema, value, onValue, ...rest }: FieldsProps) {
   )
 }
 
-interface PropertyProps extends Omit<FieldsProps, "schema" | "value" | "onValue"> {
+interface FieldProps extends Omit<FieldsProps, "schema" | "value" | "onValue"> {
   name: string
   prop: JsonSchema
   value: unknown
   onValue: (v: unknown) => void
 }
 
-function Property(props: PropertyProps) {
-  const lesson = props.learn?.[[...props.path, props.name].join(".")]
-  const field = <Field {...props} />
-  if (!lesson) return field
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      {field}
-      <LearnHint lesson={lesson} />
-    </div>
-  )
-}
-
-function Field({ name, prop, value, onValue, root, path, depth, errors, base, learn, titles }: PropertyProps) {
+function Field({ name, prop, value, onValue, root, path, depth, errors, base, learn, titles }: FieldProps) {
   const f = describeField(prop, root)
   const at = [...path, name]
   const key = at.join(".")
@@ -176,7 +165,12 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
   const own = errors[key] ?? []
   const v = value === undefined ? f.schema.default : value
   const isNull = f.nullable && v === null
-  const help = f.schema.description
+  // The description and any lesson open behind the info button; only a unit or range hint stays in view.
+  // A field with no description but a lesson (chunk_size) takes its hint from the lesson's first line.
+  const description = f.schema.description
+  const lesson = learn?.[key]
+  const info = <FieldHelp title={label} text={description} lesson={lesson} />
+  const hint = description ? hintFor(description) : hintFor(lesson?.hint)
 
   const unset = f.nullable ? (
     <UnsetToggle id={`${ids.control}-unset`} isNull={isNull} onToggle={() => onValue(isNull ? seedValue(f, root) : null)} />
@@ -186,7 +180,6 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
     const inner = isPlainObject(v) ? v : defaultsFor(f.schema, root)
     const body = (
       <>
-        {help ? <Help id={ids.help} text={help} /> : null}
         {unset}
         <Errors id={ids.error} errors={own} />
         {isNull ? null : (
@@ -214,6 +207,7 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
           </summary>
           <fieldset data-field-kind="object" data-depth={depth + 1} className="m-0 flex min-w-0 flex-col gap-2 border-0 border-t border-hairline p-2">
             <legend className="sr-only">{label}</legend>
+            {description || lesson ? <div className="flex justify-end">{info}</div> : null}
             {body}
           </fieldset>
         </details>
@@ -221,19 +215,23 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
     }
     return (
       <fieldset data-field-kind="object" data-depth={depth + 1} className="m-0 flex min-w-0 flex-col gap-2 border-0 border-l border-hairline p-0 pl-3">
-        <legend className="mb-2 p-0 text-sm font-semibold">{label}</legend>
+        <legend className="mb-2 flex items-center gap-1 p-0 text-sm font-semibold">
+          {label}
+          {info}
+        </legend>
         {body}
       </fieldset>
     )
   }
 
+  const kind = f.kind
   const control = {
     f,
     id: ids.control,
     value: v,
     disabled: isNull,
     invalid: own.length > 0,
-    describedBy: describedBy(ids, Boolean(help), own),
+    describedBy: describedBy(ids, Boolean(kind === "json" || hint), own),
     onChange: onValue,
   }
 
@@ -241,13 +239,16 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
     return (
       <div data-field-kind="boolean" className="flex min-w-0 flex-col gap-1">
         <div className="flex min-h-[20px] items-center justify-between gap-2">
-          <label htmlFor={ids.control} className="flex items-center gap-2 text-sm font-medium text-fg select-none">
-            <BooleanField {...control} />
-            {label}
-          </label>
+          <div className="flex min-w-0 items-center gap-1">
+            <label htmlFor={ids.control} className="flex items-center gap-2 text-sm font-medium text-fg select-none">
+              <BooleanField {...control} />
+              {label}
+            </label>
+            {info}
+          </div>
           {unset}
         </div>
-        {help ? <Help id={ids.help} text={help} /> : null}
+        {hint ? <Help id={ids.help} text={hint} /> : null}
         <Errors id={ids.error} errors={own} />
       </div>
     )
@@ -257,16 +258,18 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
     // A group of checkboxes is named by a legend, not a label pointing at one input.
     return (
       <fieldset data-field-kind="choices" className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
-        <legend className="mb-1 p-0 text-sm font-medium text-fg">{label}</legend>
+        <legend className="mb-1 flex items-center gap-1 p-0 text-sm font-medium text-fg">
+          {label}
+          {info}
+        </legend>
         {unset}
         <ChoiceListField {...control} />
-        {help ? <Help id={ids.help} text={help} /> : null}
+        {hint ? <Help id={ids.help} text={hint} /> : null}
         <Errors id={ids.error} errors={own} />
       </fieldset>
     )
   }
 
-  const kind = f.kind
   // A single-value Literal offers no choice, so it is not drawn as a control.
   const Control = kind === "enum" && f.options.length === 1 ? ConstField : (CONTROLS[kind] ?? JsonField)
   const range = f.kind === "integer" || f.kind === "number" ? rangeHint(f.schema) : null
@@ -285,7 +288,8 @@ function Field({ name, prop, value, onValue, root, path, depth, errors, base, le
       kind={kind}
       ids={ids}
       label={label}
-      help={kind === "json" ? (help ? `${help} ` : "") + "No form control for this shape. Edit it as JSON." : help}
+      info={info}
+      hint={kind === "json" ? "No form control for this shape. Edit it as JSON." : (hint ?? undefined)}
       errors={own}
       aside={aside}
     >

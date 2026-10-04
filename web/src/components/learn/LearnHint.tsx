@@ -1,7 +1,7 @@
 import type { Lesson } from "@/api/types"
 
 /**
- * Under a field or a strategy on Build: the plugin's one-sentence hint, and
+ * Under a field or a strategy in a lesson page: the plugin's one-sentence hint, and
  * a "Read more" that opens its longer paragraphs (plan I-22).
  */
 export function LearnHint({ lesson }: { lesson: Lesson }) {
@@ -24,18 +24,3 @@ export function LearnHint({ lesson }: { lesson: Lesson }) {
   )
 }
 
-/** The stage lesson at the top of a card: open by default, folds away. */
-export function StageLesson({ title, paragraphs }: { title: string; paragraphs: string[] }) {
-  return (
-    <details open data-learn="" className="min-w-0 rounded-panel bg-surface-elevated p-3 text-sm" onClick={(e) => e.stopPropagation()}>
-      <summary className="cursor-pointer font-semibold select-none">{title}</summary>
-      <div className="mt-2 flex max-w-[68ch] flex-col gap-2">
-        {paragraphs.map((p) => (
-          <p key={p} className="m-0">
-            {p}
-          </p>
-        ))}
-      </div>
-    </details>
-  )
-}

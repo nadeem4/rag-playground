@@ -584,3 +584,17 @@ describe("the stuck head", () => {
     }
   })
 })
+
+describe("the card body is only fields", () => {
+  it("a Chunk card with a stage lesson and a strategy lesson shows neither inline", () => {
+    const transforms = transformsFor(R, "chunk").map((t) =>
+      t.name === chunkNode.transform ? { ...t, learn: { _strategy: { hint: "Cuts at natural places.", more: ["Paragraphs first."] } } } : t,
+    )
+    const card = renderCard({ selected: true, transforms, lesson: ["Chunks are small pieces of the document."] })
+    expect(card.querySelector("[data-learn]")).toBeNull()
+    expect(within(card).queryByText("What is chunking?")).toBeNull()
+    expect(within(card).queryByText("Chunks are small pieces of the document.")).toBeNull()
+    expect(within(card).queryByText("Cuts at natural places.")).toBeNull()
+    expect(within(card).getByRole("button", { name: "About Transform" })).toBeTruthy()
+  })
+})

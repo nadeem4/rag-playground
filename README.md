@@ -255,9 +255,10 @@ beside you the whole time, and ends with a recap.
 Your progress is kept in your browser, so finished lessons are marked and the page offers the
 next one.
 
-The **Build** page always explains itself. Each card shows what the step is for and what the
-chosen strategy does, and every setting has a one-sentence hint under it, with "Read more"
-behind each.
+The **Build** page always explains itself. Each card's info button says what the step is for
+and what the chosen strategy does, and every setting has its own info button with what it is
+and what it does. A setting counted in a unit, such as characters or tokens, also keeps a
+one-line hint under its box.
 
 ## Stages and supported strategies
 

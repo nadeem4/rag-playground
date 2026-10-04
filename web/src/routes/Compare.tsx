@@ -43,6 +43,7 @@ import {
   terminalNode,
   titleFor,
   transformsFor,
+  upstreamFor,
   upstreamOfStage,
   useStoredGraph,
   type PipelineGraph,
@@ -83,6 +84,8 @@ import {
   type ResultsMode,
   type SortKey,
 } from "@/state/compare"
+import { firstSentence } from "@/lib/sentence"
+import { compatibility } from "@/state/compat"
 import { recipeSentence } from "@/state/recipeSentence"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
@@ -634,7 +637,17 @@ function Sweep({
     mode,
     side.fit,
   )
-  const strategies = transforms.map((t) => ({ name: t.name, plain: strategyName(target.stage, t.name), gloss: GLOSS[t.name] ?? t.summary ?? "" }))
+  // Each strategy as Build's pickers show it: its summary's first sentence, and a tag when it would fall back or cannot run here.
+  const wired = upstreamFor(graph, registry, target.id)
+  const strategies = transforms.map((t) => {
+    const lock = compatibility(t, wired)
+    return {
+      name: t.name,
+      plain: strategyName(target.stage, t.name),
+      gloss: t.summary ? firstSentence(t.summary) : (GLOSS[t.name] ?? ""),
+      lock: lock.kind === "ok" ? undefined : lock,
+    }
+  })
 
   const setVariant = (key: number, v: Variant) => {
     setItems((xs) => xs.map((x) => (x.key === key ? { ...x, variant: v } : x)))

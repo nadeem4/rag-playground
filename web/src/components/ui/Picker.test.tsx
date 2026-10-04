@@ -112,8 +112,9 @@ describe("Picker, open", () => {
     expect(option(/^By heading/).textContent).toContain("Cannot run")
     expect(option(/^LLM reranker/).textContent).toContain("Needs a key")
     expect(option(/^Beta/).textContent).toContain("Edited since saved")
-    // The tags are read: they are part of each option's name.
-    expect(option(/Cannot run/).id).toBe(option(/^By heading/).id)
+    // The tags are read: they are part of each option's name, word by word.
+    expect(option(/^By heading markdown_header Cannot run Cuts at headings\.$/)).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Strategy Recursive (natural breaks) recursive_character" })).toBeTruthy()
   })
 
   it("disables a hard-locked option: it cannot be picked", () => {

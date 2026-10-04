@@ -4,6 +4,7 @@ import { canonicalPath, pageFor, routeFor } from "@/App"
 import { Home } from "@/routes/Home"
 import { Learn } from "@/routes/Learn"
 import { Lessons } from "@/routes/Lessons"
+import { Library } from "@/routes/Library"
 import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
 import { LESSONS_ENABLED } from "@/state/lessons"
@@ -51,6 +52,11 @@ describe("routes with the lessons off", () => {
   it("falls through to Home on an unknown path", () => {
     expect(pageFor("/nope", false)).toBe(Home)
     expect(pageFor("/forms", false)).toBe(Home)
+  })
+
+  it("renders Library at /library", () => {
+    expect(pageFor("/library", false)).toBe(Library)
+    expect(pageFor("/library", true)).toBe(Library)
   })
 
   it("renders the Read page at /read", () => {

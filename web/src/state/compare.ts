@@ -77,7 +77,13 @@ const NAME_PARTS: Record<string, (v: unknown) => { text: string; joined?: boolea
 }
 
 /** A setting's value in a name: on or off for a switch, the value itself otherwise. */
-const valueWord = (v: unknown) => (typeof v === "boolean" ? (v ? "on" : "off") : v === null ? "native" : typeof v === "string" ? v : JSON.stringify(v))
+/** A list in plain words, as the recipe sentence words it: "body", "body and notes", "body, notes and furniture". */
+const listWord = (xs: unknown[]) => {
+  const w = xs.map(String)
+  return w.length < 2 ? w.join("") : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`
+}
+const valueWord = (v: unknown) =>
+  typeof v === "boolean" ? (v ? "on" : "off") : v === null ? "native" : typeof v === "string" ? v : Array.isArray(v) ? listWord(v) : JSON.stringify(v)
 
 /** A strategy's plain name: Build's, or the Ask panel's on Retrieve. */
 export function strategyName(stage: Stage, transform: string): string {

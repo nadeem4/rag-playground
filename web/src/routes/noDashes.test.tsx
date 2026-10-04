@@ -126,12 +126,12 @@ describe("no em-dashes or en-dashes in visible text", () => {
     expect(visibleText()).not.toMatch(DASH)
   })
 
-  it("Compare, before a sweep", async () => {
+  it("Compare, before a run", async () => {
     storeGraph(sampleGraph(registry, SOURCE))
     serve([SOURCE])
     render(<Compare />)
-    await waitFor(() => expect(visibleText()).toMatch(/Sweep \d+ variants?/))
-    expect(visibleText()).toMatch(/Not swept yet/)
+    await waitFor(() => expect(visibleText()).toMatch(/Run \d+ recipes?/))
+    expect(visibleText()).toMatch(/Not run yet/)
     expect(visibleText()).not.toMatch(DASH)
   })
 

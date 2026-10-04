@@ -184,15 +184,20 @@ unsafe to share:
   Each sample has its own question set, so Evaluate scores the sample you loaded.
 - **Change one setting and rerun cheaply.** Results are cached by recipe, so changing the
   chunker never re-parses the PDF.
-- **Compare strategies.** On the Compare page you pick a stage, Parse, Chunk or Retrieve,
-  and it lists that stage's recipes side by side with what each one produced. The Sweep
-  button on a Build card opens Compare on that card, and Compare searches in the Retrieval
-  block of Build's Ask panel opens it on Retrieve, with the question it answers shown at the
-  top. The default Chunk sweep compares the pipeline's own size with half of it and with By
-  sentence. On a retrieval sweep each column says how its ranking differs from the baseline:
-  the same order, two places swapped, a shorter list, or how many pieces they share. Below
-  tablet width the page shows one recipe at a time. It also says how many steps were reused
-  from the cache.
+- **Compare strategies.** On the Compare page you pick a step, Parse, Chunk or Retrieve,
+  and it runs that step's recipes side by side. Once a run finishes, the page opens with a
+  sentence that says what differs, such as "Halving the size doubles the pieces, from 6 to
+  12." It says "the answer" only when the question is one of the sample's own. Each column
+  names its recipe in words, with the code name beside it, and folds its editor away behind
+  Change this recipe. A chunk column shows its numbers, the document as a bar of pieces drawn
+  to scale by tokens, and the first pieces as slips. A search column says how its ranking
+  differs from the baseline: the same order, two places swapped, a shorter list, or how many
+  pieces they share. The Sweep button on a Build card opens Compare on that card, and Compare
+  searches in the Retrieval block of Build's Ask panel opens it on Retrieve, with the question
+  it answers shown at the top. The default Chunk run compares the pipeline's own size with
+  half of it and with By sentence. Below 820 px, or when the columns do not fit, the page shows one recipe at a time. A
+  quiet line says how many steps were reused from the cache, how long the slowest step took
+  and how many recipes failed. When the server rejects a run, the page opens the recipe the error belongs to.
 - **Save and share pipelines.** Name the pipeline on Build and keep it; switch between saved
   pipelines from the bar under the Index pipeline header of the column, and edit any of them. Once a
   pipeline is saved, Copy link puts the whole configuration in a URL: whoever opens it gets the pipeline on their Build page, and if it was
@@ -202,10 +207,14 @@ unsafe to share:
   any saved pipeline you pick, asks it every question in the loaded sample's question set, and
   says how many of them found their answer, at what rank, and in which chunk. Each question
   carries the sentence in the document that answers it, so a run counts as a hit when a
-  retrieved chunk contains that sentence. A row opens to show the chunks that came back, so a
-  miss can be understood. The previous score of each pipeline in this tab is kept, so after changing one setting
-  the page reads "4 of 10, was 10 of 10" and marks the questions that changed. It needs no API
-  key.
+  retrieved chunk contains that sentence. The score reads as a sentence with the last run beside
+  it ("3 of 5 questions found the answer. The last run found 5 of 5."), and the line under it
+  names what changed when one step did ("Both misses are new since Parse changed to Fast text.").
+  One mark per question sits under the score, and pressing a mark jumps to its row. Each row says
+  its verdict in a word and why in a sentence ("Not in any of the 6 pieces that came back, so no
+  number of pieces checked would find it."). An open row shows the sentence that answers the
+  question and the top three pieces that came back, so a miss can be understood. The previous
+  score of each pipeline in this tab is kept. It needs no API key.
 - **Bring your own questions.** The bundled question sets are about the bundled samples, so
   scoring your own PDF against one of them would be meaningless. Download the template
   ([`GET /api/questions/template?format=json`](http://127.0.0.1:8000/api/questions/template?format=json),

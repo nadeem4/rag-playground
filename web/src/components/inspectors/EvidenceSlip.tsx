@@ -3,7 +3,7 @@ import { useState, type HTMLAttributes } from "react"
 import { cn } from "@/lib/utils"
 import { CHUNK_CLASSES } from "@/styles/dataClasses"
 
-import { componentKeys, findingLine, fmtScore, pages, scaleName, type HitRowData, type SlipSide } from "./hits"
+import { componentKeys, findingLine, fmtScore, pages, scaleName, stripHeadingMarks, type FindingPart, type HitRowData, type SlipSide } from "./hits"
 import { chunkSlot } from "./spans"
 
 /**
@@ -45,6 +45,10 @@ export interface EvidenceSlipProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   onShowInPdf?: () => void
   /** No finding line and no scores: the row has no rank or score worth saying. Not a tab stop. */
   bare?: boolean
+  /** The finding line to show in place of the computed one: a piece in Compare is named, not ranked. */
+  finding?: FindingPart[]
+  /** False leaves the scores out, for a row that has none (a piece in Compare). */
+  scores?: boolean
   [data: `data-${string}`]: string | number | undefined
 }
 
@@ -69,14 +73,16 @@ export function EvidenceSlip({
   retriever,
   onShowInPdf,
   bare = false,
+  finding,
+  scores: withScores = true,
   className,
   ...rest
 }: EvidenceSlipProps) {
   const notKept = side === "notKept"
   // Compact, both sides of the comparison share one anatomy: the place line has no score, and the meta line has the side's one score.
-  const parts = bare ? [] : findingLine(row, side, scaleKey, keepLimit, reranker, !compact)
+  const parts = bare ? [] : (finding ?? findingLine(row, side, scaleKey, keepLimit, reranker, !compact))
   const scores: { name: string; value: number | undefined; missed?: string }[] =
-    notKept || bare
+    notKept || bare || !withScores
       ? []
       : compact
         ? [{ name: scaleName(scaleKey), value: row.score }]
@@ -185,7 +191,7 @@ export function EvidenceSlip({
         ) : null}
         {/* Clamped, the passage flows as plain text: a kept blank line would use up a clamped line. */}
         <p data-testid="passage" className={cn("font-serif text-base leading-[1.55] break-words text-fg", clamped ? "line-clamp-2" : "whitespace-pre-line")}>
-          {row.text}
+          {stripHeadingMarks(row.text)}
         </p>
         {meta ? (
           <p data-testid="meta" className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-fg-muted">

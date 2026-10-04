@@ -4,7 +4,7 @@ import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
 import markdownJson from "@/api/fixtures/chunk_set.markdown_header.json"
 import type { ChunkSet } from "@/api/types"
 
-import { assignLanes, chunkSlot, median, overlapPairs, p95, projectSpans, type SpanChunk } from "./spans"
+import { assignLanes, chunkSlot, chunkStats, median, overlapPairs, p95, projectSpans, type SpanChunk } from "./spans"
 
 const recursive = recursiveJson as unknown as ChunkSet
 const markdown = markdownJson as unknown as ChunkSet
@@ -169,5 +169,19 @@ describe("median and p95", () => {
     expect(median([4, 1, 2, 3])).toBe(2.5)
     expect(p95([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])).toBe(19)
     expect(p95([69, 69, 75, 69, 73, 75, 37])).toBe(75)
+  })
+})
+
+describe("chunkStats", () => {
+  it("gives the numbers the chunk inspector showed for the recursive fixture", () => {
+    expect(chunkStats(recursive)).toEqual({ pieces: 6, tokens: 399, median: 67, p95: 76, overlaps: 3, uncovered: 4 })
+  })
+
+  it("gives the numbers the chunk inspector showed for the markdown_header fixture", () => {
+    expect(chunkStats(markdown)).toEqual({ pieces: 5, tokens: 388, median: 70, p95: 119, overlaps: 0, uncovered: 8 })
+  })
+
+  it("counts the whole text as left out when there are no pieces", () => {
+    expect(chunkStats({ ...markdown, chunks: [] })).toEqual({ pieces: 0, tokens: 0, median: null, p95: null, overlaps: 0, uncovered: markdown.source_text.length })
   })
 })

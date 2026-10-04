@@ -47,5 +47,9 @@ def test_stops_waiting_when_its_own_server_exits(monkeypatch, tmp_path):
         _mod.start_server(_free_port(), tmp_path)
 
 
+def test_compare_takes_start_cold_so_the_recipes_run_on_camera():
+    assert _mod.COLD_TAKES == {"compare"}
+
+
 def test_has_a_compare_clip_ready_for_the_new_page():
     assert set(_mod.CLIPS) == {"build", "compare", "evaluate"}

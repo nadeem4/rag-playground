@@ -28,13 +28,17 @@ Writes `web/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800), and a
 telling moment.
 
 `compare` shows Compare's setup cards, presses Run 3 recipes, lets the rows
-fill in and ends on the finding sentence.
+fill in and ends on the finding sentence. Its setup runs only Parse and Clean,
+and each take starts a fresh server on a copy of the data as setup left it,
+so the three chunk recipes really run on camera in both themes while the
+shared steps come from the cache.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -199,9 +203,12 @@ def evaluate_scene(page: Page, base: str, poster: Path) -> float:
 
 
 def compare_setup(page: Page, base: str) -> None:
+    """Run only the shared steps, Parse and Clean, so the recipes run on camera."""
     pick_sample(page, base, None)
-    page.goto(base + "/compare")
-    run_recipes(page)
+    page.get_by_role("button", name="Expand Clean").click()
+    clean = page.locator('[data-node-id^="clean"]')
+    clean.get_by_role("button", name="Run", exact=True).click()
+    clean.get_by_test_id("run-result").wait_for(timeout=600_000)
 
 
 def run_recipes(page: Page) -> None:
@@ -236,16 +243,46 @@ CLIPS = {
     "compare": (compare_setup, compare_scene),
     "evaluate": (evaluate_setup, evaluate_scene),
 }
+#: Clips whose takes each start from the data as setup left it, so what the
+#: scene runs is not already cached by the take before.
+COLD_TAKES = {"compare"}
 
 
-def record(browser, base: str, name: str, videos: Path) -> None:
+class Server:
+    """The one server this script starts, on `port`, with its data in `data`."""
+
+    def __init__(self, port: int, data: Path):
+        self.port = port
+        self.start(data)
+
+    def start(self, data: Path) -> None:
+        self.data = data
+        self.proc = start_server(self.port, data)
+
+    def stop(self) -> None:
+        self.proc.terminate()
+        self.proc.wait(timeout=30)
+        # On Windows the venv's python.exe is a launcher; the real server
+        # process goes with it a moment later. Wait until the port is free.
+        deadline = time.time() + 30
+        while port_answers(self.port) and time.time() < deadline:
+            time.sleep(0.2)
+
+
+def record(browser, server: Server, base: str, name: str, videos: Path) -> None:
     setup, scene = CLIPS[name]
     ctx = browser.new_context(viewport=SIZE)
     setup(ctx.new_page(), base)
     state = ctx.storage_state()
     ctx.close()
+    snapshot = server.data
 
     for theme, suffix in THEMES.items():
+        if name in COLD_TAKES:
+            server.stop()
+            take = snapshot.parent / f"{snapshot.name}-{name}-{theme}"
+            shutil.copytree(snapshot, take)
+            server.start(take)
         ctx = browser.new_context(
             viewport=SIZE, color_scheme=theme, storage_state=state, record_video_dir=str(videos), record_video_size=SIZE
         )
@@ -264,6 +301,10 @@ def record(browser, base: str, name: str, videos: Path) -> None:
             print(f"  warning: {target.name} runs {seconds:.1f} s, outside 8 to 15 s")
         if size > 1.5 * 1048576:
             print(f"  warning: {target.name} is over 1.5 MB")
+    if name in COLD_TAKES:
+        # Back to the data the later clips build on.
+        server.stop()
+        server.start(snapshot)
 
 
 def encode(raw: Path, target: Path, start: float) -> None:
@@ -295,19 +336,17 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     base = f"http://127.0.0.1:{args.port}"
     with tempfile.TemporaryDirectory() as tmp:
-        data = Path(tmp)
-        server = start_server(args.port, data)
+        server = Server(args.port, Path(tmp) / "data")
         try:
             from playwright.sync_api import sync_playwright
 
             with sync_playwright() as p:
                 browser = p.chromium.launch()
                 for name in clips:
-                    record(browser, base, name, data / "videos")
+                    record(browser, server, base, name, Path(tmp) / "videos")
                 browser.close()
         finally:
-            server.terminate()
-            server.wait(timeout=30)
+            server.stop()
 
 
 if __name__ == "__main__":

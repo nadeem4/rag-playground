@@ -8,7 +8,8 @@ import type { EvalSummary } from "@/state/evaluate"
 import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
 import { chooseDocument, resetDocumentForTests } from "@/state/document"
 import { resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
-import { readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
+import { resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
+import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
 
 import { Evaluate } from "./Evaluate"
 
@@ -458,7 +459,8 @@ describe("the upload report", () => {
 })
 
 describe("Evaluate picks a pipeline", () => {
-  const picker = () => screen.getByRole("combobox", { name: "Pipeline" }) as HTMLSelectElement
+  const picker = () => screen.getByRole("button", { name: /^Pipeline/ }) as HTMLButtonElement
+  const picked = () => picker().getAttribute("data-picked")
 
   it("lists the pipeline on Build and every saved pipeline, defaulting to the one current on Build", async () => {
     // The working copy on Build is this pipeline, unedited, so it is the default (I1).
@@ -467,9 +469,13 @@ describe("Evaluate picks a pipeline", () => {
     serve()
     storeGraph(graph)
     render(<Evaluate />)
-    await screen.findByRole("combobox", { name: "Pipeline" })
-    expect([...picker().options].map((o) => o.textContent)).toEqual(["The pipeline on Build", "Token chunks"])
-    expect(picker().value).toBe(saved.id)
+    await screen.findByRole("button", { name: /^Pipeline/ })
+    // Saved pipelines first, then the one on Build, as the approved design lists them.
+    expect(optionNames(picker())).toEqual(["Token chunks", "The pipeline on Build"])
+    expect(picked()).toBe(saved.id)
+    // Each pipeline says its steps in one line, closed and open.
+    expect(picker().textContent).toContain("Docling")
+    expect(optionOf(picker(), "Token chunks").textContent).toContain("Fixed token count")
     // The name and the filename sit in separate nodes (the filename in its own <span>), so this
     // reads the whole line rather than getByText, which cannot match text split across elements.
     expect(document.body.textContent).toMatch(/How often Token chunks finds the answer in chunking-primer\.pdf\./)
@@ -479,9 +485,9 @@ describe("Evaluate picks a pipeline", () => {
     savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))
     setCurrentId(null)
     const p = setup()
-    await screen.findByRole("combobox", { name: "Pipeline" })
-    expect(picker().value).toBe("")
-    fireEvent.change(picker(), { target: { value: readPipelines()[0].id } })
+    await screen.findByRole("button", { name: /^Pipeline/ })
+    expect(picked()).toBe("")
+    choose(picker(), "Token chunks")
     await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(p.sweeps.length).toBe(1))
@@ -493,8 +499,8 @@ describe("Evaluate picks a pipeline", () => {
     storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: "working", byId: {}, summary: { total: 10, hits: 10, averageRank: null } as EvalSummary })
     const saved = savePipeline("Token chunks", sampleGraph(registry, SOURCE))!.saved
     setup()
-    await screen.findByRole("combobox", { name: "Pipeline" })
-    expect(picker().value).toBe(saved.id)
+    await screen.findByRole("button", { name: /^Pipeline/ })
+    expect(picked()).toBe(saved.id)
     expect(screen.queryByTestId("previous")).toBeNull()
   })
 
@@ -502,9 +508,11 @@ describe("Evaluate picks a pipeline", () => {
     // A is current on Build, but Build shows it edited: the working copy has recursive chunks.
     savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))
     const p = setup()
-    await screen.findByRole("combobox", { name: "Pipeline" })
-    expect(picker().value).toBe("")
+    await screen.findByRole("button", { name: /^Pipeline/ })
+    expect(picked()).toBe("")
     expect(document.body.textContent).toMatch(/How often Token chunks \(edited\) finds the answer in chunking-primer\.pdf\./)
+    expect(optionOf(picker(), "The pipeline on Build").textContent).toContain("Edited since saved")
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" })
     await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(p.sweeps.length).toBe(1))
@@ -515,8 +523,8 @@ describe("Evaluate picks a pipeline", () => {
     const saved = savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))!.saved
     storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: saved.id, byId: {}, summary: { total: 2, hits: 1, averageRank: null } as EvalSummary })
     setup()
-    await screen.findByRole("combobox", { name: "Pipeline" })
-    expect(picker().value).toBe("")
+    await screen.findByRole("button", { name: /^Pipeline/ })
+    expect(picked()).toBe("")
     expect((await screen.findByTestId("previous")).textContent).toMatch(/found 1 of 2/)
   })
 
@@ -526,7 +534,8 @@ describe("Evaluate picks a pipeline", () => {
     const savedId = savePipeline("Token chunks", other)!.saved.id
     setCurrentId(null)
     const { sweeps } = setup()
-    fireEvent.change(await screen.findByLabelText("Pipeline"), { target: { value: savedId } })
+    choose(await screen.findByRole("button", { name: /^Pipeline/ }), "Token chunks")
+    expect(picked()).toBe(savedId)
     await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(sweeps).toHaveLength(1))
@@ -539,10 +548,10 @@ describe("Evaluate picks a pipeline", () => {
     savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))
     setCurrentId(null)
     setup()
-    await screen.findByRole("combobox", { name: "Pipeline" })
+    await screen.findByRole("button", { name: /^Pipeline/ })
     const before = picker()
     before.focus()
-    fireEvent.change(before, { target: { value: readPipelines()[0].id } })
+    choose(before, "Token chunks")
     await waitFor(() => expect(document.body.textContent).toMatch(/How often Token chunks finds/))
     expect(picker()).toBe(before)
     expect(document.activeElement).toBe(before)
@@ -552,15 +561,16 @@ describe("Evaluate picks a pipeline", () => {
     const graph = sampleGraph(registry, SOURCE)
     savePipeline("Semantic", { ...graph, nodes: graph.nodes.map((n) => (n.stage === "chunk" ? { ...n, transform: "semantic" } : n)) })
     setup()
-    await screen.findByRole("combobox", { name: "Pipeline" })
-    expect(picker().value).toBe("")
-    const option = [...picker().options].find((o) => o.textContent === "Semantic (not usable here)")
-    expect(option?.disabled).toBe(true)
+    await screen.findByRole("button", { name: /^Pipeline/ })
+    expect(picked()).toBe("")
+    const option = optionOf(picker(), "Semantic")
+    expect(option.textContent).toContain("Cannot run")
+    expect(option.getAttribute("aria-disabled")).toBe("true")
   })
 
   it("holds the pipeline still while an evaluation runs (M8)", async () => {
     setup()
-    await screen.findByRole("combobox", { name: "Pipeline" })
+    await screen.findByRole("button", { name: /^Pipeline/ })
     expect(picker().disabled).toBe(false)
     await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))

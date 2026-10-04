@@ -49,6 +49,7 @@ const FILES = [
   "components/ui/Picker.tsx",
   "components/pipeline/TransformSelect.tsx",
   "lib/sentence.ts",
+  "components/pipeline/PipelineBar.tsx",
 ]
 
 const offScale =

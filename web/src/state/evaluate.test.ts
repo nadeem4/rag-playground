@@ -12,6 +12,7 @@ import {
   metricsByTag,
   percent,
   piecesWarning,
+  pipelineLine,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
@@ -88,6 +89,12 @@ describe("the graph an evaluation runs", () => {
       { label: "Retrieve", transform: "hybrid_rrf", name: "Hybrid (RRF)" },
       { label: "Rerank", transform: "mmr", name: "MMR (variety)" },
     ])
+  })
+
+  it("says a pipeline's steps in one line, for a pipeline picker's help line", () => {
+    expect(pipelineLine(e2eSampleGraph(LIVE, SRC))).toBe(
+      "Docling, Remove duplicate blocks, Recursive (natural breaks), LanceDB, Hybrid (RRF), MMR (variety)",
+    )
   })
 })
 

@@ -81,6 +81,13 @@ export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
     }))
 }
 
+/** A pipeline's steps in one line, by their plain names: a pipeline picker's help line. */
+export function pipelineLine(g: PipelineGraph): string {
+  return pipelineSteps(g)
+    .map((s) => s.name)
+    .join(", ")
+}
+
 // ------------------------------------------------- too few pieces, a miss --
 
 /**

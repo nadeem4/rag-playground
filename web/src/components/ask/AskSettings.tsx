@@ -248,7 +248,7 @@ function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
         Reranker
       </label>
       <Picker id={`${labelId}-picker`} labelledBy={labelId} options={choices} value={node?.transform ?? ""} onChange={(v) => p.onReranker(v || null)} />
-      {p.hasKey === false && p.registry.rerank?.llm_rerank ? <p className={GLOSS}>{LLM_REASON}</p> : null}
+      {p.hasKey === false && p.registry.rerank?.llm_rerank && node?.transform !== "llm_rerank" ? <p className={GLOSS}>{LLM_REASON}</p> : null}
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}
       {node ? (
         <NodeForm node={node} registry={p.registry} errors={p.errors[node.id]} onConfig={p.onConfig} titles={{ top_k: "Keep, top k" }} primary={RERANK_PRIMARY} />

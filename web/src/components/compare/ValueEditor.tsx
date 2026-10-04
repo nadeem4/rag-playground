@@ -111,7 +111,7 @@ export function ValueEditor({
                 aria-pressed={s.name === transform}
                 disabled={s.lock?.kind === "hard"}
                 onClick={() => onPick(s.name)}
-                className={cn(OPTION_GRID, "hover:bg-muted disabled:cursor-not-allowed disabled:hover:bg-transparent", s.name === transform && "bg-accent-wash")}
+                className={cn(OPTION_GRID, "hover:bg-surface-elevated disabled:cursor-not-allowed disabled:hover:bg-transparent", s.name === transform && "bg-accent-wash")}
               >
                 <OptionFace option={{ value: s.name, name: s.plain, code: s.name, help: s.gloss || undefined, lock: s.lock }} selected={s.name === transform} />
               </button>

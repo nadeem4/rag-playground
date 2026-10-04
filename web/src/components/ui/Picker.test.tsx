@@ -228,5 +228,67 @@ describe("Picker, keyboard", () => {
     )
     const t = screen.getByRole("button", { name: /^Strategy/ }) as HTMLButtonElement
     expect(t.disabled).toBe(true)
+    fireEvent.click(t)
+    fireEvent.keyDown(t, { key: "ArrowDown" })
+    expect(screen.queryByRole("listbox")).toBeNull()
+  })
+
+  it("Escape never reaches a keydown listener on the document under it", () => {
+    const { trigger } = setup()
+    const spy = vi.fn()
+    document.addEventListener("keydown", spy)
+    try {
+      openPicker(trigger())
+      fireEvent.keyDown(listbox(), { key: "Escape" })
+      expect(screen.queryByRole("listbox")).toBeNull()
+      expect(spy.mock.calls.filter(([e]) => (e as KeyboardEvent).key === "Escape")).toHaveLength(0)
+    } finally {
+      document.removeEventListener("keydown", spy)
+    }
+  })
+
+  it("Tab and Shift+Tab close the list and leave focus to move on from the trigger", () => {
+    const { trigger } = setup()
+    for (const shiftKey of [false, true]) {
+      openPicker(trigger())
+      // Not prevented: the browser moves focus on from the trigger.
+      expect(fireEvent.keyDown(listbox(), { key: "Tab", shiftKey })).toBe(true)
+      expect(screen.queryByRole("listbox")).toBeNull()
+      expect(document.activeElement).toBe(trigger())
+    }
+  })
+
+  it("marks the keyboard-active option with an outline, apart from the selected one", () => {
+    const { trigger } = setup()
+    openPicker(trigger())
+    const selected = option(/^Recursive/)
+    // Opened on the pick: the selected option is also active, and shows it.
+    expect(selected.className).toContain("outline-primary")
+    fireEvent.keyDown(listbox(), { key: "ArrowDown" })
+    expect(option(/^By layout block/).className).toContain("outline-primary")
+    expect(option(/^Recursive/).className).not.toContain("outline-primary")
+    expect(option(/^Recursive/).className).toContain("bg-accent-wash")
+  })
+})
+
+describe("Picker, its note", () => {
+  it("the trigger is described by the note under it", () => {
+    setup("markdown_header")
+    const note = screen.getByTestId("lock-reason")
+    expect(note.id).toBeTruthy()
+    expect(screen.getByRole("button", { name: /^Strategy/ }).getAttribute("aria-describedby")).toBe(note.id)
+  })
+
+  it("has no description when there is no note", () => {
+    const { trigger } = setup()
+    expect(trigger().hasAttribute("aria-describedby")).toBe(false)
+  })
+
+  it("keeps the same alert across open and close, so it is not announced again", () => {
+    const { trigger } = setup("markdown_header")
+    const before = screen.getByRole("alert")
+    openPicker(trigger())
+    fireEvent.keyDown(listbox(), { key: "Escape" })
+    expect(screen.getByRole("alert")).toBe(before)
   })
 })

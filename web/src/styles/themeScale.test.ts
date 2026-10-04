@@ -19,6 +19,7 @@ const FILES = [
   "components/pipeline/PipelineColumn.tsx",
   "state/graph.ts",
   "routes/Compare.tsx",
+  "routes/Evaluate.tsx",
   "routes/Shell.tsx",
   "routes/useColumnsFit.ts",
   "components/ask/AskSettings.tsx",

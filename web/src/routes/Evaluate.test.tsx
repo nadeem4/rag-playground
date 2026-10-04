@@ -6,7 +6,8 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import type { GoldQuestion, QuestionSetUpload, Registry, SampleQuestion } from "@/api/types"
 import type { EvalSummary } from "@/state/evaluate"
 import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
-import { sampleGraph, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
+import { chooseDocument, resetDocumentForTests } from "@/state/document"
+import { resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
 import { readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 
 import { Evaluate } from "./Evaluate"
@@ -178,6 +179,8 @@ beforeEach(() => {
   resetAppSettingsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
+  resetStoredGraphForTests()
+  resetDocumentForTests()
   resetPipelinesForTests()
   vi.stubGlobal("EventSource", SilentEventSource)
   serve()
@@ -192,6 +195,7 @@ describe("Evaluate", () => {
   it("sends you to Build when nothing has been built", async () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByText("No pipeline to evaluate")).toBeTruthy())
+    expect(screen.queryByTestId("document-note")).toBeNull()
     expect(screen.getByRole("link", { name: "Go to Build" }).getAttribute("href")).toBe("/build")
   })
 
@@ -516,6 +520,21 @@ describe("Evaluate picks a pipeline", () => {
     expect((await screen.findByTestId("previous")).textContent).toMatch(/found 1 of 2/)
   })
 
+  it("scores a picked saved pipeline on the bar's document", async () => {
+    // The saved pipeline was built on another file; the bar (the working copy) is on SOURCE.
+    const other = setConfig(setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry), "source", { sha: OTHER_SHA, filename: "other.pdf" })
+    const savedId = savePipeline("Token chunks", other)!.saved.id
+    setCurrentId(null)
+    const { sweeps } = setup()
+    fireEvent.change(await screen.findByLabelText("Pipeline"), { target: { value: savedId } })
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(sweeps).toHaveLength(1))
+    expect(sweeps[0].graph.nodes.find((n) => n.stage === "source")!.config.sha).toBe(SOURCE.sha)
+    expect(sweeps[0].graph.nodes.find((n) => n.stage === "chunk")!.transform).toBe("token_based")
+    expect(document.body.textContent).toMatch(/How often Token chunks finds the answer in chunking-primer\.pdf\./)
+  })
+
   it("keeps the picker's own element, and so its focus, when the pipeline changes (Task 3 review)", async () => {
     savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))
     setCurrentId(null)
@@ -690,6 +709,15 @@ describe("while and after scoring", () => {
     await screen.findByTestId("summary")
   }
 
+  it("opens a fresh evaluation when the document changes", async () => {
+    await finishTwo()
+    expect(screen.getByTestId("summary")).toBeTruthy()
+    await act(() => chooseDocument({ sha: OTHER_SHA, filename: "other.pdf" }))
+    expect(screen.queryByTestId("summary")).toBeNull()
+    expect(screen.queryByText("Was found 1st")).toBeNull()
+    expect(document.body.textContent).toMatch(/finds the answer in other\.pdf/)
+  })
+
   it("draws one mark per question, and a mark opens its row and scrolls it into view", async () => {
     const scroll = vi.fn()
     Element.prototype.scrollIntoView = scroll
@@ -818,5 +846,37 @@ describe("while and after scoring", () => {
     const warning = await screen.findByTestId("pieces-warning")
     expect(warning.textContent).toBe("This pipeline makes only 3 pieces, so every question finds its answer. The score says nothing here.")
     expect(warning.getAttribute("role")).toBe("status")
+  })
+})
+
+describe("the document in the bar", () => {
+  /** Answers `GET /api/sources` with no uploads, so a file nobody has reads as missing. */
+  function noUploads() {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => (url === "/api/sources" ? Promise.resolve(new Response("[]", { status: 200 })) : base(url, init))),
+    )
+  }
+
+  it("says the document is missing and disables Evaluate", async () => {
+    serve()
+    noUploads()
+    storeGraph(sampleGraph(registry, { sha: "ef".repeat(32), filename: "NK_Resume.pdf" }))
+    render(<Evaluate />)
+    expect((await screen.findByTestId("document-note")).textContent).toContain("Pick a document in the bar above to run the evaluation.")
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(true))
+    expect(screen.getByText("Needs a document.")).toBeTruthy()
+  })
+
+  it("asks for a document when the pipeline has none, instead of No pipeline to evaluate", async () => {
+    serve()
+    noUploads()
+    storeGraph(setConfig(sampleGraph(registry, SOURCE), "source", {}))
+    render(<Evaluate />)
+    expect((await screen.findByTestId("document-note")).textContent).toBe(
+      "Pick a document in the bar above to run the evaluation.Pick a document",
+    )
+    expect(screen.queryByText("No pipeline to evaluate")).toBeNull()
   })
 })

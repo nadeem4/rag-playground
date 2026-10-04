@@ -10,7 +10,8 @@ import bm25Json from "@/api/fixtures/retrieval_result.bm25.json"
 import denseJson from "@/api/fixtures/retrieval_result.dense.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Registry } from "@/api/types"
-import { sampleGraph, storeGraph, terminalNode, transformsFor } from "@/state/graph"
+import { chooseDocument, resetDocumentForTests } from "@/state/document"
+import { resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, terminalNode, transformsFor } from "@/state/graph"
 
 import { Compare, seedVariants, VariantResult } from "./Compare"
 import { FakeResizeObserver } from "./fakeResizeObserver"
@@ -57,6 +58,8 @@ const text = () => document.body.textContent ?? ""
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
+  resetStoredGraphForTests()
+  resetDocumentForTests()
   vi.stubGlobal("EventSource", SilentEventSource)
   serve()
   storeGraph(sampleGraph(registry, SOURCE))
@@ -352,6 +355,20 @@ describe("after a run", () => {
     es.emit(seq, { event: "stream_end", status: "finished", ok: true })
   }
 
+  it("follows a document chosen on this page, and says the results are from the old one", async () => {
+    serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    await runWith({ chunk: ["a0", "a1", "a2"] })
+    await screen.findByTestId("compare-finding")
+    expect(screen.queryByTestId("document-note")).toBeNull()
+    await act(() => chooseDocument({ sha: "12".repeat(32), filename: "my-notes.pdf" }))
+    expect(text()).toContain("over my-notes.pdf")
+    expect(screen.getByTestId("document-note").textContent).toBe(
+      "The document changed to my-notes.pdf. The results below are from the old one. Run again to update them.",
+    )
+  })
+
   it("opens a Chunk run with the finding sentence, its sub line and the quiet tally, and shows each column as evidence", async () => {
     serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson })
     render(<Compare />)
@@ -507,5 +524,34 @@ describe("seedVariants", () => {
   it("keeps the old rule for Parse: the node's parser, then the others", () => {
     const parse = sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "parse")!
     expect(seedVariants(parse, transformsFor(registry, "parse")).map((x) => x.transform)).toEqual(["docling", "pdfium"])
+  })
+})
+
+describe("the document in the bar", () => {
+  it("says the document is missing and disables the run", async () => {
+    storeGraph(sampleGraph(registry, { sha: "ef".repeat(32), filename: "NK_Resume.pdf" }))
+    serve({}, { "/api/sources": [], "/api/samples": [] })
+    render(<Compare />)
+    const note = await screen.findByTestId("document-note")
+    expect(note.textContent).toContain("Pick a document in the bar above to run these recipes.")
+    expect((screen.getByRole("button", { name: "Run 3 recipes" }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText("Needs a document.")).toBeTruthy()
+  })
+
+  it("asks for a document when the pipeline has none, instead of No pipeline to compare", async () => {
+    const g = sampleGraph(registry, SOURCE)
+    storeGraph(setConfig(g, "source", {}))
+    serve({}, { "/api/sources": [], "/api/samples": [] })
+    render(<Compare />)
+    const note = await screen.findByTestId("document-note")
+    expect(note.textContent).toContain("Pick a document in the bar above to run these recipes.")
+    expect(screen.queryByText("No pipeline to compare")).toBeNull()
+    expect((screen.getByRole("button", { name: "Run 3 recipes" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("says No pipeline to compare when there is no pipeline at all", async () => {
+    window.localStorage.clear()
+    render(<Compare />)
+    expect(await screen.findByText("No pipeline to compare")).toBeTruthy()
   })
 })

@@ -10,6 +10,7 @@ import { usePayloads } from "@/api/usePayloads"
 import { useQuestionSet } from "@/api/useQuestionSet"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
+import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { EvalMetricsDetail } from "@/components/evaluate/EvalMetrics"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
@@ -41,7 +42,8 @@ import {
   type RowChange,
 } from "@/state/evaluate"
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
-import { readStoredGraph, upstreamOfStage, type PipelineGraph } from "@/state/graph"
+import { upstreamOfStage, useStoredGraph, type PipelineGraph } from "@/state/graph"
+import { documentOf, useDocument, withDocument } from "@/state/document"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { sameGraph, usableGraph, usePipelines } from "@/state/pipelines"
@@ -66,6 +68,16 @@ import { RegistryScreen } from "./Shell"
 
 export function Evaluate() {
   const reg = useRegistry()
+  if (reg.kind !== "ready") return <RegistryScreen state={reg} />
+  return <EvaluatePage registry={reg.registry} />
+}
+
+/**
+ * Reads the working graph as a store and the document from the header's bar,
+ * so a document chosen on this page opens a fresh evaluation of it, with no
+ * reload. A picked saved pipeline is scored on the bar's document too.
+ */
+function EvaluatePage({ registry }: { registry: Registry }) {
   const { pipelines, currentId } = usePipelines()
   const pickerId = useId()
   // null until the picker is used: the default follows Build (I1).
@@ -74,11 +86,10 @@ export function Evaluate() {
   const [busy, setBusy] = useState(false)
   // The header's slot for the body's two controls: set by the slot's ref callback.
   const [slot, setSlot] = useState<HTMLElement | null>(null)
-  if (reg.kind !== "ready") return <RegistryScreen state={reg} />
-  const registry = reg.registry
+  const working = useStoredGraph(registry)
+  const { doc, status } = useDocument()
   // A saved pipeline this server cannot run is listed but treated as absent (M7).
   const usable = new Map(pipelines.map((p) => [p.id, usableGraph(p, registry)]))
-  const working = readStoredGraph(registry)
   const current = pipelines.find((p) => p.id === currentId) ?? null
   const currentGraph = current ? usable.get(current.id) : null
   // The current saved pipeline is the default only while Build shows it unedited;
@@ -86,7 +97,10 @@ export function Evaluate() {
   const unedited = Boolean(currentGraph && working && sameGraph(currentGraph, working))
   const chosenId = choice ?? (unedited ? currentId! : "")
   const chosen = pipelines.find((p) => p.id === chosenId && usable.get(p.id)) ?? null
-  const graph = chosen ? usable.get(chosen.id)! : working
+  // Every page uses the bar's document: a saved pipeline is scored on it, whatever file it was saved with.
+  const saved = chosen ? usable.get(chosen.id)! : null
+  const graph = saved ? (doc ? withDocument(saved, doc) : saved) : working
+  const sha = documentOf(graph)?.sha ?? ""
   // The working copy of saved pipeline A is scored under A's key, so editing A
   // and scoring it compares against A's last score.
   const pipelineKey = chosen ? chosen.id : (currentId ?? "working")
@@ -134,15 +148,20 @@ export function Evaluate() {
             <div ref={setSlot} className="flex flex-wrap items-end gap-3" />
           </div>
         </header>
-        {/* Keyed by what is scored, not by the score key: an edited A and A share a key but not a graph. */}
-        <EvaluateBody
-          key={chosen ? chosen.id : "working"}
-          graph={graph}
-          pipelineKey={pipelineKey}
-          registry={registry}
-          onBusy={setBusy}
-          slot={slot}
-        />
+        {graph ? <DocumentNote action="run the evaluation" /> : null}
+        {/* Keyed by what is scored, not by the score key: an edited A and A share a key but not a graph.
+            A new document opens a fresh body: its own question set and its own last run. */}
+        {graph && !sha ? null : (
+          <EvaluateBody
+            key={`${chosen ? chosen.id : "working"}:${sha}`}
+            graph={graph}
+            pipelineKey={pipelineKey}
+            registry={registry}
+            onBusy={setBusy}
+            slot={slot}
+            needsDocument={needsDocument(status)}
+          />
+        )}
       </div>
     </main>
   )
@@ -160,12 +179,15 @@ function EvaluateBody({
   registry,
   onBusy,
   slot,
+  needsDocument,
 }: {
   graph: PipelineGraph | null
   pipelineKey: string
   registry: Registry
   onBusy: (busy: boolean) => void
   slot: HTMLElement | null
+  /** The bar's document is missing or not chosen: the run button waits for one. */
+  needsDocument: boolean
 }) {
   const source = graph?.nodes.find((n) => n.stage === "source")
   const sourceSha = String(source?.config.sha ?? "")
@@ -174,7 +196,7 @@ function EvaluateBody({
   if (!graph || !sourceSha || !query || !useCase) {
     return (
       <Blocked title="No pipeline to evaluate">
-        Build a pipeline with a file first, then come back here to score what it finds.
+        Build a pipeline first, then come back here to score what it finds.
       </Blocked>
     )
   }
@@ -202,6 +224,7 @@ function EvaluateBody({
       pipelineKey={pipelineKey}
       onBusy={onBusy}
       slot={slot}
+      needsDocument={needsDocument}
     />
   )
 }
@@ -240,6 +263,7 @@ function Evaluation({
   pipelineKey,
   onBusy,
   slot,
+  needsDocument,
 }: {
   registry: Registry
   graph: PipelineGraph
@@ -250,6 +274,8 @@ function Evaluation({
   onBusy: (busy: boolean) => void
   /** The header's slot, where Pieces checked and the run button go. */
   slot: HTMLElement | null
+  /** The bar's document is missing or not chosen: the run button waits for one. */
+  needsDocument: boolean
 }) {
   const topKId = useId()
   const questionsId = useId()
@@ -447,7 +473,8 @@ function Evaluation({
           Cancel
         </Button>
       ) : null}
-      <Button disabled={busy || !questions?.length} onClick={() => void evaluate()}>
+      {needsDocument ? <span className="self-center text-xs text-fg-muted">Needs a document.</span> : null}
+      <Button disabled={busy || !questions?.length || needsDocument} onClick={() => void evaluate()}>
         {busy ? "Evaluating" : runId ? "Evaluate again" : "Evaluate"}
       </Button>
     </>

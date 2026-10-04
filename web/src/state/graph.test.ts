@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { act, renderHook } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   addCleaner,
@@ -31,6 +32,10 @@ import {
   titleFor,
   upstreamFor,
   upstreamOfStage,
+  readStoredGraph,
+  resetStoredGraphForTests,
+  storeGraph,
+  useStoredGraph,
   type PipelineGraph,
 } from "./graph"
 import liveRegistry from "@/api/fixtures/registry.json"
@@ -495,5 +500,38 @@ describe("ask panel helpers", () => {
     const g = setUseCase(sampleGraph(LIVE, SRC), LIVE, "chat")
     expect(askNodes(g).useCase?.transform).toBe("chat")
     expect(askNodes(setUseCase(g, LIVE, "search")).useCase?.transform).toBe("search")
+  })
+})
+
+describe("the stored working graph", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    resetStoredGraphForTests()
+  })
+
+  it("useStoredGraph follows storeGraph and keeps the graph's identity while the JSON is unchanged", () => {
+    const { result, rerender } = renderHook(() => useStoredGraph(R))
+    expect(result.current).toBeNull()
+    act(() => storeGraph(initialGraph(R)))
+    const first = result.current
+    expect(first).not.toBeNull()
+    rerender()
+    expect(result.current).toBe(first)
+  })
+
+  it("keeps working when storage throws: the graph lives in memory for the page", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked")
+    })
+    storeGraph(initialGraph(R))
+    expect(readStoredGraph(R)).not.toBeNull()
+  })
+
+  it("with a fallback and nothing stored, returns the fallback and stores it", () => {
+    const fallback = initialGraph(R)
+    const { result } = renderHook(() => useStoredGraph(R, () => fallback))
+    expect(result.current).toEqual(fallback)
+    expect(readStoredGraph(R)).toEqual(fallback)
   })
 })

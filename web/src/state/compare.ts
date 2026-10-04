@@ -582,3 +582,28 @@ export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolea
     link: named && fit > 1 ? `Read Your pipeline beside ${named.phrase}` : null,
   }
 }
+
+// --------------------------------------------------------------- open view --
+
+/**
+ * What one open column says against Your pipeline: on Chunk, the change in
+ * pieces and in characters left out; on Retrieve, how much of the top 5 it
+ * shares, where it puts the known answer, and when it returned fewer than 5.
+ */
+export function columnDelta(
+  d:
+    | { kind: "chunk"; stats: ChunkStats; base: ChunkStats }
+    | { kind: "retrieve"; shared: number; top: number; rank: number | null; goldKnown: boolean; returned: number },
+): string {
+  if (d.kind === "chunk") {
+    const dp = d.stats.pieces - d.base.pieces
+    const dl = d.stats.uncovered - d.base.uncovered
+    const a = dp === 0 ? "The same number of pieces as Your pipeline" : `${Math.abs(dp)} ${dp > 0 ? "more" : "fewer"} ${Math.abs(dp) === 1 ? "piece" : "pieces"} than Your pipeline`
+    const b = dl === 0 ? "" : d.stats.uncovered === 0 ? ", and nothing left out" : `, and ${Math.abs(dl)} ${dl > 0 ? "more" : "fewer"} characters left out`
+    return `${a}${b}.`
+  }
+  let out = `Shares ${d.shared} of ${d.top} pieces with Your pipeline.`
+  if (d.goldKnown) out += d.rank ? ` Puts the answer ${ordinal(d.rank)}.` : " Does not return the answer."
+  if (d.returned < 5) out += ` Returns ${d.returned}, not 5.`
+  return out
+}

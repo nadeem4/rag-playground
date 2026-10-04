@@ -14,6 +14,7 @@ import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
 import { AddRecipeCard } from "@/components/compare/AddRecipeCard"
 import { RecipeCard, type CardTag } from "@/components/compare/RecipeCard"
 import { RecipeHead } from "@/components/compare/RecipeHead"
+import { OpenView } from "@/components/compare/OpenView"
 import { Overview, type OverviewRow } from "@/components/compare/Overview"
 import { RecipeStatus } from "@/components/compare/RecipeStatus"
 import { RetrieveEvidence } from "@/components/compare/RetrieveEvidence"
@@ -21,6 +22,7 @@ import { ValueEditor } from "@/components/compare/ValueEditor"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
+import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { agreementText, compareLists, hitRows, type HitRowData } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
@@ -45,6 +47,7 @@ import { useDocument } from "@/state/document"
 import {
   chunkFinding,
   chunkManyFinding,
+  columnDelta,
   MAX_RECIPES,
   planSentence,
   RECIPE_TITLES,
@@ -56,8 +59,10 @@ import {
   retrieveFinding,
   retrieveManyFinding,
   sharedTop,
+  sortRecipes,
   strategyName,
   type Finding,
+  type ManyFinding,
   type RecipeStatus as Status,
   type ResultsMode,
   type SortKey,
@@ -68,6 +73,7 @@ import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels
 
 import { RegistryScreen } from "./Shell"
 import { useColumnsFit, useSideBySide } from "./useColumnsFit"
+import { useOpenRecipes } from "./useOpenRecipes"
 import { useRunClock } from "./useRunClock"
 
 /**
@@ -474,6 +480,7 @@ function Sweep({
       setChosen(0)
       setSort({ key: "order", dir: 1 })
       setTicked([])
+      opened.reset()
       setPhase("results")
     } catch (err) {
       // The run never started: back on the cards, the message goes under the recipe it belongs to, with that editor open.
@@ -530,6 +537,7 @@ function Sweep({
     addRef.current?.querySelector<HTMLElement>("button:last-of-type")?.focus({ preventScroll: true })
   }
   const changeRecipes = () => {
+    opened.reset()
     setPhase("setup")
     setRunId(null)
     setSubmitted({ variants: [], through, sha: "" })
@@ -581,7 +589,73 @@ function Sweep({
       }),
     }
   })
-  const manyFinding = (): Finding | null => {
+  // The recipes open side by side, kept in the URL; the control that opened them gets focus back.
+  const readyIdx = rows.filter((r) => r.done).map((r) => r.i)
+  const opened = useOpenRecipes(submitted.variants.length, readyIdx, side.fit)
+  const openIds = overview ? opened.ids : null
+  const opener = useRef<HTMLElement | null>(null)
+  const backRef = useRef<HTMLButtonElement>(null)
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (openIds && !wasOpen.current) backRef.current?.focus({ preventScroll: true })
+    if (!openIds && wasOpen.current && opener.current?.isConnected) opener.current.focus({ preventScroll: true })
+    wasOpen.current = openIds !== null
+  }, [openIds])
+  const openRecipes = (list: number[], from: HTMLElement) => {
+    opener.current = from
+    opened.open(list)
+  }
+  /** One recipe beside Your pipeline; alone when it is Your pipeline or when one fits. */
+  const besideBase = (i: number) => (side.fit === 1 || i === baseAt ? [i] : [baseAt, i])
+  const sortedRows = sortRecipes(rows, sort.key, sort.dir)
+  // Previous and Next walk the finished recipes in the overview's order, leaving out Your pipeline when it sits beside each one.
+  const stepOrder = sortedRows.filter((r) => r.done && !(side.fit > 1 && r.i === baseAt)).map((r) => r.i)
+  const others = openIds?.filter((i) => !(side.fit > 1 && i === baseAt)) ?? []
+  const current = !openIds ? null : others.length === 1 ? others[0] : openIds.length === 1 ? openIds[0] : null
+  const pos = current === null ? -1 : stepOrder.indexOf(current)
+  const step = (delta: 1 | -1) => {
+    const next = stepOrder[pos + delta]
+    if (current === null || next === undefined) return false
+    opened.show(besideBase(next))
+    return true
+  }
+  useEffect(() => {
+    if (!openIds) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as Element | null
+      if (t?.closest?.("input, select, textarea")) return
+      if (e.key === "Escape") {
+        e.preventDefault()
+        opened.close()
+      } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        if (step(e.key === "ArrowRight" ? 1 : -1)) e.preventDefault()
+      }
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  })
+  const nextOne = pos >= 0 ? stepOrder[pos + 1] : undefined
+  const pendingNext = sortedRows.find((r) => r.status.kind === "running" || r.status.kind === "waiting")
+  const nextLine =
+    current === null
+      ? null
+      : nextOne !== undefined
+        ? `Next: ${submittedNames[nextOne].name}. Press Next or the right arrow key.`
+        : pendingNext
+          ? `${submittedNames[pendingNext.i].name} is ${pendingNext.status.kind}. Its chip fills in when it finishes; this view stays put.`
+          : "This is the last recipe in the table's order."
+  /** The sentence an open column says against Your pipeline. */
+  const deltaFor = (i: number): string | null => {
+    if (i === baseAt) return target.stage === "retrieve" ? "The baseline. The other recipes are read against this list." : null
+    const r = rows[i]
+    const b = rows[baseAt]
+    if (!r?.done || !b?.done) return null
+    if (target.stage === "chunk") return columnDelta({ kind: "chunk", stats: chunkStats(r.set as ChunkSet), base: chunkStats(b.set as ChunkSet) })
+    if (target.stage === "retrieve")
+      return columnDelta({ kind: "retrieve", shared: r.values.shared ?? 0, top, rank: r.values.rank ?? null, goldKnown: golds !== null, returned: r.values.returned ?? 0 })
+    return null
+  }
+  const manyFinding = (): (Finding & Partial<ManyFinding>) | null => {
     const doneRows = rows.filter((r) => r.done)
     if (target.stage === "chunk") {
       return chunkManyFinding(
@@ -607,7 +681,8 @@ function Sweep({
     }
     return findingFor()
   }
-  const done = run.closed ? (overview ? manyFinding() : findingFor()) : null
+  const done: (Finding & Partial<ManyFinding>) | null = run.closed ? (overview ? manyFinding() : findingFor()) : null
+  const link = overview && done?.link && done.extremes ? { label: done.link, ids: done.extremes } : null
   const finding: Finding | null = !runId
     ? null
     : !run.closed
@@ -627,6 +702,58 @@ function Sweep({
     variant: v,
   }))
   const firstDefaults = () => add({ transform: transforms[0].name, config: defaultConfig(transforms[0]) })
+
+  /**
+   * One result column: its head, then its status while unfinished, its
+   * traceback when failed, else what it produced. `delta`, in the open view,
+   * is the sentence that reads it against Your pipeline.
+   */
+  function renderColumn(i: number, delta: string | null) {
+    const s = stateOf(i)
+    const out = payload(ids[i]?.through)
+    const chunks = payload(ids[i]?.chunks)
+    const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
+    const agreement =
+      base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
+    return (
+      <section key={i} aria-label={submittedNames[i].name} className="flex min-w-0 flex-col gap-3 bg-surface p-3">
+        <RecipeHead name={submittedNames[i].name} code={submittedNames[i].code} own={own(submitted.variants[i])} />
+      {delta && target.stage !== "retrieve" && statuses[i].kind === "done" ? <p className="m-0 text-sm font-medium text-fg">{delta}</p> : null}
+        {statuses[i].kind !== "done" ? (
+          <>
+            <RecipeStatus status={statuses[i]} seconds={clock(i)} onChange={() => changeThis(i)} />
+            {statuses[i].kind === "failed" ? (
+              <Traceback text={Object.values(s?.nodes ?? {}).find((x) => x.status === "failed")?.error ?? ""} />
+            ) : statuses[i].kind !== "stopped" ? (
+              <ResultPlaceholder stage={target.stage} />
+            ) : null}
+          </>
+        ) : (
+        <VariantResult
+          state={s}
+          pending
+          node={shownThrough}
+          type={
+            shownThrough.id === target.id
+              ? (infoFor(registry, { stage: target.stage, transform: submitted.variants[i]?.transform ?? target.transform })?.output ?? "unknown")
+              : (infoFor(registry, shownThrough)?.output ?? "unknown")
+          }
+          data={out.data}
+          status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
+          chunks={chunks.data}
+          agreement={
+            delta !== null && target.stage === "retrieve"
+        ? delta
+        : (agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null))
+          }
+          embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
+          hits={hitRowLists[i]}
+          answer={answerId(hitRowLists[i])}
+        />
+        )}
+      </section>
+    )
+  }
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -785,6 +912,17 @@ function Sweep({
                           {finding.sub}
                         </p>
                       ) : null}
+                      {link && !openIds ? (
+                        <p className="m-0">
+                          <button
+                            type="button"
+                            onClick={(e) => openRecipes(link.ids.slice(0, side.fit), e.currentTarget)}
+                            className={`${LINK_BUTTON} text-sm underline pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center`}
+                          >
+                            {link.label}
+                          </button>
+                        </p>
+                      ) : null}
                     </>
                   ) : null}
                   {!run.closed ? (
@@ -812,7 +950,34 @@ function Sweep({
               ) : null}
             </div>
 
+            {openIds ? (
+              <OpenView
+                total={submitted.variants.length}
+                shown={openIds}
+                chips={sortedRows.map((r) => ({ i: r.i, label: r.own ? "Your pipeline" : submittedNames[r.i].short, kind: r.done ? "done" : r.status.kind === "done" ? "running" : r.status.kind }))}
+                onChip={(i) => opened.show(besideBase(i))}
+                onBack={() => opened.close()}
+                backRef={backRef}
+                nextLine={nextLine}
+                position={
+                  current === null || pos < 0
+                    ? null
+                    : { at: pos + 1, of: stepOrder.length, beside: side.fit > 1, prev: pos > 0, next: nextOne !== undefined }
+                }
+                onStep={(d) => void step(d)}
+                note={
+                  target.stage === "retrieve" && searched !== null
+                    ? `The colours are piece numbers, the same in every column, because every recipe searches the same ${searched} ${searched === 1 ? "piece" : "pieces"}.${golds !== null ? " The ringed piece holds the answer." : ""}`
+                    : null
+                }
+              >
+                <div data-testid="open-grid" className="grid gap-px bg-hairline" style={{ gridTemplateColumns: `repeat(${openIds.length}, minmax(0, 1fr))` }}>
+                  {openIds.map((i) => renderColumn(i, deltaFor(i)))}
+                </div>
+              </OpenView>
+            ) : null}
             {overview ? (
+              <div hidden={openIds !== null}>
               <Overview
                 stage={target.stage}
                 rows={rows}
@@ -821,14 +986,15 @@ function Sweep({
                 ticked={ticked}
                 onTick={(i, on) => setTicked((t) => (on ? [...t, i] : t.filter((x) => x !== i)))}
                 onClear={() => setTicked([])}
-                onRead={() => undefined}
-                onOpen={() => undefined}
+                onRead={(from) => openRecipes([...ticked].sort((a, b) => a - b), from)}
+                onOpen={(i, from) => openRecipes(besideBase(i), from)}
                 onChange={changeThis}
                 fit={side.fit}
                 narrow={side.narrow}
                 goldKnown={golds !== null}
                 top={top}
               />
+              </div>
             ) : null}
             {overview || fitAll ? null : (
               <div className="flex border-b border-hairline px-3 py-2">
@@ -843,49 +1009,7 @@ function Sweep({
 
             {overview ? null : (
             <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
-              {visible.map((i) => {
-                const s = stateOf(i)
-                const out = payload(ids[i]?.through)
-                const chunks = payload(ids[i]?.chunks)
-                const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
-                const agreement =
-                  base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
-                return (
-                  <section key={i} aria-label={submittedNames[i].name} className="flex min-w-0 flex-col gap-3 bg-surface p-3">
-                    <RecipeHead name={submittedNames[i].name} code={submittedNames[i].code} own={own(submitted.variants[i])} />
-                    {statuses[i].kind !== "done" ? (
-                      <>
-                        <RecipeStatus status={statuses[i]} seconds={clock(i)} onChange={() => changeThis(i)} />
-                        {statuses[i].kind === "failed" ? (
-                          <Traceback text={Object.values(s?.nodes ?? {}).find((x) => x.status === "failed")?.error ?? ""} />
-                        ) : statuses[i].kind !== "stopped" ? (
-                          <ResultPlaceholder stage={target.stage} />
-                        ) : null}
-                      </>
-                    ) : (
-                    <VariantResult
-                      state={s}
-                      pending
-                      node={shownThrough}
-                      type={
-                        shownThrough.id === target.id
-                          ? (infoFor(registry, { stage: target.stage, transform: submitted.variants[i]?.transform ?? target.transform })?.output ?? "unknown")
-                          : (infoFor(registry, shownThrough)?.output ?? "unknown")
-                      }
-                      data={out.data}
-                      status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
-                      chunks={chunks.data}
-                      agreement={
-                        agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
-                      }
-                      embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
-                      hits={hitRowLists[i]}
-                      answer={answerId(hitRowLists[i])}
-                    />
-                    )}
-                  </section>
-                )
-              })}
+              {visible.map((i) => renderColumn(i, null))}
             </div>
             )}
             {note ? <p className="px-3 py-3 text-sm text-fg-muted">{note}</p> : null}

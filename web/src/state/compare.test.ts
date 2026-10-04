@@ -8,6 +8,7 @@ import type { NodeState, VariantState } from "@/api/runState"
 import {
   chunkFinding,
   chunkManyFinding,
+  columnDelta,
   MAX_RECIPES,
   planSentence,
   recipeNames,
@@ -335,5 +336,20 @@ describe("sortRecipes and sharedTop", () => {
 
   it("counts how many of a list's top 5 are in the baseline's top 5", () => {
     expect(sharedTop(["a", "b", "c", "d", "e", "f"], ["b", "x", "a", "f", "e"])).toBe(3)
+  })
+})
+
+describe("columnDelta", () => {
+  const st = (pieces: number, uncovered: number) => ({ pieces, tokens: 345, median: 14, p95: 30, overlaps: 0, uncovered })
+
+  it("says a chunk column against Your pipeline", () => {
+    expect(columnDelta({ kind: "chunk", stats: st(24, 34), base: st(6, 8) })).toBe("18 more pieces than Your pipeline, and 26 more characters left out.")
+    expect(columnDelta({ kind: "chunk", stats: st(5, 0), base: st(6, 8) })).toBe("1 fewer piece than Your pipeline, and nothing left out.")
+    expect(columnDelta({ kind: "chunk", stats: st(6, 8), base: st(6, 8) })).toBe("The same number of pieces as Your pipeline.")
+  })
+
+  it("says a search column against Your pipeline, the answer only when it is known", () => {
+    expect(columnDelta({ kind: "retrieve", shared: 4, top: 5, rank: 2, goldKnown: true, returned: 20 })).toBe("Shares 4 of 5 pieces with Your pipeline. Puts the answer 2nd.")
+    expect(columnDelta({ kind: "retrieve", shared: 2, top: 5, rank: null, goldKnown: false, returned: 2 })).toBe("Shares 2 of 5 pieces with Your pipeline. Returns 2, not 5.")
   })
 })

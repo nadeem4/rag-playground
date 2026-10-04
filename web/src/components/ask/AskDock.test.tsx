@@ -17,12 +17,12 @@ function Probe() {
   return <p data-testid="probe">{useComparisonWide() ? "wide" : "narrow"}</p>
 }
 
-function Harness({ count }: { count?: number }) {
+function Harness({ count, buildWidth = BUILD_WIDTH }: { count?: number; buildWidth?: number }) {
   const dock = useAskDock()
   return (
     <main>
       <p data-testid="state">{`${dock.open ? "open" : "closed"} ${dock.side} ${dock.width}`}</p>
-      <AskDock dock={dock} count={count} measure={() => BUILD_WIDTH}>
+      <AskDock dock={dock} count={count} measure={() => buildWidth}>
         {(head) => (
           <section aria-label="Ask panel">
             <div>
@@ -89,12 +89,24 @@ describe("the docked Ask panel", () => {
     expect(screen.queryByRole("button", { name: /^Ask/, expanded: false })).toBeNull()
   })
 
-  it("is closed by default below lg, and the round Ask button opens it", () => {
-    screenSize({ desktop: false })
+  it("is a sheet below lg and docks from lg: the sheet's query is the lg edge, and only lg classes dock it", () => {
+    expect(SHEET_QUERY).toBe("(max-width: 63.99rem)")
+    expect(DESKTOP_QUERY).toBe("(min-width: 64rem)")
     render(<Harness />)
-    expect(dockEl().hidden).toBe(true)
-    fireEvent.click(fab())
-    expect(dockEl().hidden).toBe(false)
+    const tokens = dockEl().className.split(/\s+/)
+    expect(tokens).toContain("lg:relative")
+    expect(tokens.filter((t) => t.startsWith("md:"))).toEqual([])
+    const css = readFileSync(`${__dirname}/../../styles/tokens.css`, "utf8")
+    expect(css).toContain("@media (prefers-reduced-motion: no-preference) and (max-width: 1023px)")
+    expect(css).not.toContain("@media (prefers-reduced-motion: no-preference) and (max-width: 767px)")
+  })
+
+  it("at 1024 px the panel stays at its 320 px minimum, the most that leaves the main pane its room", () => {
+    render(<Harness buildWidth={1024} />)
+    fireEvent.keyDown(separator(), { key: "End" })
+    expect(separator().getAttribute("aria-valuenow")).toBe("320")
+    fireEvent.keyDown(separator(), { key: "ArrowLeft", shiftKey: true })
+    expect(separator().getAttribute("aria-valuenow")).toBe("320")
   })
 
   it("closing keeps what is inside; reopening shows it again, and focus moves to the question and back to the button", () => {
@@ -255,7 +267,28 @@ describe("remembered settings", () => {
   })
 })
 
-describe("below md, a bottom sheet", () => {
+describe("below lg, a bottom sheet", () => {
+  it("the page behind it stays still while it is open, and scrolls again once it closes", () => {
+    document.documentElement.style.overflow = ""
+    document.body.style.overflow = "scroll"
+    render(<Harness />)
+    const main = document.querySelector("main")!
+    fireEvent.click(fab())
+    expect(document.documentElement.style.overflow).toBe("hidden")
+    expect(document.body.style.overflow).toBe("hidden")
+    expect(main.style.overflow).toBe("hidden")
+    fireEvent.keyDown(question(), { key: "Escape" })
+    expect(document.documentElement.style.overflow).toBe("")
+    expect(document.body.style.overflow).toBe("scroll")
+    expect(main.style.overflow).toBe("")
+    document.body.style.overflow = ""
+  })
+
+  it("a closed sheet never locks the page", () => {
+    render(<Harness />)
+    expect(document.body.style.overflow).toBe("")
+  })
+
   beforeEach(() => screenSize({ below: true, desktop: false }))
 
   it("starts closed, even when it was left open, and opens as a modal sheet with a grab line and no resize edge or side switch", () => {

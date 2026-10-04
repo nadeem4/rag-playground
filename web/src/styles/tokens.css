@@ -500,7 +500,7 @@
 /*
  * The docked Ask panel (AskDock.tsx). Its resize edge is a 12px strip over the
  * panel's inner side (44px on a touch screen), drawn as a short line on hover,
- * focus or drag. Opening fades the dock in over --dur-mid; below md the sheet
+ * focus or drag. Opening fades the dock in over --dur-mid; below lg the sheet
  * rises 24px as it fades, and its backdrop fades. Only opacity and transform
  * move; under reduced motion the panel simply appears.
  */
@@ -570,7 +570,7 @@
     animation: ask-fade-in var(--dur-mid) var(--ease-in);
   }
 }
-@media (prefers-reduced-motion: no-preference) and (max-width: 767px) {
+@media (prefers-reduced-motion: no-preference) and (max-width: 1023px) {
   .ask-dock:not([hidden]) {
     animation-name: ask-sheet-in;
   }

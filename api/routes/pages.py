@@ -68,6 +68,16 @@ def _page(doc: pdfium.PdfDocument, n: int) -> pdfium.PdfPage:
     return doc[n - 1]
 
 
+@router.get("/sources/{sha}/file")
+def source_file(sha: str, request: Request) -> Response:
+    """The stored file's own bytes, so Library can export a saved item with its
+    document. Read whole, so no handle stays open on the file (see the module
+    note). Never cached: the demo deletes an upload, and a copy must not outlive it."""
+    path = source_path(request, sha)
+    media = "application/pdf" if path.suffix.lower() == ".pdf" else "application/octet-stream"
+    return Response(path.read_bytes(), media_type=media, headers={"Cache-Control": "private, no-store"})
+
+
 @router.get("/sources/{sha}/pages")
 def list_pages(sha: str, request: Request) -> list[dict[str, Any]]:
     with _open(request, sha) as doc:

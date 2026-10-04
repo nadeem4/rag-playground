@@ -10,12 +10,12 @@ export function LessonEnd({ slug }: { slug: Lesson["slug"] }) {
   return (
     <div className="flex flex-wrap gap-3">
       <Button asChild>
-        <a href="/" onClick={() => markDone(slug)}>
+        <a href="/learn" onClick={() => markDone(slug)}>
           Mark as done
         </a>
       </Button>
       <Button asChild variant="outline">
-        {next ? <a href={next.href}>Next: {next.title}</a> : <a href="/">Back to lessons</a>}
+        {next ? <a href={next.href}>Next: {next.title}</a> : <a href="/learn">Back to lessons</a>}
       </Button>
     </div>
   )

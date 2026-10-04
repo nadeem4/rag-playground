@@ -1,151 +1,222 @@
-import { useAppSettings } from "@/api/useDemo"
-import { Button } from "@/components/ui/button"
-import { barHeight, previewCaption, RUN } from "@/learn/e2e"
-import { cn } from "@/lib/utils"
-import { continueAction, LESSONS, useProgress, type Lesson } from "@/state/lessons"
+import { useState } from "react"
 
-import "@/components/learn/learn.css"
+import { api } from "@/api/client"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { loadSampleDocument, useDocument } from "@/state/document"
 
 /**
- * Home: the lessons as an ordered path, the first one featured with the chunk
- * map of its recorded run, and a way out to Build for your own PDF.
+ * Home: the front page. A plain promise, the six steps the site lets you look
+ * inside, then one section per page (Build, Compare, Evaluate), each with a
+ * short clip of the real site and a button that opens the page with a sample
+ * already loaded, so the first click runs something real. A visitor who
+ * already has a document keeps it.
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
-const AUTHOR = "https://github.com/nadeem4"
 
-/** The recorded run's chunks as bars; the top pick and the reranker's picks stand out. */
-function Preview() {
-  const kept = new Set(RUN.mmr)
+const STEPS = [
+  { name: "Document", what: "a sample or your PDF" },
+  { name: "Parse", what: "text, tables, headings" },
+  { name: "Clean", what: "headers and footers out" },
+  { name: "Chunk", what: "the pieces you search" },
+  { name: "Index", what: "meaning and keywords" },
+  { name: "Ask", what: "search, rerank, answer" },
+]
+
+interface PageSection {
+  id: string
+  page: string
+  href: string
+  heading: string
+  what: string
+  points: [string, string]
+  clip: { poster: string; label: string; caption: string }
+}
+
+const PAGES: PageSection[] = [
+  {
+    id: "build",
+    page: "Build",
+    href: "/build",
+    heading: "Build a pipeline and ask it",
+    what: "Pick how each step works, build the index, then ask a question. You see the pieces it found and how the reranker reordered them.",
+    points: ["Every step names the real library and setting it uses.", "The rerank is drawn as lines from search order to final order."],
+    clip: {
+      poster: "/clips/build.jpg",
+      label: "Clip: building the index and asking a question on Build",
+      caption: "Build the index, ask, and watch the rerank",
+    },
+  },
+  {
+    id: "compare",
+    page: "Compare",
+    href: "/compare",
+    heading: "Compare recipes on the same document",
+    what: "Run one step several ways at once, such as three chunk sizes or three searches, and read what changed in one sentence.",
+    points: ["Steps the recipes share run once.", "Save the set as an experiment and come back to it."],
+    clip: {
+      poster: "/clips/compare.jpg",
+      label: "A still of the Compare page",
+      caption: "Clip coming soon",
+    },
+  },
+  {
+    id: "evaluate",
+    page: "Evaluate",
+    href: "/evaluate",
+    heading: "Evaluate it on real questions",
+    what: "Score the pipeline on the sample's questions, or your own, and open any miss to see the sentence it should have found.",
+    points: ["Change one step and it says which questions moved.", "Every miss gives its reason in a sentence."],
+    clip: {
+      poster: "/clips/evaluate.jpg",
+      label: "Clip: scoring the pipeline and opening a miss on Evaluate",
+      caption: "Run the questions, change Parse, open a miss",
+    },
+  },
+]
+
+const MORE = [
+  { label: "Read", href: "/read", what: "Twenty posts on each step, in pipeline order, for when you want the why." },
+  { label: "Run it on your machine", href: `${REPO}#quick-start`, what: "One command, your own files, nothing expires." },
+  { label: "Source on GitHub", href: REPO, what: "Every step is a plugin you can read and change." },
+]
+
+const goTo = (href: string) => window.location.assign(href)
+
+/**
+ * Open `href` with a document ready: when the visitor has none, load the
+ * first sample first. A sample that cannot be loaded still opens the page,
+ * which then says how to pick a document.
+ */
+function useOpenWithSample(navigate: (href: string) => void) {
+  const { doc, samples } = useDocument()
+  const [busy, setBusy] = useState<string | null>(null)
+  const open = async (href: string) => {
+    if (busy) return
+    setBusy(href)
+    try {
+      if (!doc) {
+        const first = (samples ?? (await api.samples()))[0]
+        if (first) await loadSampleDocument(first)
+      }
+    } catch {
+      // The page itself offers the samples and an upload.
+    }
+    navigate(href)
+  }
+  return { open, busy }
+}
+
+/** The clip's place: the poster still and its caption. */
+function ClipSlot({ poster, label, caption }: PageSection["clip"]) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="chunk-map h-[64px]" aria-hidden>
-        {RUN.chunks.map((c) => (
-          <span
-            key={c.id}
-            data-chunk={c.id === RUN.mmr[0] ? "top" : kept.has(c.id) ? "kept" : "rest"}
-            style={{ height: barHeight(c, RUN, 22, 42) }}
-          />
-        ))}
-      </div>
-      <p className="m-0 font-mono text-xs text-fg-muted">{previewCaption(RUN)}</p>
-    </div>
+    <figure aria-label={label} className="relative m-0 aspect-[16/10] overflow-hidden rounded-panel border border-hairline bg-surface-raised shadow-(--shadow-raised)">
+      <img src={poster} alt="" className="block size-full object-cover object-top-left" />
+      <figcaption className="absolute bottom-3 left-3 right-[64px] w-fit max-w-full rounded-control border border-hairline bg-surface-raised/90 px-3 py-1 text-sm font-semibold">
+        {caption}
+      </figcaption>
+    </figure>
   )
 }
 
-function LessonRow({ lesson, n, done }: { lesson: Lesson; n: number; done: boolean }) {
-  const featured = n === 1
-  return (
-    <li>
-      <article
-        aria-labelledby={`lesson-${lesson.slug}`}
-        className={cn(
-          "grid grid-cols-[32px_minmax(0,1fr)] items-start gap-4 rounded-panel border bg-surface-elevated p-4",
-          featured ? "border-fg-muted lg:grid-cols-[40px_minmax(0,1fr)_300px] lg:p-6" : "border-hairline md:grid-cols-[40px_minmax(0,1fr)]",
-        )}
-      >
-        <span className="pt-px font-mono text-lg text-fg-muted">{n}</span>
-        <div className="flex min-w-0 flex-col gap-1">
-          <h3 id={`lesson-${lesson.slug}`} className={cn("m-0 font-semibold", featured ? "text-xl" : "text-lg")}>
-            {lesson.title}
-          </h3>
-          <p className="m-0 max-w-[60ch] text-base text-fg-muted">{lesson.what}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {[...lesson.steps, lesson.size].map((s) => (
-              <span key={s} className="rounded-control border border-hairline px-2 text-xs text-fg-muted">
-                {s}
-              </span>
-            ))}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button asChild variant="outline">
-              <a href={lesson.href}>{done ? "Open again" : "Start"}</a>
-            </Button>
-            {done ? <span className="text-sm font-medium text-fg">Done</span> : null}
-          </div>
-        </div>
-        {featured ? (
-          <div className="col-span-full lg:col-span-1">
-            <Preview />
-          </div>
-        ) : null}
-      </article>
-    </li>
-  )
-}
-
-/** What your own PDF may be on the demo, and what needs a key anywhere. */
-function ownPdfNote(settings: ReturnType<typeof useAppSettings>): string {
-  const keyNote = "Everything works without a key, except a written answer."
-  const limits = settings?.demo ? settings.limits : undefined
-  if (!limits) return keyNote
-  return `Your own PDF can be up to ${Math.round(limits.max_bytes / 1048576)} MB and ${limits.max_pages} pages. ${keyNote}`
-}
-
-export function Home() {
-  const settings = useAppSettings()
-  const done = useProgress()
-  const go = continueAction(done)
+export function Home({ navigate = goTo }: { navigate?: (href: string) => void } = {}) {
+  const { open, busy } = useOpenWithSample(navigate)
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-surface">
-      <div className="learn-page">
-        <section className="learn-top flex max-w-[680px] flex-col gap-4">
-          <h1 className="learn-display">Learn how RAG works by trying it.</h1>
-          <p className="learn-lead">
-            Short lessons on a sample PDF. You follow a real run, predict what a setting will do, and see how citations are checked.
+      <div className="mx-auto grid max-w-[1080px] gap-[56px] px-4 pt-8 pb-[64px] md:gap-[72px] md:pt-[48px]">
+        <section aria-labelledby="home-title" className="grid max-w-[760px] gap-4">
+          <span className="text-xs font-semibold tracking-[0.06em] text-primary uppercase">Retrieval, made visible</span>
+          <h1 id="home-title" className="m-0 text-[clamp(2rem,4.2vw,3.1rem)] leading-[1.08] font-semibold tracking-[-0.02em] text-balance">
+            See why a RAG pipeline finds the answer, or misses it.
+          </h1>
+          <p className="m-0 max-w-[58ch] text-[1.1875rem] leading-[1.55] text-fg-muted">
+            Load a PDF, cut it into pieces, search it and ask it a question. Every step shows what it did to your document, so you can change one
+            setting and watch the answer move.
           </p>
-          <div>
-            <Button asChild className="h-[36px] px-4 text-lg">
-              <a href={go.href}>{go.label}</a>
+          <div className="mt-1 flex flex-wrap gap-3">
+            <Button className="h-[44px] px-4 text-base font-semibold" busy={busy === "/build"} onClick={() => void open("/build")}>
+              Try it on a sample
+            </Button>
+            <Button asChild variant="outline" className="h-[44px] px-4 text-base font-semibold">
+              <a href="#build">See how it works</a>
             </Button>
           </div>
+          <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0 text-sm text-fg-muted">
+            {["No sign in", "Runs on samples or your own PDF", "A key is only needed for chat answers"].map((f) => (
+              <li key={f} className="flex items-center gap-2">
+                <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-primary" />
+                {f}
+              </li>
+            ))}
+          </ul>
         </section>
 
-        <ol aria-label="Lessons" className="m-0 mb-6 flex list-none flex-col gap-3 p-0">
-          {LESSONS.map((l, i) => (
-            <LessonRow key={l.slug} lesson={l} n={i + 1} done={Boolean(done[l.slug])} />
+        <ol aria-label="The steps you can look inside" className="m-0 grid list-none grid-cols-2 gap-2 p-0 md:grid-cols-3 lg:grid-cols-6">
+          {STEPS.map((s) => (
+            <li key={s.name} className="grid min-w-0 gap-[2px] rounded-panel border border-hairline bg-surface-raised px-3 py-2">
+              <span className="text-sm font-semibold">{s.name}</span>
+              <span className="text-xs text-fg-muted">{s.what}</span>
+            </li>
           ))}
         </ol>
 
-        <section aria-labelledby="own-pdf" className="learn-band grid grid-cols-1 items-center gap-6 md:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="flex flex-col gap-2">
-            <h2 id="own-pdf" className="learn-h2">
-              Use your own PDF
-            </h2>
-            <p className="m-0 max-w-[56ch] text-lg text-fg-muted">
-              Build lets you run every step on your own document and change any setting. Compare runs two strategies side by side.
-              Evaluate scores a pipeline against a sample's questions.
-            </p>
-            <p className="m-0 max-w-[56ch] text-base text-fg-muted" data-testid="own-pdf-note">
-              {ownPdfNote(settings)}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button asChild variant="outline">
-              <a href="/build">Open Build</a>
-            </Button>
-            <Button asChild variant="outline">
-              <a href="/compare">Compare</a>
-            </Button>
-            <Button asChild variant="outline">
-              <a href="/evaluate">Evaluate</a>
-            </Button>
-          </div>
-        </section>
+        {PAGES.map((p, i) => {
+          const flip = i % 2 === 1
+          return (
+            <section
+              key={p.id}
+              id={p.id}
+              aria-labelledby={`home-${p.id}`}
+              className={cn(
+                "grid scroll-mt-4 grid-cols-1 items-center gap-4 md:gap-8",
+                flip ? "md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]" : "md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]",
+              )}
+            >
+              <div data-copy className={cn("grid content-start gap-3", flip && "md:order-2")}>
+                <span className="font-mono text-xs font-semibold text-fg-muted">{i + 1} of 3</span>
+                <h2 id={`home-${p.id}`} className="m-0 text-xl font-semibold tracking-[-0.01em]">
+                  {p.heading}
+                </h2>
+                <p className="m-0 max-w-[46ch] text-base">{p.what}</p>
+                <ul className="m-0 grid gap-1 pl-[18px] text-sm text-fg-muted">
+                  {p.points.map((pt) => (
+                    <li key={pt}>{pt}</li>
+                  ))}
+                </ul>
+                <Button
+                  className="mt-1 h-[44px] justify-self-start px-4 text-base font-semibold"
+                  busy={busy === p.href}
+                  onClick={() => void open(p.href)}
+                >
+                  Try it yourself on {p.page}
+                </Button>
+              </div>
+              <ClipSlot {...p.clip} />
+            </section>
+          )
+        })}
 
-        <footer className="flex flex-wrap justify-between gap-4 border-t border-hairline py-6 text-sm text-fg-muted">
-          <span>
-            Made by{" "}
-            <a href={AUTHOR} className="text-fg no-underline hover:underline">
-              Nadeem Khan
-            </a>
-            . Open source under the MIT license.
-          </span>
-          <a href={REPO} className="text-fg-muted no-underline hover:text-fg">
-            github.com/nadeem4/rag-playground
-          </a>
-        </footer>
+        <section aria-label="More" className="grid grid-cols-1 gap-4 border-t border-hairline pt-8 md:grid-cols-3">
+          {MORE.map((m) => (
+            <div key={m.label}>
+              <a href={m.href} className="text-base font-semibold text-primary">
+                {m.label}
+              </a>
+              <p className="m-0 mt-1 text-sm text-fg-muted">{m.what}</p>
+            </div>
+          ))}
+        </section>
       </div>
+      <footer className="mx-auto flex max-w-[1080px] flex-wrap gap-x-4 gap-y-1 border-t border-hairline p-4 text-sm text-fg-muted">
+        <span>RAG Playground</span>
+        <a href={`${REPO}#where-your-data-goes`} className="text-fg-muted hover:text-fg">
+          Your data and privacy
+        </a>
+        <a href={REPO} className="text-fg-muted hover:text-fg">
+          GitHub
+        </a>
+      </footer>
     </main>
   )
 }

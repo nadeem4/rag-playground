@@ -7,6 +7,7 @@ import { resetStoredGraphForTests } from "@/state/graph"
 import { ApiKeyProvider } from "@/api/apiKey"
 import { pageFor, routeFor } from "@/App"
 import { Home } from "@/routes/Home"
+import { Lessons } from "@/routes/Lessons"
 import { Inspect } from "@/routes/Inspect"
 import { Learn, topicFor } from "@/routes/Learn"
 import { Shell } from "@/routes/Shell"
@@ -41,13 +42,14 @@ function header(path = "/", lessonsEnabled = true) {
 const devButton = () => screen.getByRole("button", { name: "Dev" })
 
 describe("AppHeader", () => {
-  it("shows Lessons, Build, Compare, Evaluate, Read and GitHub as primary navigation", () => {
+  it("shows Home, Lessons, Build, Compare, Evaluate, Read and GitHub as primary navigation", () => {
     header()
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Lessons", "Build", "Compare", "Evaluate", "Read", "GitHub"])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Lessons", "Build", "Compare", "Evaluate", "Read", "GitHub"])
     expect(links.map((l) => l.getAttribute("href"))).toEqual([
       "/",
+      "/learn",
       "/build",
       "/compare",
       "/evaluate",
@@ -63,12 +65,17 @@ describe("AppHeader", () => {
     expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/")
   })
 
-  it("marks Build as current on /build and Lessons on Home", () => {
+  it("marks Build as current on /build, Home on / and Lessons on /learn", () => {
     header("/build")
     expect(screen.getByRole("link", { name: "Build" }).getAttribute("aria-current")).toBe("page")
     cleanup()
     header("/")
+    expect(screen.getByRole("link", { name: "Home" }).getAttribute("aria-current")).toBe("page")
+    expect(screen.getByRole("link", { name: "Lessons" }).getAttribute("aria-current")).toBeNull()
+    cleanup()
+    header("/learn")
     expect(screen.getByRole("link", { name: "Lessons" }).getAttribute("aria-current")).toBe("page")
+    expect(screen.getByRole("link", { name: "Home" }).getAttribute("aria-current")).toBeNull()
   })
 
   it("keeps the dev pages out of sight until the Dev menu opens", () => {
@@ -236,17 +243,23 @@ describe("AppHeader with the lessons hidden", () => {
     expect(screen.getByTestId("document-trigger").className).not.toContain("bg-stale-wash")
   })
 
-  it("shows Build, Compare, Evaluate, Read and GitHub, with no Lessons", () => {
+  it("shows Home first, then Build, Compare, Evaluate, Read and GitHub, with no Lessons", () => {
     header("/build", false)
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Build", "Compare", "Evaluate", "Read", "GitHub"])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Build", "Compare", "Evaluate", "Read", "GitHub"])
+    expect(links[0].getAttribute("href")).toBe("/")
     expect(screen.queryByText("Lessons")).toBeNull()
   })
 
-  it("links the brand to Build", () => {
+  it("links the brand to Home", () => {
     header("/build", false)
-    expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/build")
+    expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/")
+  })
+
+  it("marks Home as current on /", () => {
+    header("/", false)
+    expect(screen.getByRole("link", { name: "Home" }).getAttribute("aria-current")).toBe("page")
   })
 
   it("marks Build as current on /build", () => {
@@ -325,9 +338,9 @@ describe("routes", () => {
     expect(topicFor("/learn/nope")).toBe("end-to-end")
   })
 
-  it("redirects /learn to Home", () => {
-    expect(routeFor("/learn", true)).toBe("/")
-    expect(pageFor(routeFor("/learn", true), true)).toBe(Home)
+  it("lists the lessons at /learn", () => {
+    expect(routeFor("/learn", true)).toBe("/learn")
+    expect(pageFor(routeFor("/learn", true), true)).toBe(Lessons)
     expect(routeFor("/build", true)).toBe("/build")
   })
 

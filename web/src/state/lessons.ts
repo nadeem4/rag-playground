@@ -7,7 +7,7 @@ import { useSyncExternalStore } from "react"
  */
 
 // The lessons are hidden for now while they are rethought; nothing is deleted.
-// Set this to true to bring back the lesson pages, Home and the Lessons link.
+// Set this to true to bring back the lesson pages, the lessons list at /learn and the Lessons link.
 export const LESSONS_ENABLED = false
 
 export interface Lesson {
@@ -104,7 +104,7 @@ export function nextLesson(slug: Lesson["slug"]): Lesson | null {
   return LESSONS[i + 1] ?? null
 }
 
-/** Home's main button: the first lesson not done yet. */
+/** The lessons page's main button: the first lesson not done yet. */
 export function continueAction(done: Progress): { label: string; href: string } {
   const next = LESSONS.find((l) => !done[l.slug])
   if (!next) return { label: "Open the first lesson again", href: LESSONS[0].href }

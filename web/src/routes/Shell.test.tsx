@@ -124,8 +124,10 @@ function reranked() {
   return { ...hybridResult, hits: order.map((i, k) => ({ ...hybridResult.hits[i], rank: k + 1, prior_rank: hybridResult.hits[i].rank })) }
 }
 
-/** The Ask panel, in the right pane while no card is selected. */
+/** The Ask panel, docked at the right edge of Build. */
 const panel = () => within(screen.getByRole("region", { name: "Ask panel" }))
+const CLOSE_ASK = "Close Ask. Your question and results are kept."
+const altA = () => fireEvent.keyDown(document, { key: "a", code: "KeyA", altKey: true })
 
 describe("Ask with a chat card and no API key", () => {
   const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none" }
@@ -286,8 +288,36 @@ function storedStages() {
   return (read.nodes ?? []).map((n) => n.stage)
 }
 
+describe("the main pane", () => {
+  it("says to pick a step until a card is clicked, then shows that step's output; there is no Back to Ask", async () => {
+    await ready()
+    const main = () => within(screen.getByRole("region", { name: "Inspector" }))
+    expect(main().getByText("Pick a step")).toBeTruthy()
+    expect(main().getByText("Click a step card to see its output here.")).toBeTruthy()
+    fireEvent.click(card("chunk"))
+    expect(main().getByRole("heading", { name: "Chunk" })).toBeTruthy()
+    expect(main().queryByText("Pick a step")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Back to Ask" })).toBeNull()
+    // The Ask panel is not in the main pane; it is docked beside it, still open.
+    expect(main().queryByRole("region", { name: "Ask panel" })).toBeNull()
+    expect(screen.getByRole("complementary", { name: "Ask" })).toBeTruthy()
+    expect(panel().getByLabelText("Question")).toBeTruthy()
+    fireEvent.click(card("parse"))
+    expect(main().getByRole("heading", { name: "Parse" })).toBeTruthy()
+  })
+
+  it("the dock takes a third column at its remembered width, and the main pane shrinks; closed, the column goes", async () => {
+    await ready()
+    const main = document.querySelector("main")!
+    expect(main.style.getPropertyValue("--ask-w")).toBe("440px")
+    expect(main.className).toMatch(/md:grid-cols-\[380px_minmax\(0,1fr\)_/)
+    fireEvent.click(screen.getByRole("button", { name: CLOSE_ASK }))
+    expect(main.className).toContain("md:grid-cols-[380px_minmax(0,1fr)]")
+  })
+})
+
 describe("the page on a phone", () => {
-  it("below the md breakpoint the page scrolls as one: no inner box scrolls on its own", async () => {
+  it("below the md breakpoint the page scrolls as one: no inner box scrolls on its own, outside the Ask sheet", async () => {
     storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename }))
     setup()
     await waitFor(() => expect(card("parse")).toBeTruthy())
@@ -295,7 +325,8 @@ describe("the page on a phone", () => {
     const tokens = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/)
     expect(tokens(main)).toContain("overflow-y-auto")
     // Inner boxes scroll from md up only (md:overflow-y-auto); below it the page is one scroll.
-    const inner = [...main.querySelectorAll("[class]")].filter((el) => tokens(el).includes("overflow-y-auto"))
+    // The Ask sheet sits over the page and scrolls its own content.
+    const inner = [...main.querySelectorAll("[class]")].filter((el) => tokens(el).includes("overflow-y-auto") && !el.closest("#ask-dock"))
     expect(inner.map((el) => el.getAttribute("class"))).toEqual([])
   })
 })
@@ -1274,20 +1305,25 @@ describe("the Ask panel results on Build", () => {
     await waitFor(() => expect(panel().getByText("Hybrid search returned 6 candidates. These are the top 5, in search order.")).toBeTruthy())
   }
 
-  it("Back to Ask returns from a card to the panel with the question and the results intact (Review Focus 4)", async () => {
+  it("closing Ask and opening it again keeps the question and the results; a card's output stays beside it (Review Focus 4)", async () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
     await buildAndAsk()
     await waitFor(() => expect(panel().getByText("Earlier questions in this tab (1)")).toBeTruthy())
     fireEvent.click(card("parse"))
+    // The card's output takes the main pane; the Ask panel stays open beside it.
+    expect(within(screen.getByRole("region", { name: "Inspector" })).getByRole("heading", { name: "Parse" })).toBeTruthy()
+    expect(panel().getByText("Earlier questions in this tab (1)")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: CLOSE_ASK }))
     expect(screen.queryByRole("region", { name: "Ask panel" })).toBeNull()
-    fireEvent.click(screen.getByRole("button", { name: "Back to Ask" }))
+    // Closed, the round button says how many results the last question found.
+    fireEvent.click(screen.getByRole("button", { name: "Ask 5 results" }))
     expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("What does overlap cost?")
     expect(await waitFor(() => panel().getByText("Hybrid search returned 6 candidates. These are the top 5, in search order."))).toBeTruthy()
     expect(panel().getByText("Earlier questions in this tab (1)")).toBeTruthy()
     expect(panel().getByText("Working copy, no rerank: 5 pieces")).toBeTruthy()
   })
 
-  it("a hidden comparison stays hidden across a card and Back to Ask", async () => {
+  it("a hidden comparison stays hidden across closing and opening Ask", async () => {
     storeGraph(setReranker(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), liveRegistry as never, "cross_encoder"))
     render(<Shell />)
     const build = await screen.findByRole("button", { name: "Build the index" })
@@ -1310,7 +1346,9 @@ describe("the Ask panel results on Build", () => {
     fireEvent.click(await waitFor(() => panel().getByRole("button", { name: "Hide comparison" })))
     expect(panel().getByRole("button", { name: "Show comparison" })).toBeTruthy()
     fireEvent.click(card("parse"))
-    fireEvent.click(screen.getByRole("button", { name: "Back to Ask" }))
+    fireEvent.click(screen.getByRole("button", { name: CLOSE_ASK }))
+    expect(screen.queryByRole("region", { name: "Ask panel" })).toBeNull()
+    altA()
     expect(await waitFor(() => panel().getByRole("button", { name: "Show comparison" }))).toBeTruthy()
     expect(panel().queryByRole("button", { name: "Hide comparison" })).toBeNull()
     // A new Ask opens it again.

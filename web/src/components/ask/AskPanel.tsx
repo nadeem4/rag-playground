@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import { hasAnyKey, type Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
@@ -19,7 +19,7 @@ import { AskSettings, RETRIEVAL_LABEL } from "./AskSettings"
 import { askSignature, goldRank, Transcript, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
 /**
- * The Ask panel: the right pane when no card is selected. It holds the
+ * The Ask panel, docked at the edge of Build (a bottom sheet on a phone). It holds the
  * question and the retrieval, rerank and answer settings, which are the
  * query, retrieve, rerank and use case nodes of the same pipeline graph.
  */
@@ -65,6 +65,8 @@ export interface AskPanelProps {
   needsDocument?: boolean
   /** Set while Build the index runs: the step it is on (when one has started) and when that step started, epoch seconds. */
   buildingStep?: { title?: string; startedAt?: number }
+  /** The dock's buttons (side switch and close), shown at the end of the panel's head. */
+  head?: ReactNode
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -186,23 +188,26 @@ export function AskPanel(p: AskPanelProps) {
   ].filter(Boolean)
 
   return (
-    <section aria-label="Ask panel" className="flex min-w-0 flex-col md:min-h-0">
-      <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
-        <h2 className="text-xl font-semibold">Ask</h2>
-        <span data-testid="index-status" className="text-xs text-fg-muted">
-          {p.buildingStep
-            ? p.buildingStep.title
-              ? `Building the index: ${p.buildingStep.title}${buildElapsed !== undefined ? `, ${buildElapsed} s` : ""}`
-              : "Building the index"
-            : indexId
-            ? `Index ready: ${ready.join(", ")}`
-            : sha
-              ? "Build the index first."
-              : "Pick a document in the bar above, then build the index."}
-        </span>
+    <section aria-label="Ask panel" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-row shrink-0 items-center justify-between gap-2 border-b border-hairline py-1 pr-2 pl-3">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="text-xl font-semibold">Ask</h2>
+          <span data-testid="index-status" className="text-xs text-fg-muted">
+            {p.buildingStep
+              ? p.buildingStep.title
+                ? `Building the index: ${p.buildingStep.title}${buildElapsed !== undefined ? `, ${buildElapsed} s` : ""}`
+                : "Building the index"
+              : indexId
+              ? `Index ready: ${ready.join(", ")}`
+              : sha
+                ? "Build the index first."
+                : "Pick a document in the bar above, then build the index."}
+          </span>
+        </div>
+        {p.head}
       </div>
-      {/* Scrolls on its own from md up; below it the whole page is one scroll. */}
-      <div className="flex flex-col gap-3 p-3 md:min-h-0 md:flex-1 md:overflow-y-auto">
+      {/* Scrolls on its own: the panel is a docked column or a bottom sheet, never part of the page's scroll. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         {query ? (
           <QuestionField
             value={String(query.config.text ?? "")}

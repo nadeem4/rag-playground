@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import { hasAnyKey, needsKey, useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
@@ -12,6 +12,7 @@ import { KeyHint } from "@/components/ApiKeyControl"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
+import { AskDock, useAskDock } from "@/components/ask/AskDock"
 import { AskPanel } from "@/components/ask/AskPanel"
 import { askSnapshot, logEntry, type AskSnapshot, type TranscriptEntry } from "@/components/ask/Transcript"
 import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
@@ -21,6 +22,7 @@ import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from 
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   addCleaner,
   ancestors,
@@ -59,8 +61,9 @@ import {
 } from "@/state/pipelines"
 
 /**
- * Build: the index pipeline column on the left; on the right the Ask panel,
- * or the selected card's output. The graph is the state; both render it.
+ * Build: the index pipeline column on the left, the selected card's output in
+ * the main pane, and the Ask panel docked at the right (or left) edge. The
+ * graph is the state; all three render it.
  */
 export function Shell() {
   const reg = useRegistry()
@@ -134,10 +137,13 @@ function Build({ registry }: { registry: Registry }) {
   const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const onLog = useCallback((entry: TranscriptEntry) => setTranscript((t) => logEntry(t, entry)), [])
-  // The rerank result whose comparison the reader hid. Held here, so opening a
-  // card and coming Back to Ask keeps it; a new Ask or another reranker opens it.
+  // The rerank result whose comparison the reader hid. Held here, so closing the
+  // Ask panel and opening it again keeps it; a new Ask or another reranker opens it.
   const [comparisonHidden, setComparisonHidden] = useState<string | null>(null)
   const { keys } = useApiKey()
+  // The Ask panel's dock: open or closed, its side and its width, remembered in this browser.
+  const dock = useAskDock()
+  const mainRef = useRef<HTMLElement>(null)
 
   // Which keys the server has. Null until it answers, and if it fails: then
   // Ask is left alone.
@@ -209,8 +215,8 @@ function Build({ registry }: { registry: Registry }) {
   }, [registry])
 
   /**
-   * `select` false leaves the right pane as it is: Build the index and Ask keep
-   * the Ask panel in view. Resolves to the run id, or undefined when no run started.
+   * `select` false leaves the main pane as it is: Build the index and Ask do
+   * not change the step in view. Resolves to the run id, or undefined when no run started.
    */
   async function start(target: string | undefined, force: boolean, select = true, ask = false): Promise<string | undefined> {
     setFromAsk(ask)
@@ -251,7 +257,12 @@ function Build({ registry }: { registry: Registry }) {
       if (routed.kind === "fields") setErrors({ [routed.nodeId]: { fields: routed.errors } })
       else if (routed.kind === "node") setErrors({ [routed.nodeId]: { message: routed.message } })
       else setColumnError(routed.message)
-      if (routed.kind !== "column") setSelected(routed.nodeId)
+      if (routed.kind !== "column") {
+        setSelected(routed.nodeId)
+        // An error on a retrieval, rerank or answer step is shown in the Ask panel.
+        const stage = graph.nodes.find((n) => n.id === routed.nodeId)?.stage
+        if (stage && ASK_STAGES.includes(stage)) dock.setOpen(true)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -323,7 +334,19 @@ function Build({ registry }: { registry: Registry }) {
     stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
 
   return (
-    <main className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden">
+    <main
+      ref={mainRef}
+      style={{ "--ask-w": `${dock.width}px` } as CSSProperties}
+      className={cn(
+        "grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-rows-[minmax(0,1fr)] md:overflow-hidden",
+        // Open, the dock is a third column: its width, but never so wide that the main pane falls under 360 px.
+        !dock.open
+          ? "md:grid-cols-[380px_minmax(0,1fr)]"
+          : dock.side === "right"
+            ? "md:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]"
+            : "md:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
+      )}
+    >
       <section aria-label="Pipeline" className="flex flex-col bg-surface md:min-h-0">
         {/* Grows rather than clipping: on a touch screen its buttons are 44px tall. */}
         <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-hairline px-3 py-1">
@@ -428,10 +451,13 @@ function Build({ registry }: { registry: Registry }) {
         results={results}
         stale={stale}
         selected={selected}
-        onSelect={setSelected}
         failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
-        ask={
+      />
+
+      <AskDock dock={dock} count={transcript[0]?.rows.length} measure={() => mainRef.current?.getBoundingClientRect().width || window.innerWidth}>
+        {(head) => (
           <AskPanel
+            head={head}
             graph={graph}
             registry={registry}
             results={results}
@@ -466,8 +492,8 @@ function Build({ registry }: { registry: Registry }) {
               void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
             }}
           />
-        }
-      />
+        )}
+      </AskDock>
     </main>
   )
 }
@@ -487,30 +513,26 @@ function InspectorPanel({
   results,
   stale,
   selected,
-  onSelect,
   failedHint,
-  ask,
 }: {
   graph: PipelineGraph
   registry: Registry
   results: Record<string, NodeState>
   stale: Set<string>
   selected: string | null
-  onSelect: (id: string | null) => void
   failedHint?: string
-  /** The Ask panel: shown when no card is selected, or when the selection is a step the panel edits. */
-  ask: ReactNode
 }) {
   const picked = graph.nodes.find((n) => n.id === selected)
+  // The retrieval, rerank and answer steps are edited in the Ask panel, not here.
   if (!picked || ASK_STAGES.includes(picked.stage)) {
     return (
       <section aria-label="Inspector" className="flex min-w-0 flex-col bg-surface md:min-h-0 md:overflow-y-auto">
         {failedHint ? <p className="px-3 pt-3 text-sm text-fg-muted">Select the {failedHint} card to see why it failed.</p> : null}
-        {ask}
+        <EmptyState title="Pick a step">Click a step card to see its output here.</EmptyState>
       </section>
     )
   }
-  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} onBack={() => onSelect(null)} />
+  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} />
 }
 
 function CardInspector({
@@ -519,15 +541,12 @@ function CardInspector({
   results,
   stale,
   node,
-  onBack,
 }: {
   graph: PipelineGraph
   registry: Registry
   results: Record<string, NodeState>
   stale: Set<string>
   node: GraphNode
-  /** Returns the right pane to the Ask panel. */
-  onBack: () => void
 }) {
   const result = results[node.id]
   const usable = result && (result.status === "done" || result.status === "cached") && !stale.has(result.id)
@@ -593,11 +612,6 @@ function CardInspector({
 
   return (
     <section aria-label="Inspector" className="flex min-w-0 flex-col bg-surface md:min-h-0">
-      <div className="shrink-0 border-b border-hairline px-3 py-2">
-        <Button variant="outline" size="sm" onClick={onBack}>
-          Back to Ask
-        </Button>
-      </div>
       {/* Wraps rather than squeezing: at phone width the title and the artifact
           metadata each take a row, as on Compare and Evaluate. */}
       <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">

@@ -3,13 +3,13 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { hasAnyKey, needsKey, useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { GraphNode, LlmSettings, Registry, Source } from "@/api/types"
+import type { GraphNode, LlmSettings, Registry } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { useExplanations } from "@/api/useExplain"
-import { useSamples } from "@/api/samples"
 import { KeyHint } from "@/components/ApiKeyControl"
+import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { AskPanel } from "@/components/ask/AskPanel"
@@ -31,9 +31,7 @@ import {
   indexNode,
   infoFor,
   initialGraph,
-  readStoredGraph,
   removeNode,
-  sampleGraph,
   setConfig,
   setReranker,
   setRewrite,
@@ -43,8 +41,10 @@ import {
   storeGraph,
   titleFor,
   upstreamOfStage,
+  useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
+import { useDocument } from "@/state/document"
 import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   decodePipeline,
@@ -90,23 +90,27 @@ export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry
 }
 
 /**
- * Why Build the index is disabled: the Upload card just needs a file, not a
- * settings fix, so it gets its own calm sentence instead of naming a "Upload" setting.
+ * Why Build the index is disabled: the Document card just needs a file, not a
+ * settings fix, so it gets its own calm sentence instead of naming a "Document" setting.
  */
 function blockedTitle(blocker: GraphNode): string {
   return blocker.stage === "source" ? "Load a sample to start." : `Fix the ${titleFor(blocker)} settings to run the pipeline.`
 }
 
 function Build({ registry }: { registry: Registry }) {
-  // The working copy: whatever was last stored under its own key, else the
-  // graph of whichever saved pipeline is selected (a session that starts with
-  // a selection already made but no working-copy storage of its own yet),
-  // else the default graph.
-  const [graph, setGraph] = useState<PipelineGraph>(() => {
+  // The working copy, a store every page reads (the header's Document control
+  // too): whatever was last stored under its own key, else the graph of
+  // whichever saved pipeline is selected (a session that starts with a
+  // selection already made but no working-copy storage of its own yet), else
+  // the default graph.
+  const graph = useStoredGraph(registry, () => {
     const currentId = readCurrentId()
     const current = currentId ? readPipelines().find((p) => p.id === currentId) : undefined
-    return readStoredGraph(registry) ?? (current ? usableGraph(current, registry) : null) ?? initialGraph(registry)
+    return (current ? usableGraph(current, registry) : null) ?? initialGraph(registry)
   })
+  // The document comes from the bar in the header. Missing or none blocks a run.
+  const { status: docStatus } = useDocument()
+  const noDocument = needsDocument(docStatus)
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [tracked, setTracked] = useState<Tracked>({ results: {}, history: {} })
@@ -134,18 +138,6 @@ function Build({ registry }: { registry: Registry }) {
   // card and coming Back to Ask keeps it; a new Ask or another reranker opens it.
   const [comparisonHidden, setComparisonHidden] = useState<string | null>(null)
   const { keys } = useApiKey()
-  // Plan I-15: null until `GET /api/sources` answers, and if it fails.
-  const [uploaded, setUploaded] = useState<Source[] | null>(null)
-
-  useEffect(() => {
-    api.sources().then(setUploaded, () => undefined)
-  }, [])
-  // Files the Upload card's picker handed over in this tab (an upload just now
-  // included): they exist on the server, so they are never flagged as missing.
-  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set())
-  const notePicked = (c: Record<string, unknown>) => {
-    if (typeof c.sha === "string" && c.sha) setPicked((p) => (p.has(c.sha as string) ? p : new Set(p).add(c.sha as string)))
-  }
 
   // Which keys the server has. Null until it answers, and if it fails: then
   // Ask is left alone.
@@ -158,7 +150,6 @@ function Build({ registry }: { registry: Registry }) {
   const [keyNotice, setKeyNotice] = useState<string | null>(null)
   useEffect(() => setKeyNotice(null), [keys])
 
-  useEffect(() => storeGraph(graph), [graph])
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
   const explanations = useExplanations(graph.nodes)
 
@@ -175,7 +166,7 @@ function Build({ registry }: { registry: Registry }) {
   )
 
   const edit = useCallback((next: PipelineGraph, ...touched: string[]) => {
-    setGraph(next)
+    storeGraph(next)
     if (touched.length) {
       setErrors((e) => {
         if (!touched.some((id) => e[id])) return e
@@ -226,7 +217,7 @@ function Build({ registry }: { registry: Registry }) {
     setRunTarget(target)
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
-      setErrors((e) => ({ ...e, [source.id]: { message: "Choose or upload a file first." } }))
+      setErrors((e) => ({ ...e, [source.id]: { message: "Pick a document in the bar above first." } }))
       setSelected(source.id)
       return
     }
@@ -285,38 +276,27 @@ function Build({ registry }: { registry: Registry }) {
     window.location.assign(`/compare?${q.toString()}`)
   }
 
-  // Plan I-15: the first-run screen, whenever no file is selected. Its picker
-  // lists this browser's uploads, so a returning visitor can pick one there.
+  // Plan I-15: the first-visit card, whenever no file is selected. This
+  // browser's uploads are in the bar's menu.
   const sourceNode = graph.nodes.find((n) => n.stage === "source")
   const firstRun = sourceNode !== undefined && !sourceNode.config.sha
-
   // The working copy's document may not exist in this browser (opened from a
-  // share link, or a different machine): null, so no notice, until sources
-  // have answered and samples have answered or failed (M1). A failed samples
-  // fetch counts as answered, with no samples.
-  const { samples, error: samplesError } = useSamples()
+  // share link, or a different machine). The bar decides, once its lists have
+  // answered (M1); a file chosen on this page is never flagged.
+  const missing = docStatus === "missing"
+
+  // A new document clears the errors the old one left on the Document card.
   const sourceSha = String(sourceNode?.config.sha ?? "")
-  const sourceName = String(sourceNode?.config.filename ?? "")
-  const known =
-    uploaded === null || (samples === null && !samplesError)
-      ? null
-      : picked.has(sourceSha) || uploaded.some((s) => s.sha === sourceSha) || (samples?.some((s) => s.sha === sourceSha) ?? false)
-  const missing = Boolean(sourceSha) && known === false
-
-  function loadSample(src: Source, question: string) {
-    edit(sampleGraph(registry, src, question))
-    setUploaded((u) => [...(u ?? []), src])
-    setSelected(null)
-  }
-
-  /** A sample picked on the Upload card: set its file and its question, and keep every other setting. */
-  function pickSample(src: Source, question: string) {
-    if (!sourceNode) return
-    let g = setConfig(graph, sourceNode.id, { sha: src.sha, filename: src.filename })
-    const query = g.nodes.find((n) => n.stage === "query")
-    if (query) g = setConfig(g, query.id, { ...query.config, text: question })
-    edit(g, sourceNode.id, ...(query ? [query.id] : []))
-  }
+  const sourceId = sourceNode?.id
+  useEffect(() => {
+    if (!sourceId) return
+    setErrors((e) => {
+      if (!e[sourceId]) return e
+      const rest = { ...e }
+      delete rest[sourceId]
+      return rest
+    })
+  }, [sourceSha, sourceId])
 
   const failedNode = order.find((n) => results[n.id]?.status === "failed" && !stale.has(n.id))
 
@@ -354,11 +334,12 @@ function Build({ registry }: { registry: Registry }) {
                 Cancel
               </Button>
             ) : null}
+            {noDocument ? <span className="text-xs text-fg-muted">Needs a document.</span> : null}
             <Button
               size="sm"
               busy={building}
-              disabled={busy || Boolean(blocker) || firstRun}
-              title={blocker ? blockedTitle(blocker) : BUILD_TITLE}
+              disabled={busy || Boolean(blocker) || firstRun || noDocument}
+              title={noDocument ? "Needs a document." : blocker ? blockedTitle(blocker) : BUILD_TITLE}
               onClick={() => void start(indexNode(graph)?.id, false, false)}
             >
               {building ? "Building" : "Build the index"}
@@ -381,13 +362,9 @@ function Build({ registry }: { registry: Registry }) {
         <p className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
           These five steps build the index. Retrieval, reranking and answering live in the Ask panel.
         </p>
-        {missing ? (
-          <p role="status" data-testid="missing-document" className="border-b border-hairline bg-stale-wash px-3 py-2 text-xs text-stale">
-            This pipeline was built on {sourceName}. Load a sample, or upload that file, to run it.
-          </p>
-        ) : null}
+        <DocumentNote action="build the index" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />
         {/* A source blocker is the no-file case, which the first-visit card covers. Right after a
-            sample loads, the Upload card's old explanation can linger for a moment; no red flash. */}
+            sample loads, the Document card's old explanation can linger for a moment; no red flash. */}
         {blocker && !firstRun && blocker.stage !== "source" ? (
           <p data-testid="run-all-blocked" className="border-b border-hairline px-3 py-2 text-xs text-danger">
             {blockedTitle(blocker)}
@@ -411,16 +388,10 @@ function Build({ registry }: { registry: Registry }) {
           </div>
         ) : null}
         {/* Keyed by the screen it holds: the column after a sample loads starts at the top,
-            not at the Upload card's scroll position. Below md the page scrolls as one. */}
+            not at the first-visit card's scroll position. Below md the page scrolls as one. */}
         <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" data-scroll-box className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {firstRun && sourceNode ? (
-            <FirstRun
-              onSource={(v) => {
-                notePicked({ ...v })
-                edit(setConfig(graph, sourceNode.id, { ...v }), sourceNode.id)
-              }}
-              onSample={loadSample}
-            />
+            <FirstRun />
           ) : (
             <>
               <PipelineColumn
@@ -434,11 +405,7 @@ function Build({ registry }: { registry: Registry }) {
                 missingSource={missing}
                 onSelect={setSelected}
                 onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
-                onConfig={(id, c) => {
-                  if (id === sourceNode?.id) notePicked(c)
-                  edit(setConfig(graph, id, c), id)
-                }}
-                onSample={pickSample}
+                onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
                 onRun={(id, force) => void start(id, force)}
                 onAddCleaner={() => edit(addCleaner(graph, registry))}
                 onRemove={(id) => {
@@ -471,6 +438,7 @@ function Build({ registry }: { registry: Registry }) {
             busy={busy}
             asking={asking}
             buildingStep={building ? { title: runningTitle, startedAt: runningSince } : undefined}
+            needsDocument={noDocument}
             keys={keys}
             server={server}
             explanations={explanations}
@@ -507,7 +475,7 @@ function Build({ registry }: { registry: Registry }) {
 const ids = (n: GraphNode | undefined) => (n ? [n.id] : [])
 
 /** What the Build the index button does, for its tooltip. */
-const BUILD_TITLE = "Runs Upload, Parse, Clean, Chunk and Index with their current settings. A step whose settings have not changed is reused."
+const BUILD_TITLE = "Runs Document, Parse, Clean, Chunk and Index with their current settings. A step whose settings have not changed is reused."
 
 /** Stages whose output is placed on the upstream chunk set's document. */
 const RETRIEVAL = new Set(["retrieve", "rerank", "use_case"])

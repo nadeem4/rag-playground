@@ -290,10 +290,34 @@ describe("click to close, and scroll into view", () => {
     expect(row.className.split(/\s+/)).not.toContain("flex-wrap")
   })
 
-  it("the Upload card has no chevron", () => {
+  it("the Document card has no chevron", () => {
     const source = initialGraph(R).nodes.find((n) => n.stage === "source")!
-    const card = renderCard({ node: source, title: "Upload", transforms: transformsFor(R, "source") })
+    const card = renderCard({ node: source, title: "Document", transforms: transformsFor(R, "source") })
     expect(within(card).queryByRole("button", { name: /^(Expand|Collapse) / })).toBeNull()
+  })
+
+  describe("the Document card", () => {
+    const source = initialGraph(R).nodes.find((n) => n.stage === "source")!
+    const withFile = { ...source, config: { sha: "ab".repeat(32), filename: "report.pdf" } }
+
+    it("names the document and points to the bar, with nothing to edit when open", () => {
+      const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), selected: true })
+      expect(card.textContent).toContain("report.pdf. Change it in the bar above.")
+      expect(within(card).queryByRole("textbox")).toBeNull()
+      expect(within(card).queryByRole("combobox")).toBeNull()
+    })
+
+    it("says there is none yet", () => {
+      const card = renderCard({ node: source, title: "Document", transforms: transformsFor(R, "source") })
+      expect(card.textContent).toContain("None yet. Pick one in the bar above.")
+    })
+
+    it("names a missing file and says where to pick another", () => {
+      const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), missing: true })
+      expect(card.textContent).toContain("report.pdf")
+      expect(card.textContent).not.toContain("Change it in the bar above.")
+      expect(within(card).getByTestId("missing-file").textContent).toBe("Missing. Pick a document in the bar above.")
+    })
   })
 
   describe("scrolling", () => {

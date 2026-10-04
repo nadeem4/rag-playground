@@ -7,7 +7,8 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
-import { addReranker, chatSampleGraph, initialGraph, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
+import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/state/document"
+import { addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -28,6 +29,8 @@ beforeEach(() => {
   posts = []
   resetSampleQuestionsCache()
   window.localStorage.clear()
+  resetStoredGraphForTests()
+  resetDocumentForTests()
   resetPipelinesForTests()
   window.history.replaceState(null, "", "/build")
   vi.stubGlobal("EventSource", SilentEventSource)
@@ -58,12 +61,10 @@ afterEach(() => {
 
 const card = (id: string) => document.querySelector(`[data-node-id="${id}"]`) as HTMLElement
 
+/** Renders Shell on the default pipeline with report.pdf as its document, as the bar would set it. */
 async function ready() {
+  storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename }))
   render(<Shell />)
-  // With no file the pipeline shows the first-visit card; its picker lists the uploads.
-  const pick = await waitFor(() => within(document.querySelector('[aria-label="Upload"]') as HTMLElement).getByLabelText("File") as HTMLSelectElement)
-  await waitFor(() => expect(within(pick).getByRole("option", { name: /report\.pdf/ })).toBeTruthy())
-  fireEvent.change(pick, { target: { value: SOURCE.sha } })
   await waitFor(() => expect(card("parse")).toBeTruthy())
 }
 
@@ -91,7 +92,7 @@ describe("Build page", () => {
     expect(within(card("parse")).queryByText(/greater than or equal/)).toBeNull()
   })
 
-  it("Build the index without a file asks calmly for a sample, with no red note", async () => {
+  it("Build the index without a document says it needs one, with no red note", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
@@ -108,8 +109,9 @@ describe("Build page", () => {
     )
     render(<Shell />)
     const build = await screen.findByRole("button", { name: "Build the index" })
-    await waitFor(() => expect(build.getAttribute("title")).toBe("Load a sample to start."), { timeout: 2000 })
+    await waitFor(() => expect(build.getAttribute("title")).toBe("Needs a document."), { timeout: 2000 })
     expect((build as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText("Needs a document.").length).toBeGreaterThan(0)
     expect(document.querySelector("[data-testid=run-all-blocked]")).toBeNull()
     expect(posts).toHaveLength(0)
   })
@@ -304,7 +306,7 @@ describe("Build the index", () => {
     await ready()
     const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
     await waitFor(() => expect(build.disabled).toBe(false))
-    expect(build.getAttribute("title")).toBe("Runs Upload, Parse, Clean, Chunk and Index with their current settings. A step whose settings have not changed is reused.")
+    expect(build.getAttribute("title")).toBe("Runs Document, Parse, Clean, Chunk and Index with their current settings. A step whose settings have not changed is reused.")
   })
 
   it("sends the Index node as the only target", async () => {
@@ -376,7 +378,7 @@ describe("the run strip", () => {
   it("sits above the column, says which step a build is on, then how long it took", async () => {
     await ready()
     const strip = screen.getByTestId("run-strip")
-    expect(within(strip).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Upload", "Parse", "Chunk", "Index"])
+    expect(within(strip).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Document", "Parse", "Chunk", "Index"])
     expect(line()).toBeNull()
     const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
     await waitFor(() => expect(build.disabled).toBe(false))
@@ -583,13 +585,13 @@ describe("First run (plan I-15)", () => {
       if (!el) throw new Error(`no ${sel}`)
       return el as unknown as T
     })
-  const sampleButton = () => found<HTMLButtonElement>('[aria-label="Upload"] li button')
+  const sampleButton = () => found<HTMLButtonElement>('[aria-label="Document"] li button')
 
   it("shows when no source is selected and nothing is uploaded", async () => {
     render(<Shell />)
     expect((await sampleButton()).textContent).toBe("Load")
     // The Ask panel's status line carries the first-run guidance; no empty state sits above it.
-    expect(panel().getByTestId("index-status").textContent).toBe("Load a PDF or pick a sample on the Upload card, then build the index.")
+    expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the bar above, then build the index.")
     expect(document.body.textContent).not.toContain("Nothing to show yet")
     expect(document.body.textContent).not.toContain("Run all")
     expect(card("parse")).toBeNull()
@@ -599,7 +601,7 @@ describe("First run (plan I-15)", () => {
     expect(document.querySelector("[data-testid=run-all-blocked]")).toBeNull()
   })
 
-  it("still shows when files are already uploaded, and its picker lists them", async () => {
+  it("still shows when files are already uploaded, and points to the bar for them", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
@@ -609,10 +611,11 @@ describe("First run (plan I-15)", () => {
       ),
     )
     render(<Shell />)
-    const upload = await found<HTMLElement>('[aria-label="Upload"]')
-    expect(panel().getByTestId("index-status").textContent).toBe("Load a PDF or pick a sample on the Upload card, then build the index.")
+    const upload = await found<HTMLElement>('[aria-label="Document"]')
+    expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the bar above, then build the index.")
     expect(card("parse")).toBeNull()
-    await waitFor(() => expect(within(upload).getByRole("option", { name: /report\.pdf/ })).toBeTruthy())
+    expect(upload.textContent).toContain("Or pick one in the bar above.")
+    expect(within(upload).getByRole("button", { name: "Upload a PDF" })).toBeTruthy()
   })
 
   it("does not show when the stored graph already has a source", async () => {
@@ -622,7 +625,7 @@ describe("First run (plan I-15)", () => {
     )
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(document.querySelector('[aria-label="Upload"]')).toBeNull()
+    expect(document.querySelector('[aria-label="Document"]')).toBeNull()
   })
 
   it("the sample loads the source and sets the default graph, without running anything", async () => {
@@ -649,7 +652,7 @@ describe("First run (plan I-15)", () => {
     expect(document.body.textContent).not.toContain("Ask card")
   })
 
-  it("after a sample loads, the column starts at the top: a fresh scroll box, not the Upload card's", async () => {
+  it("after a sample loads, the column starts at the top: a fresh scroll box, not the first-visit card's", async () => {
     render(<Shell />)
     const btn = await sampleButton()
     const box = document.querySelector('[data-testid="pipeline-scroll"]')
@@ -689,7 +692,7 @@ function storedQuestion() {
   return read.nodes?.find((n) => n.stage === "query")?.config.text
 }
 
-describe("picking a sample on the Upload card", () => {
+describe("picking a sample in the bar", () => {
   const TWO_COL = { sha: "11".repeat(32), filename: "two-column-report.pdf", size: 8192, content_type: "application/pdf" }
   const CARD = {
     name: "two-column-report",
@@ -729,9 +732,7 @@ describe("picking a sample on the Upload card", () => {
     storeGraph(g)
     render(<Shell />)
     await waitFor(() => expect(card("source")).toBeTruthy())
-    const pick = await waitFor(() => within(card("source")).getByLabelText("File") as HTMLSelectElement)
-    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
-    fireEvent.change(pick, { target: { value: "sample:two-column-report" } })
+    await act(() => loadSampleDocument(CARD))
     await waitFor(() => expect(storedQuestion()).toBe("How long did the survey run?"))
     expect(sampled).toEqual(["two-column-report"])
     type Stored = { nodes: { id: string; config: Record<string, unknown> }[] }
@@ -744,7 +745,7 @@ describe("picking a sample on the Upload card", () => {
     const byId = new Map(stored.nodes.map((n) => [n.id, n.config]))
     expect(byId.get("chunk")).toEqual({ ...chunk.config, chunk_size: 321 })
     expect(stored.nodes.map((n) => n.id)).toEqual(g.nodes.map((n) => n.id))
-    expect(pick.value).toBe("sample:two-column-report")
+    expect(card("source").textContent).toContain("two-column-report.pdf. Change it in the bar above.")
     expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?")
   })
 
@@ -879,7 +880,11 @@ describe("saved pipelines on Build", () => {
     const foreign = setConfig(graph, src.id, { sha: "ef".repeat(32), filename: "report.pdf" })
     storeGraph(foreign)
     setup()
-    expect(await screen.findByText("This pipeline was built on report.pdf. Load a sample, or upload that file, to run it.")).toBeTruthy()
+    await waitFor(() =>
+      expect(screen.getByTestId("document-note").textContent).toContain(
+        "report.pdf is missing. Uploads on the demo expire. Pick a document in the bar above to build the index.",
+      ),
+    )
   })
   const blockWrites = () =>
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
@@ -978,15 +983,30 @@ describe("saved pipelines on Build", () => {
   })
 
   describe("the missing document notice while samples load (M1)", () => {
-    let settle: { resolve: (r: Response) => void; reject: (e: Error) => void }
+    // Every reader of the samples list (the bar's store, the Ask panel) waits on its own request; settle answers them all.
+    // A request made after the answer gets the same answer.
+    let pending: { resolve: (r: Response) => void; reject: (e: Error) => void }[] = []
+    let answered: ((p: (typeof pending)[number]) => void) | null = null
+    const settle = {
+      resolve: (r: Response) => {
+        answered = (p) => p.resolve(r.clone())
+        pending.splice(0).forEach(answered)
+      },
+      reject: (e: Error) => {
+        answered = (p) => p.reject(e)
+        pending.splice(0).forEach(answered)
+      },
+    }
     const SAMPLE_SHA = "cd".repeat(32)
 
     beforeEach(() => {
+      pending = []
+      answered = null
       const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
       vi.stubGlobal(
         "fetch",
         vi.fn((url: string, init?: RequestInit) =>
-          url === "/api/samples" ? new Promise<Response>((resolve, reject) => (settle = { resolve, reject })) : base(url, init),
+          url === "/api/samples" ? new Promise<Response>((resolve, reject) => (answered ? answered({ resolve, reject }) : pending.push({ resolve, reject }))) : base(url, init),
         ),
       )
     })
@@ -996,7 +1016,7 @@ describe("saved pipelines on Build", () => {
       const src = graph.nodes.find((n) => n.stage === "source")!
       storeGraph(setConfig(graph, src.id, { sha, filename: "chunking-primer.pdf" }))
     }
-    const notice = () => screen.queryByTestId("missing-document")
+    const notice = () => screen.queryByTestId("document-note")
     const sample = { name: "chunking-primer", sha: SAMPLE_SHA, filename: "chunking-primer.pdf" }
 
     it("shows nothing until samples answer, and nothing for a sample once they do", async () => {
@@ -1021,7 +1041,7 @@ describe("saved pipelines on Build", () => {
 
     const cardWarning = () => card("source")?.querySelector("[data-testid=missing-file]") ?? null
 
-    it("the collapsed Upload card warns that the file is missing, and the column notice reads as a warning", async () => {
+    it("the collapsed Document card warns that the file is missing, and the column note reads as a warning", async () => {
       stored("ef".repeat(32))
       setup()
       await screen.findByRole("group", { name: "Saved pipelines" })
@@ -1033,7 +1053,7 @@ describe("saved pipelines on Build", () => {
       })
       expect(card("source").getAttribute("aria-current")).toBeNull()
       expect(warning.getAttribute("role")).toBe("status")
-      expect(warning.textContent).toBe("Missing. Uploads expire on the demo. Upload it again or load a sample.")
+      expect(warning.textContent).toBe("Missing. Pick a document in the bar above.")
       expect(warning.className).toContain("text-stale")
       expect(warning.className).toContain("bg-stale-wash")
       expect(notice()!.className).toContain("text-stale")
@@ -1041,7 +1061,7 @@ describe("saved pipelines on Build", () => {
       expect(notice()!.className).not.toContain("text-fg-muted")
     })
 
-    it("the Upload card shows no warning while the lists are still loading", async () => {
+    it("the Document card shows no warning while the lists are still loading", async () => {
       stored("ef".repeat(32))
       setup()
       await screen.findByRole("group", { name: "Saved pipelines" })
@@ -1050,7 +1070,7 @@ describe("saved pipelines on Build", () => {
       expect(cardWarning()).toBeNull()
     })
 
-    it("the Upload card shows no warning when the file is present", async () => {
+    it("the Document card shows no warning when the file is present", async () => {
       stored(SAMPLE_SHA)
       setup()
       await screen.findByRole("group", { name: "Saved pipelines" })
@@ -1071,13 +1091,13 @@ describe("saved pipelines on Build", () => {
       ),
     )
     setup()
-    const upload = await screen.findByLabelText("Upload a file")
+    const upload = await screen.findByLabelText("Upload a PDF file")
     await act(async () => {
       fireEvent.change(upload, { target: { files: [new File(["%PDF-1.4"], "my-notes.pdf", { type: "application/pdf" })] } })
     })
     await waitFor(() => expect(card("parse")).toBeTruthy())
     await act(async () => {})
-    expect(screen.queryByTestId("missing-document")).toBeNull()
+    expect(screen.queryByTestId("document-note")).toBeNull()
     expect(card("source").querySelector("[data-testid=missing-file]")).toBeNull()
   })
 
@@ -1367,5 +1387,145 @@ describe("the Ask panel results on Build", () => {
     await waitFor(() => expect(panel().getAllByText("This model is not available").length).toBeGreaterThan(0))
     fireEvent.click(within(panel().getByRole("group", { name: "Answer with" })).getByRole("button", { name: "Search" }))
     await waitFor(() => expect(panel().queryByText("This model is not available")).toBeNull())
+  })
+})
+
+describe("the document comes from the bar", () => {
+  const SAMPLE_SHA = "cd".repeat(32)
+  const UP = { sha: "12".repeat(32), filename: "my-notes.pdf", size: 7451, content_type: "application/pdf" }
+  const SAMPLE_CARD = {
+    name: "chunking-primer",
+    title: "A primer on chunking",
+    blurb: "b",
+    shows: "s",
+    stresses: "chunk",
+    pages: 2,
+    default: true,
+    filename: "chunking-primer.pdf",
+    sha: SAMPLE_SHA,
+    question: "Why do chunk boundaries matter?",
+  }
+  // Every reader of the samples list (the bar's store, the Ask panel) waits on its own request; settle answers them all.
+  // A request made after the answer gets the same answer.
+  let pending: { resolve: (r: Response) => void; reject: (e: Error) => void }[] = []
+  let answered: ((p: (typeof pending)[number]) => void) | null = null
+  const settle = {
+    resolve: (r: Response) => {
+      answered = (p) => p.resolve(r.clone())
+      pending.splice(0).forEach(answered)
+    },
+    reject: (e: Error) => {
+      answered = (p) => p.reject(e)
+      pending.splice(0).forEach(answered)
+    },
+  }
+  let streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[]
+
+  class OpenEventSource {
+    onmessage = null
+    onerror = null
+    onopen = null
+    constructor() {
+      streams.push(this)
+    }
+    close() {}
+  }
+
+  beforeEach(() => {
+    streams = []
+    pending = []
+    answered = null
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        url === "/api/samples" ? new Promise<Response>((resolve, reject) => (answered ? answered({ resolve, reject }) : pending.push({ resolve, reject }))) : base(url, init),
+      ),
+    )
+  })
+
+  const stored = (sha: string, filename = "chunking-primer.pdf") => storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha, filename }))
+  const cardWarning = () => card("source")?.querySelector("[data-testid=missing-file]") ?? null
+
+  it("shows the document in use on a slim Document card, with no file picker in it", async () => {
+    stored(SAMPLE_SHA)
+    setup()
+    const doc = await waitFor(() => {
+      expect(card("source")).toBeTruthy()
+      return card("source")
+    })
+    expect(within(doc).getByText("Document")).toBeTruthy()
+    expect(doc.textContent).toContain("chunking-primer.pdf. Change it in the bar above.")
+    fireEvent.click(within(doc).getByText("Document"))
+    expect(within(doc).queryByRole("combobox")).toBeNull()
+    expect(within(doc).queryByRole("button", { name: /upload/i })).toBeNull()
+  })
+
+  it("a missing file warns on the card and in the note, and disables Build the index and Ask", async () => {
+    stored("ef".repeat(32))
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    await act(async () => settle.reject(new Error("down")))
+    await waitFor(() => expect(cardWarning()?.textContent).toBe("Missing. Pick a document in the bar above."))
+    expect(screen.getByTestId("document-note").textContent).toContain("Pick a document in the bar above to build the index.")
+    expect((screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText("Needs a document.").length).toBe(2)
+    expect((screen.getByRole("button", { name: "Ask" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("a document chosen in the bar marks every built step out of date and says so", async () => {
+    vi.stubGlobal("EventSource", OpenEventSource)
+    stored(SAMPLE_SHA)
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    await act(async () => settle.resolve(new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })))
+    const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(build.disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    const emit = (event: Record<string, unknown>, id: string) =>
+      act(() => streams[0].onmessage!(new MessageEvent("message", { data: JSON.stringify(event), lastEventId: id })))
+    ;["source", "parse", "chunk", "index"].forEach((id, i) =>
+      emit({ event: "node_finished", node_id: id, artifact_id: `${id}1`, cache_hit: false, duration_ms: 10 }, String(i + 1)),
+    )
+    emit({ event: "stream_end", status: "finished", ok: true }, "9")
+    await waitFor(() => expect(card("index").getAttribute("data-look")).toBe("done"))
+    expect(screen.queryByTestId("document-note")).toBeNull()
+    await act(() => chooseDocument({ sha: UP.sha, filename: "my-notes.pdf" }))
+    for (const stage of ["parse", "chunk", "index"]) expect(card(stage).getAttribute("data-look")).toBe("stale")
+    expect(screen.getByTestId("document-note").textContent).toBe(
+      "The document changed to my-notes.pdf. The results below are from the old one. Run again to update them.",
+    )
+  })
+
+  it("a share link opened in a new browser keeps its recipe, and picking a sample keeps it too", async () => {
+    const g0 = sampleGraph(liveRegistry as never, { sha: "ef".repeat(32), filename: "their-notes.pdf" })
+    const chunk = g0.nodes.find((n) => n.stage === "chunk")!
+    const shared = setConfig(g0, chunk.id, { ...chunk.config, chunk_size: 200 })
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("From a friend", shared)}`)
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        url === "/api/registry" ? Promise.resolve(new Response(JSON.stringify(liveRegistry), { status: 200 })) : base(url, init),
+      ),
+    )
+    setup()
+    await screen.findByRole("group", { name: "Saved pipelines" })
+    await act(async () => settle.resolve(new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })))
+    await waitFor(() => expect(cardWarning()).toBeTruthy())
+    await act(() => chooseDocument({ sha: SAMPLE_SHA, filename: "chunking-primer.pdf" }, "Why do chunk boundaries matter?"))
+    expect(card("chunk").textContent).toContain("recursive_character")
+    expect(readStoredGraph(liveRegistry as never)!.nodes.find((n) => n.stage === "chunk")!.config.chunk_size).toBe(200)
+    expect(cardWarning()).toBeNull()
+  })
+
+  it("a sample picked in the bar on a first visit loads the sample pipeline", async () => {
+    setup()
+    await screen.findByRole("button", { name: "Upload a PDF" })
+    expect(card("parse")).toBeNull()
+    await act(() => chooseDocument({ sha: SAMPLE_SHA, filename: "chunking-primer.pdf" }, "Why do chunk boundaries matter?"))
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    expect(card("source").textContent).toContain("chunking-primer.pdf. Change it in the bar above.")
   })
 })

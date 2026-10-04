@@ -4,9 +4,9 @@ import { api } from "./client"
 import type { SampleCard, SampleQuestion, Source } from "./types"
 
 /**
- * The bundled samples, shared by every place that lists or loads one (F2):
- * the Load card (`FirstRun`) and the file picker's Samples group
- * (`SourcePicker`). One fetch, one error message, instead of three.
+ * The bundled samples, for the first-visit card (`FirstRun`) and the Ask
+ * panel. The Document control's store (state/document.ts) keeps its own copy,
+ * fetched once per page.
  */
 export interface SamplesState {
   /** Null until the list arrives, or when it could not be read. */

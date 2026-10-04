@@ -2,7 +2,7 @@ import { Fragment, useState } from "react"
 import { Plus } from "lucide-react"
 
 import type { NodeState } from "@/api/runState"
-import type { GraphNode, Registry, Source, Stage } from "@/api/types"
+import type { GraphNode, Registry, Stage } from "@/api/types"
 import { useStages, type ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,6 @@ import { ancestors, columnOrder, INDEX_STAGES, infoFor, titleFor, transformsFor,
 import type { RunHistory } from "@/state/pipeline"
 
 import { NodeCard } from "./NodeCard"
-import { SourcePicker, type SourceConfig } from "./SourcePicker"
 
 /**
  * The pipeline column: a top-to-bottom rendering of the graph. It owns no
@@ -35,14 +34,12 @@ export interface PipelineColumnProps {
   selected: string | null
   busy: boolean
   errors: Record<string, NodeErrors>
-  /** The Upload card's file is known to be gone from this browser (an expired upload). */
+  /** The Document card's file is known to be gone from this browser (an expired upload). */
   missingSource?: boolean
   /** A card's id, or null when the selected card's head closes it. */
   onSelect: (id: string | null) => void
   onTransform: (id: string, transform: string) => void
   onConfig: (id: string, config: Record<string, unknown>) => void
-  /** A sample picked on the Upload card: its source and its own question. */
-  onSample?: (src: Source, question: string) => void
   onRun: (id: string, force: boolean) => void
   onAddCleaner: () => void
   onRemove: (id: string) => void
@@ -134,16 +131,6 @@ export function PipelineColumn(p: PipelineColumnProps) {
               previousArtifactId={p.history?.[node.id]?.previous}
               showId={stacked}
               onRemove={stacked ? () => p.onRemove(node.id) : undefined}
-              body={
-                node.stage === "source" ? (
-                  <SourcePicker
-                    value={node.config as SourceConfig}
-                    onChange={(c) => p.onConfig(node.id, { ...c })}
-                    onSample={p.onSample}
-                    errors={errs?.fields ? Object.entries(errs.fields).flatMap(([k, msgs]) => msgs.map((m) => (k ? `${k}: ${m}` : m))) : undefined}
-                  />
-                ) : undefined
-              }
               actions={
                 SWEEPABLE.includes(node.stage) ? (
                   <div className="ml-auto flex items-center gap-1">

@@ -61,6 +61,8 @@ export interface AskPanelProps {
   /** Open Compare on a node: the Retrieval block's Compare searches. */
   onSweep?: (id: string) => void
   onAsk: () => void
+  /** The bar's document is missing or not chosen: Ask cannot run until there is one. */
+  needsDocument?: boolean
   /** Set while Build the index runs: the step it is on (when one has started) and when that step started, epoch seconds. */
   buildingStep?: { title?: string; startedAt?: number }
 }
@@ -117,7 +119,7 @@ export function AskPanel(p: AskPanelProps) {
   const questions = useSampleQuestions(sample?.name)
   const terminal = terminalNode(p.graph)
   const blocker = terminal ? blockingNode(p.graph, p.registry, p.explanations, terminal.id) : undefined
-  const askDisabled = p.busy || !indexId || Boolean(blocker)
+  const askDisabled = p.busy || !indexId || Boolean(blocker) || Boolean(p.needsDocument)
 
   // Open on a pipeline whose question has not run yet; folded once it has.
   const answered = p.graph.nodes.some((n) => ASK_STAGES.includes(n.stage) && n.stage !== "query" && p.results[n.id])
@@ -196,7 +198,7 @@ export function AskPanel(p: AskPanelProps) {
             ? `Index ready: ${ready.join(", ")}`
             : sha
               ? "Build the index first."
-              : "Load a PDF or pick a sample on the Upload card, then build the index."}
+              : "Pick a document in the bar above, then build the index."}
         </span>
       </div>
       {/* Scrolls on its own from md up; below it the whole page is one scroll. */}
@@ -215,6 +217,7 @@ export function AskPanel(p: AskPanelProps) {
             }
           />
         ) : null}
+        {p.needsDocument ? <p className="text-xs text-fg-muted">Needs a document.</p> : null}
         {askStale ? null : <SearchedFor outputs={outputs} />}
         {queryErrors?.message ? <p className="text-xs break-words text-danger">{queryErrors.message}</p> : null}
         {indexId && blocker ? <p className="text-xs text-danger">Fix the {titleFor(blocker)} settings to ask.</p> : null}

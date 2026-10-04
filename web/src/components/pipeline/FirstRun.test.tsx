@@ -1,10 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import liveRegistry from "@/api/fixtures/registry.json"
+import type { Registry } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
+import { documentOf, resetDocumentForTests } from "@/state/document"
+import { readStoredGraph, resetStoredGraphForTests } from "@/state/graph"
 
 import { FirstRun } from "./FirstRun"
-import { SourcePicker } from "./SourcePicker"
 
 const SAMPLE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf", size: 4096, content_type: "application/pdf" }
 
@@ -38,9 +41,14 @@ const SAMPLES = [
 let demo = false
 let appCalls = 0
 let posted: (string | null)[] = []
+let uploadRefusal = ""
+const registry = liveRegistry as unknown as Registry
 
 beforeEach(() => {
   resetAppSettingsForTests()
+  window.localStorage.clear()
+  resetStoredGraphForTests()
+  resetDocumentForTests()
   demo = false
   appCalls = 0
   posted = []
@@ -52,6 +60,8 @@ beforeEach(() => {
         appCalls += 1
         return ok(demo ? { demo, limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, ttl_hours: 24 } } : { demo })
       }
+      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/sources" && init?.method === "POST") return new Response(JSON.stringify({ detail: uploadRefusal }), { status: 413 })
       if (url === "/api/sources") return ok([SAMPLE])
       if (url === "/api/samples") return ok(SAMPLES)
       if (url === "/api/sources/sample") {
@@ -68,124 +78,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const uploadButton = () => screen.queryByRole("button", { name: "Upload" })
+const uploadButton = () => screen.queryByRole("button", { name: "Upload a PDF" })
 const NOTE =
   "This is a hosted demo. A PDF you upload is private to this browser, is not shared with anyone, and is deleted after a day. Files up to 10 MB and 20 pages, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
 const IN_A_FRAME = " Uploads need cookies. If your browser blocks them here, open the demo in its own tab."
 
-describe("SourcePicker", () => {
-  it("offers Upload outside demo mode, and says files never leave the machine", async () => {
-    render(<SourcePicker value={{}} onChange={() => {}} />)
-    await screen.findByLabelText("File")
-    await waitFor(() => expect(appCalls).toBe(1))
-    expect(uploadButton()).not.toBeNull()
-    expect(await screen.findByText("Your files stay on this machine and never leave it.")).toBeTruthy()
-  })
-
-  it("offers Upload in demo mode too, and says the file is not shared", async () => {
-    demo = true
-    render(<SourcePicker value={{}} onChange={() => {}} />)
-    await screen.findByLabelText("File")
-    await waitFor(() => expect(appCalls).toBe(1))
-    expect(uploadButton()).not.toBeNull()
-    expect(await screen.findByText("Your file is private to this browser, is not shared with anyone, and is deleted after a day.")).toBeTruthy()
-  })
-
-  it("keeps Upload when the app settings cannot be read", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/sources" ? [SAMPLE] : { detail: "x" }), { status: url === "/api/sources" ? 200 : 500 })),
-    )
-    render(<SourcePicker value={{}} onChange={() => {}} />)
-    await screen.findByLabelText("File")
-    expect(uploadButton()).not.toBeNull()
-  })
-
-  it("offers every sample in the file list, and loads one", async () => {
-    const onChange = vi.fn()
-    render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={onChange} />)
-    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
-    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
-    expect([...pick.querySelectorAll("optgroup")[0].querySelectorAll("option")].map((o) => o.textContent)).toEqual(["A primer on chunking", "Scanned notes"])
-    expect(screen.queryByLabelText("Load a sample")).toBeNull()
-    fireEvent.change(pick, { target: { value: "sample:scanned-notes" } })
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
-    expect(posted).toEqual(["scanned-notes"])
-  })
-
-  it("has no Samples group and lists no sample file when told samples are offered elsewhere (F2)", async () => {
-    render(<SourcePicker value={{}} onChange={() => {}} samples={false} />)
-    expect(await screen.findByText("No files uploaded yet. Upload a PDF to start.")).toBeTruthy()
-    expect(document.querySelector("optgroup")).toBeNull()
-    expect(screen.queryByLabelText("Load a sample")).toBeNull()
-  })
-
-  it("names the sample in a failed load, disables the select meanwhile, and clears the message on a later success", async () => {
-    const onChange = vi.fn()
-    let fail = true
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-        if (url === "/api/sources") return ok([SAMPLE])
-        if (url === "/api/samples") return ok(SAMPLES)
-        if (url === "/api/sources/sample") {
-          posted.push(init?.body ? JSON.parse(String(init.body)).name : null)
-          return fail ? new Response(JSON.stringify({ detail: "boom" }), { status: 500 }) : ok(SAMPLE)
-        }
-        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
-      }),
-    )
-    render(<SourcePicker value={{ sha: SAMPLE.sha, filename: SAMPLE.filename }} onChange={onChange} />)
-    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
-    await waitFor(() => expect(pick.querySelectorAll("optgroup")).toHaveLength(2))
-    fireEvent.change(pick, { target: { value: "sample:scanned-notes" } })
-    expect(pick.disabled).toBe(true)
-    const err = await screen.findByRole("alert")
-    expect(err.textContent).toBe("Could not load Scanned notes: boom")
-    await waitFor(() => expect(pick.disabled).toBe(false))
-
-    fail = false
-    fireEvent.change(pick, { target: { value: "sample:scanned-notes" } })
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull())
-  })
-
-  it("shows the server's own sentence when an upload is refused, without the status and path", async () => {
-    const said = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files. Or split out the pages you need and upload those."
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/sources" && init?.method === "POST") return new Response(JSON.stringify({ detail: said }), { status: 413 })
-        return new Response(JSON.stringify(url === "/api/sources" ? [SAMPLE] : { detail: "x" }), { status: url === "/api/sources" ? 200 : 404 })
-      }),
-    )
-    render(<SourcePicker value={{}} onChange={() => {}} />)
-    await screen.findByLabelText("File")
-    const file = new File(["%PDF"], "big.pdf", { type: "application/pdf" })
-    fireEvent.change(screen.getByLabelText("Upload a file"), { target: { files: [file] } })
-    expect((await screen.findByRole("alert")).textContent).toBe(`Upload of big.pdf failed: ${said}`)
-  })
-
-  it("in demo mode, an empty list says how to add a file", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-        if (url === "/api/settings/app") return ok({ demo: true })
-        if (url === "/api/sources") return ok([])
-        if (url === "/api/samples") return ok(SAMPLES)
-        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
-      }),
-    )
-    render(<SourcePicker value={{}} onChange={() => {}} samples={false} />)
-    expect(await screen.findByText("No files yet. Upload a PDF, or load a sample.")).toBeTruthy()
-  })
-})
-
 describe("FirstRun", () => {
   it("lists every sample, the default first, with its title, blurb and the stage it stresses", async () => {
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    render(<FirstRun />)
     const rows = await screen.findAllByRole("listitem")
     expect(rows.map((r) => within(r).getByRole("heading").textContent)).toEqual(["A primer on chunking", "Scanned notes"])
     expect(within(rows[1]).getByText("Two pages that are pictures of text.")).toBeTruthy()
@@ -193,75 +93,63 @@ describe("FirstRun", () => {
   })
 
   it("outside demo mode, says files stay on this machine exactly once", async () => {
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    render(<FirstRun />)
     await screen.findAllByRole("listitem")
     expect(await screen.findAllByText("Your files stay on this machine and never leave it.")).toHaveLength(1)
   })
 
-  it("Load posts the sample's name and hands the source back, with the sample's own question (F6)", async () => {
-    const onSample = vi.fn()
-    render(<FirstRun onSource={() => {}} onSample={onSample} />)
+  it("Load posts the sample's name and stores the sample pipeline, with the sample's own question (F6)", async () => {
+    render(<FirstRun />)
     const rows = await screen.findAllByRole("listitem")
     fireEvent.click(within(rows[1]).getByRole("button", { name: "Load" }))
-    await waitFor(() => expect(onSample).toHaveBeenCalledWith(SAMPLE, "What does a scanner actually do to a page?"))
+    await waitFor(() => expect(documentOf(readStoredGraph(registry))).toEqual({ sha: SAMPLE.sha, filename: SAMPLE.filename }))
+    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "query")!.config.text).toBe("What does a scanner actually do to a page?")
     expect(posted).toEqual(["scanned-notes"])
   })
 
-  it("does not also offer the file picker's own sample select (F2)", async () => {
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+  it("points to the bar for your uploads, and has no file picker of its own", async () => {
+    render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    expect(screen.queryByLabelText("Load a sample")).toBeNull()
+    expect(screen.getByText("Or pick one in the bar above.")).toBeTruthy()
+    expect(screen.queryByRole("combobox")).toBeNull()
+    expect(uploadButton()).not.toBeNull()
   })
 
-  it("its file list holds only your uploads, with no Samples group", async () => {
-    const SCANNED = { sha: "ef".repeat(32), filename: "scanned-notes.pdf", size: 2048, content_type: "application/pdf" }
-    const MINE = { sha: "ab".repeat(32), filename: "mine.pdf", size: 1024, content_type: "application/pdf" }
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-        if (url === "/api/settings/app") return ok({ demo: true })
-        if (url === "/api/sources") return ok([SAMPLE, SCANNED, MINE])
-        if (url === "/api/samples") return ok(SAMPLES)
-        return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
-      }),
-    )
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+  it("Upload a PDF refuses a file that is not a PDF", async () => {
+    render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    const pick = (await screen.findByLabelText("File")) as HTMLSelectElement
-    await waitFor(() => expect([...pick.options].map((o) => o.textContent)).toEqual(["Pick a file", "mine.pdf"]))
-    expect(pick.querySelectorAll("optgroup")).toHaveLength(0)
+    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["hello"], "notes.txt", { type: "text/plain" })] } })
+    expect((await screen.findByRole("alert")).textContent).toBe("Upload of notes.txt failed: Only PDF files can be uploaded.")
   })
 
-  it("in demo mode, when every listed file is a sample, its picker says how to add a file", async () => {
-    demo = true
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
-    expect(await screen.findByText("No files yet. Upload a PDF, or load a sample.")).toBeTruthy()
-    expect(document.querySelector("select")).toBeNull()
+  it("shows the server's own sentence when an upload is refused, without the status and path", async () => {
+    uploadRefusal = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Or split out the pages you need and upload those."
+    render(<FirstRun />)
+    await screen.findAllByRole("listitem")
+    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "big.pdf", { type: "application/pdf" })] } })
+    expect((await screen.findByRole("alert")).textContent).toBe(`Upload of big.pdf failed: ${uploadRefusal}`)
   })
 
   it("says so, and still shows Upload, when the sample list cannot be read", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/sources" ? [] : { detail: "down" }), { status: url === "/api/sources" ? 200 : 500 })))
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    render(<FirstRun />)
     expect((await screen.findByRole("alert")).textContent).toMatch(/Could not list the samples/)
     await waitFor(() => expect(uploadButton()).not.toBeNull())
   })
 
   it("in demo mode: Upload stays, the samples stay, and the note states the limits, said once", async () => {
     demo = true
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    render(<FirstRun />)
     const note = await screen.findByTestId("demo-note")
     expect(note.textContent).toBe(NOTE)
     expect(screen.getByRole("link", { name: "run it locally" })).toBeTruthy()
     await waitFor(() => expect(uploadButton()).not.toBeNull())
     expect(await screen.findAllByRole("listitem")).toHaveLength(2)
-    // The embedded picker does not repeat its own short reassurance sentence.
-    expect(screen.queryByText("Your file is private to this browser, is not shared with anyone, and is deleted after a day.")).toBeNull()
   })
 
   it("in demo mode, the limits are not repeated under its Upload button", async () => {
     demo = true
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    render(<FirstRun />)
     await screen.findByTestId("demo-note")
     await waitFor(() => expect(uploadButton()).not.toBeNull())
     expect(screen.queryByTestId("upload-limits")).toBeNull()
@@ -278,7 +166,7 @@ describe("FirstRun", () => {
         return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
       }),
     )
-    render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+    render(<FirstRun />)
     const note = await screen.findByTestId("demo-note")
     expect(note.textContent).toBe(NOTE)
   })
@@ -288,7 +176,7 @@ describe("FirstRun", () => {
     const real = Object.getOwnPropertyDescriptor(window, "top")
     Object.defineProperty(window, "top", { configurable: true, get: () => ({}) })
     try {
-      render(<FirstRun onSource={() => {}} onSample={() => {}} />)
+      render(<FirstRun />)
       const note = await screen.findByTestId("demo-note")
       expect(note.textContent).toBe(NOTE + IN_A_FRAME)
       const link = screen.getByRole("link", { name: "open the demo in its own tab" })

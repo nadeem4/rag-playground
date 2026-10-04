@@ -1,32 +1,27 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { Upload } from "lucide-react"
 
-import { loadSample, useSamples } from "@/api/samples"
-import type { Source } from "@/api/types"
+import { useSamples } from "@/api/samples"
 import { useAppSettings } from "@/api/useDemo"
+import { useUpload } from "@/components/useUpload"
 import { Button } from "@/components/ui/button"
-
-import { SourcePicker, type SourceConfig } from "./SourcePicker"
+import { loadSampleDocument } from "@/state/document"
 
 /**
- * The Load card on a first visit (plan I-15): nothing uploaded and no file
- * selected. Upload your own through the usual picker, or load one of the
- * bundled samples (`GET /api/samples`, then `POST /api/sources/sample`).
- * Nothing runs until the user presses Run. A hosted demo still offers
- * Upload, and states its limits in a note above the picker.
- *
- * The embedded `SourcePicker` leaves out its Samples group (F2): this card
- * already lists every sample, and offering the same choice twice, through two
- * different code paths, is how a sample used to load with the wrong question.
- * It also hides its own reassurance sentence: this card already says, above
- * the picker, that the file is private or never leaves the machine, and
- * its limits line under Upload, since the demo note already states them.
+ * The first-visit card on Build (plan I-15): no document yet. Load one of the
+ * bundled samples (`GET /api/samples`, then `POST /api/sources/sample`), or
+ * upload a PDF; either becomes the document in the header's bar. This
+ * browser's earlier uploads are in the bar's menu. Nothing runs until the
+ * user presses Run. A hosted demo states its limits in a note.
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 const count = (n: number) => WORDS[n] ?? String(n)
-export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) => void; onSample: (s: Source, question: string) => void }) {
+export function FirstRun() {
   const { samples, error: samplesError } = useSamples()
+  const { upload, busy: uploading, error: uploadError } = useUpload()
+  const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const settings = useAppSettings()
@@ -41,7 +36,7 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
     setBusy(name)
     setLoadError(null)
     try {
-      onSample(await loadSample(name), question)
+      await loadSampleDocument({ name, question })
     } catch (err) {
       setLoadError(`Could not load ${title}: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -50,8 +45,11 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
   }
 
   return (
-    <section aria-label="Upload" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
-      <h3 className="text-sm font-semibold">Upload</h3>
+    <section aria-label="Document" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm font-semibold">Document</h3>
+        <p className="m-0 text-sm text-fg-muted">Or pick one in the bar above.</p>
+      </div>
       {demo ? (
         <p data-testid="demo-note" className="text-sm text-fg-muted">
           This is a hosted demo. A PDF you upload is private to this browser, is not shared with anyone, and is deleted after{" "}
@@ -76,8 +74,29 @@ export function FirstRun({ onSource, onSample }: { onSource: (v: SourceConfig) =
       ) : (
         <p className="text-sm text-fg-muted">Your files stay on this machine and never leave it.</p>
       )}
-      <div className="rounded-panel border border-dashed border-field-border p-3">
-        <SourcePicker value={{}} onChange={onSource} samples={false} reassure={false} limits={false} />
+      <div className="flex min-w-0 flex-col gap-2 rounded-panel border border-dashed border-field-border p-3">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="sr-only"
+          tabIndex={-1}
+          aria-label="Upload a PDF file"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            e.target.value = ""
+            void upload(file)
+          }}
+        />
+        <Button variant="outline" size="sm" className="self-start" busy={uploading !== null} onClick={() => fileRef.current?.click()}>
+          <Upload aria-hidden strokeWidth={1.75} />
+          {uploading ? `Uploading ${uploading}` : "Upload a PDF"}
+        </Button>
+        {uploadError ? (
+          <p role="alert" className="text-xs break-words text-danger">
+            {uploadError}
+          </p>
+        ) : null}
       </div>
       <div className="flex min-w-0 flex-col gap-2">
         <h4 className="m-0 text-sm font-medium">Try a sample document</h4>

@@ -120,7 +120,14 @@ describe("the Ask panel header", () => {
     const g = sampleGraph(LIVE, SAMPLE)
     const noFile: PipelineGraph = { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: {} } : n)) }
     setup({ graph: noFile, results: {} })
-    expect(screen.getByTestId("index-status").textContent).toBe("Load a PDF or pick a sample on the Upload card, then build the index.")
+    expect(screen.getByTestId("index-status").textContent).toBe("Pick a document in the bar above, then build the index.")
+  })
+
+  it("without a usable document, Ask is disabled and the panel says it needs one", async () => {
+    setup({ needsDocument: true })
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toContain("Index ready"))
+    expect(askButton().disabled).toBe(true)
+    expect(screen.getByText("Needs a document.")).toBeTruthy()
   })
 
   it("while a build runs, says which step it is on and for how long", () => {

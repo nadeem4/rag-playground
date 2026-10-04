@@ -296,7 +296,7 @@ clips](#recording-the-home-clips).
   option in the dropdown shows what it does: its plain name, its code name and one line
   of help from its own description. A strategy that does not fit the step above it is
   marked before you pick it: one that would still run but fall back is tagged "Falls back"
-  and the card says why in grey, and one that could not run at all is greyed out, tagged
+  and the card says why in amber, and one that could not run at all is greyed out, tagged
   "Cannot run", and blocks Run with the reason in red. One that needs an API key when none
   is set is tagged "Needs a key". After a run, the card says what the step did compared
   with the previous run.

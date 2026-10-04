@@ -11,8 +11,6 @@ import { goldRank } from "./Transcript"
  * for word. With Chat the written answer stands in, so it says nothing.
  */
 
-export { firstSentence }
-
 /** Where a sample question's gold answer was found: the piece's rank and the answer it holds. */
 function goldFound(question: string, rows: readonly HitRowData[], questions: readonly SampleQuestion[]): { rank: number; gold: string } | null {
   const q = questions.find((s) => s.question.trim() === question.trim())

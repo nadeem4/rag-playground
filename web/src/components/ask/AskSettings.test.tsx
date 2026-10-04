@@ -216,6 +216,8 @@ describe("the Rerank block", () => {
   it("a picked LLM reranker with no key says so under the picker", () => {
     setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "llm_rerank"), hasKey: false })
     expect(block("Rerank").getByTestId("key-note").textContent).toBe("Needs an API key. Add one under Key.")
+    // One note: the picker's own, not the block's reason as well.
+    expect(screen.queryByText("Add a key to use the LLM reranker")).toBeNull()
   })
 
   it("LLM is not tagged with a key, nor while keys are unknown", () => {

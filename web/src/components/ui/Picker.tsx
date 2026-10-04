@@ -75,23 +75,23 @@ function tagsOf(o: PickerOption): PickerTag[] {
 }
 
 /** The note under the closed picker: a lock's reason, or that a key is needed. */
-export function PickerNote({ option }: { option?: PickerOption }) {
+export function PickerNote({ option, id }: { option?: PickerOption; id?: string }) {
   const lock = option?.lock
   if (lock?.kind === "soft")
     return (
-      <p role="status" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-stale">
+      <p id={id} role="status" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-stale">
         {lock.reason}
       </p>
     )
   if (lock?.kind === "hard")
     return (
-      <p role="alert" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-danger">
+      <p id={id} role="alert" data-testid="lock-reason" className="text-xs leading-[1.5] break-words text-danger">
         {lock.reason}
       </p>
     )
   if (option?.needsKey)
     return (
-      <p role="status" data-testid="key-note" className="text-xs leading-[1.5] break-words text-fg-muted">
+      <p id={id} role="status" data-testid="key-note" className="text-xs leading-[1.5] break-words text-fg-muted">
         {KEY_NOTE}
       </p>
     )
@@ -120,7 +120,7 @@ export function OptionFace({ option, selected }: { option: PickerOption; selecte
         {tags.map((t) => (
           <Fragment key={t.label}>
             {" "}
-            <span className={cn("rounded-swatch px-[7px] py-px text-2xs font-bold whitespace-nowrap", TAG[t.tone])}>{t.label}</span>
+            <span className={cn("rounded-swatch px-2 py-px text-2xs font-bold whitespace-nowrap", TAG[t.tone])}>{t.label}</span>
           </Fragment>
         ))}
       </span>
@@ -144,6 +144,8 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
   const triggerRef = useRef<HTMLButtonElement>(null)
   const current = options.find((o) => o.value === value)
   const optId = (i: number) => `${id}-opt-${i}`
+  const noteId = `${id}-note`
+  const hasNote = Boolean(current?.lock || current?.needsKey)
 
   const enabled = options.map((o, i) => (isDisabled(o) ? -1 : i)).filter((i) => i >= 0)
 
@@ -169,7 +171,7 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (!enabled.length) return
+    if (!enabled.length && e.key !== "Tab") return
     const pos = enabled.indexOf(active)
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault()
@@ -178,6 +180,10 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
     } else if (e.key === "Home" || e.key === "End") {
       e.preventDefault()
       moveTo(e.key === "Home" ? enabled[0] : enabled[enabled.length - 1])
+    } else if (e.key === "Tab") {
+      // Not prevented: the list closes and the browser moves focus on from the trigger.
+      setOpen(false)
+      triggerRef.current?.focus({ preventScroll: true })
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault()
       pick(active)
@@ -215,8 +221,11 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
         onClick={() => pick(i)}
         className={cn(
           OPTION_GRID,
-          "cursor-pointer data-active:bg-muted",
-          selected && "bg-accent-wash data-active:bg-accent-wash",
+          "cursor-pointer",
+          selected && "bg-accent-wash",
+          // The active row: a fill and an inset outline, so it shows in both themes and on the selected row.
+          i === active && "outline-2 -outline-offset-2 outline-primary",
+          i === active && !selected && "bg-muted",
           isDisabled(o) && "cursor-not-allowed",
         )}
       >
@@ -237,13 +246,14 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
             disabled={disabled}
             aria-haspopup="listbox"
             aria-labelledby={`${labelledBy} ${id}`}
+            aria-describedby={hasNote ? noteId : undefined}
             onKeyDown={(e) => {
-              if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              if (!open && !disabled && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
                 e.preventDefault()
                 show(true)
               }
             }}
-            className="grid min-h-[44px] w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-control border border-field-border bg-field px-[10px] py-[6px] text-left text-sm text-fg hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid min-h-[44px] w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-control border border-field-border bg-field px-2 py-1 text-left text-sm text-fg hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="truncate font-semibold">{current?.name ?? value}</span>
             <ChevronDown aria-hidden className="row-span-2 size-[16px] text-fg-muted" strokeWidth={1.75} />
@@ -265,6 +275,8 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
             align="start"
             sideOffset={6}
             collisionPadding={16}
+            // Every way out moves focus itself (to the trigger, or on by Tab), so Radix must not pull it back later.
+            onCloseAutoFocus={(e) => e.preventDefault()}
             onOpenAutoFocus={(e) => {
               e.preventDefault()
               listRef.current?.focus({ preventScroll: true })
@@ -275,7 +287,7 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
               triggerRef.current?.focus({ preventScroll: true })
             }}
             onKeyDown={onKeyDown}
-            className="z-40 flex max-h-[min(420px,var(--radix-popover-content-available-height))] w-[calc(100vw-32px)] flex-col gap-px overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-[6px] text-fg shadow-sheet outline-none md:w-auto md:max-w-[min(480px,calc(100vw-32px))] md:min-w-(--radix-popover-trigger-width)"
+            className="z-40 flex max-h-[min(420px,var(--radix-popover-content-available-height))] w-[calc(100vw-32px)] flex-col gap-px overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-1 text-fg shadow-sheet outline-none md:w-auto md:max-w-[min(480px,calc(100vw-32px))] md:min-w-(--radix-popover-trigger-width)"
           >
             {groups.map((g, gi) =>
               g.name ? (
@@ -292,7 +304,8 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      {open ? null : <PickerNote option={current} />}
+      {/* Mounted across open and close, so a hard lock's alert is not announced again on every close. */}
+      <PickerNote option={current} id={noteId} />
     </div>
   )
 }

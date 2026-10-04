@@ -150,6 +150,11 @@ function tabbable(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(`${FOCUSABLE}, summary`)].filter((el) => el.checkVisibility?.() ?? el.offsetParent !== null)
 }
 
+/** Inside a popover opened over the page (a picker's list, in a Radix portal): focus there is not an escape from the sheet. */
+function inLayer(el: EventTarget | null): boolean {
+  return el instanceof Element && el.closest("[data-radix-popper-content-wrapper]") !== null
+}
+
 /** A place where Alt+A may be typing: a field, a select or editable text. */
 function isField(el: EventTarget | null): el is HTMLElement {
   if (!(el instanceof HTMLElement)) return false
@@ -226,7 +231,7 @@ export function AskDock({
   useEffect(() => {
     if (!locked || !aside) return
     const onFocus = (e: FocusEvent) => {
-      if (aside.hidden || aside.contains(e.target as Node)) return
+      if (aside.hidden || aside.contains(e.target as Node) || inLayer(e.target)) return
       tabbable(aside)[0]?.focus()
     }
     document.addEventListener("focusin", onFocus)
@@ -253,7 +258,8 @@ export function AskDock({
 
   // The sheet is modal: Escape closes it, and Tab stays inside it.
   function onSheetKey(e: KeyboardEvent<HTMLElement>) {
-    if (!sheet || !aside) return
+    // A picker's list sits in a portal but bubbles here through React: its keys are its own.
+    if (!sheet || !aside || !aside.contains(e.target as Node)) return
     if (e.key === "Escape" && !e.defaultPrevented) {
       e.preventDefault()
       hide()

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { Picker } from "@/components/ui/Picker"
 import { FakeResizeObserver } from "@/routes/fakeResizeObserver"
 import { buildCss } from "@/styles/compileCss"
 
@@ -17,7 +18,17 @@ function Probe() {
   return <p data-testid="probe">{useComparisonWide() ? "wide" : "narrow"}</p>
 }
 
-function Harness({ count, buildWidth = BUILD_WIDTH, details = false }: { count?: number; buildWidth?: number; details?: boolean }) {
+function Harness({
+  count,
+  buildWidth = BUILD_WIDTH,
+  details = false,
+  picker = false,
+}: {
+  count?: number
+  buildWidth?: number
+  details?: boolean
+  picker?: boolean
+}) {
   const dock = useAskDock()
   return (
     <main>
@@ -35,6 +46,21 @@ function Harness({ count, buildWidth = BUILD_WIDTH, details = false }: { count?:
               <textarea />
             </label>
             <button type="button">Change settings</button>
+            {picker ? (
+              <>
+                <span id="reranker-label">Reranker</span>
+                <Picker
+                  id="reranker-picker"
+                  labelledBy="reranker-label"
+                  options={[
+                    { value: "", name: "None" },
+                    { value: "mmr", name: "MMR" },
+                  ]}
+                  value=""
+                  onChange={() => {}}
+                />
+              </>
+            ) : null}
             {details ? (
               <details>
                 <summary>Show search order</summary>
@@ -434,6 +460,19 @@ describe("below lg, a bottom sheet", () => {
     expect(document.activeElement).toBe(close)
     fireEvent.keyDown(close, { key: "Tab", shiftKey: true })
     expect(document.activeElement).toBe(summary)
+  })
+
+  it("a picker's list opens above the sheet and the scrim, keeps its focus, and its Escape closes only the list", async () => {
+    render(<Harness picker />)
+    fireEvent.click(fab())
+    fireEvent.click(screen.getByRole("button", { name: /Reranker/ }))
+    const list = await screen.findByRole("listbox")
+    // The list is in a portal, outside the sheet: above the sheet (z-50) and the scrim (z-40).
+    expect(dockEl().contains(list)).toBe(false)
+    expect(list.className.split(/\s+/)).toContain("z-[60]")
+    expect(document.activeElement).toBe(list)
+    fireEvent.keyDown(list, { key: "Escape" })
+    expect(dockEl().hidden).toBe(false)
   })
 
   it("brings focus back inside when it has got out", () => {

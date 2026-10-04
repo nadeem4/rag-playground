@@ -275,6 +275,7 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
             align="start"
             sideOffset={6}
             collisionPadding={16}
+            // Above the Ask sheet (z-50) and its scrim (z-40), so a list opened in the sheet shows.
             // Every way out moves focus itself (to the trigger, or on by Tab), so Radix must not pull it back later.
             onCloseAutoFocus={(e) => e.preventDefault()}
             onOpenAutoFocus={(e) => {
@@ -287,7 +288,7 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
               triggerRef.current?.focus({ preventScroll: true })
             }}
             onKeyDown={onKeyDown}
-            className="z-40 flex max-h-[min(420px,var(--radix-popover-content-available-height))] w-[calc(100vw-32px)] flex-col gap-px overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-1 text-fg shadow-sheet outline-none md:w-auto md:max-w-[min(480px,calc(100vw-32px))] md:min-w-(--radix-popover-trigger-width)"
+            className="z-[60] flex max-h-[min(420px,var(--radix-popover-content-available-height))] w-[calc(100vw-32px)] flex-col gap-px overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-1 text-fg shadow-sheet outline-none md:w-auto md:max-w-[min(480px,calc(100vw-32px))] md:min-w-(--radix-popover-trigger-width)"
           >
             {groups.map((g, gi) =>
               g.name ? (

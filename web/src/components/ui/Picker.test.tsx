@@ -54,6 +54,7 @@ describe("Picker, closed", () => {
     expect(t.getAttribute("aria-expanded")).toBe("false")
     expect(t.getAttribute("aria-labelledby")).toBe("lbl pk")
     expect(t.className).toContain("min-h-[44px]")
+    expect(t.getAttribute("data-picked")).toBe("recursive_character")
   })
 
   it("uses the option's own second line when it has no code name", () => {

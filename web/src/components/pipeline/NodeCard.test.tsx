@@ -6,6 +6,7 @@ import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
 import type { NodeState } from "@/api/runState"
 import { initialGraph, transformsFor } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
+import { optionOf } from "@/components/ui/pickerTesting"
 
 import { describeResult, NodeCard, type NodeCardProps } from "./NodeCard"
 
@@ -182,9 +183,13 @@ describe("the transform line", () => {
     expect(card.querySelector("header .truncate")).toBeNull()
   })
 
-  it("the picker's options read the same way", () => {
+  it("the picker reads the same way: the plain name, then the code name", () => {
     const card = renderCard()
-    expect(within(card).getByRole("option", { name: "Recursive (natural breaks), recursive_character" })).toBeTruthy()
+    const picker = within(card).getByRole("button", { name: /^Transform/ })
+    expect(picker.textContent).toContain("Recursive (natural breaks)")
+    expect(picker.textContent).toContain("recursive_character")
+    const option = optionOf(picker, "Recursive (natural breaks)")
+    expect(within(option).getByText("recursive_character").className).toContain("font-mono")
   })
 })
 
@@ -304,7 +309,7 @@ describe("click to close, and scroll into view", () => {
       const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), selected: true })
       expect(card.textContent).toContain("report.pdf. Change it in the bar above.")
       expect(within(card).queryByRole("textbox")).toBeNull()
-      expect(within(card).queryByRole("combobox")).toBeNull()
+      expect(within(card).queryByRole("button", { name: /^Transform/ })).toBeNull()
     })
 
     it("says there is none yet", () => {

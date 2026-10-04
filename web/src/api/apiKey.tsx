@@ -79,6 +79,16 @@ export function hasAnyKey(server: LlmSettings | null, keys: Keys): boolean | nul
   return PROVIDERS.some((p) => server[p] !== "none")
 }
 
+/**
+ * The strategies that call a model and so need a key: the ones the Ask panel
+ * turns off when no key is set (the LLM reranker, the LLM rewrite and Chat).
+ */
+const KEY_TRANSFORMS = new Set(["llm_rerank", "llm_rewrite", "chat"])
+
+export function needsApiKey(transform: string): boolean {
+  return KEY_TRANSFORMS.has(transform)
+}
+
 export function checkMessage(provider: LlmProvider, check: LlmCheck): { ok: boolean; text: string } {
   const checked = {
     header: "the key entered here",

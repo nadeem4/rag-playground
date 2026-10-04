@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
+import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
 import { askNodes, initialGraph, sampleGraph, setReranker, setRewrite, setTransform, setUseCase } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
@@ -51,16 +52,17 @@ describe("the Retrieval block", () => {
   it("offers the strategies by their technical names, with a gloss and the stage name", () => {
     setup()
     const b = block("Retrieval")
-    const select = b.getByLabelText("Strategy") as HTMLSelectElement
-    expect([...select.options].map((o) => o.textContent).sort()).toEqual(["BM25", "Dense", "Hybrid (RRF)"])
-    expect(select.value).toBe("hybrid_rrf")
+    const picker = b.getByRole("button", { name: /^Strategy/ })
+    expect(picker.textContent).toContain("Hybrid (RRF)")
+    expect(picker.textContent).toContain("hybrid_rrf")
+    expect(optionNames(picker).sort()).toEqual(["BM25", "Dense", "Hybrid (RRF)"])
     expect(b.getByText("Meaning search and keyword search, fused by reciprocal rank.")).toBeTruthy()
     expect(b.getByText("retrieve")).toBeTruthy()
   })
 
   it("picking a strategy calls onTransform on the retrieve node", () => {
     const p = setup()
-    fireEvent.change(block("Retrieval").getByLabelText("Strategy"), { target: { value: "bm25" } })
+    choose(block("Retrieval").getByRole("button", { name: /^Strategy/ }), "BM25")
     expect(p.onTransform).toHaveBeenCalledWith("retrieve", "bm25")
   })
 
@@ -79,17 +81,26 @@ describe("the Retrieval block", () => {
       retrieve: { ...R.retrieve, dense: { ...dense, prefers: { index: { backends: ["dense"] } }, fallback: "It searches by keyword instead." } },
     }
     setup({ graph: initialGraph(soft), registry: soft })
-    const option = block("Retrieval").getByRole("option", { name: "Dense · falls back" }) as HTMLOptionElement
-    expect(option.disabled).toBe(false)
+    const option = optionOf(block("Retrieval").getByRole("button", { name: /^Strategy/ }), "Dense")
+    expect(option.textContent).toContain("Falls back")
+    expect(option.getAttribute("aria-disabled")).toBe("false")
   })
 
-  it("a hard lock is disabled in the select, and the reason shows when it is picked", () => {
+  it("a hard lock is disabled in the picker, and the reason shows when it is picked", () => {
     setup({ graph: setTransform(initialGraph(R), "retrieve", "bm25", R), registry: R })
     const b = block("Retrieval")
-    const option = b.getByRole("option", { name: "BM25 · locked" }) as HTMLOptionElement
-    expect(option.disabled).toBe(true)
     expect(b.getByTestId("lock-reason").getAttribute("role")).toBe("alert")
     expect(b.getByRole("alert").textContent).toBe("Needs text search from the index step. lancedb does not provide it, so this cannot run.")
+    const option = optionOf(b.getByRole("button", { name: /^Strategy/ }), "BM25")
+    expect(option.textContent).toContain("Cannot run")
+    expect(option.getAttribute("aria-disabled")).toBe("true")
+  })
+
+  it("each strategy says what it does in one line, from its own summary", () => {
+    setup()
+    const option = optionOf(block("Retrieval").getByRole("button", { name: /^Strategy/ }), "BM25")
+    expect(option.textContent).toContain("Scores pieces by the words they share with the question, counting rare words for more than common ones (the BM25 formula).")
+    expect(option.textContent).not.toContain("It finds exact names")
   })
 })
 

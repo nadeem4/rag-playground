@@ -11,6 +11,7 @@ import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/sta
 import { addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
+import { choose, optionOf } from "@/components/ui/pickerTesting"
 
 import { Shell } from "./Shell"
 
@@ -776,7 +777,8 @@ describe("saved pipelines on Build", () => {
   const withFile = () => setConfig(initialGraph(TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename })
   const bar = () => screen.getByRole("group", { name: "Saved pipelines" })
   const picker = () => within(bar()).getByRole("combobox", { name: "Pipeline" }) as HTMLSelectElement
-  const chunkTransform = () => (within(card("chunk")).getByRole("combobox", { name: "Transform" }) as HTMLSelectElement).value
+  const chunkPicker = () => within(card("chunk")).getByRole("button", { name: /^Transform/ })
+  const chunkTransform = () => chunkPicker().getAttribute("data-picked")
 
   it("starts on the working copy with nothing saved", async () => {
     setup()
@@ -808,7 +810,7 @@ describe("saved pipelines on Build", () => {
     fireEvent.change(picker(), { target: { value: saved.id } })
     expect(chunkTransform()).toBe("token_based")
     expect(within(bar()).queryByText("edited")).toBeNull()
-    fireEvent.change(within(card("chunk")).getByRole("combobox", { name: "Transform" }), { target: { value: "markdown_header" } })
+    choose(chunkPicker(), "By heading")
     expect(within(bar()).getByText("edited")).toBeTruthy()
     expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("token_based")
     fireEvent.click(within(bar()).getByRole("button", { name: "Save changes" }))
@@ -943,7 +945,7 @@ describe("saved pipelines on Build", () => {
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
     expect(within(bar()).getByText("The pipeline could not be saved in this browser.")).toBeTruthy()
     fireEvent.click(within(bar()).getByRole("button", { name: "Cancel" }))
-    fireEvent.change(within(card("chunk")).getByRole("combobox", { name: "Transform" }), { target: { value: "token_based" } })
+    choose(chunkPicker(), "Fixed token count")
     fireEvent.click(within(bar()).getByRole("button", { name: "Save changes" }))
     expect(within(bar()).getByText("The pipeline could not be saved in this browser.")).toBeTruthy()
   })
@@ -953,7 +955,7 @@ describe("saved pipelines on Build", () => {
     setup()
     await screen.findByRole("group", { name: "Saved pipelines" })
     expect((within(bar()).getByRole("button", { name: "Copy link" }) as HTMLButtonElement).disabled).toBe(false)
-    fireEvent.change(within(card("chunk")).getByRole("combobox", { name: "Transform" }), { target: { value: "token_based" } })
+    choose(chunkPicker(), "Fixed token count")
     const copy = within(bar()).getByRole("button", { name: "Copy link" }) as HTMLButtonElement
     expect(copy.disabled).toBe(true)
     expect(copy.title).toBe("Save changes first")
@@ -1150,9 +1152,9 @@ describe("lock states behind a Clean step", () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE))
     render(<Shell />)
     await waitFor(() => expect(card("chunk")).toBeTruthy())
-    const chunk = within(card("chunk"))
-    expect(chunk.getByRole("option", { name: "By heading, markdown_header" })).toBeTruthy()
-    expect(chunk.queryByRole("option", { name: /markdown_header · falls back/ })).toBeNull()
+    const option = optionOf(within(card("chunk")).getByRole("button", { name: /^Transform/ }), "By heading")
+    expect(option.textContent).toContain("markdown_header")
+    expect(option.textContent).not.toContain("Falls back")
   })
 
   it("the Docling card shows its content layers as five checkboxes", async () => {
@@ -1193,9 +1195,9 @@ describe("lock states behind a Clean step", () => {
     storeGraph(setTransform(g, parse.id, parser, liveRegistry as never))
     render(<Shell />)
     await waitFor(() => expect(card("chunk")).toBeTruthy())
-    const chunk = within(card("chunk"))
-    expect(chunk.getByRole("option", { name: fallsBack ? "By layout block, layout_blocks · falls back" : "By layout block, layout_blocks" })).toBeTruthy()
-    expect(chunk.getByRole("option", { name: "By sentence, sentence_window" })).toBeTruthy()
+    const picker = within(card("chunk")).getByRole("button", { name: /^Transform/ })
+    expect(optionOf(picker, "By layout block").textContent?.includes("Falls back")).toBe(fallsBack)
+    expect(optionOf(picker, "By sentence").textContent).not.toContain("Falls back")
   })
 })
 

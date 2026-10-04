@@ -8,7 +8,7 @@ import { resetDocumentForTests } from "@/state/document"
 import { initialGraph, readStoredGraph, resetStoredGraphForTests, setConfig, storeGraph } from "@/state/graph"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
-import { ApiKeyProvider, checkMessage, hasAnyKey, keyShortLabel, keySourceLabel, needsKey } from "./apiKey"
+import { ApiKeyProvider, checkMessage, hasAnyKey, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
 import { api, KEY_HEADERS, keyHeaders } from "./client"
 import type { LlmProvider } from "./types"
 
@@ -398,5 +398,12 @@ describe("a chat card that failed for want of a key", () => {
     expect(screen.getAllByText(/No Anthropic API key/).length).toBeGreaterThan(0)
     fireEvent.click(within(screen.getByTestId("key-hint")).getByRole("button", { name: "Open API key" }))
     await waitFor(() => expect(screen.getByRole("dialog", { name: "API keys" })).toBeTruthy())
+  })
+})
+
+describe("needsApiKey", () => {
+  it("is true for the strategies that call a model, the ones Ask turns off without a key", () => {
+    expect(["llm_rerank", "llm_rewrite", "chat"].every(needsApiKey)).toBe(true)
+    expect(["cross_encoder", "mmr", "search", "hybrid_rrf"].some(needsApiKey)).toBe(false)
   })
 })

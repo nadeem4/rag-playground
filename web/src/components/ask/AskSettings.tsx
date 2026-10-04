@@ -206,6 +206,7 @@ function Retrieval({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
         value={node.transform}
         upstream={upstreamFor(p.graph, p.registry, node.id)}
         labelFor={(name) => RETRIEVAL_LABEL[name] ?? name}
+        hasKey={p.hasKey}
         onChange={(t) => p.onTransform(node.id, t)}
       />
       {gloss ? <p className={GLOSS}>{gloss}</p> : null}

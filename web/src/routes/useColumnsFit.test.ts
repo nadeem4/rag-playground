@@ -1,35 +1,14 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { FakeResizeObserver } from "./fakeResizeObserver"
 import { useColumnsFit } from "./useColumnsFit"
-
-/** A stand-in for the browser's ResizeObserver: reports a width on observe, and again when told to. */
-class FakeResizeObserver {
-  static all: FakeResizeObserver[] = []
-  static width = 1440
-  disconnected = false
-  private cb: ResizeObserverCallback
-  constructor(cb: ResizeObserverCallback) {
-    this.cb = cb
-    FakeResizeObserver.all.push(this)
-  }
-  observe() {
-    this.report(FakeResizeObserver.width)
-  }
-  report(width: number) {
-    this.cb([{ contentRect: { width } } as ResizeObserverEntry], this as unknown as ResizeObserver)
-  }
-  unobserve() {}
-  disconnect() {
-    this.disconnected = true
-  }
-}
 
 const box = () => ({ current: document.createElement("div") })
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  FakeResizeObserver.all = []
+  FakeResizeObserver.reset()
 })
 
 describe("useColumnsFit", () => {
@@ -50,6 +29,15 @@ describe("useColumnsFit", () => {
     FakeResizeObserver.width = 819
     const one = renderHook(() => useColumnsFit(box(), 1))
     expect(one.result.current).toBe(false)
+  })
+
+  it("measures before the first paint, so a narrow screen never draws every column", () => {
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    FakeResizeObserver.silent = true
+    const el = document.createElement("div")
+    Object.defineProperty(el, "clientWidth", { value: 753 })
+    const { result } = renderHook(() => useColumnsFit({ current: el }, 3))
+    expect(result.current).toBe(false)
   })
 
   it("follows a later resize", () => {

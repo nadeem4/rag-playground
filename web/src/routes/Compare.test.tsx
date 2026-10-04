@@ -6,6 +6,7 @@ import type { Registry } from "@/api/types"
 import { sampleGraph, storeGraph, transformsFor } from "@/state/graph"
 
 import { Compare, seedVariants, VariantResult } from "./Compare"
+import { FakeResizeObserver } from "./fakeResizeObserver"
 
 const registry = liveRegistry as unknown as Registry
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
@@ -38,20 +39,6 @@ const picker = () => screen.getByLabelText("Compare") as HTMLSelectElement
 const columns = () => (screen.getAllByLabelText("Transform") as HTMLSelectElement[]).map((s) => s.value)
 const text = () => document.body.textContent ?? ""
 
-/** Reports one width for the recipe grid's container, as the browser's ResizeObserver would. */
-class FakeResizeObserver {
-  static width = 1440
-  private cb: ResizeObserverCallback
-  constructor(cb: ResizeObserverCallback) {
-    this.cb = cb
-  }
-  observe() {
-    this.cb([{ contentRect: { width: FakeResizeObserver.width } } as ResizeObserverEntry], this as unknown as ResizeObserver)
-  }
-  unobserve() {}
-  disconnect() {}
-}
-
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -64,6 +51,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  FakeResizeObserver.reset()
   window.history.replaceState(null, "", "/")
 })
 
@@ -155,10 +143,23 @@ describe("the Compare stage picker", () => {
     expect(screen.getByRole("link", { name: "Change the question on Build" }).getAttribute("href")).toBe("/build")
   })
 
+  it("gives the Change the question link a 44 px box under a coarse pointer, though it sits in a sentence", async () => {
+    openAt("?node=retrieve")
+    render(<Compare />)
+    const link = await screen.findByRole("link", { name: "Change the question on Build" })
+    for (const c of ["pointer-coarse:inline-flex", "pointer-coarse:min-h-[44px]", "pointer-coarse:items-center"]) expect(link.className.split(" ")).toContain(c)
+  })
+
   it("shows no question on a Chunk sweep", async () => {
     render(<Compare />)
     await waitFor(() => expect(picker().value).toBe("chunk"))
     expect(screen.queryByTestId("sweep-question")).toBeNull()
+  })
+
+  it("uses no sm: class in the files this patch touched, since the theme has no sm breakpoint", async () => {
+    const { readFileSync } = await import("node:fs")
+    const files = ["routes/Compare.tsx", "routes/useColumnsFit.ts", "routes/Shell.tsx", "components/ask/AskSettings.tsx", "components/ask/AskPanel.tsx"]
+    for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(/(^|[\s"'`])sm:/m)
   })
 
   it("has no em-dashes or en-dashes", async () => {

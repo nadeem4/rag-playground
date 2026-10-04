@@ -148,10 +148,10 @@ describe("hits on the position spine", () => {
 
 describe("compareLists", () => {
   // MMR version 2 takes relevance from hybrid's own scores, so on this sample it keeps hybrid's top five, reordered.
-  it("MMR chooses from hybrid's wider pool: the same five pieces as hybrid's top five", () => {
+  it("MMR chooses from hybrid's wider pool: the same five pieces as hybrid's top five, three of them in other places", () => {
     const ids = (r: RetrievalResult) => r.hits.map((h) => h.chunk.id)
     expect(hybrid.hits.length).toBeGreaterThan(mmr.hits.length)
-    expect(["same", "swap", "moved"]).toContain(compareLists(ids(hybrid), ids(mmr)).kind)
+    expect(compareLists(ids(hybrid), ids(mmr))).toEqual({ kind: "moved", count: 3, of: 5 })
   })
 
   it("reads both lists at their top k", () => {

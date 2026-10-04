@@ -250,7 +250,7 @@ function Sweep({
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-surface">
       <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline px-3 py-1">
-        <div className="flex min-w-0 basis-full items-baseline gap-3 md:basis-auto">
+        <div className="flex min-w-0 basis-full flex-wrap items-baseline gap-x-3 md:basis-auto">
           <h1 className="text-xl font-semibold">Compare</h1>
           {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
           <p className="text-sm text-fg-muted">
@@ -268,16 +268,17 @@ function Sweep({
                   {question}
                 </q>
                 .{" "}
-                <a href="/build" className="text-fg underline">
+                {/* Inline in the sentence, so the touch rule's min height needs an inline-flex box to apply. */}
+                <a href="/build" className="text-fg underline pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center">
                   Change the question on Build
                 </a>
               </>
             ) : null}
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
           <div className="flex items-center gap-2">
-            <label htmlFor={stageId} className="text-sm text-fg-muted">
+            <label htmlFor={stageId} className="text-sm whitespace-nowrap text-fg-muted">
               Compare
             </label>
             <select id={stageId} className={`${CONTROL} w-auto min-w-[10rem]`} value={target.id} disabled={busy} onChange={(e) => onChoose(e.target.value)}>
@@ -291,7 +292,7 @@ function Sweep({
           {/* Parse and Chunk columns show their own output; only a later stage has a choice of where to stop. */}
           {downstream.length > 1 && target.stage !== "parse" && target.stage !== "chunk" ? (
             <div className="flex items-center gap-2">
-              <label htmlFor={throughId} className="text-sm text-fg-muted">
+              <label htmlFor={throughId} className="text-sm whitespace-nowrap text-fg-muted">
                 Show through
               </label>
               <select id={throughId} className={`${CONTROL} w-auto min-w-[10rem]`} value={through} disabled={busy} onChange={(e) => setThrough(e.target.value)}>
@@ -317,14 +318,14 @@ function Sweep({
             <Plus aria-hidden strokeWidth={1.75} />
             Add variant
           </Button>
-          {/* Below sm the run buttons take their own full-width row, so Sweep is never pushed off a phone screen. */}
-          <div className="flex basis-full gap-2 sm:basis-auto">
+          {/* Below md the run buttons take their own full-width row, so Sweep is never pushed off a phone screen. */}
+          <div className="flex basis-full gap-2 md:basis-auto">
             {busy && runId ? (
-              <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+              <Button variant="outline" size="sm" className="flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
                 Cancel
               </Button>
             ) : null}
-            <Button size="sm" className="flex-1 sm:flex-none" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
+            <Button size="sm" className="flex-1 md:flex-none" disabled={busy || variants.length === 0} onClick={() => void sweep()}>
               {busy ? "Sweeping" : `Sweep ${variants.length} ${variants.length === 1 ? "variant" : "variants"}`}
             </Button>
           </div>
@@ -364,7 +365,7 @@ function Sweep({
         </div>
       )}
 
-      <div ref={scroller} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div ref={scroller} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div data-testid="recipe-grid" className="grid gap-px bg-hairline" style={grid}>
           {visible.map((i) => (
             <SweepControl

@@ -7,6 +7,7 @@ One key per provider (I-18):
 | anthropic | `X-Anthropic-Api-Key`| `ANTHROPIC_API_KEY`         |
 | openai    | `X-OpenAI-Api-Key`   | `OPENAI_API_KEY`            |
 | custom    | `X-Custom-Api-Key`   | `OPENAI_COMPATIBLE_API_KEY` |
+| openrouter| `X-OpenRouter-Api-Key`| `OPENROUTER_API_KEY`       |
 
 Resolution, per provider, first match wins, once per run request (spec §9):
 
@@ -51,6 +52,9 @@ PROVIDERS: dict[str, ProviderKey] = {
     "openai": ProviderKey("X-OpenAI-Api-Key", "OPENAI_API_KEY", "openai_api_key"),
     "custom": ProviderKey(
         "X-Custom-Api-Key", "OPENAI_COMPATIBLE_API_KEY", "custom_api_key"
+    ),
+    "openrouter": ProviderKey(
+        "X-OpenRouter-Api-Key", "OPENROUTER_API_KEY", "openrouter_api_key"
     ),
 }
 

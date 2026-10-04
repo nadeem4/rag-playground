@@ -12,6 +12,10 @@ for any provider:
 - `openai_compatible`: the same SDK and call against a `base_url` the user
   names, with `model_name` as the model id and `max_tokens`, which local
   servers such as Ollama, vLLM and LM Studio understand.
+- `openrouter`: the same SDK and call against OpenRouter's fixed URL
+  (`OPENROUTER_BASE_URL`), with `model_name` as OpenRouter's model id (such as
+  `openai/gpt-4o-mini`), `max_tokens`, and OpenRouter's optional app
+  attribution headers. It needs its own key.
 
 Native Claude citations need document blocks, so that path stays in the chat
 plugin. `complete()` serves the sentence-id path, which works with any model.
@@ -39,7 +43,7 @@ from typing import Any, Literal
 
 from providers import endpoints
 
-Provider = Literal["anthropic", "openai", "openai_compatible"]
+Provider = Literal["anthropic", "openai", "openrouter", "openai_compatible"]
 
 
 @dataclass(frozen=True)
@@ -80,12 +84,34 @@ NO_KEY: dict[str, str] = {
         "No OpenAI API key. Add one with the key button at the top right, "
         "or set OPENAI_API_KEY on the server."
     ),
+    "openrouter": (
+        "No OpenRouter API key. Add one with the key button at the top right, "
+        "or set OPENROUTER_API_KEY on the server."
+    ),
 }
+
+#: OpenRouter's OpenAI-compatible API. Fixed: the user never types it.
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+#: OpenRouter's optional app attribution, sent on every OpenRouter request.
+OPENROUTER_HEADERS: dict[str, str] = {
+    "HTTP-Referer": "https://github.com/nadeem4/rag-playground",
+    "X-Title": "RAG Playground",
+}
+
+#: Model ids offered as examples in the OpenRouter model field's help.
+OPENROUTER_SUGGESTIONS = (
+    "anthropic/claude-sonnet-4",
+    "openai/gpt-4o-mini",
+    "meta-llama/llama-3.3-70b-instruct",
+    "google/gemini-2.5-flash",
+)
 
 #: Where each provider's key sits in `ctx.extras["credentials"]`.
 CREDENTIAL: dict[str, str] = {
     "anthropic": "anthropic_api_key",
     "openai": "openai_api_key",
+    "openrouter": "openrouter_api_key",
     "openai_compatible": "custom_api_key",
 }
 
@@ -125,7 +151,10 @@ def openai_client_kwargs(api_key: str | None, base_url: str | None) -> dict[str,
     (`providers.endpoints`).
     """
     kwargs: dict[str, Any] = {"api_key": api_key or NO_KEY_PLACEHOLDER}
-    if base_url:
+    if base_url == OPENROUTER_BASE_URL:
+        kwargs["base_url"] = base_url
+        kwargs["default_headers"] = dict(OPENROUTER_HEADERS)
+    elif base_url:
         kwargs["base_url"] = base_url
         if endpoints.demo_enabled():
             import openai
@@ -193,6 +222,17 @@ def complete(
         request["max_completion_tokens"] = max_tokens
         client = make_openai_client(api_key)
         where = "OpenAI"
+    elif model.provider == "openrouter":
+        if not api_key:
+            raise ValueError(NO_KEY["openrouter"])
+        if not (model_name or "").strip():
+            raise ValueError(
+                "OpenRouter needs a model id, for example openai/gpt-4o-mini."
+            )
+        request["model"] = model_name.strip()
+        request["max_tokens"] = max_tokens
+        client = make_openai_client(api_key, OPENROUTER_BASE_URL)
+        where = "OpenRouter"
     else:
         if not base_url or not model_name:
             raise ValueError(

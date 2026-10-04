@@ -71,6 +71,20 @@ describe("Home", () => {
     for (const fact of ["No sign in", "Runs on samples or your own PDF", "A key is only needed for chat answers"]) expect(screen.getByText(fact)).toBeTruthy()
   })
 
+  it("makes every call to action 44 px tall, with no smaller height left to win", () => {
+    render(<Home navigate={vi.fn()} />)
+    const ctas = [
+      screen.getByRole("button", { name: "Try it on a sample" }),
+      screen.getByRole("link", { name: "See how it works" }),
+      ...["Build", "Compare", "Evaluate"].map((p) => screen.getByRole("button", { name: `Try it yourself on ${p}` })),
+    ]
+    for (const el of ctas) {
+      const c = el.className.split(/\s+/)
+      expect(c).toContain("h-[44px]")
+      expect(c).not.toContain("h-control")
+    }
+  })
+
   it("names the six steps from Document to Ask, in order", () => {
     render(<Home navigate={vi.fn()} />)
     const strip = screen.getByRole("list", { name: "The steps you can look inside" })

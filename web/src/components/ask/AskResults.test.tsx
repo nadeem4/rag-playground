@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { useState } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
@@ -10,13 +10,10 @@ import type { Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry, RetrievalResult } from "@/api/types"
-import { play } from "@/lib/flip"
 import { sampleGraph, setReranker, setRewrite, setUseCase, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
-import { resetMotionMemory, slideTiming } from "./AskResults"
-
-vi.mock("@/lib/flip", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/flip")>()), play: vi.fn() }))
+import { resetMotionMemory } from "./AskResults"
 
 const LIVE = liveRegistry as unknown as Registry
 const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
@@ -35,7 +32,6 @@ function reranked(): RetrievalResult {
 let payloads: Record<string, unknown>
 
 beforeEach(() => {
-  vi.mocked(play).mockClear()
   resetMotionMemory()
   resetSampleQuestionsCache()
   payloads = {
@@ -287,31 +283,355 @@ describe("the comparison, with a reranker", () => {
   })
 })
 
+describe("the slope between the two lists", () => {
+  it("draws one line per kept piece, from its search swatch to its reranked swatch, by movement", async () => {
+    // Each swatch sits at its place in its column, so the lines have coordinates.
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const column = this.closest("[data-column]")?.getAttribute("data-column")
+      const el = this as HTMLElement
+      if (el.hasAttribute("data-gutter")) return new DOMRect(400, 0, 96, 800)
+      if (!column || el.dataset.id === undefined) return new DOMRect(0, 0, 0, 0)
+      const i = [...this.closest("[data-column]")!.querySelectorAll("[data-id]")].indexOf(this)
+      return new DOMRect(column === "search" ? 0 : 600, 40 + i * 60, 30, 30)
+    })
+    onTestFinished(() => spy.mockRestore())
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const svg = document.querySelector("svg.slope-lines") as SVGElement
+    expect(svg).toBeTruthy()
+    expect(svg.getAttribute("aria-hidden")).toBe("true")
+    // Each list is as tall as its own slips, so opening a passage resizes it and the lines follow.
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("items-start")
+    // A 96 px gutter between the two lists.
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)]")
+    // Prior ranks 6, 1, 2, 4, 3: up, down, down, stayed, down. The dropped piece has no line.
+    const ids = [5, 0, 1, 3, 2].map((i) => hybrid.hits[i].chunk.id)
+    await waitFor(() => expect(svg.querySelectorAll("path")).toHaveLength(5))
+    const paths = [...svg.querySelectorAll("path")]
+    expect(paths.map((p) => p.getAttribute("data-id"))).toEqual(ids)
+    expect(paths.map((p) => p.getAttribute("data-kind"))).toEqual(["up", "down", "down", "same", "down"])
+    // The top kept piece was 6th in search: across the gutter (x 400 to 496), from the 6th left swatch's
+    // centre (y 340 + 15) to the 1st right one's (y 40 + 15). No line reaches into either column.
+    expect(paths[0].getAttribute("d")).toBe("M 402,355 C 442,355 454,55 494,55")
+  })
+
+  it("draws no lines while the comparison is hidden", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(document.querySelector("svg.slope-lines")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    expect(document.querySelector("svg.slope-lines")).toBeNull()
+  })
+})
+
+describe("compact slips in the comparison", () => {
+  const passages = (column: string) => [...document.querySelectorAll<HTMLElement>(`[data-column="${column}"] [data-testid=passage]`)]
+
+  it("clamps the passage to two lines on both sides, so the two lists keep the same rhythm", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(passages("search")).toHaveLength(6)
+    expect(passages("reranked")).toHaveLength(6)
+    expect([...passages("search"), ...passages("reranked")].every((p) => p.className.includes("line-clamp-2"))).toBe(true)
+  })
+
+  it("Show more opens one passage in place and Show less closes it", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const top = document.querySelector<HTMLElement>('[data-column="reranked"] [data-hit-row="1"]')!
+    fireEvent.click(within(top).getByRole("button", { name: "Show more" }))
+    expect(within(top).getByTestId("passage").className).not.toContain("line-clamp")
+    expect(passages("reranked").filter((p) => p.className.includes("line-clamp-2"))).toHaveLength(5)
+    fireEvent.click(within(top).getByRole("button", { name: "Show less" }))
+    expect(within(top).getByTestId("passage").className).toContain("line-clamp-2")
+  })
+
+  it("both sides share one slip anatomy: a place line, two lines of passage, one meta line with one score", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const slip = (column: string) => document.querySelector<HTMLElement>(`[data-column="${column}"] [data-hit-row="1"]`)!
+    const anatomy = (el: HTMLElement) => ({
+      parts: [...el.querySelectorAll("[data-testid]")].map((n) => n.getAttribute("data-testid")),
+      scores: el.querySelectorAll("[data-score]").length,
+      buttons: within(el)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    })
+    expect(anatomy(slip("search"))).toEqual(anatomy(slip("reranked")))
+    expect(anatomy(slip("search")).scores).toBe(1)
+    // The search side's score moves from the place line to the meta line.
+    expect(within(slip("search")).getByTestId("finding").textContent).toBe("1st in search")
+    expect(slip("search").querySelector("[data-score]")!.textContent).toMatch(/^RRF /)
+  })
+
+  it("the single list keeps its full passages", async () => {
+    render(<Panel {...props(sampleGraph(LIVE, UPLOAD), { retrieve: done("retrieve", "ret1"), use_case: done("use_case", "out1") })} />)
+    await waitFor(() => expect(document.querySelectorAll("[data-testid=passage]").length).toBeGreaterThan(0))
+    expect([...document.querySelectorAll("[data-testid=passage]")].some((p) => p.className.includes("line-clamp"))).toBe(false)
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull()
+  })
+})
+
+describe("the linked highlight", () => {
+  it("shows no hand cursor on a slip in the wide layout, where a click does nothing", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(slipOf("reranked", top()).className).not.toContain("cursor-pointer")
+    expect(document.querySelector("[data-slope-grid]")!.className).not.toContain("cursor-pointer")
+  })
+
+  const slipOf = (column: string, id: string) => document.querySelector(`[data-column="${column}"] [data-id="${id}"]`)!.closest<HTMLElement>("[data-slip]")!
+  const litSlips = () => [...document.querySelectorAll<HTMLElement>("[data-slip][data-lit]")]
+  const path = (id: string) => document.querySelector<SVGPathElement>(`svg.slope-lines path[data-id="${id}"]`)!
+  const svg = () => document.querySelector<SVGElement>("svg.slope-lines")!
+  const ready = async () => {
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+  }
+  /** The top reranked piece: 6th in search. */
+  const top = () => hybrid.hits[5].chunk.id
+  /** The highlight's grace before it clears. */
+  const grace = (ms = 80) => act(() => vi.advanceTimersByTime(ms))
+
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
+  afterEach(() => vi.useRealTimers())
+
+  it("a new rerank result starts with nothing lit", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const { rerender } = render(<Panel {...p} />)
+    await ready()
+    fireEvent.mouseOver(slipOf("search", top()))
+    expect(litSlips()).toHaveLength(2)
+    rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(litSlips()).toHaveLength(0)
+  })
+
+  it("hovering a left slip lights its right twin and its line, and dims the other lines; leaving clears it", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    fireEvent.mouseOver(slipOf("search", top()))
+    expect(litSlips()).toEqual([slipOf("search", top()), slipOf("reranked", top())])
+    expect(path(top()).classList.contains("lit")).toBe(true)
+    expect(svg().hasAttribute("data-active")).toBe(true)
+    expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(1)
+    fireEvent.mouseLeave(document.querySelector("[data-slope-grid]")!)
+    grace()
+    expect(litSlips()).toEqual([])
+    expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(0)
+    expect(svg().hasAttribute("data-active")).toBe(false)
+  })
+
+  it("crossing the gap to the next slip does not flicker: the highlight holds for 80 ms", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    const next = hybrid.hits[0].chunk.id
+    fireEvent.mouseOver(slipOf("reranked", top()))
+    expect(litSlips()).toHaveLength(2)
+    // The 4 px gap: still lit, then the next slip takes over with no dark frame.
+    fireEvent.mouseOver(document.querySelector('[data-column="reranked"]')!)
+    grace(79)
+    expect(litSlips()).toEqual([slipOf("search", top()), slipOf("reranked", top())])
+    fireEvent.mouseOver(slipOf("reranked", next))
+    grace(200)
+    expect(litSlips()).toEqual([slipOf("search", next), slipOf("reranked", next)])
+  })
+
+  it("resting on the gap clears it after the grace", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    fireEvent.mouseOver(slipOf("reranked", top()))
+    fireEvent.mouseOver(document.querySelector('[data-column="reranked"]')!)
+    grace()
+    expect(litSlips()).toEqual([])
+  })
+
+  it("focus lights the same way, and blur clears it", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await ready()
+    const id = hybrid.hits[0].chunk.id
+    fireEvent.focus(slipOf("reranked", id))
+    expect(litSlips()).toEqual([slipOf("search", id), slipOf("reranked", id)])
+    expect(path(id).classList.contains("lit")).toBe(true)
+    fireEvent.blur(slipOf("reranked", id))
+    grace()
+    expect(litSlips()).toEqual([])
+  })
+
+  it("a slip without a twin lights only itself, and no line", async () => {
+    // The reranker's top piece is one the search list does not show.
+    const lonely = reranked()
+    lonely.hits[0] = { ...lonely.hits[0], chunk: { ...lonely.hits[0].chunk, id: "lonely" } }
+    payloads.rrLonely = lonely
+    render(<Panel {...props(withCrossEncoder(), { ...RERANKED, rerank_1: done("rerank_1", "rrLonely") })} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(4))
+    fireEvent.mouseOver(slipOf("reranked", "lonely"))
+    expect(litSlips()).toEqual([slipOf("reranked", "lonely")])
+    expect(document.querySelectorAll("svg.slope-lines path.lit")).toHaveLength(0)
+    expect(svg().hasAttribute("data-active")).toBe(false)
+  })
+})
+
+describe("below the wide layout (phone and tablet)", () => {
+  /** A window narrower than 1280 px: the min-width query fails, reduced motion is off. */
+  const narrow = () => vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+  const slipOf = (column: string, id: string) => document.querySelector(`[data-column="${column}"] [data-id="${id}"]`)!.closest<HTMLElement>("[data-slip]")!
+  const top = () => hybrid.hits[5].chunk.id
+  let scrolled: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    narrow()
+    scrolled = vi.fn()
+    Object.assign(Element.prototype, { scrollIntoView: scrolled })
+  })
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+  })
+
+  it("shows the reranked list first, draws no lines, and folds the search order under a closed disclosure", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(document.querySelector("svg.slope-lines")).toBeNull()
+    expect(document.querySelector('[data-column="search"]')).toBeNull()
+    const disclosure = screen.getByRole("button", { name: "Show search order" })
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false")
+    fireEvent.click(disclosure)
+    const search = document.querySelector('[data-column="search"]')!
+    expect(search).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Hide search order" }).getAttribute("aria-expanded")).toBe("true")
+    // The reranked list comes first.
+    const reranked = document.querySelector('[data-column="reranked"]')!
+    expect(reranked.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("a tap lights a slip and its twin and brings the twin into view; a second tap clears it; hover does nothing", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(screen.getByRole("button", { name: "Show search order" }))
+    fireEvent.mouseOver(slipOf("reranked", top()))
+    expect(document.querySelectorAll("[data-slip][data-lit]")).toHaveLength(0)
+    fireEvent.click(slipOf("reranked", top()))
+    expect([...document.querySelectorAll("[data-slip][data-lit]")]).toEqual([slipOf("reranked", top()), slipOf("search", top())])
+    // A smooth scroll that centres the twin, so the reader keeps their place.
+    expect(scrolled).toHaveBeenCalledWith({ behavior: "smooth", block: "center" })
+    expect(scrolled.mock.contexts[0]).toBe(slipOf("search", top()))
+    fireEvent.click(slipOf("reranked", top()))
+    expect(document.querySelectorAll("[data-slip][data-lit]")).toHaveLength(0)
+    // A list item takes no aria-pressed: data-lit alone carries the state.
+    expect(slipOf("reranked", top()).hasAttribute("aria-pressed")).toBe(false)
+  })
+
+  it("a tap does not also select the slip: after two taps it has neither the lit nor the selected look", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const slip = slipOf("reranked", top())
+    fireEvent.click(slip)
+    fireEvent.click(slip)
+    expect(slip.hasAttribute("data-lit")).toBe(false)
+    expect(slip.className).not.toContain("bg-selection")
+    fireEvent.keyDown(slip, { key: "Enter" })
+    fireEvent.keyDown(slip, { key: "Enter" })
+    expect(slip.className).not.toContain("bg-selection")
+  })
+
+  it("shows the hand cursor on a slip only where a tap does something", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(document.querySelector("[data-slope-grid]")!.className).toContain("[&_[data-slip]]:cursor-pointer")
+    expect(slipOf("reranked", top()).className).not.toContain("cursor-pointer")
+  })
+
+  it("scrolls to the twin without motion under reduced motion", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((q: string) => ({ matches: q.includes("reduced-motion"), addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(screen.getByRole("button", { name: "Show search order" }))
+    fireEvent.click(slipOf("reranked", top()))
+    expect(scrolled).toHaveBeenCalledWith({ behavior: "auto", block: "center" })
+  })
+
+  it("the search order starts closed on every switch between the wide and the stacked layout", async () => {
+    let isWide = false
+    const listeners = new Set<() => void>()
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({
+        matches: q.includes("min-width") ? isWide : false,
+        addEventListener: (_: string, f: () => void) => listeners.add(f),
+        removeEventListener: (_: string, f: () => void) => listeners.delete(f),
+      })),
+    )
+    const flip = (w: boolean) =>
+      act(() => {
+        isWide = w
+        listeners.forEach((f) => f())
+      })
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(screen.getByRole("button", { name: "Show search order" }))
+    expect(screen.getByRole("button", { name: "Hide search order" })).toBeTruthy()
+    flip(true)
+    expect(document.querySelector("[data-gutter]")).toBeTruthy()
+    flip(false)
+    expect(screen.getByRole("button", { name: "Show search order" }).getAttribute("aria-expanded")).toBe("false")
+    expect(document.querySelector('[data-column="search"]')).toBeNull()
+  })
+
+  it("Show more does not toggle the highlight", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    fireEvent.click(within(slipOf("reranked", top())).getByRole("button", { name: "Show more" }))
+    expect(slipOf("reranked", top()).hasAttribute("data-lit")).toBe(false)
+  })
+})
+
 describe("the two result motions", () => {
   const rows = (column: string) => [...document.querySelectorAll<HTMLElement>(`[data-column="${column}"] [data-hit-row]`)]
+  /** The lines the draw has animated so far, by data-id, in call order. */
+  let animate: ReturnType<typeof vi.fn>
+  const drawn = () => animate.mock.contexts.map((el) => (el as Element).getAttribute("data-id"))
 
-  it("slides the reranked hits once per rerank result, from the place of their prior rank", async () => {
+  beforeEach(() => {
+    animate = vi.fn()
+    // jsdom has no Web Animations API and no SVG geometry.
+    Object.assign(Element.prototype, { animate, getTotalLength: () => 100 })
+  })
+
+  afterEach(() => {
+    delete (Element.prototype as { animate?: unknown }).animate
+    delete (Element.prototype as { getTotalLength?: unknown }).getTotalLength
+  })
+
+  it("draws the lines once per rerank result, never on a rerender, a collapse or an expand", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     const { rerender } = render(<Panel {...p} />)
     await waitFor(() => expect(badges()).toHaveLength(5))
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
-    const [container, before, timing] = vi.mocked(play).mock.calls[0]
-    expect(container).toBe(document.querySelector('[data-column="reranked"]'))
-    // Every kept hit has a place to come from; the one from #6 starts below the five.
-    // The Not kept slip stays where it is.
-    const keptRows = rows("reranked").filter((r) => !r.textContent!.includes("Not kept"))
-    expect(keptRows).toHaveLength(5)
-    expect([...before.keys()].sort()).toEqual(keptRows.map((r) => r.dataset.flipKey).sort())
-    expect(timing).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
-    // A rerender, a collapse and an expand do not play it again.
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
+    expect(drawn()).toEqual([5, 0, 1, 3, 2].map((i) => hybrid.hits[i].chunk.id))
+    expect(animate.mock.calls[0]).toEqual([
+      [
+        { strokeDasharray: "100", strokeDashoffset: 100 },
+        { strokeDasharray: "100", strokeDashoffset: 0 },
+      ],
+      { duration: 360, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+    ])
     rerender(<Panel {...p} />)
     fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
     fireEvent.click(screen.getByRole("button", { name: "Show comparison" }))
     await screen.findByRole("heading", { name: "Search order, 6 candidates" })
-    expect(play).toHaveBeenCalledTimes(1)
-    // A new rerank result plays once more.
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).toHaveBeenCalledTimes(5)
+    // A new rerank result draws once more.
     rerender(<Panel {...p} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(10))
+  })
+
+  it("draws nothing under reduced motion: the lines are there at full length", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })))
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).not.toHaveBeenCalled()
   })
 
   it("new lists fade in when they first appear, and not again on collapse or expand", async () => {
@@ -330,42 +650,28 @@ describe("the two result motions", () => {
   it("remembers what it showed across a remount, as Back to Ask does", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     render(<Panel {...p} />)
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
     await waitFor(() => expect(rows("search").length).toBe(6))
     cleanup()
     render(<Panel {...p} />)
     await waitFor(() => expect(badges()).toHaveLength(5))
-    await waitFor(() => expect(rows("search").length).toBe(6))
-    expect(play).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).toHaveBeenCalledTimes(5)
     expect(document.querySelector("[data-enter]")).toBeNull()
   })
 
-  it("plays once per distinct rerank result: X, then Y, then X again plays twice", async () => {
+  it("draws once per distinct rerank result: X, then Y, then X again draws nothing new", async () => {
     const p = props(withCrossEncoder(), RERANKED)
     const { rerender } = render(<Panel {...p} />)
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(5))
     const mmr = setReranker(p.graph, LIVE, "mmr")
     rerender(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
     await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })
-    await waitFor(() => expect(play).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(animate).toHaveBeenCalledTimes(10))
     rerender(<Panel {...p} />)
     await screen.findByRole("heading", { name: "After rerank, Cross-encoder, 5 kept" })
-    await waitFor(() => expect(badges()).toHaveLength(5))
-    expect(play).toHaveBeenCalledTimes(2)
-  })
-
-  it("reads the slide's duration in its own unit: the built CSS says .32s", () => {
-    const style = (dur: string) =>
-      vi.spyOn(window, "getComputedStyle").mockReturnValue({
-        getPropertyValue: (name: string) => (name === "--dur-slow" ? dur : " cubic-bezier(0.2, 0, 0, 1)"),
-      } as CSSStyleDeclaration)
-    style(".32s")
-    expect(slideTiming()).toEqual({ duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" })
-    style("320ms")
-    expect(slideTiming().duration).toBe(320)
-    style("")
-    expect(slideTiming().duration).toBe(320)
-    vi.restoreAllMocks()
+    await waitFor(() => expect(document.querySelectorAll("svg.slope-lines path")).toHaveLength(5))
+    expect(animate).toHaveBeenCalledTimes(10)
   })
 })
 
@@ -375,8 +681,21 @@ describe("the note under a reranker that only reorders", () => {
     const mmr = setReranker(p.graph, LIVE, "mmr")
     render(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
     const note = await screen.findByText("Ordered by MMR; the scores are the search's.")
-    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(true)
     expect(note.className).toContain("text-fg-muted")
+    // Above the two lists, not inside the right one, so both lists start level.
+    expect(note.closest("[data-column]")).toBeNull()
+    const grid = document.querySelector("[data-slope-grid]")!
+    expect(note.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("keeps the note with the right list when the comparison is hidden", async () => {
+    const p = props(withCrossEncoder(), RERANKED)
+    const mmr = setReranker(p.graph, LIVE, "mmr")
+    render(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr3") }} />)
+    await screen.findByText("Ordered by MMR; the scores are the search's.")
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    const note = screen.getByText("Ordered by MMR; the scores are the search's.")
+    expect((document.querySelector('[data-column="reranked"]') as HTMLElement).contains(note)).toBe(true)
   })
 
   it("says nothing when the reranker wrote its own scores", async () => {

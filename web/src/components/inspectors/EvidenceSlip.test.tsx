@@ -43,6 +43,42 @@ describe("the evidence slip", () => {
     expect(c).toContain("hover:ring-hairline")
   })
 
+  it("a compact slip clamps its passage and has Show more on its meta line, which opens and closes it in place", () => {
+    const onClick = vi.fn()
+    render(<EvidenceSlip row={rows[0]} side="reranked" piece={0} scaleKey="hybrid_rrf" compact onClick={onClick} />)
+    expect(part("passage")!.className).toContain("line-clamp-2")
+    const more = within(part("meta")!).getByRole("button", { name: "Show more" })
+    expect(more.getAttribute("aria-expanded")).toBe("false")
+    fireEvent.click(more)
+    expect(part("passage")!.className).not.toContain("line-clamp")
+    const less = within(part("meta")!).getByRole("button", { name: "Show less" })
+    expect(less.getAttribute("aria-expanded")).toBe("true")
+    // Show more and Show in PDF stay together, so a narrow slip wraps the score, not a button.
+    const actions = part("meta")!.querySelector<HTMLElement>("[data-actions]")!
+    expect(actions.className).toContain("whitespace-nowrap")
+    expect(within(actions).getByRole("button", { name: "Show less" })).toBeTruthy()
+    // The toggle is its own control: it does not select the slip.
+    expect(onClick).not.toHaveBeenCalled()
+    fireEvent.click(less)
+    expect(part("passage")!.className).toContain("line-clamp-2")
+  })
+
+  it("a slip that is not compact has no Show more", () => {
+    render(<EvidenceSlip row={rows[0]} side="reranked" piece={0} scaleKey="hybrid_rrf" />)
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull()
+  })
+
+  it("a lit slip has the raised look of a hovered one", () => {
+    const { rerender } = render(<EvidenceSlip row={rows[0]} side="search" piece={0} scaleKey="hybrid_rrf" />)
+    expect(slip().hasAttribute("data-lit")).toBe(false)
+    expect(slip().className).not.toMatch(/(^|\s)bg-surface-raised(\s|$)/)
+    rerender(<EvidenceSlip row={rows[0]} side="search" piece={0} scaleKey="hybrid_rrf" lit />)
+    expect(slip().hasAttribute("data-lit")).toBe(true)
+    expect(slip().className).toMatch(/(^|\s)bg-surface-raised(\s|$)/)
+    expect(slip().className).toMatch(/(^|\s)ring-1(\s|$)/)
+    expect(slip().className).toMatch(/(^|\s)ring-hairline(\s|$)/)
+  })
+
   it("sets the passage in the document voice and the finding line in the tool's voice, on every side", () => {
     for (const side of ["single", "search", "reranked", "notKept"] as const) {
       render(<EvidenceSlip row={{ ...rows[1], prior_rank: 4 }} side={side} piece={0} scaleKey="hybrid_rrf" keepLimit={5} />)

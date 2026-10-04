@@ -187,6 +187,13 @@ describe("the finding line", () => {
     expect(strong(parts)).toEqual([])
   })
 
+  it("the search side can leave the score out, for a compact slip that shows it on its meta line", () => {
+    const parts = findingLine(row(1, null, 0.0328), "search", "hybrid_rrf", undefined, undefined, false)
+    expect(text(parts)).toBe("1st in search")
+    expect(parts.filter((p) => p.place).map((p) => p.text)).toEqual(["1st"])
+    expect(parts.some((p) => p.mono)).toBe(false)
+  })
+
   it("the reranked side says where a piece moved from, bold only when it rose", () => {
     const up = findingLine(row(2, 4), "reranked", "cross_encoder")
     expect(text(up)).toBe("2nd, moved up from 4th")

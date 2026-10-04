@@ -1,0 +1,48 @@
+/*
+ * The slope between the search order and the reranked order (spec section 6).
+ * The overlay fills the comparison grid and takes no pointer; each line runs
+ * inside the 96 px gutter, 2 px with round caps: rising solid in the accent,
+ * falling solid in grey, stayed dashed in --flat.
+ */
+
+.slope-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.slope-lines path {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition:
+    opacity var(--dur-fast),
+    stroke-width var(--dur-fast);
+}
+
+/* The linked highlight: the lit piece's line thickens, the others dim. */
+.slope-lines[data-active] path {
+  opacity: 0.5;
+}
+
+.slope-lines path.lit {
+  stroke-width: 3;
+  opacity: 1;
+}
+
+.slope-lines path[data-kind="up"] {
+  stroke: var(--accent);
+}
+
+.slope-lines path[data-kind="down"] {
+  stroke: var(--text-secondary);
+}
+
+/* A piece that stayed is dashed, so "stayed" reads without colour. The draw's own dash overrides it while it runs. */
+.slope-lines path[data-kind="same"] {
+  stroke: var(--flat);
+  stroke-dasharray: 4 4;
+}

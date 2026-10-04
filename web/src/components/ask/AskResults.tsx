@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
@@ -6,16 +6,20 @@ import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Query, Registry, Retri
 import { loadMeta, useArtifactPayload } from "@/api/useArtifact"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
-import { reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
+import { movement, reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
 import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
-import { measure, play, type Rect } from "@/lib/flip"
+import { DRAW_MS, drawSlope, reducedMotion, type SlopeKind } from "@/lib/slope"
 import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
 import { RERANKERS, RETRIEVAL_LABEL } from "./AskSettings"
 import { Finding } from "./Finding"
+import { useSlope } from "./useSlope"
+import { useWide } from "./useWide"
+
+import "./ask.css"
 
 /**
  * The results of the Ask panel: the finding sentence (or a Chat answer when
@@ -160,44 +164,10 @@ export interface AskResultsProps {
 
 export const STALE_LINE = "The settings changed since the last Ask. Press Ask to see the new results."
 
-/**
- * Where each reranked hit stood before the rerank, as a place in the reranked
- * list itself: the hit that was #3 starts where row 3 is now. A hit from below
- * the kept rows starts just under the last one. The rows mount fresh with the
- * result (the old list is gone while Ask runs), so the slots of the new list
- * are the only "before" there is.
- */
-export function priorPlaces(now: ReadonlyMap<string, Rect>, rows: readonly HitRowData[]): Map<string, Rect> {
-  const slots = rows.map((r) => now.get(r.chunk_id))
-  const last = slots[slots.length - 1]
-  const out = new Map<string, Rect>()
-  for (const r of rows) {
-    const p = r.prior_rank
-    if (p === null || p < 1) continue
-    const slot = p <= slots.length ? slots[p - 1] : last && { left: last.left, top: last.top + (last.height ?? 0) }
-    if (slot) out.set(r.chunk_id, slot)
-  }
-  return out
-}
-
-/**
- * A CSS time in milliseconds. The built stylesheet is minified, so `320ms`
- * reads back as `.32s`: the unit must be read, not assumed.
- */
-export function durationMs(raw: string, fallback: number): number {
-  const v = raw.trim()
-  const n = parseFloat(v)
-  if (!Number.isFinite(n)) return fallback
-  return v.endsWith("ms") ? n : v.endsWith("s") ? n * 1000 : fallback
-}
-
-/** Motion 4's timing from the tokens: `--dur-slow` on `--ease-in`. */
-export function slideTiming(): { duration: number; easing: string } {
-  const css = getComputedStyle(document.documentElement)
-  return {
-    duration: durationMs(css.getPropertyValue("--dur-slow"), 320),
-    easing: css.getPropertyValue("--ease-in").trim() || "cubic-bezier(0.2, 0, 0, 1)",
-  }
+/** The slope's draw: 360 ms on `--ease-in` (spec section 6). */
+export function drawTiming(): { duration: number; easing: string } {
+  const ease = getComputedStyle(document.documentElement).getPropertyValue("--ease-in").trim()
+  return { duration: DRAW_MS, easing: ease || "cubic-bezier(0.2, 0, 0, 1)" }
 }
 
 /*
@@ -207,12 +177,12 @@ export function slideTiming(): { duration: number; easing: string } {
  * neither may replay a motion the reader has seen.
  */
 const listsShown = new Set<string>()
-const reranksPlayed = new Set<string>()
+const slopesDrawn = new Set<string>()
 
 /** Forget both, for tests. */
 export function resetMotionMemory(): void {
   listsShown.clear()
-  reranksPlayed.clear()
+  slopesDrawn.clear()
 }
 
 export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [] }: AskResultsProps) {
@@ -230,17 +200,6 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   }
   useEffect(() => {
     for (const id of shown) listsShown.add(id)
-  })
-
-  // Motion 4: once per rerank result, the reranked hits slide from the place
-  // of their prior rank. Never on a rerender, a collapse, an expand or a remount.
-  const flipRef = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const el = flipRef.current
-    const id = o.rerankId
-    if (!el || !id || !o.rerank || reranksPlayed.has(id)) return
-    reranksPlayed.add(id)
-    play(el, priorPlaces(measure(el, "[data-flip-key]"), rowsFromResult(o.rerank)), slideTiming())
   })
 
   let lists: ReactNode = null
@@ -261,7 +220,6 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
         onToggle={() => onComparison(open ? (o.rerankId ?? null) : null)}
         enterSearch={enter(o.retrieveId)}
         enterReranked={enter(o.rerankId)}
-        flipRef={flipRef}
         whatItDid={note === null}
       />
     )
@@ -323,6 +281,21 @@ function Failed({ node, error }: { node: GraphNode; error: string }) {
   )
 }
 
+/** How long the linked highlight holds after the pointer or the focus leaves a slip, in ms. */
+const LIT_GRACE_MS = 80
+
+/** The piece of the slip an event came from, by its swatch's `data-id`; null outside a slip. */
+function pieceAt(target: EventTarget | null): string | null {
+  const slip = target instanceof Element ? target.closest("[data-slip]") : null
+  return slip?.querySelector<HTMLElement>("[data-id]")?.dataset.id ?? null
+}
+
+/** A kept piece's movement as a slope kind: unmoved is `same`. */
+function slopeKind(row: HitRowData): SlopeKind {
+  const m = movement(row)
+  return m.kind === "none" ? "same" : m.kind
+}
+
 /**
  * The search order against the reranked order. Open by default; the reader
  * can hide it for one rerank result, and Build keeps that choice. Hidden, the
@@ -336,7 +309,6 @@ function Comparison({
   onToggle,
   enterSearch,
   enterReranked,
-  flipRef,
   whatItDid,
 }: {
   node: GraphNode
@@ -346,8 +318,6 @@ function Comparison({
   onToggle: () => void
   enterSearch: boolean
   enterReranked: boolean
-  /** The reranked column, where motion 4 plays. */
-  flipRef: RefObject<HTMLDivElement | null>
   /** True when the reranker left no run note: What it did says the outcome under the list instead. */
   whatItDid: boolean
 }) {
@@ -356,14 +326,85 @@ function Comparison({
   const kept = new Set(after.map((r) => r.chunk_id))
   // The candidates the reranker dropped, each with its search place, follow the kept ones as Not kept slips.
   const dropped = before.filter((r) => !kept.has(r.chunk_id)).map((r) => ({ ...r, prior_rank: r.rank }))
+  // At 1280 px and up the lists sit side by side with the slope between them;
+  // below, they stack, no line is drawn, and the search order folds away.
+  const wide = useWide()
+  const sideBySide = open && wide
+  // The slope: one line per kept piece, coloured by how it moved.
+  const gridRef = useRef<HTMLDivElement>(null)
+  const moves = new Map<string, SlopeKind>(after.map((r) => [r.chunk_id, slopeKind(r)]))
+  const lines = useSlope(gridRef, sideBySide, o.rerankId, moves)
+  // Motion 4: once per rerank result, the lines draw from left to right, once
+  // they are measured at the final places. Never on a rerender, a collapse, an
+  // expand or a remount.
+  const svgRef = useRef<SVGSVGElement>(null)
+  useLayoutEffect(() => {
+    const id = o.rerankId
+    if (!svgRef.current || !id || !lines.length || slopesDrawn.has(id)) return
+    slopesDrawn.add(id)
+    drawSlope(svgRef.current, drawTiming())
+  }, [lines, o.rerankId])
+  // The linked highlight: the piece under the pointer or the focus, lit in both
+  // lists and on its line. It clears after a short grace, so crossing the gap
+  // between two slips does not flash everything off and on.
+  const [lit, setLit] = useState<string | null>(null)
+  const grace = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settle = () => {
+    if (grace.current) clearTimeout(grace.current)
+    grace.current = null
+  }
+  const lightNow = (id: string) => {
+    settle()
+    setLit(id)
+  }
+  const clearSoon = () => {
+    if (grace.current) return
+    grace.current = setTimeout(() => {
+      grace.current = null
+      setLit(null)
+    }, LIT_GRACE_MS)
+  }
+  const hover = (target: EventTarget | null) => {
+    const id = pieceAt(target)
+    if (id) lightNow(id)
+    else clearSoon()
+  }
+  useEffect(() => settle, [])
+  // Stacked, the twin is a screen away and hover shows nothing: a tap lights a
+  // slip, brings its twin into view, and a second tap clears it.
+  const tap = (target: EventTarget | null) => {
+    if (!(target instanceof Element) || target.closest("button, a")) return
+    const id = pieceAt(target)
+    if (!id) return
+    const next = lit === id ? null : id
+    setLit(next)
+    if (!next) return
+    const slip = target.closest("[data-slip]")
+    const twin = [...(gridRef.current?.querySelectorAll("[data-slip]") ?? [])].find((el) => el !== slip && el.querySelector<HTMLElement>("[data-id]")?.dataset.id === id)
+    twin?.scrollIntoView?.({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" })
+  }
+  // The search order starts folded on every switch between the two layouts.
+  // Reset during render, not in an effect: an effect on mount could land after
+  // a quick first tap and close what the reader just opened.
+  const [searchShown, setSearchShown] = useState(false)
+  const [shownAt, setShownAt] = useState(wide)
+  if (shownAt !== wide) {
+    setShownAt(wide)
+    setSearchShown(false)
+  }
+  const litLine = lit !== null && lines.some((l) => l.id === lit)
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
       {open ? "Hide comparison" : "Show comparison"}
     </Button>
   )
   const title = <Heading>{`After rerank, ${rerankLabel(node.transform)}, ${after.length} kept`}</Heading>
+  // MMR and the LLM reranker reorder without rescoring: say why the scores are not in order.
+  const note = reorderedOnly(after) ? (
+    <p className="basis-full text-xs text-fg-muted">{`Ordered by ${rerankLabel(node.transform)}; the scores are the search's.`}</p>
+  ) : null
   const reranked = (
-    <div ref={flipRef} data-column="reranked" className="flex min-w-0 flex-col gap-2">
+    <div data-column="reranked" className="flex min-w-0 flex-col gap-2">
       <RetrievalView
         key={o.rerankId}
         enter={enterReranked}
@@ -376,21 +417,20 @@ function Comparison({
         reranker={node.transform}
         kept={kept}
         keepLimit={after.length}
+        compact={open}
+        lit={open ? lit : null}
         facts={
-          <>
-            {open ? (
-              title
-            ) : (
+          open ? (
+            title
+          ) : (
+            <>
               <div className="flex flex-1 flex-wrap items-center justify-between gap-2">
                 {title}
                 {toggle}
               </div>
-            )}
-            {/* MMR and the LLM reranker reorder without rescoring: say why the scores are not in order. */}
-            {reorderedOnly(after) ? (
-              <p className="basis-full text-xs text-fg-muted">{`Ordered by ${rerankLabel(node.transform)}; the scores are the search's.`}</p>
-            ) : null}
-          </>
+              {note}
+            </>
+          )
         }
       />
       {/* The reranker's run note is the sub line above the results; without one, What it did says the outcome here. */}
@@ -398,28 +438,70 @@ function Comparison({
     </div>
   )
   if (!open) return reranked
+  const search = (
+    <div data-column="search" className="min-w-0">
+      <RetrievalView
+        key={o.retrieveId}
+        enter={enterSearch}
+        rows={before}
+        chunkSet={o.chunkSet}
+        doc={o.doc}
+        showDetail={false}
+        side="search"
+        flat
+        compact
+        lit={lit}
+        facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
+      />
+    </div>
+  )
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Heading>Search order against the reranked order</Heading>
         {toggle}
       </div>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <div data-column="search" className="min-w-0">
-          <RetrievalView
-            key={o.retrieveId}
-            enter={enterSearch}
-            rows={before}
-            chunkSet={o.chunkSet}
-            doc={o.doc}
-            showDetail={false}
-            side="search"
-            flat
-            facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
-          />
+      {/* Above both lists, so the two start level and a stayed piece's line runs flat. */}
+      {note}
+      {wide ? (
+        <div
+          ref={gridRef}
+          data-slope-grid=""
+          className="relative grid grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)] items-start gap-3"
+          onMouseOver={(e) => hover(e.target)}
+          onMouseLeave={clearSoon}
+          onFocus={(e) => hover(e.target)}
+          onBlur={clearSoon}
+        >
+          <svg ref={svgRef} className="slope-lines" aria-hidden data-active={litLine ? "" : undefined}>
+            {lines.map((l) => (
+              <path key={l.id} data-id={l.id} data-kind={l.kind} d={l.d} className={l.id === lit ? "lit" : undefined} />
+            ))}
+          </svg>
+          {search}
+          {/* The gutter the lines cross. */}
+          <div data-gutter="" aria-hidden />
+          {reranked}
         </div>
-        {reranked}
-      </div>
+      ) : (
+        <div
+          ref={gridRef}
+          data-slope-grid=""
+          className="flex flex-col gap-3 [&_[data-slip]]:cursor-pointer"
+          onClick={(e) => tap(e.target)}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === " ") && e.target instanceof Element && e.target.matches("[data-slip]")) tap(e.target)
+          }}
+        >
+          {reranked}
+          <div>
+            <Button variant="outline" size="sm" aria-expanded={searchShown} onClick={() => setSearchShown(!searchShown)}>
+              {searchShown ? "Hide search order" : "Show search order"}
+            </Button>
+          </div>
+          {searchShown ? search : null}
+        </div>
+      )}
     </div>
   )
 }

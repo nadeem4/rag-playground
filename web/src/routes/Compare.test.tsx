@@ -135,15 +135,30 @@ describe("the Compare stage picker", () => {
         node={node}
         type="retrieval_result"
         status={{ kind: "ready" }}
-        agreement="3 of 5 match hybrid_rrf"
+        agreement="Same 5 pieces. The 2nd and 3rd swap places."
         embeddings={null}
       />,
     )
     const line = screen.getByTestId("agreement")
-    expect(line.textContent).toBe("3 of 5 match hybrid_rrf")
+    expect(line.textContent).toBe("Same 5 pieces. The 2nd and 3rd swap places.")
     expect(line.className).not.toContain("font-mono")
     const mono = [...line.querySelectorAll(".font-mono")].map((m) => m.textContent)
-    expect(mono).toEqual(["3", "5"])
+    expect(mono).toEqual(["5", "2", "3"])
+  })
+
+  it("shows the question a Retrieve sweep answers", async () => {
+    openAt("?node=retrieve")
+    render(<Compare />)
+    await waitFor(() => expect(picker().value).toBe("retrieve"))
+    const asked = String(sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "query")!.config.text)
+    expect(screen.getByTestId("sweep-question").textContent).toBe(asked)
+    expect(screen.getByRole("link", { name: "Change the question on Build" }).getAttribute("href")).toBe("/build")
+  })
+
+  it("shows no question on a Chunk sweep", async () => {
+    render(<Compare />)
+    await waitFor(() => expect(picker().value).toBe("chunk"))
+    expect(screen.queryByTestId("sweep-question")).toBeNull()
   })
 
   it("has no em-dashes or en-dashes", async () => {

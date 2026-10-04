@@ -7,6 +7,8 @@ import searchJson from "@/api/fixtures/output.search.json"
 import type { ChunkSet, RetrievalResult } from "@/api/types"
 
 import {
+  agreementText,
+  compareLists,
   componentKeys,
   findingLine,
   fmtScore,
@@ -18,7 +20,6 @@ import {
   rowsFromSearch,
   scaleName,
   scoreKey,
-  topKAgreement,
   type SearchOutput,
 } from "./hits"
 
@@ -145,19 +146,52 @@ describe("hits on the position spine", () => {
   })
 })
 
-describe("top-k agreement", () => {
-  it("counts the top k shared with the baseline, in any order", () => {
-    expect(topKAgreement(["a", "b", "c", "d", "e"], ["e", "d", "c", "b", "a"])).toEqual({ match: 5, of: 5 })
-    expect(topKAgreement(["a", "b", "c", "d", "e"], ["a", "b", "x", "d", "y"])).toEqual({ match: 3, of: 5 })
-    expect(topKAgreement(["a", "b", "c", "d", "e", "f"], ["f", "a"])).toEqual({ match: 1, of: 2 })
-    expect(topKAgreement([], ["a"])).toEqual({ match: 0, of: 1 })
-  })
-
+describe("compareLists", () => {
   // MMR version 2 takes relevance from hybrid's own scores, so on this sample it keeps hybrid's top five, reordered.
-  it("MMR chooses from hybrid's wider pool: all five are in hybrid's top five", () => {
+  it("MMR chooses from hybrid's wider pool: the same five pieces as hybrid's top five", () => {
     const ids = (r: RetrievalResult) => r.hits.map((h) => h.chunk.id)
     expect(hybrid.hits.length).toBeGreaterThan(mmr.hits.length)
-    expect(topKAgreement(ids(hybrid), ids(mmr))).toEqual({ match: 5, of: 5 })
+    expect(["same", "swap", "moved"]).toContain(compareLists(ids(hybrid), ids(mmr)).kind)
+  })
+
+  it("reads both lists at their top k", () => {
+    expect(compareLists(["a", "b", "c"], ["a", "b", "x"], 2)).toEqual({ kind: "same", of: 2 })
+  })
+
+  it("names the places of a swap", () => {
+    expect(compareLists(["a", "b", "c", "d", "e"], ["a", "b", "c", "e", "d"])).toEqual({ kind: "swap", places: [4, 5], of: 5 })
+  })
+})
+
+describe("agreementText", () => {
+  const hybrid = ["c1", "c4", "c3", "c6", "c5"]
+  const say = (ids: string[]) => agreementText(compareLists(hybrid, ids), "Hybrid (RRF)")
+
+  it("says so when the same pieces come back in the same order", () => {
+    expect(say(hybrid)).toBe("Same 5 pieces, in the same order.")
+  })
+  it("names a swap of two places, as Dense does on the sample", () => {
+    expect(say(["c1", "c3", "c4", "c6", "c5"])).toBe("Same 5 pieces. The 2nd and 3rd swap places.")
+  })
+  it("counts the pieces in a different place when more than two moved", () => {
+    expect(say(["c4", "c3", "c1", "c6", "c5"])).toBe("Same 5 pieces. 3 of them are in a different place.")
+  })
+  it("says a shorter list is shorter, as BM25 is on the sample", () => {
+    expect(say(["c1", "c4"])).toBe("Returned 2 pieces, not 5. Both sit where Hybrid (RRF) puts them.")
+    expect(say(["c4", "c1"])).toBe("Returned 2 pieces, not 5. Both are in the top 5 of Hybrid (RRF), in other places.")
+    expect(say(["c1", "c9"])).toBe("Returned 2 pieces, not 5. 1 of them is in the top 5 of Hybrid (RRF).")
+  })
+  it("never claims other places for a piece that kept its place", () => {
+    expect(say(["c1", "c3"])).toBe("Returned 2 pieces, not 5. Both are in the top 5 of Hybrid (RRF), and 1 sits in the same place.")
+  })
+  it("says an empty list is empty", () => {
+    expect(say([])).toBe("Returned no pieces, not 5.")
+  })
+  it("counts the shared pieces when the lists differ", () => {
+    expect(say(["c1", "c2", "c3", "c4", "c8"])).toBe("3 of the 5 pieces are also in the top 5 of Hybrid (RRF).")
+  })
+  it("reads against a baseline that returned fewer pieces by its own length", () => {
+    expect(agreementText(compareLists(["c1", "c4"], hybrid), "BM25")).toBe("2 of the 5 pieces are also in the top 2 of BM25.")
   })
 })
 

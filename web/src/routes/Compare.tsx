@@ -8,9 +8,10 @@ import type { GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
 import { usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
+import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
-import { hitIds, topKAgreement } from "@/components/inspectors/hits"
+import { agreementText, compareLists, hitIds } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import type { InspectorStatus } from "@/components/inspectors/status"
@@ -117,6 +118,19 @@ export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Va
   return [own, ...others].slice(0, 3)
 }
 
+/**
+ * The baseline's plain name in the agreement sentence: the strategy's name on
+ * Retrieve (`Hybrid (RRF)`) when no other recipe uses it, `the 1024-dimension
+ * index` for a Matryoshka baseline, else its distinguishing values.
+ */
+function plainName(variants: Variant[], base: number, stage: string, labels: VariantLabel[], dim: number | undefined): string {
+  const v = variants[base]
+  if ("truncate_dim" in v.config && typeof dim === "number") return `the ${dim}-dimension index`
+  const alone = variants.filter((x) => x.transform === v.transform).length === 1
+  if (stage === "retrieve" && alone && RETRIEVAL_LABEL[v.transform]) return RETRIEVAL_LABEL[v.transform]
+  return variantName(labels[base])
+}
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 const finished = (n?: NodeState) => n !== undefined && (n.status === "done" || n.status === "cached")
@@ -186,7 +200,10 @@ function Sweep({
   // A Matryoshka baseline is named by the width its index was built at, which
   // the descriptor knows even when the variant asked for "native".
   const baseDim = base === null ? undefined : (payload(ids[base]?.index).data as IndexDescriptor | undefined)?.dim
-  const baseName = base === null ? "" : "truncate_dim" in submitted.variants[base].config && typeof baseDim === "number" ? String(baseDim) : variantName(labels[base])
+  const baseName = base === null ? "" : plainName(submitted.variants, base, target.stage, labels, baseDim)
+  // The question a sweep answers, when the step it runs through reads it.
+  const query = graph.nodes.find((n) => n.stage === "query")
+  const question = query && ancestors(graph, through, registry).has(query.id) ? String(query.config.text ?? "") : ""
 
   async function sweep() {
     setError(null)
@@ -244,6 +261,18 @@ function Sweep({
               </>
             ) : null}
             {preset ? ", at Matryoshka dimensions" : null}
+            {question ? (
+              <>
+                , for{" "}
+                <q data-testid="sweep-question" className="font-serif text-fg" style={{ quotes: '"“" "”"' }}>
+                  {question}
+                </q>
+                .{" "}
+                <a href="/build" className="text-fg underline">
+                  Change the question on Build
+                </a>
+              </>
+            ) : null}
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -353,7 +382,7 @@ function Sweep({
             const chunks = payload(ids[i]?.chunks)
             const descriptor = payload(ids[i]?.index).data as IndexDescriptor | undefined
             const agreement =
-              base !== null && i !== base && hitLists[i] && hitLists[base] ? topKAgreement(hitLists[base]!, hitLists[i]!) : null
+              base !== null && i !== base && hitLists[i] && hitLists[base] ? agreementText(compareLists(hitLists[base]!, hitLists[i]!), baseName) : null
             return (
               <VariantResult
                 key={i}
@@ -370,11 +399,7 @@ function Sweep({
                 status={ids[i]?.chunks && chunks.status.kind === "loading" ? { kind: "loading" } : out.status}
                 chunks={chunks.data}
                 agreement={
-                  agreement
-                    ? `${agreement.match} of ${agreement.of} match ${baseName}`
-                    : i === base && hitLists.some((h, j) => j !== i && h)
-                      ? "the baseline the others are matched against"
-                      : null
+                  agreement ?? (i === base && hitLists.some((h, j) => j !== i && h) ? "The baseline. The other recipes are read against this list." : null)
                 }
                 embeddings={embeddingCounts(descriptor)}
               />
@@ -406,7 +431,7 @@ export function VariantResult({
   data?: unknown
   status: InspectorStatus
   chunks?: unknown
-  /** Top-5 agreement with the baseline variant: the number a sweep is for. */
+  /** How this variant's top 5 differs from the baseline's, in a sentence: the finding a sweep is for. */
   agreement: string | null
   /** `384 embedded, 0 from cache`, when the index descriptor reports it. */
   embeddings: string | null

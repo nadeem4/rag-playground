@@ -1,6 +1,7 @@
 import type { VariantState } from "@/api/runState"
 import type { GraphNode, Registry, Stage, Variant } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
+import { fmtMs } from "@/components/pipeline/NodeCard"
 
 /**
  * Sweep bookkeeping. The runState reducer has already grouped node events
@@ -14,20 +15,29 @@ export interface SweepTally {
   /** Every `node_finished` with `cache_hit: true`, any node. */
   cacheHits: number
   variants: number
+  /** Variants with a failed node. */
+  failed: number
+  /** The longest single execution (not a cache hit), when one carries a duration. */
+  slowest: { id: string; ms: number } | null
 }
 
 export function tallySweep(variants: VariantState[]): SweepTally {
   const executed: Record<string, number> = {}
   let cacheHits = 0
+  let slowest: SweepTally["slowest"] = null
   for (const v of variants) {
     for (const n of Object.values(v.nodes)) {
       if (n.status !== "done" && n.status !== "cached") continue
       executed[n.id] = executed[n.id] ?? 0
       if (n.cache_hit) cacheHits += 1
-      else executed[n.id] += 1
+      else {
+        executed[n.id] += 1
+        if (typeof n.duration_ms === "number" && (!slowest || n.duration_ms > slowest.ms)) slowest = { id: n.id, ms: n.duration_ms }
+      }
     }
   }
-  return { executed, cacheHits, variants: variants.length }
+  const failed = variants.filter((v) => Object.values(v.nodes).some((n) => n.status === "failed")).length
+  return { executed, cacheHits, variants: variants.length, failed, slowest }
 }
 
 const times = (n: number) => `${n} ${n === 1 ? "time" : "times"}`
@@ -38,6 +48,7 @@ const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1)
  * `Parse ran 1 time, Index ran 5 times. Load came from the cache.` Plain
  * words, no glyphs, nodes in column order. A node that finished but never
  * executed is named as coming from the cache rather than as "ran 0 times".
+ * Then the slowest step's time, and how many recipes failed.
  */
 export function tallyLine(t: SweepTally, column: { id: string; title: string }[]): string {
   const titles = column.map((n) => n.title)
@@ -45,8 +56,18 @@ export function tallyLine(t: SweepTally, column: { id: string; title: string }[]
   const seen = column.filter((n) => n.id in t.executed)
   const ran = seen.filter((n) => t.executed[n.id] > 0).map((n) => `${name(n)} ran ${times(t.executed[n.id])}`)
   const cached = seen.filter((n) => t.executed[n.id] === 0).map(name)
-  if (!ran.length) return cached.length ? "Nothing ran: every step came from the cache." : "Nothing has finished yet."
-  return `${ran.join(", ")}.` + (cached.length ? ` ${list(cached)} came from the cache.` : "")
+  const failed = t.failed ? ` ${t.failed} ${t.failed === 1 ? "recipe" : "recipes"} failed.` : ""
+  if (!ran.length) {
+    if (!cached.length) return t.failed ? failed.trim() : "Nothing has finished yet."
+    return (t.failed ? "Every step that finished came from the cache." : "Nothing ran: every step came from the cache.") + failed
+  }
+  const slow = t.slowest ? column.find((n) => n.id === t.slowest!.id) : undefined
+  return (
+    `${ran.join(", ")}.` +
+    (cached.length ? ` ${list(cached)} came from the cache.` : "") +
+    (slow ? ` The slowest step was ${name(slow)}, at ${fmtMs(t.slowest!.ms)}.` : "") +
+    failed
+  )
 }
 
 export interface VariantLabel {

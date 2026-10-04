@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 
 import "./inspectors.css"
 import { useSpineLayout } from "./spine"
-import { assignLanes, chunkSlot, median, overlapPairs, p95, projectSpans, type Segment } from "./spans"
+import { assignLanes, chunkSlot, chunkStats, projectSpans, type Segment } from "./spans"
 import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
 
 /**
@@ -88,24 +88,16 @@ function ChunkSetView({
         last[i] = k
       }
     })
-    const tokens = chunks.map((c) => c.token_count)
-    const uncovered = segments.filter((s) => s.chunks.length === 0).reduce((n, s) => n + s.end - s.start, 0)
+    const { pieces, tokens, ...rest } = chunkStats({ source_text: source, chunks }, segments)
     return {
       lanes,
       laneCount,
       first,
       last,
-      maxTokens: Math.max(1, ...tokens),
-      stats: {
-        chunks: chunks.length,
-        total: tokens.reduce((a, b) => a + b, 0),
-        median: median(tokens),
-        p95: p95(tokens),
-        overlaps: overlapPairs(segments).length,
-        uncovered,
-      },
+      maxTokens: Math.max(1, ...chunks.map((c) => c.token_count)),
+      stats: { chunks: pieces, total: tokens, ...rest },
     }
-  }, [chunks, segments])
+  }, [chunks, segments, source])
 
   useSpineLayout(rootRef, [segments])
 

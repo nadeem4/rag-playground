@@ -50,6 +50,39 @@ export function rowsFromResult(r: RetrievalResult): HitRowData[] {
   }))
 }
 
+/**
+ * A chunk as a row, for a slip that shows a piece rather than a hit: its rank
+ * is its place in the set, and it has no score.
+ */
+export function rowFromChunk(c: Chunk): HitRowData {
+  return {
+    rank: c.ordinal + 1,
+    score: 0,
+    prior_rank: null,
+    prior_score: null,
+    retriever: "",
+    component_scores: {},
+    chunk_id: c.id,
+    text: c.text,
+    page_span: c.page_span,
+    element_ids: c.source_element_ids ?? null,
+    ordinal: c.ordinal,
+    section: sectionOf(c.heading_path),
+  }
+}
+
+/** Leading markdown heading lines, and the blank lines after them. */
+const LEADING_HEADINGS = /^(?:[ \t]*(?:#{1,6}[ \t].*)?(?:\r?\n|$))+/
+
+/**
+ * A passage without its leading markdown heading lines, so no raw `##` shows;
+ * a heading that is all there is keeps its words and loses its marks.
+ */
+export function stripHeadingMarks(text: string): string {
+  const body = text.replace(LEADING_HEADINGS, "")
+  return body.trim() ? body : text.replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
+}
+
 /** A row of the `search` use case's output (plugins/use_case/search.py). */
 export interface SearchRow {
   rank: number
@@ -85,13 +118,18 @@ export function rowsFromSearch(out: SearchOutput): HitRowData[] {
   }))
 }
 
+/** Hit rows in rank order, from a retrieval result or a Search output; null for anything else. */
+export function hitRows(data: unknown): HitRowData[] | null {
+  if (!data || typeof data !== "object") return null
+  if (Array.isArray((data as RetrievalResult).hits)) return rowsFromResult(data as RetrievalResult)
+  const out = data as SearchOutput
+  if (out.kind === "search" && Array.isArray(out.payload?.results)) return rowsFromSearch(out)
+  return null
+}
+
 /** Hit chunk ids in rank order, from a retrieval result or a Search output. */
 export function hitIds(data: unknown): string[] | null {
-  if (!data || typeof data !== "object") return null
-  if (Array.isArray((data as RetrievalResult).hits)) return rowsFromResult(data as RetrievalResult).map((h) => h.chunk_id)
-  const out = data as SearchOutput
-  if (out.kind === "search" && Array.isArray(out.payload?.results)) return rowsFromSearch(out).map((h) => h.chunk_id)
-  return null
+  return hitRows(data)?.map((h) => h.chunk_id) ?? null
 }
 
 const KNOWN = ["dense", "bm25"]

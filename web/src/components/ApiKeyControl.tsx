@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
  */
 type Check = { state: "idle" } | { state: "checking" } | { state: "done"; result: LlmCheck } | { state: "error"; message: string }
 
-const NO_KEY = "Add a key for chat answers (optional)"
+const NO_KEY = "Add a key for chat answers and the LLM reranker (optional)"
 
 export function ApiKeyControl() {
   const { keys, panelOpen, setPanelOpen } = useApiKey()
@@ -199,7 +199,7 @@ export function KeyHint() {
   const { setPanelOpen } = useApiKey()
   return (
     <p className="text-xs text-fg-muted" data-testid="key-hint">
-      Chat needs an API key for its model.{" "}
+      Chat and the LLM reranker need an API key.{" "}
       <button
         type="button"
         className="text-fg underline underline-offset-2"

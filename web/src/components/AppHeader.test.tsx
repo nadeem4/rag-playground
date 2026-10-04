@@ -190,10 +190,10 @@ describe("the header on a phone", () => {
     serve({ demo: true })
     header()
     const button = screen.getByTestId("api-key-button")
-    await waitFor(() => expect(button.title).toBe("Add a key for chat answers (optional)"))
+    await waitFor(() => expect(button.title).toBe("Add a key for chat answers and the LLM reranker (optional)"))
     const short = within(button).getByText("Key")
     expect(short.className.split(/\s+/)).toContain("md:hidden")
-    const long = within(button).getByText("Add a key for chat answers (optional)")
+    const long = within(button).getByText("Add a key for chat answers and the LLM reranker (optional)")
     expect(long.className.split(/\s+/)).toContain("hidden")
     expect(long.className.split(/\s+/)).toContain("md:inline")
   })
@@ -255,7 +255,7 @@ describe("the key button", () => {
   it("offers a key for chat answers, as an option, when no key is set", async () => {
     serve({ demo: true })
     header()
-    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toBe("KeyAdd a key for chat answers (optional)"))
+    await waitFor(() => expect(screen.getByTestId("api-key-button").textContent).toBe("KeyAdd a key for chat answers and the LLM reranker (optional)"))
   })
 
   it("stays API key with a count when a key is set in this tab", async () => {

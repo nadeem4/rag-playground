@@ -10,12 +10,12 @@ import {
   hasRetriever,
   metrics,
   metricsByTag,
-  missText,
   percent,
   piecesWarning,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
+  reasonText,
   rerankEffect,
   rerankLine,
   scoreFinding,
@@ -255,19 +255,16 @@ describe("the warning about too few pieces", () => {
   })
 })
 
-describe("the reason for a miss", () => {
-  it("names the rank when the answer was found below the top k", () => {
-    expect(missText(payload({ hit: false, rank: null, found_at: 7 }), 5)).toBe("Found at rank 7, below the top 5.")
-  })
-
-  it("says the answer was in none of the pieces that came back, counting what was returned", () => {
-    expect(missText(payload({ hit: false, rank: null, found_at: null, returned: 5, total_candidates: 12 }), 5)).toBe(
-      "Not in any of the 5 pieces that came back.",
-    )
+describe("the reason for a row", () => {
+  it("gives each row its reason as one sentence", () => {
+    expect(reasonText(pay(true, 1), 5)).toBe("Found in the 1st piece.")
+    expect(reasonText(pay(true, 2, { match: "normalized" }), 5)).toBe("Found in the 2nd piece. The match ignores case and spacing.")
+    expect(reasonText(pay(false, null, { found_at: 7 }), 5)).toBe("Found 7th, below the 5 pieces checked.")
+    expect(reasonText(pay(false, null, { returned: 6 }), 5)).toBe("Not in any of the 6 pieces that came back, so no number of pieces checked would find it.")
   })
 
   it("falls back to what was checked on an older payload without the returned count", () => {
-    expect(missText(payload({ hit: false, rank: null, considered: 5, total_candidates: 12 }), 5)).toBe("5 of 12 checked")
+    expect(reasonText(miss({ considered: 5, total_candidates: 12 }), 5)).toBe("5 of 12 checked")
   })
 })
 
@@ -367,9 +364,10 @@ describe("the change since the previous evaluation", () => {
   })
 
   it("says what it was, in words", () => {
-    expect(changeText("found", miss())).toBe("was a miss")
-    expect(changeText("lost", payload({ rank: 2 }))).toBe("was rank 2")
-    expect(changeText("up", payload({ rank: 5 }))).toBe("was rank 5")
+    expect(changeText("found", miss())).toBe("Was missed")
+    expect(changeText("lost", payload({ rank: 1 }))).toBe("Was found 1st")
+    expect(changeText("lost", payload({ rank: 2 }))).toBe("Was found 2nd")
+    expect(changeText("up", payload({ rank: 5 }))).toBe("Was found 5th")
     expect(changeText("none", payload())).toBeNull()
   })
 })

@@ -608,14 +608,17 @@ describe("while and after scoring", () => {
     expect(summary.querySelector("span.font-mono")).not.toBeNull()
     expect(screen.getByTestId("hit-rate")).toBeTruthy()
     expect(document.body.textContent).not.toContain("Scoring question")
-    expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")
-    // Verdict words and the meta line in sans; only numbers and the id in mono.
+    expect(document.body.textContent).toContain("Found 7th, below the 5 pieces checked.")
+    // The verdict and the reason in sans; mono only on the digits.
     for (const row of document.querySelectorAll<HTMLElement>("details[data-question] summary")) {
-      const [verdict, , words] = [...row.children] as HTMLElement[]
+      const verdict = row.querySelector<HTMLElement>("[data-verdict]")!
       expect(verdict.className).toContain("font-sans")
-      const meta = words.lastElementChild as HTMLElement
-      expect(meta.className).not.toContain("font-mono")
-      expect(meta.querySelector(".font-mono")).not.toBeNull()
+      expect(verdict.className).toContain("font-semibold")
+      expect(verdict.querySelector(".font-mono")).toBeNull()
+      const reason = row.querySelector<HTMLElement>("[data-reason]")!
+      expect(reason.className).not.toContain("font-mono")
+      expect([...reason.querySelectorAll(".font-mono")].every((m) => /^[\d,.]+$/.test(m.textContent ?? ""))).toBe(true)
+      expect(reason.querySelector(".font-mono")).not.toBeNull()
     }
   })
 
@@ -634,14 +637,14 @@ describe("while and after scoring", () => {
     es.emit(5, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
     es.emit(6, { event: "stream_end", status: "finished", ok: true })
     await screen.findByTestId("summary")
-    await waitFor(() => expect(document.body.textContent).toContain("Found at rank 7, below the top 5."))
+    await waitFor(() => expect(document.body.textContent).toContain("Found 7th, below the 5 pieces checked."))
     await screen.findByTestId("pieces-warning")
 
     fireEvent.change(screen.getByLabelText("Pieces checked"), { target: { value: "10" } })
     expect((screen.getByLabelText("Pieces checked") as HTMLInputElement).value).toBe("10")
 
-    expect(document.body.textContent).toContain("Found at rank 7, below the top 5.")
-    expect(document.body.textContent).not.toContain("below the top 10")
+    expect(document.body.textContent).toContain("Found 7th, below the 5 pieces checked.")
+    expect(document.body.textContent).not.toContain("below the 10 pieces")
     expect(screen.getByTestId("hit-rate").textContent).toMatch(/^Hit rate at 5 /)
     expect(screen.getByTestId("pieces-warning").textContent).toBe(
       "With 7 pieces and 5 checked, a hit says little. A miss still says a lot: its answer was not in the top 5.",
@@ -649,14 +652,18 @@ describe("while and after scoring", () => {
     expect(screen.getByTestId("pieces-warning").className).toContain("bg-warn")
   })
 
+  let finished = 0
+
   /** Runs the two questions to the end: a found one and a missed one. */
   async function finishTwo(missed: Record<string, unknown> = {}) {
-    const es = await start({ o0: evalOut({}), o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", returned: 3, ...missed }) })
+    // Payloads are cached by artifact id, so each run gets ids of its own.
+    const [a0, a1] = [`f${++finished}a`, `f${finished}b`]
+    const es = await start({ [a0]: evalOut({}), [a1]: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", returned: 3, ...missed }) })
     const useCase = idOf("use_case")
     es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: "o0", cache_hit: false, duration_ms: 1 })
+    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: a0, cache_hit: false, duration_ms: 1 })
     es.emit(3, { event: "variant_started", index: 1, variant: {} })
-    es.emit(4, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
+    es.emit(4, { event: "node_finished", node_id: useCase, artifact_id: a1, cache_hit: false, duration_ms: 1 })
     es.emit(5, { event: "stream_end", status: "finished", ok: true })
     await screen.findByTestId("summary")
   }
@@ -674,6 +681,85 @@ describe("while and after scoring", () => {
     fireEvent.click(marks[1])
     expect((document.querySelector('[data-question="b"]') as HTMLDetailsElement).open).toBe(true)
     expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
+  })
+
+  it("says the verdict in a word and the reason in a sentence, with no hash id", async () => {
+    await finishTwo()
+    const row = document.querySelector<HTMLElement>('[data-question="b"] summary')!
+    expect(row.textContent).toContain("\u2715 Missed")
+    expect(row.textContent).toContain("Not in any of the 3 pieces that came back")
+    expect(row.textContent).not.toMatch(/[0-9a-f]{8}/)
+    expect(row.textContent).not.toMatch(/checked$/)
+    expect(row.querySelector("[data-question-text]")!.className).toContain("text-base")
+    expect(document.querySelector<HTMLElement>('[data-question="a"] summary')!.textContent).toContain("\u2713 Found")
+    expect(document.querySelector<HTMLElement>('[data-question="a"] summary')!.textContent).toContain("Found in the 1st piece.")
+    expect(screen.queryByText("result")).toBeNull()
+    expect(document.querySelector('[data-question="b"]')!.className).not.toContain("border-l-2")
+  })
+
+  it("says how a row changed since the last run, a loss on the removed hue", async () => {
+    storePreviousEvaluation({
+      sourceSha: SOURCE.sha,
+      pipelineKey: "working",
+      byId: { a: evalOut({}).payload as never, b: evalOut({}).payload as never },
+      summary: { hits: 2, total: 2, averageRank: 1 },
+    })
+    await finishTwo()
+    const change = document.querySelector<HTMLElement>('[data-question="b"] [data-row-change]')!
+    expect(change.textContent).toBe("Was found 1st")
+    expect(change.className).toContain("text-removed-mark")
+    expect(document.querySelector('[data-question="a"] [data-row-change]')).toBeNull()
+  })
+
+  it("opens onto the sentence that answers it and the top three pieces as slips", async () => {
+    const hit = (rank: number, id: string, text: string) => ({
+      chunk: { id, text, embed_text: null, start_char: 0, end_char: 1, token_count: 1, kind: "text", parent_id: null, level: 0, ordinal: rank + 1, doc_id: "d", heading_path: [], source_element_ids: [], page_span: [1, 1], metadata: {} },
+      score: 0.03 - rank / 1000,
+      rank,
+      prior_rank: null,
+      prior_score: null,
+      matched_chunk_id: id,
+      expansion: "none",
+      retriever: "hybrid_rrf",
+      component_scores: {},
+      highlights: [],
+    })
+    const r1 = {
+      hits: [hit(1, "h1", "First piece."), hit(2, "h2", "Second piece."), hit(3, "h3", "Third piece."), hit(4, "h4", "Fourth piece.")],
+      query_id: "q",
+      fetch_k: 20,
+      total_candidates: 4,
+      timings_ms: { search: 3 },
+    }
+    const es = await start({
+      s0: evalOut({}),
+      s1: evalOut({ rank: 2, matched_chunk_id: "h2", returned: 4 }),
+      r1,
+    })
+    const useCase = idOf("use_case")
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: "s0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "variant_started", index: 1, variant: {} })
+    es.emit(4, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r1", cache_hit: false, duration_ms: 1 })
+    es.emit(5, { event: "node_finished", node_id: useCase, artifact_id: "s1", cache_hit: false, duration_ms: 1 })
+    es.emit(6, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+
+    fireEvent.click(document.querySelector('[data-question="b"] summary')!)
+    const open = document.querySelector<HTMLElement>('[data-question="b"]')!
+    expect(within(open).getByText("The sentence that answers it").className).toContain("text-xs")
+    expect(within(open).getByText("A chunk should answer one question well.").className).toContain("font-serif")
+    await waitFor(() => expect(within(open).getAllByTestId("passage")).toHaveLength(3))
+    expect(within(open).getByText("What came back, top 3 of 4.")).toBeTruthy()
+    const findings = within(open).getAllByTestId("finding").map((f) => f.textContent)
+    expect(findings).toEqual(["1st", "2nd, holds the answer", "3rd"])
+    // The swatch names the piece by its place in the chunk set.
+    expect(within(open).getAllByRole("img").map((s) => s.getAttribute("aria-label"))).toEqual(["Chunk 3", "Chunk 4", "Chunk 5"])
+    // The retrieval facts line is not shown here.
+    expect(open.textContent).not.toMatch(/fetch_k|candidates/)
+    fireEvent.click(within(open).getByRole("button", { name: "Show all 4" }))
+    expect(within(open).getAllByTestId("passage")).toHaveLength(4)
+    expect(open.querySelector("[data-open-row]")!.className).toContain("max-w-[72ch]")
   })
 
   it("says the last run beside the score, and stores this run with its recipe", async () => {

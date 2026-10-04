@@ -14,8 +14,8 @@ import { EmptyState } from "@/components/EmptyState"
 import { EvalMetricsDetail } from "@/components/evaluate/EvalMetrics"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { CONTROL } from "@/components/fields/types"
-import { rowsFromResult } from "@/components/inspectors/hits"
-import { RetrievalResultInspector } from "@/components/inspectors/RetrievalResultInspector"
+import { EvidenceSlip, LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
+import { ordinal, rowsFromResult, scoreKey, type FindingPart } from "@/components/inspectors/hits"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -27,11 +27,11 @@ import {
   isEvalOutput,
   metrics,
   metricsByTag,
-  missText,
   piecesWarning,
   pipelineSteps,
   questionVariants,
   readPreviousEvaluation,
+  reasonText,
   rerankEffect,
   rerankLine,
   storePreviousEvaluation,
@@ -252,6 +252,7 @@ function Evaluation({
   slot: HTMLElement | null
 }) {
   const topKId = useId()
+  const questionsId = useId()
   const query = graph.nodes.find((n) => n.id === queryId)!
   // The step whose hits the eval step reads: the last reranker, else Retrieve.
   const resultNode = upstreamOfStage(graph, useCaseId, ["rerank", "retrieve"])
@@ -540,7 +541,7 @@ function Evaluation({
       </section>
 
       {firstFailure ? (
-        <p role="alert" className="shrink-0 border-b border-hairline px-3 py-2 font-mono text-xs break-words text-danger">
+        <p role="alert" className="font-mono text-xs break-words text-danger">
           {errorHeadline(firstFailure.error ?? "A step failed.")}
         </p>
       ) : null}
@@ -552,25 +553,25 @@ function Evaluation({
             cache.
           </EmptyState>
         ) : (
-          <div className="flex flex-col gap-px bg-hairline">
-            <div className="grid grid-cols-[52px_44px_minmax(0,1fr)] items-baseline gap-x-2 bg-surface-elevated px-3 py-1" aria-hidden>
-              <span className="meta">result</span>
-              <span className="meta text-right">rank</span>
-              <span className="meta">question</span>
+          <section aria-labelledby={questionsId} className="flex flex-col gap-2">
+            <h2 id={questionsId} className="text-base font-semibold">
+              Questions
+            </h2>
+            <div className="border-t border-hairline">
+              {rows.map((row) => (
+                <QuestionRow
+                  key={row.question.id}
+                  row={row}
+                  before={previous?.byId[row.question.id]}
+                  topK={shownK}
+                  rowRef={(el) => {
+                    if (el) rowEls.current.set(row.question.id, el)
+                    else rowEls.current.delete(row.question.id)
+                  }}
+                />
+              ))}
             </div>
-            {rows.map((row) => (
-              <QuestionRow
-                key={row.question.id}
-                row={row}
-                before={previous?.byId[row.question.id]}
-                topK={shownK}
-                rowRef={(el) => {
-                  if (el) rowEls.current.set(row.question.id, el)
-                  else rowEls.current.delete(row.question.id)
-                }}
-              />
-            ))}
-          </div>
+          </section>
         )}
       </div>
     </div>
@@ -621,15 +622,28 @@ function Mark({ n, verdict, onPress }: { n: number; verdict: Verdict; onPress: (
   )
 }
 
-/** Improvements read on the kept hue, regressions on the removed one. */
-const CHANGE_RULE: Record<RowChange, string> = {
+/** A gain reads on the kept hue, a loss on the removed one. */
+const CHANGE_TONE: Record<RowChange, string> = {
   none: "",
-  found: "border-l-2 border-kept-mark",
-  up: "border-l-2 border-kept-mark",
-  lost: "border-l-2 border-removed-mark",
-  down: "border-l-2 border-removed-mark",
+  found: "text-kept-mark",
+  up: "text-kept-mark",
+  lost: "text-removed-mark",
+  down: "text-removed-mark",
 }
 
+const VERDICT: Record<Verdict, { word: string; tone: string }> = {
+  found: { word: "\u2713 Found", tone: "text-kept-text" },
+  missed: { word: "\u2715 Missed", tone: "text-removed-text" },
+  failed: { word: "Failed", tone: "text-danger" },
+  waiting: { word: "Waiting", tone: "text-fg-muted" },
+  running: { word: "Running", tone: "text-fg-muted" },
+}
+
+/**
+ * One question: the verdict in a word, the question, the change since the
+ * last run on the right, and the reason in a sentence under the question.
+ * A <details>, so the keyboard and a mark both open it through `open`.
+ */
 function QuestionRow({
   row,
   before,
@@ -644,48 +658,98 @@ function QuestionRow({
   const p = row.payload
   const change = changeFor(p, before)
   const moved = changeText(change, before)
-  const verdict = !row.started ? "waiting" : row.failed ? "failed" : p ? (p.hit ? "hit" : "miss") : "running"
-  const tone =
-    verdict === "hit"
-      ? "bg-kept text-kept-text"
-      : verdict === "miss"
-        ? "bg-removed text-removed-text"
-        : verdict === "failed"
-          ? "bg-removed text-danger"
-          : "text-fg-muted"
+  const verdict = VERDICT[verdictOf(row)]
+  const reason = row.failed ? errorHeadline(row.failed.error ?? "Failed") : p ? reasonText(p, topK) : null
 
   return (
-    <details ref={rowRef} className={cn("bg-surface", CHANGE_RULE[change])} data-question={row.question.id} data-change={change === "none" ? undefined : change}>
-      <summary className="grid cursor-pointer list-none grid-cols-[52px_44px_minmax(0,1fr)] items-baseline gap-x-2 px-3 py-2 hover:bg-muted">
-        <span className={cn("justify-self-start rounded-control px-1 font-sans text-2xs", tone)}>{verdict}</span>
-        <span className="text-right font-mono text-sm text-fg tabular-nums">{p?.rank ?? ""}</span>
-        <span className="flex min-w-0 flex-col gap-1">
-          <span className="text-sm text-fg">{row.question.question}</span>
-          <span className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-muted">
-            {p?.hit && p.match !== "exact" ? <span>{p.match} match</span> : null}
-            {p?.matched_chunk_id ? (
-              <span className="font-mono" title={p.matched_chunk_id}>
-                {p.matched_chunk_id.slice(0, 8)}
-              </span>
-            ) : null}
-            {p ? (
-              <span>
-                <span className="font-mono">{p.considered}</span> of <span className="font-mono">{p.total_candidates}</span> checked
-              </span>
-            ) : null}
-            {p && !p.hit ? (
-              <span>
-                <MonoNumbers text={missText(p, topK)} />
-              </span>
-            ) : null}
-            {moved ? <span className="font-medium text-fg">{moved}</span> : null}
-            {row.failed ? <span className="text-danger">{errorHeadline(row.failed.error ?? "Failed")}</span> : null}
-          </span>
+    <details
+      ref={rowRef}
+      className="border-b border-hairline"
+      data-question={row.question.id}
+      data-change={change === "none" ? undefined : change}
+    >
+      <summary className="grid cursor-pointer list-none grid-cols-1 items-baseline gap-x-3.5 gap-y-1 rounded-panel px-2 py-3 hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring) md:grid-cols-[92px_minmax(0,1fr)_auto]">
+        <span data-verdict="" className={cn("font-sans font-semibold", verdict.tone)}>
+          {verdict.word}
         </span>
+        <span data-question-text="" className="text-base font-semibold text-fg">
+          {row.question.question}
+        </span>
+        {moved ? (
+          <span data-row-change="" className={cn("text-[0.8125rem] font-semibold whitespace-nowrap", CHANGE_TONE[change])}>
+            {moved}
+          </span>
+        ) : (
+          <span aria-hidden className="hidden md:block" />
+        )}
+        {reason ? (
+          <span data-reason="" className={cn("font-sans text-sm md:col-start-2", row.failed ? "break-words text-danger" : "text-fg-muted")}>
+            <MonoNumbers text={reason} />
+          </span>
+        ) : null}
       </summary>
-      <div className="overflow-x-auto border-t border-hairline">
-        <RetrievalResultInspector result={row.result} status={row.resultStatus} showDetail={false} />
-      </div>
+      <OpenRow row={row} />
     </details>
+  )
+}
+
+/** The slips shown before Show all. */
+const TOP = 3
+
+/**
+ * An open row: the sentence that answers the question, then what came back as
+ * evidence slips, the top three first. The matched piece says it holds the
+ * answer. Capped at 72ch, so the passages read as text.
+ */
+function OpenRow({ row }: { row: Row }) {
+  const [all, setAll] = useState(false)
+  const gold = row.question.gold_answers[0]
+  const hits = row.result ? rowsFromResult(row.result) : []
+  const shown = all ? hits : hits.slice(0, TOP)
+  const scale = scoreKey(hits)
+  const matched = row.payload?.hit ? row.payload.matched_chunk_id : null
+  const holds = (rank: number): FindingPart[] => [{ text: ordinal(rank), place: true }, { text: ", holds the answer" }]
+  return (
+    <div data-open-row="" className="flex max-w-[72ch] flex-col gap-3 px-2 pb-4 md:pl-[114px]">
+      {gold ? (
+        <div className="border-l-[3px] border-primary py-0.5 pl-3">
+          <p className="text-xs text-fg-muted">The sentence that answers it</p>
+          <p className="font-serif text-base leading-[1.55] break-words text-fg">{gold}</p>
+        </div>
+      ) : null}
+      {row.result ? (
+        hits.length ? (
+          <>
+            <p className="text-sm text-fg-muted">
+              {hits.length > TOP ? `What came back, top ${TOP} of ${hits.length}.` : `What came back, ${hits.length} ${hits.length === 1 ? "piece" : "pieces"}.`}
+            </p>
+            <div role="list" className="flex flex-col gap-2.5">
+              {shown.map((h) => (
+                <EvidenceSlip
+                  key={h.chunk_id}
+                  role="listitem"
+                  row={h}
+                  side="single"
+                  piece={h.ordinal}
+                  scaleKey={scale}
+                  finding={h.chunk_id === matched ? holds(h.rank) : undefined}
+                />
+              ))}
+            </div>
+            {hits.length > TOP && !all ? (
+              <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center self-start text-sm")} onClick={() => setAll(true)}>
+                Show all {hits.length}
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-sm text-fg-muted">Nothing came back for this question.</p>
+        )
+      ) : row.resultStatus.kind === "error" ? (
+        <p className="text-sm break-words text-danger">{row.resultStatus.message}</p>
+      ) : row.payload ? (
+        <p className="text-sm text-fg-muted">Loading what came back.</p>
+      ) : null}
+    </div>
   )
 }

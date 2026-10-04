@@ -1,6 +1,6 @@
 import type { EvalOutput, EvalPayload, GraphNode, Registry, SampleQuestion, Stage, Variant } from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
-import type { HitRowData } from "@/components/inspectors/hits"
+import { ordinal, type HitRowData } from "@/components/inspectors/hits"
 import { strategyLabel } from "@/learn/challenges"
 
 import { columnOrder, setConfig, setTransform, titleFor, type PipelineGraph } from "./graph"
@@ -103,12 +103,20 @@ export function piecesWarning(pieces: number | null, topK: number, misses: reado
 }
 
 /**
- * Why a question missed: ranked too low, or not among the pieces that came
- * back at all. An older payload has no `returned`, so it says what was checked.
+ * Why a row reads as it does, in one sentence: where a hit was found, or why
+ * a question missed (ranked below the pieces checked, or not among the pieces
+ * that came back at all). An older payload has no `returned`, so it says what
+ * was checked.
  */
-export function missText(p: EvalPayload, topK: number): string {
-  if (typeof p.found_at === "number") return `Found at rank ${p.found_at}, below the top ${topK}.`
-  if (typeof p.returned === "number") return `Not in any of the ${p.returned} pieces that came back.`
+export function reasonText(p: EvalPayload, topK: number): string {
+  if (p.hit) {
+    const where = typeof p.rank === "number" ? `Found in the ${ordinal(p.rank)} piece.` : `Found in the top ${topK} pieces.`
+    return p.match === "normalized" ? `${where} The match ignores case and spacing.` : where
+  }
+  if (typeof p.found_at === "number") return `Found ${ordinal(p.found_at)}, below the ${topK} ${topK === 1 ? "piece" : "pieces"} checked.`
+  if (typeof p.returned === "number") {
+    return `Not in any of the ${p.returned} ${p.returned === 1 ? "piece" : "pieces"} that came back, so no number of pieces checked would find it.`
+  }
   return `${p.considered} of ${p.total_candidates} checked`
 }
 
@@ -385,10 +393,11 @@ export function changeFor(now?: EvalPayload, before?: EvalPayload): RowChange {
   return "none"
 }
 
+/** What the row was last run: `Was found 1st`, `Was missed`. */
 export function changeText(change: RowChange, before?: EvalPayload): string | null {
   if (change === "none") return null
-  if (change === "found") return "was a miss"
-  return before?.rank === null || before?.rank === undefined ? "was a miss" : `was rank ${before.rank}`
+  if (change === "found") return "Was missed"
+  return before?.rank === null || before?.rank === undefined ? "Was missed" : `Was found ${ordinal(before.rank)}`
 }
 
 // ------------------------------------------------------------ the reranker --

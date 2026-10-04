@@ -26,6 +26,15 @@ import { defaultConfig } from "./graph"
 const registry = liveRegistry as unknown as Registry
 
 describe("recipeNames", () => {
+  it("words a list setting in plain words, never as JSON", () => {
+    const v = [
+      { transform: "docling", config: { content_layers: ["body"] } },
+      { transform: "docling", config: { content_layers: ["body", "notes"] } },
+    ]
+    const names = recipeNames(v, "parse", registry).map((n) => n.name)
+    expect(names.join(" ")).not.toContain("[")
+    expect(names[1]).toContain("body and notes")
+  })
   it("names chunk recipes by Build's plain names and the size that tells them apart", () => {
     const v = [
       { transform: "recursive_character", config: { chunk_size: 400, chunk_overlap: 80, heading_context: true } },

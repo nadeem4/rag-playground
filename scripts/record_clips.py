@@ -2,7 +2,7 @@
 
     cd web && npm run build && cd ..
     uv run --with playwright==1.55.0 playwright install chromium                                     # once
-    uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py            # build and evaluate
+    uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py            # all three
     uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py evaluate   # one clip
 
 It starts the server in demo mode (`RAG_PLAYGROUND_DEMO=1`, so the Dev menu
@@ -27,9 +27,8 @@ Writes `web/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800), and a
 `.jpg` poster for each, taken with Playwright's screenshot at the clip's
 telling moment.
 
-`compare` records Compare running its three recipes and ending on the
-finding sentence. Home shows a still of Compare until that clip is recorded
-on the redesigned page; `compare-still` saves that still in both themes.
+`compare` shows Compare's setup cards, presses Run 3 recipes, lets the rows
+fill in and ends on the finding sentence.
 """
 
 from __future__ import annotations
@@ -206,9 +205,15 @@ def compare_setup(page: Page, base: str) -> None:
 
 
 def run_recipes(page: Page) -> None:
-    """Press Run on every recipe and wait for the finding sentence."""
+    """Press Run 3 recipes and wait until every recipe has finished.
+
+    The finding line says "Running three recipes" while they run; the button
+    reads Running until the run has closed, then Run 3 recipes again.
+    """
     page.get_by_role("button", name="Run 3 recipes").click()
-    page.get_by_test_id("compare-finding").wait_for(timeout=600_000)
+    page.get_by_role("button", name="Stop the run").wait_for(timeout=30_000)
+    page.get_by_role("button", name="Run 3 recipes").wait_for(timeout=600_000)
+    page.get_by_test_id("compare-finding").wait_for()
 
 
 def compare_scene(page: Page, base: str, poster: Path) -> float:
@@ -216,28 +221,14 @@ def compare_scene(page: Page, base: str, poster: Path) -> float:
     page.get_by_role("button", name="Run 3 recipes").wait_for()
     page.wait_for_load_state("networkidle")
     loaded = time.time()
-    page.wait_for_timeout(2000)
+    # The setup cards first: what each recipe will do.
+    page.wait_for_timeout(2500)
     run_recipes(page)
-    finding = page.get_by_test_id("compare-finding")
-    finding.evaluate("el => el.scrollIntoView({ behavior: 'smooth', block: 'center' })")
+    # Then the rows filled in, under the finding sentence.
     page.wait_for_timeout(2500)
     page.screenshot(path=poster, type="jpeg", quality=80)
-    page.wait_for_timeout(4500)
+    page.wait_for_timeout(3500)
     return loaded
-
-
-def compare_still(browser, base: str) -> None:
-    """Compare has no clip yet: a still of the page with the sample loaded, in each theme."""
-    for theme, suffix in THEMES.items():
-        ctx = browser.new_context(viewport=SIZE, color_scheme=theme)
-        page = ctx.new_page()
-        pick_sample(page, base, None)
-        page.goto(base + "/compare")
-        page.wait_for_timeout(2500)
-        poster = OUT / f"compare{suffix}.jpg"
-        page.screenshot(path=poster, type="jpeg", quality=80)
-        ctx.close()
-        print(f"{poster.name} {poster.stat().st_size // 1024} KB")
 
 
 CLIPS = {
@@ -292,9 +283,13 @@ def encode(raw: Path, target: Path, start: float) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("clips", nargs="*", default=["build", "evaluate"], choices=[*CLIPS, "compare-still"])
+    ap.add_argument("clips", nargs="*", metavar="clip", help="build, compare or evaluate; all three when none is named")
     ap.add_argument("--port", type=int, default=8231)
     args = ap.parse_args()
+    clips = args.clips or list(CLIPS)
+    unknown = sorted(set(clips) - set(CLIPS))
+    if unknown:
+        ap.error(f"unknown clip: {', '.join(unknown)}")
     if not (ROOT / "web" / "dist" / "index.html").exists():
         raise SystemExit("web/dist is missing: run `npm run build` in web/ first")
     OUT.mkdir(parents=True, exist_ok=True)
@@ -307,11 +302,8 @@ def main() -> None:
 
             with sync_playwright() as p:
                 browser = p.chromium.launch()
-                for name in args.clips:
-                    if name == "compare-still":
-                        compare_still(browser, base)
-                    else:
-                        record(browser, base, name, data / "videos")
+                for name in clips:
+                    record(browser, base, name, data / "videos")
                 browser.close()
         finally:
             server.terminate()

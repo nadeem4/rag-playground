@@ -42,20 +42,12 @@ function header(path = "/", lessonsEnabled = true) {
 const devButton = () => screen.getByRole("button", { name: "Dev" })
 
 describe("AppHeader", () => {
-  it("shows Home, Lessons, Build, Compare, Evaluate, Read and GitHub as primary navigation", () => {
+  it("shows Home, Lessons, Build, Compare, Evaluate and Read as primary navigation", () => {
     header()
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Home", "Lessons", "Build", "Compare", "Evaluate", "Read", "GitHub"])
-    expect(links.map((l) => l.getAttribute("href"))).toEqual([
-      "/",
-      "/learn",
-      "/build",
-      "/compare",
-      "/evaluate",
-      "/read",
-      "https://github.com/nadeem4/rag-playground",
-    ])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Lessons", "Build", "Compare", "Evaluate", "Read"])
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/learn", "/build", "/compare", "/evaluate", "/read"])
     expect(screen.queryByText("Forms")).toBeNull()
     expect(screen.queryByText("Tokens")).toBeNull()
   })
@@ -243,11 +235,11 @@ describe("AppHeader with the lessons hidden", () => {
     expect(screen.getByTestId("document-trigger").className).not.toContain("bg-stale-wash")
   })
 
-  it("shows Home first, then Build, Compare, Evaluate, Read and GitHub, with no Lessons", () => {
+  it("shows Home first, then Build, Compare, Evaluate and Read, with no Lessons", () => {
     header("/build", false)
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Home", "Build", "Compare", "Evaluate", "Read", "GitHub"])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Build", "Compare", "Evaluate", "Read"])
     expect(links[0].getAttribute("href")).toBe("/")
     expect(screen.queryByText("Lessons")).toBeNull()
   })
@@ -255,6 +247,11 @@ describe("AppHeader with the lessons hidden", () => {
   it("links the brand to Home", () => {
     header("/build", false)
     expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/")
+  })
+
+  it("leaves GitHub to Home, so the Home tab costs the Document control no width", () => {
+    header("/build", false)
+    expect(screen.queryByRole("link", { name: "GitHub" })).toBeNull()
   })
 
   it("marks Home as current on /", () => {

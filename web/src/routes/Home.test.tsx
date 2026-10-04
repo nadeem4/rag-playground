@@ -174,17 +174,28 @@ describe("Home", () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
   })
 
-  it("shows the Build and Evaluate clips, and a still for Compare with Clip coming soon", () => {
+  it("shows a clip for Build, Compare and Evaluate, each in light and dark", () => {
     render(<Home navigate={vi.fn()} />)
     const videos = document.querySelectorAll("video")
     expect([...videos].map((v) => [...v.querySelectorAll("source")].map((s) => s.getAttribute("src")))).toEqual([
       ["/clips/build-dark.webm", "/clips/build.webm"],
+      ["/clips/compare-dark.webm", "/clips/compare.webm"],
       ["/clips/evaluate-dark.webm", "/clips/evaluate.webm"],
     ])
-    expect([...videos].map((v) => v.getAttribute("poster"))).toEqual(["/clips/build.jpg", "/clips/evaluate.jpg"])
+    expect([...videos].map((v) => v.getAttribute("poster"))).toEqual(["/clips/build.jpg", "/clips/compare.jpg", "/clips/evaluate.jpg"])
     const compare = screen.getByRole("region", { name: "Compare recipes on the same document" })
-    expect(within(compare).getByText("Clip coming soon")).toBeTruthy()
-    expect(compare.querySelector("figure img")!.getAttribute("src")).toBe("/clips/compare.jpg")
+    expect(within(compare).getByRole("figure", { name: "Clip: running three recipes on Compare and reading what changed" })).toBeTruthy()
+    expect(within(compare).getByText("Run three recipes and read what changed")).toBeTruthy()
+    expect(screen.queryByText("Clip coming soon")).toBeNull()
+  })
+
+  it("describes the Compare page as it is now", () => {
+    render(<Home navigate={vi.fn()} />)
+    const compare = screen.getByRole("region", { name: "Compare recipes on the same document" })
+    expect(within(compare).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Save the set as an experiment and come back to it.",
+      "Up to ten recipes; open any three side by side.",
+    ])
   })
 
   it("links Read, running it on your machine and the source, then the footer", () => {

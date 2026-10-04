@@ -177,8 +177,9 @@ Home (`/`) is the first tab. It has:
 - links to **Read**, running it on your machine and the source, and a footer.
 
 The clips are muted and loop. Each has a Pause and Play button, and with reduced motion
-turned on they hold still on their poster until you press Play. Compare shows a still of the
-page for now. Any path the app does not know opens Home.
+turned on they hold still on their poster until you press Play. Any path the app does not know
+opens Home. The link to the source on GitHub is on Home, in the links row and the footer, so the
+header keeps its width for the Document control.
 
 The clips are recorded from a real session by a script. See [Recording the Home
 clips](#recording-the-home-clips).
@@ -579,21 +580,21 @@ To work on the UI, run `uv run rag-playground --no-browser --reload` in one term
 
 ### Recording the Home clips
 
-Home's clips live in `web/public/clips/`: `build.webm` and `evaluate.webm` with a `.jpg`
-poster each, and `compare.jpg`, a still of Compare until it has a clip. Each also comes in a
-dark version (`build-dark.webm`, `build-dark.jpg` and so on). On the System theme the page
+Home's clips live in `web/public/clips/`: `build.webm`, `compare.webm` and `evaluate.webm`,
+with a `.jpg` poster each. Each also comes in a dark version (`build-dark.webm`, `build-dark.jpg` and so on). On the System theme the page
 serves the dark file by media query, with the light one as the fallback; when the theme is set
 to Light or Dark, it plays the matching file. To record them again:
 
 ```bash
 cd web && npm run build && cd ..
-uv run --with playwright==1.55.0 playwright install chromium                                          # once
-uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py                 # build and evaluate
-uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py compare-still   # the Compare still
+uv run --with playwright==1.55.0 playwright install chromium                                    # once
+uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py           # all three
+uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py compare   # one clip
 ```
 
-`compare` is ready too: it runs three recipes and ends on the finding sentence. It will be
-recorded once the redesigned Compare page lands; until then Home shows the still.
+Build builds the index, asks with the cross-encoder and ends on the rerank slope. Compare shows
+the setup cards, runs three recipes and ends on the finding sentence. Evaluate scores the
+pipeline, scores it again with Parse set to Fast text and opens a miss.
 
 The script starts its own server in demo mode, so the Dev menu is hidden, on port 8231
 (`--port` changes it), with a fresh artifact and source folder in a temp directory, and stops it

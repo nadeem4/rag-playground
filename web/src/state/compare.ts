@@ -4,6 +4,7 @@ import { compareLists, ordinal, type ListChange } from "@/components/inspectors/
 import type { ChunkStats } from "@/components/inspectors/spans"
 import { strategyLabel } from "@/learn/challenges"
 
+import { defaultConfig } from "./graph"
 import { variantLabels } from "./sweep"
 
 /**
@@ -12,14 +13,44 @@ import { variantLabels } from "./sweep"
  * same sentences.
  */
 
-/** A recipe's names: in words, its code name, and the short form a tab or a sentence uses. */
+/** The most recipes one run takes; the server enforces the same cap. */
+export const MAX_RECIPES = 10
+
+/** The fields' titles in sentence case, in place of the schemas' own ("Chunk Size", "Rrf K"). */
+export const RECIPE_TITLES: Record<string, string> = {
+  chunk_size: "Chunk size",
+  chunk_overlap: "Chunk overlap",
+  max_tokens: "Most tokens per piece",
+  overlap: "Overlap tokens",
+  sentences_per_chunk: "Sentences per piece",
+  overlap_sentences: "Overlap sentences",
+  top_k: "Candidates, top k",
+  rrf_k: "RRF k",
+  truncate_dim: "Dimensions",
+  heading_context: "Heading context",
+  keep_tables_whole: "Keep tables whole",
+  section_level: "Section level",
+  build_fts: "Build the keyword index",
+  do_ocr: "Read text in images (OCR)",
+  do_table_structure: "Find table structure",
+  table_mode: "Table mode",
+  heading_hierarchy: "Heading levels",
+  join_lines: "Join lines",
+  query_expansion: "Query expansion",
+  prf_docs: "PRF pieces",
+  prf_terms: "PRF terms",
+}
+
+/** A recipe's names: in words, its code name, and the short forms a tab or a sentence uses. */
 export interface RecipeName {
   /** `Recursive (natural breaks), 400 characters`. */
   name: string
   /** The transform's code name, `recursive_character`. */
   code: string
-  /** `400 characters`, or the plain name when no size tells the recipe apart. */
+  /** `400 characters`, or the name when no size tells the recipe apart. */
   short: string
+  /** What a finding calls it: `Your pipeline`, `Recursive at 100 characters`, `Dense with top 1`. */
+  phrase: string
 }
 
 /** The fields whose value is a size, with its unit. */
@@ -35,17 +66,80 @@ function sized(field: string, value: unknown): string {
   return value === null ? "native width" : `${String(value)} ${SIZE_UNITS[field]}`
 }
 
+/** How a setting other than the size reads in a name; `joined` parts follow the name with a space, the rest with a comma. */
+const NAME_PARTS: Record<string, (v: unknown) => { text: string; joined?: boolean } | null> = {
+  top_k: (v) => ({ text: `top ${String(v)}` }),
+  rrf_k: (v) => ({ text: `RRF k ${String(v)}` }),
+  query_expansion: (v) => (v === "prf" ? { text: "with PRF", joined: true } : null),
+}
+
+/** A setting's value in a name: on or off for a switch, the value itself otherwise. */
+const valueWord = (v: unknown) => (typeof v === "boolean" ? (v ? "on" : "off") : v === null ? "native" : typeof v === "string" ? v : JSON.stringify(v))
+
+/** The short phrase a chunk recipe goes by in a finding, from its own settings. */
+function chunkPhrase(v: Variant): string | null {
+  const c = v.config
+  switch (v.transform) {
+    case "recursive_character":
+      return typeof c.chunk_size === "number" ? `Recursive at ${c.chunk_size} characters` : null
+    case "sentence_window":
+      return typeof c.sentences_per_chunk === "number" ? `By sentence at ${c.sentences_per_chunk}` : null
+    case "token_based":
+      return typeof c.max_tokens === "number" ? `Fixed ${c.max_tokens}-token pieces` : null
+    case "layout_blocks":
+      return "By layout block"
+    case "markdown_header":
+      return "By heading"
+    default:
+      return null
+  }
+}
+
 /**
- * Each recipe by Build's plain name (the Ask panel's name on Retrieve), plus
- * the first field that tells it apart and has a unit.
+ * Each recipe by Build's plain name (the Ask panel's name on Retrieve), then
+ * the size that tells it apart, then each other setting that tells it apart
+ * and is away from the strategy's default. A recipe whose name an earlier one
+ * already has ends with `, copy 2`, so no two recipes share a name. `own` is
+ * the index of the node's own recipe, whose phrase is "Your pipeline".
  */
-export function recipeNames(variants: Variant[], stage: Stage, registry: Registry): RecipeName[] {
+export function recipeNames(variants: Variant[], stage: Stage, registry: Registry, own?: number): RecipeName[] {
   const labels = variantLabels(variants, registry, stage)
-  return variants.map((v, i) => {
-    const plain = (stage === "retrieve" ? RETRIEVAL_LABEL[v.transform] : undefined) ?? strategyLabel(v.transform)
+  const plainOf = (v: Variant) => (stage === "retrieve" ? RETRIEVAL_LABEL[v.transform] : undefined) ?? strategyLabel(v.transform)
+  const sizeOf = (i: number) => {
     const field = labels[i].fields.find(([k]) => k in SIZE_UNITS)?.[0]
-    const size = field ? sized(field, v.config[field]) : null
-    return { name: size ? `${plain}, ${size}` : plain, code: v.transform, short: size ?? plain }
+    return { field, size: field ? sized(field, variants[i].config[field]) : null }
+  }
+  const heads = variants.map((v, i) => `${plainOf(v)}|${sizeOf(i).size ?? ""}`)
+  const seen = new Map<string, number>()
+  return variants.map((v, i) => {
+    const plain = plainOf(v)
+    const { field, size } = sizeOf(i)
+    const info = registry[stage]?.[v.transform]
+    const defaults = info ? defaultConfig(info) : {}
+    // The recipes the plain name and the size do not yet tell apart from this one.
+    const peers = variants.filter((_, j) => heads[j] === heads[i])
+    const parts = Object.keys(v.config)
+      .filter((k) => k !== field && peers.some((p) => JSON.stringify(p.config[k]) !== JSON.stringify(v.config[k])))
+      .filter((k) => JSON.stringify(defaults[k]) !== JSON.stringify(v.config[k]))
+      .map((k) => (k in NAME_PARTS ? NAME_PARTS[k](v.config[k]) : { text: `${RECIPE_TITLES[k] ?? k} ${valueWord(v.config[k])}` }))
+      .filter((p): p is { text: string; joined?: boolean } => p !== null)
+    const joined = parts.filter((p) => p.joined).map((p) => p.text)
+    const comma = [...(size ? [size] : []), ...parts.filter((p) => !p.joined).map((p) => p.text)]
+    let name = [plain, ...joined].join(" ") + (comma.length ? `, ${comma.join(", ")}` : "")
+    let short = size ? [size, ...parts.filter((p) => !p.joined).map((p) => p.text)].join(", ") : name
+    const n = (seen.get(name) ?? 0) + 1
+    seen.set(name, n)
+    if (n > 1) {
+      name = `${name}, copy ${n}`
+      short = `${short}, copy ${n}`
+    }
+    const words = [...parts.filter((p) => p.joined).map((p) => p.text.replace(/^with /, "")), ...parts.filter((p) => !p.joined).map((p) => p.text)]
+    const phrase =
+      i === own
+        ? "Your pipeline"
+        : ((stage === "chunk" ? chunkPhrase(v) : null) ??
+          (stage === "retrieve" ? (words.length ? `${plain} with ${list(words)}` : plain) : name.replace(/, copy \d+$/, "")))
+    return { name, code: v.transform, short, phrase }
   })
 }
 

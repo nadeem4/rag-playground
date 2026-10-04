@@ -239,6 +239,17 @@ def test_sweep_bad_request_is_400(client):
     assert client.post("/api/sweeps", json=no_variants).status_code == 422
 
 
+
+def test_sweep_takes_at_most_ten_recipes(client):
+    src = upload_pdf(client)
+    g = ingest_graph(src["sha"], src["filename"])
+    ten = [{"transform": "recursive_character", "config": {"chunk_size": 100 + 50 * i}} for i in range(10)]
+    ok = client.post("/api/sweeps", json={"graph": g, "node_id": "chunk", "variants": ten})
+    assert ok.status_code == 202, ok.text
+    r = client.post("/api/sweeps", json={"graph": g, "node_id": "chunk", "variants": ten + [ten[0]]})
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["loc"][-1] == "variants"
+
 # ---------------------------------------------------------------------------
 # fake plugins: deterministic control over timing
 # ---------------------------------------------------------------------------

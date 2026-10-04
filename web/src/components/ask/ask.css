@@ -1,0 +1,39 @@
+/*
+ * The slope between the search order and the reranked order (spec section 6).
+ * The overlay fills the comparison grid and takes no pointer; each line is
+ * 2 px with round caps, coloured by how its piece moved.
+ */
+
+.slope-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.slope-lines path {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.slope-lines path[data-kind="up"] {
+  stroke: var(--accent);
+}
+
+.slope-lines path[data-kind="down"] {
+  stroke: var(--text-secondary);
+}
+
+.slope-lines path[data-kind="same"] {
+  stroke: var(--flat);
+}
+
+/* Below the two-column width the lists stack, so a line would cross a list: none is drawn. */
+@media (width < 80rem) {
+  .slope-lines {
+    display: none;
+  }
+}

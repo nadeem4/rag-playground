@@ -6,16 +6,20 @@ import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Query, Registry, Retri
 import { loadMeta, useArtifactPayload } from "@/api/useArtifact"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
-import { reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
+import { movement, reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
 import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
 import { measure, play, type Rect } from "@/lib/flip"
+import type { SlopeKind } from "@/lib/slope"
 import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
 import { RERANKERS, RETRIEVAL_LABEL } from "./AskSettings"
 import { Finding } from "./Finding"
+import { useSlope } from "./useSlope"
+
+import "./ask.css"
 
 /**
  * The results of the Ask panel: the finding sentence (or a Chat answer when
@@ -323,6 +327,12 @@ function Failed({ node, error }: { node: GraphNode; error: string }) {
   )
 }
 
+/** A kept piece's movement as a slope kind: unmoved is `same`. */
+function slopeKind(row: HitRowData): SlopeKind {
+  const m = movement(row)
+  return m.kind === "none" ? "same" : m.kind
+}
+
 /**
  * The search order against the reranked order. Open by default; the reader
  * can hide it for one rerank result, and Build keeps that choice. Hidden, the
@@ -356,6 +366,10 @@ function Comparison({
   const kept = new Set(after.map((r) => r.chunk_id))
   // The candidates the reranker dropped, each with its search place, follow the kept ones as Not kept slips.
   const dropped = before.filter((r) => !kept.has(r.chunk_id)).map((r) => ({ ...r, prior_rank: r.rank }))
+  // The slope: one line per kept piece, coloured by how it moved.
+  const gridRef = useRef<HTMLDivElement>(null)
+  const moves = new Map<string, SlopeKind>(after.map((r) => [r.chunk_id, slopeKind(r)]))
+  const lines = useSlope(gridRef, open, o.rerankId, moves)
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
       {open ? "Hide comparison" : "Show comparison"}
@@ -404,7 +418,12 @@ function Comparison({
         <Heading>Search order against the reranked order</Heading>
         {toggle}
       </div>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div ref={gridRef} className="relative grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)]">
+        <svg className="slope-lines" aria-hidden>
+          {lines.map((l) => (
+            <path key={l.id} data-id={l.id} data-kind={l.kind} d={l.d} />
+          ))}
+        </svg>
         <div data-column="search" className="min-w-0">
           <RetrievalView
             key={o.retrieveId}
@@ -418,6 +437,8 @@ function Comparison({
             facts={<Heading>{`Search order, ${before.length} candidates`}</Heading>}
           />
         </div>
+        {/* The gutter the lines cross; stacked, it takes no room. */}
+        <div aria-hidden className="hidden xl:block" />
         {reranked}
       </div>
     </div>

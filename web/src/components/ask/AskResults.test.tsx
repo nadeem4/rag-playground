@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { useState } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
@@ -284,6 +284,41 @@ describe("the comparison, with a reranker", () => {
     rerender(<Panel {...p} graph={mmr} results={{ ...p.results, rerank_1: done("rerank_1", "rr2") }} />)
     expect(await screen.findByRole("button", { name: "Hide comparison" })).toBeTruthy()
     expect(await screen.findByRole("heading", { name: "After rerank, MMR, 5 kept" })).toBeTruthy()
+  })
+})
+
+describe("the slope between the two lists", () => {
+  it("draws one line per kept piece, from its search swatch to its reranked swatch, by movement", async () => {
+    // Each swatch sits at its place in its column, so the lines have coordinates.
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const column = this.closest("[data-column]")?.getAttribute("data-column")
+      const el = this as HTMLElement
+      if (!column || el.dataset.id === undefined) return new DOMRect(0, 0, 0, 0)
+      const i = [...this.closest("[data-column]")!.querySelectorAll("[data-id]")].indexOf(this)
+      return new DOMRect(column === "search" ? 0 : 600, 40 + i * 60, 30, 30)
+    })
+    onTestFinished(() => spy.mockRestore())
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    const svg = document.querySelector("svg.slope-lines") as SVGElement
+    expect(svg).toBeTruthy()
+    expect(svg.getAttribute("aria-hidden")).toBe("true")
+    // Prior ranks 6, 1, 2, 4, 3: up, down, down, stayed, down. The dropped piece has no line.
+    const ids = [5, 0, 1, 3, 2].map((i) => hybrid.hits[i].chunk.id)
+    await waitFor(() => expect(svg.querySelectorAll("path")).toHaveLength(5))
+    const paths = [...svg.querySelectorAll("path")]
+    expect(paths.map((p) => p.getAttribute("data-id"))).toEqual(ids)
+    expect(paths.map((p) => p.getAttribute("data-kind"))).toEqual(["up", "down", "down", "same", "down"])
+    // The top kept piece was 6th in search: from the 6th left swatch (y 340 + 15) to the 1st right one (y 40 + 15).
+    expect(paths[0].getAttribute("d")).toBe("M 30,355 C 70,355 560,55 600,55")
+  })
+
+  it("draws no lines while the comparison is hidden", async () => {
+    render(<Panel {...props(withCrossEncoder(), RERANKED)} />)
+    await waitFor(() => expect(badges()).toHaveLength(5))
+    expect(document.querySelector("svg.slope-lines")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Hide comparison" }))
+    expect(document.querySelector("svg.slope-lines")).toBeNull()
   })
 })
 

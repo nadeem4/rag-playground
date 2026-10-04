@@ -23,6 +23,10 @@ request and the request holds the key. A custom endpoint with no key gets a
 placeholder, never `None`: the OpenAI SDK would otherwise read
 `OPENAI_API_KEY` from the environment and send it to the custom URL.
 
+**Custom endpoints on the demo.** In demo mode a custom `base_url` must be a
+public https address (`providers.endpoints`), checked before any client is
+built, and that client does not follow redirects.
+
 Both SDKs are imported lazily, inside the factories and the calls, so importing
 this module (every API start, every test run) costs nothing. Tests patch
 `make_anthropic_client` and `make_openai_client`.
@@ -32,6 +36,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from providers import endpoints
 
 Provider = Literal["anthropic", "openai", "openai_compatible"]
 
@@ -112,10 +118,19 @@ def make_anthropic_client(api_key: str) -> Any:
 
 
 def openai_client_kwargs(api_key: str | None, base_url: str | None) -> dict[str, Any]:
-    """Always an explicit key, so the SDK never falls back to the environment."""
+    """Always an explicit key, so the SDK never falls back to the environment.
+
+    In demo mode a custom endpoint's client does not follow redirects, so a
+    public endpoint cannot bounce the request to a private address
+    (`providers.endpoints`).
+    """
     kwargs: dict[str, Any] = {"api_key": api_key or NO_KEY_PLACEHOLDER}
     if base_url:
         kwargs["base_url"] = base_url
+        if endpoints.demo_enabled():
+            import openai
+
+            kwargs["http_client"] = openai.DefaultHttpxClient(follow_redirects=False)
     return kwargs
 
 
@@ -183,6 +198,7 @@ def complete(
             raise ValueError(
                 "A custom endpoint needs both a base URL and a model name."
             )
+        endpoints.guard_endpoint(base_url)
         request["model"] = model_name
         request["max_tokens"] = max_tokens
         client = make_openai_client(api_key or NO_KEY_PLACEHOLDER, base_url)

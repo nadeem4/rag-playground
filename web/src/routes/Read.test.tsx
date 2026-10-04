@@ -5,7 +5,7 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { decodePipeline } from "@/state/pipelines"
 
-import { Read } from "./Read"
+import { Read, TRY_IT_ENABLED, tryLink } from "./Read"
 
 const registry = liveRegistry as unknown as Registry
 const PRIMER_SHA = "cd".repeat(32)
@@ -48,7 +48,7 @@ describe("Read", () => {
   it("shows the header and ten sections in pipeline order", async () => {
     render(<Read />)
     expect(await screen.findByRole("heading", { level: 1, name: "Read, then try it" })).toBeTruthy()
-    expect(screen.getByText("The posts behind each step, in pipeline order. Most steps have a button that opens Build ready for that step.")).toBeTruthy()
+    expect(screen.getByText("The posts behind each step, in pipeline order.")).toBeTruthy()
     const titles = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)
     expect(titles).toEqual(["Overview", "Upload", "Parse", "Clean", "Chunk", "Index", "Retrieve", "Rerank", "Answer", "Evaluate"])
   })
@@ -97,24 +97,22 @@ describe("Read", () => {
     expect(within(section("Rerank")).getByText("No post on this yet.")).toBeTruthy()
   })
 
-  it("the Chunk button opens Build on the primer", async () => {
+  it("shows no Try it on Build buttons while the switch is off, and still opens Evaluate", async () => {
     render(<Read />)
-    const button = await within(await screen.findByRole("region", { name: "Chunk" })).findByRole("link", { name: "Try it on Build" })
-    const href = button.getAttribute("href")!
-    expect(href.startsWith("/build?pipeline=")).toBe(true)
-    const decoded = decodePipeline(href.slice("/build?pipeline=".length), registry)!
-    expect(decoded.name).toBe("Read: Chunk")
-    expect(decoded.graph.nodes.find((n) => n.stage === "source")!.config.sha).toBe(PRIMER_SHA)
+    await screen.findByRole("region", { name: "Chunk" })
+    expect(TRY_IT_ENABLED).toBe(false)
+    expect(screen.queryByRole("link", { name: "Try it on Build" })).toBeNull()
+    expect(within(section("Evaluate")).getByRole("link", { name: "Open Evaluate" }).getAttribute("href")).toBe("/evaluate")
   })
 
-  it("the Parse button uses the two-column report, Evaluate opens Evaluate, the Overview has no button", async () => {
-    render(<Read />)
-    const parse = await within(await screen.findByRole("region", { name: "Parse" })).findByRole("link", { name: "Try it on Build" })
-    const decoded = decodePipeline(parse.getAttribute("href")!.slice("/build?pipeline=".length), registry)!
+  it("the link builder still opens Build on the stage's sample with its own question", () => {
+    const columns = { name: "two-column-report", title: "Two-column report", blurb: "", shows: "", stresses: "parse" as const, pages: 3, default: false, filename: "two-column-report.pdf", sha: COLUMNS_SHA, question: "What does the report recommend?" }
+    const href = tryLink(registry, columns, "Parse")
+    expect(href.startsWith("/build?pipeline=")).toBe(true)
+    const decoded = decodePipeline(href.slice("/build?pipeline=".length), registry)!
+    expect(decoded.name).toBe("Read: Parse")
     expect(decoded.graph.nodes.find((n) => n.stage === "source")!.config.sha).toBe(COLUMNS_SHA)
     expect(decoded.graph.nodes.find((n) => n.stage === "query")!.config.text).toBe("What does the report recommend?")
-    expect(within(section("Evaluate")).getByRole("link", { name: "Open Evaluate" }).getAttribute("href")).toBe("/evaluate")
-    expect(within(section("Overview")).queryByRole("link", { name: "Try it on Build" })).toBeNull()
   })
 
   it("our own words have no em-dash or en-dash", async () => {

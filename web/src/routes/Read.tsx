@@ -43,8 +43,15 @@ function dateInWords(iso: string): string {
   return `${d} ${MONTHS[m - 1]} ${y}`
 }
 
+/**
+ * The "Try it on Build" buttons are hidden until the Guide me tour can say what the
+ * reader is learning and when they have tried it (owner, 3 October). Flip this to
+ * bring them back; the link builder stays tested.
+ */
+export const TRY_IT_ENABLED = false
+
 /** A share link that opens Build on the stage's sample with the sample's own question, built the way the parsing lab builds one. */
-function tryLink(registry: Registry, sample: SampleCard, title: string): string {
+export function tryLink(registry: Registry, sample: SampleCard, title: string): string {
   const graph = sampleGraph(registry, { sha: sample.sha, filename: sample.filename }, sample.question)
   return `/build?pipeline=${encodePipeline(`Read: ${title}`, graph)}`
 }
@@ -85,7 +92,7 @@ function StageSection({ section, registry, samples }: { section: Section; regist
             <a href="/evaluate">Open Evaluate</a>
           </Button>
         </div>
-      ) : sample && posts.length ? (
+      ) : TRY_IT_ENABLED && sample && posts.length ? (
         <div>
           <Button asChild variant="outline">
             <a href={tryLink(registry, sample, section.title)}>Try it on Build</a>
@@ -105,7 +112,7 @@ export function Read() {
       <div className="learn-page">
         <section className="learn-top flex max-w-[680px] flex-col gap-4">
           <h1 className="learn-display">Read, then try it</h1>
-          <p className="learn-lead">The posts behind each step, in pipeline order. Most steps have a button that opens Build ready for that step.</p>
+          <p className="learn-lead">The posts behind each step, in pipeline order.</p>
         </section>
         {SECTIONS.map((s) => (
           <StageSection key={s.stage} section={s} registry={reg.registry} samples={samples} />

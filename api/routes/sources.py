@@ -147,10 +147,58 @@ def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
         and isinstance(m.get("filename"), str)
         and demo.readable(m["sha"], request)
     ]
-    return sorted(
-        ({k: v for k, v in m.items() if k != "visitors"} for m in items),
-        key=lambda m: m["filename"].lower(),
-    )
+    me = visitor.visitor_id(request)
+    return sorted((_listed(m, me) for m in items), key=lambda m: m["filename"].lower())
+
+
+def _listed(meta: dict[str, Any], me: str | None) -> dict[str, Any]:
+    """A sidecar as the list shows it: never the visitor ids, and `uploaded_at`
+    when there is an upload time to give. That is this browser's own time when
+    it uploaded the file (the demo's 24 hours count from it), else the latest
+    one, so a local run still shows when a file arrived. A sample has none."""
+    out = {k: v for k, v in meta.items() if k != "visitors"}
+    stamps = meta.get("visitors") or {}
+    if isinstance(stamps, dict) and stamps:
+        mine = stamps.get(me) if me else None
+        stamp = mine if isinstance(mine, str) else max((t for t in stamps.values() if isinstance(t, str)), default=None)
+        if stamp:
+            out["uploaded_at"] = stamp
+    return out
+
+
+@router.delete("/sources/{sha}")
+def delete_source(sha: str, request: Request) -> dict[str, Any]:
+    """Delete an upload now instead of when it expires.
+
+    On the demo only the caller's own upload: their visitor id is dropped from
+    the record, and the file goes once nobody else holds it. Running locally,
+    any upload. A sample is never deleted. `deleted` says whether the file left
+    the disk.
+    """
+    sources: Path = request.app.state.deps.sources_dir
+    if not SHA.match(sha):
+        raise HTTPException(404, "There is no upload with that fingerprint.")
+    if sha in sample_set.readable_shas():
+        raise HTTPException(403, "A sample cannot be deleted. It is there for everyone.")
+    meta_path = sources / META_DIR / f"{sha}.json"
+    me = visitor.visitor_id(request) if demo.enabled() else None
+    if demo.enabled() and me is None:
+        raise HTTPException(400, NO_VISITOR)
+    with SIDECAR_LOCK:
+        body = _read_sidecar(meta_path)
+        visitors = dict(body.get("visitors") or {})
+        if not body or (demo.enabled() and me not in visitors):
+            raise HTTPException(404, "There is no upload of yours with that fingerprint.")
+        if demo.enabled():
+            visitors.pop(me, None)
+            if visitors:
+                meta_path.write_text(json.dumps({**body, "visitors": visitors}), encoding="utf-8")
+                return {"sha": sha, "deleted": False}
+        for f in sources.glob(f"{sha}*"):
+            if f.is_file():
+                f.unlink()
+        meta_path.unlink(missing_ok=True)
+    return {"sha": sha, "deleted": True}
 
 
 @router.post("/sources")

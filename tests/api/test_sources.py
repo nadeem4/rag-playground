@@ -40,8 +40,9 @@ def test_uploaded_file_is_findable_by_the_upload_transform(client, dirs):
 def test_list_sources(client):
     assert client.get("/api/sources").json() == []
     body = upload_pdf(client)
-    listed = client.get("/api/sources").json()
-    assert listed == [body]
+    [listed] = client.get("/api/sources").json()
+    # the list adds when it was uploaded (tests/api/test_delete_source.py)
+    assert {k: v for k, v in listed.items() if k != "uploaded_at"} == body
 
 
 def test_distinct_bytes_distinct_sha(client):

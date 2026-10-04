@@ -384,8 +384,14 @@ function Comparison({
     twin?.scrollIntoView?.({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" })
   }
   // The search order starts folded on every switch between the two layouts.
+  // Reset during render, not in an effect: an effect on mount could land after
+  // a quick first tap and close what the reader just opened.
   const [searchShown, setSearchShown] = useState(false)
-  useEffect(() => setSearchShown(false), [wide])
+  const [shownAt, setShownAt] = useState(wide)
+  if (shownAt !== wide) {
+    setShownAt(wide)
+    setSearchShown(false)
+  }
   const litLine = lit !== null && lines.some((l) => l.id === lit)
   const toggle = (
     <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>

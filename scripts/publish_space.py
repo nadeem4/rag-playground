@@ -5,7 +5,8 @@
 Only files committed at HEAD are published (`git archive`), so `sources/`,
 `.env` and `docs/` can never go up, and files no longer at HEAD are removed
 from the Space. The Space copy differs from the repo in
-one place: the README starts with the header Spaces require. Demo mode is set
+two places: the README starts with the header Spaces require, and
+.gitattributes gains LFS rules for binaries so the Space's build gets real files. Demo mode is set
 as a Space variable, so anyone who duplicates the Space can turn it off.
 Log in first with `hf auth login`.
 """
@@ -46,13 +47,25 @@ def space_readme(readme: str) -> str:
     return SPACE_HEADER + readme
 
 
+#: Binary types the Space must keep in LFS. The Space's Docker build checks files
+#: out with its own .gitattributes; without these rules it copies LFS pointers
+#: (about 130 bytes) instead of the files, and the Home clips play blank.
+SPACE_LFS = ("webm", "mp4", "jpg", "jpeg", "png", "gif", "webp", "pdf", "woff", "woff2", "ttf", "lance", "zip", "gz")
+
+
+def space_gitattributes(attrs: str) -> str:
+    """The repo's .gitattributes, plus an LFS rule for every binary type."""
+    lines = [f"*.{ext} filter=lfs diff=lfs merge=lfs -text" for ext in SPACE_LFS]
+    return attrs.rstrip("\n") + "\n\n# Hugging Face Space: binaries live in LFS.\n" + "\n".join(lines) + "\n"
+
+
 def export_tree(dest: Path) -> list[str]:
     """Write the files committed at HEAD into `dest`, return their paths."""
     tar = subprocess.run(["git", "archive", "--format=tar", "HEAD"], cwd=ROOT, check=True, capture_output=True).stdout
     with tarfile.open(fileobj=io.BytesIO(tar)) as t:
         t.extractall(dest, filter="data")
         names = [m.name for m in t.getmembers() if m.isfile()]
-    for name, change in (("README.md", space_readme),):
+    for name, change in (("README.md", space_readme), (".gitattributes", space_gitattributes)):
         path = dest / name
         path.write_text(change(path.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
     return names

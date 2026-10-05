@@ -119,6 +119,7 @@ def key_sentence(provider: str) -> str:
         + _locally(provider)
     )
 
+
 #: OpenRouter's OpenAI-compatible API. Fixed: the user never types it.
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 

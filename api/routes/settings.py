@@ -30,6 +30,8 @@ def no_key(provider: str) -> str:
         f"no API key: type one in the UI, set {PROVIDERS[provider].env_var} for "
         "the server process, or put it in .env at the repo root"
     )
+
+
 NO_BASE_URL = "no base URL: send the custom endpoint's base URL to check it"
 REJECTED = "authentication failed: the API key was rejected"
 DEMO_NO_CUSTOM = "custom endpoints are disabled in this hosted demo"

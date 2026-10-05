@@ -3,7 +3,7 @@
  * the Learn and Home dials in the plan (variance 5, motion 4, density 4), so
  * they get the display size from the type scale and the 32px section rhythm.
  * Every font size here is a --text-* token. Everything else comes from tokens.css. Documented in
- * docs/superpowers/design-system.md, section 5.
+ * .superpowers/docs/superpowers/design-system.md (private, not in the repo), section 5.
  */
 
 .learn-page {

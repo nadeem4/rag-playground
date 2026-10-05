@@ -1,5 +1,3 @@
-# Local design docs and plans (kept out of the repo by request)
-docs/
 .remember/
 
 # Python
@@ -42,5 +40,5 @@ Thumbs.db
 # Browser-automation screenshots and traces
 .playwright-mcp/
 
-# Agent working notes
+# Agent working notes, and the private plans, specs and design system (.superpowers/docs/)
 .superpowers/

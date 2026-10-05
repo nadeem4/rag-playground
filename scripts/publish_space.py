@@ -3,7 +3,8 @@
     uv run --no-sync python scripts/publish_space.py --repo <user>/rag-playground [--dry-run]
 
 Only files committed at HEAD are published (`git archive`), so `sources/`,
-`.env` and `docs/` can never go up, and files no longer at HEAD are removed
+`.env` and the private notes in `.superpowers/` can never go up, while the
+public pages in `docs/` do, and files no longer at HEAD are removed
 from the Space. The Space copy differs from the repo in
 two places: the README starts with the header Spaces require, and
 .gitattributes gains LFS rules for binaries so the Space's build gets real files. Demo mode is set

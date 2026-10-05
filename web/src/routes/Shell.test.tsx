@@ -1478,6 +1478,11 @@ describe("the Ask panel results on Build", () => {
     expect(header.className).not.toContain("font-mono")
     expect(header.parentElement!.className).not.toContain("font-mono")
     expect(within(header).getByText("4.0 ms").className).toContain("font-mono")
+    // A narrow inspector wraps the type, id and timing onto rows instead of running past its edge.
+    expect(header.parentElement!.className).toContain("flex-wrap")
+    expect(header.parentElement!.className).toContain("min-w-0")
+    expect(header.parentElement!.className).not.toContain("shrink-0")
+    expect(header.className).toContain("whitespace-nowrap")
   })
 
   it("switching Answer to Search clears a field error on the chat model", async () => {

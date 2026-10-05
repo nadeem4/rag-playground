@@ -639,13 +639,13 @@ function CardInspector({
           <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span>
         </div>
         {artifactId ? (
-          <div className="flex shrink-0 items-center gap-3 text-xs text-fg-muted">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
             <span className="font-mono">{type}</span>
             <span className="font-mono" title={artifactId}>
               {artifactId.slice(0, 12)}
             </span>
             {result?.duration_ms !== undefined ? (
-              <span data-testid="inspector-timing">
+              <span data-testid="inspector-timing" className="whitespace-nowrap">
                 {result.cache_hit ? "reused from an earlier run" : "computed"} <span className="font-mono">{fmtMs(result.duration_ms)}</span>
               </span>
             ) : null}

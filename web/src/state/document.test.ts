@@ -178,3 +178,68 @@ describe("the last upload's error", () => {
     expect(result.current.uploadError).toBeNull()
   })
 })
+
+describe("a sample saved with an old fingerprint", () => {
+  const OLD = "ab".repeat(32)
+  const NOTE = "The sample chunking-primer.pdf was updated, so this page now uses its current copy."
+
+  it("switches to the sample's current copy once the lists load, reads ready, and says so once", async () => {
+    storeGraph(sampleGraph(registry, ref(OLD, "chunking-primer.pdf")))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
+    expect(result.current.status).toBe("ready")
+    await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "query")!.config.text).toBe(SAMPLE.question)
+    // The note clears after the next document choice.
+    await act(() => chooseDocument(ref(UP.sha, UP.filename)))
+    expect(result.current.recoveredNote).toBeNull()
+  })
+
+  it("leaves an upload missing, even when an upload in this browser has a sample's filename", async () => {
+    const twin = { ...UP, sha: "77".repeat(32), filename: "chunking-primer.pdf" }
+    answers["/api/sources"] = [twin]
+    storeGraph(sampleGraph(registry, ref(OLD, "chunking-primer.pdf")))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.status).toBe("missing"))
+    await act(async () => {})
+    expect(result.current.doc).toEqual(ref(OLD, "chunking-primer.pdf"))
+    expect(result.current.recoveredNote).toBeNull()
+  })
+
+  it("never matches a file whose name is not exactly a sample's", async () => {
+    storeGraph(sampleGraph(registry, ref(OLD, "Chunking-Primer.pdf")))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.status).toBe("missing"))
+    await act(async () => {})
+    expect(result.current.recoveredNote).toBeNull()
+  })
+
+  it("recovers when a saved pipeline with the old fingerprint is opened later", async () => {
+    storeGraph(sampleGraph(registry, ref(UP.sha, UP.filename)))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.status).toBe("ready"))
+    await waitFor(() => expect(result.current.samples).not.toBeNull())
+    act(() => storeGraph(sampleGraph(registry, ref(OLD, "chunking-primer.pdf"))))
+    await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
+    expect(result.current.status).toBe("ready")
+    await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+  })
+
+  it("does nothing while the lists are still loading", async () => {
+    let release: () => void = () => {}
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    const inner = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === "/api/samples" ? new Promise((resolve) => (release = () => resolve(inner(url, init)))) : inner(url, init),
+    )
+    storeGraph(sampleGraph(registry, ref(OLD, "chunking-primer.pdf")))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.uploads).not.toBeNull())
+    await act(async () => {})
+    expect(result.current.status).toBe("checking")
+    expect(result.current.doc).toEqual(ref(OLD, "chunking-primer.pdf"))
+    expect(result.current.recoveredNote).toBeNull()
+    act(() => release())
+    await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
+  })
+})

@@ -35,7 +35,7 @@ const HEADING = "px-2 pt-2 pb-1 text-2xs text-fg-muted"
  * page's "Pick a document" button opens it too.
  */
 export function DocumentControl() {
-  const { doc, status, samples, uploads, listError, menuOpen, sampleLoading } = useDocument()
+  const { doc, status, samples, uploads, listError, menuOpen, sampleLoading, recoveredNote } = useDocument()
   const demo = useDemo()
   const { upload, busy, error: uploadError, limitsLine } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -130,6 +130,10 @@ export function DocumentControl() {
             {missing ? (
               <p role="status" className="rounded-control bg-stale-wash p-2 text-xs text-stale">
                 {doc?.filename} is no longer on {demo ? "the demo" : "this machine"}. Upload it again, or pick a sample.
+              </p>
+            ) : recoveredNote ? (
+              <p role="status" className="rounded-control bg-surface-hover p-2 text-xs text-fg-muted">
+                {recoveredNote}
               </p>
             ) : null}
             <DropdownMenu.RadioGroup value={current}>

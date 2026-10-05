@@ -86,6 +86,17 @@ describe("DocumentNote", () => {
     expect(screen.queryByTestId("document-note")).toBeNull()
   })
 
+  it("says once, in status tone, when a sample saved with an old fingerprint moved to its current copy", async () => {
+    stored("ab".repeat(32), "chunking-primer.pdf")
+    render(<DocumentNote action="build the index" />)
+    const note = await screen.findByTestId("document-note")
+    await waitFor(() => expect(note.textContent).toBe("The sample chunking-primer.pdf was updated, so this page now uses its current copy."))
+    expect(note.getAttribute("role")).toBe("status")
+    expect(note.className).not.toContain("stale")
+    expect(note.className).toContain("text-fg-muted")
+    expect(screen.queryByRole("button")).toBeNull()
+  })
+
   it("needsDocument is true for no document and a missing one only", () => {
     expect(needsDocument("empty")).toBe(true)
     expect(needsDocument("missing")).toBe(true)

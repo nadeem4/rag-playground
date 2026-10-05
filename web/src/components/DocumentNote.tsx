@@ -12,13 +12,21 @@ export function needsDocument(status: DocStatus): boolean {
  * The one stale-tone note Build, Compare and Evaluate share about the
  * document in the header's bar. Missing or none: what it blocks, and a "Pick
  * a document" button that opens the bar's menu. Changed since the results on
- * the page were made: says so, with no button. Otherwise nothing.
+ * the page were made: says so, with no button. A sample saved with an old
+ * fingerprint that just moved to its current copy: one status-tone line.
+ * Otherwise nothing.
  */
 export function DocumentNote({ action, changed = false, className }: { action: string; changed?: boolean; className?: string }) {
-  const { doc, status } = useDocument()
+  const { doc, status, recoveredNote } = useDocument()
   const demo = useDemo()
   const blocked = needsDocument(status)
-  if (!blocked && !(changed && doc)) return null
+  if (!blocked && !(changed && doc)) {
+    return recoveredNote ? (
+      <p role="status" data-testid="document-note" className={cn("rounded-control bg-surface-hover px-3 py-2 text-sm text-fg-muted", className)}>
+        {recoveredNote}
+      </p>
+    ) : null
+  }
   return (
     <div
       role="status"

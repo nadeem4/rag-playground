@@ -6,7 +6,15 @@ import { ApiError } from "@/api/client"
 import type { SampleCard } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { cn } from "@/lib/utils"
-import { chooseDocument, documentBusy, loadSampleDocument, refreshUploads, setDocumentMenuOpen, useDocument } from "@/state/document"
+import {
+  chooseDocument,
+  documentBusy,
+  loadSampleDocument,
+  refreshUploads,
+  setDocumentMenuOpen,
+  takeDocumentMenuOpener,
+  useDocument,
+} from "@/state/document"
 
 import { useUpload } from "./useUpload"
 
@@ -109,11 +117,19 @@ export function DocumentControl() {
             align="end"
             sideOffset={6}
             collisionPadding={16}
+            onCloseAutoFocus={(e) => {
+              // Opened from a page's button: focus goes back there, not to this trigger.
+              const back = takeDocumentMenuOpener()
+              if (back?.isConnected) {
+                e.preventDefault()
+                back.focus()
+              }
+            }}
             className="menu-drop z-10 flex max-h-[min(560px,calc(100dvh-96px))] w-[min(360px,calc(100vw-32px))] flex-col gap-1 overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-2 text-fg shadow-sheet"
           >
             {missing ? (
               <p role="status" className="rounded-control bg-stale-wash p-2 text-xs text-stale">
-                {doc?.filename} is no longer on the server.{demo ? " Uploads on the demo expire." : ""} Upload it again, or pick a sample.
+                {doc?.filename} is no longer on {demo ? "the demo" : "this machine"}. Upload it again, or pick a sample.
               </p>
             ) : null}
             <DropdownMenu.RadioGroup value={current}>

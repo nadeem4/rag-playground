@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
-import { documentOf, resetDocumentForTests } from "@/state/document"
+import { documentOf, openDocumentMenu, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph } from "@/state/graph"
 
 import { DocumentControl } from "./DocumentControl"
@@ -102,12 +102,12 @@ describe("DocumentControl", () => {
     expect(trigger().getAttribute("aria-label")).toBe("Document NK_Resume.pdf is missing. Pick another or upload it again.")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
-    expect(menu.textContent).toContain("NK_Resume.pdf is no longer on the server. Upload it again, or pick a sample.")
-    expect(menu.textContent).not.toContain("Uploads on the demo expire.")
+    expect(menu.textContent).toContain("NK_Resume.pdf is no longer on this machine. Upload it again, or pick a sample.")
+    expect(menu.textContent).not.toContain("on the server")
     expect(within(menu).getByText("None in this browser yet.")).toBeTruthy()
   })
 
-  it("on the demo, the warning says uploads expire", async () => {
+  it("on the demo, the warning says the file is no longer on the demo, in Home's words", async () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     serve({ sources: [], samples: [SAMPLE], app: { demo: true } })
     render(<DocumentControl />)
@@ -116,8 +116,51 @@ describe("DocumentControl", () => {
     await act(async () => {})
     fireEvent.keyDown(trigger(), { key: "Enter" })
     expect((await screen.findByRole("menu")).textContent).toContain(
-      "NK_Resume.pdf is no longer on the server. Uploads on the demo expire. Upload it again, or pick a sample.",
+      "NK_Resume.pdf is no longer on the demo. Upload it again, or pick a sample.",
     )
+  })
+
+  it("gives focus back to the button that opened the menu from a page, not the header trigger", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    serve({ sources: [UP], samples: [SAMPLE] })
+    render(
+      <>
+        <DocumentControl />
+        <button type="button" onClick={openDocumentMenu}>
+          Change
+        </button>
+      </>,
+    )
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: chunking-primer.pdf. Change it."))
+    const opener = screen.getByRole("button", { name: "Change" })
+    opener.focus()
+    fireEvent.click(opener)
+    const menu = await screen.findByRole("menu")
+    fireEvent.keyDown(menu, { key: "Escape" })
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+  })
+
+  it("gives focus back to the header trigger when the trigger opened the menu", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    serve({ sources: [UP], samples: [SAMPLE] })
+    render(
+      <>
+        <DocumentControl />
+        <button type="button" onClick={openDocumentMenu}>
+          Change
+        </button>
+      </>,
+    )
+    // A page opened it once before; the trigger opening it now wins.
+    fireEvent.click(screen.getByRole("button", { name: "Change" }))
+    fireEvent.keyDown(await screen.findByRole("menu"), { key: "Escape" })
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+    trigger().focus()
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    fireEvent.keyDown(await screen.findByRole("menu"), { key: "Escape" })
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(trigger()))
   })
 
   it("while an upload runs, the samples, your uploads and Upload a PDF wait, so a pick cannot race it", async () => {

@@ -45,6 +45,7 @@ SYSTEM_PROMPT = (
 )
 
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
+_SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
 _KEY_WORDS: dict[str, str] = {
     "anthropic": (
@@ -54,6 +55,10 @@ _KEY_WORDS: dict[str, str] = {
     "openai": (
         "It needs an OpenAI API key, added with the key button at the top "
         "right or set as OPENAI_API_KEY on the server."
+    ),
+    "openrouter": (
+        "It needs an OpenRouter API key, added with the key button at the top "
+        "right or set as OPENROUTER_API_KEY on the server."
     ),
     "openai_compatible": (
         "A key is optional, added with the key button at the top right, and a "
@@ -70,6 +75,12 @@ class LlmRerankConfig(BaseModel):
     )
     custom_base_url: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
     custom_model: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
+    openrouter_model: str = Field(
+        default="",
+        title="OpenRouter model",
+        description=llm.OPENROUTER_MODEL_HELP,
+        json_schema_extra=_SHOW_IF_OPENROUTER,
+    )
     #: How many it keeps from the retriever's candidate pool (20 by default).
     top_k: int = 5
 
@@ -81,6 +92,8 @@ def _custom_complete(config: LlmRerankConfig) -> bool:
 def _model_name(config: LlmRerankConfig) -> str:
     if config.model == "custom":
         return config.custom_model.strip() or "(not set)"
+    if config.model == "openrouter":
+        return f"{config.openrouter_model.strip() or '(not set)'} on OpenRouter"
     return CHAT_MODELS[config.model].label
 
 
@@ -89,7 +102,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
     """`retrieval_result -> retrieval_result`, so it stacks with other rerankers."""
 
     name = "llm_rerank"
-    version = "2"
+    version = "3"
     stage = Stage.RERANK
     inputs = {
         "result": PortSpec(ArtifactType.RETRIEVAL_RESULT),
@@ -136,6 +149,8 @@ class LlmRerank(Transform[LlmRerankConfig]):
                 "http://localhost:11434/v1 for Ollama) and a model name.",
                 True,
             )
+        elif model.provider == "openrouter" and not config.openrouter_model.strip():
+            warning, blocking = llm.OPENROUTER_NEEDS_MODEL, True
         return Explanation(
             settings=settings, tradeoff=tradeoff, warning=warning, blocking=blocking
         )
@@ -172,7 +187,9 @@ class LlmRerank(Transform[LlmRerankConfig]):
             user=_prompt(question, hits),
             api_key=api_key,
             base_url=config.custom_base_url.strip() if custom else None,
-            model_name=config.custom_model.strip() if custom else None,
+            model_name=llm.model_name_for(
+                model, config.custom_model, config.openrouter_model
+            ),
             max_tokens=MAX_TOKENS,
         )
         elapsed = time.perf_counter() - started

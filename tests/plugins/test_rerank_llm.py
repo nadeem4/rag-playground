@@ -105,7 +105,7 @@ def test_a_rewritten_question_is_judged_as_asked(reply, tmp_path):
 
 
 def test_version_is_bumped_for_the_question_as_asked():
-    assert LlmRerank.version == "2"
+    assert LlmRerank.version == "3"
     assert "the question as you typed it" in LlmRerank().explain(LlmRerankConfig()).settings
 
 
@@ -118,7 +118,7 @@ def texts_of(result: RetrievalResult) -> list[str]:
 
 def test_registered_under_the_rerank_stage():
     assert registry.get(Stage.RERANK, "llm_rerank") is LlmRerank
-    assert LlmRerank.version == "2"
+    assert LlmRerank.version == "3"
 
 
 def test_ports_match_the_mmr_contract():

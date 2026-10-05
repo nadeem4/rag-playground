@@ -36,8 +36,8 @@
   "use_case": {
     "chat": {
       "name": "chat",
-      "version": "2",
-      "summary": "Sends the retrieved pieces and your question to a chat model (Claude, OpenAI, or any OpenAI-compatible server), which answers using only those pieces. Every claim points at the passages it relied on, and each citation is checked against the parsed document.",
+      "version": "3",
+      "summary": "Sends the retrieved pieces and your question to a chat model (Claude, OpenAI, OpenRouter, or any OpenAI-compatible server), which answers using only those pieces. Every claim points at the passages it relied on, and each citation is checked against the parsed document.",
       "stage": "use_case",
       "output": "output",
       "stackable": false,
@@ -84,6 +84,7 @@
               "gpt-6-astra",
               "gpt-5.6-sol",
               "gpt-5.6-luna",
+              "openrouter",
               "custom"
             ],
             "title": "Model",
@@ -95,7 +96,8 @@
               "custom": "Custom (OpenAI-compatible)",
               "gpt-5.6-luna": "GPT-5.6 Luna",
               "gpt-5.6-sol": "GPT-5.6 Sol",
-              "gpt-6-astra": "GPT-6 Astra"
+              "gpt-6-astra": "GPT-6 Astra",
+              "openrouter": "OpenRouter"
             }
           },
           "custom_base_url": {
@@ -112,6 +114,15 @@
             "type": "string",
             "x-show-when": {
               "model": "custom"
+            }
+          },
+          "openrouter_model": {
+            "default": "",
+            "description": "The OpenRouter model id, for example anthropic/claude-sonnet-4, openai/gpt-4o-mini, meta-llama/llama-3.3-70b-instruct or google/gemini-2.5-flash.",
+            "title": "OpenRouter model",
+            "type": "string",
+            "x-show-when": {
+              "model": "openrouter"
             }
           },
           "citation_method": {
@@ -281,7 +292,7 @@
     },
     "llm_rewrite": {
       "name": "llm_rewrite",
-      "version": "1",
+      "version": "2",
       "summary": "Asks a chat model to restate your question in the words the document would use, and searches with that. The answer still uses your question as typed. It needs an API key and makes one model call per question.",
       "stage": "query",
       "output": "query",
@@ -331,6 +342,7 @@
               "gpt-6-astra",
               "gpt-5.6-sol",
               "gpt-5.6-luna",
+              "openrouter",
               "custom"
             ],
             "title": "Model",
@@ -342,7 +354,8 @@
               "custom": "Custom (OpenAI-compatible)",
               "gpt-5.6-luna": "GPT-5.6 Luna",
               "gpt-5.6-sol": "GPT-5.6 Sol",
-              "gpt-6-astra": "GPT-6 Astra"
+              "gpt-6-astra": "GPT-6 Astra",
+              "openrouter": "OpenRouter"
             }
           },
           "custom_base_url": {
@@ -359,6 +372,15 @@
             "type": "string",
             "x-show-when": {
               "model": "custom"
+            }
+          },
+          "openrouter_model": {
+            "default": "",
+            "description": "The OpenRouter model id, for example anthropic/claude-sonnet-4, openai/gpt-4o-mini, meta-llama/llama-3.3-70b-instruct or google/gemini-2.5-flash.",
+            "title": "OpenRouter model",
+            "type": "string",
+            "x-show-when": {
+              "model": "openrouter"
             }
           },
           "style": {
@@ -1356,7 +1378,7 @@
     },
     "llm_rerank": {
       "name": "llm_rerank",
-      "version": "2",
+      "version": "3",
       "summary": "Asks a chat model to read the question and every candidate piece and put the pieces in order of relevance. It needs an API key and makes one model call per question.",
       "stage": "rerank",
       "output": "retrieval_result",
@@ -1392,6 +1414,7 @@
               "gpt-6-astra",
               "gpt-5.6-sol",
               "gpt-5.6-luna",
+              "openrouter",
               "custom"
             ],
             "title": "Model",
@@ -1403,7 +1426,8 @@
               "custom": "Custom (OpenAI-compatible)",
               "gpt-5.6-luna": "GPT-5.6 Luna",
               "gpt-5.6-sol": "GPT-5.6 Sol",
-              "gpt-6-astra": "GPT-6 Astra"
+              "gpt-6-astra": "GPT-6 Astra",
+              "openrouter": "OpenRouter"
             }
           },
           "custom_base_url": {
@@ -1420,6 +1444,15 @@
             "type": "string",
             "x-show-when": {
               "model": "custom"
+            }
+          },
+          "openrouter_model": {
+            "default": "",
+            "description": "The OpenRouter model id, for example anthropic/claude-sonnet-4, openai/gpt-4o-mini, meta-llama/llama-3.3-70b-instruct or google/gemini-2.5-flash.",
+            "title": "OpenRouter model",
+            "type": "string",
+            "x-show-when": {
+              "model": "openrouter"
             }
           },
           "top_k": {

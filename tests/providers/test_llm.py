@@ -15,7 +15,6 @@ from providers import llm
 from providers.llm import CHAT_MODELS, ChatModel, Completion, complete
 
 KEY = "sk-test-SECRET-0123456789"
-OPENROUTER = ChatModel("openrouter", "openrouter", "OpenRouter", False)
 
 
 # --- the registry -------------------------------------------------------------
@@ -29,12 +28,15 @@ def test_registry_entries_and_providers():
         "gpt-6-astra",
         "gpt-5.6-sol",
         "gpt-5.6-luna",
+        "openrouter",
         "custom",
     ]
     providers = {m.id: m.provider for m in CHAT_MODELS.values()}
     assert providers["claude-opus-5"] == "anthropic"
     assert providers["gpt-6-astra"] == "openai"
     assert providers["custom"] == "openai_compatible"
+    assert providers["openrouter"] == "openrouter"
+    assert CHAT_MODELS["openrouter"].label == "OpenRouter"
     for model_id, model in CHAT_MODELS.items():
         assert isinstance(model, ChatModel) and model.id == model_id and model.label
         assert model.native_citations is (model.provider == "anthropic")
@@ -345,7 +347,7 @@ def test_key_for_reads_the_providers_credential():
         "custom_api_key": "c",
         "openrouter_api_key": "r",
     }
-    assert key_for(OPENROUTER, creds) == "r"
+    assert key_for(CHAT_MODELS["openrouter"], creds) == "r"
     assert key_for(CHAT_MODELS["claude-opus-5"], creds) == "a"
     assert key_for(CHAT_MODELS["gpt-6-astra"], creds) == "o"
     assert key_for(CHAT_MODELS["custom"], creds) == "c"
@@ -415,7 +417,7 @@ def test_outside_demo_mode_the_client_keeps_the_sdk_default(monkeypatch):
 
 def test_openrouter_uses_its_fixed_url_and_the_model_id(fake_openai):
     out = complete(
-        OPENROUTER, system="S", user="U", api_key=KEY,
+        CHAT_MODELS["openrouter"], system="S", user="U", api_key=KEY,
         model_name="anthropic/claude-sonnet-4", max_tokens=300,
     )
     assert out.text == "An answer [1.1]."
@@ -428,7 +430,7 @@ def test_openrouter_uses_its_fixed_url_and_the_model_id(fake_openai):
 def test_openrouter_requires_its_own_key(fake_openai):
     with pytest.raises(ValueError, match="OPENROUTER_API_KEY") as info:
         complete(
-            OPENROUTER, system="s", user="u", api_key=None,
+            CHAT_MODELS["openrouter"], system="s", user="u", api_key=None,
             model_name="openai/gpt-4o-mini",
         )
     assert str(info.value) == llm.NO_KEY["openrouter"]
@@ -439,7 +441,7 @@ def test_openrouter_requires_its_own_key(fake_openai):
 def test_openrouter_requires_a_model_id(fake_openai, model_name):
     with pytest.raises(ValueError, match="model id"):
         complete(
-            OPENROUTER, system="s", user="u", api_key=KEY,
+            CHAT_MODELS["openrouter"], system="s", user="u", api_key=KEY,
             model_name=model_name,
         )
     assert fake_openai.built == []
@@ -454,7 +456,7 @@ def test_openrouter_is_not_a_custom_endpoint_on_the_demo(fake_openai, monkeypatc
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr("providers.endpoints._resolve", no_dns)
     complete(
-        OPENROUTER, system="s", user="u", api_key=KEY,
+        CHAT_MODELS["openrouter"], system="s", user="u", api_key=KEY,
         model_name="google/gemini-2.5-flash",
     )
     assert fake_openai.built[0]["base_url"] == llm.OPENROUTER_BASE_URL
@@ -470,7 +472,7 @@ def test_openrouter_errors_name_openrouter_and_never_carry_the_key(fake_openai):
     )
     with pytest.raises(RuntimeError) as info:
         complete(
-            OPENROUTER, system="s", user="u", api_key=KEY,
+            CHAT_MODELS["openrouter"], system="s", user="u", api_key=KEY,
             model_name="openai/gpt-4o-mini",
         )
     assert str(info.value).startswith("OpenRouter rejected the API key")

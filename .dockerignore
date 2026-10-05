@@ -9,8 +9,9 @@ artifacts/
 web/node_modules/
 web/dist/
 
-# Local tooling and docs
+# Local tooling, private notes and docs
 docs/
+.superpowers/
 .git/
 .remember/
 .agents/

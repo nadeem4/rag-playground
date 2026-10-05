@@ -7,8 +7,8 @@ const reason = (err: unknown) =>
   err instanceof ApiError && typeof err.detail === "string" ? err.detail : err instanceof Error ? err.message : String(err)
 
 export interface Upload {
-  /** Check and send a file; a finished upload becomes the document. */
-  upload: (file: File | undefined) => Promise<void>
+  /** Check and send a file; a finished upload becomes the document. True when it did. */
+  upload: (file: File | undefined) => Promise<boolean>
   /** The name of the file being sent, or null. */
   busy: string | null
   /** The sentence to show when an upload was refused or failed, or null. */
@@ -32,25 +32,25 @@ export function useUpload(): Upload {
   const { uploading: busy, uploadError: error } = useDocument()
 
   async function upload(file: File | undefined) {
-    if (!file || documentBusy()) return
-    const refuse = (why: string) => setUploadState({ uploadError: `Upload of ${file.name} failed: ${why}` })
-    if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
-      refuse("Only PDF files can be uploaded.")
-      return
+    if (!file || documentBusy()) return false
+    const refuse = (why: string) => {
+      setUploadState({ uploadError: `Upload of ${file.name} failed: ${why}` })
+      return false
     }
+    if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") return refuse("Only PDF files can be uploaded.")
     if (limits && file.size > limits.max_bytes) {
-      refuse(
+      return refuse(
         `This file is ${(file.size / 1048576).toFixed(1)} MB. The hosted demo takes files up to ${mb} MB. Or split out the pages you need and upload those.`,
       )
-      return
     }
     setUploadState({ uploading: file.name, uploadError: null })
     try {
       const src = await api.uploadSource(file)
       refreshUploads()
       await chooseDocument({ sha: src.sha, filename: src.filename })
+      return true
     } catch (err) {
-      refuse(reason(err))
+      return refuse(reason(err))
     } finally {
       setUploadState({ uploading: null })
     }

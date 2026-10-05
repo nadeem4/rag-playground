@@ -1,17 +1,20 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { api } from "@/api/client"
+import { useAppSettings } from "@/api/useDemo"
 import { Clip } from "@/components/Clip"
 import { Button } from "@/components/ui/button"
+import { useUpload } from "@/components/useUpload"
 import { cn } from "@/lib/utils"
-import { loadSampleDocument, useDocument } from "@/state/document"
+import { loadSampleDocument, openDocumentMenu, useDocument, type DocumentState } from "@/state/document"
 
 /**
  * Home: the front page. A plain promise, the six steps the site lets you look
  * inside, then one section per page (Build, Compare, Evaluate), each with a
  * short clip of the real site and a button that opens the page with a sample
  * already loaded, so the first click runs something real. A visitor who
- * already has a document keeps it.
+ * already has a document keeps it. The hero also takes the visitor's own PDF,
+ * and each section says which document its page will use.
  */
 
 const REPO = "https://github.com/nadeem4/rag-playground"
@@ -118,8 +121,56 @@ function useOpenWithSample(navigate: (href: string) => void) {
   return { open, busy }
 }
 
+/**
+ * The line under each "Try it yourself": which document the page will use.
+ * Nothing while the document is checked, so a slow list never flickers.
+ */
+function documentLine({ doc, status, samples }: Pick<DocumentState, "doc" | "status" | "samples">, demo: boolean) {
+  if (status === "checking") return null
+  if (status === "missing") return { text: `${doc?.filename} is no longer on ${demo ? "the demo" : "this machine"}.`, stale: true }
+  if (!doc) {
+    const first = samples?.[0]
+    return first ? { text: `On the sample: ${first.filename}`, stale: false } : null
+  }
+  const sample = samples?.some((s) => s.sha === doc.sha) ?? false
+  return { text: `${sample ? "On the sample" : "On your file"}: ${doc.filename}`, stale: false }
+}
+
 export function Home({ navigate = goTo }: { navigate?: (href: string) => void } = {}) {
   const { open, busy } = useOpenWithSample(navigate)
+  const current = useDocument()
+  const settings = useAppSettings()
+  const demo = settings?.demo === true
+  const limits = demo ? settings?.limits : undefined
+  const { upload, busy: uploading, error: uploadError } = useUpload()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const ownRef = useRef<HTMLButtonElement>(null)
+  // After a refused upload, focus goes back to the button once it is enabled again.
+  const [refocus, setRefocus] = useState(false)
+  useEffect(() => {
+    if (refocus && uploading === null) {
+      setRefocus(false)
+      ownRef.current?.focus()
+    }
+  }, [refocus, uploading])
+
+  async function uploadOwn(file: File | undefined) {
+    if (!file) return
+    if (await upload(file)) navigate("/build")
+    else setRefocus(true)
+  }
+
+  const limitsLine =
+    settings === null
+      ? null
+      : limits
+        ? `Up to ${limits.max_pages} pages and ${Math.round(limits.max_bytes / 1048576)} MB. Private to your browser and deleted after ${limits.ttl_hours} hours.`
+        : demo
+          ? null
+          : "Your file stays on this machine."
+  const line = documentLine(current, demo)
+  const waiting = busy !== null || uploading !== null || current.sampleLoading !== null
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-surface">
       <main className="mx-auto grid max-w-[1080px] gap-8 px-4 pt-8 pb-8">
@@ -132,13 +183,51 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
             Load a PDF, cut it into pieces, search it and ask it a question. Every step shows what it did to your document, so you can change one
             setting and watch the answer move.
           </p>
-          <div className="mt-1 flex flex-wrap gap-3">
-            <Button size={null} className="h-[44px] px-4 text-base font-semibold" busy={busy === "/build"} onClick={() => void open("/build")}>
-              Try it on a sample
-            </Button>
-            <Button asChild variant="outline" size={null} className="h-[44px] px-4 text-base font-semibold">
-              <a href="#build">See how it works</a>
-            </Button>
+          <div className="mt-1 grid gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                size={null}
+                className="h-[44px] px-4 text-base font-semibold"
+                busy={busy === "/build"}
+                disabled={waiting}
+                onClick={() => void open("/build")}
+              >
+                Try a sample
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="sr-only"
+                tabIndex={-1}
+                aria-label="Choose your own PDF"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ""
+                  void uploadOwn(file)
+                }}
+              />
+              <Button
+                ref={ownRef}
+                variant="outline"
+                size={null}
+                className="h-[44px] px-4 text-base font-semibold"
+                busy={uploading !== null}
+                disabled={waiting}
+                onClick={() => fileRef.current?.click()}
+              >
+                {uploading ? `Uploading ${uploading}` : "Use your own PDF"}
+              </Button>
+              <a href="#build" className="inline-flex min-h-[44px] items-center px-2 text-base text-fg-muted underline underline-offset-4 hover:text-fg">
+                See how it works
+              </a>
+            </div>
+            {uploadError ? (
+              <p role="alert" className="m-0 text-sm break-words text-danger">
+                {uploadError}
+              </p>
+            ) : null}
+            {limitsLine ? <p className="m-0 text-sm text-fg-muted">{limitsLine}</p> : null}
           </div>
           <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0 text-sm text-fg-muted">
             {["No sign in", "Runs on samples or your own PDF", "A key is only needed for chat answers"].map((f) => (
@@ -182,14 +271,27 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                     <li key={pt}>{pt}</li>
                   ))}
                 </ul>
-                <Button
-                  size={null}
-                  className="mt-1 h-[44px] justify-self-start px-4 text-base font-semibold"
-                  busy={busy === p.href}
-                  onClick={() => void open(p.href)}
-                >
-                  Try it yourself on {p.page}
-                </Button>
+                <div className="mt-1 grid justify-items-start">
+                  <Button size={null} className="h-[44px] px-4 text-base font-semibold" busy={busy === p.href} onClick={() => void open(p.href)}>
+                    Try it yourself on {p.page}
+                  </Button>
+                  {line ? (
+                    <p
+                      data-testid="home-document"
+                      className={cn("m-0 flex flex-wrap items-center gap-x-2 text-sm", line.stale ? "text-stale" : "text-fg-muted")}
+                    >
+                      <span className="min-w-0 [overflow-wrap:anywhere]">{line.text}</span>
+                      <button
+                        type="button"
+                        aria-label={`Change the document for ${p.page}`}
+                        className="inline-flex min-h-[44px] items-center font-semibold underline underline-offset-4 hover:text-fg"
+                        onClick={openDocumentMenu}
+                      >
+                        Change
+                      </button>
+                    </p>
+                  ) : null}
+                </div>
               </div>
               <Clip {...p.clip} />
             </section>

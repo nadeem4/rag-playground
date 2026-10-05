@@ -151,7 +151,8 @@ function recoverStaleSample(): void {
   if (!card) return
   recovering = true
   const gen = generation
-  chooseDocument({ sha: card.sha, filename: card.filename }, card.question)
+  // No question: only the fingerprint changes, so the query text the visitor typed stays.
+  chooseDocument({ sha: card.sha, filename: card.filename })
     .then(
       () => gen === generation && set({ recovered: card.filename }),
       () => {},

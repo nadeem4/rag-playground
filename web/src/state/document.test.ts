@@ -189,10 +189,17 @@ describe("a sample saved with an old fingerprint", () => {
     await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
     expect(result.current.status).toBe("ready")
     await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
-    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "query")!.config.text).toBe(SAMPLE.question)
     // The note clears after the next document choice.
     await act(() => chooseDocument(ref(UP.sha, UP.filename)))
     expect(result.current.recoveredNote).toBeNull()
+  })
+
+  it("keeps the question you typed: only the fingerprint changes", async () => {
+    storeGraph(sampleGraph(registry, ref(OLD, "chunking-primer.pdf"), "Who wrote this?"))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
+    await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "query")!.config.text).toBe("Who wrote this?")
   })
 
   it("leaves an upload missing, even when an upload in this browser has a sample's filename", async () => {

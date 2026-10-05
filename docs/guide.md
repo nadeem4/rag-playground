@@ -35,6 +35,9 @@ Each sample has its own question set, so Evaluate scores the sample you loaded.
 
 When you choose another document, the results on the page are marked out of date, as
 they are when you edit a step, and Evaluate opens a fresh evaluation for it.
+A question you typed stays. A question the sample filled in is cleared, so you are not
+asked about the old document; the empty box then suggests asking about the new one, and
+Ask waits until there is a question.
 
 When a saved upload has expired, or was uploaded in another browser, the control turns
 amber and reads Missing with the filename. Build, Compare and Evaluate then say so in one

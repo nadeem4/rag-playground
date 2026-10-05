@@ -130,8 +130,8 @@ export function RunStrip({ segments, line }: { segments: StripSegment[]; line: S
           bars it takes its own row, so labels never truncate and bars never jump. */}
       <ol
         aria-label="Index steps"
-        style={{ minWidth: `${segments.length * 3.25}rem` }}
-        className="m-0 grid min-w-[280px] flex-1 auto-cols-fr grid-flow-col gap-1 p-0"
+        style={{ minWidth: `${segments.length * 4}rem` }}
+        className="m-0 grid flex-1 auto-cols-fr grid-flow-col gap-1 p-0"
       >
         {segments.map((s) => (
           <li

@@ -34,7 +34,8 @@ const bar = (strip: HTMLElement, id: string) => within(seg(strip, id)).getByTest
 describe("the run strip", () => {
   it("keeps the step labels whole: the list has a floor width, so the run line drops below it", () => {
     const strip = show(segs("done", "done", "done", "done", "done"))
-    expect(within(strip).getByRole("list").className).toContain("min-w-[280px]")
+    // 4rem a step fits "Document" at the label size; 3.25rem let a short Built in line squeeze it.
+    expect(within(strip).getByRole("list").style.minWidth).toBe("20rem")
     for (const li of within(strip).getAllByRole("listitem")) expect(li.lastElementChild!.className).not.toContain("break-words")
   })
 
@@ -76,7 +77,7 @@ describe("the run strip", () => {
     const strip = show(segs("done", "running"), { kind: "building", title: "Parse" })
     for (const li of within(strip).getAllByRole("listitem")) expect(li.innerHTML).not.toContain("truncate")
     expect(strip.className).toContain("flex-wrap")
-    expect(within(strip).getByRole("list").style.minWidth).toBe("16.25rem")
+    expect(within(strip).getByRole("list").style.minWidth).toBe("20rem")
   })
 
   it("each segment says its step and its state to a screen reader", () => {

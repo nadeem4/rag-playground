@@ -111,7 +111,7 @@ export function QuestionSetPanel({
             </>
           ) : (
             <>
-              {n ? <strong className="font-semibold text-fg">{n}</strong> : "The questions"} from the {name} sample.
+              {n ? <strong className="font-semibold text-fg">{n}</strong> : "The questions"} from the sample, {name}.
             </>
           )}
         </p>

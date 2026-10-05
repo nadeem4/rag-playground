@@ -102,6 +102,27 @@ describe("the Ask button tooltip", () => {
 
 const question = () => screen.getByLabelText("Question") as HTMLTextAreaElement
 
+describe("an empty question", () => {
+  const blank = (doc = UPLOAD) => {
+    const g = sampleGraph(LIVE, doc)
+    return { ...g, nodes: g.nodes.map((n) => (n.stage === "query" ? { ...n, config: { ...n.config, text: "" } } : n)) }
+  }
+
+  it("invites a question about the document, and Ask waits for one", async () => {
+    setup({ graph: blank() })
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toContain("Index ready"))
+    expect(question().placeholder).toBe("Ask something about report.pdf.")
+    expect(askButton().disabled).toBe(true)
+  })
+
+  it("counts spaces alone as empty", async () => {
+    const g = blank()
+    setup({ graph: { ...g, nodes: g.nodes.map((n) => (n.stage === "query" ? { ...n, config: { ...n.config, text: "   " } } : n)) } })
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toContain("Index ready"))
+    expect(askButton().disabled).toBe(true)
+  })
+})
+
 describe("the Ask panel header", () => {
   it("says the index is ready, with the file, its pages and its pieces", async () => {
     setup()

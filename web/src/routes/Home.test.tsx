@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { Registry, SampleCard, Source } from "@/api/types"
-import { documentOf, resetDocumentForTests } from "@/state/document"
+import type { AppSettings, Registry, SampleCard, Source } from "@/api/types"
+import { resetAppSettingsForTests } from "@/api/useDemo"
+import { documentOf, resetDocumentForTests, useDocument } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, storedGraphJson } from "@/state/graph"
 
 import { Home } from "./Home"
@@ -26,17 +27,29 @@ const SECOND: SampleCard = { ...FIRST, name: "chunking-primer", filename: "chunk
 const OWN: Source = { sha: "ab".repeat(32), filename: "mine.pdf", size: 2048, content_type: "application/pdf" }
 
 let posted: string[] = []
+let uploaded: string[] = []
 
-function serve() {
+const DEMO = {
+  demo: true,
+  limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, max_total_bytes: 31457280, ttl_hours: 24 },
+} as AppSettings
+
+function serve({ settings = { demo: false } as AppSettings, sources = [] as Source[] | "never" } = {}) {
   posted = []
+  uploaded = []
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/registry") return ok(liveRegistry)
       if (url === "/api/samples") return ok([FIRST, SECOND])
-      if (url === "/api/sources") return ok([])
-      if (url === "/api/settings/app") return ok({ demo: false })
+      if (url === "/api/sources" && init?.method === "POST") {
+        const file = (init.body as FormData).get("file") as File
+        uploaded.push(file.name)
+        return ok({ ...OWN, filename: file.name })
+      }
+      if (url === "/api/sources") return sources === "never" ? new Promise<Response>(() => {}) : ok(sources)
+      if (url === "/api/settings/app") return ok(settings)
       if (url === "/api/sources/sample" && init?.method === "POST") {
         const name = JSON.parse(String(init.body ?? "{}")).name as string
         posted.push(name)
@@ -52,6 +65,7 @@ beforeEach(() => {
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
+  resetAppSettingsForTests()
   serve()
 })
 
@@ -66,7 +80,8 @@ describe("Home", () => {
     expect(screen.getByText("Retrieval, made visible")).toBeTruthy()
     expect(screen.getByRole("heading", { level: 1, name: "See why a RAG pipeline finds the answer, or misses it." })).toBeTruthy()
     expect(screen.getByText(/Load a PDF, cut it into pieces, search it and ask it a question\./)).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Try it on a sample" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Try a sample" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Use your own PDF" })).toBeTruthy()
     expect(screen.getByRole("link", { name: "See how it works" }).getAttribute("href")).toBe("#build")
     for (const fact of ["No sign in", "Runs on samples or your own PDF", "A key is only needed for chat answers"]) expect(screen.getByText(fact)).toBeTruthy()
   })
@@ -74,8 +89,8 @@ describe("Home", () => {
   it("makes every call to action 44 px tall, with no smaller height left to win", () => {
     render(<Home navigate={vi.fn()} />)
     const ctas = [
-      screen.getByRole("button", { name: "Try it on a sample" }),
-      screen.getByRole("link", { name: "See how it works" }),
+      screen.getByRole("button", { name: "Try a sample" }),
+      screen.getByRole("button", { name: "Use your own PDF" }),
       ...["Build", "Compare", "Evaluate"].map((p) => screen.getByRole("button", { name: `Try it yourself on ${p}` })),
     ]
     for (const el of ctas) {
@@ -147,10 +162,10 @@ describe("Home", () => {
     expect(g.nodes.find((n) => n.stage === "query")!.config.text).toBe(FIRST.question)
   })
 
-  it("Try it on a sample opens Build with the first sample", async () => {
+  it("Try a sample opens Build with the first sample", async () => {
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    fireEvent.click(screen.getByRole("button", { name: "Try it on a sample" }))
+    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
     expect(posted).toEqual([FIRST.name])
   })
@@ -223,6 +238,124 @@ describe("Home", () => {
     expect(document.body.textContent).not.toMatch(/[–—]/)
     const labels = [...document.querySelectorAll("[aria-label]")].map((e) => e.getAttribute("aria-label")).join(" ")
     expect(labels).not.toMatch(/[–—]/)
+  })
+})
+
+const pdf = (name = "mine.pdf", type = "application/pdf") => new File(["%PDF-1.4"], name, { type })
+
+describe("Home's own PDF", () => {
+  it("keeps See how it works as a quiet text link, 44 px tall", () => {
+    render(<Home navigate={vi.fn()} />)
+    const link = screen.getByRole("link", { name: "See how it works" })
+    expect(link.getAttribute("data-slot")).toBeNull()
+    expect(link.className.split(/\s+/)).toContain("min-h-[44px]")
+  })
+
+  it("Use your own PDF opens the file picker straight away", () => {
+    render(<Home navigate={vi.fn()} />)
+    const input = screen.getByLabelText("Choose your own PDF") as HTMLInputElement
+    expect(input.type).toBe("file")
+    const click = vi.spyOn(input, "click").mockImplementation(() => {})
+    fireEvent.click(screen.getByRole("button", { name: "Use your own PDF" }))
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it("uploads the chosen PDF, makes it the document and opens Build", async () => {
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf()] } })
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    expect(uploaded).toEqual(["mine.pdf"])
+    expect(posted).toEqual([])
+    expect(documentOf(readStoredGraph(registry))).toEqual({ sha: OWN.sha, filename: "mine.pdf" })
+  })
+
+  it("says why an upload was refused under the buttons, stays on Home and puts focus back on the button", async () => {
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf("notes.txt", "text/plain")] } })
+    expect((await screen.findByRole("alert")).textContent).toBe("Upload of notes.txt failed: Only PDF files can be uploaded.")
+    expect(navigate).not.toHaveBeenCalled()
+    expect(uploaded).toEqual([])
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own PDF" })))
+  })
+
+  it("states the demo's real limits under the buttons", async () => {
+    serve({ settings: DEMO })
+    render(<Home navigate={vi.fn()} />)
+    expect(await screen.findByText("Up to 20 pages and 10 MB. Private to your browser and deleted after 24 hours.")).toBeTruthy()
+    expect(screen.queryByText("Your file stays on this machine.")).toBeNull()
+  })
+
+  it("says the file stays on this machine when running locally", async () => {
+    render(<Home navigate={vi.fn()} />)
+    expect(await screen.findByText("Your file stays on this machine.")).toBeTruthy()
+    expect(screen.queryByText(/Private to your browser/)).toBeNull()
+  })
+})
+
+function MenuProbe() {
+  return <span data-testid="menu">{useDocument().menuOpen ? "open" : "closed"}</span>
+}
+
+const lines = () => screen.queryAllByTestId("home-document").map((el) => el.firstElementChild!.textContent)
+
+describe("Home's document line", () => {
+  it("names the first sample under each Try it yourself when there is no document", async () => {
+    render(<Home navigate={vi.fn()} />)
+    await waitFor(() => expect(lines()).toEqual(Array(3).fill("On the sample: two-column-report.pdf")))
+  })
+
+  it("names the sample that is loaded", async () => {
+    storeGraph(sampleGraph(registry, { sha: SECOND.sha, filename: SECOND.filename }))
+    render(<Home navigate={vi.fn()} />)
+    await waitFor(() => expect(lines()).toEqual(Array(3).fill("On the sample: chunking-primer.pdf")))
+  })
+
+  it("names the visitor's own upload", async () => {
+    serve({ sources: [OWN] })
+    storeGraph(sampleGraph(registry, OWN))
+    render(<Home navigate={vi.fn()} />)
+    await waitFor(() => expect(lines()).toEqual(Array(3).fill("On your file: mine.pdf")))
+  })
+
+  it("says, in the stale tone, when the upload is gone on the demo", async () => {
+    serve({ settings: DEMO })
+    storeGraph(sampleGraph(registry, OWN))
+    render(<Home navigate={vi.fn()} />)
+    await waitFor(() => expect(lines()).toEqual(Array(3).fill("mine.pdf is no longer on the demo.")))
+    expect(screen.getAllByTestId("home-document")[0].className.split(/\s+/)).toContain("text-stale")
+  })
+
+  it("says the upload is gone from this machine when running locally", async () => {
+    storeGraph(sampleGraph(registry, OWN))
+    render(<Home navigate={vi.fn()} />)
+    await waitFor(() => expect(lines()).toEqual(Array(3).fill("mine.pdf is no longer on this machine.")))
+  })
+
+  it("shows nothing while the document is being checked, so it does not flicker", async () => {
+    serve({ sources: "never" })
+    storeGraph(sampleGraph(registry, OWN))
+    render(<Home navigate={vi.fn()} />)
+    await act(async () => {})
+    expect(lines()).toEqual([])
+  })
+
+  it("Change opens the Document menu, named for its page, 44 px tall", async () => {
+    render(
+      <>
+        <MenuProbe />
+        <Home navigate={vi.fn()} />
+      </>,
+    )
+    const change = await screen.findByRole("button", { name: "Change the document for Compare" })
+    expect(screen.getByRole("button", { name: "Change the document for Build" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Change the document for Evaluate" })).toBeTruthy()
+    expect(change.textContent).toBe("Change")
+    expect(change.className.split(/\s+/)).toContain("min-h-[44px]")
+    expect(screen.getByTestId("menu").textContent).toBe("closed")
+    fireEvent.click(change)
+    expect(screen.getByTestId("menu").textContent).toBe("open")
   })
 })
 

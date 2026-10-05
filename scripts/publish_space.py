@@ -88,7 +88,7 @@ def main() -> None:
 
         api = HfApi()
         api.create_repo(args.repo, repo_type="space", space_sdk="docker", exist_ok=True)
-        api.add_space_variable(args.repo, *DEMO_VAR, description="Demo mode: no uploads, sample document only, visitor's API key only.")
+        api.add_space_variable(args.repo, *DEMO_VAR, description="Demo mode: uploads are private, small and deleted after 24 hours; only a visitor's own API key is used; custom endpoints are off. Set to 0 for a private copy.")
         # Mirror HEAD: a file deleted from the repo is deleted from the Space too.
         # Hugging Face always keeps .gitattributes. Without this, a stale file
         # once broke the Space's build (2026-10-04).

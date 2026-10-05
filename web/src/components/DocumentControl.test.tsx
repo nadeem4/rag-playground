@@ -198,6 +198,19 @@ describe("DocumentControl", () => {
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: fresh.pdf. Change it."))
   })
 
+  it("moves a sample saved with an old fingerprint to its current copy, never amber, and the menu says so in status tone", async () => {
+    stored("ab".repeat(32), "chunking-primer.pdf")
+    serve({ sources: [], samples: [SAMPLE] })
+    render(<DocumentControl />)
+    await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA))
+    expect(trigger().className).not.toContain("bg-stale-wash")
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    const note = within(menu).getByText("The sample chunking-primer.pdf was updated, so this page now uses its current copy.")
+    expect(note.getAttribute("role")).toBe("status")
+    expect(note.className).not.toContain("stale")
+  })
+
   it("never shows Missing while the lists are still loading", async () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     serve({ sources: never, samples: never })

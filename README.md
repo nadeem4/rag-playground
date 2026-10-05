@@ -241,7 +241,11 @@ clips](#recording-the-home-clips).
   Compare and Evaluate all use, and opens a menu of the samples, your uploads and Upload a PDF.
   When a saved upload has expired, or is not in this browser, the control turns amber and reads
   Missing with the filename. Build, Compare and Evaluate then say so in one note with a Pick a
-  document button, and their run buttons wait, saying "Needs a document." Choosing another
+  document button, and their run buttons wait, saying "Needs a document." A sample saved with an
+  older copy of its PDF (its fingerprint changed in a new release) is not missing: when its
+  filename is exactly a current sample's, and no upload in this browser has that filename, the
+  page switches to the sample's current copy and says so once. Uploads are never matched by
+  filename. Choosing another
   document marks the results on the page out of date, as an edited step does; Evaluate opens a
   fresh evaluation for it. Build keeps a slim Document card that only says which document is in use.
 - **Change one setting and rerun cheaply.** Results are cached by recipe, so changing the

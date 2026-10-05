@@ -68,6 +68,8 @@ interface State {
   uploadError: string | null
   /** The sample being loaded now, by name. */
   sampleLoading: string | null
+  /** A sample's filename when its old fingerprint was swapped for the current one, until the next choice. */
+  recovered: string | null
 }
 
 const FRESH: State = {
@@ -80,6 +82,7 @@ const FRESH: State = {
   uploading: null,
   uploadError: null,
   sampleLoading: null,
+  recovered: null,
 }
 
 let state: State = FRESH
@@ -96,7 +99,11 @@ function set(patch: Partial<State>) {
 function fetchSources() {
   const gen = generation
   api.sources().then(
-    (s) => gen === generation && set(Array.isArray(s) ? { sources: s, sourcesFailed: false } : { sources: null, sourcesFailed: true }),
+    (s) => {
+      if (gen !== generation) return
+      set(Array.isArray(s) ? { sources: s, sourcesFailed: false } : { sources: null, sourcesFailed: true })
+      recoverStaleSample()
+    },
     () => gen === generation && set({ sources: null, sourcesFailed: true }),
   )
 }
@@ -104,15 +111,64 @@ function fetchSources() {
 function fetchSamples() {
   const gen = generation
   api.samples().then(
-    (s) => gen === generation && set(Array.isArray(s) ? { samples: s, samplesFailed: false } : { samples: null, samplesFailed: true }),
+    (s) => {
+      if (gen !== generation) return
+      set(Array.isArray(s) ? { samples: s, samplesFailed: false } : { samples: null, samplesFailed: true })
+      recoverStaleSample()
+    },
     () => gen === generation && set({ samples: null, samplesFailed: true }),
   )
 }
+
+/**
+ * The sample a document saved with an old fingerprint stands for, or null. A
+ * sample's bytes can change (a new release, or the hour on 2026-10-05 when the
+ * demo served Git LFS pointer files), so its sha changes while its filename
+ * stays. A stored document carries no mark saying it was a sample, so the rule
+ * is: its sha is in neither list, its filename equals a sample's exactly, and
+ * no upload in this browser has that filename (an upload is never matched by
+ * name). Null until both lists have answered.
+ */
+export function staleSample(
+  doc: DocRef | null,
+  sources: readonly Source[] | null,
+  samples: readonly SampleCard[] | null,
+  known: ReadonlySet<string>,
+): SampleCard | null {
+  if (!doc || !sources || !samples || known.has(doc.sha)) return null
+  if (sources.some((s) => s.sha === doc.sha) || samples.some((s) => s.sha === doc.sha)) return null
+  const sampleShas = new Set(samples.map((s) => s.sha))
+  if (sources.some((s) => !sampleShas.has(s.sha) && s.filename === doc.filename)) return null
+  return samples.find((s) => s.filename === doc.filename) ?? null
+}
+
+let recovering = false
+
+/** Switch a working graph whose sample has an old fingerprint to that sample's current copy, and say so once. */
+function recoverStaleSample(): void {
+  if (recovering) return
+  const card = staleSample(documentOf(rawGraph(storedGraphJson())), state.sources, state.samples, state.known)
+  if (!card) return
+  recovering = true
+  const gen = generation
+  chooseDocument({ sha: card.sha, filename: card.filename }, card.question)
+    .then(
+      () => gen === generation && set({ recovered: card.filename }),
+      () => {},
+    )
+    .finally(() => {
+      recovering = false
+    })
+}
+
+// Watches the working graph, so a saved pipeline or experiment opened with an old sample fingerprint recovers too.
+let unwatchGraph: (() => void) | null = null
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   if (!started) {
     started = true
+    unwatchGraph = subscribeGraph(recoverStaleSample)
     fetchSources()
     fetchSamples()
   }
@@ -184,7 +240,7 @@ function rawGraph(json: string | null): PipelineGraph | null {
  * every await has resolved, so a page left mid-way keeps the old document.
  */
 export async function chooseDocument(doc: DocRef, question?: string): Promise<void> {
-  set({ known: new Set(state.known).add(doc.sha), uploadError: null })
+  set({ known: new Set(state.known).add(doc.sha), uploadError: null, recovered: null })
   const current = rawGraph(storedGraphJson())
   if (current && documentOf(current)) {
     let g = withDocument(current, doc)
@@ -226,6 +282,8 @@ export interface DocumentState {
   uploading: string | null
   uploadError: string | null
   sampleLoading: string | null
+  /** A one-time note when a sample saved with an old fingerprint was switched to its current copy. */
+  recoveredNote: string | null
 }
 
 export function useDocument(): DocumentState {
@@ -250,6 +308,7 @@ export function useDocument(): DocumentState {
     uploading: s.uploading,
     uploadError: s.uploadError,
     sampleLoading: s.sampleLoading,
+    recoveredNote: s.recovered ? `The sample ${s.recovered} was updated, so this page now uses its current copy.` : null,
   }
 }
 
@@ -257,6 +316,9 @@ export function useDocument(): DocumentState {
 export function resetDocumentForTests(): void {
   generation += 1
   started = false
+  recovering = false
+  unwatchGraph?.()
+  unwatchGraph = null
   state = { ...FRESH, known: new Set() }
   opener = null
 }

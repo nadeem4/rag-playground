@@ -133,8 +133,20 @@ export function refreshUploads(): void {
   }
 }
 
+// The page button that opened the menu, so focus goes back to it when the menu closes.
+let opener: HTMLElement | null = null
+
+/** Open or close the menu. Opening it here (the header's own trigger) forgets any page opener. */
 export function setDocumentMenuOpen(open: boolean): void {
+  if (open) opener = null
   if (state.menuOpen !== open) set({ menuOpen: open })
+}
+
+/** The page button that opened the menu, once: it is forgotten as it is read. */
+export function takeDocumentMenuOpener(): HTMLElement | null {
+  const el = opener
+  opener = null
+  return el
 }
 
 /** One upload at a time for the whole page: what is being sent, and why the last one failed. */
@@ -147,9 +159,10 @@ export function documentBusy(): boolean {
   return state.uploading !== null || state.sampleLoading !== null
 }
 
-/** A page's "Pick a document" button: open the header's menu. */
-export function openDocumentMenu(): void {
+/** A page's "Pick a document" or "Change" button: open the header's menu, and give focus back to that button when it closes. */
+export function openDocumentMenu(event?: { currentTarget: EventTarget | null }): void {
   setDocumentMenuOpen(true)
+  opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
 }
 
 /** The stored graph's raw JSON as a graph, without the registry. */
@@ -171,7 +184,7 @@ function rawGraph(json: string | null): PipelineGraph | null {
  * every await has resolved, so a page left mid-way keeps the old document.
  */
 export async function chooseDocument(doc: DocRef, question?: string): Promise<void> {
-  set({ known: new Set(state.known).add(doc.sha) })
+  set({ known: new Set(state.known).add(doc.sha), uploadError: null })
   const current = rawGraph(storedGraphJson())
   if (current && documentOf(current)) {
     let g = withDocument(current, doc)
@@ -189,6 +202,8 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
 
 /** Load a bundled sample on the server (`POST /api/sources/sample`), then make it the document with its own question. */
 export async function loadSampleDocument(card: Pick<SampleCard, "name" | "question">): Promise<void> {
+  // An upload or another sample is on its way: this one waits, so the two cannot race.
+  if (documentBusy()) return
   set({ sampleLoading: card.name })
   try {
     const src = await api.sampleSource(card.name)
@@ -243,4 +258,5 @@ export function resetDocumentForTests(): void {
   generation += 1
   started = false
   state = { ...FRESH, known: new Set() }
+  opener = null
 }

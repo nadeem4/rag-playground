@@ -6,7 +6,7 @@ import { Clip } from "@/components/Clip"
 import { Button } from "@/components/ui/button"
 import { useUpload } from "@/components/useUpload"
 import { cn } from "@/lib/utils"
-import { loadSampleDocument, openDocumentMenu, useDocument, type DocumentState } from "@/state/document"
+import { documentBusy, loadSampleDocument, openDocumentMenu, useDocument, type DocumentState } from "@/state/document"
 
 /**
  * Home: the front page. A plain promise, the six steps the site lets you look
@@ -99,18 +99,22 @@ const goTo = (href: string) => window.location.assign(href)
 
 /**
  * Open `href` with a document ready: when the visitor has none, load the
- * first sample first. A sample that cannot be loaded still opens the page,
- * which then says how to pick a document.
+ * first sample first. With `sampleOnly` (Try a sample), the first sample is
+ * loaded unless the document already is a sample, so a missing upload or the
+ * visitor's own file never stands in for it. A sample that cannot be loaded
+ * still opens the page, which then says how to pick a document. `busy` is the
+ * id of the button that started it, so only that button reads busy.
  */
 function useOpenWithSample(navigate: (href: string) => void) {
   const { doc, samples } = useDocument()
   const [busy, setBusy] = useState<string | null>(null)
-  const open = async (href: string) => {
-    if (busy) return
-    setBusy(href)
+  const open = async (id: string, href: string, sampleOnly = false) => {
+    if (busy || documentBusy()) return
+    setBusy(id)
     try {
-      if (!doc) {
-        const first = (samples ?? (await api.samples()))[0]
+      const list = doc && !sampleOnly ? null : (samples ?? (await api.samples()))
+      if (list && !(doc && list.some((s) => s.sha === doc.sha))) {
+        const first = list[0]
         if (first) await loadSampleDocument(first)
       }
     } catch {
@@ -188,9 +192,9 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
               <Button
                 size={null}
                 className="h-[44px] px-4 text-base font-semibold"
-                busy={busy === "/build"}
+                busy={busy === "hero"}
                 disabled={waiting}
-                onClick={() => void open("/build")}
+                onClick={() => void open("hero", "/build", true)}
               >
                 Try a sample
               </Button>
@@ -216,7 +220,8 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                 disabled={waiting}
                 onClick={() => fileRef.current?.click()}
               >
-                {uploading ? `Uploading ${uploading}` : "Use your own PDF"}
+                {/* The header names the file; a long name here would push the button past a phone's edge. */}
+                {uploading ? "Uploading" : "Use your own PDF"}
               </Button>
               <a href="#build" className="inline-flex min-h-[44px] items-center px-2 text-base text-fg-muted underline underline-offset-4 hover:text-fg">
                 See how it works
@@ -272,7 +277,13 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                   ))}
                 </ul>
                 <div className="mt-1 grid justify-items-start">
-                  <Button size={null} className="h-[44px] px-4 text-base font-semibold" busy={busy === p.href} onClick={() => void open(p.href)}>
+                  <Button
+                    size={null}
+                    className="h-[44px] px-4 text-base font-semibold"
+                    busy={busy === p.id}
+                    disabled={waiting}
+                    onClick={() => void open(p.id, p.href)}
+                  >
                     Try it yourself on {p.page}
                   </Button>
                   {line ? (

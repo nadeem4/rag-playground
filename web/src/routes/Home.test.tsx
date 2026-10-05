@@ -28,6 +28,9 @@ const OWN: Source = { sha: "ab".repeat(32), filename: "mine.pdf", size: 2048, co
 
 let posted: string[] = []
 let uploaded: string[] = []
+let holdUpload = false
+let releaseUpload: () => void = () => {}
+let refuseUpload: string | null = null
 
 const DEMO = {
   demo: true,
@@ -46,7 +49,9 @@ function serve({ settings = { demo: false } as AppSettings, sources = [] as Sour
       if (url === "/api/sources" && init?.method === "POST") {
         const file = (init.body as FormData).get("file") as File
         uploaded.push(file.name)
-        return ok({ ...OWN, filename: file.name })
+        if (refuseUpload) return new Response(JSON.stringify({ detail: refuseUpload }), { status: 422 })
+        const answer = () => ok({ ...OWN, filename: file.name })
+        return holdUpload ? new Promise<Response>((resolve) => (releaseUpload = () => resolve(answer()))) : answer()
       }
       if (url === "/api/sources") return sources === "never" ? new Promise<Response>(() => {}) : ok(sources)
       if (url === "/api/settings/app") return ok(settings)
@@ -66,6 +71,8 @@ beforeEach(() => {
   resetStoredGraphForTests()
   resetDocumentForTests()
   resetAppSettingsForTests()
+  holdUpload = false
+  refuseUpload = null
   serve()
 })
 
@@ -168,6 +175,40 @@ describe("Home", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
     expect(posted).toEqual([FIRST.name])
+  })
+
+  it("Try a sample loads the first sample over a missing upload, so Build is not blocked", async () => {
+    storeGraph(sampleGraph(registry, OWN))
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    await waitFor(() => expect(lines()[0]).toBe("mine.pdf is no longer on this machine."))
+    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    expect(posted).toEqual([FIRST.name])
+    expect(documentOf(readStoredGraph(registry))).toEqual({ sha: FIRST.sha, filename: FIRST.filename })
+  })
+
+  it("Try a sample loads the first sample even when your own file is loaded", async () => {
+    serve({ sources: [OWN] })
+    storeGraph(sampleGraph(registry, OWN))
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    await waitFor(() => expect(lines()[0]).toBe("On your file: mine.pdf"))
+    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    expect(posted).toEqual([FIRST.name])
+  })
+
+  it("Try a sample keeps a sample that is already loaded", async () => {
+    storeGraph(sampleGraph(registry, { sha: SECOND.sha, filename: SECOND.filename }))
+    const before = storedGraphJson()
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    await waitFor(() => expect(lines()[0]).toBe("On the sample: chunking-primer.pdf"))
+    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    expect(posted).toEqual([])
+    expect(storedGraphJson()).toBe(before)
   })
 
   it("keeps the visitor's own document and just opens the page", async () => {
@@ -278,6 +319,37 @@ describe("Home's own PDF", () => {
     expect(navigate).not.toHaveBeenCalled()
     expect(uploaded).toEqual([])
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own PDF" })))
+  })
+
+  it("says the server's refusal under the buttons and puts focus back on the button", async () => {
+    refuseUpload = "This PDF has 40 pages. The hosted demo takes up to 20."
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf()] } })
+    expect((await screen.findByRole("alert")).textContent).toBe("Upload of mine.pdf failed: This PDF has 40 pages. The hosted demo takes up to 20.")
+    expect(navigate).not.toHaveBeenCalled()
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own PDF" })))
+  })
+
+  it("while an upload runs, the busy button just says Uploading, and every button on Home waits", async () => {
+    holdUpload = true
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    const long = "a-very-long-file-name-that-would-push-the-button-far-past-the-edge-of-a-phone.pdf"
+    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf(long)] } })
+    const own = await screen.findByRole("button", { name: "Uploading" })
+    expect(own.textContent).toBe("Uploading")
+    expect((own as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole("button", { name: "Try a sample" }) as HTMLButtonElement).disabled).toBe(true)
+    for (const p of ["Build", "Compare", "Evaluate"]) {
+      const b = screen.getByRole("button", { name: `Try it yourself on ${p}` }) as HTMLButtonElement
+      expect(b.disabled).toBe(true)
+      fireEvent.click(b)
+    }
+    expect(posted).toEqual([])
+    await act(async () => releaseUpload())
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    expect(navigate).toHaveBeenCalledTimes(1)
   })
 
   it("states the demo's real limits under the buttons", async () => {

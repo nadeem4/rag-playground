@@ -182,7 +182,8 @@ Home (`/`) is the first tab. It has:
 
 - the promise, a **Try a sample** button, a **Use your own PDF** button, a quiet **See how it
   works** link and three facts: no sign in, samples or your own PDF, and a key only for chat
-  answers. **Try a sample** loads the first sample if you have no document, then opens Build.
+  answers. **Try a sample** loads the first sample, unless your document is already a sample, then
+  opens Build.
   **Use your own PDF** opens a file picker; once the upload is done it opens Build, and if the
   upload is refused it says why under the buttons. One line under the buttons says what
   happens to your file: on the demo it gives the page and size limits and how many hours

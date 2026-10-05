@@ -4,7 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
-import { chooseDocument, docStatus, documentOf, loadSampleDocument, resetDocumentForTests, useDocument, withDocument } from "./document"
+import {
+  chooseDocument,
+  docStatus,
+  documentOf,
+  loadSampleDocument,
+  resetDocumentForTests,
+  setUploadState,
+  useDocument,
+  withDocument,
+} from "./document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, type PipelineGraph } from "./graph"
 import { sameGraph } from "./pipelines"
 
@@ -149,5 +158,23 @@ describe("loadSampleDocument", () => {
     const g = readStoredGraph(registry)!
     expect(documentOf(g)).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf"))
     expect(g.nodes.find((n) => n.stage === "query")!.config.text).toBe(SAMPLE.question)
+  })
+
+  it("does nothing while an upload runs, so the two cannot race", async () => {
+    storeGraph(sampleGraph(registry, ref(UP.sha, UP.filename)))
+    setUploadState({ uploading: "big.pdf" })
+    await loadSampleDocument(SAMPLE)
+    expect(posts).toEqual([])
+    expect(documentOf(readStoredGraph(registry))).toEqual(ref(UP.sha, UP.filename))
+  })
+})
+
+describe("the last upload's error", () => {
+  it("is cleared once a document is chosen", async () => {
+    setUploadState({ uploadError: "Upload of a.txt failed: Only PDF files can be uploaded." })
+    const { result } = renderHook(() => useDocument())
+    expect(result.current.uploadError).not.toBeNull()
+    await act(() => chooseDocument(ref(UP.sha, UP.filename)))
+    expect(result.current.uploadError).toBeNull()
   })
 })

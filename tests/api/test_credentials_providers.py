@@ -350,6 +350,7 @@ def test_demo_host_keys_never_reach_a_run(kclient, monkeypatch):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setenv("OPENAI_API_KEY", ENV_OPENAI)
     monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", ENV_OPENAI)
+    monkeypatch.setenv("OPENROUTER_API_KEY", ENV_OPENAI)
     r = kclient.post("/api/runs", json={"graph": keyed_graph()})
     raw_stream(kclient, r.json()["run_id"])
     assert SEEN and all("credentials" not in s for s in SEEN)
@@ -371,3 +372,40 @@ def test_every_key_is_redacted_from_a_failing_run(kclient, tmp_path, monkeypatch
     for secret in (FAKE_KEY, OPENAI_KEY, CUSTOM_KEY, OPENROUTER_KEY):
         assert secret not in stream and secret not in snapshot and secret not in state
         assert secret.encode() not in files
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai", "openrouter"])
+def test_on_the_demo_a_missing_key_never_points_at_a_server_variable(
+    client, monkeypatch, provider
+):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    body = client.post("/api/settings/llm/check", json={"provider": provider}).json()
+    assert body["ok"] is False
+    assert "_API_KEY" not in body["error"] and ".env" not in body["error"]
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    local = client.post("/api/settings/llm/check", json={"provider": provider}).json()
+    assert credentials.PROVIDERS[provider].env_var in local["error"]
+
+
+# --- the demo hides the custom endpoint ---------------------------------------
+
+MODEL_STEPS = [("use_case", "chat"), ("rerank", "llm_rerank"), ("query", "llm_rewrite")]
+
+
+def model_field(registry: dict, stage: str, name: str) -> dict:
+    return registry[stage][name]["config_schema"]["properties"]["model"]
+
+
+def test_on_the_demo_the_registry_offers_no_custom_model(client, monkeypatch):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    registry = client.get("/api/registry").json()
+    for stage, name in MODEL_STEPS:
+        field = model_field(registry, stage, name)
+        assert "custom" not in field["enum"]
+        assert "custom" not in field["x-labels"] and "custom" not in field["x-providers"]
+        assert "openrouter" in field["enum"]
+    # The plugin's own schema is untouched: only the served copy changes.
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    local = client.get("/api/registry").json()
+    for stage, name in MODEL_STEPS:
+        assert "custom" in model_field(local, stage, name)["enum"]

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { hasAnyKey, type Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions, useSamples } from "@/api/samples"
-import type { LlmSettings, Registry } from "@/api/types"
+import type { LlmProvider, LlmSettings, Registry } from "@/api/types"
 import { useArtifactPayload } from "@/api/useArtifact"
 import type { ExplainState } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
@@ -41,6 +41,8 @@ export interface AskPanelProps {
   errors: Record<string, NodeErrors>
   /** Set when a keyless ask stopped before Chat and the run has ended. */
   keyNotice: string | null
+  /** The provider whose key the notice asks for, when it is known. */
+  keyProvider?: LlmProvider | null
   /**
    * The Ask run that has just finished, once it has, with what it was asked
    * with: its answer joins the transcript under those labels.
@@ -235,7 +237,7 @@ export function AskPanel(p: AskPanelProps) {
           // A div, not a p: KeyHint is itself a p, and a p cannot hold one.
           <div role="status" data-testid="key-notice" className="text-xs text-fg-muted">
             <p>{p.keyNotice}</p>
-            <KeyHint />
+            <KeyHint provider={p.keyProvider} />
           </div>
         ) : null}
         {questions.length ? (

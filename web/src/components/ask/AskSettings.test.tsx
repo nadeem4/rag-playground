@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
-import { askNodes, initialGraph, sampleGraph, setReranker, setRewrite, setTransform, setUseCase } from "@/state/graph"
+import { askNodes, initialGraph, sampleGraph, setConfig, setReranker, setRewrite, setTransform, setUseCase } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
 import { AskSettings, LLM_GLOSS, PRF_GLOSS, type AskSettingsProps } from "./AskSettings"
@@ -292,6 +292,24 @@ describe("primary fields and the More disclosure", () => {
     setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "mmr") })
     expect(inMore("Rerank", "Keep, top k")).toBe(false)
     expect(inMore("Rerank", "Lambda Mult")).toBe(true)
+  })
+
+  it("OpenRouter's model field shows in front for Chat, the LLM reranker and LLM rewrite", () => {
+    const toOpenRouter = (g: ReturnType<typeof sampleGraph>, stage: "useCase" | "rerank" | "query") => {
+      const node = askNodes(g)[stage]!
+      return setConfig(g, node.id, { ...node.config, model: "openrouter" })
+    }
+    const base = () => sampleGraph(LIVE, SAMPLE, "Who is my current employer?")
+    setup({ graph: toOpenRouter(setUseCase(base(), LIVE, "chat"), "useCase") })
+    expect(inMore("Answer", "OpenRouter model")).toBe(false)
+    cleanup()
+    setup({ graph: toOpenRouter(setReranker(base(), LIVE, "llm_rerank"), "rerank") })
+    expect(more("Rerank") === null || !inMore("Rerank", "OpenRouter model")).toBe(true)
+    expect(block("Rerank").getByLabelText("OpenRouter model")).toBeTruthy()
+    cleanup()
+    setup({ graph: toOpenRouter(setRewrite(base(), LIVE, "llm"), "query") })
+    expect(block("Retrieval").getByLabelText("OpenRouter model")).toBeTruthy()
+    expect(inMore("Retrieval", "OpenRouter model")).toBe(false)
   })
 
   it("a server error on a field under More opens it", () => {

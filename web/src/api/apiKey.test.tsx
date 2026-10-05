@@ -8,7 +8,9 @@ import { resetDocumentForTests } from "@/state/document"
 import { initialGraph, readStoredGraph, resetStoredGraphForTests, setConfig, storeGraph } from "@/state/graph"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
-import { ApiKeyProvider, checkMessage, hasAnyKey, hasKeyFor, keyProviderFor, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
+import { resetAppSettingsForTests } from "@/api/useDemo"
+
+import { ApiKeyProvider, checkMessage, hasAnyKey, hasKeyFor, keyMissing, keyNeedFor, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
 import { api, KEY_HEADERS, keyHeaders } from "./client"
 import type { LlmProvider } from "./types"
 
@@ -51,6 +53,7 @@ interface Sent {
 }
 let sent: Sent[] = []
 let servers: Record<LlmProvider, string> = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
+let demo = false
 
 function headersOf(init?: RequestInit): Record<string, string> {
   const h = new Headers(init?.headers)
@@ -62,6 +65,8 @@ function headersOf(init?: RequestInit): Record<string, string> {
 beforeEach(() => {
   sent = []
   servers = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
+  demo = false
+  resetAppSettingsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
   resetStoredGraphForTests()
@@ -76,6 +81,7 @@ beforeEach(() => {
       if (url === "/api/registry") return ok(TEST_REGISTRY)
       if (url === "/api/sources") return ok([SOURCE])
       if (url === "/api/settings/llm") return ok(servers)
+      if (url === "/api/settings/app") return ok({ demo })
       if (url === "/api/settings/llm/check") {
         const p = JSON.parse(String(init?.body)).provider as LlmProvider
         const has = headersOf(init)[H(p)]
@@ -232,13 +238,34 @@ describe("key source words", () => {
   })
 
   describe("the key a chat model needs", () => {
-    it("maps each model to its key slot; a custom endpoint needs none", () => {
-      expect(keyProviderFor("claude-opus-5")).toBe("anthropic")
-      expect(keyProviderFor("claude-haiku-4-5")).toBe("anthropic")
-      expect(keyProviderFor("gpt-6-astra")).toBe("openai")
-      expect(keyProviderFor("openrouter")).toBe("openrouter")
-      expect(keyProviderFor("custom")).toBeNull()
-      expect(keyProviderFor(undefined)).toBeNull()
+    const schema = {
+      default: "claude-opus-5",
+      "x-providers": { "claude-opus-5": "anthropic", "gpt-6-astra": "openai", openrouter: "openrouter", custom: "openai_compatible" },
+    }
+    it("reads each model's provider from the schema; a custom endpoint needs none", () => {
+      expect(keyNeedFor(schema, "claude-opus-5")).toEqual({ kind: "provider", provider: "anthropic" })
+      expect(keyNeedFor(schema, "gpt-6-astra")).toEqual({ kind: "provider", provider: "openai" })
+      expect(keyNeedFor(schema, "openrouter")).toEqual({ kind: "provider", provider: "openrouter" })
+      expect(keyNeedFor(schema, "custom")).toEqual({ kind: "none" })
+    })
+    it("a config without a model uses the schema's default", () => {
+      expect(keyNeedFor(schema, undefined)).toEqual({ kind: "provider", provider: "anthropic" })
+    })
+    it("an unknown model, or no provider data, needs some key; custom never does", () => {
+      expect(keyNeedFor(schema, "mystery-model")).toEqual({ kind: "any" })
+      expect(keyNeedFor(undefined, "claude-opus-5")).toEqual({ kind: "any" })
+      expect(keyNeedFor(undefined, "custom")).toEqual({ kind: "none" })
+    })
+    it("keyMissing is false only when the need is met or unknown", () => {
+      const none = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as const
+      const noKeys = { anthropic: null, openai: null, custom: null, openrouter: null }
+      const withAnthropic = { ...noKeys, anthropic: FAKE.anthropic }
+      expect(keyMissing({ kind: "provider", provider: "openrouter" }, none, withAnthropic)).toBe(true)
+      expect(keyMissing({ kind: "provider", provider: "anthropic" }, none, withAnthropic)).toBe(false)
+      expect(keyMissing({ kind: "any" }, none, noKeys)).toBe(true)
+      expect(keyMissing({ kind: "any" }, none, withAnthropic)).toBe(false)
+      expect(keyMissing({ kind: "none" }, none, noKeys)).toBe(false)
+      expect(keyMissing({ kind: "provider", provider: "openrouter" }, null, noKeys)).toBe(false)
     })
     it("hasKeyFor looks at that slot only", () => {
       const none = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as const
@@ -340,6 +367,14 @@ describe("the API key panel", () => {
     } finally {
       spies.forEach((s) => s.mockRestore())
     }
+  })
+
+  it("on the demo the panel has no Custom endpoint row, which could only end in a 403", async () => {
+    demo = true
+    await page()
+    const panel = openPanel()
+    await waitFor(() => expect(within(panel).queryByRole("group", { name: "Custom endpoint" })).toBeNull())
+    for (const p of ["anthropic", "openai", "openrouter"] as const) expect(within(panel).getByRole("group", { name: ROW[p] })).toBeTruthy()
   })
 
   it("custom: no Check (it needs the endpoint's URL); says when it is checked instead", async () => {

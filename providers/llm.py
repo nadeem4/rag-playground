@@ -69,6 +69,15 @@ CHAT_MODELS: dict[str, ChatModel] = {
 }
 
 
+#: The `model` field's schema extras in every step that calls a model: the
+#: label of each choice, and its provider, so the web app knows which key a
+#: choice needs and the demo can drop the custom endpoint.
+MODEL_SCHEMA_EXTRA: dict[str, Any] = {
+    "x-labels": {m.id: m.label for m in CHAT_MODELS.values()},
+    "x-providers": {m.id: m.provider for m in CHAT_MODELS.values()},
+}
+
+
 @dataclass
 class Completion:
     text: str
@@ -76,20 +85,39 @@ class Completion:
     stop_reason: str
 
 
-NO_KEY: dict[str, str] = {
-    "anthropic": (
-        "No Anthropic API key. Add one with the key button at the top right, "
-        "or set ANTHROPIC_API_KEY on the server."
-    ),
-    "openai": (
-        "No OpenAI API key. Add one with the key button at the top right, "
-        "or set OPENAI_API_KEY on the server."
-    ),
-    "openrouter": (
-        "No OpenRouter API key. Add one with the key button at the top right, "
-        "or set OPENROUTER_API_KEY on the server."
-    ),
+#: Each provider's name and server variable, for the key sentences below.
+KEY_NAMES: dict[str, tuple[str, str]] = {
+    "anthropic": ("Anthropic", "ANTHROPIC_API_KEY"),
+    "openai": ("OpenAI", "OPENAI_API_KEY"),
+    "openrouter": ("OpenRouter", "OPENROUTER_API_KEY"),
 }
+
+#: The first sentence of a missing-key error; `no_key_message` adds the rest.
+NO_KEY: dict[str, str] = {
+    p: f"No {name} API key. Add one with the key button at the top right."
+    for p, (name, _) in KEY_NAMES.items()
+}
+
+
+def _locally(provider: str) -> str:
+    """The server variable, but only off the demo: a demo visitor cannot set it."""
+    if endpoints.demo_enabled():
+        return ""
+    return f" Running locally, you can also set {KEY_NAMES[provider][1]}."
+
+
+def no_key_message(provider: str) -> str:
+    """What a step says when its provider's key is missing."""
+    return NO_KEY[provider] + _locally(provider)
+
+
+def key_sentence(provider: str) -> str:
+    """How a step's explanation says it needs this provider's key."""
+    name = KEY_NAMES[provider][0]
+    return (
+        f"It needs an {name} API key, added with the key button at the top right."
+        + _locally(provider)
+    )
 
 #: OpenRouter's OpenAI-compatible API. Fixed: the user never types it.
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -127,6 +155,7 @@ def model_name_for(model: ChatModel, custom_model: str, openrouter_model: str) -
         return openrouter_model.strip()
     return None
 
+
 #: Where each provider's key sits in `ctx.extras["credentials"]`.
 CREDENTIAL: dict[str, str] = {
     "anthropic": "anthropic_api_key",
@@ -163,31 +192,48 @@ def make_anthropic_client(api_key: str) -> Any:
     return anthropic.Anthropic(api_key=api_key)
 
 
-def openai_client_kwargs(api_key: str | None, base_url: str | None) -> dict[str, Any]:
+def openai_client_kwargs(
+    api_key: str | None, base_url: str | None, *, openrouter: bool = False
+) -> dict[str, Any]:
     """Always an explicit key, so the SDK never falls back to the environment.
+
+    `openrouter` (the provider, not the URL) picks OpenRouter's fixed URL and
+    its app attribution headers. Any endpoint that is not OpenAI's never gets
+    the `OpenAI-Organization` or `OpenAI-Project` header, which the SDK would
+    otherwise fill from `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID`.
 
     In demo mode a custom endpoint's client does not follow redirects, so a
     public endpoint cannot bounce the request to a private address
-    (`providers.endpoints`).
+    (`providers.endpoints`), and ignores proxy settings in the environment.
     """
     kwargs: dict[str, Any] = {"api_key": api_key or NO_KEY_PLACEHOLDER}
-    if base_url == OPENROUTER_BASE_URL:
-        kwargs["base_url"] = base_url
-        kwargs["default_headers"] = dict(OPENROUTER_HEADERS)
-    elif base_url:
-        kwargs["base_url"] = base_url
-        if endpoints.demo_enabled():
-            import openai
+    if not (openrouter or base_url):
+        return kwargs
+    import openai
 
-            kwargs["http_client"] = openai.DefaultHttpxClient(follow_redirects=False)
+    kwargs["default_headers"] = {
+        "OpenAI-Organization": openai.Omit(),
+        "OpenAI-Project": openai.Omit(),
+    }
+    if openrouter:
+        kwargs["base_url"] = OPENROUTER_BASE_URL
+        kwargs["default_headers"].update(OPENROUTER_HEADERS)
+        return kwargs
+    kwargs["base_url"] = base_url
+    if endpoints.demo_enabled():
+        kwargs["http_client"] = openai.DefaultHttpxClient(
+            follow_redirects=False, trust_env=False
+        )
     return kwargs
 
 
-def make_openai_client(api_key: str | None, base_url: str | None = None) -> Any:
+def make_openai_client(
+    api_key: str | None, base_url: str | None = None, *, openrouter: bool = False
+) -> Any:
     """The one place a real OpenAI client is built. Tests patch this."""
     import openai
 
-    return openai.OpenAI(**openai_client_kwargs(api_key, base_url))
+    return openai.OpenAI(**openai_client_kwargs(api_key, base_url, openrouter=openrouter))
 
 
 def anthropic_request_extras(model_id: str) -> dict[str, Any]:
@@ -211,7 +257,7 @@ def complete(
     """One answer from any registered model. Raises a readable error, key-free."""
     if model.provider == "anthropic":
         if not api_key:
-            raise ValueError(NO_KEY["anthropic"])
+            raise ValueError(no_key_message("anthropic"))
         request = {
             "model": model.id,
             "max_tokens": max_tokens,
@@ -237,19 +283,19 @@ def complete(
     }
     if model.provider == "openai":
         if not api_key:
-            raise ValueError(NO_KEY["openai"])
+            raise ValueError(no_key_message("openai"))
         request["model"] = model.id
         request["max_completion_tokens"] = max_tokens
         client = make_openai_client(api_key)
         where = "OpenAI"
     elif model.provider == "openrouter":
         if not api_key:
-            raise ValueError(NO_KEY["openrouter"])
+            raise ValueError(no_key_message("openrouter"))
         if not (model_name or "").strip():
             raise ValueError(OPENROUTER_NEEDS_MODEL)
         request["model"] = model_name.strip()
         request["max_tokens"] = max_tokens
-        client = make_openai_client(api_key, OPENROUTER_BASE_URL)
+        client = make_openai_client(api_key, OPENROUTER_BASE_URL, openrouter=True)
         where = "OpenRouter"
     else:
         if not base_url or not model_name:

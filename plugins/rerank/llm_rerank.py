@@ -47,31 +47,23 @@ SYSTEM_PROMPT = (
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
 _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
-_KEY_WORDS: dict[str, str] = {
-    "anthropic": (
-        "It needs an Anthropic API key, added with the key button at the top "
-        "right or set as ANTHROPIC_API_KEY on the server."
-    ),
-    "openai": (
-        "It needs an OpenAI API key, added with the key button at the top "
-        "right or set as OPENAI_API_KEY on the server."
-    ),
-    "openrouter": (
-        "It needs an OpenRouter API key, added with the key button at the top "
-        "right or set as OPENROUTER_API_KEY on the server."
-    ),
-    "openai_compatible": (
-        "A key is optional, added with the key button at the top right, and a "
-        "local server usually needs none. Custom endpoints are turned off in "
-        "the hosted demo."
-    ),
-}
+
+def _key_words(provider: str) -> str:
+    """How this step says it needs a key. The server variable is mentioned only
+    off the demo, where a visitor could set it."""
+    if provider == "openai_compatible":
+        return (
+            "A key is optional, added with the key button at the top right, and a "
+            "local server usually needs none. Custom endpoints are turned off in "
+            "the hosted demo."
+        )
+    return llm.key_sentence(provider)
 
 
 class LlmRerankConfig(BaseModel):
     model: Literal[tuple(CHAT_MODELS)] = Field(  # type: ignore[valid-type]
         default="claude-haiku-4-5",
-        json_schema_extra={"x-labels": {m.id: m.label for m in CHAT_MODELS.values()}},
+        json_schema_extra=llm.MODEL_SCHEMA_EXTRA,
     )
     custom_base_url: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
     custom_model: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
@@ -131,7 +123,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
             f"{TEXT_BUDGET} characters of each, and keeps the {config.top_k} "
             f"best. It judges each piece against the question as you typed it, "
             "even when the question was rewritten for retrieval. "
-            f"{_KEY_WORDS[model.provider]}"
+            f"{_key_words(model.provider)}"
         )
         tradeoff = (
             "A model can judge relevance well, but it costs one model call per "
@@ -173,7 +165,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
                 "custom_base_url and custom_model on the rerank node."
             )
         if not custom and not api_key:
-            raise ValueError(llm.NO_KEY[model.provider])
+            raise ValueError(llm.no_key_message(model.provider))
 
         prior_ids = [hit.chunk.id for hit in hits]
         for hit in hits:

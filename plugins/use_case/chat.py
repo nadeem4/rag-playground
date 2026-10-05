@@ -65,7 +65,6 @@ from plugins.use_case._grounding import (
 from providers import llm
 from providers.llm import CHAT_MODELS, ChatModel
 
-NO_KEY_MESSAGE = llm.NO_KEY["anthropic"]
 
 SYSTEM_PROMPT = (
     "Answer the user's question using only the provided documents. "
@@ -94,7 +93,7 @@ _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 class ChatConfig(BaseModel):
     model: Literal[tuple(CHAT_MODELS)] = Field(  # type: ignore[valid-type]
         default="claude-opus-5",
-        json_schema_extra={"x-labels": {m.id: m.label for m in CHAT_MODELS.values()}},
+        json_schema_extra=llm.MODEL_SCHEMA_EXTRA,
     )
     custom_base_url: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
     custom_model: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
@@ -122,29 +121,19 @@ _CLAUDE_COST: dict[str, str] = {
     ),
 }
 
-_KEY_WORDS: dict[str, str] = {
-    "anthropic": (
-        "It needs an Anthropic API key, added with the key button at the top "
-        "right or set as ANTHROPIC_API_KEY on the server, and every run is a new "
-        "paid request, never a cached answer."
-    ),
-    "openai": (
-        "It needs an OpenAI API key, added with the key button at the top "
-        "right or set as OPENAI_API_KEY on the server, and every run is a new "
-        "paid request, never a cached answer."
-    ),
-    "openrouter": (
-        "It needs an OpenRouter API key, added with the key button at the top "
-        "right or set as OPENROUTER_API_KEY on the server, and every run is a "
-        "new paid request, never a cached answer."
-    ),
-    "openai_compatible": (
-        "A key is optional, added with the key button at the top right or "
-        "set as OPENAI_COMPATIBLE_API_KEY on the server, and a local server "
-        "usually needs none. Every run is a new request, "
-        "never a cached answer. Custom endpoints are turned off in the hosted demo."
-    ),
-}
+
+def _key_words(provider: str) -> str:
+    """How this step says it needs a key. The server variable is mentioned only
+    off the demo, where a visitor could set it."""
+    if provider == "openai_compatible":
+        return (
+            "A key is optional, added with the key button at the top right or "
+            "set as OPENAI_COMPATIBLE_API_KEY on the server, and a local server "
+            "usually needs none. Every run is a new request, never a cached "
+            "answer. Custom endpoints are turned off in the hosted demo."
+        )
+    return llm.key_sentence(provider) + " Every run is a new paid request, never a cached answer."
+
 
 def make_client(api_key: str) -> Any:
     """The client for the native path. Tests monkeypatch this."""
@@ -256,7 +245,7 @@ class ChatUseCase(Transform[ChatConfig]):
         elif model.provider == "openrouter" and not config.openrouter_model.strip():
             warning, blocking = llm.OPENROUTER_NEEDS_MODEL, True
         return Explanation(
-            settings=f"{who} It reads {pieces}. {method} {_KEY_WORDS[model.provider]}",
+            settings=f"{who} It reads {pieces}. {method} {_key_words(model.provider)}",
             tradeoff=tradeoff,
             warning=warning,
             blocking=blocking,
@@ -284,7 +273,7 @@ def _native(
     inputs: Mapping[str, Any], config: ChatConfig, api_key: str | None
 ) -> dict[str, Any]:
     if not api_key:
-        raise ValueError(NO_KEY_MESSAGE)
+        raise ValueError(llm.no_key_message("anthropic"))
 
     hits = RetrievalResult.model_validate(inputs["result"]).hits[: config.max_chunks]
     question = Query.model_validate(inputs["query"]).asked
@@ -406,7 +395,7 @@ def _sentence_ids(
             "custom_base_url and custom_model on the chat node."
         )
     if not custom and not api_key:
-        raise ValueError(llm.NO_KEY[model.provider])
+        raise ValueError(llm.no_key_message(model.provider))
     if inputs.get("index") is None:
         raise ValueError(
             "Sentence-id citations need the index: its embedder checks each "

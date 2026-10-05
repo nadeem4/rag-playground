@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 
+from api import demo
 from core.ports import STAGE_LESSON, STAGE_WHAT, Stage
 from core.registry import UnknownTransformError
 
@@ -16,7 +18,27 @@ router = APIRouter()
 
 @router.get("/registry")
 def get_registry(request: Request) -> dict[str, Any]:
-    return request.app.state.deps.registry.export_schema()
+    """The catalogue. On the demo, the custom endpoint is left out of every
+    model choice: a run that picks it is refused with 403 anyway."""
+    schema = request.app.state.deps.registry.export_schema()
+    return _without_custom_models(schema) if demo.enabled() else schema
+
+
+def _without_custom_models(schema: dict[str, Any]) -> dict[str, Any]:
+    """A copy with every model choice whose provider is a custom endpoint
+    (`x-providers`) dropped from `enum`, `x-labels` and `x-providers`."""
+    out = copy.deepcopy(schema)
+    for transforms in out.values():
+        for info in transforms.values():
+            field = info["config_schema"].get("properties", {}).get("model") or {}
+            providers = field.get("x-providers")
+            if not providers:
+                continue
+            custom = {m for m, p in providers.items() if p == "openai_compatible"}
+            field["enum"] = [m for m in field.get("enum", []) if m not in custom]
+            for key in ("x-labels", "x-providers"):
+                field[key] = {m: v for m, v in field[key].items() if m not in custom}
+    return out
 
 
 @router.get("/stages")

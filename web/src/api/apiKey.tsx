@@ -81,16 +81,43 @@ export function hasAnyKey(server: LlmSettings | null, keys: Keys): boolean | nul
 }
 
 /**
- * The key slot a chat model needs, read from its id: Claude models need the
- * Anthropic key, GPT models the OpenAI key, OpenRouter its own key. A custom
- * endpoint needs none, so it is null, as is anything unknown.
+ * The key a model choice needs: one provider's, none (a custom endpoint), or
+ * some key when the model is not known (play safe rather than skip the stop).
  */
-export function keyProviderFor(model: unknown): LlmProvider | null {
-  if (typeof model !== "string") return null
-  if (model === "openrouter") return "openrouter"
-  if (model.startsWith("claude-")) return "anthropic"
-  if (model.startsWith("gpt-")) return "openai"
-  return null
+export type KeyNeed = { kind: "provider"; provider: LlmProvider } | { kind: "none" } | { kind: "any" }
+
+/** The key slot for each model provider the server names in `x-providers`. */
+const SLOT: Record<string, LlmProvider | null> = {
+  anthropic: "anthropic",
+  openai: "openai",
+  openrouter: "openrouter",
+  openai_compatible: null,
+}
+
+/**
+ * What key a model needs, from the `model` field's schema: its `x-providers`
+ * map, and its `default` when the config names no model.
+ */
+export function keyNeedFor(schema: Record<string, unknown> | undefined, model: unknown): KeyNeed {
+  const id = model ?? schema?.default
+  if (id === "custom") return { kind: "none" }
+  const provider = typeof id === "string" ? (schema?.["x-providers"] as Record<string, string> | undefined)?.[id] : undefined
+  if (provider === undefined || !(provider in SLOT)) return { kind: "any" }
+  const slot = SLOT[provider]
+  return slot ? { kind: "provider", provider: slot } : { kind: "none" }
+}
+
+/** Is the needed key surely missing? False while the server has not answered. */
+export function keyMissing(need: KeyNeed, server: LlmSettings | null, keys: Keys): boolean {
+  if (need.kind === "none") return false
+  if (need.kind === "any") return hasAnyKey(server, keys) === false
+  return hasKeyFor(need.provider, server, keys) === false
+}
+
+/** "an OpenRouter", "an Anthropic": the article that goes with a provider's name. */
+export function withArticle(provider: LlmProvider): string {
+  const name = PROVIDER_INFO[provider].name
+  return `${/^[AEIOU]/.test(name) ? "an" : "a"} ${name}`
 }
 
 /** Is this provider's key set, in this tab or on the server? Null while unknown. */

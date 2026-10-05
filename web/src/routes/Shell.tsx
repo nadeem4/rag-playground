@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
-import { hasKeyFor, keyProviderFor, needsKey, useApiKey } from "@/api/apiKey"
+import { keyMissing, keyNeedFor, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { GraphNode, LlmSettings, Registry } from "@/api/types"
+import type { GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
@@ -156,6 +156,7 @@ function Build({ registry }: { registry: Registry }) {
 
   // Set when a keyless Ask stopped before Chat. A new key clears it.
   const [keyNotice, setKeyNotice] = useState<string | null>(null)
+  const [keyNoticeProvider, setKeyNoticeProvider] = useState<LlmProvider | null>(null)
   useEffect(() => setKeyNotice(null), [keys])
 
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
@@ -234,13 +235,16 @@ function Build({ registry }: { registry: Registry }) {
     // traceback. Stop at the card that feeds Chat instead, and say so in one
     // sentence. A custom endpoint needs no key.
     let notice: string | null = null
+    let noticeProvider: LlmProvider | null = null
     const chat = graph.nodes.find((n) => n.stage === "use_case" && n.transform === "chat")
-    const chatKey = chat ? keyProviderFor(chat.config.model) : null
-    if (target === undefined && chat && chatKey && hasKeyFor(chatKey, server, keys) === false) {
+    const modelSchema = chat ? (infoFor(registry, chat)?.config_schema.properties?.model as Record<string, unknown> | undefined) : undefined
+    const need = chat ? keyNeedFor(modelSchema, chat.config.model) : null
+    if (target === undefined && chat && need && keyMissing(need, server, keys)) {
       const upstream = graph.edges.find((e) => e.dst === chat.id)?.src
       if (upstream) {
         target = upstream
-        notice = "Search results are ready. Add a key to get a written answer."
+        noticeProvider = need.kind === "provider" ? need.provider : null
+        notice = `Search results are ready. Add ${noticeProvider ? withArticle(noticeProvider) : "a"} key to get a written answer.`
       }
     }
     setErrors({})
@@ -251,6 +255,7 @@ function Build({ registry }: { registry: Registry }) {
     try {
       const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }), { keys })
       setKeyNotice(notice)
+      setKeyNoticeProvider(noticeProvider)
       setRunSteps({ ids: new Set(covered), runId: run_id })
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       if (select) setSelected(target ?? order[order.length - 1]?.id ?? null)
@@ -474,6 +479,7 @@ function Build({ registry }: { registry: Registry }) {
             explanations={explanations}
             errors={errors}
             keyNotice={keyNotice && !busy && !run.error && !failedNode ? keyNotice : null}
+            keyProvider={keyNoticeProvider}
             asked={asked !== null && asked.runId === runId && !busy ? asked : null}
             runError={fromAsk && (columnError || run.error) ? "The run could not start. See the note above the cards." : null}
             transcript={transcript}

@@ -199,7 +199,7 @@ def test_no_key_raises_the_chat_steps_sentence(reply, tmp_path, model, provider)
     fake = reply(REWRITE)
     with pytest.raises(ValueError) as err:
         rewrite(tmp_path, run_ctx=ctx(tmp_path, creds=None), model=model)
-    assert str(err.value) == llm.NO_KEY[provider]
+    assert str(err.value) == llm.no_key_message(provider)
     assert fake.calls == []
 
 

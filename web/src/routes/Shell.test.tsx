@@ -130,7 +130,7 @@ const CLOSE_ASK = "Close Ask. Your question and results are kept."
 const altA = () => fireEvent.keyDown(document, { key: "a", code: "KeyA", altKey: true })
 
 describe("Ask with a chat card and no API key", () => {
-  const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none" }
+  const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
   let settings: Record<string, string>
   let streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[]
 
@@ -236,6 +236,25 @@ describe("Ask with a chat card and no API key", () => {
     const body = await ask(true)
     expect(body.targets).toBeUndefined()
     expect(screen.queryByTestId("key-notice")).toBeNull()
+  })
+
+  it("a chat set to OpenRouter needs the OpenRouter key: an Anthropic key alone stops before Chat", async () => {
+    const g = chatSampleGraph(liveRegistry as never, SOURCE)
+    const chat = g.nodes.find((n) => n.stage === "use_case")!
+    chat.config = { ...chat.config, model: "openrouter", openrouter_model: "openai/gpt-4o-mini" }
+    storeGraph(g)
+    const body = await ask(true)
+    expect(body.targets).toEqual([chatUpstream()])
+  })
+
+  it("a chat set to OpenRouter runs all the way with a server OpenRouter key", async () => {
+    settings = { ...NO_SERVER_KEYS, openrouter: "env" }
+    const g = chatSampleGraph(liveRegistry as never, SOURCE)
+    const chat = g.nodes.find((n) => n.stage === "use_case")!
+    chat.config = { ...chat.config, model: "openrouter", openrouter_model: "openai/gpt-4o-mini" }
+    storeGraph(g)
+    const body = await ask()
+    expect(body.targets).toBeUndefined()
   })
 
   it("a server .env key runs all the way", async () => {

@@ -16,7 +16,7 @@ import { AskPanel, type AskPanelProps } from "./AskPanel"
 import { resetMotionMemory } from "./AskResults"
 
 const LIVE = liveRegistry as unknown as Registry
-const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
+const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null, openrouter: null }
 const UPLOAD = { sha: "ab".repeat(32), filename: "report.pdf" }
 const hybrid = hybridJson as unknown as RetrievalResult
 

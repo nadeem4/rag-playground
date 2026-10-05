@@ -429,7 +429,7 @@ export interface AppSettings {
 // Plan I-8 and I-18. The server reports only WHICH source it can supply, never a value.
 
 /** One key per provider. `custom` is the OpenAI-compatible endpoint. */
-export type LlmProvider = "anthropic" | "openai" | "custom"
+export type LlmProvider = "anthropic" | "openai" | "custom" | "openrouter"
 
 /**
  * `GET /api/settings/llm`: the key the SERVER itself can supply. "none" means

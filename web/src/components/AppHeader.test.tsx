@@ -299,7 +299,7 @@ describe("AppHeader with the lessons hidden", () => {
   })
 })
 
-function serve(app: { demo: boolean }, keys: Record<string, string> = { anthropic: "none", openai: "none", custom: "none" }) {
+function serve(app: { demo: boolean }, keys: Record<string, string> = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {

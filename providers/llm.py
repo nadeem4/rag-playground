@@ -63,6 +63,7 @@ CHAT_MODELS: dict[str, ChatModel] = {
         ChatModel("gpt-6-astra", "openai", "GPT-6 Astra", False),
         ChatModel("gpt-5.6-sol", "openai", "GPT-5.6 Sol", False),
         ChatModel("gpt-5.6-luna", "openai", "GPT-5.6 Luna", False),
+        ChatModel("openrouter", "openrouter", "OpenRouter", False),
         ChatModel("custom", "openai_compatible", "Custom (OpenAI-compatible)", False),
     )
 }
@@ -106,6 +107,25 @@ OPENROUTER_SUGGESTIONS = (
     "meta-llama/llama-3.3-70b-instruct",
     "google/gemini-2.5-flash",
 )
+
+#: The help under the OpenRouter model field, in every step that calls a model.
+OPENROUTER_MODEL_HELP = (
+    "The OpenRouter model id, for example "
+    + ", ".join(OPENROUTER_SUGGESTIONS[:-1])
+    + f" or {OPENROUTER_SUGGESTIONS[-1]}."
+)
+
+#: Said when OpenRouter is chosen and no model id is typed.
+OPENROUTER_NEEDS_MODEL = "OpenRouter needs a model id, for example openai/gpt-4o-mini."
+
+
+def model_name_for(model: ChatModel, custom_model: str, openrouter_model: str) -> str | None:
+    """The typed model id to send: a custom endpoint's or OpenRouter's, else None."""
+    if model.provider == "openai_compatible":
+        return custom_model.strip()
+    if model.provider == "openrouter":
+        return openrouter_model.strip()
+    return None
 
 #: Where each provider's key sits in `ctx.extras["credentials"]`.
 CREDENTIAL: dict[str, str] = {
@@ -226,9 +246,7 @@ def complete(
         if not api_key:
             raise ValueError(NO_KEY["openrouter"])
         if not (model_name or "").strip():
-            raise ValueError(
-                "OpenRouter needs a model id, for example openai/gpt-4o-mini."
-            )
+            raise ValueError(OPENROUTER_NEEDS_MODEL)
         request["model"] = model_name.strip()
         request["max_tokens"] = max_tokens
         client = make_openai_client(api_key, OPENROUTER_BASE_URL)

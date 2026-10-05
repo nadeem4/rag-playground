@@ -51,6 +51,7 @@ _ASK = {
 }
 
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
+_SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
 
 def system_prompt(style: str) -> str:
@@ -76,6 +77,12 @@ class LlmRewriteConfig(TextQueryConfig):
     )
     custom_base_url: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
     custom_model: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
+    openrouter_model: str = Field(
+        default="",
+        title="OpenRouter model",
+        description=llm.OPENROUTER_MODEL_HELP,
+        json_schema_extra=_SHOW_IF_OPENROUTER,
+    )
     style: Literal["document words", "keywords"] = Field(
         default="document words",
         description="'document words' restates the question in the document's "
@@ -90,6 +97,8 @@ def _custom_complete(config: LlmRewriteConfig) -> bool:
 def _model_name(config: LlmRewriteConfig) -> str:
     if config.model == "custom":
         return config.custom_model.strip() or "(not set)"
+    if config.model == "openrouter":
+        return f"{config.openrouter_model.strip() or '(not set)'} on OpenRouter"
     return CHAT_MODELS[config.model].label
 
 
@@ -98,7 +107,7 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
     """`(parsed_doc?) -> query`. Bound ambiently, like the `text` query."""
 
     name = "llm_rewrite"
-    version = "1"
+    version = "2"
     stage = Stage.QUERY
     inputs = {
         "doc": PortSpec(ArtifactType.PARSED_DOC, ambient=True, required=False),
@@ -145,6 +154,8 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
                 "http://localhost:11434/v1 for Ollama) and a model name.",
                 True,
             )
+        elif config.model == "openrouter" and not config.openrouter_model.strip():
+            warning, blocking = llm.OPENROUTER_NEEDS_MODEL, True
         return Explanation(
             settings=settings, tradeoff=tradeoff, warning=warning, blocking=blocking
         )
@@ -178,7 +189,9 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
             user=_prompt(question, inputs.get("doc")),
             api_key=api_key,
             base_url=config.custom_base_url.strip() if custom else None,
-            model_name=config.custom_model.strip() if custom else None,
+            model_name=llm.model_name_for(
+                model, config.custom_model, config.openrouter_model
+            ),
             max_tokens=MAX_TOKENS,
         )
         reply = "" if completion.stop_reason == "refusal" else completion.text.strip()

@@ -88,6 +88,7 @@ MAX_TOKENS = 16000
 LABELS = ("cited", "weak", "similarity", "none")
 
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
+_SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
 
 class ChatConfig(BaseModel):
@@ -97,6 +98,12 @@ class ChatConfig(BaseModel):
     )
     custom_base_url: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
     custom_model: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
+    openrouter_model: str = Field(
+        default="",
+        title="OpenRouter model",
+        description=llm.OPENROUTER_MODEL_HELP,
+        json_schema_extra=_SHOW_IF_OPENROUTER,
+    )
     #: `auto`: native citations when the model has them, else sentence ids.
     citation_method: Literal["auto", "sentence_ids"] = "auto"
     support_threshold: float = Field(default=0.55, ge=0, le=1)
@@ -126,6 +133,11 @@ _KEY_WORDS: dict[str, str] = {
         "right or set as OPENAI_API_KEY on the server, and every run is a new "
         "paid request, never a cached answer."
     ),
+    "openrouter": (
+        "It needs an OpenRouter API key, added with the key button at the top "
+        "right or set as OPENROUTER_API_KEY on the server, and every run is a "
+        "new paid request, never a cached answer."
+    ),
     "openai_compatible": (
         "A key is optional, added with the key button at the top right or "
         "set as OPENAI_COMPATIBLE_API_KEY on the server, and a local server "
@@ -153,7 +165,7 @@ class ChatUseCase(Transform[ChatConfig]):
     """`retrieval_result (+ query, parsed_doc, index) -> output`."""
 
     name = "chat"
-    version = "2"
+    version = "3"
     stage = Stage.USE_CASE
     inputs = {
         "result": PortSpec(ArtifactType.RETRIEVAL_RESULT),
@@ -172,7 +184,8 @@ class ChatUseCase(Transform[ChatConfig]):
     deterministic = False
     summary = (
         "Sends the retrieved pieces and your question to a chat model (Claude, "
-        "OpenAI, or any OpenAI-compatible server), which answers using only "
+        "OpenAI, OpenRouter, or any OpenAI-compatible server), which answers "
+        "using only "
         "those pieces. Every claim points at the passages it relied on, and each "
         "citation is checked against the parsed document."
     )
@@ -185,6 +198,11 @@ class ChatUseCase(Transform[ChatConfig]):
             who = f"Answers with {model.label}, {_CLAUDE_COST[model.id]}."
         elif model.provider == "openai":
             who = f"Answers with OpenAI's {model.label}."
+        elif model.provider == "openrouter":
+            who = (
+                f"Answers with the model "
+                f"{config.openrouter_model.strip() or '(not set)'} on OpenRouter."
+            )
         else:
             who = (
                 f"Answers with the model {config.custom_model.strip() or '(not set)'} "
@@ -235,6 +253,8 @@ class ChatUseCase(Transform[ChatConfig]):
                 "http://localhost:11434/v1 for Ollama) and a model name.",
                 True,
             )
+        elif model.provider == "openrouter" and not config.openrouter_model.strip():
+            warning, blocking = llm.OPENROUTER_NEEDS_MODEL, True
         return Explanation(
             settings=f"{who} It reads {pieces}. {method} {_KEY_WORDS[model.provider]}",
             tradeoff=tradeoff,
@@ -404,13 +424,14 @@ def _sentence_ids(
         user=f"{block}\n\nQuestion: {question}",
         api_key=api_key,
         base_url=config.custom_base_url.strip() if custom else None,
-        model_name=config.custom_model.strip() if custom else None,
+        model_name=llm.model_name_for(model, config.custom_model, config.openrouter_model),
         max_tokens=MAX_TOKENS,
     )
 
     payload: dict[str, Any] = {
         "question": question,
-        "model": config.custom_model.strip() if custom else model.id,
+        "model": llm.model_name_for(model, config.custom_model, config.openrouter_model)
+        or model.id,
         "provider": model.provider,
         "citation_method": "sentence_ids",
         "usage": completion.usage,

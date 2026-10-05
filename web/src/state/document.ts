@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react"
 
 import { api } from "@/api/client"
+import { sampleQuestionTexts } from "@/api/samples"
 import type { SampleCard, Source } from "@/api/types"
 
 import { initialGraph, readStoredGraph, sampleGraph, storedGraphJson, storeGraph, subscribeGraph, type PipelineGraph } from "./graph"
@@ -245,8 +246,12 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
   const current = rawGraph(storedGraphJson())
   if (current && documentOf(current)) {
     let g = withDocument(current, doc)
-    if (question !== undefined) {
-      g = { ...g, nodes: g.nodes.map((n) => (n.stage === "query" ? { ...n, config: { ...n.config, text: question } } : n)) }
+    // A sample's question the app filled in means nothing on another document; a typed one stays.
+    // Answered at once when it can be, so a switch that needs no list waits on nothing.
+    const hit = question === undefined ? isSampleQuestion(current, doc) : false
+    const text = question ?? ((typeof hit === "boolean" ? hit : await hit) ? "" : undefined)
+    if (text !== undefined) {
+      g = { ...g, nodes: g.nodes.map((n) => (n.stage === "query" ? { ...n, config: { ...n.config, text } } : n)) }
     }
     storeGraph(g)
   } else {
@@ -255,6 +260,17 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
     storeGraph(isSample ? sampleGraph(registry, doc, question) : withDocument(readStoredGraph(registry) ?? initialGraph(registry), doc))
   }
   setDocumentMenuOpen(false)
+}
+
+/** True when `g` is on a sample other than `next` and its query is one of that sample's own questions. */
+function isSampleQuestion(g: PipelineGraph, next: DocRef): boolean | Promise<boolean> {
+  const from = documentOf(g)
+  const card = state.samples?.find((c) => c.sha === from?.sha)
+  if (!card || card.sha === next.sha) return false
+  const text = g.nodes.find((n) => n.stage === "query")?.config.text
+  if (typeof text !== "string" || !text) return false
+  if (text === card.question) return true
+  return sampleQuestionTexts(card.name).then((texts) => texts.includes(text))
 }
 
 /** Load a bundled sample on the server (`POST /api/sources/sample`), then make it the document with its own question. */

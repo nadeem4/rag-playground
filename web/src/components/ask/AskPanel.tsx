@@ -123,7 +123,9 @@ export function AskPanel(p: AskPanelProps) {
   const questions = useSampleQuestions(sample?.name)
   const terminal = terminalNode(p.graph)
   const blocker = terminal ? blockingNode(p.graph, p.registry, p.explanations, terminal.id) : undefined
-  const askDisabled = p.busy || !indexId || Boolean(blocker) || Boolean(p.needsDocument)
+  // A blank question has nothing to search for, so Ask waits for one.
+  const blankQuestion = !String(query?.config.text ?? "").trim()
+  const askDisabled = p.busy || !indexId || Boolean(blocker) || Boolean(p.needsDocument) || blankQuestion
 
   // Open on a pipeline whose question has not run yet; folded once it has.
   const answered = p.graph.nodes.some((n) => ASK_STAGES.includes(n.stage) && n.stage !== "query" && p.results[n.id])
@@ -215,6 +217,7 @@ export function AskPanel(p: AskPanelProps) {
             value={String(query.config.text ?? "")}
             errors={queryErrors?.fields?.text}
             disabled={askDisabled}
+            placeholder={filename ? `Ask something about ${filename}.` : undefined}
             onChange={setText}
             onSubmit={ask}
             action={

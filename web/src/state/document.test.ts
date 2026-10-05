@@ -133,6 +133,34 @@ describe("chooseDocument", () => {
     expect(result.current.status).toBe("ready")
   })
 
+  describe("leaving a sample for another document", () => {
+    const queryText = () => readStoredGraph(registry)!.nodes.find((n) => n.stage === "query")!.config.text
+    async function onSample(text: string) {
+      answers["/api/samples/chunking-primer/questions"] = [{ id: "q1", question: "What does overlap cost?" }]
+      storeGraph(sampleGraph(registry, ref(SAMPLE_SHA, "chunking-primer.pdf"), text))
+      const { result } = renderHook(() => useDocument())
+      await waitFor(() => expect(result.current.samples).not.toBeNull())
+    }
+
+    it("clears the sample's own question, so the upload is not asked about the sample", async () => {
+      await onSample(SAMPLE.question)
+      await act(() => chooseDocument(ref(UP.sha, UP.filename)))
+      expect(queryText()).toBe("")
+    })
+
+    it("clears any of the sample's listed questions, such as one picked from its chips", async () => {
+      await onSample("What does overlap cost?")
+      await act(() => chooseDocument(ref(UP.sha, UP.filename)))
+      expect(queryText()).toBe("")
+    })
+
+    it("keeps a question the visitor typed", async () => {
+      await onSample("Where is the summary table?")
+      await act(() => chooseDocument(ref(UP.sha, UP.filename)))
+      expect(queryText()).toBe("Where is the summary table?")
+    })
+  })
+
   it("lists as Your uploads only the files that are not a sample", async () => {
     answers["/api/sources"] = [UP, { sha: SAMPLE_SHA, filename: "chunking-primer.pdf", size: 1, content_type: "application/pdf" }]
     const { result } = renderHook(() => useDocument())

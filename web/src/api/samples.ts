@@ -53,6 +53,16 @@ function loadQuestions(name: string): Promise<SampleQuestion[]> {
   return p
 }
 
+/** The texts of the sample's question set, from the same cache; none when it cannot be read. */
+export async function sampleQuestionTexts(name: string): Promise<string[]> {
+  try {
+    const qs = await loadQuestions(name)
+    return Array.isArray(qs) ? qs.map((q) => q.question) : []
+  } catch {
+    return []
+  }
+}
+
 /**
  * The question set of the sample called `name`. No name (an upload, or a file
  * no sample has) gets none. The caller finds the sample, so the list is not

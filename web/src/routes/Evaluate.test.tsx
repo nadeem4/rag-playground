@@ -235,7 +235,7 @@ describe("Evaluate", () => {
 
   it("says the question set in one line and folds the upload under Use your own questions", async () => {
     setup()
-    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the A primer on chunking sample."))
+    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the sample, A primer on chunking."))
     const own = screen.getByText("Use your own questions").closest("details")!
     expect(own.open).toBe(false)
     expect(within(own).getByRole("link", { name: "JSON" }).className).toContain("inline-flex")
@@ -308,7 +308,7 @@ describe("the question set panel", () => {
   it("names the matched sample, counts it, and links to a template in both formats", async () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
-    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the A primer on chunking sample."))
+    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the sample, A primer on chunking."))
     openOwn()
     expect(screen.getByRole("link", { name: "JSON" }).getAttribute("href")).toBe("/api/questions/template?format=json")
     expect(screen.getByRole("link", { name: "CSV" }).getAttribute("href")).toBe("/api/questions/template?format=csv")

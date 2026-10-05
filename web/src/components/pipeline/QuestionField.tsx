@@ -13,6 +13,7 @@ export function QuestionField({
   value,
   errors = [],
   disabled,
+  placeholder,
   onChange,
   onSubmit,
   action,
@@ -20,6 +21,7 @@ export function QuestionField({
   value: string
   errors?: string[]
   disabled?: boolean
+  placeholder?: string
   onChange: (text: string) => void
   onSubmit: () => void
   action?: ReactNode
@@ -35,6 +37,7 @@ export function QuestionField({
         id={id}
         rows={3}
         value={value}
+        placeholder={placeholder}
         aria-invalid={errors.length > 0 || undefined}
         aria-describedby={`${id}-help${errors.length ? ` ${errorId}` : ""}`}
         onChange={(e) => onChange(e.target.value)}
@@ -44,7 +47,7 @@ export function QuestionField({
             onSubmit()
           }
         }}
-        className="w-full min-w-0 resize-y rounded-control border border-field-border bg-field px-2 py-1 text-sm leading-5 text-fg aria-invalid:border-danger"
+        className="w-full min-w-0 resize-y rounded-control border border-field-border bg-field px-2 py-1 text-sm leading-5 text-fg placeholder:text-fg-muted aria-invalid:border-danger"
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p id={`${id}-help`} className="text-xs text-fg-muted">

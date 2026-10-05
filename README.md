@@ -146,8 +146,8 @@ Then open http://localhost:8000.
 - **Your models and uploads live in a named volume**, mounted at `/data` in the container.
   They survive `docker compose down` and rebuilds. To delete them, run
   `docker compose down -v`.
-- **API keys for chat answers:** put `ANTHROPIC_API_KEY=...`, `OPENAI_API_KEY=...` or
-  `OPENAI_COMPATIBLE_API_KEY=...` in a `.env` file next to `docker-compose.yml` (copy
+- **API keys for chat answers:** put `ANTHROPIC_API_KEY=...`, `OPENAI_API_KEY=...`,
+  `OPENROUTER_API_KEY=...` or `OPENAI_COMPATIBLE_API_KEY=...` in a `.env` file next to `docker-compose.yml` (copy
   `.env.example`). Compose passes them to the container at start. They are never copied
   into the image, and the setup works without a `.env` at all.
 - **Another port:** `RAG_PLAYGROUND_PORT=8080 docker compose up` serves the UI on
@@ -168,11 +168,17 @@ unsafe to share:
   your uploads.
 - **No server API keys.** Every key, for every provider, comes only from the request
   header, that is, a key the visitor types in the UI. `ANTHROPIC_API_KEY`,
-  `OPENAI_API_KEY` and `OPENAI_COMPATIBLE_API_KEY` in the environment or in `.env` are
-  ignored, so visitors can never spend the host's keys.
-- **No custom endpoints.** A run or sweep with a chat node set to the `custom` model is
-  refused with 403, and so is checking a custom endpoint: the server would otherwise send
-  a request to any URL a visitor chose.
+  `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `OPENAI_COMPATIBLE_API_KEY` in the environment
+  or in `.env` are ignored, so visitors can never spend the host's keys.
+- **No custom endpoints.** A run or sweep with a chat, LLM rerank or LLM rewrite node set to
+  the `custom` model is refused with 403, and so is checking a custom endpoint: the server
+  would otherwise send a request to any URL a visitor chose. Behind that, every model call
+  checks a custom base URL before it is made: on the demo it must be a public https address
+  on port 443, with no user name or password in it, whose name resolves only to public
+  addresses (not localhost, private, link-local, CGNAT, multicast or reserved ones, in IPv4
+  or IPv6). That client does not follow redirects. Outside demo mode none of this applies,
+  so Ollama and LM Studio on localhost keep working. OpenRouter is not a custom endpoint:
+  its address is fixed, so it works on the demo with a visitor's own key.
 
 `GET /api/settings/app` returns `{"demo": true, "limits": {...}}` so the UI can say so and state the limits.
 
@@ -440,7 +446,7 @@ several times, for example two cleaners in a row.
 | Strategy | How it works | Needs a key |
 |---|---|---|
 | `search` | Shows the top 5 chunks as a ranked list with scores and pages, and how many candidates there were. | No |
-| `chat` | A chat model (Claude, OpenAI, or a custom OpenAI-compatible endpoint) answers from the top 5 retrieved chunks only, and every claim points at the sentences it relied on. `citation_method` is `auto` (Claude's own citations for a Claude model, sentence ids for any other) or `sentence_ids`. With sentence ids, `support_threshold` (0.55) decides when a claim counts as cited rather than weak. | Yes, for the chosen provider; optional for a custom endpoint |
+| `chat` | A chat model (Claude, OpenAI, a model on OpenRouter, or a custom OpenAI-compatible endpoint) answers from the top 5 retrieved chunks only, and every claim points at the sentences it relied on. `citation_method` is `auto` (Claude's own citations for a Claude model, sentence ids for any other) or `sentence_ids`. With sentence ids, `support_threshold` (0.55) decides when a claim counts as cited rather than weak. | Yes, for the chosen provider; optional for a custom endpoint |
 | `eval` | Checks whether the top 5 retrieved chunks contain the sentence that answers the question, and reports hit or miss, the rank it was found at, and which chunk it was in. The question carries that sentence as its `gold_answer`, so one sweep over a set of questions scores a whole configuration. A question may also carry several sentences in `gold_answers`, any of which counts, and the report says how many of them were found. | No |
 
 ## Models and downloads
@@ -468,7 +474,14 @@ Everything else works without one.
 |---|---|---|---|
 | Anthropic | Claude Opus 5, Sonnet 5, Haiku 4.5 | `X-Anthropic-Api-Key` | `ANTHROPIC_API_KEY` |
 | OpenAI | GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Luna | `X-OpenAI-Api-Key` | `OPENAI_API_KEY` |
+| OpenRouter | any model OpenRouter serves (choose OpenRouter, then type its model id in `openrouter_model`, for example `anthropic/claude-sonnet-4`, `openai/gpt-4o-mini`, `meta-llama/llama-3.3-70b-instruct` or `google/gemini-2.5-flash`) | `X-OpenRouter-Api-Key` | `OPENROUTER_API_KEY` |
 | Custom endpoint | any model on an OpenAI-compatible server (set `custom_base_url` and `custom_model` on the chat node) | `X-Custom-Api-Key` | `OPENAI_COMPATIBLE_API_KEY` |
+
+The same choices apply to the LLM reranker (`llm_rerank`) and the LLM rewrite
+(`llm_rewrite`). OpenRouter is called through the OpenAI SDK at the fixed address
+`https://openrouter.ai/api/v1`, which you never type, and every request carries
+OpenRouter's optional app attribution headers (`HTTP-Referer` and `X-Title: RAG
+Playground`). OpenRouter also serves embedding models, which the Index step may use later.
 
 The custom endpoint's key is optional: a local server such as Ollama
 (`http://localhost:11434/v1`) usually needs none. A missing key for any other provider fails
@@ -479,11 +492,11 @@ finds:
 
 1. **Typed in the UI.** Open the key button at the top right. It reads **Add a key for chat
    answers (optional)** until a key is set, then **API key**. The panel has one row per
-   provider: Anthropic, OpenAI, and Custom endpoint (optional, since a local server may
-   need no key). Paste a key into its row and choose Apply. The browser keeps each key in
-   memory for that tab only. It is never saved, and reloading the page clears it. The
-   Anthropic and OpenAI rows have **Check key**, which tests that key without spending
-   tokens. A custom endpoint's key is checked when chat runs against it.
+   provider: Anthropic, OpenAI, Custom endpoint (optional, since a local server may
+   need no key) and OpenRouter. Paste a key into its row and choose Apply. The browser
+   keeps each key in memory for that tab only. It is never saved, and reloading the page
+   clears it. The Anthropic, OpenAI and OpenRouter rows have **Check key**, which tests
+   that key without spending tokens. A custom endpoint's key is checked when chat runs against it.
 2. **The provider's environment variable in the server process,** for example:
 
    ```bash
@@ -513,10 +526,11 @@ off disk again, by deleting the file.
 
 The server never stores, logs or returns a key, and it shows `[redacted]` in its place in
 any error. `GET /api/settings/llm` reports only which source the server itself has for
-each provider, as `{"anthropic": ..., "openai": ..., "custom": ...}` with `env`, `dotenv`
-or `none`. `POST /api/settings/llm/check` with `{"provider": "anthropic" | "openai" |
-"custom"}` tests one key with a model listing, which costs no tokens; a custom check also
-needs `"base_url"`.
+each provider, as `{"anthropic": ..., "openai": ..., "custom": ..., "openrouter": ...}`
+with `env`, `dotenv` or `none`. `POST /api/settings/llm/check` with `{"provider":
+"anthropic" | "openai" | "custom" | "openrouter"}` tests one key without spending tokens:
+with a model listing, or for OpenRouter, whose model list is public, with its key endpoint
+(`GET /key`). A custom check also needs `"base_url"`.
 
 ## How it works
 
@@ -533,7 +547,7 @@ chunkers over one parse is one cached parse and three new chunk sets.
 
 ```
 core/        the engine: artifacts, transforms, graph, executor, content-addressed store
-providers/   embedding models and the embedding cache
+providers/   embedding models, the embedding cache, chat model calls, and the demo's custom endpoint check
 plugins/     one module per strategy, grouped by stage
 api/         FastAPI server: registry, sources, runs (streamed as server-sent events), artifacts
 web/         React UI: Lessons, Build, Compare, Evaluate, Read, inspectors
@@ -686,4 +700,4 @@ and is gone when the tab closes. See
 `sources/`, `artifacts/` and `.env` are gitignored. **Clear cache** in the UI deletes the
 cached results and the embedding cache. Nothing leaves your machine except model downloads
 and, when you use `chat`, the question and retrieved chunks sent to the chat model's
-provider (Anthropic, OpenAI, or the custom endpoint you set).
+provider (Anthropic, OpenAI, OpenRouter, or the custom endpoint you set).

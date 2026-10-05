@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
-import { hasAnyKey, needsKey, useApiKey } from "@/api/apiKey"
+import { hasKeyFor, keyProviderFor, needsKey, useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, LlmSettings, Registry } from "@/api/types"
@@ -230,12 +230,14 @@ function Build({ registry }: { registry: Registry }) {
       return
     }
     setKeyNotice(null)
-    // An Ask with no key anywhere would end in a chat traceback. Stop at
-    // the card that feeds Chat instead, and say so in one sentence.
+    // An Ask without the key Chat's model needs would end in a chat
+    // traceback. Stop at the card that feeds Chat instead, and say so in one
+    // sentence. A custom endpoint needs no key.
     let notice: string | null = null
-    if (target === undefined && hasAnyKey(server, keys) === false) {
-      const chat = graph.nodes.find((n) => n.stage === "use_case" && n.transform === "chat")
-      const upstream = chat && chat.config.model !== "custom" ? graph.edges.find((e) => e.dst === chat.id)?.src : undefined
+    const chat = graph.nodes.find((n) => n.stage === "use_case" && n.transform === "chat")
+    const chatKey = chat ? keyProviderFor(chat.config.model) : null
+    if (target === undefined && chat && chatKey && hasKeyFor(chatKey, server, keys) === false) {
+      const upstream = graph.edges.find((e) => e.dst === chat.id)?.src
       if (upstream) {
         target = upstream
         notice = "Search results are ready. Add a key to get a written answer."

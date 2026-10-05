@@ -12,17 +12,18 @@ import type { LlmCheck, LlmProvider, LlmServerSource, LlmSettings } from "./type
  * key check.
  */
 
-export const PROVIDERS: LlmProvider[] = ["anthropic", "openai", "custom"]
+export const PROVIDERS: LlmProvider[] = ["anthropic", "openai", "custom", "openrouter"]
 
 export const PROVIDER_INFO: Record<LlmProvider, { name: string; env: string }> = {
   anthropic: { name: "Anthropic", env: "ANTHROPIC_API_KEY" },
   openai: { name: "OpenAI", env: "OPENAI_API_KEY" },
   custom: { name: "Custom endpoint", env: "OPENAI_COMPATIBLE_API_KEY" },
+  openrouter: { name: "OpenRouter", env: "OPENROUTER_API_KEY" },
 }
 
 export type Keys = Record<LlmProvider, string | null>
 
-const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null }
+const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null, openrouter: null }
 
 export interface ApiKeyState {
   /** The UI keys; null where none is set. */
@@ -77,6 +78,26 @@ export function hasAnyKey(server: LlmSettings | null, keys: Keys): boolean | nul
   if (PROVIDERS.some((p) => keys[p] !== null)) return true
   if (server === null) return null
   return PROVIDERS.some((p) => server[p] !== "none")
+}
+
+/**
+ * The key slot a chat model needs, read from its id: Claude models need the
+ * Anthropic key, GPT models the OpenAI key, OpenRouter its own key. A custom
+ * endpoint needs none, so it is null, as is anything unknown.
+ */
+export function keyProviderFor(model: unknown): LlmProvider | null {
+  if (typeof model !== "string") return null
+  if (model === "openrouter") return "openrouter"
+  if (model.startsWith("claude-")) return "anthropic"
+  if (model.startsWith("gpt-")) return "openai"
+  return null
+}
+
+/** Is this provider's key set, in this tab or on the server? Null while unknown. */
+export function hasKeyFor(provider: LlmProvider, server: LlmSettings | null, keys: Keys): boolean | null {
+  if (keys[provider] !== null) return true
+  if (server === null) return null
+  return server[provider] !== "none"
 }
 
 /**

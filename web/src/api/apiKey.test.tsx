@@ -8,7 +8,7 @@ import { resetDocumentForTests } from "@/state/document"
 import { initialGraph, readStoredGraph, resetStoredGraphForTests, setConfig, storeGraph } from "@/state/graph"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
-import { ApiKeyProvider, checkMessage, hasAnyKey, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
+import { ApiKeyProvider, checkMessage, hasAnyKey, hasKeyFor, keyProviderFor, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
 import { api, KEY_HEADERS, keyHeaders } from "./client"
 import type { LlmProvider } from "./types"
 
@@ -17,14 +17,16 @@ const FAKE: Record<LlmProvider, string> = {
   anthropic: "sk-ant-FAKE-test-key-0000",
   openai: "sk-FAKE-openai-test-key-1111",
   custom: "FAKE-custom-test-key-2222",
+  openrouter: "sk-or-FAKE-openrouter-test-key-3333",
 }
-const PROVIDERS: LlmProvider[] = ["anthropic", "openai", "custom"]
+const PROVIDERS: LlmProvider[] = ["anthropic", "openai", "custom", "openrouter"]
 const LABEL: Record<LlmProvider, string> = {
   anthropic: "Anthropic API key",
   openai: "OpenAI API key",
   custom: "Custom endpoint API key",
+  openrouter: "OpenRouter API key",
 }
-const ROW: Record<LlmProvider, string> = { anthropic: "Anthropic", openai: "OpenAI", custom: "Custom endpoint" }
+const ROW: Record<LlmProvider, string> = { anthropic: "Anthropic", openai: "OpenAI", custom: "Custom endpoint", openrouter: "OpenRouter" }
 const H = (p: LlmProvider) => KEY_HEADERS[p].toLowerCase()
 
 class SilentEventSource {
@@ -48,7 +50,7 @@ interface Sent {
   body: string
 }
 let sent: Sent[] = []
-let servers: Record<LlmProvider, string> = { anthropic: "none", openai: "none", custom: "none" }
+let servers: Record<LlmProvider, string> = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
 
 function headersOf(init?: RequestInit): Record<string, string> {
   const h = new Headers(init?.headers)
@@ -59,7 +61,7 @@ function headersOf(init?: RequestInit): Record<string, string> {
 
 beforeEach(() => {
   sent = []
-  servers = { anthropic: "none", openai: "none", custom: "none" }
+  servers = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
   window.localStorage.clear()
   window.sessionStorage.clear()
   resetStoredGraphForTests()
@@ -139,6 +141,7 @@ describe("keyHeaders", () => {
       anthropic: "X-Anthropic-Api-Key",
       openai: "X-OpenAI-Api-Key",
       custom: "X-Custom-Api-Key",
+      openrouter: "X-OpenRouter-Api-Key",
     })
   })
 
@@ -198,8 +201,8 @@ describe("key source words", () => {
   })
 
   it("the header badge counts the providers that have a key", () => {
-    const none = { anthropic: null, openai: null, custom: null }
-    const allNone = { anthropic: "none", openai: "none", custom: "none" } as const
+    const none = { anthropic: null, openai: null, custom: null, openrouter: null }
+    const allNone = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as const
     expect(keyShortLabel(null, none)).toBe("")
     expect(keyShortLabel(allNone, none)).toBe("not set")
     expect(keyShortLabel({ ...allNone, anthropic: "dotenv" }, none)).toBe("1 set")
@@ -208,8 +211,8 @@ describe("key source words", () => {
   })
 
   describe("hasAnyKey", () => {
-    const none = { anthropic: "none", openai: "none", custom: "none" } as const
-    const noKeys = { anthropic: null, openai: null, custom: null }
+    const none = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as const
+    const noKeys = { anthropic: null, openai: null, custom: null, openrouter: null }
     it("is null while the server has not answered", () => {
       expect(hasAnyKey(null, noKeys)).toBeNull()
     })
@@ -221,6 +224,30 @@ describe("key source words", () => {
     })
     it("is true with a server key from .env", () => {
       expect(hasAnyKey({ ...none, openai: "dotenv" }, noKeys)).toBe(true)
+    })
+    it("counts an OpenRouter key like the others", () => {
+      expect(hasAnyKey(none, { ...noKeys, openrouter: FAKE.openrouter })).toBe(true)
+      expect(hasAnyKey({ ...none, openrouter: "env" }, noKeys)).toBe(true)
+    })
+  })
+
+  describe("the key a chat model needs", () => {
+    it("maps each model to its key slot; a custom endpoint needs none", () => {
+      expect(keyProviderFor("claude-opus-5")).toBe("anthropic")
+      expect(keyProviderFor("claude-haiku-4-5")).toBe("anthropic")
+      expect(keyProviderFor("gpt-6-astra")).toBe("openai")
+      expect(keyProviderFor("openrouter")).toBe("openrouter")
+      expect(keyProviderFor("custom")).toBeNull()
+      expect(keyProviderFor(undefined)).toBeNull()
+    })
+    it("hasKeyFor looks at that slot only", () => {
+      const none = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as const
+      const noKeys = { anthropic: null, openai: null, custom: null, openrouter: null }
+      expect(hasKeyFor("openrouter", null, noKeys)).toBeNull()
+      expect(hasKeyFor("openrouter", none, { ...noKeys, anthropic: FAKE.anthropic })).toBe(false)
+      expect(hasKeyFor("openrouter", none, { ...noKeys, openrouter: FAKE.openrouter })).toBe(true)
+      expect(hasKeyFor("openrouter", { ...none, openrouter: "dotenv" }, noKeys)).toBe(true)
+      expect(hasKeyFor("openrouter", null, { ...noKeys, openrouter: FAKE.openrouter })).toBe(true)
     })
   })
 
@@ -244,7 +271,7 @@ describe("key source words", () => {
 
 describe("the API key panel", () => {
   it("has one row per provider, each showing the server's source", async () => {
-    servers = { anthropic: "dotenv", openai: "env", custom: "none" }
+    servers = { anthropic: "dotenv", openai: "env", custom: "none", openrouter: "none" }
     await page()
     await waitFor(() => expect(within(row("anthropic")).getByTestId("key-source").textContent).toBe("Using the key from .env"))
     expect(within(row("openai")).getByTestId("key-source").textContent).toBe("Using OPENAI_API_KEY from the environment")
@@ -253,7 +280,7 @@ describe("the API key panel", () => {
   })
 
   it.each(PROVIDERS)("%s: applying shows this tab's key, empties the field, and Clear restores the server's", async (p) => {
-    servers = { anthropic: "dotenv", openai: "dotenv", custom: "dotenv" }
+    servers = { anthropic: "dotenv", openai: "dotenv", custom: "dotenv", openrouter: "dotenv" }
     await page()
     await waitFor(() => expect(within(row(p)).getByTestId("key-source").textContent).toBe("Using the key from .env"))
     const r = enterKey(p, FAKE[p])
@@ -322,7 +349,7 @@ describe("the API key panel", () => {
     expect(within(r).getByText("Checked when chat runs against your endpoint.")).toBeTruthy()
   })
 
-  it.each(["anthropic", "openai"] as const)("%s: its own Check sends its own key and shows the result in its row", async (p) => {
+  it.each(["anthropic", "openai", "openrouter"] as const)("%s: its own Check sends its own key and shows the result in its row", async (p) => {
     await page()
     const r = enterKey(p, FAKE[p])
     fireEvent.click(within(r).getByRole("button", { name: "Check key" }))

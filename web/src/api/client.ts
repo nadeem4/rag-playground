@@ -76,6 +76,7 @@ export const KEY_HEADERS: Record<LlmProvider, string> = {
   anthropic: "X-Anthropic-Api-Key",
   openai: "X-OpenAI-Api-Key",
   custom: "X-Custom-Api-Key",
+  openrouter: "X-OpenRouter-Api-Key",
 }
 
 /** UI keys by provider; null or absent when not set. */

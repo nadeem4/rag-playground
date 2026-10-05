@@ -73,10 +73,11 @@ class FakeOpenAI:
 
 @pytest.fixture
 def fake_openai(monkeypatch):
-    holder = SimpleNamespace(client=None, reply=None, error=None, built=[])
+    holder = SimpleNamespace(client=None, reply=None, error=None, built=[], options=[])
 
-    def make(api_key, base_url=None):
+    def make(api_key, base_url=None, **options):
         holder.built.append({"api_key": api_key, "base_url": base_url})
+        holder.options.append(options)
         holder.client = FakeOpenAI(holder.reply, holder.error)
         return holder.client
 
@@ -433,7 +434,7 @@ def test_openrouter_requires_its_own_key(fake_openai):
             CHAT_MODELS["openrouter"], system="s", user="u", api_key=None,
             model_name="openai/gpt-4o-mini",
         )
-    assert str(info.value) == llm.NO_KEY["openrouter"]
+    assert str(info.value) == llm.no_key_message("openrouter")
     assert fake_openai.built == []
 
 
@@ -483,12 +484,86 @@ def test_openrouter_client_sends_the_app_attribution_headers(monkeypatch):
     import openai
 
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
-    kwargs = llm.openai_client_kwargs(KEY, llm.OPENROUTER_BASE_URL)
-    assert kwargs["default_headers"] == {
-        "HTTP-Referer": "https://github.com/nadeem4/rag-playground",
-        "X-Title": "RAG Playground",
-    }
+    kwargs = llm.openai_client_kwargs(KEY, llm.OPENROUTER_BASE_URL, openrouter=True)
+    assert kwargs["default_headers"]["HTTP-Referer"] == "https://github.com/nadeem4/rag-playground"
+    assert kwargs["default_headers"]["X-Title"] == "RAG Playground"
     client = openai.OpenAI(**kwargs)
     assert client.default_headers["X-Title"] == "RAG Playground"
-    assert "default_headers" not in llm.openai_client_kwargs(KEY, None)
-    assert "default_headers" not in llm.openai_client_kwargs(KEY, "http://localhost:1/v1")
+    assert "X-Title" not in llm.openai_client_kwargs(KEY, None).get("default_headers", {})
+
+
+def test_openrouter_is_chosen_by_the_provider_not_the_url(fake_openai, monkeypatch):
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+    # The URL alone is not enough to send OpenRouter's headers...
+    by_url = llm.openai_client_kwargs(KEY, llm.OPENROUTER_BASE_URL)
+    assert "X-Title" not in by_url.get("default_headers", {})
+    # ...and the provider sets the fixed URL itself.
+    by_provider = llm.openai_client_kwargs(KEY, None, openrouter=True)
+    assert by_provider["base_url"] == llm.OPENROUTER_BASE_URL
+    complete(OPENROUTER_MODEL(), system="s", user="u", api_key=KEY, model_name="openai/gpt-4o-mini")
+    assert fake_openai.options == [{"openrouter": True}]
+
+
+def OPENROUTER_MODEL():  # noqa: N802
+    return CHAT_MODELS["openrouter"]
+
+
+def built_headers(client) -> dict[str, str]:
+    from openai._models import FinalRequestOptions
+
+    request = client._build_request(FinalRequestOptions.construct(method="get", url="/key"))
+    return {k.lower(): v for k, v in request.headers.items()}
+
+
+@pytest.mark.parametrize(
+    "base_url,openrouter",
+    [(None, True), ("http://localhost:11434/v1", False)],
+    ids=["openrouter", "custom"],
+)
+def test_a_non_openai_endpoint_never_gets_the_openai_org_or_project(
+    monkeypatch, base_url, openrouter
+):
+    import openai
+
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+    monkeypatch.setenv("OPENAI_ORG_ID", "org-ENV-must-not-travel")
+    monkeypatch.setenv("OPENAI_PROJECT_ID", "proj-ENV-must-not-travel")
+    client = openai.OpenAI(**llm.openai_client_kwargs(KEY, base_url, openrouter=openrouter))
+    headers = built_headers(client)
+    assert "openai-organization" not in headers and "openai-project" not in headers
+    # OpenAI itself still gets them, as before.
+    plain = built_headers(openai.OpenAI(**llm.openai_client_kwargs(KEY, None)))
+    assert plain["openai-organization"] == "org-ENV-must-not-travel"
+
+
+def test_in_demo_mode_a_custom_client_ignores_proxy_settings(monkeypatch):
+    import openai
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    kwargs = llm.openai_client_kwargs(None, "https://api.example.com/v1")
+    assert kwargs["http_client"].trust_env is False
+    assert openai.OpenAI(**kwargs)._client.trust_env is False
+
+
+def test_no_key_message_mentions_the_server_variable_only_locally(monkeypatch):
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+    local = llm.no_key_message("openrouter")
+    assert local.startswith("No OpenRouter API key. Add one with the key button at the top right.")
+    assert "Running locally, you can also set OPENROUTER_API_KEY." in local
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    for provider in ("anthropic", "openai", "openrouter"):
+        demo = llm.no_key_message(provider)
+        assert "_API_KEY" not in demo and "server" not in demo
+
+
+def test_model_schema_carries_each_models_provider():
+    extra = llm.MODEL_SCHEMA_EXTRA
+    assert extra["x-providers"] == {m.id: m.provider for m in CHAT_MODELS.values()}
+    assert extra["x-labels"]["openrouter"] == "OpenRouter"
+
+
+def test_key_sentence_mentions_the_server_variable_only_locally(monkeypatch):
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+    assert "Running locally, you can also set OPENAI_API_KEY." in llm.key_sentence("openai")
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    assert "OPENAI_API_KEY" not in llm.key_sentence("openai")

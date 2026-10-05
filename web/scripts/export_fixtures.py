@@ -350,7 +350,7 @@ def main() -> None:
             # directly, with exactly the inputs the executor would bind, so
             # the fake stays local to this one call.
             previous_client = llm.make_openai_client
-            llm.make_openai_client = lambda api_key, base_url=None: FakeOpenAI()
+            llm.make_openai_client = lambda api_key, base_url=None, **options: FakeOpenAI()
             try:
                 output = ChatUseCase().apply(
                     {

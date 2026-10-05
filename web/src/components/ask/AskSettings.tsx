@@ -135,8 +135,8 @@ function NodeForm({
 
 /** The fields each block shows at full weight. Strategy, the reranker and Search / Chat are their own controls. */
 const RETRIEVAL_PRIMARY = ["top_k"]
-// A custom model's address and name only show when the model is custom: they belong with the model.
-const MODEL_FIELDS = ["model", "custom_base_url", "custom_model"]
+// A custom model's address and name, and an OpenRouter model id, show only with their model: they belong with it.
+const MODEL_FIELDS = ["model", "custom_base_url", "custom_model", "openrouter_model"]
 const RERANK_PRIMARY = ["top_k", ...MODEL_FIELDS]
 const ANSWER_PRIMARY = MODEL_FIELDS
 

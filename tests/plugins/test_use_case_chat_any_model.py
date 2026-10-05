@@ -83,7 +83,7 @@ class FakeOpenAI:
 def openai_fake(monkeypatch):
     holder = SimpleNamespace(client=None, answer=lambda prompt: "Nothing here.", built=[])
 
-    def make(api_key, base_url=None):
+    def make(api_key, base_url=None, **options):
         holder.built.append({"api_key": api_key, "base_url": base_url})
         holder.client = FakeOpenAI(holder.answer)
         return holder.client

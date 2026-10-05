@@ -2,7 +2,8 @@ import { useEffect, useId, useState } from "react"
 import { Popover } from "radix-ui"
 
 import { api } from "@/api/client"
-import { checkMessage, keyShortLabel, keySourceLabel, PROVIDER_INFO, PROVIDERS, useApiKey } from "@/api/apiKey"
+import { checkMessage, keyShortLabel, keySourceLabel, PROVIDER_INFO, PROVIDERS, useApiKey, withArticle } from "@/api/apiKey"
+import { useDemo } from "@/api/useDemo"
 import type { LlmCheck, LlmProvider, LlmServerSource, LlmSettings } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -45,6 +46,9 @@ export function ApiKeyControl() {
   }, [panelOpen])
 
   const short = keyShortLabel(server, keys)
+  // On the demo a custom endpoint is refused with a 403, so its key has no use there.
+  const demo = useDemo()
+  const rows = demo ? PROVIDERS.filter((p) => p !== "custom") : PROVIDERS
   const keysSet = short !== "" && short !== "not set"
 
   return (
@@ -82,7 +86,7 @@ export function ApiKeyControl() {
           {serverError ? (
             <p className="px-3 pt-3 font-mono text-2xs break-words text-fg-muted">Could not ask the server which keys it has: {serverError}</p>
           ) : null}
-          {PROVIDERS.map((p) => (
+          {rows.map((p) => (
             <KeyRow key={p} provider={p} server={server?.[p] ?? null} />
           ))}
           <p className="border-t border-hairline px-3 py-2 text-xs text-fg-muted" data-testid="key-privacy">
@@ -193,12 +197,12 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
   )
 }
 
-/** Under a chat failure that is about the key: one click to the control. */
-export function KeyHint() {
+/** Under a chat failure that is about the key: one click to the control. Names the provider when it is known. */
+export function KeyHint({ provider }: { provider?: LlmProvider | null }) {
   const { setPanelOpen } = useApiKey()
   return (
     <p className="text-xs text-fg-muted" data-testid="key-hint">
-      Chat and the LLM reranker need an API key.{" "}
+      {provider ? `This model needs ${withArticle(provider)} API key.` : "Chat and the LLM reranker need an API key."}{" "}
       <button
         type="button"
         className="text-fg underline underline-offset-2"

@@ -30,7 +30,7 @@ CUSTOM = {
 def demo(monkeypatch):
     built: list[str | None] = []
 
-    def make(api_key, base_url=None):
+    def make(api_key, base_url=None, **options):
         built.append(base_url)
         raise AssertionError("no client may be built for a refused endpoint")
 

@@ -101,7 +101,7 @@ def test_rerank_without_the_openrouter_key_names_it(reply, tmp_path):  # noqa: F
             LlmRerankConfig(model="openrouter", openrouter_model=MODEL_ID),
             run_ctx(tmp_path),  # Anthropic and OpenAI keys only
         )
-    assert str(info.value) == llm.NO_KEY["openrouter"]
+    assert str(info.value) == llm.no_key_message("openrouter")
     assert fake.calls == []
 
 
@@ -150,3 +150,23 @@ def test_chat_on_openrouter_without_its_key_names_it(openai_fake, pipeline, inde
     with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
         ask(pipeline, index=index, model="openrouter", openrouter_model=MODEL_ID)
     assert openai_fake.built == []
+
+
+@pytest.mark.parametrize("cls,config_cls,base", STEPS[:2], ids=IDS[:2])
+@pytest.mark.parametrize("model", ["claude-haiku-4-5", "gpt-6-astra", "openrouter"])
+def test_on_the_demo_explain_never_asks_for_a_server_variable(
+    monkeypatch, cls, config_cls, base, model
+):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    exp = cls().explain(config_cls(model=model, openrouter_model=MODEL_ID, **base))
+    assert "_API_KEY" not in exp.settings and "key button" in exp.settings
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    local = cls().explain(config_cls(model=model, openrouter_model=MODEL_ID, **base))
+    assert "Running locally, you can also set" in local.settings
+
+
+def test_the_model_field_carries_each_choices_provider():
+    for config_cls in (ChatConfig, LlmRerankConfig, LlmRewriteConfig):
+        props = config_cls.model_json_schema()["properties"]
+        assert props["model"]["x-providers"]["openrouter"] == "openrouter"
+        assert props["model"]["x-providers"]["custom"] == "openai_compatible"

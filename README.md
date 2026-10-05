@@ -169,16 +169,23 @@ unsafe to share:
 - **No server API keys.** Every key, for every provider, comes only from the request
   header, that is, a key the visitor types in the UI. `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `OPENAI_COMPATIBLE_API_KEY` in the environment
-  or in `.env` are ignored, so visitors can never spend the host's keys.
+  or in `.env` are ignored, so visitors can never spend the host's keys. Key help and
+  missing-key messages on the demo never tell a visitor to set a server variable; running
+  locally, they also name the variable (for example, "Running locally, you can also set
+  OPENROUTER_API_KEY.").
 - **No custom endpoints.** A run or sweep with a chat, LLM rerank or LLM rewrite node set to
   the `custom` model is refused with 403, and so is checking a custom endpoint: the server
   would otherwise send a request to any URL a visitor chose. Behind that, every model call
   checks a custom base URL before it is made: on the demo it must be a public https address
-  on port 443, with no user name or password in it, whose name resolves only to public
-  addresses (not localhost, private, link-local, CGNAT, multicast or reserved ones, in IPv4
-  or IPv6). That client does not follow redirects. Outside demo mode none of this applies,
-  so Ollama and LM Studio on localhost keep working. OpenRouter is not a custom endpoint:
-  its address is fixed, so it works on the demo with a visitor's own key.
+  on port 443, with no `@`, query, fragment or odd character in it, no decimal, octal or
+  hex IPv4 form (fullwidth and other look-alike names are judged in their ASCII form),
+  whose name resolves only to public addresses (not localhost, private, link-local, CGNAT,
+  multicast or reserved ones, in IPv4 or IPv6). That client does not follow redirects and
+  ignores proxy settings. Outside demo mode none of this applies, so Ollama and LM Studio
+  on localhost keep working. The demo also leaves "Custom (OpenAI-compatible)" out of every
+  model choice and the Custom endpoint row out of the key panel, since they could only end
+  in a 403. OpenRouter is not a custom endpoint: its address is fixed, so it works on the
+  demo with a visitor's own key.
 
 `GET /api/settings/app` returns `{"demo": true, "limits": {...}}` so the UI can say so and state the limits.
 
@@ -481,7 +488,8 @@ The same choices apply to the LLM reranker (`llm_rerank`) and the LLM rewrite
 (`llm_rewrite`). OpenRouter is called through the OpenAI SDK at the fixed address
 `https://openrouter.ai/api/v1`, which you never type, and every request carries
 OpenRouter's optional app attribution headers (`HTTP-Referer` and `X-Title: RAG
-Playground`). OpenRouter also serves embedding models, which the Index step may use later.
+Playground`). Any endpoint other than OpenAI's never gets the `OpenAI-Organization` or
+`OpenAI-Project` header, even when `OPENAI_ORG_ID` or `OPENAI_PROJECT_ID` is set.
 
 The custom endpoint's key is optional: a local server such as Ollama
 (`http://localhost:11434/v1`) usually needs none. A missing key for any other provider fails
@@ -699,5 +707,7 @@ and is gone when the tab closes. See
 
 `sources/`, `artifacts/` and `.env` are gitignored. **Clear cache** in the UI deletes the
 cached results and the embedding cache. Nothing leaves your machine except model downloads
-and, when you use `chat`, the question and retrieved chunks sent to the chat model's
-provider (Anthropic, OpenAI, OpenRouter, or the custom endpoint you set).
+and, when you use chat, the LLM reranker or the LLM rewrite, the text that step sends to
+the provider you chose (Anthropic, OpenAI, OpenRouter, or the custom endpoint you set):
+the question and the retrieved chunks for chat and the reranker, and the question and the
+start of the document for the rewrite.

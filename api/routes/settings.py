@@ -17,24 +17,19 @@ from pydantic import BaseModel
 from api import demo, visitor
 from api.credentials import PROVIDERS, redact, resolve_key, server_source
 from providers.endpoints import EndpointRefused, guard_endpoint
-from providers.llm import OPENROUTER_BASE_URL, openai_client_kwargs
+from providers.llm import openai_client_kwargs
 
 router = APIRouter()
 
-NO_KEY = {
-    "anthropic": (
-        "no API key: type one in the UI, set ANTHROPIC_API_KEY for the server "
-        "process, or put it in .env at the repo root"
-    ),
-    "openai": (
-        "no API key: type one in the UI, set OPENAI_API_KEY for the server "
-        "process, or put it in .env at the repo root"
-    ),
-    "openrouter": (
-        "no API key: type one in the UI, set OPENROUTER_API_KEY for the server "
-        "process, or put it in .env at the repo root"
-    ),
-}
+def no_key(provider: str) -> str:
+    """Why there is nothing to check. Only off the demo can a visitor set a
+    server variable or a `.env` entry, so only there are they mentioned."""
+    if demo.enabled():
+        return "no API key: type one in the UI"
+    return (
+        f"no API key: type one in the UI, set {PROVIDERS[provider].env_var} for "
+        "the server process, or put it in .env at the repo root"
+    )
 NO_BASE_URL = "no base URL: send the custom endpoint's base URL to check it"
 REJECTED = "authentication failed: the API key was rejected"
 DEMO_NO_CUSTOM = "custom endpoints are disabled in this hosted demo"
@@ -86,7 +81,7 @@ def check_llm_key(
         except EndpointRefused as exc:
             return {"ok": False, "source": source, "error": str(exc)}
     elif not key:
-        return {"ok": False, "source": source, "error": NO_KEY[provider]}
+        return {"ok": False, "source": source, "error": no_key(provider)}
 
     try:
         if provider == "anthropic":
@@ -98,11 +93,9 @@ def check_llm_key(
             import openai
 
             auth_error = openai.AuthenticationError
-            base_url = {"custom": body.base_url, "openrouter": OPENROUTER_BASE_URL}.get(
-                provider
-            )
+            base_url = body.base_url if provider == "custom" else None
             kwargs: dict[str, Any] = {
-                **openai_client_kwargs(key, base_url),
+                **openai_client_kwargs(key, base_url, openrouter=provider == "openrouter"),
                 "max_retries": 0,
                 "timeout": 15.0,
             }

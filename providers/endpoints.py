@@ -10,6 +10,9 @@ working.
 `check_public_endpoint` accepts only:
 
 - the `https` scheme, no user name or password in the URL, port 443 or none;
+- no `@`, query, fragment, backslash, space or control character anywhere;
+- a host that is not a decimal, octal or hex IPv4 form, judged in its IDNA
+  (ASCII) form, so a fullwidth `localhost` is still `localhost`;
 - a host name other than `localhost` (or `*.localhost`) that resolves, where
   **every** resolved address is public: not loopback, private, link-local,
   CGNAT, multicast, reserved or unspecified. IPv6 addresses that carry an IPv4
@@ -31,6 +34,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 import socket
 from urllib.parse import urlsplit
 
@@ -45,6 +49,9 @@ DEMO_ENDPOINT_ERROR = (
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
+
+#: Whitespace, control characters and backslashes, which parsers disagree on.
+_ODD = re.compile(r"[\s\\\x00-\x1f\x7f]")
 
 
 class EndpointRefused(ValueError):
@@ -82,21 +89,57 @@ def _is_public(ip: IPAddress) -> bool:
     return ip.is_global and not (ip.is_multicast or ip.is_reserved)
 
 
+def _ascii_host(host: str) -> str:
+    """The host as the network sees it: IDNA-encoded, so a fullwidth or other
+    look-alike form is judged by the ASCII name it turns into."""
+    if host.isascii():
+        return host
+    return host.encode("idna").decode("ascii").lower()
+
+
+def _legacy_ipv4(host: str) -> bool:
+    """A decimal, octal, hex or short IPv4 form (`2130706433`, `0177.0.0.1`,
+    `0x7f000001`, `127.1`), which resolvers accept but `ipaddress` does not."""
+    try:
+        socket.inet_aton(host)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def check_public_endpoint(url: str) -> None:
     """Raise `EndpointRefused` unless `url` is a public https address."""
+    url = url or ""
+    # No `@` anywhere (credentials, or `#@` and `?@` tricks), no query or
+    # fragment, no backslash, space or control character: a base URL needs none.
+    if "@" in url or "?" in url or "#" in url or _ODD.search(url):
+        raise EndpointRefused()
     try:
-        parts = urlsplit((url or "").strip())
+        parts = urlsplit(url)
         port = parts.port
     except ValueError:
         raise EndpointRefused() from None
     if parts.scheme.lower() != "https":
         raise EndpointRefused()
-    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+    if parts.username is not None or parts.password is not None:
         raise EndpointRefused()
     if port not in (None, 443):
         raise EndpointRefused()
-    host = (parts.hostname or "").rstrip(".").lower()
+    try:
+        host = _ascii_host((parts.hostname or "").rstrip(".").lower()).rstrip(".")
+    except UnicodeError:
+        raise EndpointRefused() from None
     if not host or host == "localhost" or host.endswith(".localhost"):
+        raise EndpointRefused()
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if not _is_public(literal):
+            raise EndpointRefused()
+        return
+    if _legacy_ipv4(host):
         raise EndpointRefused()
     try:
         addresses = _resolve(host)

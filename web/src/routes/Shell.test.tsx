@@ -218,7 +218,7 @@ describe("Ask with a chat card and no API key", () => {
     await waitFor(() => expect(streams).toHaveLength(2))
     await endRun()
     const notice = await waitFor(() => panel().getByTestId("key-notice"))
-    expect(notice.textContent!.startsWith("Search results are ready. Add a key to get a written answer.")).toBe(true)
+    expect(notice.textContent!.startsWith("Search results are ready. Add an Anthropic key to get a written answer.")).toBe(true)
     expect(within(notice).getByTestId("key-hint")).toBeTruthy()
   })
 
@@ -238,21 +238,43 @@ describe("Ask with a chat card and no API key", () => {
     expect(screen.queryByTestId("key-notice")).toBeNull()
   })
 
-  it("a chat set to OpenRouter needs the OpenRouter key: an Anthropic key alone stops before Chat", async () => {
+  function chatModel(config: Record<string, unknown>) {
     const g = chatSampleGraph(liveRegistry as never, SOURCE)
     const chat = g.nodes.find((n) => n.stage === "use_case")!
-    chat.config = { ...chat.config, model: "openrouter", openrouter_model: "openai/gpt-4o-mini" }
+    chat.config = config
     storeGraph(g)
+  }
+
+  it("a chat set to OpenRouter needs the OpenRouter key: an Anthropic key alone stops before Chat, and the note names it", async () => {
+    chatModel({ model: "openrouter", openrouter_model: "openai/gpt-4o-mini" })
     const body = await ask(true)
+    expect(body.targets).toEqual([chatUpstream()])
+    await waitFor(() => expect(streams).toHaveLength(2))
+    await endRun()
+    const notice = await waitFor(() => panel().getByTestId("key-notice"))
+    expect(notice.textContent!.startsWith("Search results are ready. Add an OpenRouter key to get a written answer.")).toBe(true)
+    expect(within(notice).getByTestId("key-hint").textContent).toContain("OpenRouter API key")
+  })
+
+  it("a chat config without a model uses the default model's key", async () => {
+    settings = { ...NO_SERVER_KEYS, openrouter: "env" }
+    chatModel({})
+    const body = await ask()
+    expect(body.targets).toEqual([chatUpstream()])
+    await waitFor(() => expect(streams).toHaveLength(2))
+    await endRun()
+    expect((await waitFor(() => panel().getByTestId("key-notice"))).textContent).toContain("Add an Anthropic key")
+  })
+
+  it("an unknown model id needs some key: with none set anywhere it stops before Chat", async () => {
+    chatModel({ model: "mystery-model" })
+    const body = await ask()
     expect(body.targets).toEqual([chatUpstream()])
   })
 
   it("a chat set to OpenRouter runs all the way with a server OpenRouter key", async () => {
     settings = { ...NO_SERVER_KEYS, openrouter: "env" }
-    const g = chatSampleGraph(liveRegistry as never, SOURCE)
-    const chat = g.nodes.find((n) => n.stage === "use_case")!
-    chat.config = { ...chat.config, model: "openrouter", openrouter_model: "openai/gpt-4o-mini" }
-    storeGraph(g)
+    chatModel({ model: "openrouter", openrouter_model: "openai/gpt-4o-mini" })
     const body = await ask()
     expect(body.targets).toBeUndefined()
   })

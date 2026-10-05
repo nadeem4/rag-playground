@@ -130,6 +130,65 @@ def test_a_name_that_does_not_resolve_is_refused(resolve):
     refused("https://nowhere.example/v1")
 
 
+@pytest.fixture
+def answers_public(monkeypatch):
+    """A resolver that says every name is public, so only the URL rules can refuse."""
+    asked: list[str] = []
+
+    def fake(host: str) -> list[str]:
+        asked.append(host)
+        return [PUBLIC_V4]
+
+    monkeypatch.setattr(endpoints, "_resolve", fake)
+    return asked
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://2130706433/v1",  # decimal 127.0.0.1
+        "https://017700000001/v1",  # octal
+        "https://0177.0.0.1/v1",  # octal octet
+        "https://0x7f000001/v1",  # hex
+        "https://0x7f.0.0.1/v1",
+        "https://127.1/v1",  # short form
+        "https://１２７.０.０.１/v1",  # fullwidth 127.0.0.1
+        "https://ｌｏｃａｌｈｏｓｔ/v1",  # fullwidth localhost
+    ],
+)
+def test_numeric_and_fullwidth_hosts_are_refused_without_dns(answers_public, url):
+    refused(url)
+    assert answers_public == []
+
+
+def test_an_idna_host_is_resolved_in_its_ascii_form(answers_public):
+    check_public_endpoint("https://bücher.example/v1")
+    assert answers_public == ["xn--bcher-kva.example"]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://api.example.com#@127.0.0.1/v1",
+        "https://api.example.com?@127.0.0.1/v1",
+        "https://api.example.com/v1#frag",
+        "https://api.example.com/v1?x=1",
+        "https://api.example.com\\@127.0.0.1/v1",
+        "https://api.example.com/v1/@127.0.0.1",
+        "https://api.example .com/v1",
+        "https://api.example.com/v1\n",
+    ],
+)
+def test_tricks_with_at_signs_queries_and_odd_characters_are_refused(answers_public, url):
+    refused(url)
+
+
+def test_a_dns_name_pointed_at_loopback_is_refused(resolve):
+    resolve.table["loop.attacker.example"] = ["127.0.0.1", "::1"]
+    refused("https://loop.attacker.example/v1")
+    assert resolve.asked == ["loop.attacker.example"]
+
+
 # --- the addresses ------------------------------------------------------------
 
 

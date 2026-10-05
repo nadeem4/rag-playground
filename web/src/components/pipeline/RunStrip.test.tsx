@@ -32,6 +32,12 @@ const seg = (strip: HTMLElement, id: string) => strip.querySelector(`[data-segme
 const bar = (strip: HTMLElement, id: string) => within(seg(strip, id)).getByTestId("strip-bar")
 
 describe("the run strip", () => {
+  it("keeps the step labels whole: the list has a floor width, so the run line drops below it", () => {
+    const strip = show(segs("done", "done", "done", "done", "done"))
+    expect(within(strip).getByRole("list").className).toContain("min-w-[280px]")
+    for (const li of within(strip).getAllByRole("listitem")) expect(li.lastElementChild!.className).not.toContain("break-words")
+  })
+
   it("before anything runs: five hairlines with their labels, in column order, and no line", () => {
     const strip = show(segs())
     const items = within(strip).getAllByRole("listitem")

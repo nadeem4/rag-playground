@@ -131,7 +131,7 @@ export function RunStrip({ segments, line }: { segments: StripSegment[]; line: S
       <ol
         aria-label="Index steps"
         style={{ minWidth: `${segments.length * 3.25}rem` }}
-        className="m-0 grid flex-1 auto-cols-fr grid-flow-col gap-1 p-0"
+        className="m-0 grid min-w-[280px] flex-1 auto-cols-fr grid-flow-col gap-1 p-0"
       >
         {segments.map((s) => (
           <li
@@ -146,7 +146,7 @@ export function RunStrip({ segments, line }: { segments: StripSegment[]; line: S
                 <span data-testid="strip-half" className="absolute inset-y-0 left-0 hidden w-1/2 bg-primary motion-reduce:block" />
               ) : null}
             </span>
-            <span aria-hidden className={cn("text-2xs break-words", s.state === "failed" ? "text-danger" : "text-fg-muted")}>
+            <span aria-hidden className={cn("text-2xs", s.state === "failed" ? "text-danger" : "text-fg-muted")}>
               {s.title}
               {s.state === "failed" ? " failed" : null}
             </span>

@@ -76,7 +76,8 @@ no auth, so only do that on a network you trust.
 The playground opens on **Home** (`/`). It says what the playground shows and gives Build,
 Compare and Evaluate a section each, with a short clip of the page. Each **Try it yourself**
 button opens its page with the first sample already loaded, so the first click runs something
-real. If you already have a document, it is kept. See [Home](#home).
+real. If you already have a document, it is kept. You can also upload your own PDF from Home.
+See [Home](#home).
 
 The column on the left of **Build** is the index pipeline: Upload, Parse, Clean, Chunk and
 Index, one card each with its own settings. **Build the index** runs those five steps, and
@@ -179,12 +180,19 @@ unsafe to share:
 
 Home (`/`) is the first tab. It has:
 
-- the promise, a **Try it on a sample** button and three facts: no sign in, samples or your
-  own PDF, and a key only for chat answers;
+- the promise, a **Try a sample** button, a **Use your own PDF** button, a quiet **See how it
+  works** link and three facts: no sign in, samples or your own PDF, and a key only for chat
+  answers. **Try a sample** loads the first sample if you have no document, then opens Build.
+  **Use your own PDF** opens a file picker; once the upload is done it opens Build, and if the
+  upload is refused it says why under the buttons. One line under the buttons says what
+  happens to your file: on the demo it gives the page and size limits and how many hours
+  until the file is deleted, and running locally it says the file stays on your machine;
 - the six steps you can look inside, from Document to Ask;
 - one section each for **Build**, **Compare** and **Evaluate**, with a short clip and a
   **Try it yourself** button. With no document yet, the button loads the first sample, then
-  opens the page;
+  opens the page. Under the button, one line names the document the page will use (the first
+  sample, the sample you loaded, or your own file), or says your file is no longer there. Its
+  **Change** button opens the Document menu in the header;
 - links to **Read**, running it on your machine and the source, and a footer.
 
 The clips are muted and loop. Each has a Pause and Play button, and with reduced motion

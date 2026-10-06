@@ -395,14 +395,17 @@ export function NodeCard(p: NodeCardProps) {
           {/* The explicit open and close, on the title line so it never wraps away.
               It follows selection, as clicking does. The Document card has nothing to open. */}
           {isSource ? null : (
+            // The word Settings shows, so a visitor sees the card holds settings to change; open or closed is aria-expanded.
             <Button
               variant="ghost"
-              size="icon"
-              aria-label={`${p.selected ? "Collapse" : "Expand"} ${p.title}`}
+              size="sm"
+              className="px-1 text-fg-muted"
+              aria-label={`${p.title} settings`}
               aria-expanded={p.selected}
               aria-controls={`${id}-options`}
               onClick={toggle}
             >
+              Settings
               <svg
                 aria-hidden
                 width="16"

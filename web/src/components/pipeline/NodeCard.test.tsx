@@ -244,9 +244,11 @@ describe("click to close, and scroll into view", () => {
     expect(raised.className).not.toContain("hover:border-field-border")
   })
 
-  it("the chevron at the end of the head says Expand when closed and Collapse when open", () => {
+  it("the button at the end of the head reads Settings, is named for its step, and says open or closed through aria-expanded", () => {
     const flat = renderCard({ selected: false })
-    const expand = within(flat).getByRole("button", { name: "Expand Chunk" })
+    const expand = within(flat).getByRole("button", { name: "Chunk settings" })
+    // The word shows, so a visitor sees the card holds settings; the name says the same words.
+    expect(expand.textContent).toBe("Settings")
     expect(expand.getAttribute("aria-expanded")).toBe("false")
     expect(expand.closest("header")).not.toBeNull()
     const icon = expand.querySelector("svg")!
@@ -254,11 +256,10 @@ describe("click to close, and scroll into view", () => {
     expect(icon.getAttribute("class")).toContain("duration-(--dur-fast)")
     expect(icon.getAttribute("class")).toContain("motion-reduce:transition-none")
     expect(icon.getAttribute("class")).not.toContain("rotate-180")
-    expect(within(flat).queryByRole("button", { name: "Collapse Chunk" })).toBeNull()
     cleanup()
 
     const open = renderCard({ selected: true })
-    const collapse = within(open).getByRole("button", { name: "Collapse Chunk" })
+    const collapse = within(open).getByRole("button", { name: "Chunk settings" })
     expect(collapse.getAttribute("aria-expanded")).toBe("true")
     expect(collapse.querySelector("svg")!.getAttribute("class")).toContain("rotate-180")
   })
@@ -267,7 +268,7 @@ describe("click to close, and scroll into view", () => {
     const onSelect = vi.fn()
     const onDeselect = vi.fn()
     renderCard({ selected: true, onSelect, onDeselect })
-    fireEvent.click(screen.getByRole("button", { name: "Collapse Chunk" }))
+    fireEvent.click(screen.getByRole("button", { name: "Chunk settings" }))
     expect(onDeselect).toHaveBeenCalledTimes(1)
     expect(onSelect).not.toHaveBeenCalled()
     cleanup()
@@ -275,20 +276,20 @@ describe("click to close, and scroll into view", () => {
     const onSelect2 = vi.fn()
     const onDeselect2 = vi.fn()
     renderCard({ selected: false, onSelect: onSelect2, onDeselect: onDeselect2 })
-    fireEvent.click(screen.getByRole("button", { name: "Expand Chunk" }))
+    fireEvent.click(screen.getByRole("button", { name: "Chunk settings" }))
     expect(onSelect2).toHaveBeenCalledTimes(1)
     expect(onDeselect2).not.toHaveBeenCalled()
   })
 
   it("the chevron follows selection: a card open only for a field error still reads Expand", () => {
     const card = renderCard({ selected: false, fieldErrors: { chunk_size: ["Too small"] } })
-    const chevron = within(card).getByRole("button", { name: "Expand Chunk" })
+    const chevron = within(card).getByRole("button", { name: "Chunk settings" })
     expect(chevron.getAttribute("aria-expanded")).toBe("false")
   })
 
   it("the chevron sits on the title row, not in the group that wraps", () => {
     const card = renderCard({ selected: false, onRemove: vi.fn(), result: { id: "chunk", status: "failed", error: "x" } })
-    const chevron = within(card).getByRole("button", { name: "Expand Chunk" })
+    const chevron = within(card).getByRole("button", { name: "Chunk settings" })
     const row = chevron.parentElement!
     expect(row.querySelector("h3")).not.toBeNull()
     expect(row.contains(within(card).getByTestId("status-chip"))).toBe(false)

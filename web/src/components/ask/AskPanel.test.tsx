@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
+import searchJson from "@/api/fixtures/output.search.json"
+import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
@@ -132,11 +134,35 @@ describe("finding the answer", () => {
     expect(into.mock.contexts[0]).toBe(screen.getByTestId("ask-answer"))
   })
 
-  it("once there is an answer, says the settings below are there to play with", () => {
-    setup({ results: ANSWERED })
-    expect(screen.getByText(HINT)).toBeTruthy()
-    cleanup()
+  it("right under a fresh answer, invites a change of search or reranker, and its button opens the settings and goes to them", async () => {
+    const into = vi.fn()
+    HTMLElement.prototype.scrollIntoView = into
+    const base = globalThis.fetch
+    const payloads: Record<string, unknown> = { ret1: hybridJson, out1: searchJson }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const m = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+        return m && m[1] in payloads ? new Response(JSON.stringify(payloads[m[1]]), { status: 200 }) : base(url, init)
+      }),
+    )
+    setup({ results: { ...ANSWERED, retrieve: { id: "retrieve", status: "done", artifact_id: "ret1" } } })
+    const invite = await screen.findByTestId("ask-invite")
+    expect(within(screen.getByTestId("ask-answer")).getByTestId("ask-invite")).toBe(invite)
+    expect(invite.textContent).toBe("Try another search or a reranker, and ask again.Change settings")
+    expect(screen.queryByRole("button", { name: /^Reranker/ })).toBeNull()
+    fireEvent.click(within(invite).getByRole("button", { name: "Change settings" }))
+    expect(screen.getByRole("button", { name: /^Reranker/ })).toBeTruthy()
+    expect(into).toHaveBeenCalled()
+    expect(into.mock.contexts.at(-1)).toBe(screen.getByTestId("ask-settings"))
+  })
+
+  it("says nothing of the kind before an answer, or over an answer that is out of date", () => {
     setup({ results: INDEX_DONE })
+    expect(screen.queryByTestId("ask-invite")).toBeNull()
+    cleanup()
+    setup({ results: ANSWERED, stale: new Set(["use_case"]) })
+    expect(screen.queryByTestId("ask-invite")).toBeNull()
     expect(screen.queryByText(HINT)).toBeNull()
   })
 
@@ -247,7 +273,10 @@ describe("the question box", () => {
 
   it("says why the results are gone when the settings moved past them", () => {
     setup({ results: { ...INDEX_DONE, use_case: { id: "use_case", status: "done", artifact_id: "out1" } }, stale: new Set(["use_case"]) })
-    expect(screen.getByTestId("stale-results").textContent).toBe("The settings changed since the last Ask. Press Ask to see the new results.")
+    expect(screen.getByTestId("stale-results").textContent).toBe("Settings changed. Ask again to see what changed.")
+    // In the out-of-date tone, and the Ask button carries a soft ring until it is pressed.
+    expect(screen.getByTestId("stale-results").className.split(/\s+/)).toContain("bg-stale-wash")
+    expect(askButton().className.split(/\s+/)).toContain("ring-accent-wash")
   })
 
   it("says nothing about stale results when the results are fresh or there are none", () => {

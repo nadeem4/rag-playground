@@ -160,9 +160,11 @@ export interface AskResultsProps {
   stale?: boolean
   /** The sample's question set, for the finding sentence; empty for an upload. */
   questions?: readonly SampleQuestion[]
+  /** A line shown right under a fresh answer's headline, inviting the reader to change a setting and ask again. */
+  invite?: ReactNode
 }
 
-export const STALE_LINE = "The settings changed since the last Ask. Press Ask to see the new results."
+export const STALE_LINE = "Settings changed. Ask again to see what changed."
 
 /** The slope's draw: 360 ms on `--ease-in` (spec section 6). */
 export function drawTiming(): { duration: number; easing: string } {
@@ -185,7 +187,7 @@ export function resetMotionMemory(): void {
   slopesDrawn.clear()
 }
 
-export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [] }: AskResultsProps) {
+export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [], invite }: AskResultsProps) {
   const { query, retrieve, rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
   // The reranker's run note is the sub line; its meta is fetched once and What it did reads the same cache.
@@ -254,7 +256,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
   return (
     <section aria-label="Results" className="flex flex-col gap-3 border-t border-hairline pt-3">
       {stale ? (
-        <p data-testid="stale-results" className="text-xs text-fg-muted">
+        <p data-testid="stale-results" className="rounded-control bg-stale-wash px-2 py-1 text-xs text-stale">
           {STALE_LINE}
         </p>
       ) : null}
@@ -266,6 +268,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
           {sub}
         </p>
       ) : null}
+      {kept && !stale ? invite : null}
       {lists}
     </section>
   )

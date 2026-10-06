@@ -78,6 +78,9 @@ Index, one card each with its own settings. The Document card only says which do
 in use.
 
 - **Build the index** runs the steps. Each card also has its own **Run**.
+- **Settings** on a card opens its settings. Once the index is built, the line above the
+  cards invites you to change a step, such as the chunk size, and build again, and points
+  to Compare for several settings side by side.
 - Selecting a card shows its output in the main pane beside the column: the parsed
   elements with their types and pages, a diff of what each cleaner removed, the chunk
   boundaries drawn over the text, or the index contents. Until a card is selected, the
@@ -150,6 +153,11 @@ The panel holds the question and three blocks of settings, summed up in one reci
 question. When the answer arrives, the panel scrolls to it. The sample's questions and the
 settings come after the answer, so you can change a setting and ask again to see the pieces
 move. Picking one of the sample's questions takes you back up to the question box.
+
+- Under a fresh answer, a line reads "Try another search or a reranker, and ask again."
+  Its **Change settings** button opens the settings and scrolls to them.
+- Change a setting and an amber note reads "Settings changed. Ask again to see what
+  changed." The Ask button gets a soft ring until you press it.
 
 - With a reranker on, the panel shows the search order against the reranked order, joined
   by a slope: one line per kept piece, rising in the accent colour and falling in grey.

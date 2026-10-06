@@ -165,12 +165,15 @@ export function AskDock({
   dock,
   count,
   building = false,
+  hideButton = false,
   measure,
   children,
 }: {
   dock: Dock
   /** True while the index builds: the round button is greyed out and Ask cannot open until it is done. */
   building?: boolean
+  /** True while another sheet (a step's output on a phone) is open: one sheet at a time. */
+  hideButton?: boolean
   /** How many results the last question found; shown on the round button once a question has been asked. */
   count?: number
   /** Build's width in px, so the panel never leaves the main pane under 360 px. */
@@ -375,7 +378,7 @@ export function AskDock({
       <button
         ref={fabRef}
         type="button"
-        hidden={open}
+        hidden={open || hideButton}
         aria-expanded={false}
         aria-controls="ask-dock"
         disabled={building}

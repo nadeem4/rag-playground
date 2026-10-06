@@ -78,13 +78,15 @@ Index, one card each with its own settings. The Document card only says which do
 in use.
 
 - **Build the index** runs the steps. Each card also has its own **Run**.
-- **Settings** on a card opens its settings. Once the index is built, the line above the
+- The **gear** on a card opens its settings. Once the index is built, the line above the
   cards invites you to change a step, such as the chunk size, and build again, and points
   to Compare for several settings side by side.
-- Selecting a card shows its output in the main pane beside the column: the parsed
-  elements with their types and pages, a diff of what each cleaner removed, the chunk
-  boundaries drawn over the text, or the index contents. Until a card is selected, the
-  main pane says to pick a step.
+- The **output** button on a card (a panel opening to the right), or a click on its result
+  line, shows the step's output: the parsed elements with their types and pages, a diff of
+  what each cleaner removed, the chunk boundaries drawn over the text, or the index
+  contents. On a laptop or tablet it shows in the pane beside the cards, and the button
+  stays lit for the step on show; clicking a card's title shows it there too. On a phone
+  it opens in a sheet over the cards, with a close button.
 - Results are cached by recipe, so changing the chunker never parses the PDF again.
 - Each card has an info button that says what the step is for, how the chosen strategy
   works and what it will do with your settings. Every setting has its own info button too.

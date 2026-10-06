@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode, type Ref } from "react"
-import { Info, X } from "lucide-react"
+import { Info, PanelRightOpen, Settings, X } from "lucide-react"
 import { Popover } from "radix-ui"
 
 import { needsKey } from "@/api/apiKey"
@@ -56,6 +56,12 @@ export interface NodeCardProps {
   onDeselect?: () => void
   onTransform: (name: string) => void
   onConfig: (config: Record<string, unknown>) => void
+  /** Show this step's output: in the pane beside the cards, or in a sheet on a phone. No icon without it. */
+  onShowOutput?: () => void
+  /** The gear: open or close the settings only. Falls back to the head's open and close. */
+  onSettings?: () => void
+  /** True while this step's output is the one on show (desktop's pane). */
+  showing?: boolean
   onRun: (force: boolean) => void
   onRemove?: () => void
   /** Extra actions in the footer (Sweep). */
@@ -149,12 +155,36 @@ function EmptyParse({ transform, config, onConfig }: { transform: string; config
 }
 
 /** The outcome on one line, its headline number in bold and the other numbers in mono. */
-function ResultLine({ outcome, testId = "step-summary", ref }: { outcome: Outcome; testId?: string; ref?: Ref<HTMLParagraphElement> }) {
+function ResultLine({
+  outcome,
+  testId = "step-summary",
+  ref,
+  onShow,
+}: {
+  outcome: Outcome
+  testId?: string
+  ref?: Ref<HTMLParagraphElement>
+  /** A tap or click on the line shows the output too; the output icon is the keyboard's way in. */
+  onShow?: () => void
+}) {
   const text = outcomeText(outcome)
   const head = fmt(outcome.headline)
   const at = outcome.lead.lastIndexOf(head)
   return (
-    <p ref={ref} data-testid={testId} title={text} className="m-0 mt-1 truncate text-sm text-fg">
+    <p
+      ref={ref}
+      data-testid={testId}
+      title={text}
+      onClick={
+        onShow
+          ? (e) => {
+              e.stopPropagation()
+              onShow()
+            }
+          : undefined
+      }
+      className={cn("m-0 mt-1 truncate text-sm text-fg", onShow && "cursor-pointer hover:underline hover:underline-offset-4")}
+    >
       {at < 0 ? (
         <MonoNumbers text={text} />
       ) : (
@@ -360,6 +390,7 @@ export function NodeCard(p: NodeCardProps) {
       data-node-id={p.node.id}
       data-look={isSource ? undefined : shown.look}
       aria-current={p.selected ? "true" : undefined}
+      data-showing={p.showing ? "true" : undefined}
       onClick={p.onSelect}
       className={cn(
         "relative flex min-w-0 scroll-mt-3 flex-col rounded-panel border border-hairline p-3",
@@ -368,6 +399,8 @@ export function NodeCard(p: NodeCardProps) {
           ? "z-10 bg-surface-raised shadow-raised"
           : "bg-surface transition-colors duration-(--dur-fast) hover:border-field-border hover:bg-surface-raised",
         p.explainOpen && "outline-1 -outline-offset-1 outline-fg-muted outline-solid",
+        // The step whose output is on show beside the cards.
+        p.showing && !p.explainOpen && "border-primary outline-1 -outline-offset-1 outline-primary outline-solid",
       )}
     >
       <div ref={sentinelRef} aria-hidden className="h-0" />
@@ -421,37 +454,24 @@ export function NodeCard(p: NodeCardProps) {
               </span>
             </button>
           </h3>
-          {/* The explicit open and close, on the title line so it never wraps away.
-              It follows selection, as clicking does. The Document card has nothing to open. */}
+          {/* The gear opens and closes the settings, on the title line so it never wraps away.
+              The Document card has nothing to open. */}
           {isSource ? null : (
-            // The word Settings shows, so a visitor sees the card holds settings to change; open or closed is aria-expanded.
             <Button
               variant="ghost"
-              size="sm"
-              className="px-1 text-fg-muted"
+              size="icon"
+              className="text-fg-muted"
               aria-label={`${p.title} settings`}
+              title={`${p.title} settings`}
               aria-expanded={p.selected}
               aria-controls={`${id}-options`}
-              onClick={toggle}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (p.onSettings) p.onSettings()
+                else toggle(e)
+              }}
             >
-              Settings
-              <svg
-                aria-hidden
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={cn(
-                  "size-[16px] transition-transform duration-(--dur-fast) motion-reduce:transition-none",
-                  p.selected && "rotate-180 motion-reduce:rotate-0",
-                )}
-              >
-                <path d="M4 6l4 4 4-4" />
-              </svg>
+              <Settings aria-hidden strokeWidth={1.75} />
             </Button>
           )}
         </div>
@@ -470,6 +490,22 @@ export function NodeCard(p: NodeCardProps) {
                 </span>
               )}
               {shown.duration !== undefined ? <span className="font-mono text-xs text-fg">{fmtMs(shown.duration)}</span> : null}
+              {p.onShowOutput ? (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label={`See ${p.title} output`}
+                  title={`See ${p.title} output`}
+                  aria-pressed={Boolean(p.showing)}
+                  className={cn(p.showing && "border-primary bg-accent-wash text-primary hover:bg-accent-wash")}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    p.onShowOutput!()
+                  }}
+                >
+                  <PanelRightOpen aria-hidden strokeWidth={1.75} />
+                </Button>
+              ) : null}
               <Popover.Trigger asChild>
                 <Button
                   variant="outline"
@@ -521,7 +557,7 @@ export function NodeCard(p: NodeCardProps) {
       )}
 
       {/* Closed, the result shows here; open, it shows under the Run button instead. */}
-      {ready?.outcome && !isSource && !open ? <ResultLine outcome={ready.outcome} /> : null}
+      {ready?.outcome && !isSource && !open ? <ResultLine outcome={ready.outcome} onShow={p.onShowOutput} /> : null}
       {ready && p.node.stage === "chunk" ? <ChunkBar data={ready.data} /> : null}
       {ready?.outcome && p.node.stage === "parse" && ready.outcome.headline === 0 && !p.stale ? (
         <EmptyParse transform={p.node.transform} config={p.node.config} onConfig={p.onConfig} />
@@ -634,7 +670,7 @@ export function NodeCard(p: NodeCardProps) {
         {p.actions}
       </footer>
       {/* The outcome again, right under the buttons, so it shows where Run was pressed. */}
-      {ready?.outcome ? <ResultLine ref={resultRef} outcome={ready.outcome} testId="run-result" /> : null}
+      {ready?.outcome ? <ResultLine ref={resultRef} outcome={ready.outcome} testId="run-result" onShow={p.onShowOutput} /> : null}
       {completed ? (
         <WhatItDid stage={p.node.stage} type={info?.output} artifactId={completed} previousId={p.previousArtifactId} stale={p.stale} />
       ) : null}

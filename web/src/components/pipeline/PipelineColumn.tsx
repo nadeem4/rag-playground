@@ -38,6 +38,12 @@ export interface PipelineColumnProps {
   missingSource?: boolean
   /** A card's id, or null when the selected card's head closes it. */
   onSelect: (id: string | null) => void
+  /** The step whose output is on show beside the cards (desktop), if any. */
+  showing?: string | null
+  /** Show a step's output: the output icon and the result line. */
+  onShowOutput?: (id: string) => void
+  /** Open or close a card's settings only: the gear. */
+  onSettings?: (id: string) => void
   onTransform: (id: string, transform: string) => void
   onConfig: (id: string, config: Record<string, unknown>) => void
   onRun: (id: string, force: boolean) => void
@@ -116,6 +122,9 @@ export function PipelineColumn(p: PipelineColumnProps) {
               missing={node.stage === "source" && p.missingSource}
               onSelect={() => p.onSelect(node.id)}
               onDeselect={() => p.onSelect(null)}
+              showing={p.showing === node.id}
+              onShowOutput={p.onShowOutput ? () => p.onShowOutput!(node.id) : undefined}
+              onSettings={p.onSettings ? () => p.onSettings!(node.id) : undefined}
               onTransform={(t) => p.onTransform(node.id, t)}
               onConfig={(c) => p.onConfig(node.id, c)}
               onRun={(force) => p.onRun(node.id, force)}

@@ -245,24 +245,19 @@ describe("click to close, and scroll into view", () => {
     expect(raised.className).not.toContain("hover:border-field-border")
   })
 
-  it("the button at the end of the head reads Settings, is named for its step, and says open or closed through aria-expanded", () => {
+  it("the gear is named for its step and says open or closed through aria-expanded", () => {
     const flat = renderCard({ selected: false })
     const expand = within(flat).getByRole("button", { name: "Chunk settings" })
-    // The word shows, so a visitor sees the card holds settings; the name says the same words.
-    expect(expand.textContent).toBe("Settings")
+    // A gear, with the same words as its tooltip: an icon like the output and info buttons beside it.
+    expect(expand.textContent).toBe("")
+    expect(expand.getAttribute("title")).toBe("Chunk settings")
     expect(expand.getAttribute("aria-expanded")).toBe("false")
     expect(expand.closest("header")).not.toBeNull()
-    const icon = expand.querySelector("svg")!
-    expect(icon.getAttribute("width")).toBe("16")
-    expect(icon.getAttribute("class")).toContain("duration-(--dur-fast)")
-    expect(icon.getAttribute("class")).toContain("motion-reduce:transition-none")
-    expect(icon.getAttribute("class")).not.toContain("rotate-180")
+    expect(expand.querySelector("svg")).not.toBeNull()
     cleanup()
 
     const open = renderCard({ selected: true })
-    const collapse = within(open).getByRole("button", { name: "Chunk settings" })
-    expect(collapse.getAttribute("aria-expanded")).toBe("true")
-    expect(collapse.querySelector("svg")!.getAttribute("class")).toContain("rotate-180")
+    expect(within(open).getByRole("button", { name: "Chunk settings" }).getAttribute("aria-expanded")).toBe("true")
   })
 
   it("the chevron toggles the card the way the head does", () => {
@@ -685,5 +680,44 @@ describe("a parse that found no text", () => {
     card("docling", { do_ocr: false }, "empty4", { stale: true })
     await act(async () => {})
     expect(screen.queryByTestId("empty-parse")).toBeNull()
+  })
+})
+
+describe("the output icon", () => {
+  it("is on every step card with a result line: See Chunk output, pressed while the step is on show", async () => {
+    payloads = { out1: chunkRecursive }
+    const onShowOutput = vi.fn()
+    const card = renderCard({ result: done("out1"), onShowOutput, showing: true })
+    const icon = within(card).getByRole("button", { name: "See Chunk output" })
+    expect(icon.getAttribute("title")).toBe("See Chunk output")
+    expect(icon.getAttribute("aria-pressed")).toBe("true")
+    expect(card.dataset.showing).toBe("true")
+    fireEvent.click(icon)
+    expect(onShowOutput).toHaveBeenCalledTimes(1)
+    // The result line is a second way in.
+    fireEvent.click(await within(card).findByTestId("step-summary"))
+    expect(onShowOutput).toHaveBeenCalledTimes(2)
+  })
+
+  it("the gear opens the settings without showing the output, and the icon shows the output without opening the settings", () => {
+    const onShowOutput = vi.fn()
+    const onSettings = vi.fn()
+    const onSelect = vi.fn()
+    const card = renderCard({ onShowOutput, onSettings, onSelect })
+    fireEvent.click(within(card).getByRole("button", { name: "Chunk settings" }))
+    expect(onSettings).toHaveBeenCalledTimes(1)
+    expect(onShowOutput).not.toHaveBeenCalled()
+    fireEvent.click(within(card).getByRole("button", { name: "See Chunk output" }))
+    expect(onShowOutput).toHaveBeenCalledTimes(1)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it("is not on the Document card, and not pressed when another step is on show", () => {
+    const card = renderCard({ onShowOutput: vi.fn(), showing: false })
+    expect(within(card).getByRole("button", { name: "See Chunk output" }).getAttribute("aria-pressed")).toBe("false")
+    cleanup()
+    const source = initialGraph(R).nodes.find((n) => n.stage === "source")!
+    const doc = renderCard({ node: source, title: "Document", onShowOutput: vi.fn() })
+    expect(within(doc).queryByRole("button", { name: /^See .* output$/ })).toBeNull()
   })
 })

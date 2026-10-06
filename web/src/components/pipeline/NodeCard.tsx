@@ -57,8 +57,6 @@ export interface NodeCardProps {
   onConfig: (config: Record<string, unknown>) => void
   onRun: (force: boolean) => void
   onRemove?: () => void
-  /** Show the node id beside the title: stacked cards need telling apart. */
-  showId?: boolean
   /** Extra actions in the footer (Sweep). */
   actions?: ReactNode
   /** Plan I-12: this card's explanation for its CURRENT settings. */
@@ -394,7 +392,6 @@ export function NodeCard(p: NodeCardProps) {
               </span>
             </button>
           </h3>
-          {p.showId ? <span className="font-mono text-xs whitespace-nowrap text-fg-muted">{p.node.id}</span> : null}
           {/* The explicit open and close, on the title line so it never wraps away.
               It follows selection, as clicking does. The Document card has nothing to open. */}
           {isSource ? null : (
@@ -460,7 +457,7 @@ export function NodeCard(p: NodeCardProps) {
               variant="ghost"
               size="icon"
               className="h-row-compact w-[24px]"
-              aria-label={`Remove ${p.node.id}`}
+              aria-label={`Remove ${p.title}, ${plain}`}
               title="Remove this step"
               onClick={(e) => {
                 e.stopPropagation()

@@ -138,7 +138,7 @@ export const api = {
   /** Plan I-31: a filled-in example set to start from. */
   questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,
   /** Plan I-31: the set stored against this document. 404 when there is none. */
-  questionSet: (source: string) => request<StoredQuestionSet>(`/sources/${sha(source)}/questions`),
+  questionSet: (source: string) => request<StoredQuestionSet | null>(`/sources/${sha(source)}/questions`),
   /** Plan I-31: store a set against this document, and check every gold passage against its text. 403 in demo mode. */
   uploadQuestionSet: (source: string, file: File) => {
     const form = new FormData()

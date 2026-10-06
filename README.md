@@ -14,7 +14,7 @@ so you can change one setting and see what it does.
 ## What you can do
 
 - **Build.** Run the index pipeline one card at a time: Document, Parse, Clean, Chunk and
-  Index. The Document bar at the top of every page picks the PDF, and the Ask panel docked
+  Index. The Document bar at the top of Build, Compare and Evaluate picks the PDF, and the Ask panel docked
   beside the cards asks a question of the index you just built.
 - **Ask.** Search with dense, keyword or hybrid retrieval, rewrite the question first if
   you like, and rerank the results. A slope shows how the reranker moved each piece. Chat

@@ -19,7 +19,8 @@ def test_upload_is_idempotent(client, dirs):
     a = upload_pdf(client)
     b = upload_pdf(client)
     assert a == b
-    assert len([p for p in dirs["sources"].iterdir() if p.is_file()]) == 1
+    # One stored file for the one upload (the samples seeded at startup aside).
+    assert len([p for p in dirs["sources"].iterdir() if p.is_file() and p.name.startswith(a["sha"])]) == 1
 
 
 def test_empty_upload_is_400(client):
@@ -77,7 +78,7 @@ def test_sample_is_idempotent(client, dirs):
     a = client.post("/api/sources/sample").json()
     b = client.post("/api/sources/sample").json()
     assert a == b
-    assert len([p for p in dirs["sources"].iterdir() if p.is_file()]) == 1
+    assert len([p for p in dirs["sources"].iterdir() if p.is_file() and p.name.startswith(a["sha"])]) == 1
 
 
 def test_sample_by_name_registers_that_sample(client, dirs):

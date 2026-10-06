@@ -125,7 +125,7 @@ export function DocumentControl() {
                 back.focus()
               }
             }}
-            className="menu-drop z-10 flex max-h-[min(560px,calc(100dvh-96px))] w-[min(360px,calc(100vw-32px))] flex-col gap-1 overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-2 text-fg shadow-sheet"
+            className="menu-drop z-50 flex max-h-[min(560px,calc(100dvh-96px))] w-[min(360px,calc(100vw-32px))] flex-col gap-1 overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-2 text-fg shadow-sheet"
           >
             {missing ? (
               <p role="status" className="rounded-control bg-stale-wash p-2 text-xs text-stale">

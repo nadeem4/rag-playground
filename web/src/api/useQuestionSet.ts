@@ -46,21 +46,20 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
     setSet(null)
     setRep(null)
     setTabOnly(false)
-    api.questionSet(sourceSha).then(
-      (s) => {
-        if (!live) return
-        setSet(s)
-        setLoading(false)
-      },
-      () => {
-        // No set on the server, or no route yet: this tab may still hold one.
-        if (!live) return
-        const held = readTabSet(sourceSha)
-        setSet(held)
-        setTabOnly(held !== null)
-        setLoading(false)
-      },
-    )
+    // No set on the server (null), or the document cannot be read: this tab may still hold one.
+    const fromTab = () => {
+      if (!live) return
+      const held = readTabSet(sourceSha)
+      setSet(held)
+      setTabOnly(held !== null)
+      setLoading(false)
+    }
+    api.questionSet(sourceSha).then((s) => {
+      if (!live) return
+      if (!s) return fromTab()
+      setSet(s)
+      setLoading(false)
+    }, fromTab)
     return () => {
       live = false
     }

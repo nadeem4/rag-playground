@@ -303,16 +303,19 @@ def test_a_set_is_stored_against_the_document_and_read_back(client, dirs):
     }
 
 
-def test_no_set_yet_is_a_404(client):
+def test_no_set_yet_is_an_empty_answer_not_an_error(client):
+    # Evaluate asks on every visit; "none yet" is normal, so it is no 404 in the console.
     sha = upload_doc(client)["sha"]
-    assert client.get(f"/api/sources/{sha}/questions").status_code == 404
+    r = client.get(f"/api/sources/{sha}/questions")
+    assert r.status_code == 200
+    assert r.json() is None
 
 
 def test_a_set_can_be_removed(client, dirs):
     sha = upload_doc(client)["sha"]
     post_set(client, sha, one_json(BOUNDARY))
     assert client.delete(f"/api/sources/{sha}/questions").status_code == 204
-    assert client.get(f"/api/sources/{sha}/questions").status_code == 404
+    assert client.get(f"/api/sources/{sha}/questions").json() is None
     assert not (dirs["sources"] / "questions" / f"{sha}.json").exists()
     # removing what is not there is not an error
     assert client.delete(f"/api/sources/{sha}/questions").status_code == 204
@@ -337,7 +340,7 @@ def test_an_unreadable_file_is_a_400_naming_the_row(client):
     r = post_set(client, sha, "question,gold_answers\nq1?,g1.\n,g2.\n", "q.csv")
     assert r.status_code == 400
     assert "row 3" in r.json()["detail"]
-    assert client.get(f"/api/sources/{sha}/questions").status_code == 404
+    assert client.get(f"/api/sources/{sha}/questions").json() is None
 
 
 def test_demo_mode_checks_a_set_but_keeps_nothing(client, dirs, monkeypatch):
@@ -358,7 +361,7 @@ def test_demo_mode_checks_a_set_but_keeps_nothing(client, dirs, monkeypatch):
     assert body["questions"][0]["status"] == "not_found"
     assert not (dirs["sources"] / "questions").exists()
     # And nothing is served back afterwards.
-    assert client.get(f"/api/sources/{sha}/questions").status_code == 404
+    assert client.get(f"/api/sources/{sha}/questions").json() is None
 
 
 def test_demo_mode_serves_no_set_for_another_document(dirs, monkeypatch):

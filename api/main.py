@@ -35,6 +35,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        sources.seed_sample_files(app.state.deps.sources_dir)
         sweeper = (
             asyncio.create_task(expiry.run_forever(app.state.deps.sources_dir))
             if demo.enabled()

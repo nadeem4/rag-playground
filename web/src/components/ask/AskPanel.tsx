@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { hasAnyKey, type Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
@@ -101,6 +101,11 @@ export function recipeLine(graph: PipelineGraph, registry: Registry): string {
   return parts.join(" ")
 }
 
+/** Smooth unless the visitor asked for less motion. */
+function motion(): ScrollBehavior {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+}
+
 export function AskPanel(p: AskPanelProps) {
   const { query, retrieve, rerank, useCase } = askNodes(p.graph)
   const index = indexNode(p.graph)
@@ -130,6 +135,15 @@ export function AskPanel(p: AskPanelProps) {
   // Open on a pipeline whose question has not run yet; folded once it has.
   const answered = p.graph.nodes.some((n) => ASK_STAGES.includes(n.stage) && n.stage !== "query" && p.results[n.id])
   const [open, setOpen] = useState(!answered)
+
+  // When Asking turns back into Ask with an answer, bring the answer into view, so the press never looks like nothing happened.
+  const scrollBox = useRef<HTMLDivElement>(null)
+  const answerBox = useRef<HTMLDivElement>(null)
+  const wasAsking = useRef(Boolean(p.asking))
+  useEffect(() => {
+    if (wasAsking.current && !p.asking && answered) answerBox.current?.scrollIntoView?.({ behavior: motion(), block: "start" })
+    wasAsking.current = Boolean(p.asking)
+  }, [p.asking, answered])
   // A server error on a settings step must be seen, so it unfolds the settings.
   const settingsError = [retrieve, rerank, useCase].some((n) => n && p.errors[n.id])
   const shown = open || settingsError
@@ -211,7 +225,7 @@ export function AskPanel(p: AskPanelProps) {
         {p.head}
       </div>
       {/* Scrolls on its own: the panel is a docked column or a bottom sheet, never part of the page's scroll. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+      <div ref={scrollBox} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         {query ? (
           <QuestionField
             value={String(query.config.text ?? "")}
@@ -243,6 +257,18 @@ export function AskPanel(p: AskPanelProps) {
             <KeyHint provider={p.keyProvider} />
           </div>
         ) : null}
+        {/* The answer comes straight after the question; the sample's questions and the settings follow it. */}
+        <div ref={answerBox} data-testid="ask-answer" className="scroll-mt-3">
+          <AskResults
+            graph={p.graph}
+            registry={p.registry}
+            outputs={outputs}
+            comparisonHidden={p.comparisonHidden}
+            stale={askStale}
+            questions={questions}
+            onComparison={p.onComparison}
+          />
+        </div>
         {questions.length ? (
           <div className="flex flex-col gap-1">
             <p className="text-xs text-fg-muted">Try one of the sample's questions:</p>
@@ -256,13 +282,20 @@ export function AskPanel(p: AskPanelProps) {
                   size={null}
                   // Wraps and shrinks, so a long question never pushes the pane sideways on a phone.
                   className="chip min-h-[24px] max-w-full shrink px-2 py-1 text-left text-xs whitespace-normal"
-                  onClick={() => setText(q.question)}
+                  onClick={() => {
+                    setText(q.question)
+                    // Back up to the question box, where Ask is.
+                    scrollBox.current?.scrollTo?.({ top: 0, behavior: motion() })
+                  }}
                 >
                   {q.question}
                 </Button>
               ))}
             </div>
           </div>
+        ) : null}
+        {answered ? (
+          <p className="text-xs text-fg-muted">Change a setting below, such as the search or the reranker, and ask again to see the pieces move.</p>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3">
           <div className="flex min-w-0 flex-col gap-1">
@@ -300,15 +333,6 @@ export function AskPanel(p: AskPanelProps) {
             onSweep={p.onSweep}
           />
         ) : null}
-        <AskResults
-          graph={p.graph}
-          registry={p.registry}
-          outputs={outputs}
-          comparisonHidden={p.comparisonHidden}
-          stale={askStale}
-          questions={questions}
-          onComparison={p.onComparison}
-        />
         <Transcript entries={p.transcript} onAskAgain={setText} />
       </div>
     </section>

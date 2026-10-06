@@ -8,7 +8,7 @@ import { initialGraph, transformsFor } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 import { optionOf } from "@/components/ui/pickerTesting"
 
-import { describeResult, NodeCard, type NodeCardProps } from "./NodeCard"
+import { describeResult, NodeCard, plainName, type NodeCardProps } from "./NodeCard"
 
 /** A start time `ago` seconds before a frozen clock, so a slow machine cannot tick the shown seconds over. */
 const FROZEN_MS = 1_800_000_000_000
@@ -287,7 +287,7 @@ describe("click to close, and scroll into view", () => {
   })
 
   it("the chevron sits on the title row, not in the group that wraps", () => {
-    const card = renderCard({ selected: false, showId: true, onRemove: vi.fn(), result: { id: "chunk", status: "failed", error: "x" } })
+    const card = renderCard({ selected: false, onRemove: vi.fn(), result: { id: "chunk", status: "failed", error: "x" } })
     const chevron = within(card).getByRole("button", { name: "Expand Chunk" })
     const row = chevron.parentElement!
     expect(row.querySelector("h3")).not.toBeNull()
@@ -392,16 +392,17 @@ describe("click to close, and scroll into view", () => {
 })
 
 describe("the card head on a stacked step", () => {
-  it("wraps instead of squeezing: the title, the whole id and the chip each keep their width", () => {
+  it("wraps instead of squeezing, and never shows the internal step id", () => {
     payloads = { head1: chunkRecursive }
     const cleanNode = { ...chunkNode, id: "clean_1" }
-    const card = renderCard({ node: cleanNode, title: "Clean", showId: true, onRemove: vi.fn(), result: done("head1", "cached") })
+    const card = renderCard({ node: cleanNode, title: "Clean", onRemove: vi.fn(), result: done("head1", "cached") })
     const header = card.querySelector("header")!
     expect(header.className.split(/\s+/)).toContain("flex-wrap")
     expect(header.className.split(/\s+/)).toContain("scroll-mt-3")
     expect(card.querySelector(".break-all")).toBeNull()
-    const id = within(header).getByText("clean_1")
-    expect(id.className).toContain("whitespace-nowrap")
+    expect(card.textContent).not.toContain("clean_1")
+    // The remove button names what it removes in words, not by id.
+    expect(within(header).getByRole("button", { name: `Remove Clean, ${plainName(cleanNode.transform)}` })).toBeTruthy()
     expect(within(header).getByRole("button", { name: "Clean" })).toBeTruthy()
     const chip = within(header).getByTestId("status-chip")
     expect(chip.textContent).toBe("reused from an earlier run")

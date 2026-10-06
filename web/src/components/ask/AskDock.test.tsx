@@ -23,7 +23,9 @@ function Harness({
   buildWidth = BUILD_WIDTH,
   details = false,
   picker = false,
+  building = false,
 }: {
+  building?: boolean
   count?: number
   buildWidth?: number
   details?: boolean
@@ -34,7 +36,7 @@ function Harness({
     <main>
       <p data-testid="state">{`${dock.open ? "open" : "closed"} ${dock.side} ${dock.width}`}</p>
       <input aria-label="Chunk size" />
-      <AskDock dock={dock} count={count} measure={() => buildWidth}>
+      <AskDock dock={dock} count={count} building={building} measure={() => buildWidth}>
         {(head) => (
           <section aria-label="Ask panel">
             <div>
@@ -218,6 +220,21 @@ describe("the docked Ask panel", () => {
     expect(dockEl().hidden).toBe(false)
     expect(question().value).toBe("How long did the survey run?")
     expect(document.activeElement).toBe(question())
+  })
+
+  it("while the index builds, the round button is greyed out and Ask cannot open; it comes back after", () => {
+    const { rerender } = render(<Harness />)
+    fireEvent.click(screen.getByRole("button", { name: CLOSE }))
+    rerender(<Harness building />)
+    expect((fab() as HTMLButtonElement).disabled).toBe(true)
+    expect(fab().getAttribute("title")).toBe("Ask opens once the index is built.")
+    fireEvent.click(fab())
+    altA()
+    expect(dockEl().hidden).toBe(true)
+    rerender(<Harness />)
+    expect((fab() as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(fab())
+    expect(dockEl().hidden).toBe(false)
   })
 
   it("the round button shows how many results the last question found", () => {

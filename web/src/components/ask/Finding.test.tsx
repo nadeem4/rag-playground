@@ -90,3 +90,16 @@ describe("Finding", () => {
     expect(container.innerHTML).toBe("")
   })
 })
+
+describe("a gold answer that is a table row", () => {
+  it("is quoted in words, not with the row's bars", () => {
+    const gold = "| Readers who lost their place | 41 | 16 | -61% |"
+    const rows = [row(1, `| Measure | Before | After | Change |
+|---|---|---|---|
+${gold}`)]
+    const qs: SampleQuestion[] = [{ id: "t1", question: "How many lost their place?", gold_answer: gold }]
+    render(<Finding question="How many lost their place?" rows={rows} questions={qs} chat={false} />)
+    expect(sentence().textContent).toContain("Readers who lost their place: 41, 16, -61%")
+    expect(sentence().textContent).not.toContain("|")
+  })
+})

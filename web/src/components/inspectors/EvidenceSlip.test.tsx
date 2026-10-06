@@ -101,7 +101,8 @@ describe("the evidence slip", () => {
     expect(part("passage")!.className).not.toContain("whitespace-pre-line")
     rerender(<EvidenceSlip row={rows[0]} side="reranked" piece={0} scaleKey="hybrid_rrf" />)
     expect(part("passage")!.className).not.toContain("line-clamp")
-    expect(part("passage")!.className).toContain("whitespace-pre-line")
+    // Open, each run of text keeps its line breaks (a table, if any, is its own block).
+    expect(part("passage")!.querySelector("p")!.className).toContain("whitespace-pre-line")
   })
 
   it("names every score's scale beside its number, the number in mono and a miss in words", () => {
@@ -216,5 +217,42 @@ describe("a slip with its own finding line", () => {
   it("drops a leading markdown heading line from the passage", () => {
     render(<EvidenceSlip row={{ ...rows[0], text: "## Heading\n\nText" }} side="single" piece={0} scaleKey="hybrid_rrf" />)
     expect(part("passage")!.textContent).toBe("Text")
+  })
+})
+
+describe("a piece holding a table", () => {
+  const tableRow = {
+    ...rows[0],
+    text: ["Results.", "| Measure | Before | After |", "|---|---|---|", "| Reading time per page | 84 s | 61 s |", "| Readers who lost their place | 41 | 16 |"].join("\n"),
+  }
+
+  it("open, it draws a real table: a header row and one row a line, with no bars or dashes", () => {
+    render(<EvidenceSlip row={tableRow} side="single" piece={2} scaleKey="hybrid_rrf" />)
+    const table = within(part("passage")!).getByRole("table")
+    expect(within(table).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Measure", "Before", "After"])
+    const body = within(table).getAllByRole("row").slice(1)
+    expect(body.map((r) => within(r).getAllByRole("cell").map((c) => c.textContent))).toEqual([
+      ["Reading time per page", "84 s", "61 s"],
+      ["Readers who lost their place", "41", "16"],
+    ])
+    expect(part("passage")!.textContent).not.toMatch(/\||---/)
+    expect(part("passage")!.textContent).toContain("Results.")
+    // A value such as "+16 pts" stays on one line; the label column is the one that wraps.
+    const [label, value] = within(body[0]).getAllByRole("cell")
+    expect(value.className.split(/\s+/)).toContain("whitespace-nowrap")
+    expect(label.className.split(/\s+/)).not.toContain("whitespace-nowrap")
+  })
+
+  it("clamped, it says each row in words, so two lines never show bars", () => {
+    render(<EvidenceSlip row={tableRow} side="single" piece={2} scaleKey="hybrid_rrf" clamp />)
+    expect(within(part("passage")!).queryByRole("table")).toBeNull()
+    expect(part("passage")!.textContent).toContain("Reading time per page: 84 s, 61 s")
+    expect(part("passage")!.textContent).not.toMatch(/\||---/)
+  })
+
+  it("a wide table scrolls inside the piece rather than pushing the page sideways", () => {
+    render(<EvidenceSlip row={tableRow} side="single" piece={2} scaleKey="hybrid_rrf" />)
+    const table = within(part("passage")!).getByRole("table")
+    expect(table.parentElement!.className.split(/\s+/)).toContain("overflow-x-auto")
   })
 })

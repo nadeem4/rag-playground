@@ -160,6 +160,8 @@ move. Picking one of the sample's questions takes you back up to the question bo
   the parsed document, and one that does not match is marked unverified. With sentence ids,
   each claim is shown as cited, weak, matched by similarity, or not grounded. Clicking a
   citation opens the PDF page with the sentence highlighted.
+- A piece that holds a table shows it as a table when the piece is open, and says each row
+  in words (Measure: Before, After) when it is cut to two lines, as on Compare.
 - The questions asked earlier in the tab stay in a list below.
 
 ## Compare

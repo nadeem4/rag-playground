@@ -1,5 +1,6 @@
 import { useState, type HTMLAttributes } from "react"
 
+import { passageBlocks, plainPassage } from "@/lib/passage"
 import { cn } from "@/lib/utils"
 import { CHUNK_CLASSES } from "@/styles/dataClasses"
 
@@ -189,10 +190,25 @@ export function EvidenceSlip({
             ))}
           </p>
         ) : null}
-        {/* Clamped, the passage flows as plain text: a kept blank line would use up a clamped line. */}
-        <p data-testid="passage" className={cn("font-serif text-base leading-[1.55] break-words text-fg", clamped ? "line-clamp-2" : "whitespace-pre-line")}>
-          {stripHeadingMarks(row.text)}
-        </p>
+        {/* Clamped, the passage flows as plain text, a table said in words: a kept blank line would use up a clamped line.
+            Open, a table the parser wrote as Markdown rows is drawn as a table. */}
+        {clamped ? (
+          <p data-testid="passage" className="line-clamp-2 font-serif text-base leading-[1.55] break-words text-fg">
+            {plainPassage(stripHeadingMarks(row.text))}
+          </p>
+        ) : (
+          <div data-testid="passage" className="flex min-w-0 flex-col gap-2 font-serif text-base leading-[1.55] break-words text-fg">
+            {passageBlocks(stripHeadingMarks(row.text)).map((b, i) =>
+              b.kind === "text" ? (
+                <p key={i} className="whitespace-pre-line">
+                  {b.text}
+                </p>
+              ) : (
+                <PassageTable key={i} head={b.head} rows={b.rows} />
+              ),
+            )}
+          </div>
+        )}
         {meta ? (
           <p data-testid="meta" className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-fg-muted">
             {compact ? (
@@ -210,6 +226,38 @@ export function EvidenceSlip({
           </p>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+/** A table from the piece: a header row when the piece has one, then a row a line. It scrolls inside the piece when wide. */
+function PassageTable({ head, rows }: { head: string[]; rows: string[][] }) {
+  return (
+    <div className="max-w-full overflow-x-auto">
+      <table className="border-collapse font-sans text-sm tabular-nums">
+        {head.length ? (
+          <thead>
+            <tr>
+              {head.map((h, i) => (
+                <th key={i} scope="col" className="border-b border-hairline py-1 pr-3 text-left font-medium text-fg-muted">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        ) : null}
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b border-hairline last:border-b-0">
+              {r.map((c, j) => (
+                <td key={j} className={cn("py-1 pr-3 align-top", j > 0 && "whitespace-nowrap")}>
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

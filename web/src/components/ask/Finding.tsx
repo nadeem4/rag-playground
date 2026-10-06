@@ -1,5 +1,6 @@
 import type { SampleQuestion } from "@/api/types"
 import { ordinal, type HitRowData } from "@/components/inspectors/hits"
+import { flatRow, isTableRow } from "@/lib/passage"
 import { firstSentence } from "@/lib/sentence"
 
 import { goldRank } from "./Transcript"
@@ -43,7 +44,7 @@ export function Finding({ question, rows, questions, chat }: FindingProps) {
         <>
           {`Found in the ${ordinal(found.rank)} piece: `}
           <q className="font-serif italic" style={{ quotes: '"“" "”"' }}>
-            {found.gold}
+            {isTableRow(found.gold) ? flatRow(found.gold) : found.gold}
           </q>
         </>
       ) : (

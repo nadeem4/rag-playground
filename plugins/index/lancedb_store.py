@@ -32,7 +32,7 @@ from typing import Any, Callable, Literal, Mapping
 import lancedb
 import pyarrow as pa
 from lancedb.index import FTS
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import ChunkSet
@@ -55,21 +55,49 @@ TEXT_COLUMN = "text"
 
 class LanceDbIndexConfig(BaseModel):
     #: The first real run downloads the model (Qwen3 is about 1.2 GB).
-    embedder: EmbedderName = "qwen3-embedding-0.6b"
+    embedder: EmbedderName = Field(
+        default="qwen3-embedding-0.6b",
+        title="Embedding model",
+        description=(
+            "The model that turns each piece into a vector. The first run "
+            "downloads it."
+        ),
+    )
 
     #: Matryoshka truncation. `None` keeps the model's native width. Checked
     #: against the chosen embedder at run time: it must not exceed the native
     #: width, and a non-matryoshka embedder takes none at all.
-    truncate_dim: int | None = None
+    truncate_dim: int | None = Field(
+        default=None,
+        title="Shorter vectors",
+        description=(
+            "Keep only the first this many numbers of each vector, to save "
+            "space. Only some models allow it. Empty keeps the full length."
+        ),
+    )
 
     #: Recorded in the descriptor rather than baked into an index: with no ANN
     #: index built, the retriever chooses the distance type per search, and it
     #: must choose the one the index was declared with.
-    metric: Literal["cosine", "l2"] = "cosine"
+    metric: Literal["cosine", "l2"] = Field(
+        default="cosine",
+        title="Distance",
+        description=(
+            "How closeness between vectors is measured: cosine compares their "
+            "direction, l2 their straight-line distance."
+        ),
+    )
 
     #: On by default so `bm25` and `hybrid_rrf` cannot be mis-wired to an index
     #: that has no full-text side.
-    build_fts: bool = True
+    build_fts: bool = Field(
+        default=True,
+        title="Keyword index",
+        description=(
+            "Also build a keyword index, so keyword and hybrid search can run. "
+            "Leave it on."
+        ),
+    )
 
 
 @register

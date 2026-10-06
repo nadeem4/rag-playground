@@ -65,18 +65,34 @@ def system_prompt(style: str) -> str:
 
 class LlmRewriteConfig(TextQueryConfig):
     text: str = Field(
+        title="Question",
         default="",
-        description="The question as typed. The model rewrites it for retrieval; "
-        "the answer step still uses it as typed.",
+        description=(
+            "The question as typed. The model rewrites it for retrieval; the "
+            "answer step still uses it as typed."
+        ),
     )
     model: Literal[tuple(CHAT_MODELS)] = Field(  # type: ignore[valid-type]
+        title="Model",
         default="claude-haiku-4-5",
-        description="The chat model that rewrites the question: the same choices "
-        "as the chat step.",
+        description=(
+            "The chat model that rewrites the question: the same choices as the"
+            " chat step."
+        ),
         json_schema_extra=llm.MODEL_SCHEMA_EXTRA,
     )
-    custom_base_url: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
-    custom_model: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
+    custom_base_url: str = Field(
+        title="Endpoint URL",
+        description="The address of an OpenAI-compatible server.",
+        default="",
+        json_schema_extra=_SHOW_IF_CUSTOM,
+    )
+    custom_model: str = Field(
+        title="Model name",
+        description="The model name that server expects.",
+        default="",
+        json_schema_extra=_SHOW_IF_CUSTOM,
+    )
     openrouter_model: str = Field(
         default="",
         title="OpenRouter model",
@@ -84,9 +100,12 @@ class LlmRewriteConfig(TextQueryConfig):
         json_schema_extra=_SHOW_IF_OPENROUTER,
     )
     style: Literal["document words", "keywords"] = Field(
+        title="Style",
         default="document words",
-        description="'document words' restates the question in the document's "
-        "words; 'keywords' turns it into six to ten search words.",
+        description=(
+            "'document words' restates the question in the document's words; "
+            "'keywords' turns it into six to ten search words."
+        ),
     )
 
 

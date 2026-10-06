@@ -31,8 +31,18 @@ from plugins.chunk import (
 
 
 class TokenBasedConfig(BaseModel):
-    max_tokens: int = Field(default=512, ge=1)
-    overlap: int = Field(default=64, ge=0)
+    max_tokens: int = Field(
+        title="Piece size",
+        description="The size of each piece, in tokens.",
+        default=512,
+        ge=1,
+    )
+    overlap: int = Field(
+        title="Overlap",
+        description="How many tokens each piece repeats from the end of the one before.",
+        default=64,
+        ge=0,
+    )
 
 
 @register

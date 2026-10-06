@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import Hit, RetrievalResult
@@ -38,9 +38,20 @@ from providers.embedding_cache import embed_cached
 class MmrRerankConfig(BaseModel):
     #: 1.0 is pure relevance (the retriever's own order, kept exactly); 0.0 is
     #: pure diversity, which after the first pick ignores the question entirely.
-    lambda_mult: float = 0.5
+    lambda_mult: float = Field(
+        default=0.5,
+        title="Relevance or variety",
+        description=(
+            "From 0 to 1. At 1 the search order is kept; lower values swap in "
+            "pieces that say something different."
+        ),
+    )
     #: How many it picks from the retriever's candidate pool (20 by default).
-    top_k: int = 5
+    top_k: int = Field(
+        default=5,
+        title="Pieces kept",
+        description="How many pieces the reranker keeps.",
+    )
 
     # No `embedder` field. The model and width come from the index descriptor,
     # the same rule the retrievers follow: MMR judges similarity in the space

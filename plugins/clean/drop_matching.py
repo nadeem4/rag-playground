@@ -42,19 +42,28 @@ from plugins.clean import (
 
 class DropMatchingConfig(BaseModel):
     pattern: str = Field(
+        title="Text to remove",
         default="",
-        description="Text to look for. Any block containing it is removed. "
-        "Leave empty to remove nothing.",
+        description=(
+            "Text to look for. Any block containing it is removed. Leave empty "
+            "to remove nothing."
+        ),
     )
     mode: Literal["contains", "regex"] = Field(
+        title="Match as",
         default="contains",
-        description="'contains' matches the pattern as plain text; 'regex' "
-        "treats it as a regular expression found anywhere in the block.",
+        description=(
+            "'contains' matches the pattern as plain text; 'regex' treats it as"
+            " a regular expression found anywhere in the block."
+        ),
     )
     case_sensitive: bool = Field(
+        title="Match case",
         default=False,
-        description="Match upper and lower case exactly. Off means 'Notice' "
-        "also matches 'notice'.",
+        description=(
+            "Match upper and lower case exactly. Off means 'Notice' also "
+            "matches 'notice'."
+        ),
     )
 
 

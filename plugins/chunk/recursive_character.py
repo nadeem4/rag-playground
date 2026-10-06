@@ -47,9 +47,23 @@ _SEPARATORS: tuple[tuple[str, int], ...] = (
 
 
 class RecursiveCharacterConfig(BaseModel):
-    chunk_size: int = Field(default=400, ge=1)
-    chunk_overlap: int = Field(default=80, ge=0)
+    chunk_size: int = Field(
+        title="Chunk size",
+        description="The largest a piece can be, in characters.",
+        default=400,
+        ge=1,
+    )
+    chunk_overlap: int = Field(
+        title="Overlap",
+        description=(
+            "How many characters each piece repeats from the end of the one "
+            "before, so a sentence cut at the edge is not lost."
+        ),
+        default=80,
+        ge=0,
+    )
     heading_context: bool = Field(
+        title="Heading in front",
         default=True,
         description=(
             "heading_context: when on, the heading path where a chunk starts, "

@@ -77,6 +77,7 @@
         "properties": {
           "model": {
             "default": "claude-opus-5",
+            "description": "The chat model that writes the answer. It needs a key.",
             "enum": [
               "claude-opus-5",
               "claude-sonnet-5",
@@ -112,7 +113,8 @@
           },
           "custom_base_url": {
             "default": "",
-            "title": "Custom Base Url",
+            "description": "The address of an OpenAI-compatible server.",
+            "title": "Endpoint URL",
             "type": "string",
             "x-show-when": {
               "model": "custom"
@@ -120,7 +122,8 @@
           },
           "custom_model": {
             "default": "",
-            "title": "Custom Model",
+            "description": "The model name that server expects.",
+            "title": "Model name",
             "type": "string",
             "x-show-when": {
               "model": "custom"
@@ -137,24 +140,27 @@
           },
           "citation_method": {
             "default": "auto",
+            "description": "Auto uses the model's own citations when it has them. Otherwise the model quotes numbered sentences.",
             "enum": [
               "auto",
               "sentence_ids"
             ],
-            "title": "Citation Method",
+            "title": "Citations",
             "type": "string"
           },
           "support_threshold": {
             "default": 0.55,
+            "description": "From 0 to 1. How close a claim must be to the sentence it cites to count as supported.",
             "maximum": 1,
             "minimum": 0,
-            "title": "Support Threshold",
+            "title": "Support threshold",
             "type": "number"
           },
           "max_chunks": {
             "default": 5,
+            "description": "How many of the top pieces go to the model.",
             "minimum": 1,
-            "title": "Max Chunks",
+            "title": "Pieces sent",
             "type": "integer"
           }
         },
@@ -188,12 +194,14 @@
         "properties": {
           "top_k": {
             "default": 5,
-            "title": "Top K",
+            "description": "How many pieces the answer shows.",
+            "title": "Results shown",
             "type": "integer"
           },
           "max_snippet_chars": {
             "default": 400,
-            "title": "Max Snippet Chars",
+            "description": "The most characters shown from each piece.",
+            "title": "Snippet length",
             "type": "integer"
           }
         },
@@ -233,7 +241,8 @@
         "properties": {
           "top_k": {
             "default": 5,
-            "title": "Top K",
+            "description": "How many of the top pieces count when looking for the answer.",
+            "title": "Pieces checked",
             "type": "integer"
           }
         },
@@ -326,7 +335,7 @@
           "text": {
             "default": "",
             "description": "The question as typed. The model rewrites it for retrieval; the answer step still uses it as typed.",
-            "title": "Text",
+            "title": "Question",
             "type": "string"
           },
           "gold_answer": {
@@ -380,7 +389,8 @@
           },
           "custom_base_url": {
             "default": "",
-            "title": "Custom Base Url",
+            "description": "The address of an OpenAI-compatible server.",
+            "title": "Endpoint URL",
             "type": "string",
             "x-show-when": {
               "model": "custom"
@@ -388,7 +398,8 @@
           },
           "custom_model": {
             "default": "",
-            "title": "Custom Model",
+            "description": "The model name that server expects.",
+            "title": "Model name",
             "type": "string",
             "x-show-when": {
               "model": "custom"
@@ -447,12 +458,14 @@
           "mode": {
             "const": "text",
             "default": "text",
+            "description": "Text is the only mode: pdfium reads the text layer the PDF already has.",
             "title": "Mode",
             "type": "string"
           },
           "join_lines": {
             "default": true,
-            "title": "Join Lines",
+            "description": "When on, lines are joined back into paragraphs from the gaps between them. When off, each line is its own element.",
+            "title": "Join lines into paragraphs",
             "type": "boolean"
           }
         },
@@ -491,13 +504,13 @@
           "do_ocr": {
             "default": false,
             "description": "Docling's PdfPipelineOptions.do_ocr. Read text from page images with OCR. Only needed for scanned PDFs with no text layer; it is much slower.",
-            "title": "Do Ocr",
+            "title": "OCR for scanned pages",
             "type": "boolean"
           },
           "do_table_structure": {
             "default": true,
             "description": "Docling's PdfPipelineOptions.do_table_structure. Recover rows and columns of detected tables, so a table reaches the chunks as a markdown table instead of loose text.",
-            "title": "Do Table Structure",
+            "title": "Find table rows and columns",
             "type": "boolean"
           },
           "table_mode": {
@@ -507,7 +520,7 @@
               "fast",
               "accurate"
             ],
-            "title": "Table Mode",
+            "title": "Table model",
             "type": "string"
           },
           "content_layers": {
@@ -534,7 +547,7 @@
           "heading_hierarchy": {
             "default": false,
             "description": "Docling's HeadingHierarchyOptions.enabled, set through PdfPipelineOptions.heading_hierarchy_options. Docling infers heading levels from the layout, so a role sits under Experience instead of beside it. It reads PDF bookmarks first, then numbering such as 1. and 1.1, then font size and style. When off, every heading is at the same level. Turning it on also turns on Docling's generate_parsed_pages, which keeps the parsed pages in memory so font style can be read.",
-            "title": "Heading Hierarchy",
+            "title": "Heading levels",
             "type": "boolean"
           }
         },
@@ -570,16 +583,16 @@
         "properties": {
           "min_page_ratio": {
             "default": 0.5,
-            "description": "Fraction of pages a block must appear on, at the same page edge, to count as a running artefact.",
+            "description": "How many of the pages, from 0 to 1, a block must repeat on at the same page edge to count as a header or footer.",
             "maximum": 1.0,
             "minimum": 0.0,
-            "title": "Min Page Ratio",
+            "title": "Share of pages",
             "type": "number"
           },
           "drop": {
             "default": true,
-            "description": "Remove detected blocks from `elements`. When false they are only retyped, which already excludes them from the markdown projection while keeping them visible for inspection.",
-            "title": "Drop",
+            "description": "When on, headers and footers are removed. When off, they are only marked, so they stay visible but are left out of the text.",
+            "title": "Remove them",
             "type": "boolean"
           }
         },
@@ -613,7 +626,7 @@
         "properties": {
           "similarity": {
             "default": 0.95,
-            "description": "Minimum difflib ratio to call two blocks duplicates. Only consulted when `scope` is 'near'.",
+            "description": "How alike two blocks must be, from 0 to 1, to count as the same. Used only when Match is near.",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Similarity",
@@ -626,7 +639,7 @@
               "exact",
               "near"
             ],
-            "title": "Scope",
+            "title": "Match",
             "type": "string"
           }
         },
@@ -661,7 +674,7 @@
           "pattern": {
             "default": "",
             "description": "Text to look for. Any block containing it is removed. Leave empty to remove nothing.",
-            "title": "Pattern",
+            "title": "Text to remove",
             "type": "string"
           },
           "mode": {
@@ -671,13 +684,13 @@
               "contains",
               "regex"
             ],
-            "title": "Mode",
+            "title": "Match as",
             "type": "string"
           },
           "case_sensitive": {
             "default": false,
             "description": "Match upper and lower case exactly. Off means 'Notice' also matches 'notice'.",
-            "title": "Case Sensitive",
+            "title": "Match case",
             "type": "boolean"
           }
         },
@@ -712,21 +725,23 @@
       "config_schema": {
         "properties": {
           "chunk_size": {
-            "default": 1000,
+            "default": 400,
+            "description": "The largest a piece can be, in characters.",
             "minimum": 1,
-            "title": "Chunk Size",
+            "title": "Chunk size",
             "type": "integer"
           },
           "chunk_overlap": {
-            "default": 200,
+            "default": 80,
+            "description": "How many characters each piece repeats from the end of the one before, so a sentence cut at the edge is not lost.",
             "minimum": 0,
-            "title": "Chunk Overlap",
+            "title": "Overlap",
             "type": "integer"
           },
           "heading_context": {
             "default": true,
             "description": "heading_context: when on, the heading path where a chunk starts, for example Experience > a role, is put in front of the chunk's text before it is turned into a vector. The chunk that is shown and cited does not change. A document without headings is not affected.",
-            "title": "Heading Context",
+            "title": "Heading in front",
             "type": "boolean"
           }
         },
@@ -797,18 +812,21 @@
         "properties": {
           "max_tokens": {
             "default": 400,
+            "description": "The largest a piece can be, in tokens. A longer block is split.",
             "minimum": 1,
-            "title": "Max Tokens",
+            "title": "Largest piece",
             "type": "integer"
           },
           "keep_tables_whole": {
             "default": true,
-            "title": "Keep Tables Whole",
+            "description": "When on, a table is never split across pieces, even when it is longer than the largest piece.",
+            "title": "Keep tables whole",
             "type": "boolean"
           },
           "heading_context": {
             "default": true,
-            "title": "Heading Context",
+            "description": "When on, the heading path where a piece starts is put in front of it when it is searched. The piece that is shown does not change.",
+            "title": "Heading in front",
             "type": "boolean"
           },
           "section_level": {
@@ -816,7 +834,7 @@
             "description": "section_level: how deep a heading can be and still start a new section, from 1 to 6. A new section starts only at a heading whose level is at or above this depth; 6 means every heading starts one. Levels are Docling's heading levels. A title is 1 and section headings start at 2; with heading_hierarchy on, subsections nest below their section (on the sample resume, sections sat at 3 and roles at 4, so 3 kept a section whole). With it off, section headings share one level. A deeper heading stays inside the piece as text and still names the pieces below it in their heading path. The run note lists the levels in the document.",
             "maximum": 6,
             "minimum": 1,
-            "title": "Section Level",
+            "title": "Section depth",
             "type": "integer"
           }
         },
@@ -895,8 +913,9 @@
         "properties": {
           "max_tokens": {
             "default": 512,
+            "description": "The largest a piece can be, in tokens. A longer section is split.",
             "minimum": 1,
-            "title": "Max Tokens",
+            "title": "Largest piece",
             "type": "integer"
           }
         },
@@ -946,12 +965,14 @@
         "properties": {
           "max_tokens": {
             "default": 512,
+            "description": "The size of each piece, in tokens.",
             "minimum": 1,
-            "title": "Max Tokens",
+            "title": "Piece size",
             "type": "integer"
           },
           "overlap": {
             "default": 64,
+            "description": "How many tokens each piece repeats from the end of the one before.",
             "minimum": 0,
             "title": "Overlap",
             "type": "integer"
@@ -1009,14 +1030,16 @@
         "properties": {
           "sentences_per_chunk": {
             "default": 5,
+            "description": "How many sentences go in each piece.",
             "minimum": 1,
-            "title": "Sentences Per Chunk",
+            "title": "Sentences per piece",
             "type": "integer"
           },
           "overlap_sentences": {
             "default": 1,
+            "description": "How many sentences each piece repeats from the one before.",
             "minimum": 0,
-            "title": "Overlap Sentences",
+            "title": "Overlap",
             "type": "integer"
           }
         },
@@ -1080,12 +1103,13 @@
         "properties": {
           "embedder": {
             "default": "qwen3-embedding-0.6b",
+            "description": "The model that turns each piece into a vector. The first run downloads it.",
             "enum": [
               "qwen3-embedding-0.6b",
               "bge-small-en-v1.5",
               "fake-deterministic"
             ],
-            "title": "Embedder",
+            "title": "Embedding model",
             "type": "string"
           },
           "truncate_dim": {
@@ -1098,20 +1122,23 @@
               }
             ],
             "default": null,
-            "title": "Truncate Dim"
+            "description": "Keep only the first this many numbers of each vector, to save space. Only some models allow it. Empty keeps the full length.",
+            "title": "Shorter vectors"
           },
           "metric": {
             "default": "cosine",
+            "description": "How closeness between vectors is measured: cosine compares their direction, l2 their straight-line distance.",
             "enum": [
               "cosine",
               "l2"
             ],
-            "title": "Metric",
+            "title": "Distance",
             "type": "string"
           },
           "build_fts": {
             "default": true,
-            "title": "Build Fts",
+            "description": "Also build a keyword index, so keyword and hybrid search can run. Leave it on.",
+            "title": "Keyword index",
             "type": "boolean"
           }
         },
@@ -1159,7 +1186,8 @@
         "properties": {
           "top_k": {
             "default": 20,
-            "title": "Top K",
+            "description": "How many pieces the search hands on. The rerank or answer step after it keeps fewer.",
+            "title": "Candidates",
             "type": "integer"
           }
         },
@@ -1205,7 +1233,8 @@
         "properties": {
           "top_k": {
             "default": 20,
-            "title": "Top K",
+            "description": "How many pieces the search hands on. The rerank or answer step after it keeps fewer.",
+            "title": "Candidates",
             "type": "integer"
           }
         },
@@ -1252,12 +1281,14 @@
         "properties": {
           "top_k": {
             "default": 20,
-            "title": "Top K",
+            "description": "How many pieces the search hands on. The rerank or answer step after it keeps fewer.",
+            "title": "Candidates",
             "type": "integer"
           },
           "rrf_k": {
             "default": 60,
-            "title": "Rrf K",
+            "description": "How the two ranked lists are blended. 60 is the usual value: smaller lets each list's first picks count more, larger evens them out.",
+            "title": "Fusion constant",
             "type": "integer"
           },
           "query_expansion": {
@@ -1267,7 +1298,7 @@
               "none",
               "prf"
             ],
-            "title": "Query Expansion",
+            "title": "Expand the question",
             "type": "string"
           },
           "prf_docs": {
@@ -1275,7 +1306,7 @@
             "description": "When PRF is on: how many of the top dense hits the added words are borrowed from.",
             "maximum": 10,
             "minimum": 1,
-            "title": "Prf Docs",
+            "title": "PRF hits",
             "type": "integer"
           },
           "prf_terms": {
@@ -1283,7 +1314,7 @@
             "description": "When PRF is on: how many words are added to the keyword search, chosen by tf-idf (frequent in those hits, rare in the whole document).",
             "maximum": 20,
             "minimum": 1,
-            "title": "Prf Terms",
+            "title": "PRF words",
             "type": "integer"
           }
         },
@@ -1331,12 +1362,14 @@
         "properties": {
           "lambda_mult": {
             "default": 0.5,
-            "title": "Lambda Mult",
+            "description": "From 0 to 1. At 1 the search order is kept; lower values swap in pieces that say something different.",
+            "title": "Relevance or variety",
             "type": "number"
           },
           "top_k": {
             "default": 5,
-            "title": "Top K",
+            "description": "How many pieces the reranker keeps.",
+            "title": "Pieces kept",
             "type": "integer"
           }
         },
@@ -1387,7 +1420,8 @@
           },
           "top_k": {
             "default": 5,
-            "title": "Top K",
+            "description": "How many pieces the reranker keeps.",
+            "title": "Pieces kept",
             "type": "integer"
           }
         },
@@ -1427,6 +1461,7 @@
         "properties": {
           "model": {
             "default": "claude-haiku-4-5",
+            "description": "The chat model that scores each piece against the question. It needs a key.",
             "enum": [
               "claude-opus-5",
               "claude-sonnet-5",
@@ -1462,7 +1497,8 @@
           },
           "custom_base_url": {
             "default": "",
-            "title": "Custom Base Url",
+            "description": "The address of an OpenAI-compatible server.",
+            "title": "Endpoint URL",
             "type": "string",
             "x-show-when": {
               "model": "custom"
@@ -1470,7 +1506,8 @@
           },
           "custom_model": {
             "default": "",
-            "title": "Custom Model",
+            "description": "The model name that server expects.",
+            "title": "Model name",
             "type": "string",
             "x-show-when": {
               "model": "custom"
@@ -1487,7 +1524,8 @@
           },
           "top_k": {
             "default": 5,
-            "title": "Top K",
+            "description": "How many pieces the reranker keeps.",
+            "title": "Pieces kept",
             "type": "integer"
           }
         },

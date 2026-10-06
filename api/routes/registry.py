@@ -19,9 +19,27 @@ router = APIRouter()
 @router.get("/registry")
 def get_registry(request: Request) -> dict[str, Any]:
     """The catalogue. On the demo, the custom endpoint is left out of every
-    model choice: a run that picks it is refused with 403 anyway."""
+    model choice, with its two fields: a run that picks it is refused with 403
+    anyway. The test-only embedder is left out too."""
     schema = request.app.state.deps.registry.export_schema()
-    return _without_custom_models(schema) if demo.enabled() else schema
+    return _without_test_options(_without_custom_models(schema)) if demo.enabled() else schema
+
+
+#: Choices that exist for the test suite, not for a learner.
+TEST_ONLY = {("index", "embedder"): {"fake-deterministic"}}
+
+
+def _without_test_options(schema: dict[str, Any]) -> dict[str, Any]:
+    """`schema` (already a copy) with the test-only choices and the custom endpoint's fields removed."""
+    for stage, transforms in schema.items():
+        for info in transforms.values():
+            props = info["config_schema"].get("properties", {})
+            for (s, key), drop in TEST_ONLY.items():
+                if s == stage and key in props and "enum" in props[key]:
+                    props[key]["enum"] = [v for v in props[key]["enum"] if v not in drop]
+            for key in ("custom_base_url", "custom_model"):
+                props.pop(key, None)
+    return schema
 
 
 def _without_custom_models(schema: dict[str, Any]) -> dict[str, Any]:

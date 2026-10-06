@@ -86,16 +86,25 @@ const BY_CHARACTERS = new Set(["recursive_character"])
 function chunkOutcome(set: ChunkSet): Outcome {
   const n = set.chunks.length
   if (n === 0) return { headline: 0, lead: "Made 0 chunks", tail: ". The document produced no text to cut." }
+  // The same projection the chunk inspector counts overlaps with.
+  const overlapsLine = () => count(overlapPairs(projectSpans(set.source_text, set.chunks)).length, "overlap", "overlaps")
+  // The sentence chunker is set in sentences: say how many there were and how many go in a piece.
+  const meta = set.chunker_meta ?? {}
+  if (meta.chunker === "sentence_window" && typeof meta.sentences === "number" && typeof meta.sentences_per_chunk === "number") {
+    return {
+      headline: n,
+      lead: `Made ${count(n, "chunk", "chunks")}`,
+      tail: ` from ${count(meta.sentences, "sentence", "sentences")}, up to ${fmt(meta.sentences_per_chunk)} in each. ${overlapsLine()}.`,
+    }
+  }
   // Sizes in the unit the chunk size is set in, so the card and the setting agree.
   const chars = BY_CHARACTERS.has(String(set.chunker_meta?.chunker ?? ""))
   const sizes = set.chunks.map((c) => (chars ? c.text.length : c.token_count))
   const unit = chars ? "characters" : "tokens"
-  // The same projection the chunk inspector counts overlaps with.
-  const overlaps = overlapPairs(projectSpans(set.source_text, set.chunks)).length
   return {
     headline: n,
     lead: `Made ${count(n, "chunk", "chunks")}`,
-    tail: `. Median ${fmt(Math.round(median(sizes) ?? 0))} ${unit}, largest ${fmt(Math.max(...sizes))}. ${count(overlaps, "overlap", "overlaps")}.`,
+    tail: `. Median ${fmt(Math.round(median(sizes) ?? 0))} ${unit}, largest ${fmt(Math.max(...sizes))}. ${overlapsLine()}.`,
   }
 }
 

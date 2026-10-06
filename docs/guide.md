@@ -95,6 +95,9 @@ in use.
   the reason in red), and "Needs a key" when it needs an API key and none is set.
 - Settings that make no sense show a warning and disable Run.
 - After a run, the card says what the step did compared with the previous run.
+- When Parse finds no text, the card says the PDF may be scanned. With Docling it offers
+  **Turn on OCR**, which switches OCR on so you can run Parse again. OCR takes about 10
+  seconds a page.
 - The **Sweep** button on a card opens Compare on that step.
 - Any chunk or search hit can open its PDF page with its source paragraphs outlined.
 

@@ -146,7 +146,11 @@
               "sentence_ids"
             ],
             "title": "Citations",
-            "type": "string"
+            "type": "string",
+            "x-labels": {
+              "auto": "Auto",
+              "sentence_ids": "Numbered sentences"
+            }
           },
           "support_threshold": {
             "default": 0.55,
@@ -1110,7 +1114,12 @@
               "fake-deterministic"
             ],
             "title": "Embedding model",
-            "type": "string"
+            "type": "string",
+            "x-labels": {
+              "bge-small-en-v1.5": "BGE small, English",
+              "fake-deterministic": "Fake, for tests",
+              "qwen3-embedding-0.6b": "Qwen3 Embedding 0.6B"
+            }
           },
           "truncate_dim": {
             "anyOf": [
@@ -1133,7 +1142,11 @@
               "l2"
             ],
             "title": "Distance",
-            "type": "string"
+            "type": "string",
+            "x-labels": {
+              "cosine": "Cosine: the angle between vectors",
+              "l2": "L2: the straight-line distance"
+            }
           },
           "build_fts": {
             "default": true,

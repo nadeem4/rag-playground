@@ -70,3 +70,13 @@ def test_the_demo_hides_the_test_embedder_and_the_custom_endpoint_fields(client,
     local = client.get("/api/registry").json()
     assert "fake-deterministic" in local["index"]["lancedb"]["config_schema"]["properties"]["embedder"]["enum"]
     assert "custom_base_url" in local["use_case"]["chat"]["config_schema"]["properties"]
+
+
+def test_choices_named_in_code_get_plain_names(client):
+    # A select shows `x-labels` when it has them; these choices are code otherwise.
+    schema = client.get("/api/registry").json()
+    for stage, name, key in (("index", "lancedb", "embedder"), ("index", "lancedb", "metric"), ("use_case", "chat", "citation_method")):
+        prop = schema[stage][name]["config_schema"]["properties"][key]
+        assert set(prop.get("x-labels", {})) == set(prop["enum"]), f"{name}.{key}"
+    labels = schema["index"]["lancedb"]["config_schema"]["properties"]["metric"]["x-labels"]
+    assert labels == {"cosine": "Cosine: the angle between vectors", "l2": "L2: the straight-line distance"}

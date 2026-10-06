@@ -40,6 +40,9 @@ describe("what it did, per artifact type", () => {
     // The character chunker is set in characters, so the card counts characters.
     // Character lengths 265 327 340 366 375 389: median 353, largest 389.
     expect(text("chunk", "chunk_set", chunkRecursive)).toBe("Made 6 chunks. Median 353 characters, largest 389. 3 overlaps.")
+    // The sentence chunker is set in sentences, so the card counts sentences.
+    const bySentences = { ...chunkRecursive, chunker_meta: { chunker: "sentence_window", sentences_per_chunk: 5, overlap_sentences: 1, sentences: 37 } }
+    expect(text("chunk", "chunk_set", bySentences)).toBe("Made 6 chunks from 37 sentences, up to 5 in each. 3 overlaps.")
     // A chunker set in tokens counts tokens: 69 76 73 65 62 54, median 67, largest 76.
     const byTokens = { ...chunkRecursive, chunker_meta: { chunker: "token_based", max_tokens: 96, overlap: 16 } }
     expect(text("chunk", "chunk_set", byTokens)).toMatch(/^Made 6 chunks\. Median 67 tokens, largest 76\. \d+ overlaps?\.$/)

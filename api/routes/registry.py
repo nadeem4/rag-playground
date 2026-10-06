@@ -37,6 +37,8 @@ def _without_test_options(schema: dict[str, Any]) -> dict[str, Any]:
             for (s, key), drop in TEST_ONLY.items():
                 if s == stage and key in props and "enum" in props[key]:
                     props[key]["enum"] = [v for v in props[key]["enum"] if v not in drop]
+                    if "x-labels" in props[key]:
+                        props[key]["x-labels"] = {v: t for v, t in props[key]["x-labels"].items() if v not in drop}
             for key in ("custom_base_url", "custom_model"):
                 props.pop(key, None)
     return schema

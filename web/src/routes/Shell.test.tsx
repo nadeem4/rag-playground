@@ -1495,6 +1495,54 @@ describe("the Ask panel results on Build", () => {
     await waitFor(() => expect(screen.getByTestId("run-line").textContent).toContain("Building"))
   })
 
+  async function builtIndex() {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 4 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    await waitFor(() => expect(within(card("index")).getByRole("button", { name: "See Index output" })).toBeTruthy())
+  }
+
+  it("on desktop the output icon fills the pane and stays lit, without opening the card's settings", async () => {
+    await builtIndex()
+    const icon = within(card("index")).getByRole("button", { name: "See Index output" })
+    fireEvent.click(icon)
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Inspector" })).getByRole("heading", { level: 2 }).textContent).toBe("Index"))
+    expect(icon.getAttribute("aria-pressed")).toBe("true")
+    expect(within(card("index")).getByRole("button", { name: "Index settings" }).getAttribute("aria-expanded")).toBe("false")
+    // The gear opens the settings and leaves the pane as it is.
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk settings" }))
+    expect(within(card("chunk")).getByRole("button", { name: "Chunk settings" }).getAttribute("aria-expanded")).toBe("true")
+    expect(within(screen.getByRole("region", { name: "Inspector" })).getByRole("heading", { level: 2 }).textContent).toBe("Index")
+    expect(screen.queryByRole("dialog", { name: /output$/ })).toBeNull()
+  })
+
+  it("on a phone the output opens in a sheet instead of a pane, and the round Ask button hides while it is open", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({ matches: q === "(max-width: 47.99rem)" || q === "(max-width: 63.99rem)", addEventListener: () => {}, removeEventListener: () => {} })),
+    )
+    await builtIndex()
+    expect(screen.queryByRole("region", { name: "Inspector" })).toBeNull()
+    fireEvent.click(within(card("index")).getByRole("button", { name: "See Index output" }))
+    const sheet = await screen.findByRole("dialog", { name: "Index output" })
+    expect(within(sheet).getByRole("region", { name: "Inspector" })).toBeTruthy()
+    // One title: the sheet's own. The view inside drops its repeat of the step's name.
+    expect(within(sheet).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Index output"])
+    expect(document.querySelector<HTMLButtonElement>("button.ask-fab")!.hidden).toBe(true)
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close the output" }))
+    expect(screen.queryByRole("dialog", { name: "Index output" })).toBeNull()
+    expect(document.querySelector<HTMLButtonElement>("button.ask-fab")!.hidden).toBe(false)
+    // Tapping a card's title only opens its settings on a phone: no sheet.
+    fireEvent.click(within(card("chunk")).getByTestId("card-title"))
+    expect(screen.queryByRole("dialog", { name: /output$/ })).toBeNull()
+  })
+
   it("keeps the built steps when you leave Build and come back in the same tab", async () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
     render(<Shell />)

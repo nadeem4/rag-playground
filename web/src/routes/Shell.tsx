@@ -14,11 +14,13 @@ import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { AskDock, useAskDock } from "@/components/ask/AskDock"
 import { AskPanel } from "@/components/ask/AskPanel"
+import { OutputSheet } from "@/components/pipeline/OutputSheet"
+import { usePhone } from "@/components/pipeline/usePhone"
 import { fresh } from "@/components/ask/AskResults"
 import { askSnapshot, logEntry, type AskSnapshot, type TranscriptEntry } from "@/components/ask/Transcript"
 import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
-import { fmtMs } from "@/components/pipeline/NodeCard"
+import { fmtMs, plainName } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
@@ -124,6 +126,18 @@ function Build({ registry }: { registry: Registry }) {
   const results: Record<string, NodeState> = tracked.results
   const [sigs, setSigs] = useState<Record<string, string>>(() => session?.sigs ?? {})
   const [selected, setSelected] = useState<string | null>(null)
+  // The step whose output is on show: the pane beside the cards, or the sheet on a phone.
+  // Separate from `selected`, the card whose settings are open: the gear opens settings
+  // only, the output icon shows output only, and a card's title does both on desktop.
+  const [inspected, setInspected] = useState<string | null>(null)
+  const [outputOpen, setOutputOpen] = useState(false)
+  const isPhone = usePhone()
+  const inspectedNode = graph.nodes.find((n) => n.id === inspected)
+  const closeOutput = useCallback(() => setOutputOpen(false), [])
+  const selectCard = (id: string | null) => {
+    setSelected(id)
+    if (id && !isPhone) setInspected(id)
+  }
   const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
   const [columnError, setColumnError] = useState<string | null>(null)
   const run = useRun(runId)
@@ -248,7 +262,7 @@ function Build({ registry }: { registry: Registry }) {
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
       setErrors((e) => ({ ...e, [source.id]: { message: "Pick a document in the bar above first." } }))
-      setSelected(source.id)
+      selectCard(source.id)
       return
     }
     setKeyNotice(null)
@@ -279,7 +293,7 @@ function Build({ registry }: { registry: Registry }) {
       setKeyNoticeProvider(noticeProvider)
       setRunSteps({ ids: new Set(covered), runId: run_id })
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
-      if (select) setSelected(target ?? order[order.length - 1]?.id ?? null)
+      if (select) selectCard(target ?? order[order.length - 1]?.id ?? null)
       setRunId(run_id)
       return run_id
     } catch (err) {
@@ -288,7 +302,7 @@ function Build({ registry }: { registry: Registry }) {
       else if (routed.kind === "node") setErrors({ [routed.nodeId]: { message: routed.message } })
       else setColumnError(routed.message)
       if (routed.kind !== "column") {
-        setSelected(routed.nodeId)
+        selectCard(routed.nodeId)
         // An error on a retrieval, rerank or answer step is shown in the Ask panel.
         const stage = graph.nodes.find((n) => n.id === routed.nodeId)?.stage
         if (stage && ASK_STAGES.includes(stage)) dock.setOpen(true)
@@ -467,7 +481,13 @@ function Build({ registry }: { registry: Registry }) {
                 busy={busy}
                 errors={errors}
                 missingSource={missing}
-                onSelect={setSelected}
+                onSelect={selectCard}
+                showing={isPhone ? null : inspected}
+                onShowOutput={(id) => {
+                  setInspected(id)
+                  if (isPhone) setOutputOpen(true)
+                }}
+                onSettings={(id) => setSelected((cur) => (cur === id ? null : id))}
                 onTransform={(id, t) => edit(setTransform(graph, id, t, registry), id)}
                 onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
                 onRun={(id, force) => void start(id, force)}
@@ -475,6 +495,7 @@ function Build({ registry }: { registry: Registry }) {
                 onRemove={(id) => {
                   edit(removeNode(graph, id), id)
                   if (selected === id) setSelected(null)
+                  if (inspected === id) setInspected(null)
                 }}
                 onSweep={(id, preset) => void openSweep(id, preset)}
                 explanations={explanations}
@@ -485,17 +506,26 @@ function Build({ registry }: { registry: Registry }) {
         </div>
       </section>
 
-      <InspectorPanel
-        graph={graph}
-        registry={registry}
-        results={results}
-        stale={stale}
-        selected={selected}
-        failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
-        roomForButton={!dock.open}
-      />
+      {isPhone ? (
+        // On a phone the output opens in a sheet over the cards, not in a pane far below them.
+        outputOpen && inspectedNode ? (
+          <OutputSheet title={titleFor(inspectedNode)} sub={`${plainName(inspectedNode.transform)}, ${inspectedNode.transform}`} onClose={closeOutput}>
+            <InspectorPanel graph={graph} registry={registry} results={results} stale={stale} selected={inspected} roomForButton={false} inSheet />
+          </OutputSheet>
+        ) : null
+      ) : (
+        <InspectorPanel
+          graph={graph}
+          registry={registry}
+          results={results}
+          stale={stale}
+          selected={inspected}
+          failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
+          roomForButton={!dock.open}
+        />
+      )}
 
-      <AskDock dock={dock} count={transcript[0]?.rows.length} building={building} measure={measureBuild}>
+      <AskDock dock={dock} count={transcript[0]?.rows.length} building={building} hideButton={isPhone && outputOpen} measure={measureBuild}>
         {(head) => (
           <AskPanel
             head={head}
@@ -558,6 +588,7 @@ function InspectorPanel({
   selected,
   failedHint,
   roomForButton,
+  inSheet = false,
 }: {
   graph: PipelineGraph
   registry: Registry
@@ -567,6 +598,8 @@ function InspectorPanel({
   failedHint?: string
   /** Ask is closed: the round button sits over the foot of the pane. */
   roomForButton: boolean
+  /** Inside the phone's output sheet. */
+  inSheet?: boolean
 }) {
   const picked = graph.nodes.find((n) => n.id === selected)
   // The retrieval, rerank and answer steps are edited in the Ask panel, not here.
@@ -582,7 +615,7 @@ function InspectorPanel({
       </section>
     )
   }
-  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} roomForButton={roomForButton} />
+  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} roomForButton={roomForButton} inSheet={inSheet} />
 }
 
 function CardInspector({
@@ -592,6 +625,7 @@ function CardInspector({
   stale,
   node,
   roomForButton,
+  inSheet = false,
 }: {
   graph: PipelineGraph
   registry: Registry
@@ -600,6 +634,8 @@ function CardInspector({
   node: GraphNode
   /** Ask is closed: the round button sits over the foot of the pane. */
   roomForButton: boolean
+  /** Inside the phone's output sheet, whose head already names the step: no title of its own. */
+  inSheet?: boolean
 }) {
   const result = results[node.id]
   const usable = result && (result.status === "done" || result.status === "cached") && !stale.has(result.id)
@@ -668,10 +704,12 @@ function CardInspector({
       {/* Wraps rather than squeezing: at phone width the title and the artifact
           metadata each take a row, as on Compare and Evaluate. */}
       <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-hairline px-3 py-1">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="text-xl font-semibold">{verb}</h2>
-          <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span>
-        </div>
+        {inSheet ? null : (
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h2 className="text-xl font-semibold">{verb}</h2>
+            <span className="truncate font-mono text-xs text-fg-muted">{node.transform}</span>
+          </div>
+        )}
         {artifactId ? (
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
             <span className="font-mono">{type}</span>

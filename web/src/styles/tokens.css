@@ -579,6 +579,12 @@
     animation-name: ask-sheet-in;
   }
 }
+/* A step's output on a phone rises the way Ask's sheet does. */
+@media (prefers-reduced-motion: no-preference) {
+  .output-sheet {
+    animation: ask-sheet-in var(--dur-mid) var(--ease-in);
+  }
+}
 
 /*
  * The phone keeps only the raised card's first shadow layer (spec section 9).

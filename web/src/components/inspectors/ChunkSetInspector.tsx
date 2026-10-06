@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 
 import "./inspectors.css"
 import { useSpineLayout } from "./spine"
-import { assignLanes, chunkSlot, chunkStats, projectSpans, type Segment } from "./spans"
+import { assignLanes, chunkSizes, chunkSlot, chunkStats, median, p95, projectSpans, type Segment } from "./spans"
 import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
 
 /**
@@ -89,15 +89,17 @@ function ChunkSetView({
       }
     })
     const { pieces, tokens, ...rest } = chunkStats({ source_text: source, chunks }, segments)
+    // The median and the largest 5% in the unit the chunk size is set in, as the card says them.
+    const { sizes, unit } = chunkSizes({ chunks, chunker_meta: set.chunker_meta })
     return {
       lanes,
       laneCount,
       first,
       last,
       maxTokens: Math.max(1, ...chunks.map((c) => c.token_count)),
-      stats: { chunks: pieces, total: tokens, ...rest },
+      stats: { chunks: pieces, total: tokens, ...rest, median: median(sizes), p95: p95(sizes), unit },
     }
-  }, [chunks, segments, source])
+  }, [chunks, segments, source, set.chunker_meta])
 
   useSpineLayout(rootRef, [segments])
 
@@ -223,10 +225,10 @@ function Summary({
   stats,
   meta,
 }: {
-  stats: { chunks: number; total: number; median: number | null; p95: number | null; overlaps: number; uncovered: number }
+  stats: { chunks: number; total: number; median: number | null; p95: number | null; unit: string; overlaps: number; uncovered: number }
   meta: Record<string, unknown>
 }) {
-  const dash = (n: number | null) => (n === null ? "n/a" : fmt(n))
+  const dash = (n: number | null) => (n === null ? "n/a" : fmt(Math.round(n)))
   const params = Object.entries(meta)
     .filter(([k]) => k !== "chunker")
     .map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
@@ -235,8 +237,8 @@ function Summary({
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <Stat id="chunks" label="chunks" value={fmt(stats.chunks)} />
         <Stat id="total" label="tokens" value={fmt(stats.total)} />
-        <Stat id="median" label="median" value={dash(stats.median)} />
-        <Stat id="p95" label="p95" value={dash(stats.p95)} />
+        <Stat id="median" label={`median ${stats.unit}`} value={dash(stats.median)} />
+        <Stat id="p95" label={`p95 ${stats.unit}`} value={dash(stats.p95)} />
         <Stat id="overlaps" label="overlaps" value={fmt(stats.overlaps)} />
         <Stat id="uncovered" label="chars uncovered" value={fmt(stats.uncovered)} />
       </div>

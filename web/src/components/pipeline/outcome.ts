@@ -2,7 +2,7 @@ import type { ArtifactType, ChunkSet, CleanReportEntry, ElementType, ParsedDoc, 
 import { chatStats, isChatOutput } from "@/components/inspectors/chat"
 import { movement, rowsFromResult, type SearchOutput } from "@/components/inspectors/hits"
 import type { IndexDescriptor } from "@/components/inspectors/IndexInspector"
-import { median, overlapPairs, projectSpans } from "@/components/inspectors/spans"
+import { chunkSizes, median, overlapPairs, projectSpans } from "@/components/inspectors/spans"
 import { fmt } from "@/components/inspectors/status"
 
 /**
@@ -80,9 +80,6 @@ function cleanOutcome(entry: CleanReportEntry): Outcome {
   }
 }
 
-/** Chunkers whose size setting counts characters; the rest count tokens. */
-const BY_CHARACTERS = new Set(["recursive_character"])
-
 function chunkOutcome(set: ChunkSet): Outcome {
   const n = set.chunks.length
   if (n === 0) return { headline: 0, lead: "Made 0 chunks", tail: ". The document produced no text to cut." }
@@ -98,9 +95,7 @@ function chunkOutcome(set: ChunkSet): Outcome {
     }
   }
   // Sizes in the unit the chunk size is set in, so the card and the setting agree.
-  const chars = BY_CHARACTERS.has(String(set.chunker_meta?.chunker ?? ""))
-  const sizes = set.chunks.map((c) => (chars ? c.text.length : c.token_count))
-  const unit = chars ? "characters" : "tokens"
+  const { sizes, unit } = chunkSizes(set)
   return {
     headline: n,
     lead: `Made ${count(n, "chunk", "chunks")}`,

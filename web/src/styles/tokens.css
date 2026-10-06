@@ -434,12 +434,13 @@
  * each side, 24px wide in all, and 10px past the top and the bottom, or more
  * on a short band, so it is never under 44px tall. On a touch screen the
  * gutter's lanes are 24px apart (inspectors.css, `--lane`), so the overlays of
- * two bands side by side do not overlap. hitBox.test.ts compiles this and
- * checks it.
+ * two bands side by side do not overlap. The chunk view's bands (`ci-band`)
+ * get the same treatment, so a phone draws them 4px wide too. hitBox.test.ts
+ * compiles this and checks it.
  */
 @media (pointer: coarse) {
-  button:not(.ri-mark),
-  [role="button"]:not(.ri-mark),
+  button:not(.ri-mark):not(.ci-band),
+  [role="button"]:not(.ri-mark):not(.ci-band),
   .chip,
   a,
   select,
@@ -453,7 +454,8 @@
   label:has(> input[type="radio"]) {
     min-height: 44px;
   }
-  button.ri-mark::after {
+  button.ri-mark::after,
+  button.ci-band::after {
     content: "";
     position: absolute;
     inset-inline: -10px;

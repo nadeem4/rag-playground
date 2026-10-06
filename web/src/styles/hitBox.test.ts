@@ -39,8 +39,8 @@ describe("the 44 px hit box on a coarse pointer", () => {
     const sized = all.find(([, body]) => /min-height:\s*44px/.test(body) && /min-width:\s*44px/.test(body))
     expect(sized).toBeTruthy()
     expect(sized![0]).toEqual([
-      "button:not(.ri-mark)",
-      '[role="button"]:not(.ri-mark)',
+      "button:not(.ri-mark):not(.ci-band)",
+      '[role="button"]:not(.ri-mark):not(.ci-band)',
       ".chip",
       "a",
       "select",
@@ -79,6 +79,15 @@ describe("the 44 px hit box on a coarse pointer", () => {
     const all = rules(coarseBlocks(await buildCss()))
     const sized = all.find(([, body]) => /min-width:\s*44px/.test(body))!
     expect(sized[0].find((s) => s.startsWith("button"))).toContain(":not(.ri-mark)")
+  })
+
+  it("keeps the chunk view's 4 px bands their drawn size too, with the same overlay, so a phone shows a thin band", async () => {
+    const all = rules(coarseBlocks(await buildCss()))
+    const sized = all.find(([, body]) => /min-width:\s*44px/.test(body))!
+    expect(sized[0].find((s) => s.startsWith("button"))).toContain(":not(.ci-band)")
+    const overlay = all.find(([sel]) => sel.some((s) => s.includes(".ci-band") && s.endsWith("::after")))
+    expect(overlay).toBeTruthy()
+    expect(overlay![1]).toMatch(/inset-inline:\s*-10px/)
   })
 
   /** Every 44 px size declaration in the CSS, and how many sit in a coarse block. */

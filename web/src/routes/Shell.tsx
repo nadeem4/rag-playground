@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { AskDock, useAskDock } from "@/components/ask/AskDock"
 import { AskPanel } from "@/components/ask/AskPanel"
+import { fresh } from "@/components/ask/AskResults"
 import { askSnapshot, logEntry, type AskSnapshot, type TranscriptEntry } from "@/components/ask/Transcript"
 import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
@@ -389,9 +390,20 @@ function Build({ registry }: { registry: Registry }) {
           }}
           notice={barNotice}
         />
-        <p className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
-          These five steps build the index. Retrieval, reranking and answering live in the Ask panel.
-        </p>
+        {/* Before a build, what the steps do; once there is an index, an invitation to change one, and Compare for several at once. */}
+        {fresh(results, stale, indexNode(graph)) ? (
+          <p data-testid="column-intro" className="border-b border-hairline bg-accent-wash px-3 py-2 text-xs text-fg">
+            Open a step to change how it works, such as the chunk size, then build again. To see several settings side by side, use{" "}
+            <a href="/compare" className="font-medium text-primary underline underline-offset-4">
+              Compare
+            </a>
+            .
+          </p>
+        ) : (
+          <p data-testid="column-intro" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
+            These five steps build the index. Retrieval, reranking and answering live in the Ask panel.
+          </p>
+        )}
         {/* On a first visit the first-visit card already asks for a document. */}
         {firstRun ? null : <DocumentNote action="build the index" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />}
         {/* A source blocker is the no-file case, which the first-visit card covers. Right after a

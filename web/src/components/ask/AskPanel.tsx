@@ -11,6 +11,7 @@ import { blockingNode, type NodeErrors } from "@/components/pipeline/PipelineCol
 import { QuestionField } from "@/components/pipeline/QuestionField"
 import { useElapsed } from "@/components/pipeline/useElapsed"
 import { Button } from "@/components/ui/button"
+import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { cn } from "@/lib/utils"
 import { ASK_STAGES, askNodes, indexNode, infoFor, rewriteOf, terminalNode, titleFor, upstreamOfStage, type PipelineGraph, type RewriteMode } from "@/state/graph"
 
@@ -138,6 +139,18 @@ export function AskPanel(p: AskPanelProps) {
 
   // When Asking turns back into Ask with an answer, bring the answer into view, so the press never looks like nothing happened.
   const scrollBox = useRef<HTMLDivElement>(null)
+  // Change settings under the answer: open the settings, then bring them into view once they are drawn.
+  const settingsBox = useRef<HTMLDivElement>(null)
+  const [goSettings, setGoSettings] = useState(false)
+  const toSettings = () => {
+    setOpen(true)
+    setGoSettings(true)
+  }
+  useEffect(() => {
+    if (!goSettings) return
+    settingsBox.current?.scrollIntoView?.({ behavior: motion(), block: "start" })
+    setGoSettings(false)
+  }, [goSettings])
   const answerBox = useRef<HTMLDivElement>(null)
   const wasAsking = useRef(Boolean(p.asking))
   useEffect(() => {
@@ -235,7 +248,15 @@ export function AskPanel(p: AskPanelProps) {
             onChange={setText}
             onSubmit={ask}
             action={
-              <Button size="sm" busy={p.asking} disabled={askDisabled} title={askDisabled ? undefined : ASK_TITLE} onClick={ask}>
+              <Button
+                size="sm"
+                busy={p.asking}
+                disabled={askDisabled}
+                title={askDisabled ? undefined : ASK_TITLE}
+                // A setting changed since the answer: a soft ring says Ask is the next step.
+                className={cn(askStale && !askDisabled && "ring-[3px] ring-accent-wash")}
+                onClick={ask}
+              >
                 {p.asking ? "Asking" : "Ask"}
               </Button>
             }
@@ -267,6 +288,14 @@ export function AskPanel(p: AskPanelProps) {
             stale={askStale}
             questions={questions}
             onComparison={p.onComparison}
+            invite={
+              <p data-testid="ask-invite" className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control bg-accent-wash px-2 py-1 text-xs">
+                <span>Try another search or a reranker, and ask again.</span>
+                <button type="button" className={LINK_BUTTON} onClick={toSettings}>
+                  Change settings
+                </button>
+              </p>
+            }
           />
         </div>
         {questions.length ? (
@@ -294,9 +323,6 @@ export function AskPanel(p: AskPanelProps) {
             </div>
           </div>
         ) : null}
-        {answered ? (
-          <p className="text-xs text-fg-muted">Change a setting below, such as the search or the reranker, and ask again to see the pieces move.</p>
-        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3">
           <div className="flex min-w-0 flex-col gap-1">
             <span className="text-xs font-medium text-fg-muted">Recipe</span>
@@ -320,18 +346,20 @@ export function AskPanel(p: AskPanelProps) {
           </Button>
         </div>
         {shown ? (
-          <AskSettings
-            graph={p.graph}
-            registry={p.registry}
-            hasKey={hasAnyKey(p.server, p.keys)}
-            errors={p.errors}
-            onConfig={p.onConfig}
-            onTransform={p.onTransform}
-            onReranker={p.onReranker}
-            onUseCase={p.onUseCase}
-            onRewrite={p.onRewrite}
-            onSweep={p.onSweep}
-          />
+          <div ref={settingsBox} data-testid="ask-settings" className="scroll-mt-3">
+            <AskSettings
+              graph={p.graph}
+              registry={p.registry}
+              hasKey={hasAnyKey(p.server, p.keys)}
+              errors={p.errors}
+              onConfig={p.onConfig}
+              onTransform={p.onTransform}
+              onReranker={p.onReranker}
+              onUseCase={p.onUseCase}
+              onRewrite={p.onRewrite}
+              onSweep={p.onSweep}
+            />
+          </div>
         ) : null}
         <Transcript entries={p.transcript} onAskAgain={setText} />
       </div>

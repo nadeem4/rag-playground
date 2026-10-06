@@ -1459,6 +1459,23 @@ describe("the Ask panel results on Build", () => {
     expect(screen.getByText("The pipeline cannot run")).toBeTruthy()
   })
 
+  it("before a build the column says what the steps do; once the index is built it invites a change and points to Compare", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    render(<Shell />)
+    const BEFORE = "These five steps build the index. Retrieval, reranking and answering live in the Ask panel."
+    const AFTER = "Open a step to change how it works, such as the chunk size, then build again. To see several settings side by side, use Compare."
+    expect((await screen.findByTestId("column-intro")).textContent).toBe(BEFORE)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 4 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    await waitFor(() => expect(screen.getByTestId("column-intro").textContent).toBe(AFTER))
+    expect(within(screen.getByTestId("column-intro")).getByRole("link", { name: "Compare" }).getAttribute("href")).toBe("/compare")
+  })
+
   it("says reused from an earlier run, never cached, on the card and in the inspector header", async () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
     render(<Shell />)

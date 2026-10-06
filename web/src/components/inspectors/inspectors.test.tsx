@@ -67,6 +67,17 @@ function tenChunks(): ChunkSet {
 const segs = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>("[data-seg]")]
 
 describe("ChunkSetInspector", () => {
+  it("states the sizes in the unit the chunk size is set in, as the card does, and names it", () => {
+    render(<ChunkSetInspector chunkSet={recursive} />)
+    // Recursive is set in characters: lengths 265 327 340 366 375 389, median 353.
+    expect(screen.getByTestId("summary-median").textContent).toBe("353")
+    expect(screen.getByTestId("summary-median").nextElementSibling!.textContent).toBe("median characters")
+    expect(screen.getByTestId("summary-p95").nextElementSibling!.textContent).toBe("p95 characters")
+    cleanup()
+    render(<ChunkSetInspector chunkSet={{ ...recursive, chunker_meta: { chunker: "token_based", max_tokens: 96, overlap: 16 } }} />)
+    expect(screen.getByTestId("summary-median").nextElementSibling!.textContent).toBe("median tokens")
+  })
+
   it("renders the source exactly once, one span per segment", () => {
     const { container } = render(<ChunkSetInspector chunkSet={recursive} />)
     const reading = container.querySelector<HTMLElement>("[data-reading]")!

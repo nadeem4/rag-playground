@@ -116,6 +116,21 @@ export function median(values: readonly number[]): number | null {
 }
 
 /** Nearest-rank 95th percentile: a value that actually occurs in the data. */
+/** Chunkers whose size setting counts characters; the rest count tokens. */
+const BY_CHARACTERS = new Set(["recursive_character"])
+
+/**
+ * Each piece's size in the unit its chunker's size setting uses, so a card, a
+ * view and the setting agree: characters for Recursive, tokens otherwise.
+ */
+export function chunkSizes(set: {
+  chunks: readonly { text: string; token_count: number }[]
+  chunker_meta?: Record<string, unknown>
+}): { sizes: number[]; unit: "characters" | "tokens" } {
+  const chars = BY_CHARACTERS.has(String(set.chunker_meta?.chunker ?? ""))
+  return { sizes: set.chunks.map((c) => (chars ? c.text.length : c.token_count)), unit: chars ? "characters" : "tokens" }
+}
+
 export function p95(values: readonly number[]): number | null {
   if (values.length === 0) return null
   const s = [...values].sort((a, b) => a - b)

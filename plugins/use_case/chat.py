@@ -123,6 +123,9 @@ class ChatConfig(BaseModel):
             "Auto uses the model's own citations when it has them. Otherwise "
             "the model quotes numbered sentences."
         ),
+        json_schema_extra={
+            "x-labels": {"auto": "Auto", "sentence_ids": "Numbered sentences"}
+        },
     )
     support_threshold: float = Field(
         title="Support threshold",

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
+import parsedDoc from "@/api/fixtures/parsed_doc.json"
 import type { NodeState } from "@/api/runState"
 import { initialGraph, transformsFor } from "@/state/graph"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
@@ -636,5 +637,53 @@ describe("the card body is only fields", () => {
     expect(within(card).queryByText("Chunks are small pieces of the document.")).toBeNull()
     expect(within(card).queryByText("Cuts at natural places.")).toBeNull()
     expect(within(card).getByRole("button", { name: "About Transform" })).toBeTruthy()
+  })
+})
+
+describe("a parse that found no text", () => {
+  const empty = { ...parsedDoc, elements: [] }
+  // The test registry has pdfium only; Docling outputs the same parsed document.
+  const PARSERS = [...transformsFor(R, "parse"), { ...transformsFor(R, "parse")[0], name: "docling" }]
+  const parseNode = (transform: string, config: Record<string, unknown>) => ({ id: "parse", stage: "parse" as const, transform, config })
+  const parseDone = (id: string): NodeState => ({ id: "parse", status: "done", artifact_id: id, cache_hit: false, duration_ms: 3 })
+  const card = (transform: string, config: Record<string, unknown>, id: string, over: Partial<NodeCardProps> = {}) =>
+    renderCard({ node: parseNode(transform, config), title: "Parse", transforms: PARSERS, result: parseDone(id), ...over })
+
+  it("with Docling and OCR off, says the PDF may be scanned and offers Turn on OCR, which switches it on", async () => {
+    payloads = { empty1: empty }
+    const onConfig = vi.fn()
+    card("docling", { do_ocr: false, table_mode: "fast" }, "empty1", { onConfig })
+    const note = await screen.findByTestId("empty-parse")
+    expect(note.textContent).toContain("Found no text. This PDF may be scanned: its pages are pictures of text.")
+    expect(note.textContent).toContain("OCR takes about 10 seconds a page.")
+    fireEvent.click(within(note).getByRole("button", { name: "Turn on OCR" }))
+    expect(onConfig).toHaveBeenCalledWith({ do_ocr: true, table_mode: "fast" })
+  })
+
+  it("with OCR already on, says so and offers nothing", async () => {
+    payloads = { empty2: empty }
+    card("docling", { do_ocr: true }, "empty2")
+    const note = await screen.findByTestId("empty-parse")
+    expect(note.textContent).toBe("Found no text, even with OCR. The pages may be blank, or the text too faint to read.")
+    expect(within(note).queryByRole("button")).toBeNull()
+  })
+
+  it("with pdfium, which cannot read pictures, points to Docling with OCR", async () => {
+    payloads = { empty3: empty }
+    card("pdfium", { mode: "text" }, "empty3")
+    const note = await screen.findByTestId("empty-parse")
+    expect(note.textContent).toBe("Found no text. This PDF may be scanned: its pages are pictures of text. Pick Docling above and turn on OCR to read them.")
+    expect(within(note).queryByRole("button")).toBeNull()
+  })
+
+  it("says nothing when the parse found text, or when its settings changed since", async () => {
+    payloads = { full1: parsedDoc, empty4: empty }
+    card("docling", { do_ocr: false }, "full1")
+    await screen.findByTestId("step-summary")
+    expect(screen.queryByTestId("empty-parse")).toBeNull()
+    cleanup()
+    card("docling", { do_ocr: false }, "empty4", { stale: true })
+    await act(async () => {})
+    expect(screen.queryByTestId("empty-parse")).toBeNull()
   })
 })

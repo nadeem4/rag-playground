@@ -58,6 +58,13 @@ class LanceDbIndexConfig(BaseModel):
     embedder: EmbedderName = Field(
         default="qwen3-embedding-0.6b",
         title="Embedding model",
+        json_schema_extra={
+            "x-labels": {
+                "qwen3-embedding-0.6b": "Qwen3 Embedding 0.6B",
+                "bge-small-en-v1.5": "BGE small, English",
+                "fake-deterministic": "Fake, for tests",
+            }
+        },
         description=(
             "The model that turns each piece into a vector. The first run "
             "downloads it."
@@ -82,6 +89,12 @@ class LanceDbIndexConfig(BaseModel):
     metric: Literal["cosine", "l2"] = Field(
         default="cosine",
         title="Distance",
+        json_schema_extra={
+            "x-labels": {
+                "cosine": "Cosine: the angle between vectors",
+                "l2": "L2: the straight-line distance",
+            }
+        },
         description=(
             "How closeness between vectors is measured: cosine compares their "
             "direction, l2 their straight-line distance."

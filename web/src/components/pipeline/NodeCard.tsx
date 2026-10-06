@@ -13,6 +13,7 @@ import { fmt } from "@/components/inspectors/status"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { strategyLabel } from "@/learn/challenges"
+import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { cn } from "@/lib/utils"
 import { STAGE_VERB } from "@/state/graph"
 import { CHUNK_CLASSES } from "@/styles/dataClasses"
@@ -117,6 +118,34 @@ const RING: Record<Look, string> = {
   done: "border-primary",
   stale: "border-stale",
   failed: "border-danger",
+}
+
+/**
+ * A parse that found no text: most often a scanned PDF, whose pages are pictures
+ * of text. Docling can read them with OCR, so it offers to turn OCR on; the
+ * change marks the step, and Run reads the pages again.
+ */
+function EmptyParse({ transform, config, onConfig }: { transform: string; config: Record<string, unknown>; onConfig: (c: Record<string, unknown>) => void }) {
+  const scanned = "Found no text. This PDF may be scanned: its pages are pictures of text."
+  const body =
+    transform !== "docling" ? (
+      `${scanned} Pick Docling above and turn on OCR to read them.`
+    ) : config.do_ocr === true ? (
+      "Found no text, even with OCR. The pages may be blank, or the text too faint to read."
+    ) : (
+      <>
+        {scanned}{" "}
+        <button type="button" className={LINK_BUTTON} onClick={() => onConfig({ ...config, do_ocr: true })}>
+          Turn on OCR
+        </button>
+        , then run Parse again. OCR takes about 10 seconds a page.
+      </>
+    )
+  return (
+    <p role="status" data-testid="empty-parse" className="mt-2 rounded-control bg-stale-wash px-2 py-1 text-xs leading-[1.5] break-words text-stale">
+      {body}
+    </p>
+  )
 }
 
 /** The outcome on one line, its headline number in bold and the other numbers in mono. */
@@ -494,6 +523,9 @@ export function NodeCard(p: NodeCardProps) {
       {/* Closed, the result shows here; open, it shows under the Run button instead. */}
       {ready?.outcome && !isSource && !open ? <ResultLine outcome={ready.outcome} /> : null}
       {ready && p.node.stage === "chunk" ? <ChunkBar data={ready.data} /> : null}
+      {ready?.outcome && p.node.stage === "parse" && ready.outcome.headline === 0 && !p.stale ? (
+        <EmptyParse transform={p.node.transform} config={p.node.config} onConfig={p.onConfig} />
+      ) : null}
 
       {warning ? (
         <p role="status" data-testid="explain-warning" className="mt-2 text-xs leading-[1.5] break-words text-danger">

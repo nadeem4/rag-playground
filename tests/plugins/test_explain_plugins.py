@@ -33,7 +33,7 @@ def test_recursive_character_blocks_overlap_at_or_over_size(overlap):
 def test_recursive_character_default_is_not_blocking():
     exp = RecursiveCharacterChunker().explain(RecursiveCharacterConfig())
     assert exp.blocking is False and exp.warning is None
-    assert "1,000" in exp.settings and "200" in exp.settings
+    assert "400 characters" in exp.settings and "80 characters" in exp.settings
     assert exp.tradeoff
 
 

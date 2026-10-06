@@ -126,7 +126,7 @@ Cuts at paragraph breaks first. A paragraph too long for one piece is cut at lin
 then at sentence ends, then at spaces, so each cut lands on the most natural boundary
 available. The parts are then packed together until a piece is full.
 
-- `chunk_size` (1000 characters) and `chunk_overlap` (200 characters).
+- `chunk_size` (400 characters) and `chunk_overlap` (80 characters).
 - `heading_context` (on).
 
 **Use it** as a sound default that works with any parser.

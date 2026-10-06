@@ -234,7 +234,7 @@ describe("what it did", () => {
     expect(sentence.className).not.toContain("font-mono")
     expect(sentence.className).toContain("text-base")
     expect(within(sentence).getByText("6").className).toContain("font-mono")
-    expect(within(sentence).getByText("67").className).toContain("font-mono")
+    expect(within(sentence).getByText("353").className).toContain("font-mono")
   })
 
   it("shows the plugin's note", async () => {

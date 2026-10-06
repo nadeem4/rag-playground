@@ -47,8 +47,8 @@ _SEPARATORS: tuple[tuple[str, int], ...] = (
 
 
 class RecursiveCharacterConfig(BaseModel):
-    chunk_size: int = Field(default=1000, ge=1)
-    chunk_overlap: int = Field(default=200, ge=0)
+    chunk_size: int = Field(default=400, ge=1)
+    chunk_overlap: int = Field(default=80, ge=0)
     heading_context: bool = Field(
         default=True,
         description=(

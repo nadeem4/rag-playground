@@ -82,8 +82,9 @@ turns off what is unsafe to share.
 - The server gives each browser an anonymous `rag_visitor` cookie. An upload belongs to
   that browser: no other visitor can list it, see its pages or run on it. Clearing
   cookies loses access to your uploads.
-- Uploads are PDFs only, up to 10 MB and 20 pages each, and 3 live files per browser. All
-  live uploads together are capped at 200 MB, so the shared disk cannot fill up.
+- Uploads are PDFs only, up to 10 MB and 20 pages each, with no page over 41 inches
+  (3,000 points) a side, and 3 live files per browser. All live uploads together are
+  capped at 200 MB, so the shared disk cannot fill up.
 - An upload is deleted 24 hours after it was made. A sweep checks once an hour.
 - The bundled samples stay public, and cannot be deleted. They are put back in the store
   each time the server starts, so a restart never loses one.

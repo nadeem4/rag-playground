@@ -70,6 +70,22 @@ def page_count(data: bytes) -> int | None:
         doc.close()
 
 
+def oversized_page(data: bytes, limit: float) -> tuple[int, float, float] | None:
+    """The first page with a side over `limit` points, as (page number, width, height), or None."""
+    try:
+        doc = pdfium.PdfDocument(data)
+    except Exception:
+        return None
+    try:
+        for i in range(len(doc)):
+            width, height = doc.get_page_size(i)
+            if max(width, height) > limit:
+                return i + 1, width, height
+        return None
+    finally:
+        doc.close()
+
+
 def live_uploads(sources: Path, visitor: str) -> int:
     meta_dir = sources / META_DIR
     if not meta_dir.is_dir():
@@ -116,6 +132,14 @@ def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
             f"This PDF has {pages} pages. The hosted demo takes up to "
             f"{demo.MAX_UPLOAD_PAGES} pages. Run the playground locally for longer documents. "
             "Or split out the pages you need and upload those.",
+        )
+    big = oversized_page(data, demo.MAX_PAGE_POINTS)
+    if big is not None:
+        number, width, height = big
+        raise HTTPException(
+            413,
+            f"Page {number} is {round(width / 72)} by {round(height / 72)} inches. The hosted demo takes pages up to "
+            f"{int(demo.MAX_PAGE_POINTS / 72)} inches a side. Run the playground locally for larger pages.",
         )
     sha = hashlib.sha256(data).hexdigest()
     if sha in sample_set.readable_shas():

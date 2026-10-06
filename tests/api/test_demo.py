@@ -454,3 +454,36 @@ def test_uploading_a_samples_bytes_does_not_count_toward_the_cap(client, monkeyp
     for i in range(3):
         f = (f"f{i}.pdf", _pdf_with_pages(i + 1), "application/pdf")
         assert client.post("/api/sources", files={"file": f}).status_code == 200
+
+
+def _pdf_with_page_size(width: float, height: float) -> bytes:
+    import io
+
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument.new()
+    doc.new_page(612, 792)
+    doc.new_page(width, height)
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    return buf.getvalue()
+
+
+def test_demo_refuses_a_page_over_3000_points_a_side_with_a_plain_sentence(client, monkeypatch):
+    # Docling draws each page as an image: a 200 inch page would take the shared machine's memory.
+    demo_on(monkeypatch)
+    client.get("/api/settings/app")
+    r = client.post("/api/sources", files={"file": ("poster.pdf", _pdf_with_page_size(14400, 792), "application/pdf")})
+    assert r.status_code == 413
+    assert r.json()["detail"] == (
+        "Page 2 is 200 by 11 inches. The hosted demo takes pages up to 41 inches a side. "
+        "Run the playground locally for larger pages."
+    )
+    ok = client.post("/api/sources", files={"file": ("a0.pdf", _pdf_with_page_size(2384, 3370 - 400), "application/pdf")})
+    assert ok.status_code == 200
+
+
+def test_a_local_run_takes_a_large_page(client):
+    r = client.post("/api/sources", files={"file": ("poster.pdf", _pdf_with_page_size(14400, 792), "application/pdf")})
+    assert r.status_code == 200

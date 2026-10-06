@@ -54,9 +54,14 @@ export interface RunState {
   error: string | null
   /** True once `stream_end` arrives. The stream may be closed only then. */
   closed: boolean
+  /** True while the run waits for its turn on the busy demo (`queued` until `unqueued`). */
+  queued: boolean
   /** Highest SSE `id` applied, so a replayed stream can be de-duplicated. */
   lastSeq: number
 }
+
+/** What a page says while its run waits its turn on the busy demo. */
+export const QUEUED_LINE = "The demo is busy with other learners. Your run starts in a moment."
 
 export const initialRunState: RunState = {
   status: "idle",
@@ -65,6 +70,7 @@ export const initialRunState: RunState = {
   warnings: [],
   error: null,
   closed: false,
+  queued: false,
   lastSeq: -1,
 }
 
@@ -145,8 +151,12 @@ function applyEvent(prev: RunState, e: RunEvent): RunState {
       return { ...state, warnings: [...state.warnings, e.message] }
     case "run_error":
       return { ...state, error: e.error }
+    case "queued":
+      return { ...state, queued: true }
+    case "unqueued":
+      return { ...state, queued: false }
     case "stream_end":
-      return { ...state, status: e.status, ok: e.ok, closed: true }
+      return { ...state, status: e.status, ok: e.ok, closed: true, queued: false }
     default:
       // A newer server may add events. Ignore them rather than crash the UI.
       return prev

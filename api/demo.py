@@ -23,6 +23,9 @@ MAX_UPLOADS_PER_VISITOR = 3
 #: The largest page side the demo takes, in points (72 a inch): about 41 inches.
 #: Docling draws each page as an image, so a poster-sized page would take the shared memory.
 MAX_PAGE_POINTS = 3000
+#: Runs that do heavy work at the same time on the demo; the rest wait their turn.
+#: Two cores and 16 GB serve every visitor, and several big parses at once run out of memory.
+MAX_ACTIVE_RUNS = 2
 #: All live uploads together, so a client that keeps getting new visitor ids
 #: still cannot fill the shared disk.
 MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024

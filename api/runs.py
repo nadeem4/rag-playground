@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import traceback
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -57,9 +58,31 @@ class RunState:
         }
 
 
+@dataclass
+class _Turn:
+    """A waiting run's place in line: set when its slot comes, or when it is cancelled."""
+
+    event: asyncio.Event = field(default_factory=asyncio.Event)
+    granted: bool = False
+
+
+def demo_run_limit() -> int | None:
+    """How many runs may work at once: a few on the shared demo, no limit locally."""
+    from api import demo
+
+    return demo.MAX_ACTIVE_RUNS if demo.enabled() else None
+
+
 class RunManager:
-    def __init__(self) -> None:
+    """Runs jobs on worker threads. With a limit, runs past it wait in arrival
+    order: a waiting run logs `queued` (with how many wait ahead of it), then
+    `unqueued` when it gets its turn. Cancelling a waiting run ends it unrun."""
+
+    def __init__(self, limit: Callable[[], int | None] = demo_run_limit) -> None:
         self.runs: dict[str, RunState] = {}
+        self._limit = limit
+        self._working = 0
+        self._waiting: deque[tuple[RunState, _Turn]] = deque()
 
     def get(self, run_id: str) -> RunState | None:
         return self.runs.get(run_id)
@@ -87,6 +110,10 @@ class RunManager:
             return state.cancel_requested
 
         async def main() -> None:
+            if not await self._take_turn(state):
+                state.ok, state.status = False, "cancelled"
+                self._publish(state, event("stream_end", status="cancelled", ok=False))
+                return
             try:
                 ok, was_cancelled = await anyio.to_thread.run_sync(
                     job, on_event, cancelled
@@ -96,6 +123,8 @@ class RunManager:
             except Exception:
                 ok, status, error = False, "error", traceback.format_exc()
                 self._publish(state, event("run_error", error=error))
+            finally:
+                self._end_turn()
             # Every call_soon_threadsafe from the job was queued before the
             # thread's completion was, so the log is complete at this point.
             state.ok, state.status = ok, status
@@ -104,8 +133,39 @@ class RunManager:
         state.task = loop.create_task(main())
         return state
 
+    async def _take_turn(self, state: RunState) -> bool:
+        """Wait for a free slot when the limit is reached. False if the run was cancelled while waiting."""
+        limit = self._limit()
+        if limit is None or (self._working < limit and not self._waiting):
+            self._working += 1
+            return True
+        turn = _Turn()
+        self._waiting.append((state, turn))
+        self._publish(state, event("queued", ahead=len(self._waiting) - 1))
+        await turn.event.wait()
+        if state.cancel_requested:
+            if turn.granted:
+                self._end_turn()  # cancelled after its slot came: pass the slot on
+            return False
+        self._publish(state, event("unqueued"))
+        return True
+
+    def _end_turn(self) -> None:
+        """Hand the slot to the next run in line, or free it."""
+        if self._waiting:
+            _, turn = self._waiting.popleft()
+            turn.granted = True
+            turn.event.set()
+            return
+        self._working -= 1
+
     def cancel(self, state: RunState) -> None:
         state.cancel_requested = True
+        for i, (waiting, turn) in enumerate(self._waiting):
+            if waiting is state:
+                del self._waiting[i]
+                turn.event.set()  # it ends unrun, holding no slot
+                break
 
     async def shutdown(self) -> None:
         """Ask every live run to stop at its next node boundary, then wait."""

@@ -631,6 +631,15 @@ describe("while and after scoring", () => {
     return DrivenEventSource.instances[0]
   }
 
+  it("while the busy demo makes the run wait, says so instead of a question count", async () => {
+    const es = await start({ o0: evalOut({}), o1: evalOut({}) })
+    es.emit(0, { event: "queued", ahead: 0 })
+    await waitFor(() => expect(document.body.textContent).toContain("The demo is busy with other learners. Your run starts in a moment."))
+    expect(document.body.textContent).not.toContain("Scoring question")
+    es.emit(1, { event: "unqueued" })
+    await waitFor(() => expect(document.body.textContent).toContain("Scoring question 1 of 2."))
+  })
+
   it("says which question it is scoring while busy, and shows the summary once done", async () => {
     const es = await start({
       o0: evalOut({}),

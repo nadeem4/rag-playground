@@ -391,6 +391,15 @@ export interface RunErrorEvent extends EventBase {
   event: "run_error"
   error: string
 }
+/** The demo is busy: the run waits its turn. `ahead` runs wait in front of it. */
+export interface QueuedEvent extends EventBase {
+  event: "queued"
+  ahead: number
+}
+/** The run's turn came: it starts now. */
+export interface UnqueuedEvent extends EventBase {
+  event: "unqueued"
+}
 /** Always the last event of a stream. The only safe point to close it. */
 export interface StreamEndEvent extends EventBase {
   event: "stream_end"
@@ -410,6 +419,8 @@ export type RunEvent =
   | VariantStartedEvent
   | VariantFinishedEvent
   | RunErrorEvent
+  | QueuedEvent
+  | UnqueuedEvent
   | StreamEndEvent
 
 // ------------------------------------------------------------------- app --

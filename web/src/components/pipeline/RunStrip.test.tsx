@@ -178,3 +178,10 @@ describe("stripSegments", () => {
     expect(states[1]).toBe("todo")
   })
 })
+
+describe("a run waiting its turn on the demo", () => {
+  it("says the demo is busy, in place of the progress line", () => {
+    const strip = show(segs(), { kind: "queued" })
+    expect(within(strip).getByTestId("run-line").textContent).toBe("The demo is busy with other learners. Your run starts in a moment.")
+  })
+})

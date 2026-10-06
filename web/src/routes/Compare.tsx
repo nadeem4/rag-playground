@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 
 import { useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
 import { useSampleQuestions, useSamples } from "@/api/samples"
-import type { NodeState, VariantState } from "@/api/runState"
+import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
 import type { ChunkSet, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
 import { usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
@@ -1155,7 +1155,13 @@ function Sweep({
                   ) : null}
                   <p data-testid="tally" className="m-0 text-xs text-fg-muted">
                     <MonoNumbers text={tallyLine(tally, order.map((n) => ({ id: n.id, title: titleFor(n) })), { finished: run.closed })} />
-                    {running !== null ? ` Running recipe ${running + 1} of ${submitted.variants.length}.` : run.closed ? "" : " Starting."}
+                    {run.queued
+                      ? ` ${QUEUED_LINE}`
+                      : running !== null
+                        ? ` Running recipe ${running + 1} of ${submitted.variants.length}.`
+                        : run.closed
+                          ? ""
+                          : " Starting."}
                   </p>
                   {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
                 </>

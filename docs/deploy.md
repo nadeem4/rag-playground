@@ -91,6 +91,16 @@ turns off what is unsafe to share.
 - A question set uploaded for Evaluate is checked and not kept.
 - Page images of an upload are sent as private, so shared caches do not keep them.
 
+**A shared machine, shared fairly.**
+
+- At most two runs do heavy work at once, across every visitor. A run past that waits its
+  turn in arrival order, and the page says: The demo is busy with other learners. Your
+  run starts in a moment. A Compare is one run, however many recipes it has. Cancel works
+  while a run waits. A local run has no limit.
+- Results are cached for everyone, filed by a fingerprint of the document, the step and
+  its settings, so two visitors never overwrite each other's. The cache cannot be cleared
+  on the demo: the request is refused, because it would wipe every visitor's results.
+
 **No server keys.** Every key, for every provider, comes only from the request header,
 that is, a key the visitor types in the app. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 `OPENROUTER_API_KEY` and `OPENAI_COMPATIBLE_API_KEY` in the environment or in `.env` are

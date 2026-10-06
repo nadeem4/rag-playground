@@ -1,4 +1,4 @@
-import type { NodeState } from "@/api/runState"
+import { QUEUED_LINE, type NodeState } from "@/api/runState"
 import type { GraphNode } from "@/api/types"
 import { cn } from "@/lib/utils"
 import { titleFor } from "@/state/graph"
@@ -26,6 +26,8 @@ export type StripLine =
   | { kind: "failed"; title: string }
   /** The server refused the run before it started; the reason is in the note above the cards. */
   | { kind: "refused" }
+  /** The run waits its turn on the busy demo. */
+  | { kind: "queued" }
   | null
 
 /**
@@ -94,6 +96,8 @@ function LineText({ line }: { line: Exclude<StripLine, null> }) {
   const elapsed = useElapsed(startedAt)
   const secs = elapsed !== undefined ? <span className="font-mono">, {elapsed} s</span> : null
   switch (line.kind) {
+    case "queued":
+      return <>{QUEUED_LINE}</>
     case "building":
       return line.title ? (
         <>

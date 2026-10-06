@@ -1030,3 +1030,20 @@ describe("the document in the bar", () => {
     expect(await screen.findByText("No pipeline to compare")).toBeTruthy()
   })
 })
+
+describe("a Compare run waiting its turn on the busy demo", () => {
+  it("says the demo is busy until its turn comes, then counts recipes", async () => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: /^Run \d+ recipes$/ }))
+    const es = await driven()
+    es.emit(0, { event: "queued", ahead: 0 })
+    await waitFor(() => expect(screen.getByTestId("tally").textContent).toContain("The demo is busy with other learners. Your run starts in a moment."))
+    es.emit(1, { event: "unqueued" })
+    es.emit(2, { event: "variant_started", index: 0, variant: {} })
+    es.emit(3, { event: "node_started", node_id: "chunk", transform: "x", artifact_id: "x" })
+    await waitFor(() => expect(screen.getByTestId("tally").textContent).toContain("Running recipe 1 of"))
+    expect(screen.getByTestId("tally").textContent).not.toContain("The demo is busy")
+  })
+})

@@ -19,6 +19,7 @@ with a run, and a question set while it is checked.
 | Page images you viewed | In this browser's cache | They may stay in this browser's cache until it is cleared, even after the upload they show is deleted. |
 | A question set you upload for Evaluate | On the demo: in this tab only. Locally: on this machine, beside the document. | On the demo: until you close the tab. The demo checks the set and keeps nothing. Locally: until you delete it. |
 | Your last evaluation, for the before and after | In this tab only | Until you close the tab. |
+| Build's results and the questions you asked | In this tab only | Until you close the tab. They let you leave Build and come back to the same answer. |
 | API keys you add | In this tab's memory only | Until you close or reload the tab. A key is sent with each request that needs it and is never written to storage, a cookie, a link or a saved file. |
 
 ## On the demo server

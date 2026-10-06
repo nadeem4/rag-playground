@@ -171,6 +171,9 @@ move. Picking one of the sample's questions takes you back up to the question bo
 - A piece that holds a table shows it as a table when the piece is open, and says each row
   in words (Measure: Before, After) when it is cut to two lines, as on Compare.
 - The questions asked earlier in the tab stay in a list below.
+- Leaving Build for another page and coming back in the same tab keeps the built steps, the
+  last answer and the questions asked. A step whose settings changed meanwhile comes back
+  marked out of date.
 
 ## Compare
 

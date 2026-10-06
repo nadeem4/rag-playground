@@ -30,6 +30,7 @@ beforeEach(() => {
   posts = []
   resetSampleQuestionsCache()
   window.localStorage.clear()
+  window.sessionStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
   resetPipelinesForTests()
@@ -1474,6 +1475,50 @@ describe("the Ask panel results on Build", () => {
     emit({ event: "stream_end", status: "finished", ok: true }, "2")
     await waitFor(() => expect(screen.getByTestId("column-intro").textContent).toBe(AFTER))
     expect(within(screen.getByTestId("column-intro")).getByRole("link", { name: "Compare" }).getAttribute("href")).toBe("/compare")
+  })
+
+  it("keeps the built steps when you leave Build and come back in the same tab", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: true, duration_ms: 4 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    await waitFor(() => expect(within(card("index")).getByTestId("status-chip").textContent).toBe("reused from an earlier run"))
+
+    // Read or Compare is a new page load: Build mounts again from nothing. The server still has the result.
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        url === "/api/artifacts/idx1" ? Promise.resolve(new Response(JSON.stringify({ id: "idx1" }), { status: 200 })) : base(url, init),
+      ),
+    )
+    cleanup()
+    render(<Shell />)
+    await act(async () => {})
+    await waitFor(() => expect(within(card("index")).getByTestId("status-chip").textContent).toBe("reused from an earlier run"))
+    expect((await screen.findByTestId("column-intro")).textContent).toContain("Open a step to change how it works")
+  })
+
+  it("after a restart wiped the server's results, a restored step comes back as not run", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: true, duration_ms: 4 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    await waitFor(() => expect(within(card("index")).getByTestId("status-chip").textContent).toBe("reused from an earlier run"))
+    cleanup()
+    // The fake server answers 404 for idx1, as a restarted Space does.
+    render(<Shell />)
+    await waitFor(() => expect(within(card("index")).getByTestId("status-chip").textContent).toBe("not run"))
   })
 
   it("says reused from an earlier run, never cached, on the card and in the inspector header", async () => {

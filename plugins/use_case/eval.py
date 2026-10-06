@@ -33,7 +33,7 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import Output, Query, RetrievalResult
@@ -53,7 +53,11 @@ NO_GOLD = (
 
 class EvalConfig(BaseModel):
     #: How many of the retrieved pieces count as "what the reader would see".
-    top_k: int = 5
+    top_k: int = Field(
+        default=5,
+        title="Pieces checked",
+        description="How many of the top pieces count when looking for the answer.",
+    )
 
 
 @register

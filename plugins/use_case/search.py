@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import Hit, Output, RetrievalResult
@@ -28,11 +28,19 @@ from core.transform import Explanation, Transform
 
 class SearchUseCaseConfig(BaseModel):
     #: Results shown, taken from the top of the candidate pool it receives.
-    top_k: int = 5
+    top_k: int = Field(
+        default=5,
+        title="Results shown",
+        description="How many pieces the answer shows.",
+    )
 
     #: Characters, not bytes and not tokens. Slicing a `str` cuts on code
     #: points, so a multi-byte character can never be split in half.
-    max_snippet_chars: int = 400
+    max_snippet_chars: int = Field(
+        default=400,
+        title="Snippet length",
+        description="The most characters shown from each piece.",
+    )
 
 
 @register

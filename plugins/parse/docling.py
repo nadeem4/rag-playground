@@ -90,26 +90,29 @@ LAYERS: dict[str, str] = {
 
 class DoclingConfig(BaseModel):
     do_ocr: bool = Field(
+        title="OCR for scanned pages",
         default=False,
         description=(
-            "Docling's PdfPipelineOptions.do_ocr. "
-            "Read text from page images with OCR. Only needed for scanned PDFs "
-            "with no text layer; it is much slower."
+            "Docling's PdfPipelineOptions.do_ocr. Read text from page images "
+            "with OCR. Only needed for scanned PDFs with no text layer; it is "
+            "much slower."
         ),
     )
     do_table_structure: bool = Field(
+        title="Find table rows and columns",
         default=True,
         description=(
-            "Docling's PdfPipelineOptions.do_table_structure. "
-            "Recover rows and columns of detected tables, so a table reaches "
-            "the chunks as a markdown table instead of loose text."
+            "Docling's PdfPipelineOptions.do_table_structure. Recover rows and "
+            "columns of detected tables, so a table reaches the chunks as a "
+            "markdown table instead of loose text."
         ),
     )
     table_mode: Literal["fast", "accurate"] = Field(
+        title="Table model",
         default="fast",
         description=(
-            "Docling's TableStructureOptions.mode, fast or accurate. "
-            "Which table model to use. Fast is fine for simple grids; accurate "
+            "Docling's TableStructureOptions.mode, fast or accurate. Which "
+            "table model to use. Fast is fine for simple grids; accurate "
             "handles merged cells better and takes longer."
         ),
     )
@@ -125,14 +128,15 @@ class DoclingConfig(BaseModel):
         json_schema_extra={"x-always": ["body"]},
     )
     heading_hierarchy: bool = Field(
+        title="Heading levels",
         default=False,
         description=(
             "Docling's HeadingHierarchyOptions.enabled, set through "
-            "PdfPipelineOptions.heading_hierarchy_options. "
-            "Docling infers heading levels from the layout, so a role sits under "
-            "Experience instead of beside it. It reads PDF bookmarks first, then "
-            "numbering such as 1. and 1.1, then font size and style. When off, "
-            "every heading is at the same level. Turning it on also turns on "
+            "PdfPipelineOptions.heading_hierarchy_options. Docling infers "
+            "heading levels from the layout, so a role sits under Experience "
+            "instead of beside it. It reads PDF bookmarks first, then numbering"
+            " such as 1. and 1.1, then font size and style. When off, every "
+            "heading is at the same level. Turning it on also turns on "
             "Docling's generate_parsed_pages, which keeps the parsed pages in "
             "memory so font style can be read."
         ),

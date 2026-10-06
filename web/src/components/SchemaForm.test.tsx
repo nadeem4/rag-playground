@@ -473,8 +473,8 @@ describe("server errors", () => {
     const schema = registry.chunk!.recursive_character.config_schema
     renderForm(schema, { chunk_size: 0, chunk_overlap: -5 }, errorsFromPydantic(pydantic))
     for (const [label, msg] of [
-      ["Chunk Size", "Input should be greater than or equal to 1"],
-      ["Chunk Overlap", "Input should be greater than or equal to 0"],
+      ["Chunk size", "Input should be greater than or equal to 1"],
+      ["Overlap", "Input should be greater than or equal to 0"],
     ]) {
       const input = screen.getByLabelText(label)
       const error = screen.getByText(msg)

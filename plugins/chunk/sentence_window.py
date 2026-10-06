@@ -29,8 +29,18 @@ _OVERLAP_TOO_BIG = "Overlap must be smaller than the number of sentences per chu
 
 
 class SentenceWindowConfig(BaseModel):
-    sentences_per_chunk: int = Field(default=5, ge=1)
-    overlap_sentences: int = Field(default=1, ge=0)
+    sentences_per_chunk: int = Field(
+        title="Sentences per piece",
+        description="How many sentences go in each piece.",
+        default=5,
+        ge=1,
+    )
+    overlap_sentences: int = Field(
+        title="Overlap",
+        description="How many sentences each piece repeats from the one before.",
+        default=1,
+        ge=0,
+    )
 
     @field_validator("overlap_sentences")
     @classmethod

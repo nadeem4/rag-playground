@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any, Literal, Mapping
 
 import pypdfium2 as pdfium
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import Element, ParsedDoc
@@ -60,10 +60,24 @@ PARAGRAPH_GAP_RATIO = 1.5
 
 
 class PdfiumConfig(BaseModel):
-    mode: Literal["text"] = "text"
+    mode: Literal["text"] = Field(
+        default="text",
+        title="Mode",
+        description=(
+            "Text is the only mode: pdfium reads the text layer the PDF already"
+            " has."
+        ),
+    )
     #: Rebuild paragraphs from the vertical gaps between lines. False emits one
     #: element per extracted line, as version 1 did.
-    join_lines: bool = True
+    join_lines: bool = Field(
+        default=True,
+        title="Join lines into paragraphs",
+        description=(
+            "When on, lines are joined back into paragraphs from the gaps "
+            "between them. When off, each line is its own element."
+        ),
+    )
 
 
 @dataclass

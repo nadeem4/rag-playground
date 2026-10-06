@@ -112,14 +112,14 @@ describe("the step card's look", () => {
     expect(ring.className).toContain("border-primary")
     expect(ring.className).not.toContain("border-dashed")
     expect(within(ring).getByTestId("ring-dot").className).toContain("bg-primary")
-    const sentence = "Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps."
+    const sentence = "Made 6 chunks. Median 353 characters, largest 389. 3 overlaps."
     const summary = await within(card).findByTestId("step-summary", {}, { timeout: 4000 })
     expect(summary.textContent).toBe(sentence)
     expect(summary.getAttribute("title")).toBe(sentence)
     expect(summary.className).toContain("truncate")
     expect(summary.className).not.toContain("font-mono")
     expect(within(summary).getByText("6").className).toContain("font-semibold")
-    expect(within(summary).getByText("67").className).toContain("font-mono")
+    expect(within(summary).getByText("353").className).toContain("font-mono")
     // A computed result has no chip.
     expect(within(card).queryByTestId("status-chip")).toBeNull()
   })
@@ -131,7 +131,7 @@ describe("the step card's look", () => {
     expect(within(card).getByTestId("status-ring").className).toContain("border-dashed")
     expect(within(card).getByTestId("status-chip").textContent).toBe("reused from an earlier run")
     const summary = await within(card).findByTestId("step-summary", {}, { timeout: 4000 })
-    expect(summary.textContent).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps.")
+    expect(summary.textContent).toBe("Made 6 chunks. Median 353 characters, largest 389. 3 overlaps.")
   })
 
   it("the Chunk card shows its pieces to scale in the chunk colours", async () => {
@@ -472,7 +472,7 @@ describe("a running card keeps its status in view", () => {
     payloads = { under1: chunkRecursive }
     const card = renderCard({ selected: true, result: done("under1") })
     const under = await within(card).findByTestId("run-result", {}, { timeout: 4000 })
-    expect(under.textContent).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps.")
+    expect(under.textContent).toBe("Made 6 chunks. Median 353 characters, largest 389. 3 overlaps.")
     expect(under.previousElementSibling?.tagName).toBe("FOOTER")
     // One result line at a time: the head's copy is for the closed card.
     expect(within(card).queryByTestId("step-summary")).toBeNull()

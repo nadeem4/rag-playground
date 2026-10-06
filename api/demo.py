@@ -20,6 +20,9 @@ ENV_VAR = "RAG_PLAYGROUND_DEMO"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_UPLOAD_PAGES = 20
 MAX_UPLOADS_PER_VISITOR = 3
+#: The largest page side the demo takes, in points (72 a inch): about 41 inches.
+#: Docling draws each page as an image, so a poster-sized page would take the shared memory.
+MAX_PAGE_POINTS = 3000
 #: All live uploads together, so a client that keeps getting new visitor ids
 #: still cannot fill the shared disk.
 MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024

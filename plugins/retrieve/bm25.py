@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.artifacts import ArtifactType
 from core.payloads import Query
@@ -22,7 +22,14 @@ from plugins.retrieve import _base
 
 class Bm25Config(BaseModel):
     #: The candidate pool handed on; the next step narrows it.
-    top_k: int = 20
+    top_k: int = Field(
+        default=20,
+        title="Candidates",
+        description=(
+            "How many pieces the search hands on. The rerank or answer step "
+            "after it keeps fewer."
+        ),
+    )
 
 
 @register

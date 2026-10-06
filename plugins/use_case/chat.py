@@ -92,11 +92,23 @@ _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
 class ChatConfig(BaseModel):
     model: Literal[tuple(CHAT_MODELS)] = Field(  # type: ignore[valid-type]
+        title="Model",
+        description="The chat model that writes the answer. It needs a key.",
         default="claude-opus-5",
         json_schema_extra=llm.MODEL_SCHEMA_EXTRA,
     )
-    custom_base_url: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
-    custom_model: str = Field(default="", json_schema_extra=_SHOW_IF_CUSTOM)
+    custom_base_url: str = Field(
+        title="Endpoint URL",
+        description="The address of an OpenAI-compatible server.",
+        default="",
+        json_schema_extra=_SHOW_IF_CUSTOM,
+    )
+    custom_model: str = Field(
+        title="Model name",
+        description="The model name that server expects.",
+        default="",
+        json_schema_extra=_SHOW_IF_CUSTOM,
+    )
     openrouter_model: str = Field(
         default="",
         title="OpenRouter model",
@@ -104,9 +116,30 @@ class ChatConfig(BaseModel):
         json_schema_extra=_SHOW_IF_OPENROUTER,
     )
     #: `auto`: native citations when the model has them, else sentence ids.
-    citation_method: Literal["auto", "sentence_ids"] = "auto"
-    support_threshold: float = Field(default=0.55, ge=0, le=1)
-    max_chunks: int = Field(default=5, ge=1)
+    citation_method: Literal["auto", "sentence_ids"] = Field(
+        default="auto",
+        title="Citations",
+        description=(
+            "Auto uses the model's own citations when it has them. Otherwise "
+            "the model quotes numbered sentences."
+        ),
+    )
+    support_threshold: float = Field(
+        title="Support threshold",
+        description=(
+            "From 0 to 1. How close a claim must be to the sentence it cites to"
+            " count as supported."
+        ),
+        default=0.55,
+        ge=0,
+        le=1,
+    )
+    max_chunks: int = Field(
+        title="Pieces sent",
+        description="How many of the top pieces go to the model.",
+        default=5,
+        ge=1,
+    )
 
 
 #: How each Claude model is described to a newcomer: its cost, in words.

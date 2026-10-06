@@ -64,16 +64,22 @@ def _note(removed: list[dict[str, Any]], pages: Mapping[str, int | None]) -> str
 
 class DedupeBlocksConfig(BaseModel):
     similarity: float = Field(
+        title="Similarity",
         default=0.95,
         ge=0.0,
         le=1.0,
-        description="Minimum difflib ratio to call two blocks duplicates. "
-        "Only consulted when `scope` is 'near'.",
+        description=(
+            "How alike two blocks must be, from 0 to 1, to count as the same. "
+            "Used only when Match is near."
+        ),
     )
     scope: Literal["exact", "near"] = Field(
+        title="Match",
         default="exact",
-        description="'exact' compares normalized text; 'near' compares by "
-        "similarity ratio.",
+        description=(
+            "'exact' compares normalized text; 'near' compares by similarity "
+            "ratio."
+        ),
     )
 
 

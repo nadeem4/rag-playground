@@ -36,17 +36,36 @@ class HybridRrfConfig(BaseModel):
     #: The candidate pool handed on, and also how deep each search goes before
     #: fusion. A document has to appear in at least one list to be fusable at
     #: all, so this is what decides recall. The next step narrows the pool.
-    top_k: int = 20
+    top_k: int = Field(
+        default=20,
+        title="Candidates",
+        description=(
+            "How many pieces the search hands on. The rerank or answer step "
+            "after it keeps fewer."
+        ),
+    )
 
     #: The rank-fusion constant. 60 is the value from the original TREC paper;
     #: smaller makes rank 1 dominate, larger flattens the lists together.
-    rrf_k: int = 60
+    rrf_k: int = Field(
+        default=60,
+        title="Fusion constant",
+        description=(
+            "How the two ranked lists are blended. 60 is the usual value: "
+            "smaller lets each list's first picks count more, larger evens them"
+            " out."
+        ),
+    )
 
     query_expansion: Literal["none", "prf"] = Field(
+        title="Expand the question",
         default="none",
-        description="'none' runs the keyword search on the question as written. "
-        "'prf' (pseudo-relevance feedback) adds the most distinctive words of "
-        "the top dense hits to the keyword search; the dense search is unchanged.",
+        description=(
+            "'none' runs the keyword search on the question as written. 'prf' "
+            "(pseudo-relevance feedback) adds the most distinctive words of the"
+            " top dense hits to the keyword search; the dense search is "
+            "unchanged."
+        ),
     )
     # 2 hits and 6 words, measured: on a resume question that shares no word
     # with the document, this was the one setting that lifted the right piece
@@ -54,19 +73,25 @@ class HybridRrfConfig(BaseModel):
     # the app's default pipeline. More hits or more words borrow from
     # pieces that are off topic and pull the keyword search after them.
     prf_docs: int = Field(
+        title="PRF hits",
         default=2,
         ge=1,
         le=10,
-        description="When PRF is on: how many of the top dense hits "
-        "the added words are borrowed from.",
+        description=(
+            "When PRF is on: how many of the top dense hits the added words are"
+            " borrowed from."
+        ),
     )
     prf_terms: int = Field(
+        title="PRF words",
         default=6,
         ge=1,
         le=20,
-        description="When PRF is on: how many words are added to the "
-        "keyword search, chosen by tf-idf (frequent in those hits, rare in the "
-        "whole document).",
+        description=(
+            "When PRF is on: how many words are added to the keyword search, "
+            "chosen by tf-idf (frequent in those hits, rare in the whole "
+            "document)."
+        ),
     )
 
 

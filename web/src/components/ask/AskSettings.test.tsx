@@ -281,7 +281,7 @@ describe("primary fields and the More disclosure", () => {
   it("Answer with Chat keeps the model in front and the rest under More", () => {
     setup({ graph: setUseCase(sampleGraph(LIVE, SAMPLE), LIVE, "chat") })
     expect(inMore("Answer", "Model")).toBe(false)
-    expect(inMore("Answer", "Citation Method")).toBe(true)
+    expect(inMore("Answer", "Citations")).toBe(true)
   })
 
   it("Rerank keeps the model and Keep, top k in front; MMR's lambda goes under More", () => {
@@ -291,7 +291,7 @@ describe("primary fields and the More disclosure", () => {
     cleanup()
     setup({ graph: setReranker(sampleGraph(LIVE, SAMPLE), LIVE, "mmr") })
     expect(inMore("Rerank", "Keep, top k")).toBe(false)
-    expect(inMore("Rerank", "Lambda Mult")).toBe(true)
+    expect(inMore("Rerank", "Relevance or variety")).toBe(true)
   })
 
   it("OpenRouter's model field shows in front for Chat, the LLM reranker and LLM rewrite", () => {

@@ -584,3 +584,13 @@ def test_size_chunkers_prefer_nothing():
 
     assert RecursiveCharacterChunker.prefers == {}
     assert TokenBasedChunker.prefers == {}
+
+
+def test_the_character_chunker_defaults_to_the_samples_400_and_80():
+    # One default everywhere: a fresh step, Compare's Start from defaults and the
+    # sample pipeline all cut at 400 characters with 80 of overlap, which makes
+    # more pieces than the search returns on every sample.
+    from plugins.chunk.recursive_character import RecursiveCharacterConfig
+
+    c = RecursiveCharacterConfig()
+    assert (c.chunk_size, c.chunk_overlap) == (400, 80)

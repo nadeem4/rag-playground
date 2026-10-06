@@ -36,9 +36,13 @@ describe("what it did, per artifact type", () => {
     expect(text("clean", "parsed_doc", strip)).toBe("Removed 6 elements, kept 14. Removed 3 page headers and 3 page numbers.")
   })
 
-  it("chunk_set: count, median and largest tokens, overlaps", () => {
-    // Tokens 69 76 73 65 62 54: median 67, largest 76.
-    expect(text("chunk", "chunk_set", chunkRecursive)).toMatch(/^Made 6 chunks\. Median 67 tokens, largest 76\. \d+ overlaps?\.$/)
+  it("chunk_set: count, median and largest size in the setting's own unit, overlaps", () => {
+    // The character chunker is set in characters, so the card counts characters.
+    // Character lengths 265 327 340 366 375 389: median 353, largest 389.
+    expect(text("chunk", "chunk_set", chunkRecursive)).toBe("Made 6 chunks. Median 353 characters, largest 389. 3 overlaps.")
+    // A chunker set in tokens counts tokens: 69 76 73 65 62 54, median 67, largest 76.
+    const byTokens = { ...chunkRecursive, chunker_meta: { chunker: "token_based", max_tokens: 96, overlap: 16 } }
+    expect(text("chunk", "chunk_set", byTokens)).toMatch(/^Made 6 chunks\. Median 67 tokens, largest 76\. \d+ overlaps?\.$/)
     expect(text("chunk", "chunk_set", { ...chunkRecursive, chunks: [] })).toBe("Made 0 chunks. The document produced no text to cut.")
   })
 

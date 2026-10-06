@@ -32,7 +32,12 @@ from plugins.chunk import (
 
 
 class MarkdownHeaderConfig(BaseModel):
-    max_tokens: int = Field(default=512, ge=1)
+    max_tokens: int = Field(
+        title="Largest piece",
+        description="The largest a piece can be, in tokens. A longer section is split.",
+        default=512,
+        ge=1,
+    )
 
 
 def _sections(elements: Sequence[Element]) -> list[list[Element]]:

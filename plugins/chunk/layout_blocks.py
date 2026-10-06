@@ -53,24 +53,44 @@ _CAPTIONED = ("table", "figure")
 
 
 class LayoutBlocksConfig(BaseModel):
-    max_tokens: int = Field(default=400, ge=1)
-    keep_tables_whole: bool = True
-    heading_context: bool = True
+    max_tokens: int = Field(
+        title="Largest piece",
+        description="The largest a piece can be, in tokens. A longer block is split.",
+        default=400,
+        ge=1,
+    )
+    keep_tables_whole: bool = Field(
+        default=True,
+        title="Keep tables whole",
+        description=(
+            "When on, a table is never split across pieces, even when it is "
+            "longer than the largest piece."
+        ),
+    )
+    heading_context: bool = Field(
+        default=True,
+        title="Heading in front",
+        description=(
+            "When on, the heading path where a piece starts is put in front of "
+            "it when it is searched. The piece that is shown does not change."
+        ),
+    )
     section_level: int = Field(
+        title="Section depth",
         default=6,
         ge=1,
         le=6,
         description=(
             "section_level: how deep a heading can be and still start a new "
-            "section, from 1 to 6. A new section starts only at a heading whose "
-            "level is at or above this depth; 6 means every heading starts "
-            "one. Levels are Docling's heading levels. A title is 1 and section "
-            "headings start at 2; with heading_hierarchy on, subsections nest "
+            "section, from 1 to 6. A new section starts only at a heading whose"
+            " level is at or above this depth; 6 means every heading starts "
+            "one. Levels are Docling's heading levels. A title is 1 and section"
+            " headings start at 2; with heading_hierarchy on, subsections nest "
             "below their section (on the sample resume, sections sat at 3 and "
             "roles at 4, so 3 kept a section whole). With it off, section "
-            "headings share one level. A deeper heading stays inside the "
-            "piece as text and still names the pieces below it in their "
-            "heading path. The run note lists the levels in the document."
+            "headings share one level. A deeper heading stays inside the piece "
+            "as text and still names the pieces below it in their heading path."
+            " The run note lists the levels in the document."
         ),
     )
 

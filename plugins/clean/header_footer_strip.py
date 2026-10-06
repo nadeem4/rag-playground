@@ -87,20 +87,21 @@ KIND_NAMES = {
 
 class HeaderFooterStripConfig(BaseModel):
     min_page_ratio: float = Field(
+        title="Share of pages",
         default=0.5,
         ge=0.0,
         le=1.0,
         description=(
-            "Fraction of pages a block must appear on, at the same page edge, "
-            "to count as a running artefact."
+            "How many of the pages, from 0 to 1, a block must repeat on at the "
+            "same page edge to count as a header or footer."
         ),
     )
     drop: bool = Field(
+        title="Remove them",
         default=True,
         description=(
-            "Remove detected blocks from `elements`. When false they are only "
-            "retyped, which already excludes them from the markdown projection "
-            "while keeping them visible for inspection."
+            "When on, headers and footers are removed. When off, they are only "
+            "marked, so they stay visible but are left out of the text."
         ),
     )
 

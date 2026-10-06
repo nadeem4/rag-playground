@@ -51,15 +51,20 @@ _SIZES: dict[str, str] = {
 
 class CrossEncoderConfig(BaseModel):
     model: CrossEncoderModel = Field(
+        title="Model",
         default="cross-encoder/ms-marco-MiniLM-L-6-v2",
         description=(
             "A sentence-transformers CrossEncoder. MiniLM is small and fast; "
-            "bge-reranker-base is stronger; bge-reranker-v2-m3 is strongest and "
-            "slow on a CPU."
+            "bge-reranker-base is stronger; bge-reranker-v2-m3 is strongest and"
+            " slow on a CPU."
         ),
     )
     #: How many it keeps from the retriever's candidate pool (20 by default).
-    top_k: int = 5
+    top_k: int = Field(
+        default=5,
+        title="Pieces kept",
+        description="How many pieces the reranker keeps.",
+    )
 
 
 _LOAD_LOCK = threading.Lock()

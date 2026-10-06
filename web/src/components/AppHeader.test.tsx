@@ -162,7 +162,7 @@ describe("the theme and contrast switches", () => {
 
 describe("the header on a phone", () => {
   it("puts the brand and the right cluster on the first row and the nav on its own row below md", () => {
-    header()
+    header("/build")
     const nav = screen.getByRole("navigation", { name: "Main" })
     const c = nav.className.split(/\s+/)
     for (const k of ["flex-wrap", "min-w-0", "order-3", "w-full", "md:order-2", "md:w-auto"]) expect(c).toContain(k)
@@ -171,7 +171,7 @@ describe("the header on a phone", () => {
   })
 
   it("gives the Document control its own full-width row under the tabs below md", () => {
-    header()
+    header("/build")
     const c = screen.getByTestId("header-document").className.split(/\s+/)
     for (const k of ["order-4", "w-full", "md:ml-auto", "md:w-auto"]) expect(c).toContain(k)
   })
@@ -203,7 +203,7 @@ describe("the header on a phone", () => {
   })
 
   it("caps the Document control so the header stays one row from md up", () => {
-    header()
+    header("/build")
     const c = screen.getByTestId("document-trigger").className.split(/\s+/)
     for (const k of ["md:max-w-[240px]", "xl:max-w-[360px]"]) expect(c).toContain(k)
     expect(c).not.toContain("md:max-w-[360px]")
@@ -216,15 +216,6 @@ describe("the header on a phone", () => {
 })
 
 describe("AppHeader with the lessons hidden", () => {
-  it("shows the Document control on every page, Read included", () => {
-    for (const path of ["/build", "/compare", "/evaluate", "/read", "/design"]) {
-      header(path, false)
-      expect(screen.getByTestId("header-document")).toBeTruthy()
-      expect(screen.getByTestId("document-trigger")).toBeTruthy()
-      cleanup()
-    }
-  })
-
   it("never turns the control amber when the lists cannot be read", async () => {
     header("/build", false)
     await new Promise((r) => setTimeout(r, 0))
@@ -377,5 +368,25 @@ describe("routes", () => {
   it("sends an unknown path, including the removed /forms, to Home", () => {
     expect(pageFor("/forms", true)).toBe(Home)
     expect(pageFor("/nope", true)).toBe(Home)
+  })
+})
+
+describe("where the Document control shows", () => {
+  it("only on the pages that work on a document: Build, Compare and Evaluate", () => {
+    for (const path of ["/build", "/compare", "/evaluate"]) {
+      header(path)
+      expect(screen.getByTestId("document-trigger"), path).toBeTruthy()
+      cleanup()
+    }
+  })
+
+  it("not on Home, Read, Library or Privacy, where changing it would do nothing on the page; the controls keep to the right", () => {
+    for (const path of ["/", "/read", "/library", "/privacy"]) {
+      header(path)
+      expect(screen.queryByTestId("document-trigger"), path).toBeNull()
+      expect(screen.queryByTestId("header-document"), path).toBeNull()
+      expect(screen.getByTestId("header-controls").className.split(/\s+/)).toContain("md:ml-auto")
+      cleanup()
+    }
   })
 })

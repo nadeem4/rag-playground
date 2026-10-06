@@ -102,6 +102,53 @@ describe("the Ask button tooltip", () => {
 
 const question = () => screen.getByLabelText("Question") as HTMLTextAreaElement
 
+describe("finding the answer", () => {
+  const ANSWERED = { ...INDEX_DONE, use_case: { id: "use_case", status: "done" as const, artifact_id: "out1" } }
+  const HINT = "Change a setting below, such as the search or the reranker, and ask again to see the pieces move."
+  afterEach(() => {
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo
+  })
+
+  it("the answer sits right under the question, above the sample's chips and the settings", async () => {
+    setup({ results: ANSWERED })
+    await screen.findByRole("button", { name: "Why overlap?" })
+    const answer = screen.getByTestId("ask-answer")
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(follows(question(), answer)).toBe(true)
+    expect(follows(answer, screen.getByText("Try one of the sample's questions:"))).toBe(true)
+    expect(follows(answer, screen.getByTestId("recipe"))).toBe(true)
+  })
+
+  it("when Asking turns back into Ask, the panel brings the answer into view", () => {
+    const into = vi.fn()
+    HTMLElement.prototype.scrollIntoView = into
+    const p = setup({ results: INDEX_DONE, asking: true, busy: true })
+    expect(into).not.toHaveBeenCalled()
+    cleanup()
+    const { rerender } = render(<AskPanel {...p} />)
+    rerender(<AskPanel {...p} asking={false} busy={false} results={ANSWERED} />)
+    expect(into).toHaveBeenCalledTimes(1)
+    expect(into.mock.contexts[0]).toBe(screen.getByTestId("ask-answer"))
+  })
+
+  it("once there is an answer, says the settings below are there to play with", () => {
+    setup({ results: ANSWERED })
+    expect(screen.getByText(HINT)).toBeTruthy()
+    cleanup()
+    setup({ results: INDEX_DONE })
+    expect(screen.queryByText(HINT)).toBeNull()
+  })
+
+  it("a sample's question chip takes the panel back up to the question box", async () => {
+    const to = vi.fn()
+    HTMLElement.prototype.scrollTo = to as never
+    setup({ results: ANSWERED })
+    fireEvent.click(await screen.findByRole("button", { name: "Why overlap?" }))
+    expect(to).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
+  })
+})
+
 describe("an empty question", () => {
   const blank = (doc = UPLOAD) => {
     const g = sampleGraph(LIVE, doc)

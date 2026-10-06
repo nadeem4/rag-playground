@@ -4,6 +4,8 @@ demo, a sample or the caller's own upload; locally, any file."""
 
 from __future__ import annotations
 
+import pytest
+
 from api import sample_set
 from tests.api.conftest import build_pdf, make_client, upload_pdf
 from tests.plugins.conftest import SAMPLE_PAGES
@@ -51,3 +53,17 @@ def test_demo_serves_a_sample(client, monkeypatch):
     r = client.get(f"/api/sources/{sha}/file")
     assert r.status_code == 200
     assert r.content == sample_set.default_sample().pdf.read_bytes()
+
+
+@pytest.mark.parametrize("demo", [False, True])
+def test_every_sample_is_readable_straight_after_startup(dirs, monkeypatch, demo):
+    # A restart empties the store (the Space's disk is not kept). A saved
+    # pipeline on any sample must still find its file without a visitor
+    # loading that sample first.
+    if demo:
+        demo_on(monkeypatch)
+    with make_client(dirs) as fresh:
+        for s in sample_set.all_samples():
+            r = fresh.get(f"/api/sources/{s.sha}/file")
+            assert r.status_code == 200, s.name
+            assert r.content == s.pdf.read_bytes()

@@ -173,12 +173,13 @@ async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict
 
 
 @router.get("/sources/{sha}/questions")
-def get_questions(sha: str, request: Request) -> dict[str, Any]:
-    """The set stored for this document."""
+def get_questions(sha: str, request: Request) -> dict[str, Any] | None:
+    """The set stored for this document, or null when there is none yet: that is
+    the usual answer, so it is not an error."""
     source_path(request, sha)  # 404 for a document this request may not read
     stored = _store(request, sha)
     if not stored.is_file():
-        raise HTTPException(status_code=404, detail=f"no question set for {sha}")
+        return None
     return json.loads(stored.read_text(encoding="utf-8"))
 
 

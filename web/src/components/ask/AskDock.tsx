@@ -164,10 +164,13 @@ function isField(el: EventTarget | null): el is HTMLElement {
 export function AskDock({
   dock,
   count,
+  building = false,
   measure,
   children,
 }: {
   dock: Dock
+  /** True while the index builds: the round button is greyed out and Ask cannot open until it is done. */
+  building?: boolean
   /** How many results the last question found; shown on the round button once a question has been asked. */
   count?: number
   /** Build's width in px, so the panel never leaves the main pane under 360 px. */
@@ -221,11 +224,11 @@ export function AskDock({
       if (!isA) return
       e.preventDefault()
       if (open) hide()
-      else show()
+      else if (!building) show()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [open, show, hide, aside])
+  }, [open, show, hide, aside, building])
 
   // The sheet is modal: focus that gets out is brought back to its first control.
   useEffect(() => {
@@ -375,9 +378,10 @@ export function AskDock({
         hidden={open}
         aria-expanded={false}
         aria-controls="ask-dock"
-        title="Open Ask (Alt+A)"
+        disabled={building}
+        title={building ? "Ask opens once the index is built." : "Open Ask (Alt+A)"}
         onClick={show}
-        className="ask-fab fixed right-4 bottom-4 z-40 inline-flex min-h-[48px] items-center gap-2 rounded-full bg-primary pr-4 pl-3 text-sm font-semibold text-primary-foreground shadow-sheet focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
+        className="ask-fab fixed right-4 bottom-4 z-40 inline-flex min-h-[48px] items-center gap-2 rounded-full bg-primary pr-4 pl-3 text-sm font-semibold text-primary-foreground shadow-sheet focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) disabled:cursor-not-allowed disabled:opacity-50"
       >
         Ask
         {count !== undefined ? (

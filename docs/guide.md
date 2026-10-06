@@ -18,9 +18,10 @@ Compare, Evaluate, Library, Read and the privacy page. For what each strategy do
 
 ## The Document bar
 
-Every page works on one document. The **Document** control in the header names it, and
-opens a menu with the bundled samples, your uploads and **Upload a PDF**. Build, Compare
-and Evaluate all use the document it names.
+Build, Compare and Evaluate work on one document. The **Document** control in the header
+of those three pages names it, and opens a menu with the bundled samples, your uploads and
+**Upload a PDF**. Home, Read, Library and Privacy do not show it, because they do not work
+on a document. Home has its own **Try a sample** and **Use your own PDF** buttons.
 
 The four samples were written for the playground, and each one shows a problem:
 
@@ -116,7 +117,8 @@ room, so nothing is covered.
 - **Resize** it by dragging its inner edge, or focus the edge and use the arrow keys.
 - **Move** it to the left edge with the button in its head.
 - **Close** it, and a round **Ask** button sits at the bottom right with the number of
-  results the last question found. Closing keeps the question and the results.
+  results the last question found. Closing keeps the question and the results. While the
+  index builds, the button is greyed out and Ask opens once the build is done.
 - **Alt+A** opens and closes it from anywhere on Build.
 - The side, the width and whether it is open are remembered in this browser.
 - Below 1024 px wide (a tablet or a phone), the panel is a bottom sheet over the page
@@ -144,7 +146,10 @@ The panel holds the question and three blocks of settings, summed up in one reci
 
 ### Results
 
-**Ask** runs the question against the index and shows the ranked pieces.
+**Ask** runs the question against the index and shows the ranked pieces right under the
+question. When the answer arrives, the panel scrolls to it. The sample's questions and the
+settings come after the answer, so you can change a setting and ask again to see the pieces
+move. Picking one of the sample's questions takes you back up to the question box.
 
 - With a reranker on, the panel shows the search order against the reranked order, joined
   by a slope: one line per kept piece, rising in the accent colour and falling in grey.

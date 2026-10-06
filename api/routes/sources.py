@@ -258,6 +258,20 @@ def sample_source(request: Request, body: SampleRequest | None = None) -> dict[s
     return stored
 
 
+def seed_sample_files(sources: Path) -> None:
+    """Put every bundled sample's PDF in the store at startup. The Space's disk is
+    not kept across a restart, and a pipeline saved on any sample must still find
+    its file. Only the file: no record, so the list still shows a sample once a
+    visitor loads it, as before."""
+    sources.mkdir(parents=True, exist_ok=True)
+    for sample in sample_set.all_samples():
+        dest = sources / f"{sample.sha}{sample.pdf.suffix}"
+        if not dest.is_file():
+            tmp = dest.with_name(dest.name + ".part")
+            tmp.write_bytes(sample.pdf.read_bytes())
+            os.replace(tmp, dest)
+
+
 def _store(
     sources: Path,
     filename: str,

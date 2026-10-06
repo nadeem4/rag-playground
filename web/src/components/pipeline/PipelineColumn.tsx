@@ -129,7 +129,6 @@ export function PipelineColumn(p: PipelineColumnProps) {
                 return b ? titleFor(b) : undefined
               })()}
               previousArtifactId={p.history?.[node.id]?.previous}
-              showId={stacked}
               onRemove={stacked ? () => p.onRemove(node.id) : undefined}
               actions={
                 SWEEPABLE.includes(node.stage) ? (

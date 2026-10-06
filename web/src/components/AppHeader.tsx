@@ -91,11 +91,16 @@ function DevMenu({ path }: { path: string }) {
   )
 }
 
+/** The pages that build, compare or evaluate the chosen document. */
+const DOCUMENT_PAGES = ["/build", "/compare", "/evaluate"]
+
 export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: string; lessonsEnabled?: boolean }) {
   // The dev pages are for working on the app, not for demo visitors.
   const demo = useDemo()
   // With the lessons hidden, there is no Lessons link. Home is always first.
   const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/learn")
+  // The Document control shows only where the page works on the document; elsewhere changing it would do nothing.
+  const withDocument = DOCUMENT_PAGES.includes(path)
   return (
     // Below md: three rows. The brand and the controls share the first, the
     // nav takes the second (wrapping inside its own box at most once), and the
@@ -114,10 +119,15 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         {/* GitHub is on Home (More and the footer), so the Home tab costs the Document control no width. */}
       </nav>
       {demo ? null : <DevMenu path={path} />}
-      <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto md:min-w-[7rem] md:flex-1 md:basis-0 md:justify-end">
-        <DocumentControl />
-      </div>
-      <div data-testid="header-controls" className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5 md:ml-0">
+      {withDocument ? (
+        <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto md:min-w-[7rem] md:flex-1 md:basis-0 md:justify-end">
+          <DocumentControl />
+        </div>
+      ) : null}
+      <div
+        data-testid="header-controls"
+        className={cn("order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5", withDocument ? "md:ml-0" : "md:ml-auto")}
+      >
         <a
           href="/privacy"
           aria-label="Your data and privacy"

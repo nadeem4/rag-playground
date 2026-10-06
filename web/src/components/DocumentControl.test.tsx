@@ -85,6 +85,8 @@ describe("DocumentControl", () => {
     expect(word.className.split(/\s+/)).toContain("xl:hidden")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
+    // Above the round Ask button (z-40) on a phone, which otherwise covered its foot.
+    expect(menu.className.split(/\s+/)).toContain("z-50")
     const items = within(menu).getAllByRole("menuitemradio")
     expect(items.map((i) => i.getAttribute("aria-checked"))).toEqual(["true", "false"])
     expect(within(menu).getByText("Your uploads")).toBeTruthy()

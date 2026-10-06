@@ -462,7 +462,7 @@ function Build({ registry }: { registry: Registry }) {
         roomForButton={!dock.open}
       />
 
-      <AskDock dock={dock} count={transcript[0]?.rows.length} measure={measureBuild}>
+      <AskDock dock={dock} count={transcript[0]?.rows.length} building={building} measure={measureBuild}>
         {(head) => (
           <AskPanel
             head={head}

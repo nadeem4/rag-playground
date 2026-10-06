@@ -147,7 +147,7 @@ function serve({
           return "status" in upload ? new Response(JSON.stringify({ detail: "demo" }), { status: upload.status }) : ok(upload)
         }
         if (init?.method === "DELETE") return ok({ deleted: true })
-        return stored ? ok(stored) : missing()
+        return stored ? ok(stored) : ok(null)
       }
       return missing()
     }),

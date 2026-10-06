@@ -158,7 +158,7 @@ describe("PipelineColumn", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add cleaner" }))
     expect(p.onAddCleaner).toHaveBeenCalled()
     const clean = columnOrder(p.graph).find((n) => n.stage === "clean")!
-    fireEvent.click(screen.getByRole("button", { name: `Remove ${clean.id}` }))
+    fireEvent.click(screen.getByRole("button", { name: /^Remove Clean, / }))
     expect(p.onRemove).toHaveBeenCalledWith(clean.id)
   })
 

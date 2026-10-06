@@ -85,7 +85,8 @@ turns off what is unsafe to share.
 - Uploads are PDFs only, up to 10 MB and 20 pages each, and 3 live files per browser. All
   live uploads together are capped at 200 MB, so the shared disk cannot fill up.
 - An upload is deleted 24 hours after it was made. A sweep checks once an hour.
-- The bundled samples stay public, and cannot be deleted.
+- The bundled samples stay public, and cannot be deleted. They are put back in the store
+  each time the server starts, so a restart never loses one.
 - A question set uploaded for Evaluate is checked and not kept.
 - Page images of an upload are sent as private, so shared caches do not keep them.
 

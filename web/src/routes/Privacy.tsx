@@ -20,8 +20,9 @@ import "@/components/learn/learn.css"
  *   api/expiry.py, which runs in demo mode only.
  * - The `rag_visitor` cookie: api/visitor.py, one year.
  * - API keys: api/apiKey.tsx keeps them in memory only.
- * - The question set (state/goldSet.ts) and the last evaluation
- *   (state/evaluate.ts) are in sessionStorage; on the demo the server checks a
+ * - The question set (state/goldSet.ts), the last evaluation
+ *   (state/evaluate.ts) and Build's results with the questions asked
+ *   (state/buildSession.ts) are in sessionStorage; on the demo the server checks a
  *   set and keeps nothing (api/routes/questions.py).
  * - Saved items and the working pipeline: localStorage (state/pipelines.ts,
  *   state/libraryExperiments.ts, state/graph.ts). The Ask panel's side, width
@@ -122,6 +123,7 @@ export function Privacy() {
       demo ? "Until you close the tab. The demo checks the set and keeps nothing." : "Until you delete it.",
     ],
     ["Your last evaluation, for the before and after", "In this tab only", "Until you close the tab."],
+    ["Build's results and the questions you asked", "In this tab only", "Until you close the tab. They let you leave Build and come back to the same answer."],
     ["API keys you add", "In this tab's memory only", "Until you close or reload the tab. A key is sent with each request that needs it and is never written to storage, a cookie, a link or a saved file."],
   ]
 

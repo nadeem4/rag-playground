@@ -53,7 +53,7 @@ describe("Your data and privacy", () => {
     expect(rowFor(server, "An anonymous browser id").textContent).toContain("One year.")
     expect(rowFor(server, "Run results").textContent).toContain("until the demo restarts or the cache is cleared")
     const browser = table("In this browser")
-    for (const what of ["Saved pipelines and experiments", "The pipeline you are working on", "Theme and contrast", "Where the Ask panel sits on Build", "A question set you upload for Evaluate", "Your last evaluation", "API keys you add"]) {
+    for (const what of ["Saved pipelines and experiments", "The pipeline you are working on", "Theme and contrast", "Where the Ask panel sits on Build", "A question set you upload for Evaluate", "Your last evaluation", "Build's results and the questions you asked", "API keys you add"]) {
       expect(rowFor(browser, what)).toBeTruthy()
     }
     expect(rowFor(browser, "A question set you upload for Evaluate").textContent).toContain("In this tab only")

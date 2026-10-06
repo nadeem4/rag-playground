@@ -48,6 +48,7 @@ import {
   type PipelineGraph,
 } from "@/state/graph"
 import { useDocument } from "@/state/document"
+import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
 import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   decodePipeline,
@@ -117,16 +118,18 @@ function Build({ registry }: { registry: Registry }) {
   const noDocument = needsDocument(docStatus)
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [tracked, setTracked] = useState<Tracked>({ results: {}, history: {} })
+  // What this tab built and asked, kept across page loads (Read and Compare are their own pages).
+  const [session] = useState(readBuildSession)
+  const [tracked, setTracked] = useState<Tracked>(() => session?.tracked ?? { results: {}, history: {} })
   const results: Record<string, NodeState> = tracked.results
-  const [sigs, setSigs] = useState<Record<string, string>>({})
+  const [sigs, setSigs] = useState<Record<string, string>>(() => session?.sigs ?? {})
   const [selected, setSelected] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
   const [columnError, setColumnError] = useState<string | null>(null)
   const run = useRun(runId)
   // The last run the Ask button started, and the questions asked in this tab.
   // Taken as Ask is pressed (question, pipeline, reranker, settings), with the run id once it starts.
-  const [asked, setAsked] = useState<AskSnapshot | null>(null)
+  const [asked, setAsked] = useState<AskSnapshot | null>(() => session?.asked ?? null)
   // Whether the last run started was an Ask: its column error or crash is then also said in the panel.
   const [fromAsk, setFromAsk] = useState(false)
   // The node the last run was started for: Build the index says Building only for its own run.
@@ -136,11 +139,11 @@ function Build({ registry }: { registry: Registry }) {
   const [runSteps, setRunSteps] = useState<{ ids: Set<string>; runId: string | null } | null>(null)
   const { pipelines, currentId } = usePipelines()
   const pipelineName = pipelines.find((x) => x.id === currentId)?.name ?? "Working copy"
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>(() => session?.transcript ?? [])
   const onLog = useCallback((entry: TranscriptEntry) => setTranscript((t) => logEntry(t, entry)), [])
   // The rerank result whose comparison the reader hid. Held here, so closing the
   // Ask panel and opening it again keeps it; a new Ask or another reranker opens it.
-  const [comparisonHidden, setComparisonHidden] = useState<string | null>(null)
+  const [comparisonHidden, setComparisonHidden] = useState<string | null>(() => session?.comparisonHidden ?? null)
   const { keys } = useApiKey()
   // The Ask panel's dock: open or closed, its side and its width, remembered in this browser.
   const dock = useAskDock()
@@ -161,6 +164,23 @@ function Build({ registry }: { registry: Registry }) {
   useEffect(() => setKeyNotice(null), [keys])
 
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
+  useEffect(() => {
+    if (Object.keys(tracked.results).length || transcript.length) writeBuildSession({ tracked, sigs, transcript, asked, comparisonHidden })
+  }, [tracked, sigs, transcript, asked, comparisonHidden])
+  // A restart wipes the server's store: a restored step whose result is gone comes back as not run.
+  useEffect(() => {
+    if (!session) return
+    let live = true
+    void goneResults(session.tracked.results).then((ids) => {
+      if (!live || !ids.length) return
+      // Only the restored result itself: a step run again since keeps its new one.
+      const lost = (id: string, artifact: string | undefined) => ids.includes(id) && artifact === session.tracked.results[id]?.artifact_id
+      setTracked((prev) => ({ ...prev, results: Object.fromEntries(Object.entries(prev.results).filter(([id, r]) => !lost(id, r.artifact_id))) }))
+    })
+    return () => {
+      live = false
+    }
+  }, [session])
   const explanations = useExplanations(graph.nodes)
 
   const busy = submitting || (runId !== null && !run.closed)

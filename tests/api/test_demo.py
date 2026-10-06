@@ -487,3 +487,14 @@ def test_demo_refuses_a_page_over_3000_points_a_side_with_a_plain_sentence(clien
 def test_a_local_run_takes_a_large_page(client):
     r = client.post("/api/sources", files={"file": ("poster.pdf", _pdf_with_page_size(14400, 792), "application/pdf")})
     assert r.status_code == 200
+
+
+def test_demo_refuses_to_clear_the_shared_cache(client, monkeypatch):
+    # Every visitor shares one cache on the demo: clearing it would wipe everyone's results.
+    demo_on(monkeypatch)
+    r = client.delete("/api/cache")
+    assert r.status_code == 403
+    assert r.json()["detail"] == (
+        "The hosted demo keeps one cache for every visitor, so it cannot be cleared here. "
+        "Run the playground locally to clear it."
+    )

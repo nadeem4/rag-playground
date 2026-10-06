@@ -123,3 +123,13 @@ describe("runReducer: node timing", () => {
     expect(state.variants[0].nodes.parse).toMatchObject({ status: "running", started_at: 123.5 })
   })
 })
+
+describe("runReducer: waiting for a turn on the demo", () => {
+  it("is queued from queued until unqueued, and never after the stream ends", () => {
+    expect(initialRunState.queued).toBe(false)
+    expect(reduceEvents([e({ event: "queued", ahead: 0 })]).queued).toBe(true)
+    expect(reduceEvents([e({ event: "queued", ahead: 0 }), e({ event: "unqueued" })]).queued).toBe(false)
+    // Cancelled while waiting: the stream ends with no unqueued.
+    expect(reduceEvents([e({ event: "queued", ahead: 0 }), e({ event: "stream_end", status: "cancelled", ok: false })]).queued).toBe(false)
+  })
+})

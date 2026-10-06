@@ -175,6 +175,16 @@ describe("finding the answer", () => {
   })
 })
 
+describe("waiting its turn on the busy demo", () => {
+  it("the panel's status says the demo is busy, for an Ask or a build that waits", () => {
+    setup({ busy: true, asking: true, queued: true })
+    expect(screen.getByTestId("index-status").textContent).toBe("The demo is busy with other learners. Your run starts in a moment.")
+    cleanup()
+    setup({ results: {}, busy: true, buildingStep: { title: "Parse" }, queued: true })
+    expect(screen.getByTestId("index-status").textContent).toBe("The demo is busy with other learners. Your run starts in a moment.")
+  })
+})
+
 describe("an empty question", () => {
   const blank = (doc = UPLOAD) => {
     const g = sampleGraph(LIVE, doc)

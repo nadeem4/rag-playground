@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import { api } from "@/api/client"
-import type { NodeState } from "@/api/runState"
+import { QUEUED_LINE, type NodeState } from "@/api/runState"
 import type { EvalPayload, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
 import { useSamples } from "@/api/samples"
 import { loadPayload } from "@/api/useArtifact"
@@ -564,7 +564,9 @@ function Evaluation({
               ))}
             </div>
             {busy ? (
-              <p className="text-xs text-fg-muted">{`Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}</p>
+              <p className="text-xs text-fg-muted">
+                {run.queued ? QUEUED_LINE : `Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}
+              </p>
             ) : null}
           </>
         )}

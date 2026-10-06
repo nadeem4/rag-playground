@@ -1477,6 +1477,24 @@ describe("the Ask panel results on Build", () => {
     expect(within(screen.getByTestId("column-intro")).getByRole("link", { name: "Compare" }).getAttribute("href")).toBe("/compare")
   })
 
+  it("while the demo makes a run wait its turn, the strip and the Ask panel say so; it starts when its turn comes", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    const BUSY = "The demo is busy with other learners. Your run starts in a moment."
+    emit({ event: "queued", ahead: 0 }, "0")
+    await waitFor(() => expect(screen.getByTestId("run-line").textContent).toBe(BUSY))
+    expect(screen.getByTestId("index-status").textContent).toBe(BUSY)
+    emit({ event: "unqueued" }, "1")
+    emit({ event: "run_started", nodes: ["source", "parse"], selected: ["source", "parse"] }, "2")
+    emit({ event: "node_started", node_id: "parse", transform: "docling", artifact_id: "p1" }, "3")
+    await waitFor(() => expect(screen.getByTestId("run-line").textContent).toContain("Building"))
+  })
+
   it("keeps the built steps when you leave Build and come back in the same tab", async () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
     render(<Shell />)

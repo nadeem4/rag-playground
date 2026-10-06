@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { hasAnyKey, type Keys } from "@/api/apiKey"
+import { QUEUED_LINE } from "@/api/runState"
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions, useSamples } from "@/api/samples"
 import type { LlmProvider, LlmSettings, Registry } from "@/api/types"
@@ -68,6 +69,8 @@ export interface AskPanelProps {
   needsDocument?: boolean
   /** Set while Build the index runs: the step it is on (when one has started) and when that step started, epoch seconds. */
   buildingStep?: { title?: string; startedAt?: number }
+  /** True while the run (an Ask or a build) waits its turn on the busy demo. */
+  queued?: boolean
   /** The dock's buttons (side switch and close), shown at the end of the panel's head. */
   head?: ReactNode
 }
@@ -224,7 +227,9 @@ export function AskPanel(p: AskPanelProps) {
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="text-xl font-semibold">Ask</h2>
           <span data-testid="index-status" className="text-xs text-fg-muted">
-            {p.buildingStep
+            {p.queued
+              ? QUEUED_LINE
+              : p.buildingStep
               ? p.buildingStep.title
                 ? `Building the index: ${p.buildingStep.title}${buildElapsed !== undefined ? `, ${buildElapsed} s` : ""}`
                 : "Building the index"

@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from api import demo
 from fastapi import APIRouter, HTTPException, Request
 
 from core.artifacts import ArtifactType
@@ -65,6 +66,13 @@ def _usage(root: Path) -> tuple[int, int]:
 
 @router.delete("/cache")
 def clear_cache(request: Request) -> dict[str, Any]:
+    if demo.enabled():
+        # One cache serves every visitor: clearing it would wipe everyone's results.
+        raise HTTPException(
+            status_code=403,
+            detail="The hosted demo keeps one cache for every visitor, so it cannot be cleared here. "
+            "Run the playground locally to clear it.",
+        )
     if request.app.state.runs.active():
         raise HTTPException(status_code=409, detail="a run is in progress")
     store: Store = request.app.state.deps.store

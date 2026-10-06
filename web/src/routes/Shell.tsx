@@ -355,7 +355,8 @@ function Build({ registry }: { registry: Registry }) {
   // The last run was Build the index, and it has ended.
   const built = !busy && runId !== null && !fromAsk && runTarget !== undefined && runTarget === indexNode(graph)?.id
   let stripLine: StripLine = null
-  if (building) stripLine = { kind: "building", title: runningTitle, startedAt: runningSince }
+  if (busy && run.queued) stripLine = { kind: "queued" }
+  else if (building) stripLine = { kind: "building", title: runningTitle, startedAt: runningSince }
   else if (runningStep && runningTitle) stripLine = { kind: "running", title: runningTitle, startedAt: runningSince }
   // Refused before it started: no step ran, so the strip points at the note above the cards.
   else if (!busy && columnError) stripLine = { kind: "refused" }
@@ -505,6 +506,7 @@ function Build({ registry }: { registry: Registry }) {
             busy={busy}
             asking={asking}
             buildingStep={building ? { title: runningTitle, startedAt: runningSince } : undefined}
+            queued={busy && run.queued}
             needsDocument={noDocument}
             keys={keys}
             server={server}

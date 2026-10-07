@@ -42,3 +42,6 @@ Thumbs.db
 
 # Agent working notes, and the private plans, specs and design system (.superpowers/docs/)
 .superpowers/
+# Local launch-video output and the skill installer lock file
+brag-output*/
+skills-lock.json

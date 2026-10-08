@@ -1,13 +1,20 @@
 name: Publish the Hugging Face Space
 
-# The demo Space moves only on a version tag, so main stays free for work in
-# progress. Tag a release with, for example:
-#   git tag v0.1.0 && git push origin v0.1.0
+# Tagging a release does not change the demo. The demo changes only when this
+# workflow is started by hand with the tag to put live:
+#   gh workflow run "Publish the Hugging Face Space" -f tag=v0.33.0
+# Publishing an older tag rolls the demo back. After a publish, that tag's
+# GitHub release is marked Latest, so Latest always means "what the demo runs".
 # It needs one repository secret, HF_TOKEN, a Hugging Face token with write access.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "The version tag to put live, for example v0.33.0"
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
   publish:
@@ -15,7 +22,17 @@ jobs:
     # Without the token the job is skipped, so a fork never fails on this.
     if: github.repository == 'nadeem4/rag-playground'
     steps:
+      - name: Check the tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          case "$TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "\"$TAG\" is not a version tag like v0.33.0."; exit 1 ;;
+          esac
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -29,3 +46,14 @@ jobs:
             exit 0
           fi
           python scripts/publish_space.py --repo nadeem4nk/rag-playground
+      - name: Mark the live release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --prerelease=false --latest
+          else
+            gh release create "$TAG" --verify-tag --generate-notes --latest --title "$TAG"
+          fi
+          echo "The demo now runs $TAG." >> "$GITHUB_STEP_SUMMARY"

@@ -110,22 +110,33 @@ uv run python scripts/make_samples.py
 
 ## Cutting a release
 
-The hosted demo moves only when a version tag is pushed.
+Tagging a release and putting it live are two separate steps. A tag records a version;
+the hosted demo changes only when you publish a tag to it.
 
 1. **Bump the version** in `pyproject.toml` (`version = "X.Y.Z"`), then run `uv lock` so
    the project's own entry in `uv.lock` matches. Commit both as `chore: version X.Y.Z`.
-2. **Tag and push:**
+2. **Tag, push and record the release** as a pre-release, which means "not live yet":
 
    ```bash
    git tag vX.Y.Z
    git push origin vX.Y.Z
+   gh release create vX.Y.Z --verify-tag --prerelease --title vX.Y.Z --notes-file notes.md
    ```
 
-3. **The publish workflow** (`.github/workflows/publish-space.yml`) runs on the tag. It
-   runs `scripts/publish_space.py --repo nadeem4nk/rag-playground`, which publishes the
-   files committed at the tag to the Space with demo mode on. It needs a repository secret
+   Nothing on the demo changes. Tags can pile up during the week.
+3. **Publish the tag you choose** to the demo:
+
+   ```bash
+   gh workflow run "Publish the Hugging Face Space" -f tag=vX.Y.Z
+   ```
+
+   The workflow (`.github/workflows/publish-space.yml`) checks out that tag and runs
+   `scripts/publish_space.py --repo nadeem4nk/rag-playground`, which publishes the files
+   committed at the tag to the Space with demo mode on. Then it marks that tag's GitHub
+   release as a full release and **Latest**, so Latest always names what the demo runs.
+   Publishing an older tag rolls the demo back the same way. It needs a repository secret
    named `HF_TOKEN`, a Hugging Face token with write access; without it the job does
-   nothing. It can also be started by hand from the Actions tab. See
+   nothing. It can also be started from the Actions tab. See
    [docs/deploy.md](docs/deploy.md#publishing-with-publish_spacepy) for what the script
    does.
 4. **Check the Space** once its build is done:

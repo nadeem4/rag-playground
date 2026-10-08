@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 
 import { api } from "@/api/client"
 import { QUEUED_LINE, type NodeState } from "@/api/runState"
-import type { EvalPayload, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
+import type { EvalPayload, Registry, RetrievalResult, SampleQuestion, Trace, TraceRequest } from "@/api/types"
 import { useSamples } from "@/api/samples"
 import { loadPayload } from "@/api/useArtifact"
 import { usePayloads } from "@/api/usePayloads"
@@ -13,6 +13,7 @@ import { useRun } from "@/api/useRun"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { EvalMetricsDetail } from "@/components/evaluate/EvalMetrics"
+import { MissTrace } from "@/components/evaluate/MissTrace"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { CONTROL } from "@/components/fields/types"
 import { EvidenceSlip, LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
@@ -40,6 +41,8 @@ import {
   storePreviousEvaluation,
   scoreFinding,
   summarize,
+  fixHref,
+  traceRequest,
   type PreviousEvaluation,
   type RowChange,
 } from "@/state/evaluate"
@@ -260,6 +263,8 @@ const finished = (n?: NodeState) => n !== undefined && (n.status === "done" || n
 interface Row {
   question: Question
   payload?: EvalPayload
+  /** What the miss trace asks for, once every step this question ran has finished. */
+  trace: TraceRequest | null
   result?: RetrievalResult
   resultStatus: InspectorStatus
   failed?: NodeState
@@ -379,9 +384,11 @@ function Evaluation({
     const out = payload(ids[i].out).data
     const got = payload(ids[i].result)
     const result = got.data as RetrievalResult | undefined
+    const evaluated = isEvalOutput(out) ? out.payload : undefined
     return {
       question,
-      payload: isEvalOutput(out) ? out.payload : undefined,
+      payload: evaluated,
+      trace: evaluated ? traceRequest(graph, (id) => artifactOf(i, id), question.gold_answers, shownK) : null,
       result: result && Array.isArray(result.hits) ? result : undefined,
       resultStatus: got.status,
       failed: s ? Object.values(s.nodes).find((n) => n.status === "failed") : undefined,
@@ -603,6 +610,7 @@ function Evaluation({
                 <QuestionRow
                   key={row.question.id}
                   row={row}
+                  graph={graph}
                   before={previous?.byId[row.question.id]}
                   topK={shownK}
                   rowRef={(el) => {
@@ -687,11 +695,13 @@ const VERDICT: Record<Verdict, { word: string; tone: string }> = {
  */
 function QuestionRow({
   row,
+  graph,
   before,
   topK,
   rowRef,
 }: {
   row: Row
+  graph: PipelineGraph
   before?: EvalPayload
   topK: number
   rowRef?: (el: HTMLDetailsElement | null) => void
@@ -701,6 +711,9 @@ function QuestionRow({
   const moved = changeText(change, before)
   const verdict = VERDICT[verdictOf(row)]
   const reason = row.failed ? errorHeadline(row.failed.error ?? "Failed") : p ? reasonText(p, topK) : null
+  // The trace is fetched only once the row is open.
+  const [open, setOpen] = useState(false)
+  const missed = p !== undefined && !p.hit && row.trace !== null
 
   return (
     <details
@@ -708,6 +721,7 @@ function QuestionRow({
       className="border-b border-hairline"
       data-question={row.question.id}
       data-change={change === "none" ? undefined : change}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary className="grid cursor-pointer list-none grid-cols-1 items-baseline gap-x-[14px] gap-y-1 rounded-panel px-2 py-3 hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring) md:grid-cols-[92px_minmax(0,1fr)_auto]">
         <span data-verdict="" className={cn("font-sans font-semibold", verdict.tone)}>
@@ -728,9 +742,46 @@ function QuestionRow({
             <MonoNumbers text={reason} />
           </span>
         ) : null}
+        {missed && !open ? (
+          <span data-why="" className="text-sm font-semibold text-primary underline underline-offset-4 md:col-start-2">
+            Why did this miss?
+          </span>
+        ) : null}
       </summary>
+      {open && row.trace ? <TraceSlot request={row.trace} graph={graph} /> : null}
       <OpenRow row={row} />
     </details>
+  )
+}
+
+/**
+ * The miss trace for an open row, fetched once per request. It sits above
+ * the answer sentence and what came back, in the same column.
+ */
+function TraceSlot({ request, graph }: { request: TraceRequest; graph: PipelineGraph }) {
+  const key = JSON.stringify(request)
+  const [state, setState] = useState<{ key: string; trace?: Trace; error?: string } | null>(null)
+  useEffect(() => {
+    const ctrl = new AbortController()
+    api.trace(JSON.parse(key) as TraceRequest, ctrl.signal).then(
+      (trace) => setState({ key, trace }),
+      (err: unknown) => {
+        if (!ctrl.signal.aborted) setState({ key, error: err instanceof Error ? err.message : String(err) })
+      },
+    )
+    return () => ctrl.abort()
+  }, [key])
+  const current = state?.key === key ? state : null
+  return (
+    <div className="max-w-[80ch] px-2 pb-3 md:pl-[114px]">
+      {current?.trace ? (
+        <MissTrace trace={current.trace} fixHref={fixHref(graph, current.trace)} />
+      ) : current?.error ? (
+        <p className="text-sm break-words text-danger">Could not trace this question: {current.error}</p>
+      ) : (
+        <p className="text-sm text-fg-muted">Following the answer through each step.</p>
+      )}
+    </div>
   )
 }
 

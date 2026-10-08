@@ -25,6 +25,7 @@ from api.routes import (
     samples,
     settings,
     sources,
+    trace,
 )
 from api.runs import RunManager
 from api.static import mount_spa
@@ -63,6 +64,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         learn.router,
         samples.router,
         questions.router,
+        trace.router,
     ):
         app.include_router(r, prefix="/api")
     mount_spa(app, app.state.deps.web_dist)  # last: the catch-all route

@@ -93,6 +93,25 @@ interface RecordedSweep {
   through: string
 }
 
+/** Every POST /api/trace body, and what it answers. */
+const traced: unknown[] = []
+const TRACE = {
+  finding: "Lost at Parse. Fast text put other text in the middle of the answer sentence, so no later step can find it.",
+  lost_at: "parse",
+  fix: "Use a parser that reads the page layout, such as Docling, then evaluate again.",
+  golds: ["A chunk should answer one question well."],
+  steps: [
+    {
+      stage: "parse",
+      name: "Parse",
+      status: "lost",
+      sentence: "The answer's words are here, in order, with other text between them.",
+      evidence: { kind: "broken", parts: [{ kind: "answer", text: "A chunk should" }, { kind: "other", text: "column two" }, { kind: "answer", text: "answer one question well." }] },
+    },
+    { stage: "chunk", name: "Chunk", status: "not_checked", sentence: "Not checked.", evidence: null },
+  ],
+}
+
 function serve({
   reg = liveRegistry,
   sampleSha = SOURCE.sha,
@@ -118,6 +137,10 @@ function serve({
       if (url === "/api/sweeps" && init?.method === "POST") {
         sweeps.push(JSON.parse(String(init.body)) as RecordedSweep)
         return ok({ run_id: "r1" })
+      }
+      if (url === "/api/trace" && init?.method === "POST") {
+        traced.push(JSON.parse(String(init.body)))
+        return ok(TRACE)
       }
       const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
@@ -840,6 +863,37 @@ describe("while and after scoring", () => {
     fireEvent.click(within(open).getByRole("button", { name: "Show all 4" }))
     expect(within(open).getAllByTestId("passage")).toHaveLength(4)
     expect(open.querySelector("[data-open-row]")!.className).toContain("max-w-[72ch]")
+  })
+
+  it("invites a missed row to say why, and traces it once the row opens", async () => {
+    traced.length = 0
+    const es = await start({
+      // Ids of their own: payloads are cached by id across tests.
+      why0: evalOut({}),
+      why1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: null, returned: 4 }),
+    })
+    const steps = graph.nodes.filter((n) => ["parse", "clean", "chunk", "retrieve", "rerank"].includes(n.stage))
+    let id = 1
+    for (const index of [0, 1]) {
+      es.emit(id++, { event: "variant_started", index, variant: {} })
+      for (const n of steps) es.emit(id++, { event: "node_finished", node_id: n.id, artifact_id: `${n.stage}-${index}`, cache_hit: false, duration_ms: 1 })
+      es.emit(id++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: `why${index}`, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(id++, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+
+    const row = document.querySelector<HTMLElement>('[data-question="b"]')!
+    expect(row.querySelector("[data-why]")!.textContent).toBe("Why did this miss?")
+    expect(document.querySelector('[data-question="a"] [data-why]')).toBeNull()
+    expect(traced).toHaveLength(0)
+
+    fireEvent.click(row.querySelector("summary")!)
+    await waitFor(() => expect(within(row).getByText(/^Lost at Parse\./)).toBeTruthy())
+    expect(traced).toHaveLength(1)
+    expect(traced[0]).toMatchObject({ parse: { id: "parse-1" }, chunk: "chunk-1", retrieve: "retrieve-1", top_k: 5 })
+    expect(row.querySelector("del[data-part='other']")!.textContent).toBe("column two")
+    expect(within(row).getByRole("link", { name: "Change Parse on Build" }).getAttribute("href")).toBe(`/build?step=${idOf("parse")}`)
+    expect(row.querySelector("[data-why]")).toBeNull()
   })
 
   it("says the last run beside the score, and stores this run with its recipe", async () => {

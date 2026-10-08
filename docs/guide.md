@@ -254,6 +254,27 @@ that came back, so no number of pieces checked would find it." Open a row to see
 sentence that answers the question and the top three pieces that came back, so you can
 see why it missed. The previous score of each pipeline in this tab is kept.
 
+### Why did this miss?
+
+A missed row says "Why did this miss?" under its reason. Open it and the row follows the
+answer sentence down the pipeline, one step at a time, and stops at the first step that
+lost it:
+
+- **Parse.** Is the answer sentence in the parsed text? When all its words are there but
+  other text sits between them, the row shows the parsed text with the answer's words
+  marked and the other words struck through. A parser that reads straight across two
+  columns does this.
+- **Clean.** Is it still there after each cleaner?
+- **Chunk.** Is it whole inside one piece, or cut across two?
+- **Search.** Did the piece that holds it come back?
+- **Rerank.** When there is a reranker, where did it put that piece?
+- **Top 5.** Was it among the pieces checked?
+
+The steps after the one that lost it say "Not checked." The row ends with a fix to try and
+a button that opens that step on Build. A row that found its answer shows the same steps,
+all passed. The check is the same one Evaluate scores with, so a trace never disagrees
+with the score.
+
 ## Library
 
 The Library lists every saved pipeline and saved experiment, with All, Pipelines and

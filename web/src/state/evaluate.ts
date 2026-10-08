@@ -1,4 +1,15 @@
-import type { EvalOutput, EvalPayload, GraphNode, Registry, SampleQuestion, Stage, Variant } from "@/api/types"
+import type {
+  EvalOutput,
+  EvalPayload,
+  GraphNode,
+  Registry,
+  SampleQuestion,
+  Stage,
+  Trace,
+  TraceRequest,
+  TraceStage,
+  Variant,
+} from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { ordinal, type HitRowData } from "@/components/inspectors/hits"
 import { strategyLabel } from "@/learn/challenges"
@@ -79,6 +90,63 @@ export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
       name: (n.stage === "retrieve" ? RETRIEVAL_LABEL[n.transform] : undefined) ?? strategyLabel(n.transform),
       config: JSON.stringify(n.config),
     }))
+}
+
+/**
+ * What `POST /api/trace` needs to follow one question's answer down its run:
+ * each step's artifact and plain name, in column order. The result the eval
+ * step scored is the reranker's when there is one. Null until every step it
+ * reads has finished for this question, or when there is no answer to look for.
+ */
+export function traceRequest(
+  g: PipelineGraph,
+  artifact: (nodeId: string) => string | undefined,
+  golds: readonly string[],
+  topK: number,
+): TraceRequest | null {
+  const order = columnOrder(g)
+  const one = (stage: Stage) => order.find((n) => n.stage === stage)
+  const parse = one("parse")
+  const chunk = one("chunk")
+  const retrieve = one("retrieve")
+  const rerank = one("rerank")
+  const cleans = order.filter((n) => n.stage === "clean")
+  const ids = [parse, chunk, retrieve, rerank, ...cleans].filter((n) => n !== undefined).map((n) => artifact(n.id))
+  if (!parse || !chunk || !retrieve || !golds.length || ids.some((id) => id === undefined)) return null
+  return {
+    gold_answers: [...golds],
+    parse: { id: artifact(parse.id)!, name: strategyLabel(parse.transform) },
+    cleans: cleans.map((n) => ({ id: artifact(n.id)!, name: strategyLabel(n.transform) })),
+    chunk: artifact(chunk.id)!,
+    retrieve: artifact(retrieve.id)!,
+    final: artifact((rerank ?? retrieve).id)!,
+    rerank_name: rerank ? strategyLabel(rerank.transform) : null,
+    top_k: topK,
+  }
+}
+
+/** The Build card a lost trace step belongs to. Top k has none: it is set on Evaluate. */
+const TRACE_STAGE: Partial<Record<TraceStage, Stage>> = {
+  parse: "parse",
+  clean: "clean",
+  chunk: "chunk",
+  search: "retrieve",
+  rerank: "rerank",
+}
+
+/**
+ * Where "Change this step on Build" goes: Build with the lost step's card
+ * open. The nth Clean step of the trace is the nth Clean card. Null when
+ * nothing was lost, or the lost step has no card.
+ */
+export function fixHref(g: PipelineGraph, trace: Trace): string | null {
+  const at = trace.steps.findIndex((s) => s.status === "lost")
+  if (at < 0) return null
+  const stage = TRACE_STAGE[trace.steps[at].stage]
+  if (!stage) return null
+  const nth = trace.steps.slice(0, at).filter((s) => s.stage === trace.steps[at].stage).length
+  const node = columnOrder(g).filter((n) => n.stage === stage)[nth]
+  return node ? `/build?step=${encodeURIComponent(node.id)}` : null
 }
 
 /** A pipeline's steps in one line, by their plain names: a pipeline picker's help line. */

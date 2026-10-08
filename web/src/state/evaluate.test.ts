@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { Registry } from "@/api/types"
+import type { Registry, Trace, TraceStep } from "@/api/types"
 
 import {
   changeFor,
@@ -22,6 +22,8 @@ import {
   scoreFinding,
   storePreviousEvaluation,
   summarize,
+  fixHref,
+  traceRequest,
   type EvalPayload,
 } from "./evaluate"
 import type { Question } from "./goldSet"
@@ -518,5 +520,53 @@ describe("what the reranker did", () => {
     expect(rerankLine({ up: 3, down: 1, same: 1, judged: 5 })).toBe(
       "Rerank moved the answer up for 3 of the 5 questions that found it, and down for 1.",
     )
+  })
+})
+
+describe("traceRequest", () => {
+  const g = e2eSampleGraph(LIVE, SRC)
+  const idOf = (stage: string) => g.nodes.find((n) => n.stage === stage)!.id
+  const artifacts: Record<string, string> = Object.fromEntries(g.nodes.map((n) => [n.id, `a-${n.stage}`]))
+
+  it("sends each step's artifact and plain name, with the reranker's result as the one scored", () => {
+    const req = traceRequest(g, (id) => artifacts[id], ["The survey ran for six weeks."], 5)
+    expect(req).toEqual({
+      gold_answers: ["The survey ran for six weeks."],
+      parse: { id: "a-parse", name: "Docling" },
+      cleans: [{ id: "a-clean", name: "Remove duplicate blocks" }],
+      chunk: "a-chunk",
+      retrieve: "a-retrieve",
+      final: "a-rerank",
+      rerank_name: "MMR (variety)",
+      top_k: 5,
+    })
+  })
+
+  it("scores the retrieve result itself when there is no reranker", () => {
+    const req = traceRequest(removeNode(g, idOf("rerank")), (id) => artifacts[id], ["x"], 3)
+    expect(req?.final).toBe("a-retrieve")
+    expect(req?.rerank_name).toBeNull()
+  })
+
+  it("links a lost step to its card on Build, and the second cleaner to the second Clean card", () => {
+    const steps = (stages: string[], lost: number) =>
+      stages.map((stage, i) => ({ stage, name: stage, status: i === lost ? "lost" : "pass", sentence: "", evidence: null })) as TraceStep[]
+    const trace = (stages: string[], lost: number): Trace => ({ finding: "", lost_at: null, fix: null, golds: [], steps: steps(stages, lost) })
+    expect(fixHref(g, trace(["parse", "clean", "chunk"], 0))).toBe(`/build?step=${idOf("parse")}`)
+    expect(fixHref(g, trace(["parse", "clean", "chunk", "search"], 3))).toBe(`/build?step=${idOf("retrieve")}`)
+    expect(fixHref(g, trace(["parse", "clean", "chunk", "search", "rerank"], 4))).toBe(`/build?step=${idOf("rerank")}`)
+    expect(fixHref(g, trace(["parse", "clean", "chunk", "search", "top_k"], 4))).toBeNull()
+    expect(fixHref(g, trace(["parse", "clean", "chunk"], -1))).toBeNull()
+    const first = idOf("clean")
+    const twoCleans = {
+      nodes: [...g.nodes, { ...g.nodes.find((n) => n.id === first)!, id: "clean_2" }],
+      edges: g.edges.flatMap((e) => (e.src === first ? [{ ...e, src: "clean_2" }, { src: first, dst: "clean_2", port: e.port }] : [e])),
+    }
+    expect(fixHref(twoCleans, trace(["parse", "clean", "clean", "chunk"], 2))).toBe("/build?step=clean_2")
+  })
+
+  it("is null until every step it needs has finished, or when there is nothing to look for", () => {
+    expect(traceRequest(g, (id) => (id === idOf("chunk") ? undefined : artifacts[id]), ["x"], 5)).toBeNull()
+    expect(traceRequest(g, (id) => artifacts[id], [], 5)).toBeNull()
   })
 })

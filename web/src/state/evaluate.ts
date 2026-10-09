@@ -188,8 +188,8 @@ export function piecesWarning(pieces: number | null, topK: number, misses: reado
  */
 export function reasonText(p: EvalPayload, topK: number): string {
   if (p.hit) {
-    const where = typeof p.rank === "number" ? `Found in the ${ordinal(p.rank)} piece.` : `Found in the top ${topK} pieces.`
-    return p.match === "normalized" ? `${where} The match ignores case and spacing.` : where
+    const where = typeof p.rank === "number" ? `Found in the ${ordinal(p.rank)} piece` : `Found in the top ${topK} pieces`
+    return `${where}, ${p.match === "normalized" ? "after ignoring spacing and capitals" : "word for word"}.`
   }
   if (typeof p.found_at === "number") return `Found ${ordinal(p.found_at)}, below the ${topK} ${topK === 1 ? "piece" : "pieces"} checked.`
   if (typeof p.returned === "number") {
@@ -225,6 +225,8 @@ export interface ScoreFinding {
   finding: string
   /** `Hit rate at 5 pieces: 60%.` and, when it says something, why. */
   sub: string
+  /** `sub` without the hit rate, which the numbers row shows: empty when there is nothing more to say. */
+  note: string
 }
 
 /**
@@ -268,11 +270,11 @@ export function scoreFinding(
 
   const scored = rows.filter((r): r is { now: EvalPayload; before?: EvalPayload } => r.now !== undefined)
   if (scored.length > 0 && scored.length === rows.length && scored.every((r) => r.now.hit && r.now.rank === 1)) {
-    return { finding, sub: `${base} Every answer came back as the top piece.` }
+    return { finding, sub: `${base} Every answer came back as the top piece.`, note: "Every answer came back as the top piece." }
   }
   const misses = scored.filter((r) => !r.now.hit)
   const lost = misses.filter((r) => changeFor(r.now, r.before) === "lost").length
-  if (!previous || lost === 0) return { finding, sub: base }
+  if (!previous || lost === 0) return { finding, sub: base, note: "" }
   const step = changedStep(previous, steps, k)
   const since = step ? `since ${step}.` : "since the last run."
   const count =
@@ -281,7 +283,7 @@ export function scoreFinding(
       : lost === 1
         ? "The miss is new"
         : `${COUNT_WORDS[lost] ?? `All ${lost}`} misses are new`
-  return { finding, sub: `${base} ${count} ${since}` }
+  return { finding, sub: `${base} ${count} ${since}`, note: `${count} ${since}` }
 }
 
 // ------------------------------------------------------------- the metrics --

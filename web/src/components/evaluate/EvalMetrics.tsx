@@ -1,109 +1,56 @@
-import type { ReactNode } from "react"
-
-import { percent, type EvalMetrics, type TagMetrics } from "@/state/evaluate"
+import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
+import { cn } from "@/lib/utils"
+import type { EvalMetrics, TagMetrics } from "@/state/evaluate"
+import { numbersRow } from "@/state/evaluateView"
 
 /**
- * The numbers behind the headline (plan I-33). Hit rate at k sits in the line
- * under the score, where it cannot be missed; everything else is one click away, because
- * a wall of rates is not a result.
- *
- * Recall appears only when a question has more than one gold passage, and the
- * per-tag table only when the set has tags, so neither reads as an empty row.
+ * Every number behind the headline, in one row under the finding: each by its
+ * plain name with the technical name in brackets, and what it was in the last
+ * run when that differs. Recall joins only when a question has more than one
+ * passage; the per-tag hit rates and the reranker's effect follow in a line.
+ * "What these mean" opens How it is scored, where each number is worked out.
  */
-
-export function EvalMetricsDetail({ metrics: m, byTag, topK, rerank }: { metrics: EvalMetrics; byTag: TagMetrics[]; topK: number; rerank: string | null }) {
-  return (
-    <details data-testid="more-metrics">
-      <summary className="inline-flex cursor-pointer list-none items-center text-sm text-primary underline underline-offset-4">All the numbers</summary>
-      <div className="mt-2 flex max-w-[900px] flex-col gap-3">
-        <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-4 gap-y-2">
-          <Figure label="Mean reciprocal rank" value={m.mrr === null ? null : m.mrr.toFixed(2)}>
-            Finding the answer first counts more than finding it fifth.
-          </Figure>
-          {m.recall === null ? null : (
-            <Figure label={`Recall at ${topK}`} value={percent(m.recall)}>
-              {m.goldsFound} of {m.goldsTotal} gold passages were in the top {topK}.
-            </Figure>
-          )}
-          <Figure
-            label="Average rank of the first hit"
-            value={m.meanRank === null ? null : m.meanRank.toFixed(1)}
-            testId="average-rank"
-          >
-            Over the {m.hits} questions that found the answer.
-          </Figure>
-          <Figure label="Middle rank of the first hit" value={m.medianRank === null ? null : String(m.medianRank)}>
-            Half the questions that hit found it above this.
-          </Figure>
-        </dl>
-
-        {m.spread.length > 0 ? (
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className="meta">questions by the rank they found it at</p>
-            <dl data-testid="rank-spread" className="flex flex-wrap gap-x-4 gap-y-1">
-              {m.spread.map((s) => (
-                <div key={s.rank} className="flex items-baseline gap-1">
-                  <dt className="meta">rank {s.rank}</dt>
-                  <dd className="font-mono text-sm text-fg tabular-nums">{s.count}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        ) : null}
-
-        {byTag.length > 0 ? (
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className="meta">by tag</p>
-            <div data-testid="by-tag" className="grid grid-cols-[minmax(0,1fr)_64px_64px] gap-px bg-hairline">
-              <span className="meta bg-surface px-2 py-1">tag</span>
-              <span className="meta bg-surface px-2 py-1 text-right">found</span>
-              <span className="meta bg-surface px-2 py-1 text-right">rate</span>
-              {byTag.map((t) => (
-                <TagRow key={t.tag} tag={t} />
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {rerank ? (
-          <p data-testid="rerank-effect" className="text-sm text-fg-muted">
-            {rerank}
-          </p>
-        ) : null}
-      </div>
-    </details>
-  )
-}
-
-function TagRow({ tag }: { tag: TagMetrics }) {
-  const m = tag.metrics
-  return (
-    <>
-      <span className="bg-surface px-2 py-1 text-sm break-words text-fg">{tag.tag}</span>
-      <span className="bg-surface px-2 py-1 text-right font-mono text-sm text-fg tabular-nums">
-        {m.hits}/{m.scored}
-      </span>
-      <span className="bg-surface px-2 py-1 text-right font-mono text-sm text-fg tabular-nums">{percent(m.hitRate) ?? ""}</span>
-    </>
-  )
-}
-
-function Figure({
-  label,
-  value,
-  testId,
-  children,
+export function EvalNumbers({
+  metrics: m,
+  before,
+  byTag,
+  topK,
+  rerank,
+  onExplain,
 }: {
-  label: string
-  value: string | null
-  testId?: string
-  children: ReactNode
+  metrics: EvalMetrics
+  before: EvalMetrics | null
+  byTag: TagMetrics[]
+  topK: number
+  rerank: string | null
+  onExplain: () => void
 }) {
+  const figures = numbersRow(m, before, topK)
+  const tags = byTag.map((t) => `${t.tag} ${t.metrics.hits} of ${t.metrics.scored} found`)
   return (
-    <div data-testid={testId} className="flex min-w-0 flex-col gap-1">
-      <dt className="meta">{label}</dt>
-      <dd className="font-mono text-sm font-medium text-fg tabular-nums">{value ?? "not yet"}</dd>
-      <p className="text-xs text-fg-muted">{children}</p>
+    <div className="flex flex-col gap-2 border-y border-hairline py-3">
+      <dl data-testid="numbers" className="m-0 flex flex-wrap gap-x-6 gap-y-2">
+        {figures.map((f) => (
+          <div key={f.label} className="flex min-w-[9rem] flex-col gap-1">
+            <dt className="text-xs text-fg-muted">{f.label}</dt>
+            <dd className="m-0 font-mono text-base font-medium text-fg tabular-nums">
+              {f.value}
+              {f.was ? <span className="ml-2 font-sans text-xs font-normal text-fg-muted">was {f.was}</span> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-sm text-fg-muted">
+        {tags.length ? <span data-testid="by-tag">By tag: {tags.join(", ")}. </span> : null}
+        <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center")} onClick={onExplain}>
+          What these mean
+        </button>
+      </p>
+      {rerank ? (
+        <p data-testid="rerank-effect" className="text-sm text-fg-muted">
+          {rerank}
+        </p>
+      ) : null}
     </div>
   )
 }

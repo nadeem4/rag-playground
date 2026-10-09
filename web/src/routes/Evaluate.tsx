@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import { api } from "@/api/client"
@@ -12,7 +12,9 @@ import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
-import { EvalMetricsDetail } from "@/components/evaluate/EvalMetrics"
+import { EvalNumbers } from "@/components/evaluate/EvalMetrics"
+import { HowScored } from "@/components/evaluate/HowScored"
+import { SideSheet } from "@/components/evaluate/SideSheet"
 import { MissTrace } from "@/components/evaluate/MissTrace"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { CONTROL } from "@/components/fields/types"
@@ -47,7 +49,8 @@ import {
   type RowChange,
 } from "@/state/evaluate"
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
-import { upstreamOfStage, useStoredGraph, type PipelineGraph } from "@/state/graph"
+import { columnOrder, upstreamOfStage, useStoredGraph, type PipelineGraph } from "@/state/graph"
+import { evidenceCells, indexLine, indexSteps, progressLine, searchSteps, staleLine } from "@/state/evaluateView"
 import { documentOf, useDocument, withDocument } from "@/state/document"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
@@ -91,6 +94,9 @@ function EvaluatePage({ registry }: { registry: Registry }) {
   const [busy, setBusy] = useState(false)
   // The header's slot for the body's two controls: set by the slot's ref callback.
   const [slot, setSlot] = useState<HTMLElement | null>(null)
+  // "How it is scored" opens in the side sheet, from the header or from the numbers.
+  const [explaining, setExplaining] = useState(false)
+  const explain = useCallback(() => setExplaining(true), [])
   const working = useStoredGraph(registry)
   const { doc, status } = useDocument()
   // A saved pipeline this server cannot run is listed but treated as absent (M7).
@@ -138,11 +144,22 @@ function EvaluatePage({ registry }: { registry: Registry }) {
         <header data-testid="evaluate-header" className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-2xl font-semibold">Evaluate</h1>
-            {filename ? (
-              <p className="text-sm text-fg-muted">
-                How often {pipelineName} finds the answer in <span className="font-mono break-words text-fg">{filename}</span>.
+            <div className="flex max-w-[70ch] flex-col gap-1 text-sm text-fg-muted">
+              {filename ? (
+                <p>
+                  How often {pipelineName} finds the answer in <span className="font-mono break-words text-fg">{filename}</span>.
+                </p>
+              ) : null}
+              <p data-testid="evaluate-description">
+                Test the search with questions you already know the answers to. A question is found when its evidence comes back in the top
+                pieces. No AI judges it, so the same pipeline always gets the same score.
               </p>
-            ) : null}
+              <p>
+                <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center underline")} aria-haspopup="dialog" onClick={explain}>
+                  How it is scored
+                </button>
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-end gap-3">
             {/* Outside the keyed body, so switching pipelines keeps this picker, and its focus (F5). */}
@@ -175,9 +192,15 @@ function EvaluatePage({ registry }: { registry: Registry }) {
             onBusy={setBusy}
             slot={slot}
             needsDocument={needsDocument(status)}
+            onExplain={explain}
           />
         )}
       </div>
+      {explaining ? (
+        <SideSheet title="How Evaluate scores a pipeline" onClose={() => setExplaining(false)}>
+          <HowScored />
+        </SideSheet>
+      ) : null}
     </main>
   )
 }
@@ -195,6 +218,7 @@ function EvaluateBody({
   onBusy,
   slot,
   needsDocument,
+  onExplain,
 }: {
   graph: PipelineGraph | null
   pipelineKey: string
@@ -203,6 +227,7 @@ function EvaluateBody({
   slot: HTMLElement | null
   /** The bar's document is missing or not chosen: the run button waits for one. */
   needsDocument: boolean
+  onExplain: () => void
 }) {
   const source = graph?.nodes.find((n) => n.stage === "source")
   const sourceSha = String(source?.config.sha ?? "")
@@ -240,6 +265,7 @@ function EvaluateBody({
       onBusy={onBusy}
       slot={slot}
       needsDocument={needsDocument}
+      onExplain={onExplain}
     />
   )
 }
@@ -271,6 +297,8 @@ interface Row {
   started: boolean
 }
 
+const INDEX_STAGES = ["parse", "clean", "chunk", "index"]
+
 function Evaluation({
   registry,
   graph,
@@ -281,6 +309,7 @@ function Evaluation({
   onBusy,
   slot,
   needsDocument,
+  onExplain,
 }: {
   registry: Registry
   graph: PipelineGraph
@@ -293,6 +322,7 @@ function Evaluation({
   slot: HTMLElement | null
   /** The bar's document is missing or not chosen: the run button waits for one. */
   needsDocument: boolean
+  onExplain: () => void
 }) {
   const topKId = useId()
   const questionsId = useId()
@@ -312,6 +342,8 @@ function Evaluation({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previous, setPrevious] = useState<PreviousEvaluation | null>(() => readPreviousEvaluation(sourceSha, pipelineKey))
+  // The question whose details are open in the side sheet.
+  const [detail, setDetail] = useState<string | null>(null)
   const run = useRun(runId)
   const busy = submitting || (runId !== null && !run.closed)
   useEffect(() => {
@@ -379,7 +411,11 @@ function Evaluation({
   }, [chunkArtifact])
   const payload = usePayloads(ids.flatMap((x) => [x.out, x.result]))
 
-  const rows: Row[] = asked.map((question, i) => {
+  const ran = runId !== null
+  // Before a run the questions are listed as they will be asked; after, as they were.
+  const listed = ran ? asked : (questions ?? [])
+  const rows: Row[] = listed.map((question, i) => {
+    if (!ran) return { question, trace: null, resultStatus: { kind: "ready" }, started: false }
     const s = stateOf(i)
     const out = payload(ids[i].out).data
     const got = payload(ids[i].result)
@@ -396,34 +432,44 @@ function Evaluation({
     }
   })
 
-  const summary = summarize(rows.map((r) => r.payload))
-  const scores = metrics(rows.map((r) => r.payload))
-  const byTag = metricsByTag(rows.map((r) => ({ tags: r.question.tags, payload: r.payload })))
+  const scoredRows = ran ? rows : []
+  const summary = summarize(scoredRows.map((r) => r.payload))
+  const scores = metrics(scoredRows.map((r) => r.payload))
+  const beforeScores = previous ? metrics(Object.values(previous.byId)) : null
+  const byTag = metricsByTag(scoredRows.map((r) => ({ tags: r.question.tags, payload: r.payload })))
   const effect = graph.nodes.some((n) => n.stage === "rerank")
-    ? rerankEffect(rows.map((r) => ({ payload: r.payload, rows: r.result ? rowsFromResult(r.result) : undefined })))
+    ? rerankEffect(scoredRows.map((r) => ({ payload: r.payload, rows: r.result ? rowsFromResult(r.result) : undefined })))
     : null
   const rerankText = effect ? rerankLine(effect) : null
-  const settled = rows.filter((r) => r.payload || r.failed).length
-  const firstFailure = rows.find((r) => r.failed)?.failed
+  const settled = scoredRows.filter((r) => r.payload || r.failed).length
+  const firstFailure = scoredRows.find((r) => r.failed)?.failed
   const steps = pipelineSteps(graph)
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
-  const misses = rows.flatMap((r) => (r.payload && !r.payload.hit ? [r.payload] : []))
+  const misses = scoredRows.flatMap((r) => (r.payload && !r.payload.hit ? [r.payload] : []))
   const warning = piecesWarning(pieces, shownK, misses)
   const score = scoreFinding(
     summary,
     previous,
-    rows.map((r) => ({ now: r.payload, before: previous?.byId[r.question.id] })),
+    scoredRows.map((r) => ({ now: r.payload, before: previous?.byId[r.question.id] })),
     steps,
     shownK,
   )
+  const stale = ran && !busy ? staleLine(scoredK, topK) : null
 
-  // Each row's <details>, so a mark can open its row and bring it into view.
-  const rowEls = useRef(new Map<string, HTMLDetailsElement>())
-  function openRow(id: string) {
-    const el = rowEls.current.get(id)
-    if (!el) return
-    el.open = true
-    el.scrollIntoView?.({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" })
+  // While a run goes: is the index from the cache, and how far through the questions.
+  const indexIds = columnOrder(graph)
+    .filter((n) => INDEX_STAGES.includes(n.stage))
+    .map((n) => n.id)
+  const stepName = (id: string) => steps.find((s) => s.label.toLowerCase() === graph.nodes.find((n) => n.id === id)?.stage)?.label ?? id
+  const firstStarted = run.variants.find((v) => v.index === 0) ?? run.variants[0]
+  const index = indexLine(firstStarted?.nodes ?? {}, indexIds, stepName)
+  const retrieveId = graph.nodes.find((n) => n.stage === "retrieve")?.id
+  const cachedSearches = run.variants.filter((v) => retrieveId && v.nodes[retrieveId]?.status === "cached").length
+
+  // Each row's element, so a mark can bring its row into view.
+  const rowEls = useRef(new Map<string, HTMLLIElement>())
+  function showRow(id: string) {
+    rowEls.current.get(id)?.scrollIntoView?.({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" })
   }
 
   // The finished evaluation on screen, to compare the next one against. It is
@@ -444,6 +490,7 @@ function Evaluation({
     if (!questions?.length) return
     setError(null)
     setSubmitting(true)
+    setDetail(null)
     const before = finishedRun
     try {
       const g = evalGraph(graph, registry, topK)
@@ -472,10 +519,13 @@ function Evaluation({
 
   const controls = (
     <>
-      <div className="flex flex-col gap-1">
-        <label htmlFor={topKId} className="text-xs font-semibold text-fg-muted">
-          Pieces checked
-        </label>
+      <div className="relative flex flex-col gap-1">
+        <span className="flex items-center gap-1">
+          <label htmlFor={topKId} className="text-xs font-semibold text-fg-muted">
+            Pieces checked
+          </label>
+          <PiecesInfo />
+        </span>
         <input
           id={topKId}
           type="number"
@@ -499,6 +549,12 @@ function Evaluation({
     </>
   )
 
+  const kLine = ran
+    ? `Scored at ${shownK} ${shownK === 1 ? "piece" : "pieces"}.${pieces !== null ? ` The pipeline makes ${pieces} ${pieces === 1 ? "piece" : "pieces"}.` : ""}`
+    : `Found means the evidence is in the top ${topK} ${topK === 1 ? "piece" : "pieces"}.`
+  const search = searchSteps(graph, registry)
+  const opened = detail ? rows.find((r) => r.question.id === detail) : undefined
+
   return (
     <div className="flex flex-col gap-6">
       {slot ? createPortal(controls, slot) : null}
@@ -517,10 +573,12 @@ function Evaluation({
           disabled={busy}
           onUpload={(file) => void uploaded.upload(file)}
           onRemove={() => void uploaded.remove()}
+          extra={questions?.length ? <span data-testid="k-line">{kLine}</span> : null}
         />
-        {/* The recipe in one line: each step by its plain name, beside its code name. */}
+        {/* The recipe in two lines: the index side, then the search side. */}
         <p data-testid="recipe-line" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
-          {steps.map((s) => (
+          <span>Index side:</span>
+          {indexSteps(graph).map((s) => (
             <span key={s.label}>
               {s.label}: <strong className="font-semibold text-fg">{s.name}</strong>, <span className="font-mono">{s.transform}</span>
             </span>
@@ -529,14 +587,31 @@ function Evaluation({
             Change a step on Build
           </a>
         </p>
+        <p data-testid="search-line" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
+          <span>Search side:</span>
+          {search.map((s) => (
+            <span key={s.label}>
+              {s.label}: <strong className="font-semibold text-fg">{s.name}</strong>
+              {s.transform ? (
+                <>
+                  , <span className="font-mono">{s.transform}</span>
+                </>
+              ) : null}
+              {s.detail ? `, ${s.detail}` : null}
+            </span>
+          ))}
+          <a href="/build" className="inline-flex items-center text-primary underline underline-offset-4">
+            Change the search settings
+          </a>
+        </p>
       </div>
 
-      <section aria-label="Score" aria-live="polite" className="flex flex-col gap-3">
+      <section aria-label="Score" className="flex flex-col gap-3">
         {error || questionsError || samplesError ? (
           <p role="alert" className="font-mono text-xs break-words text-danger">
             {error ?? questionsError ?? samplesError}
           </p>
-        ) : runId === null ? (
+        ) : !ran ? (
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <p className="text-sm text-fg-muted">
               {questions
@@ -551,41 +626,79 @@ function Evaluation({
               </p>
             ) : null}
           </div>
-        ) : (
-          <>
-            {busy ? null : (
-              <div className="flex flex-col gap-1">
-                <p data-testid="summary" className="max-w-[52ch] text-[1.375rem] leading-snug text-balance text-fg">
-                  <MonoNumbers text={score.finding} />
+        ) : busy ? (
+          <div data-testid="progress" className="flex max-w-[40rem] flex-col gap-2 rounded-panel bg-surface-elevated p-3 text-sm">
+            {run.queued ? (
+              <p className="text-fg-muted">{QUEUED_LINE}</p>
+            ) : (
+              <>
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <strong className="font-semibold text-fg">Index</strong>
+                  <span
+                    data-testid="index-line"
+                    className={index.cached ? "rounded-swatch bg-kept px-2 text-xs font-semibold text-kept-text" : "text-fg-muted"}
+                  >
+                    {index.label}
+                  </span>
                 </p>
-                <p data-testid="hit-rate" className="max-w-[70ch] text-fg-muted">
-                  <MonoNumbers text={score.sub} />
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <strong className="font-semibold text-fg">Questions</strong>
+                  <span data-testid="progress-line" className="text-fg-muted">
+                    <MonoNumbers text={progressLine(settled, asked.length, cachedSearches)} />
+                  </span>
                 </p>
-              </div>
+                <div
+                  role="progressbar"
+                  aria-label="Questions scored"
+                  aria-valuemin={0}
+                  aria-valuemax={asked.length}
+                  aria-valuenow={settled}
+                  className="h-[6px] overflow-hidden rounded-full bg-surface"
+                >
+                  <span className="block h-full bg-primary" style={{ width: `${asked.length ? (settled / asked.length) * 100 : 0}%` }} />
+                </div>
+              </>
             )}
-            <div role="list" aria-label="One mark per question" className="flex flex-wrap gap-2">
-              {rows.map((row, i) => (
-                <span role="listitem" key={row.question.id} className="flex">
-                  <Mark n={i + 1} verdict={verdictOf(row)} onPress={() => openRow(row.question.id)} />
-                </span>
-              ))}
-            </div>
-            {busy ? (
-              <p className="text-xs text-fg-muted">
-                {run.queued ? QUEUED_LINE : `Scoring question ${Math.min(settled + 1, asked.length)} of ${asked.length}.`}
+          </div>
+        ) : (
+          <div aria-live="polite" className="flex flex-col gap-2">
+            <p data-testid="summary" className="max-w-[52ch] text-[1.375rem] leading-snug text-balance text-fg">
+              <MonoNumbers text={score.finding} />
+            </p>
+            {score.note ? (
+              <p data-testid="score-note" className="max-w-[70ch] text-fg-muted">
+                <MonoNumbers text={score.note} />
               </p>
             ) : null}
-          </>
+          </div>
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
+
+        {ran && !busy ? (
+          <EvalNumbers metrics={scores} before={beforeScores} byTag={byTag} topK={shownK} rerank={rerankText} onExplain={onExplain} />
+        ) : null}
+
+        {ran && !run.queued ? (
+          <div role="list" aria-label="One mark per question" className="flex flex-wrap gap-2">
+            {rows.map((row, i) => (
+              <span role="listitem" key={row.question.id} className="flex">
+                <Mark n={i + 1} verdict={verdictOf(row, ran)} onPress={() => showRow(row.question.id)} />
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {stale ? (
+          <p data-testid="stale-k" className="max-w-[70ch] rounded-panel bg-warn px-3 py-2 text-sm text-warn-text">
+            {stale}
+          </p>
+        ) : null}
 
         {warning ? (
           <p role="status" data-testid="pieces-warning" className="max-w-[80ch] rounded-panel bg-warn px-3 py-2 text-sm text-warn-text">
             {warning}
           </p>
         ) : null}
-
-        {runId === null ? null : <EvalMetricsDetail metrics={scores} byTag={byTag} topK={shownK} rerank={rerankText} />}
       </section>
 
       {firstFailure ? (
@@ -594,42 +707,100 @@ function Evaluation({
         </p>
       ) : null}
 
-      <div>
-        {runId === null ? (
-          <EmptyState title="Nothing scored yet">
-            Every question runs the whole pipeline once. The steps above the question are shared, so they run once and the rest come from the
-            cache.
-          </EmptyState>
-        ) : (
-          <section aria-labelledby={questionsId} className="flex flex-col gap-2">
-            <h2 id={questionsId} className="text-base font-semibold">
-              Questions
-            </h2>
-            <div className="border-t border-hairline">
-              {rows.map((row) => (
-                <QuestionRow
-                  key={row.question.id}
-                  row={row}
-                  graph={graph}
-                  before={previous?.byId[row.question.id]}
-                  topK={shownK}
-                  rowRef={(el) => {
-                    if (el) rowEls.current.set(row.question.id, el)
-                    else rowEls.current.delete(row.question.id)
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
+      {rows.length ? (
+        <section aria-labelledby={questionsId} className="flex flex-col gap-2">
+          <h2 id={questionsId} className="text-base font-semibold">
+            Questions
+          </h2>
+          <ol className="m-0 list-none border-t border-hairline p-0">
+            {rows.map((row) => (
+              <QuestionRow
+                key={row.question.id}
+                row={row}
+                ran={ran}
+                before={previous?.byId[row.question.id]}
+                topK={shownK}
+                onDetail={() => setDetail(row.question.id)}
+                rowRef={(el) => {
+                  if (el) rowEls.current.set(row.question.id, el)
+                  else rowEls.current.delete(row.question.id)
+                }}
+              />
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {opened ? (
+        <SideSheet title={opened.question.question} onClose={() => setDetail(null)}>
+          <QuestionDetail row={opened} graph={graph} />
+        </SideSheet>
+      ) : null}
     </div>
   )
 }
 
-type Verdict = "waiting" | "running" | "found" | "missed" | "failed"
+/**
+ * The i beside Pieces checked: a small panel that says what the number means.
+ * Escape or a click elsewhere closes it, and focus goes back to the button.
+ */
+function PiecesInfo() {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  const button = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false)
+        button.current?.focus()
+      }
+    }
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (!panel.current?.contains(t) && !button.current?.contains(t)) setOpen(false)
+    }
+    document.addEventListener("keydown", onKey)
+    document.addEventListener("mousedown", onDown)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.removeEventListener("mousedown", onDown)
+    }
+  }, [open])
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        aria-label="What Pieces checked means"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+        className="relative grid size-[20px] cursor-pointer place-items-center rounded-full border border-field-border bg-surface text-[0.6875rem] font-semibold text-fg-muted after:absolute after:-inset-[12px] after:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
+      >
+        i
+      </button>
+      {open ? (
+        <div
+          ref={panel}
+          id={id}
+          role="region"
+          aria-label="What Pieces checked means"
+          className="absolute top-full right-0 z-30 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-panel border border-hairline bg-surface-raised p-3 text-xs text-fg"
+        >
+          The search returns a ranked list of pieces. This is how many from the top are checked for the evidence. A chat model usually reads about 5,
+          so evidence in 8th place counts as missed. A higher number is easier to pass and says less about the order.
+        </div>
+      ) : null}
+    </>
+  )
+}
 
-function verdictOf(row: Row): Verdict {
+type Verdict = "notrun" | "waiting" | "running" | "found" | "missed" | "failed"
+
+function verdictOf(row: Row, ran: boolean): Verdict {
+  if (!ran) return "notrun"
   if (!row.started) return "waiting"
   if (row.failed) return "failed"
   if (!row.payload) return "running"
@@ -641,18 +812,19 @@ function reducedMotion(): boolean {
 }
 
 const MARK: Record<Verdict, { glyph: string; tone: string }> = {
-  found: { glyph: "\u2713", tone: "bg-kept text-kept-text" },
-  missed: { glyph: "\u2715", tone: "bg-removed text-removed-text shadow-[inset_0_0_0_2px_var(--removed-mark)]" },
+  found: { glyph: "✓", tone: "bg-kept text-kept-text" },
+  missed: { glyph: "✕", tone: "bg-removed text-removed-text shadow-[inset_0_0_0_2px_var(--removed-mark)]" },
   failed: { glyph: "!", tone: "bg-removed text-danger" },
   waiting: { glyph: "", tone: "border border-hairline bg-surface text-fg-muted" },
   running: { glyph: "", tone: "border border-fg-muted bg-surface text-fg-muted" },
+  notrun: { glyph: "", tone: "border border-hairline bg-surface text-fg-muted" },
 }
 
 /**
  * One question as a mark: a tick for found, a cross with a ring for missed, a
  * neutral outline while it waits or runs. 34 px square; a coarse pointer
- * grows it to 44 px through the touch rule in tokens.css. Pressing it opens
- * the question's row.
+ * grows it to 44 px through the touch rule in tokens.css. Pressing it brings
+ * the question's row into view.
  */
 function Mark({ n, verdict, onPress }: { n: number; verdict: Verdict; onPress: () => void }) {
   const m = MARK[verdict]
@@ -681,82 +853,132 @@ const CHANGE_TONE: Record<RowChange, string> = {
 }
 
 const VERDICT: Record<Verdict, { word: string; tone: string }> = {
-  found: { word: "\u2713 Found", tone: "text-kept-text" },
-  missed: { word: "\u2715 Missed", tone: "text-removed-mark" },
+  found: { word: "✓ Found", tone: "text-kept-text" },
+  missed: { word: "✕ Missed", tone: "text-removed-mark" },
   failed: { word: "Failed", tone: "text-danger" },
   waiting: { word: "Waiting", tone: "text-fg-muted" },
   running: { word: "Running", tone: "text-fg-muted" },
+  notrun: { word: "Not run", tone: "text-fg-muted" },
+}
+
+/** The evidence in the document's voice: a table row drawn as a row, a sentence as text. */
+function Evidence({ gold }: { gold: string }) {
+  const cells = evidenceCells(gold)
+  if (cells) {
+    return (
+      <table className="border-collapse font-serif text-sm text-fg">
+        <tbody>
+          <tr>
+            {cells.map((c, i) => (
+              <td key={i} className="border border-hairline px-2 py-1 break-words">
+                {c}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    )
+  }
+  return <p className="font-serif text-base leading-[1.55] break-words text-fg">{gold}</p>
 }
 
 /**
- * One question: the verdict in a word, the question, the change since the
- * last run on the right, and the reason in a sentence under the question.
- * A <details>, so the keyboard and a mark both open it through `open`.
+ * One question: the verdict in a word, the question with its id and tags, the
+ * change since the last run on the right, the reason in a sentence, then the
+ * expected answer beside the evidence. After a run, Details (and, on a miss,
+ * Why did this miss?) opens the side sheet. On a phone the evidence folds away
+ * after a run, since the sheet shows it.
  */
 function QuestionRow({
   row,
-  graph,
+  ran,
   before,
   topK,
+  onDetail,
   rowRef,
 }: {
   row: Row
-  graph: PipelineGraph
+  ran: boolean
   before?: EvalPayload
   topK: number
-  rowRef?: (el: HTMLDetailsElement | null) => void
+  onDetail: () => void
+  rowRef?: (el: HTMLLIElement | null) => void
 }) {
   const p = row.payload
   const change = changeFor(p, before)
   const moved = changeText(change, before)
-  const verdict = VERDICT[verdictOf(row)]
+  const verdictKind = verdictOf(row, ran)
+  const verdict = VERDICT[verdictKind]
   const reason = row.failed ? errorHeadline(row.failed.error ?? "Failed") : p ? reasonText(p, topK) : null
-  // The trace is fetched only once the row is open.
-  const [open, setOpen] = useState(false)
-  const missed = p !== undefined && !p.hit && row.trace !== null
-
+  const gold = row.question.gold_answers[0]
   return (
-    <details
+    <li
       ref={rowRef}
-      className="border-b border-hairline"
       data-question={row.question.id}
       data-change={change === "none" ? undefined : change}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
+      className="grid grid-cols-1 items-baseline gap-x-[14px] gap-y-1 border-b border-hairline px-2 py-3 md:grid-cols-[92px_minmax(0,1fr)_auto]"
     >
-      <summary className="grid cursor-pointer list-none grid-cols-1 items-baseline gap-x-[14px] gap-y-1 rounded-panel px-2 py-3 hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--focus-ring) md:grid-cols-[92px_minmax(0,1fr)_auto]">
-        <span data-verdict="" className={cn("font-sans font-semibold", verdict.tone)}>
-          {verdict.word}
-        </span>
+      <span data-verdict="" className={cn("font-sans font-semibold", verdict.tone)}>
+        {verdict.word}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
         <span data-question-text="" className="text-base font-semibold text-fg">
           {row.question.question}
         </span>
-        {moved ? (
-          <span data-row-change="" className={cn("text-[0.8125rem] font-semibold whitespace-nowrap", CHANGE_TONE[change])}>
-            {moved}
-          </span>
-        ) : (
-          <span aria-hidden className="hidden md:block" />
-        )}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
+          <span className="font-mono">{row.question.id}</span>
+          {row.question.tags.map((t) => (
+            <span key={t} className="rounded-swatch bg-surface-elevated px-2">
+              {t}
+            </span>
+          ))}
+        </span>
         {reason ? (
-          <span data-reason="" className={cn("font-sans text-sm md:col-start-2", row.failed ? "break-words text-danger" : "text-fg-muted")}>
+          <span data-reason="" className={cn("font-sans text-sm", row.failed ? "break-words text-danger" : "text-fg-muted")}>
             <MonoNumbers text={reason} />
           </span>
         ) : null}
-        {missed && !open ? (
-          <span data-why="" className="text-sm font-semibold text-primary underline underline-offset-4 md:col-start-2">
-            Why did this miss?
+        <div
+          data-evidence=""
+          className={cn("mt-1 max-w-[72ch] grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-[minmax(10rem,0.6fr)_minmax(0,1.4fr)]", ran ? "hidden md:grid" : "grid")}
+        >
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs text-fg-muted">Expected answer</span>
+            <p className={cn("text-sm", row.question.answer ? "text-fg" : "text-fg-muted")}>{row.question.answer || "None given"}</p>
+          </div>
+          {gold ? (
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs text-fg-muted">Evidence in the document</span>
+              <Evidence gold={gold} />
+            </div>
+          ) : null}
+        </div>
+        {p ? (
+          <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center underline")} onClick={onDetail}>
+              Details
+            </button>
+            {p.hit ? null : (
+              <button type="button" data-why="" className={cn(LINK_BUTTON, "inline-flex items-center font-semibold underline")} onClick={onDetail}>
+                Why did this miss?
+              </button>
+            )}
           </span>
         ) : null}
-      </summary>
-      {open && row.trace ? <TraceSlot request={row.trace} graph={graph} /> : null}
-      <OpenRow row={row} />
-    </details>
+      </div>
+      {moved ? (
+        <span data-row-change="" className={cn("text-[0.8125rem] font-semibold whitespace-nowrap", CHANGE_TONE[change])}>
+          {moved}
+        </span>
+      ) : (
+        <span aria-hidden className="hidden md:block" />
+      )}
+    </li>
   )
 }
 
 /**
- * The miss trace for an open row, fetched once per request. It sits above
- * the answer sentence and what came back, in the same column.
+ * The miss trace for a question, fetched once per request.
  */
 function TraceSlot({ request, graph }: { request: TraceRequest; graph: PipelineGraph }) {
   const key = JSON.stringify(request)
@@ -772,16 +994,12 @@ function TraceSlot({ request, graph }: { request: TraceRequest; graph: PipelineG
     return () => ctrl.abort()
   }, [key])
   const current = state?.key === key ? state : null
-  return (
-    <div className="max-w-[80ch] px-2 pb-3 md:pl-[114px]">
-      {current?.trace ? (
-        <MissTrace trace={current.trace} fixHref={fixHref(graph, current.trace)} />
-      ) : current?.error ? (
-        <p className="text-sm break-words text-danger">Could not trace this question: {current.error}</p>
-      ) : (
-        <p className="text-sm text-fg-muted">Following the answer through each step.</p>
-      )}
-    </div>
+  return current?.trace ? (
+    <MissTrace trace={current.trace} fixHref={fixHref(graph, current.trace)} />
+  ) : current?.error ? (
+    <p className="text-sm break-words text-danger">Could not trace this question: {current.error}</p>
+  ) : (
+    <p className="text-sm text-fg-muted">Following the answer through each step.</p>
   )
 }
 
@@ -789,11 +1007,11 @@ function TraceSlot({ request, graph }: { request: TraceRequest; graph: PipelineG
 const TOP = 3
 
 /**
- * An open row: the sentence that answers the question, then what came back as
- * evidence slips, the top three first. The matched piece says it holds the
- * answer. Capped at 72ch, so the passages read as text.
+ * A question's details in the side sheet: on a miss the trace first, then the
+ * evidence and the expected answer, then what came back as evidence slips,
+ * the top three first. The matched piece says it holds the answer.
  */
-function OpenRow({ row }: { row: Row }) {
+function QuestionDetail({ row, graph }: { row: Row; graph: PipelineGraph }) {
   const [all, setAll] = useState(false)
   const gold = row.question.gold_answers[0]
   const hits = row.result ? rowsFromResult(row.result) : []
@@ -801,47 +1019,57 @@ function OpenRow({ row }: { row: Row }) {
   const scale = scoreKey(hits)
   const matched = row.payload?.hit ? row.payload.matched_chunk_id : null
   const holds = (rank: number): FindingPart[] => [{ text: ordinal(rank), place: true }, { text: ", holds the answer" }]
+  const missed = row.payload !== undefined && !row.payload.hit
   return (
-    <div data-open-row="" className="flex max-w-[72ch] flex-col gap-3 px-2 pb-4 md:pl-[114px]">
+    <>
+      {missed ? (
+        <section data-testid="detail-trace" className="flex flex-col gap-2">
+          <h3 className="text-base font-semibold">Why did this miss?</h3>
+          {row.trace ? <TraceSlot request={row.trace} graph={graph} /> : <p className="text-sm text-fg-muted">Following the answer through each step.</p>}
+        </section>
+      ) : null}
       {gold ? (
-        <div className="border-l-[3px] border-primary py-[2px] pl-3">
-          <p className="text-xs text-fg-muted">The sentence that answers it</p>
-          <p className="font-serif text-base leading-[1.55] break-words text-fg">{gold}</p>
-        </div>
+        <section className="flex flex-col gap-2">
+          <h3 className="text-base font-semibold">The evidence</h3>
+          <Evidence gold={gold} />
+          <p className="text-sm text-fg-muted">Expected answer: {row.question.answer || "None given"}</p>
+        </section>
       ) : null}
-      {row.result ? (
-        hits.length ? (
-          <>
-            <p className="text-sm text-fg-muted">
-              {hits.length > TOP ? `What came back, top ${TOP} of ${hits.length}.` : `What came back, ${hits.length} ${hits.length === 1 ? "piece" : "pieces"}.`}
-            </p>
-            <div role="list" className="flex flex-col gap-3">
-              {shown.map((h) => (
-                <EvidenceSlip
-                  key={h.chunk_id}
-                  role="listitem"
-                  row={h}
-                  side="single"
-                  piece={h.ordinal}
-                  scaleKey={scale}
-                  finding={h.chunk_id === matched ? holds(h.rank) : undefined}
-                />
-              ))}
-            </div>
-            {hits.length > TOP && !all ? (
-              <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center self-start text-sm")} onClick={() => setAll(true)}>
-                Show all {hits.length}
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <p className="text-sm text-fg-muted">Nothing came back for this question.</p>
-        )
-      ) : row.resultStatus.kind === "error" ? (
-        <p className="text-sm break-words text-danger">{row.resultStatus.message}</p>
-      ) : row.payload ? (
-        <p className="text-sm text-fg-muted">Loading what came back.</p>
-      ) : null}
-    </div>
+      <section data-open-row="" className="flex flex-col gap-3">
+        {row.result ? (
+          hits.length ? (
+            <>
+              <h3 className="text-base font-semibold">
+                {hits.length > TOP ? `What came back, top ${TOP} of ${hits.length}` : `What came back, ${hits.length} ${hits.length === 1 ? "piece" : "pieces"}`}
+              </h3>
+              <div role="list" className="flex flex-col gap-3">
+                {shown.map((h) => (
+                  <EvidenceSlip
+                    key={h.chunk_id}
+                    role="listitem"
+                    row={h}
+                    side="single"
+                    piece={h.ordinal}
+                    scaleKey={scale}
+                    finding={h.chunk_id === matched ? holds(h.rank) : undefined}
+                  />
+                ))}
+              </div>
+              {hits.length > TOP && !all ? (
+                <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center self-start text-sm")} onClick={() => setAll(true)}>
+                  Show all {hits.length}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-sm text-fg-muted">Nothing came back for this question.</p>
+          )
+        ) : row.resultStatus.kind === "error" ? (
+          <p className="text-sm break-words text-danger">{row.resultStatus.message}</p>
+        ) : row.payload ? (
+          <p className="text-sm text-fg-muted">Loading what came back.</p>
+        ) : null}
+      </section>
+    </>
   )
 }

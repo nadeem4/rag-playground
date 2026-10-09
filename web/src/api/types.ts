@@ -601,6 +601,8 @@ export interface SampleQuestion {
   gold_answer: string
   /** Further passages that also answer it, such as a table row as plain text. */
   gold_answers?: string[]
+  /** The expected answer in words, shown beside the evidence and never scored. */
+  answer?: string
 }
 
 export type MatchKind = "exact" | "normalized" | "none"

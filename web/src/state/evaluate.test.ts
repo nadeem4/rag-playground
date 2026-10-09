@@ -102,8 +102,8 @@ describe("the graph an evaluation runs", () => {
 
 describe("one sweep variant per question", () => {
   const questions: Question[] = [
-    { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [] },
-    { id: "b", question: "How big is a chunk?", gold_answers: ["One well.", "Or the other."], tags: ["size"] },
+    { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [], answer: "" },
+    { id: "b", question: "How big is a chunk?", gold_answers: ["One well.", "Or the other."], tags: ["size"], answer: "" },
   ]
 
   it("sets the question and its gold passages together, and keeps the rest of the config", () => {
@@ -122,7 +122,7 @@ describe("one sweep variant per question", () => {
 
   it("sends the single gold answer as well, so a server that has only that field still scores the run", () => {
     const query = { id: "query", stage: "query" as const, transform: "text", config: {} }
-    const [first] = questionVariants(query, [{ id: "a", question: "Q", gold_answers: [], tags: [] }])
+    const [first] = questionVariants(query, [{ id: "a", question: "Q", gold_answers: [], tags: [], answer: "" }])
     expect(first.config).toEqual({ text: "Q", gold_answer: "", gold_answers: [] })
   })
 })
@@ -269,8 +269,8 @@ describe("the warning about too few pieces", () => {
 
 describe("the reason for a row", () => {
   it("gives each row its reason as one sentence", () => {
-    expect(reasonText(pay(true, 1), 5)).toBe("Found in the 1st piece.")
-    expect(reasonText(pay(true, 2, { match: "normalized" }), 5)).toBe("Found in the 2nd piece. The match ignores case and spacing.")
+    expect(reasonText(pay(true, 1), 5)).toBe("Found in the 1st piece, word for word.")
+    expect(reasonText(pay(true, 2, { match: "normalized" }), 5)).toBe("Found in the 2nd piece, after ignoring spacing and capitals.")
     expect(reasonText(pay(false, null, { found_at: 7 }), 5)).toBe("Found 7th, below the 5 pieces checked.")
     expect(reasonText(pay(false, null, { returned: 6 }), 5)).toBe("Not in any of the 6 pieces that came back, so no number of pieces checked would find it.")
   })
@@ -313,6 +313,8 @@ describe("the score as a finding", () => {
     const f = scoreFinding(summarize(now), before, now.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5)
     expect(f.finding).toBe("3 of 5 questions found the answer. The last run found 5 of 5.")
     expect(f.sub).toBe("Hit rate at 5 pieces: 60%. Both misses are new since Parse changed to Fast text.")
+    // The note is the sub line without the hit rate, which the numbers row already shows.
+    expect(f.note).toBe("Both misses are new since Parse changed to Fast text.")
   })
 
   it("says every answer came back first on a clean first run", () => {
@@ -320,6 +322,7 @@ describe("the score as a finding", () => {
     const f = scoreFinding(summarize(now), null, now.map((p) => ({ now: p })), steps("docling", "Docling"), 5)
     expect(f.finding).toBe("2 of 2 questions found the answer.")
     expect(f.sub).toBe("Hit rate at 5 pieces: 100%. Every answer came back as the top piece.")
+    expect(f.note).toBe("Every answer came back as the top piece.")
   })
 
   it("counts the new misses, and says since the last run when no single step changed", () => {
@@ -383,6 +386,7 @@ describe("the score as a finding", () => {
     expect(scoreFinding(summarize([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 3)).toEqual({
       finding: "1 of 1 question found the answer.",
       sub: "Hit rate at 3 pieces: 100%.",
+      note: "",
     })
   })
 })

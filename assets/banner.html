@@ -1,63 +1,58 @@
 <title>Banner</title>
 <meta charset="utf-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<!-- The share image (1200 x 630) for link previews, the Space thumbnail and LinkedIn.
+     Rendered to banner.png by scripts/render_banner.py. Every word in the trace card is a
+     real run: the two-column report sample, parsed with Fast text (pdfium). -->
 <style>
-  html,body{margin:0;padding:0;background:#3a3a3e}
-  .banner{
-    width:1200px;height:630px;box-sizing:border-box;position:relative;overflow:hidden;
-    background:#0B0B0C;color:#F4F4F5;
-    font-family:"Atkinson Hyperlegible Next","Atkinson Hyperlegible",system-ui,sans-serif;
-    padding:48px 60px 44px;display:grid;grid-template-rows:auto 1fr auto;gap:20px;
+  :root{
+    --surface:#f5f6f4; --panel:#eaece8; --raised:#fdfdfc; --ink:#161917; --ink-2:#545a55; --line:#d5d8d3;
+    --accent:oklch(0.48 0.095 166); --accent-wash:oklch(0.93 0.04 166);
+    --kept:oklch(0.92 0.04 190); --kept-text:oklch(0.32 0.04 190);
+    --removed:oklch(0.92 0.04 25); --removed-text:oklch(0.32 0.05 25); --removed-mark:oklch(0.56 0.14 25);
+    --sans:"Atkinson Hyperlegible Next",system-ui,sans-serif; --serif:"Source Serif 4",Georgia,serif; --mono:"JetBrains Mono",ui-monospace,monospace;
   }
-  .mono{font-family:"Martian Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-stretch:87.5%}
-  .top{display:flex;justify-content:space-between;align-items:baseline;gap:24px}
-  .name{font-size:23px;font-weight:600;letter-spacing:-0.01em}
-  .where{font-size:15px;color:#8A8A93}
-  h1{margin:0;font-size:58px;line-height:1.08;font-weight:600;letter-spacing:-0.025em;max-width:20ch;text-wrap:balance}
-  h1 em{font-style:normal;color:#29c090}
-  .sub{margin:20px 0 0;font-size:22px;line-height:1.45;color:#B4B4BC;max-width:46ch}
-  .mid{display:grid;grid-template-columns:1fr 500px;gap:44px;align-items:center}
-  /* the real chunk view, drawn the way the app draws it */
-  .card{border:1px solid #27272A;border-radius:10px;background:#131316;padding:16px;display:grid;gap:10px}
-  .cardhead{display:flex;justify-content:space-between;font-size:13.5px;color:#8A8A93}
-  .doc{font-size:14.5px;line-height:1.95;white-space:pre-wrap}
-  .c1{background:oklch(0.36 0.05 250)} .c2{background:oklch(0.36 0.05 150)} .c3{background:oklch(0.36 0.05 60)}
-  .ans{box-shadow:inset 0 -2px 0 oklch(0.75 0.15 25)}
-  .pipe{display:flex;gap:0;align-items:stretch;border:1px solid #27272A;border-radius:8px;overflow:hidden}
-  .pipe div{flex:1;padding:11px 6px;text-align:center;font-size:13px;color:#B4B4BC;border-right:1px solid #27272A}
-  .pipe div:last-child{border-right:0}
-  .pipe div.on{background:#1B1B1F;color:#F4F4F5}
-  .bottom{display:flex;justify-content:space-between;align-items:center;gap:32px;font-size:14.5px;color:#8A8A93;flex-wrap:nowrap}
-  .tags{display:flex;gap:10px;flex-wrap:nowrap}
-  .tag{border:1px solid #27272A;border-radius:999px;padding:5px 14px;font-size:14px;color:#B4B4BC}
+  html,body{margin:0;padding:0;background:var(--surface)}
+  .banner{width:1200px;height:630px;box-sizing:border-box;overflow:hidden;background:var(--surface);color:var(--ink);
+    font-family:var(--sans);padding:52px 60px 46px;display:grid;grid-template-columns:1fr 520px;grid-template-rows:auto 1fr auto;column-gap:48px}
+  .name{grid-column:1/-1;display:flex;justify-content:space-between;align-items:baseline;font-size:24px;font-weight:700;letter-spacing:-0.01em}
+  .name span{font-family:var(--mono);font-size:16px;font-weight:400;color:var(--ink-2)}
+  .left{align-self:center;display:grid;gap:22px}
+  h1{margin:0;font-size:60px;line-height:1.06;font-weight:700;letter-spacing:-0.025em;text-wrap:balance}
+  h1 em{font-style:normal;color:var(--accent)}
+  .sub{margin:0;font-size:23px;line-height:1.45;color:var(--ink-2);max-width:30ch}
+  .card{align-self:center;background:var(--raised);border-radius:14px;padding:22px 24px;display:grid;gap:14px;box-shadow:0 1px 2px rgba(22,25,23,.06),0 8px 24px rgba(22,25,23,.07)}
+  .head{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--ink-2)}
+  .marks{display:flex;gap:5px}
+  .m{width:22px;height:22px;border-radius:5px;display:grid;place-items:center;font-size:12px;font-weight:700}
+  .h{background:var(--kept);color:var(--kept-text)} .x{background:var(--removed);color:var(--removed-text);outline:1px solid var(--removed-mark)}
+  .q{font-size:16px;font-weight:600;line-height:1.35}
+  .finding{font-size:22px;font-weight:700;line-height:1.25} .finding b{color:var(--removed-mark)}
+  .doc{margin:0;font-family:var(--serif);font-size:18.5px;line-height:1.7;background:var(--panel);border-radius:10px;padding:12px 16px}
+  .ans{background:var(--kept);color:var(--kept-text);border-radius:3px;padding:1px 2px}
+  .in{background:var(--removed);color:var(--removed-text);text-decoration:line-through;text-decoration-color:var(--removed-mark);border-radius:3px;padding:1px 2px}
+  .steps{display:flex;gap:8px;font-size:14px;color:var(--ink-2)}
+  .steps span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:14px;height:14px;border-radius:50%;border:2px dashed var(--line);box-sizing:border-box}
+  .dot.lost{background:var(--removed-mark);border:0}
+  .steps .first{color:var(--removed-mark);font-weight:700}
+  .foot{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;font-size:17px;color:var(--ink-2)}
+  .pages{display:flex;gap:8px}
+  .pages span{background:var(--accent-wash);color:var(--ink);border-radius:999px;padding:6px 14px;font-weight:600;font-size:16px}
+  .url{font-family:var(--mono);font-size:21px;color:var(--ink);font-weight:500}
 </style>
 <div class="banner">
-  <div class="top">
-    <span class="name">RAG Playground</span>
-    <span class="where mono">open source, MIT</span>
+  <div class="name">RAG Playground <span>open source, free, no sign-in</span></div>
+  <div class="left">
+    <h1>See where your RAG answer <em>went missing.</em></h1>
+    <p class="sub">Run every step on your own PDF. Change one setting and see what it did.</p>
   </div>
-
-  <div class="mid">
-    <div>
-      <h1>Learn how RAG works<br>by <em>running it</em>.</h1>
-      <p class="sub">Every stage on a real PDF: parse, chunk, index, retrieve, answer. Change one setting and see what it did.</p>
-    </div>
-
-    <div class="card">
-      <div class="cardhead mono"><span>chunk recursive_character</span><span>14 chunks</span></div>
-      <div class="doc mono"><span class="c1">A retriever scores each chunk as a whole. </span><span class="c1 ans">When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other.</span><span class="c2"> The model then receives a passage that mentions the topic but never resolves it.</span><span class="c3"> Boundaries also decide what travels together.</span></div>
-      <div class="pipe mono">
-        <div>parse</div><div>clean</div><div class="on">chunk</div><div>index</div><div>retrieve</div><div>answer</div>
-      </div>
-    </div>
+  <div class="card">
+    <div class="head"><span>Evaluate &nbsp;·&nbsp; 3 of 5 found</span><span class="marks"><i class="m h">✓</i><i class="m h">✓</i><i class="m x">✕</i><i class="m x">✕</i><i class="m h">✓</i></span></div>
+    <div class="q">By how much did the number of readers who lost their place fall?</div>
+    <div class="finding"><b>Lost at Parse.</b> The parser read across both columns.</div>
+    <p class="doc"><span class="ans">the number of readers who lost their place</span> <span class="in">hunt for the next line has already stopped</span> <span class="ans">halfway down a page fell by more than half.</span></p>
+    <div class="steps"><span class="first"><i class="dot lost"></i>Parse</span><span><i class="dot"></i>Clean</span><span><i class="dot"></i>Chunk</span><span><i class="dot"></i>Search</span><span><i class="dot"></i>Top 5</span></div>
   </div>
-
-  <div class="bottom">
-    <div class="tags">
-      <span class="tag">Predict, then see</span>
-      <span class="tag">Citations checked on the page</span>
-      <span class="tag">Score a change</span>
-    </div>
-    <span class="mono" style="font-size:15px;color:#B4B4BC;white-space:nowrap">hf.co/spaces/nadeem4nk/rag-playground</span>
-  </div>
+  <div class="foot"><div class="pages"><span>Build</span><span>Ask</span><span>Compare</span><span>Evaluate</span></div><div class="url">rag.codewithnk.com</div></div>
 </div>

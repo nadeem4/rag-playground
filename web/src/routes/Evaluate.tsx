@@ -486,7 +486,8 @@ function Evaluation({
   const scoredRows = ran ? rows : []
   const summary = summarize(scoredRows.map((r) => r.payload))
   const scores = metrics(scoredRows.map((r) => r.payload))
-  const beforeScores = previous ? metrics(Object.values(previous.byId)) : null
+  // A number is compared only with a last run scored at the same Pieces checked.
+  const beforeScores = previous && (previous.k === undefined || previous.k === shownK) ? metrics(Object.values(previous.byId)) : null
   const byTag = metricsByTag(scoredRows.map((r) => ({ tags: r.question.tags, payload: r.payload })))
   const effect = graph.nodes.some((n) => n.stage === "rerank")
     ? rerankEffect(scoredRows.map((r) => ({ payload: r.payload, rows: r.result ? rowsFromResult(r.result) : undefined })))

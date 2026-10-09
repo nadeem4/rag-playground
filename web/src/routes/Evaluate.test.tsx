@@ -981,6 +981,19 @@ describe("while and after scoring", () => {
     expect(readPreviousEvaluation(SOURCE.sha, "working")?.k).toBe(5)
   })
 
+  it("compares the numbers only with a last run scored at the same Pieces checked", async () => {
+    storePreviousEvaluation({
+      sourceSha: SOURCE.sha,
+      pipelineKey: "working",
+      byId: { a: evalOut({}).payload as never, b: evalOut({}).payload as never },
+      summary: { hits: 2, total: 2, averageRank: 1 },
+      k: 1,
+    })
+    await finishTwo()
+    expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)50%")
+    expect(screen.getByTestId("numbers").textContent).not.toContain("was")
+  })
+
   it("warns that the score says nothing when the pipeline makes fewer pieces than the top k", async () => {
     const es = await start({ c0: { chunks: [{ id: "a" }, { id: "b" }, { id: "c" }] } })
     es.emit(1, { event: "variant_started", index: 0, variant: {} })

@@ -220,6 +220,19 @@ Evaluate scores a pipeline: the one on Build, or any saved pipeline you pick, on
 document in the Document control. It asks the pipeline every question in the question set
 and says how many found their answer, at what rank and in which piece. It needs no key.
 
+The page says what it does under its title, and **How it is scored** opens a side sheet (a
+sheet from the bottom on a phone) that explains the test: what it checks, how a question is
+marked, how the text is matched step by step with examples, and every number with its sum
+worked out. Under the question set, two lines show what is being scored: the **index side**
+(Parse, Clean, Chunk and Index, with a link to change a step on Build) and the **search
+side** (Rewrite, Retrieve with how many pieces it returns, and Rerank, with a link to the
+search settings on Build).
+
+**Pieces checked** is how many pieces from the top of each search are checked for the
+answer. Its **i** button says what that means. Every question is listed before you run,
+with its expected answer (when the set gives one, in your own words and never scored) beside
+its evidence, the sentence or table row the score looks for.
+
 ### Question sets
 
 Each question carries the sentence in the document that answers it, its gold answer. A
@@ -251,20 +264,33 @@ demo the set is kept only in the tab; locally it is kept beside the document.
 
 ### Reading a score and a miss
 
+While it runs, one line says whether the index came from the cache or was built now, and a
+second line and a bar count the questions: "Searching and scoring question 3 of 6. 2
+searches came from the cache."
+
 The score reads as a sentence with the last run beside it, such as "3 of 5 questions found
 the answer. The last run found 5 of 5." The line under it names what changed when one step
-did, such as "Both misses are new since Parse changed to Fast text."
+did, such as "Both misses are new since Parse changed to Fast text." Under that, every
+number has its plain name and its technical name: Hit rate (Hit@5), Mean reciprocal rank
+(MRR), Average rank when found (mean rank) and Middle rank when found (median rank), plus
+Evidence found (recall) when a question has more than one passage. Each says what it was in
+the last run when that differs. "What these mean" opens the explanation.
 
-One mark per question sits under the score; pressing a mark jumps to its row. Each row
-gives its verdict in a word and why in a sentence, such as "Not in any of the 6 pieces
-that came back, so no number of pieces checked would find it." Open a row to see the
-sentence that answers the question and the top three pieces that came back, so you can
-see why it missed. The previous score of each pipeline in this tab is kept.
+Changing Pieces checked after a run does not relabel the numbers: the page says "Scored at 5
+pieces. Evaluate again to use 3."
+
+One mark per question sits under the score; pressing a mark brings its row into view. Each
+row gives its verdict in a word and why in a sentence, such as "Found in the 1st piece, word
+for word." or "Not in any of the 6 pieces that came back, so no number of pieces checked
+would find it." **Details** opens the question in the side sheet: its evidence and expected
+answer, and the top three pieces that came back, with the one that holds the answer marked.
+On a phone the evidence folds away from the rows after a run, since Details shows it. The
+previous score of each pipeline in this tab is kept.
 
 ### Why did this miss?
 
-A missed row says "Why did this miss?" under its reason. Open it and the row follows the
-answer sentence down the pipeline, one step at a time, and stops at the first step that
+A missed row has a **Why did this miss?** button. It opens the side sheet, which follows
+the answer sentence down the pipeline, one step at a time, and stops at the first step that
 lost it:
 
 - **Parse.** Is the answer sentence in the parsed text? When all its words are there but
@@ -277,7 +303,7 @@ lost it:
 - **Rerank.** When there is a reranker, where did it put that piece?
 - **Top 5.** Was it among the pieces checked?
 
-The steps after the one that lost it say "Not checked." The row ends with a fix to try and
+The steps after the one that lost it say "Not checked." The trace ends with a fix to try and
 a button that opens that step on Build. A row that found its answer shows the same steps,
 all passed. The check is the same one Evaluate scores with, so a trace never disagrees
 with the score.

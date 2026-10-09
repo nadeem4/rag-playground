@@ -249,12 +249,13 @@ def trace(
 
     # Top k: the pieces the reader would look at.
     name = f"Top {top_k}"
+    checked = f"{top_k} {'piece' if top_k == 1 else 'pieces'} checked"
     if lost:
         skip("top_k", name)
     elif rank is not None and rank <= top_k:
-        step("top_k", name, "pass", f"{ordinal(rank)}, inside the {top_k} pieces checked.")
+        step("top_k", name, "pass", f"{ordinal(rank)}, inside the {checked}.")
     else:
-        below = f"{label.capitalize()} came back {ordinal(rank or 0)}, below the {top_k} pieces checked."
+        below = f"{label.capitalize()} came back {ordinal(rank or 0)}, below the {checked}."
         step("top_k", name, "lost", below)
         finding = f"Lost at {name}. {below}"
         fix = FIX["top_k"]

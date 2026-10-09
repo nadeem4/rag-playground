@@ -131,6 +131,13 @@ def test_a_piece_ranked_below_the_pieces_checked_is_lost_at_top_k():
     assert t["steps"][4]["sentence"] == "Piece 2 came back 8th, below the 5 pieces checked."
 
 
+def test_one_piece_checked_reads_in_the_singular():
+    below = run(retrieve=result(OTHER, GOOD), top_k=1)
+    assert below["steps"][4]["sentence"] == "Piece 2 came back 2nd, below the 1 piece checked."
+    inside = run(retrieve=result(GOOD, OTHER), top_k=1)
+    assert inside["steps"][4]["sentence"] == "1st, inside the 1 piece checked."
+
+
 def test_a_reranker_step_reports_the_rank_after_reranking():
     t = run(retrieve=result(GOOD, OTHER), final=result(*([OTHER] * 6), GOOD), rerank_name="Cross-encoder", top_k=5)
     assert [s["stage"] for s in t["steps"]] == ["parse", "clean", "chunk", "search", "rerank", "top_k"]

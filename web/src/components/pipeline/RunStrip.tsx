@@ -23,6 +23,8 @@ export type StripLine =
   | { kind: "building"; title?: string; startedAt?: number }
   | { kind: "running"; title: string; startedAt?: number }
   | { kind: "built"; totalMs: number }
+  /** Every step came from the cache, so nothing ran again. */
+  | { kind: "reused" }
   | { kind: "failed"; title: string }
   /** The server refused the run before it started; the reason is in the note above the cards. */
   | { kind: "refused" }
@@ -114,6 +116,8 @@ function LineText({ line }: { line: Exclude<StripLine, null> }) {
           {secs}
         </>
       )
+    case "reused":
+      return <>From the cache, nothing ran again</>
     case "built":
       return (
         <>
@@ -127,9 +131,13 @@ function LineText({ line }: { line: Exclude<StripLine, null> }) {
   }
 }
 
-export function RunStrip({ segments, line }: { segments: StripSegment[]; line: StripLine }) {
+/** `bare` drops the column's border and padding, for the strip inside another panel (Evaluate's run panel). */
+export function RunStrip({ segments, line, bare = false }: { segments: StripSegment[]; line: StripLine; bare?: boolean }) {
   return (
-    <div data-testid="run-strip" className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-hairline px-3 py-2">
+    <div
+      data-testid="run-strip"
+      className={cn("flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1", bare ? "" : "border-b border-hairline px-3 py-2")}
+    >
       {/* Each segment keeps room for its label; when the line does not fit beside the
           bars it takes its own row, so labels never truncate and bars never jump. */}
       <ol

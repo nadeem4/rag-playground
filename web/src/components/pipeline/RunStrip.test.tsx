@@ -119,6 +119,18 @@ describe("the run strip", () => {
     expect(within(strip).getByTestId("run-line").textContent).toBe("Built in 3.4 s")
   })
 
+  it("when every step came from the cache, the line says so", () => {
+    const strip = show(segs("reused", "reused", "reused", "reused", "reused"), { kind: "reused" })
+    expect(within(strip).getByTestId("run-line").textContent).toBe("From the cache, nothing ran again")
+  })
+
+  it("bare drops the column's border and padding, for use inside another panel", () => {
+    render(<RunStrip segments={segs()} line={null} bare />)
+    const strip = screen.getByTestId("run-strip")
+    expect(strip.className).not.toMatch(/border-b/)
+    expect(strip.className).not.toMatch(/px-3/)
+  })
+
   it("a build that took under a tenth of a second says so", () => {
     const strip = show(segs("reused", "reused", "reused", "reused", "reused"), { kind: "built", totalMs: 30 })
     expect(within(strip).getByTestId("run-line").textContent).toBe("Built in under 0.1 s")

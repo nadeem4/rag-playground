@@ -1,4 +1,5 @@
 import type { NodeState } from "@/api/runState"
+import type { StripLine } from "@/components/pipeline/RunStrip"
 import type { Registry } from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { strategyLabel } from "@/learn/challenges"
@@ -59,6 +60,44 @@ export function indexLine(states: Record<string, NodeState>, indexIds: readonly 
   if (mine.length === 0 || mine.every((s) => s.status === "pending")) return { label: "Waiting to start", cached: false }
   if (mine.length === indexIds.length && mine.every((s) => s.status === "cached")) return { label: "From the cache", cached: true }
   return { label: "Built now", cached: false }
+}
+
+/**
+ * The line beside Evaluate's run strip, the way Build's strip words it: queued
+ * on the busy demo, the index step running now, "From the cache, nothing ran
+ * again" when every index step was a cache hit, or the build time once every
+ * step has finished (cache hits count no time). Null before any step reports.
+ */
+export function evalStripLine(states: Record<string, NodeState>, indexIds: readonly string[], title: (id: string) => string, queued: boolean): StripLine {
+  if (queued) return { kind: "queued" }
+  const running = indexIds.find((id) => states[id]?.status === "running")
+  if (running) return { kind: "running", title: title(running), startedAt: states[running]?.started_at }
+  const mine = indexIds.map((id) => states[id])
+  if (mine.every((s) => s?.status === "cached")) return { kind: "reused" }
+  if (mine.every((s) => s?.status === "done" || s?.status === "cached")) {
+    return { kind: "built", totalMs: mine.reduce((sum, s) => sum + (s?.status === "done" ? (s.duration_ms ?? 0) : 0), 0) }
+  }
+  return null
+}
+
+/** Parsers whose first read of a document is slow enough to explain while it runs. */
+const SLOW_PARSERS = new Set(["docling"])
+
+/** Said under the strip only while a slow first read runs, so a long wait has a reason on the page. */
+export function slowReadNote(parse: NodeState | undefined): string | null {
+  if (parse?.status !== "running" || !parse.transform || !SLOW_PARSERS.has(parse.transform)) return null
+  return "Docling reads the page layout, so the first read of a document can take a minute or two. Later runs come from the cache."
+}
+
+/** "10 searches: 7 from the cache, 3 ran now. Took 12 s." The run's line that stays after it ends. */
+export function runSummary(searches: number, cached: number, ms: number | null): string {
+  const noun = searches === 1 ? "search" : "searches"
+  const ran = searches - cached
+  const head =
+    cached === searches ? `${searches} ${noun}, all from the cache.` : cached === 0 ? `${searches} ${noun}, ran now.` : `${searches} ${noun}: ${cached} from the cache, ${ran} ran now.`
+  if (ms === null) return head
+  const s = ms / 1000
+  return `${head} Took ${s < 10 ? s.toFixed(1) : String(Math.round(s))} s.`
 }
 
 /** "Searching and scoring question 3 of 6. 2 searches came from the cache." */

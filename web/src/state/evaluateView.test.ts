@@ -5,7 +5,7 @@ import type { NodeState } from "@/api/runState"
 import liveRegistry from "@/api/fixtures/registry.json"
 
 import { metrics } from "./evaluate"
-import { indexLine, indexSteps, numbersRow, progressLine, searchSteps, staleLine, evidenceCells } from "./evaluateView"
+import { evalStripLine, indexLine, indexSteps, numbersRow, progressLine, runSummary, searchSteps, slowReadNote, staleLine, evidenceCells } from "./evaluateView"
 import { sampleGraph, setConfig, setTransform } from "./graph"
 
 const registry = liveRegistry as unknown as Registry
@@ -132,5 +132,49 @@ describe("evidenceCells", () => {
   it("splits a table row into its cells, and leaves a sentence alone", () => {
     expect(evidenceCells("| Satisfaction score | 6.1 | 8.3 | +2.2 |")).toEqual(["Satisfaction score", "6.1", "8.3", "+2.2"])
     expect(evidenceCells("A table is a good home for a number.")).toBeNull()
+  })
+})
+
+describe("evalStripLine", () => {
+  const ids = ["parse", "chunk", "index"]
+  const title = (id: string) => id[0].toUpperCase() + id.slice(1)
+  it("names the step running now, with when it started", () => {
+    expect(evalStripLine({ parse: { ...state("done"), duration_ms: 900 }, chunk: { ...state("running"), started_at: 12 } }, ids, title, false)).toEqual({
+      kind: "running",
+      title: "Chunk",
+      startedAt: 12,
+    })
+  })
+  it("says the index came from the cache when every step was a cache hit", () => {
+    expect(evalStripLine({ parse: state("cached"), chunk: state("cached"), index: state("cached") }, ids, title, false)).toEqual({ kind: "reused" })
+  })
+  it("gives the build time once every step is done, counting only the steps that ran", () => {
+    expect(
+      evalStripLine({ parse: { ...state("done"), duration_ms: 2000 }, chunk: { ...state("cached"), duration_ms: 5 }, index: { ...state("done"), duration_ms: 400 } }, ids, title, false),
+    ).toEqual({ kind: "built", totalMs: 2400 })
+  })
+  it("says it is queued on the busy demo, and nothing before any step reports", () => {
+    expect(evalStripLine({}, ids, title, true)).toEqual({ kind: "queued" })
+    expect(evalStripLine({}, ids, title, false)).toBeNull()
+  })
+})
+
+describe("slowReadNote", () => {
+  it("explains a slow first read while Docling or OCR is running, and says nothing otherwise", () => {
+    expect(slowReadNote({ ...state("running"), transform: "docling" })).toBe(
+      "Docling reads the page layout, so the first read of a document can take a minute or two. Later runs come from the cache.",
+    )
+    expect(slowReadNote({ ...state("running"), transform: "pdfium" })).toBeNull()
+    expect(slowReadNote({ ...state("done"), transform: "docling" })).toBeNull()
+    expect(slowReadNote(undefined)).toBeNull()
+  })
+})
+
+describe("runSummary", () => {
+  it("says what came from the cache and how long the run took", () => {
+    expect(runSummary(10, 10, 400)).toBe("10 searches, all from the cache. Took 0.4 s.")
+    expect(runSummary(10, 7, 12_300)).toBe("10 searches: 7 from the cache, 3 ran now. Took 12 s.")
+    expect(runSummary(1, 0, 2_500)).toBe("1 search, ran now. Took 2.5 s.")
+    expect(runSummary(6, 2, null)).toBe("6 searches: 2 from the cache, 4 ran now.")
   })
 })

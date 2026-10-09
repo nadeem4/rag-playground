@@ -52,9 +52,11 @@ import {
 } from "@/state/evaluate"
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
 import { columnOrder, upstreamOfStage, useStoredGraph, type PipelineGraph } from "@/state/graph"
-import { evidenceCells, indexLine, indexSteps, progressLine, searchSteps, staleLine } from "@/state/evaluateView"
+import { evalStripLine, evidenceCells, indexSteps, progressLine, runSummary, searchSteps, slowReadNote, staleLine } from "@/state/evaluateView"
 import { documentOf, useDocument, withDocument } from "@/state/document"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
+import { RunStrip, stripSegments } from "@/components/pipeline/RunStrip"
+import { FieldHelp } from "@/components/fields/FieldHelp"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { sameGraph, usableGraph, usePipelines } from "@/state/pipelines"
 
@@ -166,7 +168,7 @@ function EvaluatePage({ registry }: { registry: Registry }) {
           <div className="flex flex-wrap items-end gap-3">
             {/* Outside the keyed body, so switching pipelines keeps this picker, and its focus (F5). */}
             <div className="flex w-[min(360px,100%)] min-w-0 flex-col gap-1">
-              <label id={`${pickerId}-label`} htmlFor={pickerId} className="text-xs font-semibold text-fg-muted">
+              <label id={`${pickerId}-label`} htmlFor={pickerId} className="text-xs text-fg-muted select-none">
                 Pipeline
               </label>
               <Picker
@@ -298,6 +300,10 @@ interface Row {
   failed?: NodeState
   started: boolean
 }
+
+/** What Pieces checked means, behind the same info button as every field on Build. */
+const PIECES_HELP =
+  "The search returns a ranked list of pieces. This is how many from the top are checked for the evidence. A chat model usually reads about 5, so evidence in 8th place counts as missed. A higher number is easier to pass and says less about the order."
 
 const INDEX_STAGES = ["parse", "clean", "chunk", "index"]
 
@@ -516,7 +522,16 @@ function Evaluation({
   // Every sweep so far: the finished ones, then the one running.
   const allVariants = [...earlier, ...(handover ? [] : run.variants)]
   const firstStarted = stateOf(0) ?? allVariants[0]
-  const index = indexLine(firstStarted?.nodes ?? {}, indexIds, stepName)
+  // The index steps as Build's run strip shows them: live while the run goes,
+  // then each step done, reused from the cache, or failed.
+  const indexNodes = columnOrder(graph).filter((n) => INDEX_STAGES.includes(n.stage))
+  const firstNodes = firstStarted?.nodes ?? {}
+  const segments = stripSegments(indexNodes, firstNodes, new Set(), busy ? { ids: new Set(indexIds), nodes: firstNodes } : undefined)
+  const segmentTitle = (id: string) => segments.find((x) => x.id === id)?.title ?? stepName(id)
+  const stripLine = evalStripLine(firstNodes, indexIds, segmentTitle, run.queued)
+  const parseId = indexNodes.find((n) => n.stage === "parse")?.id
+  const slowNote = slowReadNote(parseId ? firstNodes[parseId] : undefined)
+  const current = settled < asked.length ? asked[settled]?.question : undefined
   const retrieveId = graph.nodes.find((n) => n.stage === "retrieve")?.id
   const cachedSearches = allVariants.filter((v) => retrieveId && v.nodes[retrieveId]?.status === "cached").length
 
@@ -530,6 +545,15 @@ function Evaluation({
   // written to session storage as soon as it finishes, because changing a
   // setting means a trip to Build and a fresh page.
   const done = runId !== null && run.closed && rest.length === 0 && rows.length > 0 && rows.every((r) => r.payload !== undefined)
+  // How long the whole evaluation took, every batch together, measured here.
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [tookMs, setTookMs] = useState<number | null>(null)
+  useEffect(() => {
+    if (done && startedAt !== null) {
+      setTookMs(Date.now() - startedAt)
+      setStartedAt(null)
+    }
+  }, [done, startedAt])
   const finishedRun: PreviousEvaluation | null = done
     ? { sourceSha, pipelineKey, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary, steps, k: shownK }
     : null
@@ -546,6 +570,8 @@ function Evaluation({
     setSubmitting(true)
     setDetail(null)
     const before = finishedRun
+    setStartedAt(Date.now())
+    setTookMs(null)
     try {
       const g = evalGraph(graph, registry, topK)
       if (!g) throw new Error("This server has no eval step.")
@@ -580,10 +606,10 @@ function Evaluation({
     <>
       <div className="relative flex flex-col gap-1">
         <span className="flex items-center gap-1">
-          <label htmlFor={topKId} className="text-xs font-semibold text-fg-muted">
+          <label htmlFor={topKId} className="text-xs text-fg-muted select-none">
             Pieces checked
           </label>
-          <PiecesInfo />
+          <FieldHelp title="Pieces checked" text={PIECES_HELP} />
         </span>
         <input
           id={topKId}
@@ -697,21 +723,31 @@ function Evaluation({
               <p className="text-fg-muted">{QUEUED_LINE}</p>
             ) : (
               <>
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex flex-col gap-1">
                   <strong className="font-semibold text-fg">Index</strong>
-                  <span
-                    data-testid="index-line"
-                    className={index.cached ? "rounded-swatch bg-kept px-2 text-xs font-semibold text-kept-text" : "text-fg-muted"}
-                  >
-                    {index.label}
-                  </span>
-                </p>
+                  <RunStrip segments={segments} line={stripLine} bare />
+                  {stripLine === null ? (
+                    <span data-testid="index-line" className="text-xs text-fg-muted">
+                      Waiting to start
+                    </span>
+                  ) : null}
+                  {slowNote ? (
+                    <p data-testid="slow-note" className="max-w-[60ch] text-xs text-fg-muted">
+                      {slowNote}
+                    </p>
+                  ) : null}
+                </div>
                 <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <strong className="font-semibold text-fg">Questions</strong>
                   <span data-testid="progress-line" className="text-fg-muted">
                     <MonoNumbers text={progressLine(settled, asked.length, cachedSearches)} />
                   </span>
                 </p>
+                {current ? (
+                  <p data-testid="current-question" className="max-w-[60ch] truncate text-xs text-fg-muted">
+                    Now: {current}
+                  </p>
+                ) : null}
                 <div
                   role="progressbar"
                   aria-label="Questions scored"
@@ -738,6 +774,15 @@ function Evaluation({
           </div>
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
+
+        {ran && !busy && segments.length ? (
+          <div data-testid="run-summary" className="flex max-w-[40rem] flex-col gap-1 text-sm">
+            <RunStrip segments={segments} line={stripLine} bare />
+            <p className="text-xs text-fg-muted">
+              <MonoNumbers text={runSummary(asked.length, cachedSearches, tookMs)} />
+            </p>
+          </div>
+        ) : null}
 
         {ran && !busy ? (
           <EvalNumbers metrics={scores} before={beforeScores} byTag={byTag} topK={shownK} rerank={rerankText} onExplain={onExplain} />
@@ -802,63 +847,6 @@ function Evaluation({
         </SideSheet>
       ) : null}
     </div>
-  )
-}
-
-/**
- * The i beside Pieces checked: a small panel that says what the number means.
- * Escape or a click elsewhere closes it, and focus goes back to the button.
- */
-function PiecesInfo() {
-  const [open, setOpen] = useState(false)
-  const id = useId()
-  const button = useRef<HTMLButtonElement>(null)
-  const panel = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false)
-        button.current?.focus()
-      }
-    }
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node
-      if (!panel.current?.contains(t) && !button.current?.contains(t)) setOpen(false)
-    }
-    document.addEventListener("keydown", onKey)
-    document.addEventListener("mousedown", onDown)
-    return () => {
-      document.removeEventListener("keydown", onKey)
-      document.removeEventListener("mousedown", onDown)
-    }
-  }, [open])
-  return (
-    <>
-      <button
-        ref={button}
-        type="button"
-        aria-label="What Pieces checked means"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen((o) => !o)}
-        className="relative grid size-[20px] cursor-pointer place-items-center rounded-full border border-field-border bg-surface text-[0.6875rem] font-semibold text-fg-muted after:absolute after:-inset-[12px] after:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
-      >
-        i
-      </button>
-      {open ? (
-        <div
-          ref={panel}
-          id={id}
-          role="region"
-          aria-label="What Pieces checked means"
-          className="absolute top-full right-0 z-30 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-panel border border-hairline bg-surface-raised p-3 text-xs text-fg"
-        >
-          The search returns a ranked list of pieces. This is how many from the top are checked for the evidence. A chat model usually reads about 5,
-          so evidence in 8th place counts as missed. A higher number is easier to pass and says less about the order.
-        </div>
-      ) : null}
-    </>
   )
 }
 

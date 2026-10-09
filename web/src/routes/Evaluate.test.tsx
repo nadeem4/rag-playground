@@ -273,15 +273,17 @@ describe("Evaluate", () => {
     expect(screen.queryByRole("dialog")).toBeNull()
   })
 
-  it("says what Pieces checked means behind its i button, and closes it on Escape", async () => {
+  it("explains Pieces checked with the same info button as Build's fields, and closes it on Escape", async () => {
     setup()
-    const info = await screen.findByRole("button", { name: "What Pieces checked means" })
-    expect(info.getAttribute("aria-expanded")).toBe("false")
+    const info = await screen.findByRole("button", { name: "About Pieces checked" })
+    // The shared FieldHelp button: Lucide's Info icon, not a hand-drawn letter.
+    expect(info.querySelector("svg")).not.toBeNull()
+    expect(info.textContent).toBe("")
     fireEvent.click(info)
-    expect(info.getAttribute("aria-expanded")).toBe("true")
-    expect(screen.getByRole("region", { name: "What Pieces checked means" }).textContent).toMatch(/how many from the top are checked/)
-    fireEvent.keyDown(document, { key: "Escape" })
-    expect(screen.queryByRole("region", { name: "What Pieces checked means" })).toBeNull()
+    const dialog = await screen.findByRole("dialog", { name: "Pieces checked" })
+    expect(dialog.textContent).toMatch(/how many from the top are checked/)
+    fireEvent.keyDown(dialog, { key: "Escape" })
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Pieces checked" })).toBeNull())
   })
 
   it("lists every question with its evidence before any run", async () => {
@@ -761,6 +763,27 @@ describe("while and after scoring", () => {
       expect([...reason.querySelectorAll(".font-mono")].every((m) => /^[\d,.]+$/.test(m.textContent ?? ""))).toBe(true)
       expect(reason.querySelector(".font-mono")).not.toBeNull()
     }
+  })
+
+  it("shows Build's run strip while the index builds, and keeps a summary of what came from the cache after the run", async () => {
+    const es = await start({ o0: evalOut({}), o1: evalOut({}) })
+    const index = graph.nodes.filter((n) => ["parse", "clean", "chunk", "index"].includes(n.stage))
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_started", node_id: index[0].id, ts: 1 })
+    await waitFor(() => expect(screen.getByTestId("run-line").textContent).toMatch(/^Running /))
+    expect(screen.getByRole("list", { name: "Index steps" })).toBeTruthy()
+    let n = 3
+    for (const node of index) es.emit(n++, { event: "node_finished", node_id: node.id, artifact_id: `a-${node.id}`, cache_hit: true, duration_ms: 1 })
+    es.emit(n++, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r0", cache_hit: true, duration_ms: 1 })
+    es.emit(n++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: "o0", cache_hit: false, duration_ms: 1 })
+    es.emit(n++, { event: "variant_started", index: 1, variant: {} })
+    es.emit(n++, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r1", cache_hit: true, duration_ms: 1 })
+    es.emit(n++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: "o1", cache_hit: false, duration_ms: 1 })
+    es.emit(n++, { event: "stream_end", status: "finished", ok: true })
+    const summary = await screen.findByTestId("run-summary")
+    expect(within(summary).getByTestId("run-line").textContent).toBe("From the cache, nothing ran again")
+    expect(summary.textContent).toContain("2 searches, all from the cache.")
+    await waitFor(() => expect(screen.getByTestId("run-summary").textContent).toMatch(/Took [\d.]+ s\./))
   })
 
   it("keeps saying the k that was scored when Pieces checked changes after the run", async () => {

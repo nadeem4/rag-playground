@@ -2,8 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { createPortal } from "react-dom"
 
 import { api } from "@/api/client"
-import { QUEUED_LINE, type NodeState } from "@/api/runState"
-import type { EvalPayload, Registry, RetrievalResult, SampleQuestion, Trace, TraceRequest } from "@/api/types"
+import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
+import type { EvalPayload, Registry, RetrievalResult, SampleQuestion, Trace, TraceRequest, Variant } from "@/api/types"
 import { useSamples } from "@/api/samples"
 import { loadPayload } from "@/api/useArtifact"
 import { usePayloads } from "@/api/usePayloads"
@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { cn } from "@/lib/utils"
 import {
+  batches,
   changeFor,
   changeText,
   evalGraph,
@@ -40,6 +41,7 @@ import {
   reasonText,
   rerankEffect,
   rerankLine,
+  SWEEP_LIMIT,
   storePreviousEvaluation,
   scoreFinding,
   summarize,
@@ -345,7 +347,22 @@ function Evaluation({
   // The question whose details are open in the side sheet.
   const [detail, setDetail] = useState<string | null>(null)
   const run = useRun(runId)
-  const busy = submitting || (runId !== null && !run.closed)
+  // More questions than one sweep takes run as several sweeps in a row
+  // (SWEEP_LIMIT). `offset` is where the current sweep's first question sits in
+  // the set, `earlier` holds the finished sweeps' variants under their place in
+  // the set, and `rest` the sweeps still to start.
+  const [offset, setOffset] = useState(0)
+  const [earlier, setEarlier] = useState<VariantState[]>([])
+  const [rest, setRest] = useState<{ offset: number; variants: Variant[] }[]>([])
+  const [evalGraphUsed, setEvalGraphUsed] = useState<PipelineGraph | null>(null)
+  // True from handing over to a new sweep until its state replaces the old
+  // one: useRun resets on the next effect, so for one render `run` still
+  // describes the sweep that just closed.
+  const [handover, setHandover] = useState(false)
+  useEffect(() => {
+    if (handover && !run.closed) setHandover(false)
+  }, [handover, run.closed])
+  const busy = submitting || handover || (runId !== null && !run.closed) || rest.length > 0
   useEffect(() => {
     onBusy(busy)
     return () => onBusy(false)
@@ -380,7 +397,41 @@ function Evaluation({
     }
   }, [matched?.name])
 
-  const stateOf = (i: number) => run.variants.find((s) => s.index === i)
+  const stateOf = (i: number) =>
+    earlier.find((s) => s.index === i) ?? (handover ? undefined : run.variants.find((s) => s.index !== null && s.index + offset === i))
+
+  // When a sweep ends and more are waiting, start the next. A cancelled or
+  // crashed sweep ends the evaluation: what finished stays on the page.
+  useEffect(() => {
+    if (runId === null || !run.closed || rest.length === 0) return
+    if (run.status === "cancelled" || run.error || !evalGraphUsed) {
+      setRest([])
+      return
+    }
+    const [next, ...after] = rest
+    const finished = run.variants.map((v) => ({ ...v, index: v.index === null ? null : v.index + offset }))
+    let live = true
+    api
+      .createSweep({ graph: evalGraphUsed, node_id: queryId, variants: next.variants, through: useCaseId })
+      .then(
+        ({ run_id }) => {
+          if (!live) return
+          setEarlier((e) => [...e, ...finished])
+          setHandover(true)
+          setOffset(next.offset)
+          setRest(after)
+          setRunId(run_id)
+        },
+        (err: unknown) => {
+          if (!live) return
+          setRest([])
+          setError(err instanceof Error ? err.message : String(err))
+        },
+      )
+    return () => {
+      live = false
+    }
+  }, [runId, run.closed]) // eslint-disable-line react-hooks/exhaustive-deps
   const artifactOf = (i: number, id: string | undefined) => {
     const s = stateOf(i)
     return id && finished(s?.nodes[id]) ? s!.nodes[id].artifact_id : undefined
@@ -461,10 +512,12 @@ function Evaluation({
     .filter((n) => INDEX_STAGES.includes(n.stage))
     .map((n) => n.id)
   const stepName = (id: string) => steps.find((s) => s.label.toLowerCase() === graph.nodes.find((n) => n.id === id)?.stage)?.label ?? id
-  const firstStarted = run.variants.find((v) => v.index === 0) ?? run.variants[0]
+  // Every sweep so far: the finished ones, then the one running.
+  const allVariants = [...earlier, ...(handover ? [] : run.variants)]
+  const firstStarted = stateOf(0) ?? allVariants[0]
   const index = indexLine(firstStarted?.nodes ?? {}, indexIds, stepName)
   const retrieveId = graph.nodes.find((n) => n.stage === "retrieve")?.id
-  const cachedSearches = run.variants.filter((v) => retrieveId && v.nodes[retrieveId]?.status === "cached").length
+  const cachedSearches = allVariants.filter((v) => retrieveId && v.nodes[retrieveId]?.status === "cached").length
 
   // Each row's element, so a mark can bring its row into view.
   const rowEls = useRef(new Map<string, HTMLLIElement>())
@@ -475,7 +528,7 @@ function Evaluation({
   // The finished evaluation on screen, to compare the next one against. It is
   // written to session storage as soon as it finishes, because changing a
   // setting means a trip to Build and a fresh page.
-  const done = runId !== null && run.closed && rows.length > 0 && rows.every((r) => r.payload !== undefined)
+  const done = runId !== null && run.closed && rest.length === 0 && rows.length > 0 && rows.every((r) => r.payload !== undefined)
   const finishedRun: PreviousEvaluation | null = done
     ? { sourceSha, pipelineKey, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary, steps, k: shownK }
     : null
@@ -495,12 +548,17 @@ function Evaluation({
     try {
       const g = evalGraph(graph, registry, topK)
       if (!g) throw new Error("This server has no eval step.")
+      const [first, ...after] = batches(questionVariants(query, questions), SWEEP_LIMIT)
       const { run_id } = await api.createSweep({
         graph: g,
         node_id: queryId,
-        variants: questionVariants(query, questions),
+        variants: first.items,
         through: useCaseId,
       })
+      setEarlier([])
+      setOffset(0)
+      setEvalGraphUsed(g)
+      setRest(after.map((b) => ({ offset: b.offset, variants: b.items })))
       if (before) setPrevious(before)
       setAsked(questions)
       setScoredK(topK)
@@ -538,7 +596,13 @@ function Evaluation({
         />
       </div>
       {busy && runId ? (
-        <Button variant="outline" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setRest([])
+            void api.cancelRun(runId).catch(() => undefined)
+          }}
+        >
           Cancel
         </Button>
       ) : null}

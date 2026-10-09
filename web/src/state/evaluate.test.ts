@@ -25,6 +25,8 @@ import {
   fixHref,
   traceRequest,
   type EvalPayload,
+  SWEEP_LIMIT,
+  batches,
 } from "./evaluate"
 import type { Question } from "./goldSet"
 import { e2eSampleGraph, removeNode, sampleGraph } from "./graph"
@@ -572,5 +574,21 @@ describe("traceRequest", () => {
   it("is null until every step it needs has finished, or when there is nothing to look for", () => {
     expect(traceRequest(g, (id) => (id === idOf("chunk") ? undefined : artifacts[id]), ["x"], 5)).toBeNull()
     expect(traceRequest(g, (id) => artifacts[id], [], 5)).toBeNull()
+  })
+})
+
+describe("batches", () => {
+  it("splits questions into runs of at most the sweep limit, keeping their order and offsets", () => {
+    expect(SWEEP_LIMIT).toBe(10)
+    const items = Array.from({ length: 23 }, (_, i) => i)
+    const out = batches(items, SWEEP_LIMIT)
+    expect(out.map((b) => b.offset)).toEqual([0, 10, 20])
+    expect(out.map((b) => b.items.length)).toEqual([10, 10, 3])
+    expect(out.flatMap((b) => b.items)).toEqual(items)
+  })
+
+  it("keeps a short set in one run, and an empty one in none", () => {
+    expect(batches([1, 2], 10)).toEqual([{ offset: 0, items: [1, 2] }])
+    expect(batches([], 10)).toEqual([])
   })
 })

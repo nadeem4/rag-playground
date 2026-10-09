@@ -117,7 +117,7 @@ function serve({
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/sweeps" && init?.method === "POST") {
         sweeps.push(JSON.parse(String(init.body)) as RecordedSweep)
-        return ok({ run_id: "r1" })
+        return ok({ run_id: `r${sweeps.length}` })
       }
       const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
@@ -897,5 +897,81 @@ describe("the document in the bar", () => {
       "Pick a document in the bar above to run the evaluation.Pick a document",
     )
     expect(screen.queryByText("No pipeline to evaluate")).toBeNull()
+  })
+})
+
+describe("more questions than one run takes", () => {
+  const graph = sampleGraph(registry, SOURCE)
+  const useCase = graph.nodes.find((n) => n.stage === "use_case")!.id
+  const twelve = Array.from({ length: 12 }, (_, i) =>
+    question({ id: `q${i}`, question: `Question number ${i}?`, gold_answers: [`Answer number ${i}.`] }),
+  )
+  const stored = goldSet({
+    count: 12,
+    set: { version: 1, document: "handbook.pdf", questions: twelve },
+    questions: twelve.map((q, i) => ({
+      index: i,
+      id: q.id,
+      question: q.question,
+      status: "found",
+      golds: [{ gold: q.gold_answers[0], status: "found", document_text: "", closest: "" }],
+    })),
+  })
+  const hit = { kind: "eval", payload: { question: "q", gold_answer: "g", hit: true, rank: 1, matched_chunk_id: "c", match: "exact", considered: 5, total_candidates: 5, golds_total: 1, golds_found: 1, found_at: null, returned: 5 } }
+
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  function finishBatch(es: DrivenEventSource, offset: number, count: number) {
+    let seq = 0
+    for (let i = 0; i < count; i++) {
+      es.emit(++seq, { event: "variant_started", index: i, variant: {} })
+      es.emit(++seq, { event: "node_finished", node_id: useCase, artifact_id: `batch${offset + i}`, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(++seq, { event: "stream_end", status: "finished", ok: true })
+  }
+
+  it("runs them in batches of ten and scores them as one evaluation", async () => {
+    const artifacts = Object.fromEntries(twelve.map((_, i) => [`batch${i}`, hit]))
+    const { sweeps } = serve({ stored, artifacts })
+    storeGraph(graph)
+    render(<Evaluate />)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+
+    await waitFor(() => expect(sweeps.length).toBe(1))
+    expect(sweeps[0].variants.length).toBe(10)
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    finishBatch(DrivenEventSource.instances[0], 0, 10)
+
+    // Still one evaluation: busy, no summary, and the second batch starts by itself.
+    await waitFor(() => expect(sweeps.length).toBe(2))
+    expect(sweeps[1].variants.length).toBe(2)
+    expect(screen.queryByTestId("summary")).toBeNull()
+    expect(screen.getByRole("button", { name: "Evaluating" })).toBeTruthy()
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(2))
+    finishBatch(DrivenEventSource.instances[1], 10, 2)
+
+    const summary = await screen.findByTestId("summary")
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button").map((m) => m.getAttribute("aria-label"))).toEqual(twelve.map((_, i) => `Question ${i + 1}, found`)))
+    expect(summary.textContent).toBe("12 of 12 questions found the answer.")
+    const marks = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    expect(marks).toHaveLength(12)
+    expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(twelve.map((_, i) => `Question ${i + 1}, found`))
+  })
+
+  it("stops after the batch it is in when cancelled", async () => {
+    const { sweeps } = serve({ stored, artifacts: {} })
+    storeGraph(graph)
+    render(<Evaluate />)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    DrivenEventSource.instances[0].emit(1, { event: "stream_end", status: "cancelled", ok: false })
+    await waitFor(() => expect(screen.getByRole("button", { name: "Evaluate again" })).toBeTruthy())
+    expect(sweeps.length).toBe(1)
   })
 })

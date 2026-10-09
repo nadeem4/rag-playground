@@ -223,9 +223,16 @@ and says how many found their answer, at what rank and in which piece. It needs 
 ### Question sets
 
 Each question carries the sentence in the document that answers it, its gold answer. A
-question counts as found when a retrieved piece contains that sentence. A question may
-carry several gold answers when the document answers it in more than one place; any of
-them counts.
+question counts as found when a retrieved piece contains that sentence, word for word.
+Only differences parsers make on their own are ignored: spacing and line breaks, a word
+hyphenated across a line, capital letters, curly against straight quotes, and joined
+letters such as "fi". The upload check and the score use this same rule, so a sentence
+the check finds is one the score can find. A question may carry several gold answers when
+the document answers it in more than one place; any of them counts. A table row given both
+with and without its `|` bars is one answer written two ways, so it counts once.
+
+A set can hold any number of questions. Evaluate runs them ten at a time, one batch after
+another, and scores them as one evaluation.
 
 The bundled sets are about the bundled samples. To score your own PDF, bring your own
 questions:

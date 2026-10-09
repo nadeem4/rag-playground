@@ -25,6 +25,20 @@ export function isEvalOutput(data: unknown): data is EvalOutput {
 
 export const EVAL_TRANSFORM = "eval"
 
+/**
+ * The most recipes one sweep takes. The server refuses more (it bounds what a
+ * single request can ask of the hosted demo), so an evaluation with more
+ * questions runs as several sweeps, one after another.
+ */
+export const SWEEP_LIMIT = 10
+
+/** `items` cut into runs of at most `size`, each with the index of its first item. */
+export function batches<T>(items: readonly T[], size: number): { offset: number; items: T[] }[] {
+  const out: { offset: number; items: T[] }[] = []
+  for (let offset = 0; offset < items.length; offset += size) out.push({ offset, items: items.slice(offset, offset + size) })
+  return out
+}
+
 /** A graph can be evaluated only when something retrieves. */
 export function hasRetriever(g: PipelineGraph): boolean {
   return g.nodes.some((n) => n.stage === "retrieve")

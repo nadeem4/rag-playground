@@ -45,3 +45,5 @@ Thumbs.db
 # Local launch-video output and the skill installer lock file
 brag-output*/
 skills-lock.json
+# Agent worktrees
+.claude/worktrees/

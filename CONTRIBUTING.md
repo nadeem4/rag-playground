@@ -45,8 +45,20 @@ uv run pytest -m models       # the slow tests that load Docling, Qwen3 and bge
 cd web && npm test            # Vitest
 ```
 
+The smoke test drives the real app in a real browser. It starts its own demo server on a
+free port, builds the index, asks a question, runs Compare and Evaluate, then opens every
+page at 1440 and 390 px in light and dark. A page that scrolls sideways or logs an error
+fails it. It needs the models and a web build, and takes about two minutes:
+
+```bash
+uv run --with playwright==1.55.0 playwright install chromium   # once
+cd web && npm run build && cd ..
+uv run --with playwright==1.55.0 pytest -m smoke
+```
+
 The tests run on every push and pull request to `main` (`.github/workflows/ci.yml`): the
-Python suite, then the web tests and a web build.
+Python suite, then the web tests and a web build. The `models` and `smoke` tests do not
+run there, because they need the models. Run them before you publish a tag.
 
 Follow test-driven development: write the failing test first, then the code.
 
@@ -110,25 +122,46 @@ uv run python scripts/make_samples.py
 
 ## Cutting a release
 
-The hosted demo moves only when a version tag is pushed.
+Tagging a release and putting it live are two separate steps. A tag records a version;
+the hosted demo changes only when you publish a tag to it.
 
 1. **Bump the version** in `pyproject.toml` (`version = "X.Y.Z"`), then run `uv lock` so
    the project's own entry in `uv.lock` matches. Commit both as `chore: version X.Y.Z`.
-2. **Tag and push:**
+2. **Tag, push and record the release** as a pre-release, which means "not live yet":
 
    ```bash
    git tag vX.Y.Z
    git push origin vX.Y.Z
+   gh release create vX.Y.Z --verify-tag --prerelease --title vX.Y.Z --notes-file notes.md
    ```
 
-3. **The publish workflow** (`.github/workflows/publish-space.yml`) runs on the tag. It
-   runs `scripts/publish_space.py --repo nadeem4nk/rag-playground`, which publishes the
-   files committed at the tag to the Space with demo mode on. It needs a repository secret
+   Nothing on the demo changes. Tags can pile up during the week.
+3. **Before publishing a tag,** check it out and run the two suites CI does not run. Both
+   must pass:
+
+   ```bash
+   git checkout vX.Y.Z
+   uv run pytest -m models
+   cd web && npm run build && cd ..
+   uv run --with playwright==1.55.0 pytest -m smoke
+   ```
+
+4. **Publish the tag you choose** to the demo:
+
+   ```bash
+   gh workflow run "Publish the Hugging Face Space" -f tag=vX.Y.Z
+   ```
+
+   The workflow (`.github/workflows/publish-space.yml`) checks out that tag and runs
+   `scripts/publish_space.py --repo nadeem4nk/rag-playground`, which publishes the files
+   committed at the tag to the Space with demo mode on. Then it marks that tag's GitHub
+   release as a full release and **Latest**, so Latest always names what the demo runs.
+   Publishing an older tag rolls the demo back the same way. It needs a repository secret
    named `HF_TOKEN`, a Hugging Face token with write access; without it the job does
-   nothing. It can also be started by hand from the Actions tab. See
+   nothing. It can also be started from the Actions tab. See
    [docs/deploy.md](docs/deploy.md#publishing-with-publish_spacepy) for what the script
    does.
-4. **Check the Space** once its build is done:
+5. **Check the Space** once its build is done:
    - The stage is `RUNNING`:
 
      ```bash

@@ -223,5 +223,6 @@ uv run --no-sync python scripts/publish_space.py --repo <user>/rag-playground
   to `1`. **On a copy where you turned demo mode off, set it back to `0` after each
   publish.**
 
-The project's own demo is published by a GitHub workflow when a version tag is pushed. See
+The project's own demo is published by a GitHub workflow that you start by hand with the
+version tag to put live. Pushing a tag alone changes nothing on the demo. See
 [CONTRIBUTING.md](../CONTRIBUTING.md#cutting-a-release).

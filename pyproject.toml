@@ -48,8 +48,11 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["models: requires downloaded ML models (deselected by default)"]
-addopts = "-m 'not models'"
+markers = [
+    "models: requires downloaded ML models (deselected by default)",
+    "smoke: real-browser smoke test against a local demo server (deselected by default)",
+]
+addopts = "-m 'not models and not smoke'"
 
 [build-system]
 requires = ["hatchling"]

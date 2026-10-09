@@ -21,6 +21,18 @@ import {
   type E2ERun,
 } from "./e2e"
 
+/**
+ * The recorded run, with the reranker's picks changed so it passes over the
+ * 2nd chunk and reaches one further down: the variety case. Since the MMR fix
+ * (relevance from the retriever's own score) the recorded sample keeps its top
+ * picks in order, so this path is built here rather than recorded.
+ */
+const byRank = [...RUN.pool].sort((a, b) => a.rank - b.rank)
+const VARIED: E2ERun = {
+  ...RUN,
+  mmr: [byRank[0], ...byRank.slice(2, RUN.mmr.length + 1)].map((p) => p.id),
+}
+
 /** A small run where the reranker keeps the top two in order. */
 const TINY: E2ERun = {
   question: "Why?",
@@ -72,24 +84,24 @@ describe("the recorded run", () => {
   })
 
   it("says which chunks the reranker passed over and how far down it reached, from the ranks", () => {
-    const kept = RUN.pool.filter((p) => RUN.mmr.includes(p.id))
+    const kept = VARIED.pool.filter((p) => VARIED.mmr.includes(p.id))
     const deepest = Math.max(...kept.map((p) => p.rank))
-    const passed = RUN.pool.filter((p) => !RUN.mmr.includes(p.id) && p.rank < deepest).map((p) => `#${p.rank}`)
-    const step = rerankStep(RUN)
-    expect(step.title).toBe(`Rerank picked a varied ${numberWord(RUN.mmr.length)}`)
-    expect(step.words).toContain(`The retriever ranked all ${RUN.pool.length} chunks.`)
+    const passed = VARIED.pool.filter((p) => !VARIED.mmr.includes(p.id) && p.rank < deepest).map((p) => `#${p.rank}`)
+    const step = rerankStep(VARIED)
+    expect(step.title).toBe(`Rerank picked a varied ${numberWord(VARIED.mmr.length)}`)
+    expect(step.words).toContain(`The retriever ranked all ${VARIED.pool.length} chunks.`)
     expect(step.words.join(" ")).toContain(`It passed over ${listJoin(passed)}`)
     expect(step.words.join(" ")).toContain(`reached down to #${deepest} instead`)
   })
 
   it("shows the candidates down to the deepest pick, or all of them", () => {
-    const step = rerankStep(RUN)
-    const rows = rerankRows(RUN, false)
+    const step = rerankStep(VARIED)
+    const rows = rerankRows(VARIED, false)
     expect(rows.at(-1)!.rank).toBe(step.reached!.rank)
     expect(rows.at(-1)!.why).toBe("picked for variety")
-    expect(rows.filter((r) => r.kind === "kept")).toHaveLength(RUN.mmr.length)
+    expect(rows.filter((r) => r.kind === "kept")).toHaveLength(VARIED.mmr.length)
     expect(rows.filter((r) => r.kind === "skipped").every((r) => r.why === "passed over, too similar")).toBe(true)
-    expect(rerankRows(RUN, true)).toHaveLength(RUN.pool.length)
+    expect(rerankRows(VARIED, true)).toHaveLength(VARIED.pool.length)
   })
 
   it("draws the two rankings from each search's own scores", () => {
@@ -131,10 +143,11 @@ describe("the recorded run", () => {
   })
 
   it("says what the variety rerank costs, only when it passed something over", () => {
-    const cost = "Variety has a cost: #3, which it passed over, speaks to the question directly, and #10 is further from it."
-    expect(rerankStep(RUN).skipped[0].rank).toBe(3)
-    expect(rerankStep(RUN).reached?.rank).toBe(10)
-    expect(rerankStep(RUN).words).toContain(cost)
+    const deepest = VARIED.mmr.length + 1
+    const cost = `Variety has a cost: #2, which it passed over, speaks to the question directly, and #${deepest} is further from it.`
+    expect(rerankStep(VARIED).skipped[0].rank).toBe(2)
+    expect(rerankStep(VARIED).reached?.rank).toBe(deepest)
+    expect(rerankStep(VARIED).words).toContain(cost)
     const top5 = [...RUN.pool].sort((a, b) => a.rank - b.rank).slice(0, 5).map((p) => p.id)
     const inOrder = { ...RUN, mmr: top5 }
     expect(rerankStep(inOrder).skipped).toHaveLength(0)

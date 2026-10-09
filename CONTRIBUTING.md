@@ -45,8 +45,20 @@ uv run pytest -m models       # the slow tests that load Docling, Qwen3 and bge
 cd web && npm test            # Vitest
 ```
 
+The smoke test drives the real app in a real browser. It starts its own demo server on a
+free port, builds the index, asks a question, runs Compare and Evaluate, then opens every
+page at 1440 and 390 px in light and dark. A page that scrolls sideways or logs an error
+fails it. It needs the models and a web build, and takes about two minutes:
+
+```bash
+uv run --with playwright==1.55.0 playwright install chromium   # once
+cd web && npm run build && cd ..
+uv run --with playwright==1.55.0 pytest -m smoke
+```
+
 The tests run on every push and pull request to `main` (`.github/workflows/ci.yml`): the
-Python suite, then the web tests and a web build.
+Python suite, then the web tests and a web build. The `models` and `smoke` tests do not
+run there, because they need the models. Run them before you publish a tag.
 
 Follow test-driven development: write the failing test first, then the code.
 
@@ -124,7 +136,17 @@ the hosted demo changes only when you publish a tag to it.
    ```
 
    Nothing on the demo changes. Tags can pile up during the week.
-3. **Publish the tag you choose** to the demo:
+3. **Before publishing a tag,** check it out and run the two suites CI does not run. Both
+   must pass:
+
+   ```bash
+   git checkout vX.Y.Z
+   uv run pytest -m models
+   cd web && npm run build && cd ..
+   uv run --with playwright==1.55.0 pytest -m smoke
+   ```
+
+4. **Publish the tag you choose** to the demo:
 
    ```bash
    gh workflow run "Publish the Hugging Face Space" -f tag=vX.Y.Z
@@ -139,7 +161,7 @@ the hosted demo changes only when you publish a tag to it.
    nothing. It can also be started from the Actions tab. See
    [docs/deploy.md](docs/deploy.md#publishing-with-publish_spacepy) for what the script
    does.
-4. **Check the Space** once its build is done:
+5. **Check the Space** once its build is done:
    - The stage is `RUNNING`:
 
      ```bash

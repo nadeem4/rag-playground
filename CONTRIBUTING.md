@@ -11,7 +11,8 @@ release and record the Home clips. For how the code fits together, see
 - [Styling and fixtures](#styling-and-fixtures)
 - [Adding a strategy](#adding-a-strategy)
 - [The samples](#the-samples)
-- [Cutting a release](#cutting-a-release)
+- [Staging](#staging)
+- [Releasing](#releasing)
 - [Recording the Home clips](#recording-the-home-clips)
 
 ## Development setup
@@ -57,8 +58,14 @@ uv run --with playwright==1.55.0 pytest -m smoke
 ```
 
 The tests run on every push and pull request to `main` (`.github/workflows/ci.yml`): the
-Python suite, then the web tests and a web build. The `models` and `smoke` tests do not
-run there, because they need the models. Run them before you publish a tag.
+Python suite, then the web tests and a web build. The `models` and `smoke` tests run in
+their own workflow, **Release checks** (`.github/workflows/release-checks.yml`), on
+GitHub's machine with the models cached between runs. The Release workflow runs it
+before it tags a release. You can run it for any branch, tag or commit:
+
+```bash
+gh workflow run "Release checks" -f ref=feat/some-branch
+```
 
 Follow test-driven development: write the failing test first, then the code.
 
@@ -120,69 +127,106 @@ The bundled samples live under `samples/<name>/`: the PDF, its question set
 uv run python scripts/make_samples.py
 ```
 
-## Cutting a release
+## Staging
 
-Tagging a release and putting it live are two separate steps. A tag records a version;
-the hosted demo changes only when you publish a tag to it.
+Staging is a private copy of the demo on Hugging Face, `nadeem4nk/rag-playground-staging`.
+It runs in demo mode on the same free CPU hardware as the demo, so testing it is testing
+what visitors get, without loading your own computer.
 
-1. **Bump the version** in `pyproject.toml` (`version = "X.Y.Z"`), then run `uv lock` so
-   the project's own entry in `uv.lock` matches. Commit both as `chore: version X.Y.Z`.
-2. **Tag, push and record the release** as a pre-release, which means "not live yet":
+- **`main` publishes itself** to staging after every merge (`.github/workflows/staging.yml`).
+- **Any branch can be published by hand** before it is merged, to try a pull request:
+
+  ```bash
+  gh workflow run "Publish staging" -f ref=feat/some-branch
+  ```
+
+- After a publish, the workflow waits until the Space runs that exact commit, read from
+  `/api/health`, and fails if the build does not come up. A verified commit gets the
+  GitHub commit status `staging` = success, which production requires. One staging
+  publish runs at a time; a newer one waits for the one in progress.
+- Open it at https://huggingface.co/spaces/nadeem4nk/rag-playground-staging while signed in
+  to Hugging Face. It is private, so nobody else can. Its storage starts empty after each
+  publish, and it sleeps after about two days without a visit; the first visit wakes it.
+
+`/api/health` answers `{"status": "ok", "version": ..., "commit": ..., "demo": ...}`.
+`commit` is the commit the Space was published from (`publish_space.py --commit` sets it
+as the Space variable `RAG_PLAYGROUND_COMMIT`). `version` is the published tag
+(`--version`, the Space variable `RAG_PLAYGROUND_VERSION`); on staging it is the last
+release tag plus the commit, such as `v0.32.1+a171030`.
+
+## Releasing
+
+Production, the public demo, is released **only after the owner's explicit approval**
+(his yes, in chat), and **only from a tested staging commit**. Version numbers are
+calculated, never chosen.
+
+### Pull request titles
+
+Pull requests are squash-merged, so the title becomes the commit on `main`, and the
+release version is calculated from those commits. The title must be a Conventional
+Commit: `type(optional scope): description`, with `!` before the colon for a breaking
+change. A check (`.github/workflows/pr-title.yml`, `scripts/check_pr_title.py`) fails a
+title that is not.
+
+| Type | Meaning | Makes a release |
+|---|---|---|
+| `feat` | something new a visitor can use | yes, the minor number |
+| `fix` | a bug fixed | yes, the patch number |
+| `perf` | faster, same behaviour | yes, the patch number |
+| `docs`, `chore`, `test`, `ops`, `ci`, `refactor`, `style`, `build` | housekeeping | no |
+| any type with `!`, or `BREAKING CHANGE:` in the body | breaking | yes, the minor number before 1.0, the major number after |
+
+Do not bump the version in `pyproject.toml` in a pull request. The tag is the version:
+`pyproject.toml`'s version is no longer the source of truth, and `/api/health` reports the
+published tag.
+
+### The flow
+
+1. **Merge to `main`.** Staging publishes itself and verifies the build (see
+   [Staging](#staging)).
+2. **Test on staging.**
+3. **Ask the owner.** When he says yes, start the release:
 
    ```bash
-   git tag vX.Y.Z
-   git push origin vX.Y.Z
-   gh release create vX.Y.Z --verify-tag --prerelease --title vX.Y.Z --notes-file notes.md
+   gh workflow run Release
    ```
 
-   Nothing on the demo changes. Tags can pile up during the week.
-3. **Before publishing a tag,** check it out and run the two suites CI does not run. Both
-   must pass:
+   The Release workflow (`.github/workflows/release.yml`), stopping at the first step
+   that fails:
+
+   1. Reads the commit staging runs from its `/api/health`, checks it is on `main`, and
+      checks it passed staging (`scripts/release_gate.py`).
+   2. Calculates the version and the notes from the commits since the last release tag
+      (`scripts/next_release.py`, which runs git-cliff with `cliff.toml`). If there is
+      only housekeeping, it stops with "Nothing user-facing since vX.Y.Z."
+   3. Runs the release checks on that commit: the model tests and the smoke test.
+   4. Tags `vX.Y.Z` on that exact commit and creates the GitHub release with the notes.
+   5. Starts "Publish the Hugging Face Space" on the new tag, which publishes it,
+      verifies the Space runs that commit, the home page answers and a Home clip is a
+      real video, not a 131-byte Git LFS pointer, then marks the release **Latest**.
+
+   The version and the notes are at the top of the run's summary.
+4. **The day the owner calls it stable,** release 1.0 instead. This is the only version
+   choice anyone makes by hand:
 
    ```bash
-   git checkout vX.Y.Z
-   uv run pytest -m models
-   cd web && npm run build && cd ..
-   uv run --with playwright==1.55.0 pytest -m smoke
+   gh workflow run Release -f go_to_1_0_0=true
    ```
 
-4. **Publish the tag you choose** to the demo:
+### Rolling back
 
-   ```bash
-   gh workflow run "Publish the Hugging Face Space" -f tag=vX.Y.Z
-   ```
+Publish an older release tag. Start the workflow from that tag, because the `production`
+environment accepts deployments only from `v*.*.*` tags:
 
-   The workflow (`.github/workflows/publish-space.yml`) checks out that tag and runs
-   `scripts/publish_space.py --repo nadeem4nk/rag-playground`, which publishes the files
-   committed at the tag to the Space with demo mode on. Then it marks that tag's GitHub
-   release as a full release and **Latest**, so Latest always names what the demo runs.
-   Publishing an older tag rolls the demo back the same way. It needs a repository secret
-   named `HF_TOKEN`, a Hugging Face token with write access; without it the job does
-   nothing. It can also be started from the Actions tab. See
-   [docs/deploy.md](docs/deploy.md#publishing-with-publish_spacepy) for what the script
-   does.
-5. **Check the Space** once its build is done:
-   - The stage is `RUNNING`:
+```bash
+gh workflow run "Publish the Hugging Face Space" --ref v0.33.0 -f tag=v0.33.0
+```
 
-     ```bash
-     curl -s https://huggingface.co/api/spaces/nadeem4nk/rag-playground/runtime
-     ```
-
-   - The home page returns 200:
-
-     ```bash
-     curl -s -o /dev/null -w "%{http_code}\n" https://nadeem4nk-rag-playground.hf.space/
-     ```
-
-   - A clip comes back at full size, hundreds of kilobytes, not a 131-byte Git LFS
-     pointer:
-
-     ```bash
-     curl -s -o /dev/null -w "%{http_code} %{size_download}\n" https://nadeem4nk-rag-playground.hf.space/clips/build.webm
-     ```
-
-     A pointer means the Space's `.gitattributes` lost its LFS rules, and every clip plays
-     blank.
+It runs the same gate (a plain release tag that passed staging), the release checks, the
+publish and the verification, then marks that release Latest. Publishing needs the
+repository secret `HF_TOKEN`, a Hugging Face token with write access. See
+[docs/deploy.md](docs/deploy.md#publishing-with-publish_spacepy) for what the publish
+script does.
 
 ## Recording the Home clips
 

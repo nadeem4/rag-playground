@@ -1,0 +1,123 @@
+name: Release
+
+# One button to release what staging runs. Production is released only after the
+# owner's explicit approval (his yes, in chat), and only from a tested staging
+# commit:
+#   gh workflow run Release                         # the usual release
+#   gh workflow run Release -f go_to_1_0_0=true     # the day the owner calls it stable
+# In order, stopping at the first that fails:
+#   1. Read the commit staging runs (/api/health) and check it is on main and
+#      passed staging (scripts/release_gate.py).
+#   2. Calculate the version and the notes from the commits since the last
+#      release tag (scripts/next_release.py, git-cliff, cliff.toml). Only
+#      housekeeping since then: it stops with "Nothing user-facing since vX.Y.Z".
+#   3. Release checks on that commit: the model tests and the smoke test.
+#   4. Tag vX.Y.Z on that exact commit and create the GitHub release with the
+#      notes (a pre-release until it is live).
+#   5. Start "Publish the Hugging Face Space" on the new tag. It runs from the
+#      tag, which the `production` environment requires (deployments only from
+#      v*.*.* tags), publishes, verifies the commit, the home page and a clip,
+#      and marks the release Latest.
+on:
+  workflow_dispatch:
+    inputs:
+      go_to_1_0_0:
+        description: "Release v1.0.0 (only on the day the owner calls it stable)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  statuses: read
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    # Only the project's own repository releases; a fork never fails on this.
+    if: github.repository == 'nadeem4/rag-playground'
+    outputs:
+      release: ${{ steps.next.outputs.release }}
+      version: ${{ steps.next.outputs.version }}
+      previous: ${{ steps.next.outputs.previous }}
+      commit: ${{ steps.staging.outputs.commit }}
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install "git-cliff==2.14.2"
+      - name: The commit staging runs
+        id: staging
+        run: |
+          commit=$(curl -fsS -H "Authorization: Bearer $HF_TOKEN" https://nadeem4nk-rag-playground-staging.hf.space/api/health \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['commit'])")
+          if [ -z "$commit" ]; then echo "Staging does not report a commit. Publish main to staging first."; exit 1; fi
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "Staging runs $commit, which is not on main. Publish main to staging, test it, then release."
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Production gate
+        run: python3 scripts/release_gate.py --commit "${{ steps.staging.outputs.commit }}" --repo "${{ github.repository }}"
+      - name: Calculate the version and the notes
+        id: next
+        env:
+          GO: ${{ inputs.go_to_1_0_0 && '--go-to-1-0-0' || '' }}
+        run: python3 scripts/next_release.py --commit "${{ steps.staging.outputs.commit }}" --notes notes.md $GO
+      - name: Summary
+        run: |
+          if [ "${{ steps.next.outputs.release }}" != "true" ]; then
+            echo "## No release" >> "$GITHUB_STEP_SUMMARY"
+            echo "Nothing user-facing since ${{ steps.next.outputs.previous }}." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## ${{ steps.next.outputs.version }}"
+            echo "From ${{ steps.next.outputs.previous }}, commit ${{ steps.staging.outputs.commit }}."
+            echo
+            cat notes.md
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: steps.next.outputs.release == 'true'
+        with:
+          name: release-notes
+          path: notes.md
+
+  checks:
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
+    uses: ./.github/workflows/release-checks.yml
+    with:
+      ref: ${{ needs.prepare.outputs.commit }}
+
+  tag:
+    needs: [prepare, checks]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      COMMIT: ${{ needs.prepare.outputs.commit }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - name: Tag the commit and record the release
+        run: |
+          gh api "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/$VERSION" -f sha="$COMMIT"
+          gh release create "$VERSION" --repo "${{ github.repository }}" --verify-tag --prerelease --title "$VERSION" --notes-file notes.md
+      - name: Publish the tag to production
+        run: |
+          gh workflow run publish-space.yml --repo "${{ github.repository }}" --ref "$VERSION" \
+            -f tag="$VERSION" -f checks_done=true
+          echo "Production publishing of $VERSION has started: see the run of \"Publish the Hugging Face Space\"." >> "$GITHUB_STEP_SUMMARY"

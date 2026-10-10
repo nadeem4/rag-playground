@@ -1,0 +1,84 @@
+name: Publish staging
+
+# Staging is a private copy of the demo, nadeem4nk/rag-playground-staging, in
+# demo mode on the same free CPU hardware, so testing it is testing what
+# visitors get. main publishes itself after every merge; any branch, tag or
+# commit can be published by hand before it is merged:
+#   gh workflow run "Publish staging" -f ref=feat/some-branch
+# After a publish, the job waits until the Space runs that exact commit
+# (/api/health) and fails if it does not come up. A verified commit gets the
+# GitHub commit status "staging" = success; production refuses a commit
+# without it.
+# It needs the repository secret HF_TOKEN with write access.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to publish to staging"
+        required: true
+        default: main
+
+permissions:
+  contents: read
+  # To mark a verified commit with the commit status "staging".
+  statuses: write
+
+# One staging publish at a time; a newer one waits, it does not cancel a running build.
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Only the project's own repository publishes; a fork never fails on this.
+    if: github.repository == 'nadeem4/rag-playground'
+    timeout-minutes: 40
+    env:
+      SPACE: nadeem4nk/rag-playground-staging
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          # The whole history and tags, to name the version from the last release tag.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install "huggingface_hub>=0.35"
+      - name: Publish
+        id: publish
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "No HF_TOKEN secret is set, so there is nothing to publish to."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sha=$(git rev-parse HEAD)
+          # Staging's version: the last release tag plus this commit, such as v0.32.1+a171030.
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null || echo v0.0.0)
+          version="$last+$(git rev-parse --short HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          python scripts/publish_space.py --repo "$SPACE" --private --commit "$sha" --version "$version"
+      - name: Check it is live
+        if: steps.publish.outputs.skip != 'true'
+        run: python scripts/verify_space.py --space "$SPACE" --commit "${{ steps.publish.outputs.sha }}" --home
+      - name: Mark the commit as passing staging
+        if: steps.publish.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.publish.outputs.sha }}
+        run: |
+          gh api "repos/${{ github.repository }}/statuses/$SHA" \
+            -f state=success -f context=staging \
+            -f description="Published to staging and verified" \
+            -f target_url="https://huggingface.co/spaces/$SPACE"
+      - name: Summary
+        if: steps.publish.outputs.skip != 'true'
+        run: |
+          echo "Staging runs ${{ steps.publish.outputs.version }}, commit ${{ steps.publish.outputs.sha }} (from ${{ inputs.ref || github.ref_name }})." >> "$GITHUB_STEP_SUMMARY"
+          echo "Open it at https://huggingface.co/spaces/$SPACE while signed in." >> "$GITHUB_STEP_SUMMARY"

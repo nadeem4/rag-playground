@@ -93,6 +93,25 @@ interface RecordedSweep {
   through: string
 }
 
+/** Every POST /api/trace body, and what it answers. */
+const traced: unknown[] = []
+const TRACE = {
+  finding: "Lost at Parse. Fast text put other text in the middle of the answer sentence, so no later step can find it.",
+  lost_at: "parse",
+  fix: "Use a parser that reads the page layout, such as Docling, then evaluate again.",
+  golds: ["A chunk should answer one question well."],
+  steps: [
+    {
+      stage: "parse",
+      name: "Parse",
+      status: "lost",
+      sentence: "The answer's words are here, in order, with other text between them.",
+      evidence: { kind: "broken", parts: [{ kind: "answer", text: "A chunk should" }, { kind: "other", text: "column two" }, { kind: "answer", text: "answer one question well." }] },
+    },
+    { stage: "chunk", name: "Chunk", status: "not_checked", sentence: "Not checked.", evidence: null },
+  ],
+}
+
 function serve({
   reg = liveRegistry,
   sampleSha = SOURCE.sha,
@@ -117,7 +136,11 @@ function serve({
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/sweeps" && init?.method === "POST") {
         sweeps.push(JSON.parse(String(init.body)) as RecordedSweep)
-        return ok({ run_id: "r1" })
+        return ok({ run_id: `r${sweeps.length}` })
+      }
+      if (url === "/api/trace" && init?.method === "POST") {
+        traced.push(JSON.parse(String(init.body)))
+        return ok(TRACE)
       }
       const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
@@ -218,7 +241,7 @@ describe("Evaluate", () => {
     const text = () => document.body.textContent ?? ""
     await waitFor(() => expect(text()).toMatch(/2 questions ready/))
     expect(text()).toMatch(/How often the pipeline on Build finds the answer in chunking-primer\.pdf\./)
-    expect(screen.getByText("Nothing scored yet")).toBeTruthy()
+    expect(screen.queryByText("Nothing scored yet")).toBeNull()
     expect(screen.getByRole("button", { name: "Evaluate" })).toBeTruthy()
     expect(screen.getByLabelText("Pieces checked").getAttribute("value")).toBe("5")
     expect(screen.getByLabelText("Pieces checked").getAttribute("title")).toBe("Top k: how many of the returned pieces are checked for the answer")
@@ -233,9 +256,56 @@ describe("Evaluate", () => {
     expect(within(header).getByRole("button", { name: "Evaluate" })).toBeTruthy()
   })
 
+  it("says what Evaluate does in two sentences, and opens How it is scored in a side sheet", async () => {
+    setup()
+    const header = await screen.findByTestId("evaluate-header")
+    expect(within(header).getByTestId("evaluate-description").textContent).toBe(
+      "Test the search with questions you already know the answers to. A question is found when its evidence comes back in the top pieces. No AI judges it, so the same pipeline always gets the same score.",
+    )
+    const how = within(header).getByRole("button", { name: "How it is scored" })
+    fireEvent.click(how)
+    const sheet = screen.getByRole("dialog", { name: "How Evaluate scores a pipeline" })
+    expect(sheet.getAttribute("aria-modal")).toBe("true")
+    expect(within(sheet).getByText("How the text is matched, step by step")).toBeTruthy()
+    expect(within(sheet).getByText("Mean reciprocal rank")).toBeTruthy()
+    expect(within(sheet).getByText("(1 + 1/2 + 0 + 1 + 1/3 + 0) / 6 = 0.47")).toBeTruthy()
+    fireEvent.keyDown(document, { key: "Escape" })
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("explains Pieces checked with the same info button as Build's fields, and closes it on Escape", async () => {
+    setup()
+    const info = await screen.findByRole("button", { name: "About Pieces checked" })
+    // The shared FieldHelp button: Lucide's Info icon, not a hand-drawn letter.
+    expect(info.querySelector("svg")).not.toBeNull()
+    expect(info.textContent).toBe("")
+    fireEvent.click(info)
+    const dialog = await screen.findByRole("dialog", { name: "Pieces checked" })
+    expect(dialog.textContent).toMatch(/how many from the top are checked/)
+    fireEvent.keyDown(dialog, { key: "Escape" })
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Pieces checked" })).toBeNull())
+  })
+
+  it("lists every question with its evidence before any run", async () => {
+    setup()
+    await waitFor(() => expect(document.querySelectorAll("[data-question]").length).toBe(2))
+    const row = document.querySelector<HTMLElement>('[data-question="a"]')!
+    expect(row.querySelector("[data-verdict]")!.textContent).toBe("Not run")
+    expect(row.textContent).toContain("Expected answer")
+    expect(row.textContent).toContain("None given")
+    expect(row.textContent).toContain("Evidence in the document")
+    expect(row.textContent).toContain("It answers in two steps.")
+    // Nothing to open before a run.
+    expect(within(row).queryByRole("button", { name: "Details" })).toBeNull()
+  })
+
   it("says the question set in one line and folds the upload under Use your own questions", async () => {
     setup()
-    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the sample, A primer on chunking."))
+    await waitFor(() =>
+      expect(screen.getByTestId("set-line").textContent).toBe(
+        "2 questions from the sample, A primer on chunking. Found means the evidence is in the top 5 pieces.",
+      ),
+    )
     const own = screen.getByText("Use your own questions").closest("details")!
     expect(own.open).toBe(false)
     expect(within(own).getByRole("link", { name: "JSON" }).className).toContain("inline-flex")
@@ -246,14 +316,21 @@ describe("Evaluate", () => {
     expect(within(own).getByRole("link", { name: "CSV" }).parentElement!.textContent).not.toMatch(/CSV \.$/)
   })
 
-  it("says the recipe in one line, plain name beside the code name", async () => {
+  it("says the recipe in two lines, the index side and the search side, plain name beside the code name", async () => {
     setup()
-    await waitFor(() => expect(screen.getByTestId("recipe-line").textContent).toMatch(/Parse: Docling, docling/))
+    await waitFor(() => expect(screen.getByTestId("recipe-line").textContent).toMatch(/^Index side:/))
+    expect(screen.getByTestId("recipe-line").textContent).toMatch(/Parse: Docling, docling/)
     expect(screen.getByTestId("recipe-line").textContent).toMatch(/Chunk: Recursive \(natural breaks\), recursive_character/)
-    expect(screen.getByTestId("recipe-line").textContent).toMatch(/Retrieve: Hybrid \(RRF\), hybrid_rrf/)
+    expect(screen.getByTestId("recipe-line").textContent).not.toMatch(/Retrieve/)
     const change = within(screen.getByTestId("recipe-line")).getByRole("link", { name: "Change a step on Build" })
     expect(change.getAttribute("href")).toBe("/build")
     expect(change.className).toContain("inline-flex")
+    const search = screen.getByTestId("search-line").textContent!
+    expect(search).toMatch(/^Search side:/)
+    expect(search).toMatch(/Rewrite: None/)
+    expect(search).toMatch(/Retrieve: Hybrid \(RRF\), hybrid_rrf, returns \d+/)
+    expect(search).toMatch(/Rerank: None/)
+    expect(within(screen.getByTestId("search-line")).getByRole("link", { name: "Change the search settings" }).getAttribute("href")).toBe("/build")
   })
 
   it("uses only spacing steps the theme defines (0, 1, 2, 3, 4, 6, 8), since any other step compiles to nothing", async () => {
@@ -308,7 +385,11 @@ describe("the question set panel", () => {
   it("names the matched sample, counts it, and links to a template in both formats", async () => {
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
-    await waitFor(() => expect(screen.getByTestId("set-line").textContent).toBe("2 questions from the sample, A primer on chunking."))
+    await waitFor(() =>
+      expect(screen.getByTestId("set-line").textContent).toBe(
+        "2 questions from the sample, A primer on chunking. Found means the evidence is in the top 5 pieces.",
+      ),
+    )
     openOwn()
     expect(screen.getByRole("link", { name: "JSON" }).getAttribute("href")).toBe("/api/questions/template?format=json")
     expect(screen.getByRole("link", { name: "CSV" }).getAttribute("href")).toBe("/api/questions/template?format=csv")
@@ -336,7 +417,7 @@ describe("the question set panel", () => {
     serve({ stored: goldSet() })
     render(<Evaluate />)
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("refunds.csv"))
-    expect(screen.getByTestId("set-line").textContent).toBe("2 questions from refunds.csv.")
+    expect(screen.getByTestId("set-line").textContent).toBe("2 questions from refunds.csv. Found means the evidence is in the top 5 pieces.")
     openOwn()
     expect(screen.getByRole("button", { name: "Remove this set" })).toBeTruthy()
     expect(screen.queryByTestId("set-mismatch")).toBeNull()
@@ -635,9 +716,9 @@ describe("while and after scoring", () => {
     const es = await start({ o0: evalOut({}), o1: evalOut({}) })
     es.emit(0, { event: "queued", ahead: 0 })
     await waitFor(() => expect(document.body.textContent).toContain("The demo is busy with other learners. Your run starts in a moment."))
-    expect(document.body.textContent).not.toContain("Scoring question")
+    expect(document.body.textContent).not.toContain("scoring question")
     es.emit(1, { event: "unqueued" })
-    await waitFor(() => expect(document.body.textContent).toContain("Scoring question 1 of 2."))
+    await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Searching and scoring question 1 of 2."))
   })
 
   it("says which question it is scoring while busy, and shows the summary once done", async () => {
@@ -645,12 +726,14 @@ describe("while and after scoring", () => {
       o0: evalOut({}),
       o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }),
     })
-    await waitFor(() => expect(document.body.textContent).toContain("Scoring question 1 of 2."))
+    await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Searching and scoring question 1 of 2."))
+    expect(screen.getByTestId("index-line").textContent).toBe("Waiting to start")
+    expect(screen.getByRole("progressbar", { name: "Questions scored" }).getAttribute("aria-valuemax")).toBe("2")
     // Every mark is drawn at once, and waits until its row lands.
     const waiting = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
     expect(waiting.map((m) => m.getAttribute("aria-label"))).toEqual(["Question 1, waiting", "Question 2, waiting"])
     expect(screen.queryByTestId("summary")).toBeNull()
-    expect(screen.queryByTestId("hit-rate")).toBeNull()
+    expect(screen.queryByTestId("numbers")).toBeNull()
 
     const useCase = idOf("use_case")
     es.emit(1, { event: "variant_started", index: 0, variant: {} })
@@ -663,14 +746,14 @@ describe("while and after scoring", () => {
     expect(summary.textContent).toBe("1 of 2 questions found the answer.")
     expect(summary.className).toContain("text-[1.375rem]")
     expect(summary.className).toContain("max-w-[52ch]")
-    expect(screen.getByTestId("hit-rate").textContent).toBe("Hit rate at 5 pieces: 50%.")
+    expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)50%")
+    expect(screen.queryByTestId("score-note")).toBeNull()
     expect(summary.className).not.toContain("font-mono")
     expect(summary.querySelector("span.font-mono")).not.toBeNull()
-    expect(screen.getByTestId("hit-rate")).toBeTruthy()
-    expect(document.body.textContent).not.toContain("Scoring question")
+    expect(screen.queryByTestId("progress")).toBeNull()
     expect(document.body.textContent).toContain("Found 7th, below the 5 pieces checked.")
     // The verdict and the reason in sans; mono only on the digits.
-    for (const row of document.querySelectorAll<HTMLElement>("details[data-question] summary")) {
+    for (const row of document.querySelectorAll<HTMLElement>("li[data-question]")) {
       const verdict = row.querySelector<HTMLElement>("[data-verdict]")!
       expect(verdict.className).toContain("font-sans")
       expect(verdict.className).toContain("font-semibold")
@@ -680,6 +763,27 @@ describe("while and after scoring", () => {
       expect([...reason.querySelectorAll(".font-mono")].every((m) => /^[\d,.]+$/.test(m.textContent ?? ""))).toBe(true)
       expect(reason.querySelector(".font-mono")).not.toBeNull()
     }
+  })
+
+  it("shows Build's run strip while the index builds, and keeps a summary of what came from the cache after the run", async () => {
+    const es = await start({ o0: evalOut({}), o1: evalOut({}) })
+    const index = graph.nodes.filter((n) => ["parse", "clean", "chunk", "index"].includes(n.stage))
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(2, { event: "node_started", node_id: index[0].id, ts: 1 })
+    await waitFor(() => expect(screen.getByTestId("run-line").textContent).toMatch(/^Running /))
+    expect(screen.getByRole("list", { name: "Index steps" })).toBeTruthy()
+    let n = 3
+    for (const node of index) es.emit(n++, { event: "node_finished", node_id: node.id, artifact_id: `a-${node.id}`, cache_hit: true, duration_ms: 1 })
+    es.emit(n++, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r0", cache_hit: true, duration_ms: 1 })
+    es.emit(n++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: "o0", cache_hit: false, duration_ms: 1 })
+    es.emit(n++, { event: "variant_started", index: 1, variant: {} })
+    es.emit(n++, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r1", cache_hit: true, duration_ms: 1 })
+    es.emit(n++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: "o1", cache_hit: false, duration_ms: 1 })
+    es.emit(n++, { event: "stream_end", status: "finished", ok: true })
+    const summary = await screen.findByTestId("run-summary")
+    expect(within(summary).getByTestId("run-line").textContent).toBe("From the cache, nothing ran again")
+    expect(summary.textContent).toContain("2 searches, all from the cache.")
+    await waitFor(() => expect(screen.getByTestId("run-summary").textContent).toMatch(/Took [\d.]+ s\./))
   })
 
   it("keeps saying the k that was scored when Pieces checked changes after the run", async () => {
@@ -705,7 +809,9 @@ describe("while and after scoring", () => {
 
     expect(document.body.textContent).toContain("Found 7th, below the 5 pieces checked.")
     expect(document.body.textContent).not.toContain("below the 10 pieces")
-    expect(screen.getByTestId("hit-rate").textContent).toMatch(/^Hit rate at 5 /)
+    expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)")
+    expect(screen.getByTestId("stale-k").textContent).toBe("Scored at 5 pieces. Evaluate again to use 10.")
+    expect(screen.getByTestId("k-line").textContent).toBe("Scored at 5 pieces. The pipeline makes 7 pieces.")
     expect(screen.getByTestId("pieces-warning").textContent).toBe(
       "With 7 pieces and 5 checked, a hit says little. A miss still says a lot: its answer was not in the top 5.",
     )
@@ -737,7 +843,7 @@ describe("while and after scoring", () => {
     expect(document.body.textContent).toMatch(/finds the answer in other\.pdf/)
   })
 
-  it("draws one mark per question, and a mark opens its row and scrolls it into view", async () => {
+  it("draws one mark per question, and a mark brings its row into view", async () => {
     const scroll = vi.fn()
     Element.prototype.scrollIntoView = scroll
     await finishTwo()
@@ -748,7 +854,6 @@ describe("while and after scoring", () => {
     expect(marks[1].className).toContain("bg-removed")
     expect(marks[1].className).toContain("--removed-mark")
     fireEvent.click(marks[1])
-    expect((document.querySelector('[data-question="b"]') as HTMLDetailsElement).open).toBe(true)
     expect(scroll).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" })
   })
 
@@ -764,15 +869,19 @@ describe("while and after scoring", () => {
 
   it("says the verdict in a word and the reason in a sentence, with no hash id", async () => {
     await finishTwo()
-    const row = document.querySelector<HTMLElement>('[data-question="b"] summary')!
+    const row = document.querySelector<HTMLElement>('[data-question="b"]')!
     expect(row.textContent).toContain("\u2715 Missed")
     expect(row.querySelector("[data-verdict]")!.className).toContain("text-removed-mark")
     expect(row.textContent).toContain("Not in any of the 3 pieces that came back")
     expect(row.textContent).not.toMatch(/[0-9a-f]{8}/)
+    // The question's own id, quietly under it.
+    expect(row.querySelector(".font-mono")!.textContent).toBe("b")
     expect(row.textContent).not.toMatch(/checked$/)
     expect(row.querySelector("[data-question-text]")!.className).toContain("text-base")
-    expect(document.querySelector<HTMLElement>('[data-question="a"] summary')!.textContent).toContain("\u2713 Found")
-    expect(document.querySelector<HTMLElement>('[data-question="a"] summary')!.textContent).toContain("Found in the 1st piece.")
+    expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("\u2713 Found")
+    expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("Found in the 1st piece, word for word.")
+    // After a run the evidence folds away on a phone, since Details shows it.
+    expect(document.querySelector<HTMLElement>('[data-question="a"] [data-evidence]')!.className).toContain("hidden md:grid")
     expect(screen.queryByText("result")).toBeNull()
     expect(document.querySelector('[data-question="b"]')!.className).not.toContain("border-l-2")
   })
@@ -791,7 +900,7 @@ describe("while and after scoring", () => {
     expect(document.querySelector('[data-question="a"] [data-row-change]')).toBeNull()
   })
 
-  it("opens onto the sentence that answers it and the top three pieces as slips", async () => {
+  it("opens Details in the side sheet: the evidence, then the top three pieces as slips", async () => {
     const hit = (rank: number, id: string, text: string) => ({
       chunk: { id, text, embed_text: null, start_char: 0, end_char: 1, token_count: 1, kind: "text", parent_id: null, level: 0, ordinal: rank + 1, doc_id: "d", heading_path: [], source_element_ids: [], page_span: [1, 1], metadata: {} },
       score: 0.03 - rank / 1000,
@@ -825,12 +934,13 @@ describe("while and after scoring", () => {
     es.emit(6, { event: "stream_end", status: "finished", ok: true })
     await screen.findByTestId("summary")
 
-    fireEvent.click(document.querySelector('[data-question="b"] summary')!)
-    const open = document.querySelector<HTMLElement>('[data-question="b"]')!
-    expect(within(open).getByText("The sentence that answers it").className).toContain("text-xs")
+    fireEvent.click(within(document.querySelector<HTMLElement>('[data-question="b"]')!).getByRole("button", { name: "Details" }))
+    const open = screen.getByRole("dialog", { name: "How big is a chunk?" })
+    expect(within(open).getByText("The evidence")).toBeTruthy()
     expect(within(open).getByText("A chunk should answer one question well.").className).toContain("font-serif")
+    expect(within(open).getByText("Expected answer: None given")).toBeTruthy()
     await waitFor(() => expect(within(open).getAllByTestId("passage")).toHaveLength(3))
-    expect(within(open).getByText("What came back, top 3 of 4.")).toBeTruthy()
+    expect(within(open).getByText("What came back, top 3 of 4")).toBeTruthy()
     const findings = within(open).getAllByTestId("finding").map((f) => f.textContent)
     expect(findings).toEqual(["1st", "2nd, holds the answer", "3rd"])
     // The swatch names the piece by its place in the chunk set.
@@ -839,7 +949,41 @@ describe("while and after scoring", () => {
     expect(open.textContent).not.toMatch(/fetch_k|candidates/)
     fireEvent.click(within(open).getByRole("button", { name: "Show all 4" }))
     expect(within(open).getAllByTestId("passage")).toHaveLength(4)
-    expect(open.querySelector("[data-open-row]")!.className).toContain("max-w-[72ch]")
+    // A found question has no trace; Escape closes the sheet.
+    expect(within(open).queryByTestId("detail-trace")).toBeNull()
+    fireEvent.keyDown(document, { key: "Escape" })
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("invites a missed row to say why, and traces it in the side sheet once asked", async () => {
+    traced.length = 0
+    const es = await start({
+      // Ids of their own: payloads are cached by id across tests.
+      why0: evalOut({}),
+      why1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: null, returned: 4 }),
+    })
+    const steps = graph.nodes.filter((n) => ["parse", "clean", "chunk", "retrieve", "rerank"].includes(n.stage))
+    let id = 1
+    for (const index of [0, 1]) {
+      es.emit(id++, { event: "variant_started", index, variant: {} })
+      for (const n of steps) es.emit(id++, { event: "node_finished", node_id: n.id, artifact_id: `${n.stage}-${index}`, cache_hit: false, duration_ms: 1 })
+      es.emit(id++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: `why${index}`, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(id++, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+
+    const row = document.querySelector<HTMLElement>('[data-question="b"]')!
+    expect(row.querySelector("[data-why]")!.textContent).toBe("Why did this miss?")
+    expect(document.querySelector('[data-question="a"] [data-why]')).toBeNull()
+    expect(traced).toHaveLength(0)
+
+    fireEvent.click(row.querySelector("[data-why]")!)
+    const sheet = screen.getByRole("dialog", { name: "How big is a chunk?" })
+    await waitFor(() => expect(within(sheet).getByText(/^Lost at Parse\./)).toBeTruthy())
+    expect(traced).toHaveLength(1)
+    expect(traced[0]).toMatchObject({ parse: { id: "parse-1" }, chunk: "chunk-1", retrieve: "retrieve-1", top_k: 5 })
+    expect(sheet.querySelector("del[data-part='other']")!.textContent).toBe("column two")
+    expect(within(sheet).getByRole("link", { name: "Change Parse on Build" }).getAttribute("href")).toBe(`/build?step=${idOf("parse")}`)
   })
 
   it("says the last run beside the score, and stores this run with its recipe", async () => {
@@ -852,10 +996,25 @@ describe("while and after scoring", () => {
     await finishTwo()
     expect(screen.getByTestId("summary").textContent).toBe("1 of 2 questions found the answer. The last run found 2 of 2.")
     // An older stored run has no recipe, so the miss is new since the last run.
-    expect(screen.getByTestId("hit-rate").textContent).toBe("Hit rate at 5 pieces: 50%. The miss is new since the last run.")
+    expect(screen.getByTestId("score-note").textContent).toBe("The miss is new since the last run.")
+    // Each number says what it was when the last run differs.
+    expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)50%was 100%")
     await waitFor(() => expect(readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0]).toMatchObject({ label: "Parse", transform: "docling", name: "Docling" }))
     expect(typeof readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0].config).toBe("string")
     expect(readPreviousEvaluation(SOURCE.sha, "working")?.k).toBe(5)
+  })
+
+  it("compares the numbers only with a last run scored at the same Pieces checked", async () => {
+    storePreviousEvaluation({
+      sourceSha: SOURCE.sha,
+      pipelineKey: "working",
+      byId: { a: evalOut({}).payload as never, b: evalOut({}).payload as never },
+      summary: { hits: 2, total: 2, averageRank: 1 },
+      k: 1,
+    })
+    await finishTwo()
+    expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)50%")
+    expect(screen.getByTestId("numbers").textContent).not.toContain("was")
   })
 
   it("warns that the score says nothing when the pipeline makes fewer pieces than the top k", async () => {
@@ -897,5 +1056,81 @@ describe("the document in the bar", () => {
       "Pick a document in the bar above to run the evaluation.Pick a document",
     )
     expect(screen.queryByText("No pipeline to evaluate")).toBeNull()
+  })
+})
+
+describe("more questions than one run takes", () => {
+  const graph = sampleGraph(registry, SOURCE)
+  const useCase = graph.nodes.find((n) => n.stage === "use_case")!.id
+  const twelve = Array.from({ length: 12 }, (_, i) =>
+    question({ id: `q${i}`, question: `Question number ${i}?`, gold_answers: [`Answer number ${i}.`] }),
+  )
+  const stored = goldSet({
+    count: 12,
+    set: { version: 1, document: "handbook.pdf", questions: twelve },
+    questions: twelve.map((q, i) => ({
+      index: i,
+      id: q.id,
+      question: q.question,
+      status: "found",
+      golds: [{ gold: q.gold_answers[0], status: "found", document_text: "", closest: "" }],
+    })),
+  })
+  const hit = { kind: "eval", payload: { question: "q", gold_answer: "g", hit: true, rank: 1, matched_chunk_id: "c", match: "exact", considered: 5, total_candidates: 5, golds_total: 1, golds_found: 1, found_at: null, returned: 5 } }
+
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  function finishBatch(es: DrivenEventSource, offset: number, count: number) {
+    let seq = 0
+    for (let i = 0; i < count; i++) {
+      es.emit(++seq, { event: "variant_started", index: i, variant: {} })
+      es.emit(++seq, { event: "node_finished", node_id: useCase, artifact_id: `batch${offset + i}`, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(++seq, { event: "stream_end", status: "finished", ok: true })
+  }
+
+  it("runs them in batches of ten and scores them as one evaluation", async () => {
+    const artifacts = Object.fromEntries(twelve.map((_, i) => [`batch${i}`, hit]))
+    const { sweeps } = serve({ stored, artifacts })
+    storeGraph(graph)
+    render(<Evaluate />)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+
+    await waitFor(() => expect(sweeps.length).toBe(1))
+    expect(sweeps[0].variants.length).toBe(10)
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    finishBatch(DrivenEventSource.instances[0], 0, 10)
+
+    // Still one evaluation: busy, no summary, and the second batch starts by itself.
+    await waitFor(() => expect(sweeps.length).toBe(2))
+    expect(sweeps[1].variants.length).toBe(2)
+    expect(screen.queryByTestId("summary")).toBeNull()
+    expect(screen.getByRole("button", { name: "Evaluating" })).toBeTruthy()
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(2))
+    finishBatch(DrivenEventSource.instances[1], 10, 2)
+
+    const summary = await screen.findByTestId("summary")
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button").map((m) => m.getAttribute("aria-label"))).toEqual(twelve.map((_, i) => `Question ${i + 1}, found`)))
+    expect(summary.textContent).toBe("12 of 12 questions found the answer.")
+    const marks = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    expect(marks).toHaveLength(12)
+    expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(twelve.map((_, i) => `Question ${i + 1}, found`))
+  })
+
+  it("stops after the batch it is in when cancelled", async () => {
+    const { sweeps } = serve({ stored, artifacts: {} })
+    storeGraph(graph)
+    render(<Evaluate />)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    DrivenEventSource.instances[0].emit(1, { event: "stream_end", status: "cancelled", ok: false })
+    await waitFor(() => expect(screen.getByRole("button", { name: "Evaluate again" })).toBeTruthy())
+    expect(sweeps.length).toBe(1)
   })
 })

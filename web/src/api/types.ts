@@ -601,6 +601,8 @@ export interface SampleQuestion {
   gold_answer: string
   /** Further passages that also answer it, such as a table row as plain text. */
   gold_answers?: string[]
+  /** The expected answer in words, shown beside the evidence and never scored. */
+  answer?: string
 }
 
 export type MatchKind = "exact" | "normalized" | "none"
@@ -718,4 +720,50 @@ export interface ExplainRequest {
   stage: Stage
   transform: string
   config: Record<string, unknown>
+}
+
+// ------------------------------------------------------------ miss trace --
+
+/** A step's output by its artifact id, with the step's plain name. */
+export interface NamedArtifact {
+  id: string
+  name: string
+}
+
+/** POST /api/trace: the artifacts one question's run made, and what to look for. */
+export interface TraceRequest {
+  gold_answers: string[]
+  parse: NamedArtifact
+  cleans: NamedArtifact[]
+  chunk: string
+  retrieve: string
+  /** The result the eval step scored: the reranker's when there is one. */
+  final: string
+  rerank_name: string | null
+  top_k: number
+}
+
+export type TraceStage = "parse" | "clean" | "chunk" | "search" | "rerank" | "top_k"
+
+export interface TracePart {
+  kind: "answer" | "other" | "context"
+  text: string
+}
+
+export interface TraceStep {
+  stage: TraceStage
+  name: string
+  status: "pass" | "lost" | "not_checked"
+  sentence: string
+  /** On a broken parse: the parsed text around the answer, the answer's words and the words between them. */
+  evidence: { kind: "broken"; parts: TracePart[] } | null
+}
+
+export interface Trace {
+  finding: string
+  /** The first step that no longer held the answer; null when it came through. */
+  lost_at: TraceStage | null
+  fix: string | null
+  golds: string[]
+  steps: TraceStep[]
 }

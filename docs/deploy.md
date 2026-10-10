@@ -226,16 +226,16 @@ uv run --no-sync python scripts/publish_space.py --repo <user>/rag-playground
   differs, the script says so and leaves it.
 - `--commit <sha>` sets the Space variable `RAG_PLAYGROUND_COMMIT`, which `/api/health`
   reports, so a check can tell the new build from the old one.
+- `--version <tag>` sets the Space variable `RAG_PLAYGROUND_VERSION`. The tag is the
+  version: `/api/health` reports it, and falls back to the package version without it.
 
 `/api/health` answers `{"status": "ok", "version": ..., "commit": ..., "demo": ...}` on any
 copy. `scripts/verify_space.py --space <user>/rag-playground --commit <sha>` waits until a
 Space runs that commit; add `--home` and `--clip /clips/build.webm` to check the home page
 and a clip too. A private Space needs `HF_TOKEN` in the environment.
 
-The project's own demo is published by a GitHub workflow that you start by hand with the
-version tag to put live, only with the owner's approval. It refuses anything but a plain
-`vX.Y.Z` tag and any commit that has not passed a staging publish, then runs the release
-checks and waits for the `production` environment's approval. Pushing a tag alone
-changes nothing on the demo. A private staging copy follows `main`. See
-[CONTRIBUTING.md](../CONTRIBUTING.md#staging) and
-[Cutting a release](../CONTRIBUTING.md#cutting-a-release).
+The project's own demo is released only after the owner's explicit approval, and only
+from a tested staging commit. A private staging copy follows `main`; the Release workflow
+then calculates the version from the commits, runs the release checks, tags the staging
+commit, publishes it and verifies it. Pushing a tag alone changes nothing on the demo. See
+[Staging](../CONTRIBUTING.md#staging) and [Releasing](../CONTRIBUTING.md#releasing).

@@ -141,3 +141,14 @@ def test_commit_is_set_as_a_space_variable(monkeypatch):
     _mod.main()
     assert ("RAG_PLAYGROUND_COMMIT", "abc1234") in calls["vars"]
     assert ("RAG_PLAYGROUND_DEMO", "1") in calls["vars"]
+
+
+
+def test_version_is_set_as_a_space_variable(monkeypatch):
+    """The tag is the version: /api/health reports RAG_PLAYGROUND_VERSION."""
+    import sys
+
+    calls = _fake_api(monkeypatch, exists=True)
+    monkeypatch.setattr(sys, "argv", ["publish_space.py", "--repo", "someone/space", "--version", "v0.33.0"])
+    _mod.main()
+    assert ("RAG_PLAYGROUND_VERSION", "v0.33.0") in calls["vars"]

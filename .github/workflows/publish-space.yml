@@ -1,33 +1,43 @@
 name: Publish the Hugging Face Space
 
-# Production. Tagging a release does not change the demo. The demo changes only
-# when this workflow is started by hand with the tag to put live:
-#   gh workflow run "Publish the Hugging Face Space" -f tag=v0.33.0
-# Production is published only with the owner's explicit approval.
-# The tag goes through these gates in order:
+# Production. Production is released only after the owner's explicit approval
+# (his yes, in chat), and only from a tested staging commit.
+# Two ways in:
+#   - The Release workflow starts it on the tag it just created, with
+#     checks_done=true because it ran the release checks on that commit already.
+#   - A rollback: publish an existing release tag, started from that tag so the
+#     `production` environment accepts it (deployments only from v*.*.* tags):
+#       gh workflow run "Publish the Hugging Face Space" --ref v0.33.0 -f tag=v0.33.0
+# In order, stopping at the first that fails:
 #   0. The production gate (scripts/release_gate.py): a plain vX.Y.Z tag only,
 #      on a commit that passed a staging publish ("Publish this commit to
 #      staging and test it first").
-#   1. Release checks: the model tests and the real-browser smoke test, on the tag.
-#   2. Approval: the publish job uses the `production` environment, so it waits
-#      for a required reviewer to approve it in GitHub.
-#   3. Verification: after publishing, the job waits until the Space runs the
-#      tag's commit (/api/health), the home page answers and a Home clip is a
-#      real video, not a Git LFS pointer.
-# Only then is that tag's GitHub release marked Latest, so Latest always means
-# "what the demo runs". Publishing an older tag rolls the demo back.
+#   1. Release checks on the tag (skipped when the Release workflow ran them).
+#   2. Publish with the tag as the version and the tag's commit, then verify:
+#      the Space runs that commit (/api/health), the home page answers and a
+#      Home clip is a real video, not a Git LFS pointer.
+#   3. Mark the tag's GitHub release Latest, so Latest always means "what the
+#      demo runs".
 # It needs one repository secret, HF_TOKEN, a Hugging Face token with write access.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "The version tag to put live, for example v0.33.0"
+        description: "The release tag to put live, for example v0.33.0"
         required: true
+      checks_done:
+        description: "The Release workflow already ran the release checks on this commit"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   # To read the commit status "staging" in the production gate.
   statuses: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
 
 jobs:
   tag:
@@ -48,18 +58,22 @@ jobs:
 
   checks:
     needs: tag
+    if: ${{ !inputs.checks_done }}
     uses: ./.github/workflows/release-checks.yml
     with:
       ref: refs/tags/${{ inputs.tag }}
 
   publish:
-    needs: checks
+    needs: [tag, checks]
+    # Runs after the checks, or straight after the gate when the Release workflow ran them.
+    if: ${{ always() && needs.tag.result == 'success' && (needs.checks.result == 'success' || needs.checks.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 40
     env:
       SPACE: nadeem4nk/rag-playground
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,7 +92,7 @@ jobs:
           fi
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          python scripts/publish_space.py --repo "$SPACE" --commit "$sha"
+          python scripts/publish_space.py --repo "$SPACE" --commit "$sha" --version "$TAG"
       - name: Check it is live
         if: steps.publish.outputs.skip != 'true'
         run: python scripts/verify_space.py --space "$SPACE" --commit "${{ steps.publish.outputs.sha }}" --home --clip /clips/build.webm
@@ -86,7 +100,6 @@ jobs:
         if: steps.publish.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --prerelease=false --latest

@@ -74,6 +74,8 @@ def export_tree(dest: Path) -> list[str]:
 
 #: The Space variable that tells /api/health which commit is live.
 COMMIT_VAR = "RAG_PLAYGROUND_COMMIT"
+#: The Space variable that tells /api/health which version is live. The tag is the version.
+VERSION_VAR = "RAG_PLAYGROUND_VERSION"
 
 
 def ensure_space(api, repo: str, private: bool) -> None:
@@ -102,6 +104,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="list what would be published and stop")
     parser.add_argument("--private", action="store_true", help="create the Space private if it does not exist yet")
     parser.add_argument("--commit", default="", help="the commit being published, read back by /api/health")
+    parser.add_argument("--version", default="", help="the version being published (the release tag), read back by /api/health")
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -116,6 +119,8 @@ def main() -> None:
         ensure_space(api, args.repo, args.private)
         if args.commit:
             api.add_space_variable(args.repo, COMMIT_VAR, args.commit, description="The commit this Space was published from. /api/health reports it.")
+        if args.version:
+            api.add_space_variable(args.repo, VERSION_VAR, args.version, description="The version this Space runs (the release tag). /api/health reports it.")
         api.add_space_variable(args.repo, *DEMO_VAR, description="Demo mode: uploads are private, small and deleted after 24 hours; only a visitor's own API key is used; custom endpoints are off. Set to 0 for a private copy.")
         # Mirror HEAD: a file deleted from the repo is deleted from the Space too.
         # Hugging Face always keeps .gitattributes. Without this, a stale file

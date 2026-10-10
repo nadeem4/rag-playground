@@ -1,6 +1,7 @@
 """The production gate, run as the first step of a production publish.
 
     python scripts/release_gate.py --tag v0.33.0 --commit <sha> --repo nadeem4/rag-playground
+    python scripts/release_gate.py --commit <sha> --repo nadeem4/rag-playground   # before tagging
 
 Two rules, both from the owner:
 - Production takes only a plain version tag, vX.Y.Z.
@@ -53,6 +54,13 @@ def check_staging(statuses: list[dict]) -> None:
         raise GateClosed("Publish this commit to staging and test it first. It has no passing staging check.")
 
 
+def check(tag: str | None, statuses: list[dict]) -> None:
+    """Both rules. The Release workflow gates the staging commit before the tag exists (tag None)."""
+    if tag is not None:
+        check_tag(tag)
+    check_staging(statuses)
+
+
 def commit_statuses(repo: str, commit: str, token: str) -> list[dict]:
     req = urllib.request.Request(
         f"https://api.github.com/repos/{repo}/commits/{commit}/statuses?per_page=100",
@@ -64,18 +72,17 @@ def commit_statuses(repo: str, commit: str, token: str) -> list[dict]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--tag", required=True)
+    parser.add_argument("--tag", default=None, help="the release tag; leave it out to gate a commit before it is tagged")
     parser.add_argument("--commit", required=True, help="the commit the tag points at")
     parser.add_argument("--repo", required=True, help="owner/name on GitHub")
     args = parser.parse_args()
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN", "")
     try:
-        check_tag(args.tag)
-        check_staging(commit_statuses(args.repo, args.commit, token))
+        check(args.tag, commit_statuses(args.repo, args.commit, token))
     except (GateClosed, OSError) as exc:
         print(f"Production gate: {exc}", file=sys.stderr)
         sys.exit(1)
-    print(f"{args.tag} ({args.commit}) passed staging and may go to production.")
+    print(f"{args.tag or 'Commit'} ({args.commit}) passed staging and may go to production.")
 
 
 if __name__ == "__main__":

@@ -2,8 +2,9 @@ name: Release checks
 
 # The slow checks, on GitHub's machine instead of a laptop: the tests that need
 # the real models (`pytest -m models`) and the real-browser smoke test
-# (`pytest -m smoke`). Production publishing runs them on the tag first; they
-# can also be started by hand for any branch, tag or commit:
+# (`pytest -m smoke`). The Release workflow runs them on the staging commit
+# before it tags a release, and a rollback runs them on the tag; they can also
+# be started by hand for any branch, tag or commit:
 #   gh workflow run "Release checks" -f ref=feat/some-branch
 on:
   workflow_dispatch:

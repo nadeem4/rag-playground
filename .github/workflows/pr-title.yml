@@ -1,0 +1,22 @@
+name: Pull request title
+
+# Pull requests are squash-merged, so the title becomes the commit on main and
+# the Release workflow calculates the version from it (cliff.toml). The title
+# must be `type(optional scope)!?: description`; see scripts/check_pr_title.py.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the title
+        # Passed through the environment, never into the shell command itself.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 scripts/check_pr_title.py

@@ -39,3 +39,14 @@ def test_check_staging_says_what_to_do():
     with pytest.raises(rg.GateClosed, match="Publish this commit to staging and test it first"):
         rg.check_staging([])
     rg.check_staging([{"context": "staging", "state": "success"}])
+
+
+
+def test_the_release_workflow_gates_a_commit_before_it_has_a_tag():
+    ok = [{"context": "staging", "state": "success"}]
+    rg.check(None, ok)
+    rg.check("v0.33.0", ok)
+    with pytest.raises(rg.GateClosed, match="plain version tag"):
+        rg.check("v0.33.0-rc.1", ok)
+    with pytest.raises(rg.GateClosed, match="staging"):
+        rg.check(None, [])

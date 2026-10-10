@@ -133,10 +133,15 @@ def test_the_main_flows_work_end_to_end(base, browser):
     page.goto(base + "/compare")
     run = page.get_by_role("button", name=re.compile(r"^Run \d+ recipes$"))
     run.click()
-    page.get_by_role("button", name="Stop the run").wait_for(timeout=30_000)
-    run.wait_for(timeout=LONG)
+    # A fast machine can finish before a poll ever sees Stop the run, so wait for
+    # the results and then for the run to close, not for the Stop button.
     finding = page.get_by_test_id("compare-finding")
-    finding.wait_for()
+    try:
+        finding.wait_for(timeout=LONG)
+        page.get_by_role("button", name="Stop the run").wait_for(state="hidden", timeout=LONG)
+        run.wait_for(timeout=LONG)
+    except Exception as e:
+        raise AssertionError(f"Compare did not finish: {page.locator('main').inner_text()[:1500]}") from e
     assert finding.inner_text().strip(), "Compare finished without a finding sentence"
 
     # Evaluate: the question set runs and the score is a sentence.

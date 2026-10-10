@@ -146,16 +146,23 @@ def build_setup(page: Page, base: str) -> None:
     pick_reranker(page, "Cross-encoder")
     ask.click(timeout=600_000)  # waits until the build lets it
     page.get_by_text("Search order against the reranked order").wait_for(timeout=600_000)
-    # Back to no reranker, so the recorded pass shows the switch.
-    page.get_by_role("button", name="Change settings").click()
+    # Back to no reranker, so the recorded pass shows the switch. The settings
+    # open from the button above the answer or the invite under it; either will do.
+    if not page.get_by_role("button", name=re.compile(r"^Reranker")).is_visible():
+        page.get_by_role("button", name="Change settings").first.click()
     pick_reranker(page, "No reranker")
     page.wait_for_timeout(500)
 
 
-def pick_reranker(page: Page, name: str) -> None:
-    """Choose `name` in the Ask panel's Rerank picker: open its list, then press the option."""
-    page.get_by_role("button", name=re.compile(r"^Reranker")).click()
+def pick(page: Page, label: str, name: str) -> None:
+    """Choose `name` in the picker labelled `label`: open its list, then press the option."""
+    page.get_by_role("button", name=re.compile("^" + re.escape(label))).first.click()
     page.get_by_role("listbox").get_by_role("option", name=re.compile("^" + re.escape(name))).click()
+
+
+def pick_reranker(page: Page, name: str) -> None:
+    """Choose `name` in the Ask panel's Rerank picker."""
+    pick(page, "Reranker", name)
 
 
 def build_scene(page: Page, base: str, poster: Path) -> float:
@@ -186,21 +193,20 @@ def build_scene(page: Page, base: str, poster: Path) -> float:
 
 def evaluate_setup(page: Page, base: str) -> None:
     pick_sample(page, base, "Two-column report")
-    page.get_by_role("button", name="Expand Parse").click()
-    parser = page.locator("select").filter(has_text="Fast text, pdfium")
-    parser.select_option(label="Fast text, pdfium")
+    page.get_by_role("button", name="Parse settings").click()
+    pick(page, "Transform", "Fast text")
     page.get_by_role("button", name="Save as").click()
     page.get_by_label("Pipeline name").fill(FAST_TEXT)
     page.get_by_role("button", name="Save", exact=True).click()
     page.wait_for_timeout(500)
     # The working copy goes back to Docling: the pipeline on Build.
-    page.get_by_role("combobox", name="Pipeline", exact=True).select_option(label="Working copy")
+    pick(page, "Pipeline", "Working copy")
     page.wait_for_timeout(300)
-    parser.select_option(label="Docling, docling")
+    pick(page, "Transform", "Docling")
     page.wait_for_timeout(500)
     page.goto(base + "/evaluate")
     evaluate(page)
-    page.get_by_role("combobox", name="Pipeline", exact=True).select_option(label=FAST_TEXT)
+    pick(page, "Pipeline", FAST_TEXT)
     evaluate(page)
 
 
@@ -212,14 +218,14 @@ def evaluate_scene(page: Page, base: str, poster: Path) -> float:
     page.wait_for_timeout(1200)
     evaluate(page)
     page.wait_for_timeout(1800)
-    page.get_by_role("combobox", name="Pipeline", exact=True).select_option(label=FAST_TEXT)
+    pick(page, "Pipeline", FAST_TEXT)
     page.wait_for_timeout(900)
     evaluate(page)
     page.wait_for_timeout(1800)
-    page.get_by_role("button", name="missed", exact=False).first.click()
-    page.wait_for_timeout(1800)
+    # The poster keeps the score in view; the clip goes on to the first miss.
     page.screenshot(path=poster, type="jpeg", quality=80)
-    page.wait_for_timeout(1800)
+    page.get_by_role("button", name=re.compile(r"^Question \d+, missed")).first.click()
+    page.wait_for_timeout(2400)
     return loaded
 
 
@@ -229,7 +235,7 @@ def evaluate_scene(page: Page, base: str, poster: Path) -> float:
 def compare_setup(page: Page, base: str) -> None:
     """Run only the shared steps, Parse and Clean, so the recipes run on camera."""
     pick_sample(page, base, None)
-    page.get_by_role("button", name="Expand Clean").click()
+    page.get_by_role("button", name="Clean settings").click()
     clean = page.locator('[data-node-id^="clean"]')
     clean.get_by_role("button", name="Run", exact=True).click()
     clean.get_by_test_id("run-result").wait_for(timeout=600_000)

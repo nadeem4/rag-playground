@@ -2,7 +2,7 @@
 
 What RAG Playground keeps, where it keeps it and for how long. There are no accounts and
 no sign in. This page says the same as the **Your data and privacy** page in the app
-([on the demo](https://nadeem4nk-rag-playground.hf.space/privacy)), which also lets you
+([on the demo](https://rag.codewithnk.com/privacy)), which also lets you
 delete what is kept.
 
 ## In this browser

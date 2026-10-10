@@ -1,9 +1,27 @@
 {
   "name": "chunking-primer",
   "title": "A primer on chunking",
-  "blurb": "Three pages of notes on chunking, written for this playground.",
-  "shows": "Headings, a running footer and a repeated paragraph, so every step has something to show.",
+  "blurb": "Six pages of notes on chunking, written for this playground.",
+  "shows": "Headings, a running footer and a repeated paragraph, so every step has something to show. Two questions are planted to miss: one answer is a sentence longer than a piece, and one question uses words the document never does.",
   "stresses": "chunk",
-  "pages": 3,
-  "default": true
+  "pages": 6,
+  "default": true,
+  "teaches": [
+    {
+      "question": "size-factors",
+      "kind": "designed to miss",
+      "lost_at": "chunk",
+      "why": "The answer is one sentence of more than 400 characters, longer than a default piece, so no piece holds it whole.",
+      "fix": {"stage": "chunk", "transform": "recursive_character", "config": {"chunk_size": 800, "chunk_overlap": 80}},
+      "fix_text": "In Chunk, make the pieces 800 characters, or split By sentence."
+    },
+    {
+      "question": "longest-cut",
+      "kind": "designed to miss",
+      "lost_at": "rank",
+      "why": "The question says set and cut where the document says collection and pieces, so the search ranks the answer just below the 5 checked.",
+      "fix": {"stage": "retrieve", "transform": "hybrid_rrf", "config": {"query_expansion": "prf"}},
+      "fix_text": "In the search settings, rewrite the question with PRF, which borrows the document's own words."
+    }
+  ]
 }

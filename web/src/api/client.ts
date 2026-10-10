@@ -29,6 +29,8 @@ import type {
   Source,
   StageInfo,
   SweepRequest,
+  Trace,
+  TraceRequest,
 } from "./types"
 
 export const API_BASE = "/api"
@@ -159,6 +161,9 @@ export const api = {
   eventsUrl: (runId: string, after?: number) =>
     `${API_BASE}/runs/${encodeURIComponent(runId)}/events` +
     (after !== undefined && after >= 0 ? `?last_event_id=${after}` : ""),
+
+  /** Why did this miss? Follows one question's answer down a finished run's artifacts. 404 for an unknown id. */
+  trace: (body: TraceRequest, signal?: AbortSignal) => request<Trace>("/trace", { ...json(body), signal }),
 
   artifact: (id: string) => request<ArtifactMeta>(`/artifacts/${encodeURIComponent(id)}`),
   artifactPayload: <T = unknown>(id: string) =>

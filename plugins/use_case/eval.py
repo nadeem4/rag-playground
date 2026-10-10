@@ -30,7 +30,6 @@ which is what a recall-at-k number is made of.
 
 from __future__ import annotations
 
-import re
 from typing import Any, Mapping
 
 from pydantic import BaseModel, Field
@@ -39,10 +38,8 @@ from core.artifacts import ArtifactType
 from core.payloads import Output, Query, RetrievalResult
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
+from core.textmatch import normalise
 from core.transform import Explanation, Transform
-
-#: A hyphen at the end of a line, with the rest of the word on the next one.
-_LINE_HYPHEN = re.compile(r"-\s*\n\s*")
 
 NO_GOLD = (
     "This question has no gold answer, so there is nothing to look for. Set "
@@ -79,8 +76,10 @@ class EvalUseCase(Transform[EvalConfig]):
     cacheable = True
     deterministic = True
     #: 2: the report carries `found_at` and `returned`, so a report cached
-    #: before them is not served again.
-    version = "2"
+    #: before them is not served again. 3: the shared matching rule (curly
+    #: quotes and ligatures fold), and a table row given with and without its
+    #: | bars counts as one passage.
+    version = "3"
 
     summary = (
         "Checks whether the retrieved pieces contain the sentence that answers "
@@ -104,7 +103,8 @@ class EvalUseCase(Transform[EvalConfig]):
                 "cut, so a score built on them could never compare two settings. "
                 "A sentence stays the same sentence.",
                 "The comparison is strict. The sentence has to be there, give or "
-                "take spacing, a word broken across a line and capital letters. "
+                "take spacing, a word broken across a line, capital letters, "
+                "curly against straight quotes and joined letters such as fi. "
                 "Something that merely looks close counts as a miss, which is "
                 "what keeps the number honest.",
             ],
@@ -132,8 +132,10 @@ class EvalUseCase(Transform[EvalConfig]):
             "which piece. A question with several gold answers counts as found "
             "when any one of them is there, and the report says how many of "
             "them were. The sentence has to be there word for word, allowing "
-            "only for different spacing, a word broken across a line and "
-            "capital letters. The report says which of those two kinds of match "
+            "only for different spacing, a word broken across a line, capital "
+            "letters, curly against straight quotes and joined letters such as "
+            "fi. A table row given with and without its | bars is one passage. "
+            "The report says which of those two kinds of match "
             "it was. No language model and no API key."
         )
         if k < 1:
@@ -165,6 +167,11 @@ class EvalUseCase(Transform[EvalConfig]):
 
         considered = result.hits[: max(config.top_k, 0)]
         normalised = [_normalise(gold) for gold in golds]
+        # Which passage each gold is a form of. A table row given with and
+        # without its | bars is one passage written two ways, so whichever way
+        # the parser wrote the table, finding either form finds the passage,
+        # and recall counts it once.
+        passage = [_normalise(gold.replace("|", " ")) for gold in golds]
         found: set[int] = set()
         rank: int | None = None
         matched_chunk_id = ""
@@ -214,8 +221,8 @@ class EvalUseCase(Transform[EvalConfig]):
                 "rank": rank,
                 "matched_chunk_id": matched_chunk_id,
                 "match": match,
-                "golds_total": len(golds),
-                "golds_found": len(found),
+                "golds_total": len(set(passage)),
+                "golds_found": len({passage[n] for n in found}),
                 "considered": len(considered),
                 "total_candidates": result.total_candidates,
                 "found_at": found_at,
@@ -224,6 +231,6 @@ class EvalUseCase(Transform[EvalConfig]):
         ).model_dump(mode="json")
 
 
-def _normalise(text: str) -> str:
-    """The same sentence as a parser with other habits would have written it."""
-    return " ".join(_LINE_HYPHEN.sub("", text).split()).casefold()
+#: The shared matching rule (core.textmatch), under the name the miss trace
+#: imports it by.
+_normalise = normalise

@@ -73,20 +73,35 @@ describe("the questions the page asks", () => {
   it("reads the built-in sample set, which has one gold passage and no tags", () => {
     const sample: SampleQuestion[] = [{ id: "a", question: "What are the two steps?", gold_answer: "It answers in two steps." }]
     expect(questionsFromSample(sample)).toEqual([
-      { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [] },
+      { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [], answer: "" },
     ])
   })
 
   it("keeps a sample question's further gold passages after the single one", () => {
     const sample: SampleQuestion[] = [{ id: "row", question: "How many?", gold_answer: "| A | 41 |", gold_answers: ["A 41"] }]
-    expect(questionsFromSample(sample)).toEqual([{ id: "row", question: "How many?", gold_answers: ["| A | 41 |", "A 41"], tags: [] }])
+    expect(questionsFromSample(sample)).toEqual([{ id: "row", question: "How many?", gold_answers: ["| A | 41 |", "A 41"], tags: [], answer: "" }])
   })
 
   it("reads an uploaded set, and numbers the questions that brought no id of their own", () => {
     expect(questionsFromSet(set())).toEqual([
-      { id: "refunds", question: "How long do refunds take?", gold_answers: ["Within ten working days."], tags: ["policy"] },
-      { id: "q2", question: "Who approves an exception?", gold_answers: ["The duty manager approves it."], tags: [] },
+      { id: "refunds", question: "How long do refunds take?", gold_answers: ["Within ten working days."], tags: ["policy"], answer: "" },
+      { id: "q2", question: "Who approves an exception?", gold_answers: ["The duty manager approves it."], tags: [], answer: "" },
     ])
+  })
+
+  it("keeps a sample question's expected answer when it has one", () => {
+    const sample: SampleQuestion[] = [{ id: "a", question: "Q?", gold_answer: "It is so.", answer: "So" }]
+    expect(questionsFromSample(sample)[0].answer).toBe("So")
+  })
+
+  it("gives every question its own id, adding a number when two would share one", () => {
+    const sample: SampleQuestion[] = [
+      { id: "same", question: "One?", gold_answer: "One." },
+      { id: "same", question: "Two?", gold_answer: "Two." },
+      { id: "same-2", question: "Three?", gold_answer: "Three." },
+      { id: "", question: "Four?", gold_answer: "Four." },
+    ]
+    expect(questionsFromSample(sample).map((q) => q.id)).toEqual(["same", "same-3", "same-2", "q4"])
   })
 
   it("reads nothing at all from a record whose set is missing", () => {

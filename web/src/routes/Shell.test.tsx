@@ -960,6 +960,20 @@ describe("saved pipelines on Build", () => {
     expect(window.location.search).toBe("")
   })
 
+  it("a step link from Evaluate opens that card, and strips the parameter", async () => {
+    window.history.replaceState(null, "", "/build?step=parse")
+    await ready()
+    await waitFor(() => expect(card("parse").getAttribute("aria-current")).toBe("true"))
+    expect(window.location.search).toBe("")
+  })
+
+  it("a step link to a card that is not there opens nothing", async () => {
+    window.history.replaceState(null, "", "/build?step=nowhere")
+    await ready()
+    expect(document.querySelector('[aria-current="true"][data-node-id]')).toBeNull()
+    expect(window.location.search).toBe("")
+  })
+
   it("a bad share link is refused with one line and the page stays as it was", async () => {
     window.history.replaceState(null, "", "/build?pipeline=not-a-pipeline")
     storeGraph(withFile())

@@ -17,19 +17,52 @@ export interface Question {
   question: string
   gold_answers: string[]
   tags: string[]
+  /** The expected answer in words: shown beside the evidence, never scored. Empty when none was given. */
+  answer: string
+}
+
+/**
+ * Every question gets an id of its own, since the last run is compared row by
+ * row through it: a missing id becomes `q` and its place, and a repeated one
+ * gets the first free number after it (`same-2`, `same-3`).
+ */
+function uniqueIds(questions: Question[]): Question[] {
+  const taken = new Set(questions.map((q) => q.id).filter(Boolean))
+  const seen = new Set<string>()
+  return questions.map((q, i) => {
+    let id = q.id || `q${i + 1}`
+    if (seen.has(id)) {
+      let n = 2
+      while (taken.has(`${id}-${n}`) || seen.has(`${id}-${n}`)) n++
+      id = `${id}-${n}`
+    }
+    seen.add(id)
+    return { ...q, id }
+  })
 }
 
 export function questionsFromSample(sample: readonly SampleQuestion[]): Question[] {
-  return sample.map((q) => ({ id: q.id, question: q.question, gold_answers: [q.gold_answer, ...(q.gold_answers ?? [])], tags: [] }))
+  return uniqueIds(
+    sample.map((q) => ({
+      id: q.id,
+      question: q.question,
+      gold_answers: [q.gold_answer, ...(q.gold_answers ?? [])],
+      tags: [],
+      answer: q.answer ?? "",
+    })),
+  )
 }
 
 export function questionsFromSet(stored: StoredQuestionSet): Question[] {
-  return (stored.set?.questions ?? []).map((q, i) => ({
-    id: q.id || `q${i + 1}`,
-    question: q.question,
-    gold_answers: q.gold_answers ?? [],
-    tags: q.tags ?? [],
-  }))
+  return uniqueIds(
+    (stored.set?.questions ?? []).map((q) => ({
+      id: q.id,
+      question: q.question,
+      gold_answers: q.gold_answers ?? [],
+      tags: q.tags ?? [],
+      answer: q.answer ?? "",
+    })),
+  )
 }
 
 // ------------------------------------------------- which set, whose document --

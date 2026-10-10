@@ -14,9 +14,10 @@ text, and a question with no gold passage. Those are refused, naming the row.
 **The check** exists because a gold passage that was retyped rather than copied
 never matches at evaluation time, and the retriever gets the blame. Each gold
 passage is looked for in the document as the parser reads it: exactly, then
-with whitespace collapsed, straight and curly quotes treated alike, line-end
-hyphenation joined and case folded (the same normalisation the `eval` step
-applies, so a `found_normalized` here is a `normalized` match there). When it
+with the shared rule in core.textmatch: whitespace collapsed, straight and
+curly quotes treated alike, ligatures such as fi expanded, line-end hyphenation
+joined and case folded. The `eval` step and the miss trace use the same rule,
+so a `found_normalized` here is a `normalized` match there. When it
 is nowhere, the closest sentence in the document comes back, which makes a typo
 obvious at a glance.
 """
@@ -30,19 +31,13 @@ import json
 import re
 from typing import Any
 
+from core.textmatch import normalise_with_offsets
+
 #: Several gold passages in one CSV cell.
 GOLD_SEPARATOR = "||"
 
 #: How close a document sentence must be to count as "did you mean this?".
 CLOSEST_CUTOFF = 0.6
-
-#: Curly quotes are what a word processor makes of the straight ones a PDF
-#: usually holds. Treating them alike is the single most common reason a
-#: copied-then-edited passage fails to match.
-_QUOTES = {
-    "‘": "'", "’": "'", "‚": "'", "′": "'",
-    "“": '"', "”": '"', "„": '"', "″": '"',
-}
 
 #: The end of a sentence, for the closest-passage comparison.
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n+")
@@ -266,37 +261,8 @@ def _check_gold(
 
 
 def normalise(text: str) -> tuple[str, list[int]]:
-    """The same passage as a parser with other habits would have written it.
-
-    Returns the normalised text and, for each of its characters, the index of
-    the character it came from, so a normalised match can be shown back in the
-    document's own wording.
-    """
-    out: list[str] = []
-    index: list[int] = []
-    i, n = 0, len(text)
-    while i < n:
-        char = text[i]
-        if char == "-":
-            j = i + 1
-            while j < n and text[j] in " \t":
-                j += 1
-            if j < n and text[j] in "\r\n":  # a word broken across a line
-                while j < n and text[j].isspace():
-                    j += 1
-                i = j
-                continue
-        if char.isspace():
-            if out and out[-1] != " ":
-                out.append(" ")
-                index.append(i)
-            i += 1
-            continue
-        folded = _QUOTES.get(char, char).lower()
-        out.append(folded if len(folded) == 1 else char)
-        index.append(i)
-        i += 1
-    while out and out[-1] == " ":
-        out.pop()
-        index.pop()
-    return "".join(out), index
+    """The shared matching rule (core.textmatch) with offsets back into `text`,
+    so a normalised match can be shown in the document's own wording. The eval
+    step and the miss trace use the same rule, so what this check finds, the
+    score finds."""
+    return normalise_with_offsets(text)

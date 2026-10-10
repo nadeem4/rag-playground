@@ -222,7 +222,20 @@ uv run --no-sync python scripts/publish_space.py --repo <user>/rag-playground
 - It creates the Space if it does not exist, and sets the variable `RAG_PLAYGROUND_DEMO`
   to `1`. **On a copy where you turned demo mode off, set it back to `0` after each
   publish.**
+- `--private` creates a new Space private. An existing Space keeps its visibility; if it
+  differs, the script says so and leaves it.
+- `--commit <sha>` sets the Space variable `RAG_PLAYGROUND_COMMIT`, which `/api/health`
+  reports, so a check can tell the new build from the old one.
+
+`/api/health` answers `{"status": "ok", "version": ..., "commit": ..., "demo": ...}` on any
+copy. `scripts/verify_space.py --space <user>/rag-playground --commit <sha>` waits until a
+Space runs that commit; add `--home` and `--clip /clips/build.webm` to check the home page
+and a clip too. A private Space needs `HF_TOKEN` in the environment.
 
 The project's own demo is published by a GitHub workflow that you start by hand with the
-version tag to put live. Pushing a tag alone changes nothing on the demo. See
-[CONTRIBUTING.md](../CONTRIBUTING.md#cutting-a-release).
+version tag to put live, only with the owner's approval. It refuses anything but a plain
+`vX.Y.Z` tag and any commit that has not passed a staging publish, then runs the release
+checks and waits for the `production` environment's approval. Pushing a tag alone
+changes nothing on the demo. A private staging copy follows `main`. See
+[CONTRIBUTING.md](../CONTRIBUTING.md#staging) and
+[Cutting a release](../CONTRIBUTING.md#cutting-a-release).

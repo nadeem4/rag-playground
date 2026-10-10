@@ -40,6 +40,9 @@ def test_a_publish_removes_files_no_longer_in_the_repo(monkeypatch):
     calls: dict[str, dict] = {}
 
     class FakeApi:
+        def space_info(self, *a, **k):
+            return types.SimpleNamespace(private=False)
+
         def create_repo(self, *a, **k):
             pass
 
@@ -68,3 +71,73 @@ def test_binaries_are_tracked_by_lfs_in_the_space(tmp_path):
         assert f"*.{ext} filter=lfs diff=lfs merge=lfs -text" in attrs, ext
     # The repo's own text rule still holds.
     assert "* text=auto eol=lf" in attrs
+
+
+class _NotFound(Exception):
+    """Stands in for huggingface_hub's RepositoryNotFoundError; matched by name."""
+
+
+_NotFound.__name__ = "RepositoryNotFoundError"
+
+
+def _fake_api(monkeypatch, exists: bool, private: bool = False):
+    import sys
+    import types
+
+    calls: dict[str, list] = {"create": [], "vars": [], "upload": []}
+
+    class FakeApi:
+        def space_info(self, repo_id, **k):
+            if not exists:
+                raise _NotFound(repo_id)
+            return types.SimpleNamespace(private=private)
+
+        def create_repo(self, *a, **k):
+            calls["create"].append(k)
+
+        def add_space_variable(self, repo_id, key, value, **k):
+            calls["vars"].append((key, value))
+
+        def upload_folder(self, **kwargs):
+            calls["upload"].append(kwargs)
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(HfApi=FakeApi))
+    return calls
+
+
+def test_private_creates_a_new_space_private(monkeypatch):
+    import sys
+
+    calls = _fake_api(monkeypatch, exists=False)
+    monkeypatch.setattr(sys, "argv", ["publish_space.py", "--repo", "someone/staging", "--private"])
+    _mod.main()
+    assert calls["create"] and calls["create"][0]["private"] is True
+
+
+def test_without_private_a_new_space_is_public(monkeypatch):
+    import sys
+
+    calls = _fake_api(monkeypatch, exists=False)
+    monkeypatch.setattr(sys, "argv", ["publish_space.py", "--repo", "someone/space"])
+    _mod.main()
+    assert calls["create"][0]["private"] is False
+
+
+def test_an_existing_space_keeps_its_visibility_and_a_mismatch_is_warned(monkeypatch, capsys):
+    import sys
+
+    calls = _fake_api(monkeypatch, exists=True, private=False)
+    monkeypatch.setattr(sys, "argv", ["publish_space.py", "--repo", "someone/staging", "--private"])
+    _mod.main()
+    assert calls["create"] == []
+    assert "is public" in capsys.readouterr().out
+
+
+def test_commit_is_set_as_a_space_variable(monkeypatch):
+    import sys
+
+    calls = _fake_api(monkeypatch, exists=True)
+    monkeypatch.setattr(sys, "argv", ["publish_space.py", "--repo", "someone/space", "--commit", "abc1234"])
+    _mod.main()
+    assert ("RAG_PLAYGROUND_COMMIT", "abc1234") in calls["vars"]
+    assert ("RAG_PLAYGROUND_DEMO", "1") in calls["vars"]

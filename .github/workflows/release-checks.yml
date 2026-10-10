@@ -1,0 +1,64 @@
+name: Release checks
+
+# The slow checks, on GitHub's machine instead of a laptop: the tests that need
+# the real models (`pytest -m models`) and the real-browser smoke test
+# (`pytest -m smoke`). Production publishing runs them on the tag first; they
+# can also be started by hand for any branch, tag or commit:
+#   gh workflow run "Release checks" -f ref=feat/some-branch
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to check"
+        required: true
+        default: main
+  workflow_call:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to check"
+        required: true
+        type: string
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # One fixed place for the Hugging Face models (Docling's layout model,
+      # Qwen3, the cross-encoder), so they can be cached between runs.
+      HF_HOME: ${{ github.workspace }}/.hf-home
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Cache the models
+        uses: actions/cache@v4
+        with:
+          path: .hf-home
+          key: hf-models-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: hf-models-${{ runner.os }}-
+      - name: Install
+        run: |
+          uv sync --frozen --extra dev
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+      - name: Model tests
+        # Tests that need the owner's private files skip themselves here.
+        run: uv run --frozen pytest -m models -q
+      - name: Build the web app
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Browser for the smoke test
+        run: uv run --frozen --with playwright==1.55.0 playwright install --with-deps chromium
+      - name: Smoke test
+        run: uv run --frozen --with playwright==1.55.0 pytest -m smoke -q

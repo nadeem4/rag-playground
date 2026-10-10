@@ -1,10 +1,21 @@
 name: Publish the Hugging Face Space
 
-# Tagging a release does not change the demo. The demo changes only when this
-# workflow is started by hand with the tag to put live:
+# Production. Tagging a release does not change the demo. The demo changes only
+# when this workflow is started by hand with the tag to put live:
 #   gh workflow run "Publish the Hugging Face Space" -f tag=v0.33.0
-# Publishing an older tag rolls the demo back. After a publish, that tag's
-# GitHub release is marked Latest, so Latest always means "what the demo runs".
+# Production is published only with the owner's explicit approval.
+# The tag goes through these gates in order:
+#   0. The production gate (scripts/release_gate.py): a plain vX.Y.Z tag only,
+#      on a commit that passed a staging publish ("Publish this commit to
+#      staging and test it first").
+#   1. Release checks: the model tests and the real-browser smoke test, on the tag.
+#   2. Approval: the publish job uses the `production` environment, so it waits
+#      for a required reviewer to approve it in GitHub.
+#   3. Verification: after publishing, the job waits until the Space runs the
+#      tag's commit (/api/health), the home page answers and a Home clip is a
+#      real video, not a Git LFS pointer.
+# Only then is that tag's GitHub release marked Latest, so Latest always means
+# "what the demo runs". Publishing an older tag rolls the demo back.
 # It needs one repository secret, HF_TOKEN, a Hugging Face token with write access.
 on:
   workflow_dispatch:
@@ -15,21 +26,41 @@ on:
 
 permissions:
   contents: write
+  # To read the commit status "staging" in the production gate.
+  statuses: read
 
 jobs:
-  publish:
+  tag:
     runs-on: ubuntu-latest
-    # Without the token the job is skipped, so a fork never fails on this.
+    # Only the project's own repository publishes; a fork never fails on this.
     if: github.repository == 'nadeem4/rag-playground'
     steps:
-      - name: Check the tag
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - name: Production gate
+        # A plain vX.Y.Z tag only, on a commit that passed a staging publish
+        # (the commit status "staging").
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-        run: |
-          case "$TAG" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "\"$TAG\" is not a version tag like v0.33.0."; exit 1 ;;
-          esac
+        run: python3 scripts/release_gate.py --tag "$TAG" --commit "$(git rev-parse HEAD)" --repo "${{ github.repository }}"
+
+  checks:
+    needs: tag
+    uses: ./.github/workflows/release-checks.yml
+    with:
+      ref: refs/tags/${{ inputs.tag }}
+
+  publish:
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 40
+    env:
+      SPACE: nadeem4nk/rag-playground
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ inputs.tag }}
@@ -38,15 +69,21 @@ jobs:
           python-version: "3.13"
       - run: pip install "huggingface_hub>=0.35"
       - name: Publish
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        id: publish
         run: |
           if [ -z "$HF_TOKEN" ]; then
             echo "No HF_TOKEN secret is set, so there is nothing to publish to."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          python scripts/publish_space.py --repo nadeem4nk/rag-playground
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          python scripts/publish_space.py --repo "$SPACE" --commit "$sha"
+      - name: Check it is live
+        if: steps.publish.outputs.skip != 'true'
+        run: python scripts/verify_space.py --space "$SPACE" --commit "${{ steps.publish.outputs.sha }}" --home --clip /clips/build.webm
       - name: Mark the live release
+        if: steps.publish.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}

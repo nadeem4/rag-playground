@@ -11,6 +11,7 @@ release and record the Home clips. For how the code fits together, see
 - [Styling and fixtures](#styling-and-fixtures)
 - [Adding a strategy](#adding-a-strategy)
 - [The samples](#the-samples)
+- [Staging](#staging)
 - [Cutting a release](#cutting-a-release)
 - [Recording the Home clips](#recording-the-home-clips)
 
@@ -57,8 +58,14 @@ uv run --with playwright==1.55.0 pytest -m smoke
 ```
 
 The tests run on every push and pull request to `main` (`.github/workflows/ci.yml`): the
-Python suite, then the web tests and a web build. The `models` and `smoke` tests do not
-run there, because they need the models. Run them before you publish a tag.
+Python suite, then the web tests and a web build. The `models` and `smoke` tests run in
+their own workflow, **Release checks** (`.github/workflows/release-checks.yml`), on
+GitHub's machine with the models cached between runs. Publishing to production runs it on
+the tag first. You can run it for any branch, tag or commit:
+
+```bash
+gh workflow run "Release checks" -f ref=feat/some-branch
+```
 
 Follow test-driven development: write the failing test first, then the code.
 
@@ -120,14 +127,44 @@ The bundled samples live under `samples/<name>/`: the PDF, its question set
 uv run python scripts/make_samples.py
 ```
 
+## Staging
+
+Staging is a private copy of the demo on Hugging Face, `nadeem4nk/rag-playground-staging`.
+It runs in demo mode on the same free CPU hardware as the demo, so testing it is testing
+what visitors get, without loading your own computer.
+
+- **`main` publishes itself** to staging after every merge (`.github/workflows/staging.yml`).
+- **Any branch can be published by hand** before it is merged, to try a pull request:
+
+  ```bash
+  gh workflow run "Publish staging" -f ref=feat/some-branch
+  ```
+
+- After a publish, the workflow waits until the Space runs that exact commit, read from
+  `/api/health`, and fails if the build does not come up. A verified commit gets the
+  GitHub commit status `staging` = success, which production requires. One staging
+  publish runs at a time; a newer one waits for the one in progress.
+- Open it at https://huggingface.co/spaces/nadeem4nk/rag-playground-staging while signed in
+  to Hugging Face. It is private, so nobody else can. Its storage starts empty after each
+  publish, and it sleeps after about two days without a visit; the first visit wakes it.
+
+`/api/health` answers `{"status": "ok", "version": ..., "commit": ..., "demo": ...}`.
+`commit` is the commit the Space was published from (`publish_space.py --commit` sets it
+as the Space variable `RAG_PLAYGROUND_COMMIT`).
+
 ## Cutting a release
 
-Tagging a release and putting it live are two separate steps. A tag records a version;
-the hosted demo changes only when you publish a tag to it.
+Production, the public demo, is published **only with the owner's explicit approval**.
+Every release goes through staging first, and the production workflow refuses anything
+else. The flow:
 
-1. **Bump the version** in `pyproject.toml` (`version = "X.Y.Z"`), then run `uv lock` so
-   the project's own entry in `uv.lock` matches. Commit both as `chore: version X.Y.Z`.
-2. **Tag, push and record the release** as a pre-release, which means "not live yet":
+1. **Merge to `main`.** Staging updates itself and verifies the new build. A verified
+   commit gets the GitHub commit status `staging` = success.
+2. **Bump the version** in `pyproject.toml` (`version = "X.Y.Z"`), run `uv lock` so the
+   project's own entry in `uv.lock` matches, and merge it as `chore: version X.Y.Z`.
+   Staging publishes that commit too. Test it there.
+3. **Tag that commit and record the release** as a pre-release, which means "not live
+   yet":
 
    ```bash
    git tag vX.Y.Z
@@ -135,54 +172,35 @@ the hosted demo changes only when you publish a tag to it.
    gh release create vX.Y.Z --verify-tag --prerelease --title vX.Y.Z --notes-file notes.md
    ```
 
-   Nothing on the demo changes. Tags can pile up during the week.
-3. **Before publishing a tag,** check it out and run the two suites CI does not run. Both
-   must pass:
-
-   ```bash
-   git checkout vX.Y.Z
-   uv run pytest -m models
-   cd web && npm run build && cd ..
-   uv run --with playwright==1.55.0 pytest -m smoke
-   ```
-
-4. **Publish the tag you choose** to the demo:
+4. **Ask the owner.** Nothing goes to production without their go-ahead.
+5. **Publish to production:**
 
    ```bash
    gh workflow run "Publish the Hugging Face Space" -f tag=vX.Y.Z
    ```
 
-   The workflow (`.github/workflows/publish-space.yml`) checks out that tag and runs
-   `scripts/publish_space.py --repo nadeem4nk/rag-playground`, which publishes the files
-   committed at the tag to the Space with demo mode on. Then it marks that tag's GitHub
-   release as a full release and **Latest**, so Latest always names what the demo runs.
-   Publishing an older tag rolls the demo back the same way. It needs a repository secret
-   named `HF_TOKEN`, a Hugging Face token with write access; without it the job does
-   nothing. It can also be started from the Actions tab. See
+   The workflow (`.github/workflows/publish-space.yml`) takes the tag through these gates
+   in order, and stops at the first that fails:
+
+   1. **The production gate** (`scripts/release_gate.py`). Only a plain `vX.Y.Z` tag. The
+      tag's commit must have the passing `staging` status, or the run stops with "Publish
+      this commit to staging and test it first."
+   2. **Release checks** on the tag: the model tests and the smoke test.
+   3. **Approval.** The publish job uses the GitHub environment `production`, which has the
+      owner as required reviewer, so it waits until the owner approves it on the run's
+      page.
+   4. **Publish and verify.** It runs `scripts/publish_space.py --repo
+      nadeem4nk/rag-playground --commit <sha>`, then `scripts/verify_space.py`, which waits
+      until the Space runs the tag's commit, checks the home page answers 200, and checks a
+      Home clip is a real video, not a 131-byte Git LFS pointer (a pointer means the
+      Space's `.gitattributes` lost its LFS rules, and every clip plays blank).
+   5. **Mark it Latest.** The tag's GitHub release becomes a full release and **Latest**,
+      so Latest always names what the demo runs.
+
+   Publishing an older release tag rolls the demo back the same way. It needs a repository
+   secret named `HF_TOKEN`, a Hugging Face token with write access. See
    [docs/deploy.md](docs/deploy.md#publishing-with-publish_spacepy) for what the script
    does.
-5. **Check the Space** once its build is done:
-   - The stage is `RUNNING`:
-
-     ```bash
-     curl -s https://huggingface.co/api/spaces/nadeem4nk/rag-playground/runtime
-     ```
-
-   - The home page returns 200:
-
-     ```bash
-     curl -s -o /dev/null -w "%{http_code}\n" https://nadeem4nk-rag-playground.hf.space/
-     ```
-
-   - A clip comes back at full size, hundreds of kilobytes, not a 131-byte Git LFS
-     pointer:
-
-     ```bash
-     curl -s -o /dev/null -w "%{http_code} %{size_download}\n" https://nadeem4nk-rag-playground.hf.space/clips/build.webm
-     ```
-
-     A pointer means the Space's `.gitattributes` lost its LFS rules, and every clip plays
-     blank.
 
 ## Recording the Home clips
 

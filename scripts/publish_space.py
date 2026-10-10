@@ -72,10 +72,36 @@ def export_tree(dest: Path) -> list[str]:
     return names
 
 
+#: The Space variable that tells /api/health which commit is live.
+COMMIT_VAR = "RAG_PLAYGROUND_COMMIT"
+
+
+def ensure_space(api, repo: str, private: bool) -> None:
+    """Create the Space when it does not exist, private if asked.
+
+    An existing Space keeps its visibility: flipping a public demo private, or a
+    private staging Space public, is a decision for its owner, not a side effect
+    of a publish. A mismatch is printed instead.
+    """
+    try:
+        info = api.space_info(repo)
+    except Exception as exc:  # huggingface_hub's RepositoryNotFoundError
+        if type(exc).__name__ != "RepositoryNotFoundError":
+            raise
+        api.create_repo(repo, repo_type="space", space_sdk="docker", private=private, exist_ok=True)
+        return
+    is_private = bool(getattr(info, "private", False))
+    if is_private != private:
+        state = "private" if is_private else "public"
+        print(f"Warning: spaces/{repo} is {state}; its visibility was left as it is. Change it in the Space's settings.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", required=True, help="Space id, e.g. user/rag-playground")
     parser.add_argument("--dry-run", action="store_true", help="list what would be published and stop")
+    parser.add_argument("--private", action="store_true", help="create the Space private if it does not exist yet")
+    parser.add_argument("--commit", default="", help="the commit being published, read back by /api/health")
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -87,7 +113,9 @@ def main() -> None:
         from huggingface_hub import HfApi
 
         api = HfApi()
-        api.create_repo(args.repo, repo_type="space", space_sdk="docker", exist_ok=True)
+        ensure_space(api, args.repo, args.private)
+        if args.commit:
+            api.add_space_variable(args.repo, COMMIT_VAR, args.commit, description="The commit this Space was published from. /api/health reports it.")
         api.add_space_variable(args.repo, *DEMO_VAR, description="Demo mode: uploads are private, small and deleted after 24 hours; only a visitor's own API key is used; custom endpoints are off. Set to 0 for a private copy.")
         # Mirror HEAD: a file deleted from the repo is deleted from the Space too.
         # Hugging Face always keeps .gitattributes. Without this, a stale file

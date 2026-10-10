@@ -17,6 +17,7 @@ from api import demo, expiry
 from api.deps import Deps, build_deps
 from api.routes import (
     artifacts,
+    health,
     learn,
     pages,
     questions,
@@ -54,6 +55,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     app.state.deps = deps or build_deps()
     app.state.runs = manager
     for r in (
+        health.router,
         registry.router,
         sources.router,
         pages.router,

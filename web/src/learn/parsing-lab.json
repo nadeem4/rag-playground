@@ -1,5 +1,5 @@
 {
- "recorded_on": "2026-10-09",
+ "recorded_on": "2026-10-10",
  "chunker": {
   "chunker": "recursive_character",
   "chunk_size": 400,
@@ -10,22 +10,22 @@
   {
    "name": "two-column-report",
    "title": "Two-column report",
-   "sha": "5efe91434d18de5abaf894005a9feb85df8213ede2494afd02d4203d353b9b30",
+   "sha": "6fad5260c0bceebc91d4282172be56a4d97638ccec13579f03e6f01df50591d0",
    "filename": "two-column-report.pdf",
    "pages": 5,
    "questions": 12,
    "question": "How long did the survey run?",
    "parsers": {
     "pdfium": {
-     "ms": 123,
-     "chars": 6119,
-     "hits": 5,
+     "ms": 94,
+     "chars": 11745,
+     "hits": 4,
      "ocr": false,
      "excerpt": "Reading order in two-column reports The survey ran for six weeks. Two hundred Errors followed the same pattern. When a readers took part, and each read the same"
     },
     "docling": {
-     "ms": 3351,
-     "chars": 6050,
+     "ms": 3033,
+     "chars": 11719,
      "hits": 10,
      "ocr": false,
      "excerpt": "## Reading order in two-column reports The survey ran for six weeks. Two hundred readers took part, and each read the same twelve documents in a fixed order. Ha"
@@ -35,23 +35,23 @@
   {
    "name": "table-of-figures",
    "title": "Table of figures",
-   "sha": "93d2c8423b6c823d468ceefec86ca965100668b7ece8fe08fb1911742727072d",
+   "sha": "f3e06e67da24aee56a83cbab8b45a8525f37b498915dc1396e26bc8a64d5ed4c",
    "filename": "table-of-figures.pdf",
-   "pages": 2,
-   "questions": 6,
+   "pages": 6,
+   "questions": 12,
    "question": "How many readers lost their place before and after the reset?",
    "parsers": {
     "pdfium": {
-     "ms": 24,
-     "chars": 1492,
-     "hits": 6,
+     "ms": 86,
+     "chars": 7292,
+     "hits": 10,
      "ocr": false,
      "excerpt": "Measure Before After Change Reading time per page 84 s 61 s -27% Readers who lost their place 41 16 -61% Questions answered correctly 72% 88% +16 pts Pages rer"
     },
     "docling": {
-     "ms": 2606,
-     "chars": 1792,
-     "hits": 6,
+     "ms": 5567,
+     "chars": 8086,
+     "hits": 10,
      "ocr": false,
      "excerpt": "--------|----------| | Reading time per page | 84 s | 61 s | -27% | | Readers who lost their place | 41 | 16 | -61% | | Questions answered correctly | 72% | 88%"
     }
@@ -60,10 +60,10 @@
   {
    "name": "scanned-notes",
    "title": "Scanned notes",
-   "sha": "0e62d3293e546273b1d66044e16bc5d1e02deebd4e3768021d06de311a923c52",
+   "sha": "a254ed71dfe6a9c80d64c551d21dc6eaa12cd3a579ee28e629c0c248a36b26de",
    "filename": "scanned-notes.pdf",
-   "pages": 2,
-   "questions": 5,
+   "pages": 4,
+   "questions": 8,
    "question": "What does a scanner actually do to a page?",
    "parsers": {
     "pdfium": {
@@ -74,11 +74,11 @@
      "excerpt": null
     },
     "docling": {
-     "ms": 9010,
-     "chars": 1772,
-     "hits": 5,
+     "ms": 13690,
+     "chars": 5760,
+     "hits": 8,
      "ocr": true,
-     "excerpt": "## Notes on scanned documents A scanner does not read a page. It photographs it. The result is a grid of gray dots, and a PDF made from a scan is a container fo"
+     "excerpt": "## Notes on scanned documents A scanner does not read a page. It photographs it. The result is a grid of gra o s s a re is no text inside such a file, only a pi"
     }
    }
   }
@@ -86,22 +86,22 @@
  "baseline": {
   "name": "chunking-primer",
   "title": "A primer on chunking",
-  "sha": "19155c4d2e6d0a0785261fa742afcceede437bd532dc0b51c7affc38532d7aab",
+  "sha": "94282f52781e91a862fe99e44140167e890aeb2643d0564888bebe3b6da13567",
   "filename": "chunking-primer.pdf",
-  "pages": 3,
-  "questions": 10,
+  "pages": 6,
+  "questions": 12,
   "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
   "parsers": {
    "pdfium": {
-    "ms": 43,
-    "chars": 4331,
+    "ms": 83,
+    "chars": 11482,
     "hits": 10,
     "ocr": false,
     "excerpt": "Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it a"
    },
    "docling": {
-    "ms": 1993,
-    "chars": 4187,
+    "ms": 5374,
+    "chars": 11207,
     "hits": 10,
     "ocr": false,
     "excerpt": "## Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then i"

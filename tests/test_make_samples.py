@@ -56,7 +56,7 @@ def test_scanned_notes_has_no_text_layer():
 
     doc = pdfium.PdfDocument(scanned_notes.build())
     try:
-        assert len(doc) == 2
+        assert len(doc) == 4
         for i in range(len(doc)):
             assert doc[i].get_textpage().get_text_range().strip() == ""
     finally:
@@ -67,7 +67,7 @@ def test_scanned_notes_pages_are_mostly_white_with_dark_ink():
     from scripts.samplegen import scanned_notes
 
     pixels = scanned_notes.render_page(scanned_notes.PAGES[0], 1)
-    assert len(pixels) == 850 * 1100
+    assert len(pixels) == scanned_notes.W * scanned_notes.H
     white = sum(1 for p in pixels if p == 255)
     dark = sum(1 for p in pixels if p < 64)
     assert white > 0.8 * len(pixels)
@@ -97,10 +97,17 @@ def test_table_of_figures_cells_are_all_present_under_pdfium():
 
     doc = pdfium.PdfDocument(tf.build())
     try:
-        assert len(doc) == 2
+        assert len(doc) == 6
         text = doc[0].get_textpage().get_text_range()
+        second = doc[2].get_textpage().get_text_range()
+        scanned = doc[4].get_textpage().get_text_range()
     finally:
         doc.close()
     for row in tf.ROWS:
         for cell in row:
             assert cell in text
+    for row in tf.DOC_ROWS:
+        for cell in row:
+            assert cell in second
+    # Page 5 is a picture: its one fact has no text layer.
+    assert scanned.strip() == ""

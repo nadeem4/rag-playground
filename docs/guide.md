@@ -27,12 +27,26 @@ The four samples were written for the playground, and each one shows a problem:
 
 | Sample | Pages | What it shows |
 |---|---|---|
-| A primer on chunking | 3 | Headings, a running footer and a repeated paragraph. It is the default. |
-| Scanned notes | 2 | Pictures of text with no text layer. Without OCR the parse is empty. |
-| Two-column report | 5 | Rows drawn across both columns. A plain parser joins halves of different sentences. Two of its 12 questions are planted to miss on the default pipeline: one answer is only in a page footer, and one comes back below the pieces checked. |
-| Table of figures | 2 | Answers in a ruled table. A plain parser loses the row labels; the heading chunker keeps the table whole. |
+| A primer on chunking | 6 | Headings, a running footer, a repeated paragraph and a short glossary. It is the default. |
+| Scanned notes | 4 | Pictures of text with no text layer. Without OCR the parse is empty. |
+| Two-column report | 5 | Rows drawn across both columns. A plain parser joins halves of different sentences. |
+| Table of figures | 6 | Two ruled tables, a bar chart with a caption, one scanned page and notes. A layout parser keeps each row together. |
 
-Each sample has its own question set, so Evaluate scores the sample you loaded.
+Each sample has its own question set, so Evaluate scores the sample you loaded. Every
+question carries an expected answer and tags, and some are **planted to miss** on the
+default pipeline so that Evaluate has something to explain:
+
+| Sample | Questions | Planted to miss, and the fix |
+|---|---|---|
+| A primer on chunking | 12 | One answer is a sentence longer than a piece (lost at Chunk; 800-character pieces or By sentence find it). One question uses words the document never does (ranked below the pieces checked; a PRF rewrite finds it). |
+| Two-column report | 12 | One fact is only in a page footer (lost at Parse; read headers and footers in Parse). One answer is ranked below the pieces checked (the cross-encoder reranker finds it). Six more miss if you switch Parse to Fast text. |
+| Table of figures | 12 | One answer is on the scanned page (lost at Parse; turn on OCR). One question uses words the document never does (a PRF rewrite finds it). |
+| Scanned notes | 8 | Every question misses without OCR and is found with it. |
+
+The tags say which questions are planted ("designed to miss: ...") and which miss only after
+a change ("misses if you change: ..."), so a planted miss is never mistaken for a broken
+pipeline. Each sample's `sample.json` lists its plants under `teaches`, and
+`tests/test_sample_plants.py` checks every one against the real pipeline.
 
 When you choose another document, the results on the page are marked out of date, as
 they are when you edit a step, and Evaluate opens a fresh evaluation for it.

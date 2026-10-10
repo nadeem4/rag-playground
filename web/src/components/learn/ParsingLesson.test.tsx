@@ -48,7 +48,7 @@ describe("Choosing a parser", () => {
     const doc = () => screen.getByRole("region", { name: "The document" })
     expect(within(doc()).getByText(/^Two-column report, 5 pages\./)).toBeTruthy()
     fireEvent.click(steps()[1])
-    expect(within(doc()).getByText(/^Table of figures, 2 pages\./)).toBeTruthy()
+    expect(within(doc()).getByText(/^Table of figures, 6 pages\./)).toBeTruthy()
     expect(within(doc()).queryByRole("tab", { name: "Text" })).toBeNull()
     fireEvent.click(steps()[3])
     expect(within(doc()).getByText("Three samples, measured. The links on each step open them on Build.")).toBeTruthy()

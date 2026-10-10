@@ -16,6 +16,21 @@ def _rank(payload):
 
 @pytest.mark.models
 @pytest.mark.parametrize("name", TEXT_SAMPLES)
+def test_dump_blocks(name, tmp_path, monkeypatch):
+    from core.artifacts import ArtifactType
+    from plugins.chunk import DocView
+
+    runner = Runner(name, tmp_path, monkeypatch)
+    result = runner.run(runner.graph(through="chunk"))
+    view = DocView.of(runner.load(result, "parse", ArtifactType.PARSED_DOC))
+    lines = [f"BLOCK {name} total={len(view.rendered)} chars={len(view.text)} pieces={len(runner.pieces(result))}"]
+    for e in view.rendered:
+        lines.append(f"BLOCK {name} p{e.page} {e.type} {len(e.text)} {e.text[:70]!r}")
+    raise AssertionError("\n" + "\n".join(lines))
+
+
+@pytest.mark.models
+@pytest.mark.parametrize("name", TEXT_SAMPLES)
 def test_dump_ranks(name, tmp_path, monkeypatch):
     runner = Runner(name, tmp_path, monkeypatch)
     lines = []

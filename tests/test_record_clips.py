@@ -66,6 +66,10 @@ class _Locator:
         label = name.pattern if hasattr(name, "pattern") else name
         return _Locator(self.log, [*self.path, (role, label)])
 
+    @property
+    def first(self):
+        return self
+
     def click(self, **kw):
         self.log.append(self.path)
 

@@ -16,10 +16,10 @@
       "fix_text": "In Chunk, make the pieces 800 characters, or split By sentence."
     },
     {
-      "question": "longest-cut",
+      "question": "kept-whole",
       "kind": "designed to miss",
       "lost_at": "rank",
-      "why": "The question says set and cut where the document says collection and pieces, so the search ranks the answer just below the 5 checked.",
+      "why": "The question says set, item and kept whole where the document says collection, entry and one per piece, so the search ranks the answer far below the 5 checked.",
       "fix": {"stage": "retrieve", "transform": "hybrid_rrf", "config": {"query_expansion": "prf"}},
       "fix_text": "In the search settings, rewrite the question with PRF, which borrows the document's own words."
     }

@@ -20,8 +20,8 @@
       "kind": "designed to miss",
       "lost_at": "rank",
       "why": "The question says paperwork and another time where the document says manuals, legal texts and a later study, so the search ranks the answer far below the 5 checked.",
-      "fix": {"stage": "retrieve", "transform": "hybrid_rrf", "config": {"query_expansion": "prf"}},
-      "fix_text": "In the search settings, rewrite the question with PRF, which borrows the document's own words."
+      "fix": {"stage": "rerank", "transform": "cross_encoder", "config": {}},
+      "fix_text": "Add the cross-encoder reranker, which reads the question and each piece together."
     }
   ]
 }

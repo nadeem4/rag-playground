@@ -83,15 +83,26 @@ def test_excerpt_window():
 
 @pytest.mark.models
 def test_a_fresh_run_matches_the_committed_json(tmp_path):
+    """The stable facts match; the hit counts are only checked for range.
+
+    A hit count depends on where the embedder ranks a passage, and that moves by a
+    place or two between Windows and Linux, so an exact count is not a fact about
+    the sample. The sample files, the parser text from pdfium and the OCR switch are.
+    """
     out = tmp_path / "parsing-lab.json"
     fresh = _script().record(out)
     committed = json.loads(RECORDED.read_text(encoding="utf-8"))
     assert [c["name"] for c in fresh["cases"]] == [c["name"] for c in committed["cases"]]
     assert fresh["baseline"]["name"] == committed["baseline"]["name"]
     for f, c in zip([*fresh["cases"], fresh["baseline"]], [*committed["cases"], committed["baseline"]]):
+        assert (f["sha"], f["pages"], f["questions"]) == (c["sha"], c["pages"], c["questions"])
         assert list(f["parsers"]) == list(c["parsers"])
+        assert f["parsers"]["pdfium"]["chars"] == c["parsers"]["pdfium"]["chars"]
         for parser in c["parsers"]:
-            assert f["parsers"][parser].get("hits") == c["parsers"][parser].get("hits")
+            assert f["parsers"][parser]["ocr"] == c["parsers"][parser]["ocr"]
+            assert 0 <= f["parsers"][parser]["hits"] <= f["questions"]
+    scanned = next(c for c in [*fresh["cases"], fresh["baseline"]] if c["name"] == "scanned-notes")
+    assert scanned["parsers"]["pdfium"]["hits"] == 0, "no text layer, so nothing to find"
     assert json.loads(out.read_text(encoding="utf-8")) == fresh
 
 

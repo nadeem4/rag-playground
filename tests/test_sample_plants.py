@@ -40,6 +40,13 @@ SCANNED = "scanned-notes"
 CHUNKER = ("recursive_character", {"chunk_size": 400, "chunk_overlap": 80})
 TOP_K = 5
 MIN_PIECES = 20
+#: The margins that keep a result the same on Windows and on Linux, where the
+#: embedder and Docling's layout model can move a passage a place or two: an
+#: ordinary question is found in the top 3, not just the top 5, a search-side
+#: plant comes back 10th or lower (or not at all), and every fix finds its plant
+#: in the top 3.
+FOUND_BY = 3
+MISSED_FROM = 10
 INDEX_SIDE = {"parse", "clean", "chunk"}
 SEARCH_SIDE = {"rank"}
 FAST_TEXT = "misses if you change: Fast text"
@@ -212,6 +219,8 @@ def test_the_default_pipeline_finds_every_question_but_the_two_planted(name, tmp
     for q in _questions(name):
         payload, result = runner.ask(q)
         assert payload["hit"] is (q["id"] not in designed), q["id"]
+        if payload["hit"]:
+            assert payload["rank"] <= FOUND_BY, (q["id"], payload["rank"])
         assert len(runner.pieces(result)) >= MIN_PIECES
 
 
@@ -227,8 +236,11 @@ def test_each_plant_is_lost_at_its_step_and_its_fix_finds_it(name, tmp_path, mon
         payload, result = runner.ask(q)
         assert not payload["hit"], q["id"]
         assert runner.lost_at(q, result) == teach["lost_at"], q["id"]
+        if teach["lost_at"] in SEARCH_SIDE and payload["found_at"] is not None:
+            assert payload["found_at"] >= MISSED_FROM, (q["id"], payload["found_at"])
         fixed, _ = runner.ask(q, **_fix_kwargs(teach["fix"]))
         assert fixed["hit"], (q["id"], teach["fix"])
+        assert fixed["rank"] <= FOUND_BY, (q["id"], fixed["rank"])
 
 
 @pytest.mark.models
@@ -253,4 +265,5 @@ def test_scanned_notes_misses_everything_without_ocr_and_finds_everything_with_i
         assert runner.lost_at(q, result) == "parse", q["id"]
         fixed, result = runner.ask(q, **_fix_kwargs(teach["fix"]))
         assert fixed["hit"], q["id"]
+        assert fixed["rank"] <= FOUND_BY, (q["id"], fixed["rank"])
         assert len(runner.pieces(result)) >= MIN_PIECES

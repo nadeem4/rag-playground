@@ -1,22 +1,14 @@
 {
   "chunking-primer": [
-    {"id": "c-rule-2", "question": "What rule of thumb does the primer give for a chunk?", "gold_answer": "A useful rule of thumb: a chunk should answer one question well."},
-    {"id": "c-rule-3", "question": "What is a useful rule of thumb for what one chunk should do?", "gold_answer": "A useful rule of thumb: a chunk should answer one question well."},
-    {"id": "c-overlap-2", "question": "What happens when the overlap and the chunk size are equal?", "gold_answer": "each step moves forward by nothing"},
-    {"id": "p-b", "question": "Which kind of document needed the largest pieces?", "gold_answer": "The legal contracts did best with pieces of about eight hundred tokens"},
-    {"id": "p-c", "question": "Which set wanted each item kept whole, however long?", "gold_answer": "The product questions and answers did best with one entry per piece"},
-    {"id": "p-d", "question": "Which set was best split each time someone new spoke?", "gold_answer": "The meeting notes did best at about three hundred tokens"},
-    {"id": "p-e", "question": "Which material liked mid-sized cuts made where a paragraph closes?", "gold_answer": "The research papers did best at about five hundred tokens"}
+    {"id": "h1", "question": "Why does structure-aware splitting cut at headings?", "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."},
+    {"id": "h2", "question": "What does a section under one heading usually discuss?", "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."},
+    {"id": "h3", "question": "Why are headings natural places to cut?", "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."}
   ],
-  "table-of-figures": [
-    {"id": "c-largest-2", "question": "Which measure had the largest change?", "gold_answer": "The largest change was in readers who lost their place, which fell by more than half."},
-    {"id": "c-largest-3", "question": "What was the largest change after the reset?", "gold_answer": "The largest change was in readers who lost their place, which fell by more than half."},
-    {"id": "c-readers-2", "question": "How many readers read the same twelve documents twice?", "gold_answer": "Two hundred readers read the same twelve documents twice"},
-    {"id": "c-satisfaction-2", "question": "How did the satisfaction score change after the reset?", "gold_answer": "| Satisfaction score | 6.1 | 8.3 | +2.2 |", "gold_answers": ["Satisfaction score 6.1 8.3 +2.2"]},
-    {"id": "t-b", "question": "Who was missing from the final count?", "gold_answer": "Three readers did not finish the second reading"},
-    {"id": "t-c", "question": "Were the people in the study typical?", "gold_answer": "The readers were volunteers recruited through the council's newsletter"},
-    {"id": "t-d", "question": "What could the people have remembered from their first go?", "gold_answer": "A reader who remembered a question from the first reading"},
-    {"id": "t-e", "question": "Which kinds of paperwork were saved for a future project?", "gold_answer": "Technical manuals and legal texts with dense cross-references were left for a later study."}
-  ],
-  "two-column-report": []
+  "table-of-figures": [],
+  "two-column-report": [
+    {"id": "m1", "question": "Which item benefited most from the one-column design?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m2", "question": "Which item benefited most from the single-panel layout?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m3", "question": "Which document benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m4", "question": "Which leaflet gained most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"}
+  ]
 }

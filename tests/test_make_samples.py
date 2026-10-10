@@ -34,7 +34,8 @@ def test_every_sample_folder_is_complete(gen):
     folder = ROOT / "samples" / gen.NAME
     card = json.loads((folder / "sample.json").read_text(encoding="utf-8"))
     assert card["name"] == gen.NAME
-    assert set(card) == {"name", "title", "blurb", "shows", "stresses", "pages", "default"}
+    # `teaches` (the sample's planted misses) is optional while the samples grow one by one.
+    assert set(card) - {"teaches"} == {"name", "title", "blurb", "shows", "stresses", "pages", "default"}
     assert card["stresses"] in {"parse", "clean", "chunk", "index", "retrieve"}
     questions = json.loads((folder / "questions.json").read_text(encoding="utf-8"))
     assert questions and all(set(q) >= {"id", "question", "gold_answer"} for q in questions)
@@ -80,7 +81,7 @@ def test_two_column_report_interleaves_under_pdfium():
 
     doc = pdfium.PdfDocument(tc.build())
     try:
-        assert len(doc) == 2
+        assert len(doc) == 5
         text = doc[0].get_textpage().get_text_range()
     finally:
         doc.close()

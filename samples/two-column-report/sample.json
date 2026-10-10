@@ -1,9 +1,43 @@
 {
   "name": "two-column-report",
   "title": "Two-column report",
-  "blurb": "Two pages set in two columns, drawn row by row as many exporters do.",
-  "shows": "A plain text parser joins the halves of different sentences. A layout parser reads each column in turn.",
+  "blurb": "Five pages set in two columns, drawn row by row as many exporters do.",
+  "shows": "A plain text parser joins the halves of different sentences. A layout parser reads each column in turn. Two questions are planted to miss: one fact lives only in a page footer, and one answer is ranked too low to be checked.",
   "stresses": "parse",
-  "pages": 2,
-  "default": false
+  "pages": 5,
+  "default": false,
+  "teaches": [
+    {
+      "question": "fieldwork",
+      "kind": "designed to miss",
+      "lost_at": "parse",
+      "why": "The answer is only in page 3's footer, and Docling sets page footers aside by default.",
+      "fix": {"stage": "parse", "transform": "docling", "config": {"content_layers": ["body", "furniture"]}},
+      "fix_text": "In Parse, read page headers and footers too (Docling's content_layers)."
+    },
+    {
+      "question": "most-gain",
+      "kind": "designed to miss",
+      "lost_at": "rank",
+      "why": "The question shares few words with the answer, and many paragraphs about the twelve documents look alike, so the right piece comes back below the 5 checked.",
+      "fix": {"stage": "rerank", "transform": "cross_encoder", "config": {}},
+      "fix_text": "Add the cross-encoder reranker, which reads the question and each piece together."
+    },
+    {
+      "question": "lost-place",
+      "kind": "misses if you change",
+      "lost_at": "parse",
+      "change": {"stage": "parse", "transform": "pdfium", "config": {}},
+      "why": "The answer wraps inside the left column, and a plain text parser reads across both columns.",
+      "fix_text": "Parse with Docling, which reads each column in turn."
+    },
+    {
+      "question": "extractor-error",
+      "kind": "misses if you change",
+      "lost_at": "parse",
+      "change": {"stage": "parse", "transform": "pdfium", "config": {}},
+      "why": "The answer wraps inside the left column, and a plain text parser reads across both columns.",
+      "fix_text": "Parse with Docling, which reads each column in turn."
+    }
+  ]
 }

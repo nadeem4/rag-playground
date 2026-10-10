@@ -46,7 +46,7 @@ describe("Choosing a parser", () => {
   it("shows the case's own document beside each case step, not the primer", () => {
     render(<ParsingLesson registry={registry} />)
     const doc = () => screen.getByRole("region", { name: "The document" })
-    expect(within(doc()).getByText(/^Two-column report, 2 pages\./)).toBeTruthy()
+    expect(within(doc()).getByText(/^Two-column report, 5 pages\./)).toBeTruthy()
     fireEvent.click(steps()[1])
     expect(within(doc()).getByText(/^Table of figures, 2 pages\./)).toBeTruthy()
     expect(within(doc()).queryByRole("tab", { name: "Text" })).toBeNull()

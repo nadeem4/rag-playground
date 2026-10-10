@@ -1,5 +1,5 @@
 {
- "recorded_on": "2026-09-30",
+ "recorded_on": "2026-10-09",
  "chunker": {
   "chunker": "recursive_character",
   "chunk_size": 400,
@@ -10,23 +10,23 @@
   {
    "name": "two-column-report",
    "title": "Two-column report",
-   "sha": "03201d6dc9cb9c13840e7c96ca62a468eadf61c035cd82edb4b47bddb7b9cd8a",
+   "sha": "5efe91434d18de5abaf894005a9feb85df8213ede2494afd02d4203d353b9b30",
    "filename": "two-column-report.pdf",
-   "pages": 2,
-   "questions": 5,
+   "pages": 5,
+   "questions": 12,
    "question": "How long did the survey run?",
    "parsers": {
     "pdfium": {
-     "ms": 21,
-     "chars": 1682,
-     "hits": 3,
+     "ms": 123,
+     "chars": 6119,
+     "hits": 5,
      "ocr": false,
      "excerpt": "Reading order in two-column reports The survey ran for six weeks. Two hundred Errors followed the same pattern. When a readers took part, and each read the same"
     },
     "docling": {
-     "ms": 2822,
-     "chars": 1675,
-     "hits": 5,
+     "ms": 3351,
+     "chars": 6050,
+     "hits": 10,
      "ocr": false,
      "excerpt": "## Reading order in two-column reports The survey ran for six weeks. Two hundred readers took part, and each read the same twelve documents in a fixed order. Ha"
     }
@@ -49,7 +49,7 @@
      "excerpt": "Measure Before After Change Reading time per page 84 s 61 s -27% Readers who lost their place 41 16 -61% Questions answered correctly 72% 88% +16 pts Pages rer"
     },
     "docling": {
-     "ms": 2266,
+     "ms": 2606,
      "chars": 1792,
      "hits": 6,
      "ocr": false,
@@ -67,14 +67,14 @@
    "question": "What does a scanner actually do to a page?",
    "parsers": {
     "pdfium": {
-     "ms": 50,
+     "ms": 73,
      "chars": 0,
      "hits": 0,
      "ocr": false,
      "excerpt": null
     },
     "docling": {
-     "ms": 8912,
+     "ms": 9010,
      "chars": 1772,
      "hits": 5,
      "ocr": true,
@@ -93,14 +93,14 @@
   "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
   "parsers": {
    "pdfium": {
-    "ms": 27,
+    "ms": 43,
     "chars": 4331,
     "hits": 10,
     "ocr": false,
     "excerpt": "Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it a"
    },
    "docling": {
-    "ms": 2570,
+    "ms": 1993,
     "chars": 4187,
     "hits": 10,
     "ocr": false,

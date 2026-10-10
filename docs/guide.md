@@ -29,7 +29,7 @@ The four samples were written for the playground, and each one shows a problem:
 |---|---|---|
 | A primer on chunking | 3 | Headings, a running footer and a repeated paragraph. It is the default. |
 | Scanned notes | 2 | Pictures of text with no text layer. Without OCR the parse is empty. |
-| Two-column report | 2 | Rows drawn across both columns. A plain parser joins halves of different sentences. |
+| Two-column report | 5 | Rows drawn across both columns. A plain parser joins halves of different sentences. Two of its 12 questions are planted to miss on the default pipeline: one answer is only in a page footer, and one comes back below the pieces checked. |
 | Table of figures | 2 | Answers in a ruled table. A plain parser loses the row labels; the heading chunker keeps the table whole. |
 
 Each sample has its own question set, so Evaluate scores the sample you loaded.

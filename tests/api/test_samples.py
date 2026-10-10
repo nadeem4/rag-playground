@@ -173,15 +173,25 @@ def _questions_of(name: str) -> list[dict]:
 
 def test_two_column_controls_hit_under_pdfium_and_the_straddlers_miss(tmp_path):
     text = _parse_text(ROOT / "samples" / "two-column-report" / "two-column-report.pdf", "pdfium", tmp_path)
-    hits = {q["id"]: " ".join(q["gold_answer"].split()) in text for q in _questions_of("two-column-report")}
-    assert hits == {"how-long": True, "faster": True, "lost-place": False, "extractor-error": False, "layout-never": True}
+    questions = _questions_of("two-column-report")
+    hits = {q["id"]: " ".join(q["gold_answer"].split()) in text for q in questions}
+    # Every answer that wraps inside a column is broken by a plain text parse, and is
+    # tagged so; the footer fact is read by pdfium, which has no furniture layer.
+    breaks = {q["id"] for q in questions if "misses if you change: Fast text" in q["tags"]}
+    assert breaks >= {"lost-place", "extractor-error"}
+    assert {i for i, hit in hits.items() if not hit} == breaks | {"most-gain"}
+    assert hits["fieldwork"] is True
 
 
 @pytest.mark.models
-def test_two_column_gold_answers_all_hit_under_docling(tmp_path):
-    text = _parse_text(ROOT / "samples" / "two-column-report" / "two-column-report.pdf", "docling", tmp_path)
+def test_two_column_gold_answers_all_hit_under_docling_but_the_footer(tmp_path):
+    """Docling keeps every column whole; the footer fact is set aside as furniture, by design."""
+    pdf = ROOT / "samples" / "two-column-report" / "two-column-report.pdf"
+    text = _parse_text(pdf, "docling", tmp_path)
     for q in _questions_of("two-column-report"):
-        assert " ".join(q["gold_answer"].split()) in text, q["id"]
+        assert (" ".join(q["gold_answer"].split()) in text) is (q["id"] != "fieldwork"), q["id"]
+    with_footers = _parse_text(pdf, "docling", tmp_path, content_layers=["body", "furniture"])
+    assert "Fieldwork by the Reading Lab" in with_footers
 
 
 def test_table_prose_controls_hit_under_pdfium_and_the_rows_miss(tmp_path):

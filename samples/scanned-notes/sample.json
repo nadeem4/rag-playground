@@ -1,9 +1,19 @@
 {
   "name": "scanned-notes",
   "title": "Scanned notes",
-  "blurb": "Two pages that are pictures of text. There is no text layer to read.",
-  "shows": "Without OCR the parse returns nothing, so nothing can be found. Turn OCR on in the Parse step to recover it.",
+  "blurb": "Four pages that are pictures of text. There is no text layer to read.",
+  "shows": "Without OCR the parse returns nothing, so every question is planted to miss. Turn OCR on in the Parse step and every answer comes back.",
   "stresses": "parse",
-  "pages": 2,
-  "default": false
+  "pages": 4,
+  "default": false,
+  "teaches": [
+    {
+      "question": "*",
+      "kind": "designed to miss",
+      "lost_at": "parse",
+      "why": "Every page is a picture with no text layer, so the parse finds no text and nothing can be searched.",
+      "fix": {"stage": "parse", "transform": "docling", "config": {"do_ocr": true}},
+      "fix_text": "In Parse, turn on OCR so every page is read."
+    }
+  ]
 }

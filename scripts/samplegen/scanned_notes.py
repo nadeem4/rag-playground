@@ -1,4 +1,7 @@
-"""`scanned-notes`: two pages that are pictures of text, with no text layer.
+"""`scanned-notes`: four pages that are pictures of text, with no text layer.
+
+Every question is planted to miss without OCR (the parse finds no text at all)
+and is found with OCR on; see `samples/scanned-notes/sample.json`, `teaches`.
 
 Each page is prose rendered to a grayscale image with Pillow's bundled font and
 embedded as the page's only content. pdfium reads nothing; docling with OCR on
@@ -12,12 +15,12 @@ from PIL import Image, ImageDraw, ImageFont
 from scripts.samplegen.pdfwriter import Document, Page, PAGE_H, PAGE_W
 
 NAME = "scanned-notes"
-DPI = 100
-W, H = 850, 1100          # US Letter at 100 dpi
-MARGIN = 100
-FONT_SIZE = 22
-LEADING = 34
-WRAP = 62                  # characters per line at this size
+DPI = 150
+W, H = 1275, 1650        # US Letter at 150 dpi
+MARGIN = 150
+FONT_SIZE = 27
+LEADING = 40
+WRAP = 76                  # characters per line at this size
 
 PAGES: list[list[str]] = [
     [
@@ -35,6 +38,18 @@ PAGES: list[list[str]] = [
         "For retrieval this matters more than it seems. A retriever can only find text "
         "it was given. If the parse of a scanned page returns nothing, the page is "
         "invisible to every question, however relevant it is.",
+        "Most office scanners save to PDF by default, so a folder of scanned letters "
+        "looks just like a folder of exported reports until someone tries to search it.",
+        "The difference matters most for old records. Letters, contracts and minutes "
+        "from before offices kept digital copies often exist only as scans.",
+        "A scanned page can also be tilted. A sheet fed into the scanner at a slight angle "
+        "gives lines of text that run downhill, and some OCR engines straighten them first "
+        "while others do not.",
+        "Colour scans are larger but not always better. For printed text, a clean black and "
+        "white scan at three hundred dots per inch is usually the best input an OCR engine "
+        "can get.",
+        "Phone photos of a page are scans too. They add shadows and curved lines, and an "
+        "OCR engine reads them worse than a flat scan of the same sheet.",
     ],
     [
         "What to check first",
@@ -50,6 +65,62 @@ PAGES: list[list[str]] = [
         "The habit to build is simple. Parse first, read the parse, and only then decide "
         "what the pipeline needs. A scanned page tells you within a second that it needs "
         "OCR, if you look.",
+        "Some scanners run OCR themselves and hide the text behind the picture. Such a "
+        "file looks scanned but parses like an exported one, which is why the parse, not "
+        "the look of the page, is the test.",
+        "The parse also tells you how much of a document is affected. A report where only "
+        "the signed last page was scanned needs OCR for one page, not forty.",
+        "A quick way to tell is to try to select a word on the page in a PDF viewer. Text "
+        "in a text layer highlights; a picture of text does not.",
+        "Some tools turn OCR on for every page as a safe default. It is safe, but it makes "
+        "every document slow to read, and it can replace a perfect text layer with an "
+        "imperfect guess.",
+    ],
+    [
+        "What OCR gets wrong",
+        "OCR reads shapes, so anything that changes a shape changes the reading. A smudge, "
+        "a staple hole or a crease across a word can turn one letter into another.",
+        "Numbers suffer most. Several digits look like letters to an engine that sees only "
+        "shapes, and a wrong digit is harder to spot than a wrong letter.",
+        "Layout suffers too. OCR on a page with two columns may read straight across them, "
+        "just as a plain text extractor does, unless the engine first finds the columns.",
+        "Tables are the hardest case. The engine sees the text in each cell but not always "
+        "the lines between them, so rows can come back joined or split.",
+        "Handwriting is mostly beyond a general OCR engine. Notes written in the margin are "
+        "often left out, or read as noise.",
+        "Stamps and signatures cause their own trouble. Ink that crosses printed text can "
+        "hide the words beneath it, or add letters that were never there.",
+        "Clean, high-contrast print is where OCR does best. On a crisp page of ordinary "
+        "type, most engines get nearly every word right.",
+        "Language matters as well. An engine set up for English struggles with accents, "
+        "other alphabets and words it has never seen, and may turn a rare name into a "
+        "common word.",
+        "Faint print, such as the last copy from a tired printer, loses thin strokes first, "
+        "and the letters with thin parts are the first to be misread.",
+        "Most engines give each word a confidence score as they read it. A low score is a "
+        "hint to check that word by eye before trusting it.",
+    ],
+    [
+        "How to check a scan",
+        "Start with a single page. Search the parsed text for a word you can see on the page; "
+        "if the search finds nothing, the page has no text yet.",
+        "Then turn OCR on and parse again. Compare a few lines of the output with the "
+        "picture, and look hardest at numbers, names and anything in a table.",
+        "Keep the OCR output, not just the answer it led to. When a question misses on a "
+        "scanned document, the first place to look is what the engine read.",
+        "If the scan is poor, scan it again before tuning anything. A cleaner picture at a "
+        "higher resolution fixes more than any setting further down the pipeline.",
+        "Finally, write down which documents were scanned. A collection that mixes scans "
+        "and exports needs OCR on for some files and off for the rest.",
+        "None of this is slow to do. Checking a scan takes a minute; finding out later "
+        "that a whole folder was invisible takes much longer.",
+        "It also helps to keep a few known questions for each scanned document, with the "
+        "sentence that answers each one. Asking them after every change shows at once "
+        "whether the text is still being read.",
+        "When the answers stop coming back, the parse is the first suspect, not the search. "
+        "A search cannot find a sentence that the engine never read.",
+        "The care repays itself many times over, because a document is read once and "
+        "searched for as long as it is kept.",
     ],
 ]
 
@@ -74,7 +145,9 @@ def render_page(paragraphs: list[str], number: int) -> bytes:
             draw.text((MARGIN, y), line, font=font, fill=0)
             y += LEADING + (8 if i == 0 else 0)
         y += LEADING // 2
-    draw.text((W - MARGIN - 80, H - 60), f"Page {number}", font=body, fill=96)
+    if y > H - 135:
+        raise ValueError(f"page {number}: the text runs into the page number (y={y})")
+    draw.text((W - MARGIN - 120, H - 90), f"Page {number}", font=body, fill=96)
     return image.tobytes()
 
 

@@ -147,7 +147,7 @@ describe("no em-dashes or en-dashes in visible text", () => {
     serve([SOURCE])
     render(<Evaluate />)
     await waitFor(() => expect(visibleText()).toMatch(/questions? ready/))
-    expect(visibleText()).toMatch(/Nothing scored yet/)
+    expect(visibleText()).toMatch(/1 question ready/)
     expect(visibleText()).not.toMatch(DASH)
   })
 

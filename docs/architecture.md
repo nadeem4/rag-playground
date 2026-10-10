@@ -147,6 +147,9 @@ relative paths, so the same code works in development, where Vite on port 5173 p
 - **Runs.** It posts the pipeline graph to `/api/runs` and opens an `EventSource` on the
   events, one per run.
 - **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.
+- **Miss trace.** Evaluate posts a question's answer sentences and the artifacts its run
+  made to `POST /api/trace`, which says the first step that lost the answer, with the
+  eval step's own matching.
 - **Sources.** Uploads, page images and the PDF itself come from `/api/sources`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
 - **Keys.** A key typed in the app is sent as a header on runs, sweeps and key checks.

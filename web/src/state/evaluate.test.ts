@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { Registry } from "@/api/types"
+import type { Registry, Trace, TraceStep } from "@/api/types"
 
 import {
   changeFor,
@@ -22,7 +22,11 @@ import {
   scoreFinding,
   storePreviousEvaluation,
   summarize,
+  fixHref,
+  traceRequest,
   type EvalPayload,
+  SWEEP_LIMIT,
+  batches,
 } from "./evaluate"
 import type { Question } from "./goldSet"
 import { e2eSampleGraph, removeNode, sampleGraph } from "./graph"
@@ -100,8 +104,8 @@ describe("the graph an evaluation runs", () => {
 
 describe("one sweep variant per question", () => {
   const questions: Question[] = [
-    { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [] },
-    { id: "b", question: "How big is a chunk?", gold_answers: ["One well.", "Or the other."], tags: ["size"] },
+    { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [], answer: "" },
+    { id: "b", question: "How big is a chunk?", gold_answers: ["One well.", "Or the other."], tags: ["size"], answer: "" },
   ]
 
   it("sets the question and its gold passages together, and keeps the rest of the config", () => {
@@ -120,7 +124,7 @@ describe("one sweep variant per question", () => {
 
   it("sends the single gold answer as well, so a server that has only that field still scores the run", () => {
     const query = { id: "query", stage: "query" as const, transform: "text", config: {} }
-    const [first] = questionVariants(query, [{ id: "a", question: "Q", gold_answers: [], tags: [] }])
+    const [first] = questionVariants(query, [{ id: "a", question: "Q", gold_answers: [], tags: [], answer: "" }])
     expect(first.config).toEqual({ text: "Q", gold_answer: "", gold_answers: [] })
   })
 })
@@ -267,8 +271,8 @@ describe("the warning about too few pieces", () => {
 
 describe("the reason for a row", () => {
   it("gives each row its reason as one sentence", () => {
-    expect(reasonText(pay(true, 1), 5)).toBe("Found in the 1st piece.")
-    expect(reasonText(pay(true, 2, { match: "normalized" }), 5)).toBe("Found in the 2nd piece. The match ignores case and spacing.")
+    expect(reasonText(pay(true, 1), 5)).toBe("Found in the 1st piece, word for word.")
+    expect(reasonText(pay(true, 2, { match: "normalized" }), 5)).toBe("Found in the 2nd piece, after ignoring spacing and capitals.")
     expect(reasonText(pay(false, null, { found_at: 7 }), 5)).toBe("Found 7th, below the 5 pieces checked.")
     expect(reasonText(pay(false, null, { returned: 6 }), 5)).toBe("Not in any of the 6 pieces that came back, so no number of pieces checked would find it.")
   })
@@ -311,6 +315,8 @@ describe("the score as a finding", () => {
     const f = scoreFinding(summarize(now), before, now.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5)
     expect(f.finding).toBe("3 of 5 questions found the answer. The last run found 5 of 5.")
     expect(f.sub).toBe("Hit rate at 5 pieces: 60%. Both misses are new since Parse changed to Fast text.")
+    // The note is the sub line without the hit rate, which the numbers row already shows.
+    expect(f.note).toBe("Both misses are new since Parse changed to Fast text.")
   })
 
   it("says every answer came back first on a clean first run", () => {
@@ -318,6 +324,7 @@ describe("the score as a finding", () => {
     const f = scoreFinding(summarize(now), null, now.map((p) => ({ now: p })), steps("docling", "Docling"), 5)
     expect(f.finding).toBe("2 of 2 questions found the answer.")
     expect(f.sub).toBe("Hit rate at 5 pieces: 100%. Every answer came back as the top piece.")
+    expect(f.note).toBe("Every answer came back as the top piece.")
   })
 
   it("counts the new misses, and says since the last run when no single step changed", () => {
@@ -381,6 +388,7 @@ describe("the score as a finding", () => {
     expect(scoreFinding(summarize([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 3)).toEqual({
       finding: "1 of 1 question found the answer.",
       sub: "Hit rate at 3 pieces: 100%.",
+      note: "",
     })
   })
 })
@@ -518,5 +526,69 @@ describe("what the reranker did", () => {
     expect(rerankLine({ up: 3, down: 1, same: 1, judged: 5 })).toBe(
       "Rerank moved the answer up for 3 of the 5 questions that found it, and down for 1.",
     )
+  })
+})
+
+describe("traceRequest", () => {
+  const g = e2eSampleGraph(LIVE, SRC)
+  const idOf = (stage: string) => g.nodes.find((n) => n.stage === stage)!.id
+  const artifacts: Record<string, string> = Object.fromEntries(g.nodes.map((n) => [n.id, `a-${n.stage}`]))
+
+  it("sends each step's artifact and plain name, with the reranker's result as the one scored", () => {
+    const req = traceRequest(g, (id) => artifacts[id], ["The survey ran for six weeks."], 5)
+    expect(req).toEqual({
+      gold_answers: ["The survey ran for six weeks."],
+      parse: { id: "a-parse", name: "Docling" },
+      cleans: [{ id: "a-clean", name: "Remove duplicate blocks" }],
+      chunk: "a-chunk",
+      retrieve: "a-retrieve",
+      final: "a-rerank",
+      rerank_name: "MMR (variety)",
+      top_k: 5,
+    })
+  })
+
+  it("scores the retrieve result itself when there is no reranker", () => {
+    const req = traceRequest(removeNode(g, idOf("rerank")), (id) => artifacts[id], ["x"], 3)
+    expect(req?.final).toBe("a-retrieve")
+    expect(req?.rerank_name).toBeNull()
+  })
+
+  it("links a lost step to its card on Build, and the second cleaner to the second Clean card", () => {
+    const steps = (stages: string[], lost: number) =>
+      stages.map((stage, i) => ({ stage, name: stage, status: i === lost ? "lost" : "pass", sentence: "", evidence: null })) as TraceStep[]
+    const trace = (stages: string[], lost: number): Trace => ({ finding: "", lost_at: null, fix: null, golds: [], steps: steps(stages, lost) })
+    expect(fixHref(g, trace(["parse", "clean", "chunk"], 0))).toBe(`/build?step=${idOf("parse")}`)
+    expect(fixHref(g, trace(["parse", "clean", "chunk", "search"], 3))).toBe(`/build?step=${idOf("retrieve")}`)
+    expect(fixHref(g, trace(["parse", "clean", "chunk", "search", "rerank"], 4))).toBe(`/build?step=${idOf("rerank")}`)
+    expect(fixHref(g, trace(["parse", "clean", "chunk", "search", "top_k"], 4))).toBeNull()
+    expect(fixHref(g, trace(["parse", "clean", "chunk"], -1))).toBeNull()
+    const first = idOf("clean")
+    const twoCleans = {
+      nodes: [...g.nodes, { ...g.nodes.find((n) => n.id === first)!, id: "clean_2" }],
+      edges: g.edges.flatMap((e) => (e.src === first ? [{ ...e, src: "clean_2" }, { src: first, dst: "clean_2", port: e.port }] : [e])),
+    }
+    expect(fixHref(twoCleans, trace(["parse", "clean", "clean", "chunk"], 2))).toBe("/build?step=clean_2")
+  })
+
+  it("is null until every step it needs has finished, or when there is nothing to look for", () => {
+    expect(traceRequest(g, (id) => (id === idOf("chunk") ? undefined : artifacts[id]), ["x"], 5)).toBeNull()
+    expect(traceRequest(g, (id) => artifacts[id], [], 5)).toBeNull()
+  })
+})
+
+describe("batches", () => {
+  it("splits questions into runs of at most the sweep limit, keeping their order and offsets", () => {
+    expect(SWEEP_LIMIT).toBe(10)
+    const items = Array.from({ length: 23 }, (_, i) => i)
+    const out = batches(items, SWEEP_LIMIT)
+    expect(out.map((b) => b.offset)).toEqual([0, 10, 20])
+    expect(out.map((b) => b.items.length)).toEqual([10, 10, 3])
+    expect(out.flatMap((b) => b.items)).toEqual(items)
+  })
+
+  it("keeps a short set in one run, and an empty one in none", () => {
+    expect(batches([1, 2], 10)).toEqual([{ offset: 0, items: [1, 2] }])
+    expect(batches([], 10)).toEqual([])
   })
 })

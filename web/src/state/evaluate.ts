@@ -1,4 +1,15 @@
-import type { EvalOutput, EvalPayload, GraphNode, Registry, SampleQuestion, Stage, Variant } from "@/api/types"
+import type {
+  EvalOutput,
+  EvalPayload,
+  GraphNode,
+  Registry,
+  SampleQuestion,
+  Stage,
+  Trace,
+  TraceRequest,
+  TraceStage,
+  Variant,
+} from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { ordinal, type HitRowData } from "@/components/inspectors/hits"
 import { strategyLabel } from "@/learn/challenges"
@@ -24,6 +35,20 @@ export function isEvalOutput(data: unknown): data is EvalOutput {
 }
 
 export const EVAL_TRANSFORM = "eval"
+
+/**
+ * The most recipes one sweep takes. The server refuses more (it bounds what a
+ * single request can ask of the hosted demo), so an evaluation with more
+ * questions runs as several sweeps, one after another.
+ */
+export const SWEEP_LIMIT = 10
+
+/** `items` cut into runs of at most `size`, each with the index of its first item. */
+export function batches<T>(items: readonly T[], size: number): { offset: number; items: T[] }[] {
+  const out: { offset: number; items: T[] }[] = []
+  for (let offset = 0; offset < items.length; offset += size) out.push({ offset, items: items.slice(offset, offset + size) })
+  return out
+}
 
 /** A graph can be evaluated only when something retrieves. */
 export function hasRetriever(g: PipelineGraph): boolean {
@@ -81,6 +106,63 @@ export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
     }))
 }
 
+/**
+ * What `POST /api/trace` needs to follow one question's answer down its run:
+ * each step's artifact and plain name, in column order. The result the eval
+ * step scored is the reranker's when there is one. Null until every step it
+ * reads has finished for this question, or when there is no answer to look for.
+ */
+export function traceRequest(
+  g: PipelineGraph,
+  artifact: (nodeId: string) => string | undefined,
+  golds: readonly string[],
+  topK: number,
+): TraceRequest | null {
+  const order = columnOrder(g)
+  const one = (stage: Stage) => order.find((n) => n.stage === stage)
+  const parse = one("parse")
+  const chunk = one("chunk")
+  const retrieve = one("retrieve")
+  const rerank = one("rerank")
+  const cleans = order.filter((n) => n.stage === "clean")
+  const ids = [parse, chunk, retrieve, rerank, ...cleans].filter((n) => n !== undefined).map((n) => artifact(n.id))
+  if (!parse || !chunk || !retrieve || !golds.length || ids.some((id) => id === undefined)) return null
+  return {
+    gold_answers: [...golds],
+    parse: { id: artifact(parse.id)!, name: strategyLabel(parse.transform) },
+    cleans: cleans.map((n) => ({ id: artifact(n.id)!, name: strategyLabel(n.transform) })),
+    chunk: artifact(chunk.id)!,
+    retrieve: artifact(retrieve.id)!,
+    final: artifact((rerank ?? retrieve).id)!,
+    rerank_name: rerank ? strategyLabel(rerank.transform) : null,
+    top_k: topK,
+  }
+}
+
+/** The Build card a lost trace step belongs to. Top k has none: it is set on Evaluate. */
+const TRACE_STAGE: Partial<Record<TraceStage, Stage>> = {
+  parse: "parse",
+  clean: "clean",
+  chunk: "chunk",
+  search: "retrieve",
+  rerank: "rerank",
+}
+
+/**
+ * Where "Change this step on Build" goes: Build with the lost step's card
+ * open. The nth Clean step of the trace is the nth Clean card. Null when
+ * nothing was lost, or the lost step has no card.
+ */
+export function fixHref(g: PipelineGraph, trace: Trace): string | null {
+  const at = trace.steps.findIndex((s) => s.status === "lost")
+  if (at < 0) return null
+  const stage = TRACE_STAGE[trace.steps[at].stage]
+  if (!stage) return null
+  const nth = trace.steps.slice(0, at).filter((s) => s.stage === trace.steps[at].stage).length
+  const node = columnOrder(g).filter((n) => n.stage === stage)[nth]
+  return node ? `/build?step=${encodeURIComponent(node.id)}` : null
+}
+
 /** A pipeline's steps in one line, by their plain names: a pipeline picker's help line. */
 export function pipelineLine(g: PipelineGraph): string {
   return pipelineSteps(g)
@@ -120,8 +202,8 @@ export function piecesWarning(pieces: number | null, topK: number, misses: reado
  */
 export function reasonText(p: EvalPayload, topK: number): string {
   if (p.hit) {
-    const where = typeof p.rank === "number" ? `Found in the ${ordinal(p.rank)} piece.` : `Found in the top ${topK} pieces.`
-    return p.match === "normalized" ? `${where} The match ignores case and spacing.` : where
+    const where = typeof p.rank === "number" ? `Found in the ${ordinal(p.rank)} piece` : `Found in the top ${topK} pieces`
+    return `${where}, ${p.match === "normalized" ? "after ignoring spacing and capitals" : "word for word"}.`
   }
   if (typeof p.found_at === "number") return `Found ${ordinal(p.found_at)}, below the ${topK} ${topK === 1 ? "piece" : "pieces"} checked.`
   if (typeof p.returned === "number") {
@@ -157,6 +239,8 @@ export interface ScoreFinding {
   finding: string
   /** `Hit rate at 5 pieces: 60%.` and, when it says something, why. */
   sub: string
+  /** `sub` without the hit rate, which the numbers row shows: empty when there is nothing more to say. */
+  note: string
 }
 
 /**
@@ -200,11 +284,11 @@ export function scoreFinding(
 
   const scored = rows.filter((r): r is { now: EvalPayload; before?: EvalPayload } => r.now !== undefined)
   if (scored.length > 0 && scored.length === rows.length && scored.every((r) => r.now.hit && r.now.rank === 1)) {
-    return { finding, sub: `${base} Every answer came back as the top piece.` }
+    return { finding, sub: `${base} Every answer came back as the top piece.`, note: "Every answer came back as the top piece." }
   }
   const misses = scored.filter((r) => !r.now.hit)
   const lost = misses.filter((r) => changeFor(r.now, r.before) === "lost").length
-  if (!previous || lost === 0) return { finding, sub: base }
+  if (!previous || lost === 0) return { finding, sub: base, note: "" }
   const step = changedStep(previous, steps, k)
   const since = step ? `since ${step}.` : "since the last run."
   const count =
@@ -213,7 +297,7 @@ export function scoreFinding(
       : lost === 1
         ? "The miss is new"
         : `${COUNT_WORDS[lost] ?? `All ${lost}`} misses are new`
-  return { finding, sub: `${base} ${count} ${since}` }
+  return { finding, sub: `${base} ${count} ${since}`, note: `${count} ${since}` }
 }
 
 // ------------------------------------------------------------- the metrics --

@@ -221,6 +221,18 @@ function Build({ registry }: { registry: Registry }) {
     }
   }, [])
 
+  // A step link from Evaluate's miss trace (`?step=<node id>`) opens that card.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const step = params.get("step")
+    if (step === null) return
+    if (graph.nodes.some((n) => n.id === step)) selectCard(step)
+    params.delete("step")
+    const rest = params.toString()
+    window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount by design
+  }, [])
+
   const [barNotice, setBarNotice] = useState<string | null>(null)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)

@@ -8,6 +8,7 @@ import { LESSONS_ENABLED } from "@/state/lessons"
 import { ApiKeyControl } from "./ApiKeyControl"
 import { DocumentControl } from "./DocumentControl"
 import { DisplaySettings } from "./ThemeToggle"
+import { BrandMark } from "@/components/BrandMark"
 
 const PRIMARY = [
   { href: "/", label: "Home" },
@@ -109,7 +110,8 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
     // zero basis, so it shrinks rather than wrapping) and holds the trigger at
     // its right end, before the controls. The page itself never scrolls sideways.
     <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-3 lg:gap-x-4">
-      <a href="/" className="order-1 text-sm font-semibold whitespace-nowrap text-fg no-underline">
+      <a href="/" className="order-1 inline-flex items-center gap-2 text-sm font-semibold whitespace-nowrap text-fg no-underline">
+        <BrandMark />
         RAG Playground
       </a>
       <nav className="order-3 flex w-full min-w-0 flex-wrap items-center gap-1 md:order-2 md:w-auto md:gap-0 lg:gap-1" aria-label="Main">

@@ -1,6 +1,6 @@
 [project]
 name = "rag-playground"
-version = "0.32.1"
+version = "0.34.0"
 description = "A local-first bench for learning and demonstrating RAG by experiment"
 requires-python = ">=3.13,<3.14"
 dependencies = [
@@ -44,12 +44,17 @@ dev = [
     "httpx2>=2.13.0",
     "pytest>=8.3",
     "pytest-cov>=5.0",
+    # Computes the next release version and its notes from Conventional Commits (cliff.toml).
+    "git-cliff==2.14.2",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["models: requires downloaded ML models (deselected by default)"]
-addopts = "-m 'not models'"
+markers = [
+    "models: requires downloaded ML models (deselected by default)",
+    "smoke: real-browser smoke test against a local demo server (deselected by default)",
+]
+addopts = "-m 'not models and not smoke'"
 
 [build-system]
 requires = ["hatchling"]

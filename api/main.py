@@ -17,6 +17,7 @@ from api import demo, expiry
 from api.deps import Deps, build_deps
 from api.routes import (
     artifacts,
+    health,
     learn,
     pages,
     questions,
@@ -25,6 +26,7 @@ from api.routes import (
     samples,
     settings,
     sources,
+    trace,
 )
 from api.runs import RunManager
 from api.static import mount_spa
@@ -54,6 +56,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     app.state.deps = deps or build_deps()
     app.state.runs = manager
     for r in (
+        health.router,
         registry.router,
         sources.router,
         pages.router,
@@ -63,6 +66,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         learn.router,
         samples.router,
         questions.router,
+        trace.router,
     ):
         app.include_router(r, prefix="/api")
     mount_spa(app, app.state.deps.web_dist)  # last: the catch-all route

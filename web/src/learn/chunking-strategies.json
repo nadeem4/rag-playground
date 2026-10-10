@@ -34,7 +34,7 @@
   },
   {
    "id": "rule-of-thumb",
-   "question": "How much should a single chunk cover?",
+   "question": "What is a useful rule of thumb for what one chunk should do?",
    "gold_answer": "A useful rule of thumb: a chunk should answer one question well.",
    "answer": "Enough to answer one question well",
    "tags": [
@@ -79,7 +79,7 @@
   },
   {
    "id": "overlap-too-large",
-   "question": "What happens if the overlap is as large as the chunk itself?",
+   "question": "What happens when the overlap and the chunk size are equal?",
    "gold_answer": "When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.",
    "answer": "The splitter loops or refuses to run",
    "tags": [
@@ -88,7 +88,7 @@
   },
   {
    "id": "heading-sections",
-   "question": "Why is a heading a good place to start a new piece?",
+   "question": "Why does structure-aware splitting cut at headings?",
    "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do.",
    "answer": "A section under one heading usually discusses one subject",
    "tags": [
@@ -105,10 +105,10 @@
    ]
   },
   {
-   "id": "longest-cut",
-   "question": "Which set liked the longest cut?",
-   "gold_answer": "The legal contracts did best with pieces of about eight hundred tokens",
-   "answer": "The legal contracts",
+   "id": "kept-whole",
+   "question": "Which set wanted each item kept whole, however long?",
+   "gold_answer": "The product questions and answers did best with one entry per piece",
+   "answer": "The product questions and answers",
    "tags": [
     "designed to miss: different words"
    ]
@@ -612,9 +612,9 @@
      },
      {
       "id": "rule-of-thumb",
-      "question": "How much should a single chunk cover?",
+      "question": "What is a useful rule of thumb for what one chunk should do?",
       "hit": true,
-      "rank": 4,
+      "rank": 1,
       "match": "exact"
      },
      {
@@ -647,16 +647,16 @@
      },
      {
       "id": "overlap-too-large",
-      "question": "What happens if the overlap is as large as the chunk itself?",
+      "question": "What happens when the overlap and the chunk size are equal?",
       "hit": true,
-      "rank": 5,
+      "rank": 1,
       "match": "exact"
      },
      {
       "id": "heading-sections",
-      "question": "Why is a heading a good place to start a new piece?",
+      "question": "Why does structure-aware splitting cut at headings?",
       "hit": true,
-      "rank": 3,
+      "rank": 1,
       "match": "exact"
      },
      {
@@ -667,8 +667,8 @@
       "match": "none"
      },
      {
-      "id": "longest-cut",
-      "question": "Which set liked the longest cut?",
+      "id": "kept-whole",
+      "question": "Which set wanted each item kept whole, however long?",
       "hit": false,
       "rank": null,
       "match": "none"
@@ -806,9 +806,9 @@
      },
      {
       "id": "rule-of-thumb",
-      "question": "How much should a single chunk cover?",
+      "question": "What is a useful rule of thumb for what one chunk should do?",
       "hit": true,
-      "rank": 4,
+      "rank": 1,
       "match": "exact"
      },
      {
@@ -841,16 +841,16 @@
      },
      {
       "id": "overlap-too-large",
-      "question": "What happens if the overlap is as large as the chunk itself?",
+      "question": "What happens when the overlap and the chunk size are equal?",
       "hit": true,
       "rank": 1,
       "match": "exact"
      },
      {
       "id": "heading-sections",
-      "question": "Why is a heading a good place to start a new piece?",
+      "question": "Why does structure-aware splitting cut at headings?",
       "hit": true,
-      "rank": 2,
+      "rank": 1,
       "match": "exact"
      },
      {
@@ -861,8 +861,8 @@
       "match": "exact"
      },
      {
-      "id": "longest-cut",
-      "question": "Which set liked the longest cut?",
+      "id": "kept-whole",
+      "question": "Which set wanted each item kept whole, however long?",
       "hit": true,
       "rank": 1,
       "match": "exact"
@@ -965,9 +965,9 @@
      },
      {
       "id": "rule-of-thumb",
-      "question": "How much should a single chunk cover?",
+      "question": "What is a useful rule of thumb for what one chunk should do?",
       "hit": true,
-      "rank": 4,
+      "rank": 1,
       "match": "exact"
      },
      {
@@ -1000,16 +1000,16 @@
      },
      {
       "id": "overlap-too-large",
-      "question": "What happens if the overlap is as large as the chunk itself?",
+      "question": "What happens when the overlap and the chunk size are equal?",
       "hit": true,
       "rank": 1,
       "match": "exact"
      },
      {
       "id": "heading-sections",
-      "question": "Why is a heading a good place to start a new piece?",
+      "question": "Why does structure-aware splitting cut at headings?",
       "hit": true,
-      "rank": 2,
+      "rank": 1,
       "match": "exact"
      },
      {
@@ -1020,10 +1020,10 @@
       "match": "exact"
      },
      {
-      "id": "longest-cut",
-      "question": "Which set liked the longest cut?",
+      "id": "kept-whole",
+      "question": "Which set wanted each item kept whole, however long?",
       "hit": true,
-      "rank": 1,
+      "rank": 3,
       "match": "exact"
      }
     ]

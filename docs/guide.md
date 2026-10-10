@@ -38,9 +38,9 @@ default pipeline so that Evaluate has something to explain:
 
 | Sample | Questions | Planted to miss, and the fix |
 |---|---|---|
-| A primer on chunking | 12 | One answer is a sentence longer than a piece (lost at Chunk; 800-character pieces or By sentence find it). One question uses words the document never does (ranked below the pieces checked; a PRF rewrite finds it). |
+| A primer on chunking | 12 | One answer is a sentence longer than a piece (lost at Chunk; 800-character pieces or By sentence find it). One question uses words the document never does (ranked far below the pieces checked; a PRF rewrite finds it). |
 | Two-column report | 12 | One fact is only in a page footer (lost at Parse; read headers and footers in Parse). One answer is ranked below the pieces checked (the cross-encoder reranker finds it). Six more miss if you switch Parse to Fast text. |
-| Table of figures | 12 | One answer is on the scanned page (lost at Parse; turn on OCR). One question uses words the document never does (a PRF rewrite finds it). |
+| Table of figures | 12 | One answer is on the scanned page (lost at Parse; turn on OCR). One question uses words the document never does (ranked far below the pieces checked; the cross-encoder reranker finds it). |
 | Scanned notes | 8 | Every question misses without OCR and is found with it. |
 
 The tags say which questions are planted ("designed to miss: ...") and which miss only after

@@ -17,14 +17,14 @@
    "question": "How long did the survey run?",
    "parsers": {
     "pdfium": {
-     "ms": 94,
+     "ms": 102,
      "chars": 11745,
      "hits": 4,
      "ocr": false,
      "excerpt": "Reading order in two-column reports The survey ran for six weeks. Two hundred Errors followed the same pattern. When a readers took part, and each read the same"
     },
     "docling": {
-     "ms": 3033,
+     "ms": 3928,
      "chars": 11719,
      "hits": 10,
      "ocr": false,
@@ -42,14 +42,14 @@
    "question": "How many readers lost their place before and after the reset?",
    "parsers": {
     "pdfium": {
-     "ms": 86,
+     "ms": 191,
      "chars": 7292,
      "hits": 10,
      "ocr": false,
      "excerpt": "Measure Before After Change Reading time per page 84 s 61 s -27% Readers who lost their place 41 16 -61% Questions answered correctly 72% 88% +16 pts Pages rer"
     },
     "docling": {
-     "ms": 5567,
+     "ms": 5145,
      "chars": 8086,
      "hits": 10,
      "ocr": false,
@@ -67,14 +67,14 @@
    "question": "What does a scanner actually do to a page?",
    "parsers": {
     "pdfium": {
-     "ms": 73,
+     "ms": 82,
      "chars": 0,
      "hits": 0,
      "ocr": false,
      "excerpt": null
     },
     "docling": {
-     "ms": 13690,
+     "ms": 13619,
      "chars": 5760,
      "hits": 8,
      "ocr": true,
@@ -93,14 +93,14 @@
   "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
   "parsers": {
    "pdfium": {
-    "ms": 83,
+    "ms": 115,
     "chars": 11482,
     "hits": 10,
     "ocr": false,
     "excerpt": "Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it a"
    },
    "docling": {
-    "ms": 5374,
+    "ms": 3916,
     "chars": 11207,
     "hits": 10,
     "ocr": false,

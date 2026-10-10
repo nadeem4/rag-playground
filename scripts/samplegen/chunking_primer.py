@@ -2,8 +2,8 @@
 
 Six pages of original prose about chunking in RAG, ending in a short glossary.
 Two questions are planted to miss on the default pipeline: one evidence sentence
-is longer than a default chunk (lost at Chunk), and one glossary entry is asked
-for in other words among look-alike entries (ranked below the pieces checked).
+is longer than a default chunk (lost at Chunk), and one of five look-alike results
+on page 4 is asked for in other words (ranked far below the pieces checked).
 The layout is built to exercise the default pipeline:
 
 * bold, larger headings, so a layout parser labels them as headings;
@@ -52,8 +52,7 @@ LONG_SENTENCE = (
     "a whole page."
 )
 
-#: A glossary entry among look-alike entries; the question asks for it in other words,
-#: so the search ranks it below the pieces checked: the search-side planted miss.
+#: One glossary entry, named so the page builder can place it.
 GLOSSARY_TOP_K = "Top k. How many of the best-scoring chunks a search hands on to the next step."
 
 #: Each page is a list of (style, text) blocks in reading order.

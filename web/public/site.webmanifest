@@ -1,0 +1,12 @@
+{
+  "name": "RAG Playground",
+  "short_name": "RAG Playground",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "theme_color": "#0f6e51",
+  "background_color": "#f5f6f4",
+  "display": "browser",
+  "start_url": "/"
+}

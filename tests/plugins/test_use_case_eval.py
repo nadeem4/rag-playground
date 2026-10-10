@@ -76,8 +76,8 @@ def test_declares_an_explicit_result_port_and_an_ambient_query():
     assert EvalUseCase.inputs["query"].ambient is True
 
 
-def test_version_is_2_so_reports_without_found_at_and_returned_are_not_served():
-    assert EvalUseCase.version == "2"
+def test_version_is_3_so_reports_scored_by_an_older_rule_are_not_served():
+    assert EvalUseCase.version == "3"
 
 
 def test_is_cacheable_and_deterministic():
@@ -428,3 +428,42 @@ def test_explain_names_top_k():
 def test_explain_warns_and_blocks_when_nothing_would_be_checked():
     exp = EvalUseCase().explain(EvalConfig(top_k=0))
     assert exp.warning and exp.blocking is True
+
+
+# --------------------------------------------------------------------------
+# a table row given two ways is one passage
+# --------------------------------------------------------------------------
+
+ROW_BARS = "| Readers who lost their place | 41 | 16 | -61% |"
+ROW_PLAIN = "Readers who lost their place 41 16 -61%"
+
+
+def test_a_table_row_with_and_without_bars_counts_as_one_passage():
+    """The table sample gives each row both ways, so whichever way the parser
+    writes the table, it matches. That is one passage, not two: recall must not
+    read 50% when retrieval was perfect."""
+    for text in ("Results\n" + ROW_BARS + "\n", f"Results {ROW_PLAIN} and more"):
+        payload = run(hit(text), gold=ROW_BARS, golds=[ROW_BARS, ROW_PLAIN]).payload
+        assert payload["hit"] is True
+        assert (payload["golds_total"], payload["golds_found"]) == (1, 1)
+
+
+def test_two_different_rows_are_still_two_passages():
+    other = "| Reading time per page | 84 s | 61 s | -27% |"
+    payload = run(hit(ROW_BARS), gold=ROW_BARS, golds=[ROW_BARS, other]).payload
+    assert (payload["golds_total"], payload["golds_found"]) == (2, 1)
+
+
+def test_the_table_sample_reads_full_recall_when_every_row_is_found():
+    import json as _json
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).resolve().parents[2]
+    questions = _json.loads((root / "samples" / "table-of-figures" / "questions.json").read_text(encoding="utf-8"))
+    rows = [q for q in questions if q["gold_answer"].startswith("|")]
+    assert rows, "the table sample should carry table-row questions"
+    for q in rows:
+        golds = [q["gold_answer"], *q.get("gold_answers", [])]
+        text = "A table\n" + q["gold_answer"] + "\n"
+        payload = run(hit(text), gold=q["gold_answer"], golds=golds).payload
+        assert (payload["golds_total"], payload["golds_found"]) == (1, 1)

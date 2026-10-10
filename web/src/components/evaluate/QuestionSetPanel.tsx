@@ -1,4 +1,4 @@
-import { useId, useRef } from "react"
+import { useId, useRef, type ReactNode } from "react"
 import { Upload } from "lucide-react"
 
 import { api } from "@/api/client"
@@ -37,6 +37,7 @@ export function QuestionSetPanel({
   disabled,
   onUpload,
   onRemove,
+  extra,
 }: {
   inUse: InUse
   set: StoredQuestionSet | null
@@ -54,6 +55,8 @@ export function QuestionSetPanel({
   disabled: boolean
   onUpload: (file: File) => void
   onRemove: () => void
+  /** A quiet sentence after the set line, such as what found means at this k. */
+  extra?: ReactNode
 }) {
   const id = useId()
   const demo = useDemo()
@@ -114,6 +117,7 @@ export function QuestionSetPanel({
               {n ? <strong className="font-semibold text-fg">{n}</strong> : "The questions"} from the sample, {name}.
             </>
           )}
+          {extra ? <> {extra}</> : null}
         </p>
         <details data-testid="own-questions" className="group text-sm text-fg-muted">
           <summary className="inline-flex cursor-pointer list-none items-center text-primary underline underline-offset-4">Use your own questions</summary>

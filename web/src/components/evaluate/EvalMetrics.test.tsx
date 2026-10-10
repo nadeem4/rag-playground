@@ -1,10 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { EvalPayload } from "@/api/types"
 import { metrics, metricsByTag } from "@/state/evaluate"
 
-import { EvalMetricsDetail } from "./EvalMetrics"
+import { EvalNumbers } from "./EvalMetrics"
 
 function payload(over: Partial<EvalPayload> = {}): EvalPayload {
   return {
@@ -20,73 +20,65 @@ function payload(over: Partial<EvalPayload> = {}): EvalPayload {
   }
 }
 
-const show = (rows: { tags: string[]; payload?: EvalPayload }[], rerank: string | null = null) =>
+const show = (
+  rows: { tags: string[]; payload?: EvalPayload }[],
+  { before = null, rerank = null, onExplain = () => {} }: { before?: (EvalPayload | undefined)[] | null; rerank?: string | null; onExplain?: () => void } = {},
+) =>
   render(
-    <EvalMetricsDetail
+    <EvalNumbers
       metrics={metrics(rows.map((r) => r.payload))}
+      before={before ? metrics(before) : null}
       byTag={metricsByTag(rows)}
       topK={5}
       rerank={rerank}
+      onExplain={onExplain}
     />,
   )
 
 afterEach(cleanup)
 
-describe("the numbers behind the headline", () => {
-  it("folds under All the numbers, a link-styled disclosure that sits in the score", () => {
+describe("the numbers row", () => {
+  it("shows every number at once, each with its technical name", () => {
+    show([{ tags: [], payload: payload() }, { tags: [], payload: payload({ hit: false, rank: null }) }])
+    const row = screen.getByTestId("numbers")
+    expect(row.tagName).toBe("DL")
+    for (const label of ["Hit rate (Hit@5)", "Mean reciprocal rank (MRR)", "Average rank when found (mean rank)", "Middle rank when found (median rank)"]) {
+      expect(screen.getByText(label)).toBeTruthy()
+    }
+    expect(screen.getByText("50%")).toBeTruthy()
+    expect(screen.getByText("0.50")).toBeTruthy()
+  })
+
+  it("says what a number was when the last run differs", () => {
+    show([{ tags: [], payload: payload() }], { before: [payload({ hit: false, rank: null })] })
+    expect(screen.getByText("was 0%")).toBeTruthy()
+  })
+
+  it("adds recall only when a question has more than one passage", () => {
     show([{ tags: [], payload: payload() }])
-    const summary = screen.getByText("All the numbers")
-    expect(summary.tagName).toBe("SUMMARY")
-    expect(summary.className).toContain("inline-flex")
-    expect(summary.className).toContain("text-primary")
-    expect((summary.closest("details") as HTMLDetailsElement).open).toBe(false)
+    expect(screen.queryByText(/recall at 5/)).toBeNull()
+    cleanup()
+    show([{ tags: [], payload: payload({ golds_total: 2, golds_found: 1 }) }])
+    expect(screen.getByText("Evidence found (recall at 5)")).toBeTruthy()
   })
 
-  it("always gives the mean reciprocal rank and the rank of the first hit", () => {
-    show([{ tags: [], payload: payload({ rank: 1 }) }, { tags: [], payload: payload({ rank: 3 }) }])
-    expect(screen.getByTestId("average-rank").textContent).toMatch(/Average rank of the first hit2\.0/)
-    expect(document.body.textContent).toMatch(/Mean reciprocal rank0\.67/)
-    expect(screen.getByTestId("rank-spread").textContent).toMatch(/rank 11rank 31/)
-  })
-
-  it("leaves recall out when every question has one gold passage", () => {
-    show([{ tags: [], payload: payload({ golds_total: 1, golds_found: 1 }) }])
-    expect(document.body.textContent).not.toMatch(/Recall/)
-  })
-
-  it("shows recall at k when a question has more than one gold passage", () => {
-    show([
-      { tags: [], payload: payload({ golds_total: 3, golds_found: 2 }) },
-      { tags: [], payload: payload({ golds_total: 1, golds_found: 1 }) },
-    ])
-    expect(document.body.textContent).toMatch(/Recall at 575%/)
-    expect(document.body.textContent).toMatch(/3 of 4 gold passages were in the top 5/)
-  })
-
-  it("leaves the per-tag table out when the set has no tags", () => {
+  it("says the hit rate per tag in one line, only when there are tags", () => {
     show([{ tags: [], payload: payload() }])
     expect(screen.queryByTestId("by-tag")).toBeNull()
-  })
-
-  it("scores each tag when the set has tags", () => {
+    cleanup()
     show([
-      { tags: ["policy"], payload: payload({ rank: 1 }) },
-      { tags: ["policy"], payload: payload({ hit: false, rank: null }) },
-      { tags: ["refunds"], payload: payload({ rank: 2 }) },
+      { tags: ["table row"], payload: payload() },
+      { tags: ["table row"], payload: payload({ hit: false, rank: null }) },
+      { tags: ["sentence"], payload: payload() },
     ])
-    const table = screen.getByTestId("by-tag")
-    expect(table.textContent).toMatch(/policy1\/250%/)
-    expect(table.textContent).toMatch(/refunds1\/1100%/)
+    expect(screen.getByTestId("by-tag").textContent).toContain("By tag: sentence 1 of 1 found, table row 1 of 2 found.")
   })
 
-  it("says what is not known yet rather than showing a zero", () => {
-    show([{ tags: [], payload: undefined }])
-    expect(document.body.textContent).toMatch(/not yet/)
-  })
-
-  it("carries the reranker's line when there is a reranker, and has no em-dashes or en-dashes", () => {
-    show([{ tags: [], payload: payload() }], "Rerank moved the answer up for 1 of the 1 questions that found it, and down for 0.")
-    expect(screen.getByTestId("rerank-effect").textContent).toMatch(/Rerank moved the answer up/)
-    expect(document.body.textContent).not.toMatch(/[–—]/)
+  it("keeps the reranker's line, and opens the explanation from What these mean", () => {
+    const onExplain = vi.fn()
+    show([{ tags: [], payload: payload() }], { rerank: "The reranker moved 1 answer up.", onExplain })
+    expect(screen.getByTestId("rerank-effect").textContent).toBe("The reranker moved 1 answer up.")
+    fireEvent.click(screen.getByRole("button", { name: "What these mean" }))
+    expect(onExplain).toHaveBeenCalled()
   })
 })

@@ -2,7 +2,7 @@
 
 See why a RAG pipeline finds the answer, or misses it.
 
-[Live demo](https://nadeem4nk-rag-playground.hf.space) | [Docs](https://github.com/nadeem4/rag-playground/tree/main/docs) | [GitHub](https://github.com/nadeem4/rag-playground)
+[Live demo](https://rag.codewithnk.com) | [Docs](https://github.com/nadeem4/rag-playground/tree/main/docs) | [GitHub](https://github.com/nadeem4/rag-playground)
 
 ![The Build page: the index pipeline on the left, the Ask panel docked on the right with the rerank slope](web/public/clips/build.jpg)
 
@@ -30,7 +30,7 @@ so you can change one setting and see what it does.
 
 ## Try it online
 
-Open the [live demo](https://nadeem4nk-rag-playground.hf.space). There is no sign in.
+Open the [live demo](https://rag.codewithnk.com). There is no sign in.
 
 - Pick one of the bundled samples, or upload your own PDF. On the demo an upload can be
   up to 10 MB and 20 pages, a browser can keep 3 uploads at a time, and each upload is
@@ -39,7 +39,7 @@ Open the [live demo](https://nadeem4nk-rag-playground.hf.space). There is no sig
   rewrite. For those, add your own Anthropic, OpenAI or OpenRouter key with the key button
   at the top right. The key stays in that browser tab's memory.
 
-The [privacy page](https://nadeem4nk-rag-playground.hf.space/privacy) in the app says what
+The [privacy page](https://rag.codewithnk.com/privacy) in the app says what
 is kept, where and for how long. [docs/privacy.md](docs/privacy.md) says the same.
 
 ## Run it on your machine

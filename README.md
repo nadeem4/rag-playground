@@ -39,7 +39,7 @@ Open the [live demo](https://rag.codewithnk.com). There is no sign in.
   rewrite. For those, add your own Anthropic, OpenAI or OpenRouter key with the key button
   at the top right. The key stays in that browser tab's memory.
 
-The [privacy page](https://nadeem4nk-rag-playground.hf.space/privacy) in the app says what
+The [privacy page](https://rag.codewithnk.com/privacy) in the app says what
 is kept, where and for how long. [docs/privacy.md](docs/privacy.md) says the same.
 
 ## Run it on your machine

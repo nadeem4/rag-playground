@@ -5,7 +5,7 @@ import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DEMO = "https://nadeem4nk-rag-playground.hf.space"
+DEMO = "https://rag.codewithnk.com"
 
 
 def png_size(path: Path) -> tuple[int, int]:

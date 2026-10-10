@@ -1,9 +1,27 @@
 {
   "name": "table-of-figures",
   "title": "Table of figures",
-  "blurb": "A short study whose results sit in a ruled table, with prose around it.",
-  "shows": "A plain text parser turns the table into loose words. A layout parser keeps each row together, and the heading chunker keeps the table whole.",
+  "blurb": "Six pages of a small study: two ruled tables, a bar chart, a scanned page and notes.",
+  "shows": "A layout parser keeps each table row together, and a chart can only be read from its caption. Two questions are planted to miss: one answer is on a scanned page with no text, and one question uses words the document never does.",
   "stresses": "parse",
-  "pages": 2,
-  "default": false
+  "pages": 6,
+  "default": false,
+  "teaches": [
+    {
+      "question": "average-saving",
+      "kind": "designed to miss",
+      "lost_at": "parse",
+      "why": "The answer is on page 5, a scanned page with no text layer, so the parse has nothing to read there.",
+      "fix": {"stage": "parse", "transform": "docling", "config": {"do_ocr": true}},
+      "fix_text": "In Parse, turn on OCR so the scanned page is read."
+    },
+    {
+      "question": "left-for-later",
+      "kind": "designed to miss",
+      "lost_at": "rank",
+      "why": "The question says paperwork and another time where the document says manuals, legal texts and a later study, so the search ranks the answer far below the 5 checked.",
+      "fix": {"stage": "retrieve", "transform": "hybrid_rrf", "config": {"query_expansion": "prf"}},
+      "fix_text": "In the search settings, rewrite the question with PRF, which borrows the document's own words."
+    }
+  ]
 }

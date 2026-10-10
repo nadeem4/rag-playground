@@ -6,64 +6,70 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
 endobj
 3 0 obj
-<< /Length 2464 >>
+<< /Length 3103 >>
 stream
 BT /F2 18 Tf 72 720 Td (A small study of page layout) Tj ET
 BT /F1 11 Tf 72 688 Td (Two hundred readers read the same twelve documents twice, once in the original) Tj ET
 BT /F1 11 Tf 72 673 Td (layout and once after it was reset with a single column, wider margins and fewer) Tj ET
 BT /F1 11 Tf 72 658 Td (words per line. Every measure below compares the two readings.) Tj ET
-BT /F2 13 Tf 72 627 Td (Results) Tj ET
-BT /F2 10 Tf 72 601 Td (Table 1. Results of the study) Tj ET
-BT /F2 10 Tf 76 564 Td (Measure) Tj ET
-BT /F2 10 Tf 266 564 Td (Before) Tj ET
-BT /F2 10 Tf 356 564 Td (After) Tj ET
-BT /F2 10 Tf 446 564 Td (Change) Tj ET
-BT /F1 10 Tf 76 542 Td (Reading time per page) Tj ET
-BT /F1 10 Tf 266 542 Td (84 s) Tj ET
-BT /F1 10 Tf 356 542 Td (61 s) Tj ET
-BT /F1 10 Tf 446 542 Td (-27%) Tj ET
-BT /F1 10 Tf 76 520 Td (Readers who lost their place) Tj ET
-BT /F1 10 Tf 266 520 Td (41) Tj ET
-BT /F1 10 Tf 356 520 Td (16) Tj ET
-BT /F1 10 Tf 446 520 Td (-61%) Tj ET
-BT /F1 10 Tf 76 498 Td (Questions answered correctly) Tj ET
-BT /F1 10 Tf 266 498 Td (72%) Tj ET
-BT /F1 10 Tf 356 498 Td (88%) Tj ET
-BT /F1 10 Tf 446 498 Td (+16 pts) Tj ET
-BT /F1 10 Tf 76 476 Td (Pages reread at least once) Tj ET
-BT /F1 10 Tf 266 476 Td (2.9) Tj ET
-BT /F1 10 Tf 356 476 Td (1.4) Tj ET
-BT /F1 10 Tf 446 476 Td (-52%) Tj ET
-BT /F1 10 Tf 76 454 Td (Words per line) Tj ET
-BT /F1 10 Tf 266 454 Td (13) Tj ET
-BT /F1 10 Tf 356 454 Td (9) Tj ET
-BT /F1 10 Tf 446 454 Td (-31%) Tj ET
-BT /F1 10 Tf 76 432 Td (Satisfaction score) Tj ET
-BT /F1 10 Tf 266 432 Td (6.1) Tj ET
-BT /F1 10 Tf 356 432 Td (8.3) Tj ET
-BT /F1 10 Tf 446 432 Td (+2.2) Tj ET
-q 0.75 w 72 581 m 540 581 l S Q
-q 0.75 w 72 559 m 540 559 l S Q
-q 0.75 w 72 537 m 540 537 l S Q
-q 0.75 w 72 515 m 540 515 l S Q
-q 0.75 w 72 493 m 540 493 l S Q
-q 0.75 w 72 471 m 540 471 l S Q
-q 0.75 w 72 449 m 540 449 l S Q
-q 0.75 w 72 427 m 540 427 l S Q
-q 0.75 w 72 581 m 72 427 l S Q
-q 0.75 w 262 581 m 262 427 l S Q
-q 0.75 w 352 581 m 352 427 l S Q
-q 0.75 w 442 581 m 442 427 l S Q
-q 0.75 w 540 581 m 540 427 l S Q
-BT /F1 11 Tf 72 411 Td (The largest change was in readers who lost their place, which fell by more than) Tj ET
-BT /F1 11 Tf 72 396 Td (half. Reading time per page fell by about a quarter. Satisfaction rose by two points) Tj ET
-BT /F1 11 Tf 72 381 Td (on a ten point scale, the smallest change in relative terms and the one readers) Tj ET
-BT /F1 11 Tf 72 366 Td (mentioned first when asked.) Tj ET
+BT /F1 11 Tf 72 635 Td (The two readings were a month apart, so that readers had forgotten most of each) Tj ET
+BT /F1 11 Tf 72 620 Td (document, and half the readers met the reset layout first.) Tj ET
+BT /F2 13 Tf 72 589 Td (Results) Tj ET
+BT /F2 10 Tf 72 563 Td (Table 1. Results of the study) Tj ET
+BT /F2 10 Tf 76 526 Td (Measure) Tj ET
+BT /F2 10 Tf 266 526 Td (Before) Tj ET
+BT /F2 10 Tf 356 526 Td (After) Tj ET
+BT /F2 10 Tf 446 526 Td (Change) Tj ET
+BT /F1 10 Tf 76 504 Td (Reading time per page) Tj ET
+BT /F1 10 Tf 266 504 Td (84 s) Tj ET
+BT /F1 10 Tf 356 504 Td (61 s) Tj ET
+BT /F1 10 Tf 446 504 Td (-27%) Tj ET
+BT /F1 10 Tf 76 482 Td (Readers who lost their place) Tj ET
+BT /F1 10 Tf 266 482 Td (41) Tj ET
+BT /F1 10 Tf 356 482 Td (16) Tj ET
+BT /F1 10 Tf 446 482 Td (-61%) Tj ET
+BT /F1 10 Tf 76 460 Td (Questions answered correctly) Tj ET
+BT /F1 10 Tf 266 460 Td (72%) Tj ET
+BT /F1 10 Tf 356 460 Td (88%) Tj ET
+BT /F1 10 Tf 446 460 Td (+16 pts) Tj ET
+BT /F1 10 Tf 76 438 Td (Pages reread at least once) Tj ET
+BT /F1 10 Tf 266 438 Td (2.9) Tj ET
+BT /F1 10 Tf 356 438 Td (1.4) Tj ET
+BT /F1 10 Tf 446 438 Td (-52%) Tj ET
+BT /F1 10 Tf 76 416 Td (Words per line) Tj ET
+BT /F1 10 Tf 266 416 Td (13) Tj ET
+BT /F1 10 Tf 356 416 Td (9) Tj ET
+BT /F1 10 Tf 446 416 Td (-31%) Tj ET
+BT /F1 10 Tf 76 394 Td (Satisfaction score) Tj ET
+BT /F1 10 Tf 266 394 Td (6.1) Tj ET
+BT /F1 10 Tf 356 394 Td (8.3) Tj ET
+BT /F1 10 Tf 446 394 Td (+2.2) Tj ET
+q 0.75 w 72 543 m 540 543 l S Q
+q 0.75 w 72 521 m 540 521 l S Q
+q 0.75 w 72 499 m 540 499 l S Q
+q 0.75 w 72 477 m 540 477 l S Q
+q 0.75 w 72 455 m 540 455 l S Q
+q 0.75 w 72 433 m 540 433 l S Q
+q 0.75 w 72 411 m 540 411 l S Q
+q 0.75 w 72 389 m 540 389 l S Q
+q 0.75 w 72 543 m 72 389 l S Q
+q 0.75 w 262 543 m 262 389 l S Q
+q 0.75 w 352 543 m 352 389 l S Q
+q 0.75 w 442 543 m 442 389 l S Q
+q 0.75 w 540 543 m 540 389 l S Q
+BT /F1 11 Tf 72 373 Td (The largest change was in readers who lost their place, which fell by more than) Tj ET
+BT /F1 11 Tf 72 358 Td (half. Reading time per page fell by about a quarter. Satisfaction rose by two points) Tj ET
+BT /F1 11 Tf 72 343 Td (on a ten point scale, the smallest change in relative terms and the one readers) Tj ET
+BT /F1 11 Tf 72 328 Td (mentioned first when asked.) Tj ET
+BT /F1 11 Tf 72 305 Td (Every change in the table points the same way. No measure got worse after the reset,) Tj ET
+BT /F1 11 Tf 72 290 Td (and none of the differences was close to the margin of error.) Tj ET
+BT /F1 11 Tf 72 267 Td (Words per line is the one measure the reset set directly. The others followed from) Tj ET
+BT /F1 11 Tf 72 252 Td (it, which is why the study treats line length as the cause and the rest as effects.) Tj ET
 BT /F1 9 Tf 500 40 Td (Page 1) Tj ET
 endstream
 endobj
 4 0 obj
-<< /Length 977 >>
+<< /Length 2466 >>
 stream
 BT /F2 13 Tf 72 720 Td (What the numbers do not say) Tj ET
 BT /F1 11 Tf 72 694 Td (The table reports averages. Behind the reading time of 61 seconds per page after the) Tj ET
@@ -74,34 +80,300 @@ BT /F1 11 Tf 72 626 Td (A table is a good home for a number and a poor home for 
 BT /F1 11 Tf 72 611 Td (retrieved from this document, a row of the table carries its label and its values) Tj ET
 BT /F1 11 Tf 72 596 Td (together only if the parser kept the row together. A parser that reads the cells as) Tj ET
 BT /F1 11 Tf 72 581 Td (loose words leaves the number 61 with nothing to say what it measures.) Tj ET
+BT /F1 11 Tf 72 558 Td (Averages also hide who gained. Readers who read slowly to begin with gained the most) Tj ET
+BT /F1 11 Tf 72 543 Td (from the reset; the fastest readers gained almost nothing, because they rarely lost) Tj ET
+BT /F1 11 Tf 72 528 Td (their place in either layout.) Tj ET
+BT /F1 11 Tf 72 505 Td (The satisfaction score came from one question at the end of each document: how easy) Tj ET
+BT /F1 11 Tf 72 490 Td (was this to read, from one to ten. It measures what readers felt, not what they did,) Tj ET
+BT /F1 11 Tf 72 475 Td (and the two do not always agree.) Tj ET
+BT /F1 11 Tf 72 452 Td (Some changes interact. Fewer words per line means more lines per page and so more) Tj ET
+BT /F1 11 Tf 72 437 Td (pages, and a reader who turns more pages has more chances to lose their place at the) Tj ET
+BT /F1 11 Tf 72 422 Td (top of a new one. The reset still won, but by less than it would have without the) Tj ET
+BT /F1 11 Tf 72 407 Td (extra pages.) Tj ET
+BT /F1 11 Tf 72 384 Td (Finally, a month between readings is long enough to forget details but not the gist.) Tj ET
+BT /F1 11 Tf 72 369 Td (Some of the gain in correct answers may come from meeting the document a second) Tj ET
+BT /F1 11 Tf 72 354 Td (time, which is why half the readers saw the reset layout first.) Tj ET
+BT /F1 11 Tf 72 331 Td (None of this undoes the result. It says how far the numbers can be trusted, and) Tj ET
+BT /F1 11 Tf 72 316 Td (which questions the study cannot answer on its own.) Tj ET
 BT /F1 9 Tf 500 40 Td (Page 2) Tj ET
 endstream
 endobj
 5 0 obj
-<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+<< /Length 4147 >>
+stream
+BT /F2 13 Tf 72 720 Td (Results by document) Tj ET
+BT /F1 11 Tf 72 694 Td (Table 2 gives the reading time per page for each of the twelve documents in both) Tj ET
+BT /F1 11 Tf 72 679 Td (layouts. The difference is the extra time two columns cost, in seconds per page.) Tj ET
+BT /F2 10 Tf 72 656 Td (Table 2. Reading time per page for each document) Tj ET
+BT /F2 10 Tf 76 622 Td (Document) Tj ET
+BT /F2 10 Tf 266 622 Td (One column) Tj ET
+BT /F2 10 Tf 356 622 Td (Two columns) Tj ET
+BT /F2 10 Tf 446 622 Td (Difference) Tj ET
+BT /F1 10 Tf 76 603 Td (Bus timetable guide) Tj ET
+BT /F1 10 Tf 266 603 Td (40 s) Tj ET
+BT /F1 10 Tf 356 603 Td (55 s) Tj ET
+BT /F1 10 Tf 446 603 Td (+15 s) Tj ET
+BT /F1 10 Tf 76 584 Td (Tenancy agreement) Tj ET
+BT /F1 10 Tf 266 584 Td (92 s) Tj ET
+BT /F1 10 Tf 356 584 Td (104 s) Tj ET
+BT /F1 10 Tf 446 584 Td (+12 s) Tj ET
+BT /F1 10 Tf 76 565 Td (Recipe booklet) Tj ET
+BT /F1 10 Tf 266 565 Td (35 s) Tj ET
+BT /F1 10 Tf 356 565 Td (37 s) Tj ET
+BT /F1 10 Tf 446 565 Td (+2 s) Tj ET
+BT /F1 10 Tf 76 546 Td (Council newsletter) Tj ET
+BT /F1 10 Tf 266 546 Td (48 s) Tj ET
+BT /F1 10 Tf 356 546 Td (47 s) Tj ET
+BT /F1 10 Tf 446 546 Td (-1 s) Tj ET
+BT /F1 10 Tf 76 527 Td (Pension statement) Tj ET
+BT /F1 10 Tf 266 527 Td (71 s) Tj ET
+BT /F1 10 Tf 356 527 Td (86 s) Tj ET
+BT /F1 10 Tf 446 527 Td (+15 s) Tj ET
+BT /F1 10 Tf 76 508 Td (Product manual) Tj ET
+BT /F1 10 Tf 266 508 Td (66 s) Tj ET
+BT /F1 10 Tf 356 508 Td (79 s) Tj ET
+BT /F1 10 Tf 446 508 Td (+13 s) Tj ET
+BT /F1 10 Tf 76 489 Td (Insurance policy) Tj ET
+BT /F1 10 Tf 266 489 Td (88 s) Tj ET
+BT /F1 10 Tf 356 489 Td (101 s) Tj ET
+BT /F1 10 Tf 446 489 Td (+13 s) Tj ET
+BT /F1 10 Tf 76 470 Td (School report) Tj ET
+BT /F1 10 Tf 266 470 Td (44 s) Tj ET
+BT /F1 10 Tf 356 470 Td (52 s) Tj ET
+BT /F1 10 Tf 446 470 Td (+8 s) Tj ET
+BT /F1 10 Tf 76 451 Td (Energy bill) Tj ET
+BT /F1 10 Tf 266 451 Td (39 s) Tj ET
+BT /F1 10 Tf 356 451 Td (46 s) Tj ET
+BT /F1 10 Tf 446 451 Td (+7 s) Tj ET
+BT /F1 10 Tf 76 432 Td (Train ticket terms) Tj ET
+BT /F1 10 Tf 266 432 Td (57 s) Tj ET
+BT /F1 10 Tf 356 432 Td (69 s) Tj ET
+BT /F1 10 Tf 446 432 Td (+12 s) Tj ET
+BT /F1 10 Tf 76 413 Td (Library leaflet) Tj ET
+BT /F1 10 Tf 266 413 Td (33 s) Tj ET
+BT /F1 10 Tf 356 413 Td (38 s) Tj ET
+BT /F1 10 Tf 446 413 Td (+5 s) Tj ET
+BT /F1 10 Tf 76 394 Td (Job advert) Tj ET
+BT /F1 10 Tf 266 394 Td (41 s) Tj ET
+BT /F1 10 Tf 356 394 Td (50 s) Tj ET
+BT /F1 10 Tf 446 394 Td (+9 s) Tj ET
+q 0.75 w 72 636 m 540 636 l S Q
+q 0.75 w 72 617 m 540 617 l S Q
+q 0.75 w 72 598 m 540 598 l S Q
+q 0.75 w 72 579 m 540 579 l S Q
+q 0.75 w 72 560 m 540 560 l S Q
+q 0.75 w 72 541 m 540 541 l S Q
+q 0.75 w 72 522 m 540 522 l S Q
+q 0.75 w 72 503 m 540 503 l S Q
+q 0.75 w 72 484 m 540 484 l S Q
+q 0.75 w 72 465 m 540 465 l S Q
+q 0.75 w 72 446 m 540 446 l S Q
+q 0.75 w 72 427 m 540 427 l S Q
+q 0.75 w 72 408 m 540 408 l S Q
+q 0.75 w 72 389 m 540 389 l S Q
+q 0.75 w 72 636 m 72 389 l S Q
+q 0.75 w 262 636 m 262 389 l S Q
+q 0.75 w 352 636 m 352 389 l S Q
+q 0.75 w 442 636 m 442 389 l S Q
+q 0.75 w 540 636 m 540 389 l S Q
+BT /F1 11 Tf 72 373 Td (The council newsletter is the only row where two columns were not slower. Its) Tj ET
+BT /F1 11 Tf 72 358 Td (stories were short and stood alone, so readers rarely had to jump between columns.) Tj ET
+BT /F1 11 Tf 72 335 Td (The rows look alike on purpose: same columns, same units, numbers in the same range.) Tj ET
+BT /F1 11 Tf 72 320 Td (That is what most tables in real reports look like.) Tj ET
+BT /F1 11 Tf 72 297 Td (Longer documents cost more in two columns. The tenancy agreement and the insurance) Tj ET
+BT /F1 11 Tf 72 282 Td (policy, the two longest, also had among the biggest differences once their length is) Tj ET
+BT /F1 11 Tf 72 267 Td (taken into account.) Tj ET
+BT /F1 11 Tf 72 244 Td (The recipe booklet and the library leaflet were the shortest, and two columns cost) Tj ET
+BT /F1 11 Tf 72 229 Td (them almost nothing.) Tj ET
+BT /F1 11 Tf 72 206 Td (A reader who wants one number from this table needs both the row label and the) Tj ET
+BT /F1 11 Tf 72 191 Td (column heading. Lose either, and the number means nothing.) Tj ET
+BT /F1 9 Tf 500 40 Td (Page 3) Tj ET
+endstream
 endobj
 6 0 obj
-<< /Type /Page /Parent 7 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+<< /Length 2279 >>
+stream
+BT /F2 13 Tf 72 720 Td (The changes at a glance) Tj ET
+BT /F1 11 Tf 72 694 Td (The chart below shows the same six measures as Table 1, each as a change from its) Tj ET
+BT /F1 11 Tf 72 679 Td (value before the reset. Bars below the line are measures that fell; bars above it) Tj ET
+BT /F1 11 Tf 72 664 Td (are measures that rose.) Tj ET
+q 1 w 72 543 m 540 543 l S Q
+q 26 w 111 543 m 111 497 l S Q
+BT /F1 9 Tf 99 483 Td (-27%) Tj ET
+BT /F1 8 Tf 81 405 Td (Reading time) Tj ET
+q 26 w 189 543 m 189 440 l S Q
+BT /F1 9 Tf 177 426 Td (-61%) Tj ET
+BT /F1 8 Tf 159 405 Td (Lost place) Tj ET
+q 26 w 267 543 m 267 455 l S Q
+BT /F1 9 Tf 255 441 Td (-52%) Tj ET
+BT /F1 8 Tf 237 405 Td (Rereads) Tj ET
+q 26 w 345 543 m 345 491 l S Q
+BT /F1 9 Tf 333 477 Td (-31%) Tj ET
+BT /F1 8 Tf 315 405 Td (Words per line) Tj ET
+q 26 w 423 543 m 423 580 l S Q
+BT /F1 9 Tf 411 586 Td (+22%) Tj ET
+BT /F1 8 Tf 393 405 Td (Correct answers) Tj ET
+q 26 w 501 543 m 501 604 l S Q
+BT /F1 9 Tf 489 610 Td (+36%) Tj ET
+BT /F1 8 Tf 471 405 Td (Satisfaction) Tj ET
+BT /F2 10 Tf 72 387 Td (Figure 1. Change in each measure after the reset, as a percentage of the value before.) Tj ET
+BT /F1 11 Tf 72 361 Td (The chart makes the pattern easier to see than the table does: everything that costs) Tj ET
+BT /F1 11 Tf 72 346 Td (a reader effort went down, and everything a reader gains went up.) Tj ET
+BT /F1 11 Tf 72 323 Td (A chart like this is a picture. A parser reads its caption and its labels as text,) Tj ET
+BT /F1 11 Tf 72 308 Td (but the heights of the bars are only lines on the page, so the numbers behind them) Tj ET
+BT /F1 11 Tf 72 293 Td (are lost unless they are also written down, as they are in Table 1.) Tj ET
+BT /F1 11 Tf 72 270 Td (That is why a question about the chart can only be answered from its caption, or) Tj ET
+BT /F1 11 Tf 72 255 Td (from the table it was drawn from.) Tj ET
+BT /F1 11 Tf 72 232 Td (The two rising bars are the measures a reader would want to rise: answers that were) Tj ET
+BT /F1 11 Tf 72 217 Td (right, and how easy the documents felt to read.) Tj ET
+BT /F1 11 Tf 72 194 Td (The four falling bars are all kinds of effort: time on the page, losing one's place,) Tj ET
+BT /F1 11 Tf 72 179 Td (rereading, and the length of each line.) Tj ET
+BT /F1 9 Tf 500 40 Td (Page 4) Tj ET
+endstream
 endobj
 7 0 obj
-<< /Type /Pages /Kids [5 0 R 6 0 R] /Count 2 >>
+<< /Type /XObject /Subtype /Image /Width 850 /Height 1100 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length 25538 >>
+stream
+xÚì½y|UÕ¹ÿÿ$„œ$$DR.N " QkZ¡z¯­´ QT¬Ã½·’ bñz[q¨ÓÏ×K±zk­mmmE¤BQQ¿Š©2ˆH(*s²~{¯=­g­µ÷9'dø¼ÿàìáYÏzÖ³ÖsÎŞûò                                                                                                                                                                                                                            (6]uDÁAwdİ¬ªªª6CS"ÚÛxñ6®7 ™/z9K”ªšra£¢@S³òšÁeí;¹í_>”©Dÿ¼d%*
+´\ö]—G]_9àÁN´¬>{¨(Ğlø1Qï_¼¸ô±D…oè`ÚíªÏzFEæÂD#vË­ÿ$:zßş¼t¨@E–ÌP¢w¼­½ƒˆ=°ÁìEE–N'¢şæ¢Él‘Ü=òê¿wmßãûœ½¿œÕ¥]§/F+*æ”Ûş÷{µ+>ú²w"ÛwÏ*%q.Ñ¯Â "Z-O‰·÷şµƒ;·ï<øÚ÷…Ö\˜æî¹¯ÿ÷Û%ù½~²<<ÿÁŒcÊ:üÛ…ÍØûÀiµïò½;v†GõÎâƒ—¼uEŸâÂ~S>BE¢O‚8mÚ½qµ,×[½·‹çüu<G¤9%şÖİßÏ½5°ıÂ=$şL4$\ÊD'[JDì½ÒwKyWîåÍíµé0o/ÿÿ¼³µ?¸LÜ§UÔSı3‡údv¼ÃîI9Ş¹ÂPQ@ã¢›â.d”ŠÒé®%Oî¬¯W»—ÿjÉïœkÅœ¿§9õa1ÑŸøûŸ~â,¿¾íé¸û_{»Pî&¿·*¢ÿ/èùeÉ;ï¸Ÿ
+µg;ëuê3¯?3¥ÑÙµ¬yhş[ÏÒÜÙ˜Aßy|ñüşNI}è¬;Ÿèß~ù·×îv
+m‚6¼é[¾ö+gèå»‰¥³øà´#ª˜»ğµy½éTĞ¸Şy_şå´•»Ä]¥§ä½î®ÁïOsêì Vo :7øL¹ºÎİºšè¿·~Tø/Ë}ÔÏ‰zz_K}è|2ÌåÍ­÷Q…ç¸›»œ‹ÈËİ#·øÚİøêD~{è˜¶ö•»õµóQ5<¦³„àÅuDÇou7vü¡¢€FÍáÎ¢è>ıùo’+êlyàIgërëq¢£“OmkGeŸUD‡ø¶'z_9.§y]üÃyë·<™ø²ˆòŞô.Í¥¢­¬¹µ¢Š¿”[õu^¶S¿RWäĞwy›®©ø¬èukgIÁo, âO=ëoGEõ§Ë[‚‚íN¨(ïÊl­³õP°ĞÊ“O­8ùä©›İÎ•˜oû¨ßé@Êû\nT½d©¨_:×\áÑÑD¿äÍm5Q½yş'°úÑFÖæ¿ƒíIDS¬%?—èÊÀú.T0yñ?òeQõ~:¾¢¼_2ls¶şŸÜÚâ\f¥9Rçœªól×ø‡œE|¯ÜèO‡ÔZ*jÑ“áÑß}Ÿ7·U”ÿ@â+ç*ÖsğA`u#ÑS¬Møôï¢J{g	Á$z!8ûT°ñÍóÓÿÍY9¿Œ­(ïe—³å]1}MÔ.Í)‡O}ãE?1Ì÷è¼|íŸø¼•WdDÿ),uÑÚğèjïÂKin«¨·ÃÏ”é çÍw|œÏÁ»X›à©ˆø'Q'{g	Á‹è³Àú+Tˆ¡î™#µ¸”UÔWQE}®xïÚp§÷QtJüù
+Ù+ø·¡gy—}7­´UTµz¾ò>ô,‹W­¨ÍÌE!1nfmÂ¯¡œPsí%_Y|ÃØ>€è|¶H>W¾áÕÅ)wê:§BO›ó»—<c©(çâê>çåúH[QÛ3ª¨o˜‹^Qÿ#¬5°Kz¶u–|;Å|*
+Äó,QWoíø¿¢x»!õ{¢.KÙ"fk¹b%Ñı"æªoåª/©¢ø•jWõƒDo³-ØŞHÔÃÚYRğGß‰‹/PQ€óıa§lÿK^¹ïÁş¡ß4¤¢N#ú}xÀ¨(qåm7S‡mÖŠEô»ğèoÃ'™WÔ‰ê½‘Şæ½`û/DgZ;K
+şx¢?Ö‹PQ€ãÜ-Ü>Ÿğ{—­ğ\ÚŠ*#ªñ¼o«¨×İ§4FX+ê—D£Ã£ç„OÏ3¯¨DOVgôè±šµ™lO!ºÅÚYRğW]XÏDEÎmDÿ¶Åßş3Ñ(ç¥Oğƒ†mRQÂ‹£m%úÒé)Ï¡¹“/S”ûºpI}[QßØ+j™ÿs‡÷ˆzò6‡ùWµŸ•PşkgIÁ;®ı‡}5İPQ€ó¯Dßõ®¼>ş7¢çœ×Ë;	÷7
+µ?.lHE"š%÷;Ë“¾2Jâç”w5ußg¯(÷‡A=äïóÄÑ¯ôÅÛ>xhn>ñ?3øÁîæ#•%Ï”Î‘%Uóm¢kì%ï¸>E>›øúŒö¨( ±¨ˆ¨¢ê¥¥OLÎ'ºÊ=²Ê)¤^÷½öÇ¡tuC*êçå'|ıù)Çä}ÄWßg¹”K×‹˜Šr¼ÚaÊ³Ú/eõÅ{Ñ—X+j£óVqÚ#KŸ«r.àNßÇ+ê$:tŞâWoíî´Şcï,1øv!:üîÅ‹nûáª,ë<bÎŸãıô÷¼ıîŸ5¤¢j/	ü¾8À{ ­¾áŞ°™%öNşƒEîäØÿU8GıÿQš‹ç·Ï¹x§v¥¸Üÿ¶*gÂ®˜Î’ƒÿàpÿäI»QQÀ`ßSãú”´;è;7ş38²ââ^í‹›³moƒ¾ÏıG×v©#',	~·£­¾G‰N±%Äû?=öàvûÓ÷õÇŠı½Ûb¯(Q÷Ûs)(ê7ù-óiÆGSúu(:ò²7ElgÉÁïºë{Û•¹o¾áÍ‡Wƒßö ÿ Ò¯ ‰§rüÇi €?yùúÔw@£ %~„< Ğ8äçõšú9Ò                                                        ™-İ2Y8àÕD;_ÿ«YÅ–m8l,q”Æ]ƒI|?‹¨$ÕÄ£Ö*h	=¼Û¾æª%œUUõXõW«¨Jº+—a"›&ğÄyjeÜæB4[¾j	2¸®9…j	§FQíÍ|U×o\-¬¢
+hs.ÃD6Mà‰óÔº¯õZØ‡~ı*ª.ˆ›Ee*ªé*êó»-î6êÍèğ#•ÅİÏ[¥Øn¹pÇ’S—{µw,èôíG¼SM8¤à°	}o+Ç÷È¯¸0]ëGO¸/çR§Zçå«öE»XÛÄNˆ6œ—ªòÃ!Ú|ïà’0Bò•áÕŞx!aş	fÆÜ¦s§F®54•¡}4¾{{ßk¼‹¬"á‰RŒ£ÌüsjßTªï´OÕTê³™³`˜YÛk1Øú‹¢iƒ5¹pÒ¬”ÿzpøVê]u¼>²‘?nÎ¥Etƒ»7‘Íœ^N÷¹ÛO§Ú315Üóöl*5¾zL^é[^³ÿ¢Kë&r<C£YÛäNˆÆ¦.ZVÔ”—Îú¾ál"y±Êzãq„D}x'¸s›Î:jŞĞ4V†ö\ªÃÄ›ÎÍ)^šè"«Hx¢cïJŞ9¶ #­ªJ¥¯*©Ôg'J$[ †™µ=ÁÚ_è¾-VT‰ûî4™F‡{ĞBL¢i‘­Lã{Åô²ïĞQ{„ø+õs¬-jÿšûæÕM6[WÒu³÷õ÷îY^§Şn+:›ÜÄN£GXÛÄNœ½ŠÕa”DEKœ—é2ÂàjBíÇõ!OhfÌmwjä¼¡Å8êö“’â·İÏ,:¼6ÁEV‘ğD±œûF:å<æ¾>–sĞ¦(•úì¨W}Ê0Ì¬íYöşÚôUßT÷åm*‘sÅòş´Û#ÛÙòu-Äü>n}ì$Ú+ÄÕt…<ñ°lv5=$÷†ÓùZ×œÔŞIoä»Sut»/YÛÄNœ½„RQ—y«ºL™)µ7GDÔ‡ 3cnÓ¸S#×ÆQ·Óh–<2ˆ%¸È*(–sßè:ºØ³œ ?BüTê³£V”² 3k{ƒ½¿6]Q/º/›)78<œNy—Û¾-_ß¢RïÀ7Ÿ­"ÚîŞ)-”ûŞe~_Z¼ÖeJğ÷rº_ˆt§ïè4Ş6¹¢åjE=EÌ”Ú#"êCĞÌ˜ÛÜ‘ó†ã¨Û¾ä]<m^µ=ÁEv‘°D±œûFA#±úG©4fG©¨í½§Íö,{mº¢ÖD‡W÷#:æÖíŠ­÷Tv+Ñ!VLì)o:å‡Ù:ï¶]î†_rİìµ{ÎuU´XÌ'÷Û|¥mr'D[ÕŠZEÌ”Ú#"êÃ.w›Î9oh1º-TŸgÇºÈ.–(–sß¨6
+¿S"L¥1;JE­±÷œ6Ûk1ØúkÓµE«(±ûÑ3ò¨çÇ‚çTls¯XLşeÒ0ŸÖÊ»å^Íÿ£‡ÿowIyí»Î5À«Î5Â…®©Ú6±“ ¼`ùm1+JíÇ¡öa	—»MãEÎÚú»- Ma,ñ.²Š„'Šå<¬(¿Óş
+¯Ñó¥WTLïl¥h=)1ØûÃ÷QjE¹7¢ßónš=‹•şíy!N¤ùÎæ.iø-zEX#÷zÑ‡roÓª¯ı†?¤eóèc±;uš¨(xÛÄNôŠª1+JíÇÁñú°„Ëİ¦qÇ"gcúöºíé>£Hë"«Hx¢XÎõ«¾WèèÈ¹1;ú÷Qfïì´Ö“ƒ½?TTTQ‹F»ø+©cd{§|½Æ»ïUîgürÙjœwG-î–{c½[RÑ‡‚¤Çhî9=×Ó;¼I3k›ÜIBE9o‹ò)”Ú#úTˆú°„Ëİ¦q§š74•nHÕòÍQ×'¸È*(–sßèZšàY§ë#çÆì‰Œï­­'%{¡{T”ø”J>â5ªˆlË—¹ƒRÿ¢+=ï,‘±D_±4§ƒ{ç½¢‹ô±$§—{ò+:>üŞ¼ıĞòŸ8¯·Ğ¿Ë[Y¥mr'	µÃ¿ìW{ãq„(}Èšs›Æ:jŞĞ4Vºı+•~à™G£’\d	OË¹o´¾,xš]¾1:jÌNÈøŞÙúĞzRb°÷ºGE¹o:=n¸¾ÍlG´»à¦	ù¿qvfRÙÔ™'W$óu3^rËÅ…×msöæRé%Õ#©ÛŠ°—Ósä¥ÎR"÷£ŠµMì$¡¢Ä4`f•Ö[GXB½ŸQ.wçÎƒš74•¡]G%“gI½7%ºÈ&-Qªq`ô—bV]=ŒJ¨3mÌNÈøŞE\{ƒ½¿À=*JˆÚ+)?å·ŠíÚI‡æw+ŸŠÖİst‡ŠÑï ÅîŞŸ†t,xÇVÊq¿d/YÖşĞéÊã­»ˆÜŸ¦ìëHWém;Iª¨Å'¤rËôŞ¼8ö¸–SéçÏ¨ßW»àqçÁF­54ŒÕ¡ı~HIÑ17nMv‘M$Z¢TãĞè“)G9eŸi}v‚D&ô×^‹ÁÚ_8O ¡ú4æT¾àİ9PŸ¦ë$Kj+
+â~İ˜ábE€&Èß|:y§{zBô±pÀ'i‹;Õ˜ábE€&ÈßŞ!tÈ”Ù“ºĞ¨=Íf’.>Ó¤ábE€¦Èßîy'•å•}÷ÁÚ–1I.V                            ;-S–°B…«ÙXOÁ†İÄÿs"1Cû5©š]–ªwR–µ©‡P¡Ñ¤AÒ{Ù‰Ö>òz¬ã4ƒÌ<©ü$*j?‘éß:Ìòo"JYBÖ¦B…F“ıaÆìDëy=ÖqšAfT~Õ²+ªáĞè÷ç’Ú_ÕL‡ß’ÈNzPÙewVÕA‰*x§ıå2CõNñÎtòÂ¶¬U€‘I.zVŠş^ m*jzŞáŸ÷²ë ê£QÜqC¤ ùÈ5	B#ıÖÔ:?¢+İı7ózÖØ’Ê=&JCš9jëd%=¨ìr;›ê „	Ş±ukªŞ)Ş¹N^8Õ¬U€QUô­ı=/ Ei0p¨W”]‡ŠfĞqC¤ ùÈ¹¡ß“ª‰h¦Î¢¹µ"×ıŞA9/Û’Ê=&KC9jód%=íjwÕA	¼³j DDŞ5¼pªY› #Sô­ı=ÙDUêe×4äû¢Ë47D
+’œI‡”ô[RgÓ|–ìujåjaK*÷˜(iŠ ¶y²’Œv5;‹ê „Ş¥©¨È»¦“—PQZ€L9Ğ·Rô÷dUi0®¢ì:€†|_TQi:nˆ¤^QŠapHI¿%u6HçCsîšT¿q¥xL”†4EA6Òƒª\Ó¸³¨úwªà]šŠŠ¼k:y	¥k#*±VŠş/¾)ÆU”]Ğï«É´cõt¶RzE)„Á!‹È¢’:›¤ØŞ«ğÄöo‹¸ŠR<&JCš"ˆ éAU®iÜ­©.xç/Á-1¥zg:y	¥k#ªÊÁm»|•ú{¾øâfã9‹,VĞïS**¹ã†HAêµF/MÑHMÒık»~ÖŠR<&JCš"ˆ +éAE®iÜm‰­(UğÎ_o«c**ò®éä%T” ‹](Õáéïùâ‹›â*j5ûSş†ÀŸ]¾/“"©WÔ³¢¶¨e¤Î¦)Äãä_Z+Jí$IÒAYI†»65=KEqÁ»\úÌİ~1®¢BïšN^REñ õØ5ı=y\U²Èbu íò}™tÜ)H½¢jÌŠRYRgÓÊûAÏÄV”ÖI¬4¤>ÈBzPÙµ©éqÕA	¼+¥¿ù Ë°Ó¼k:yáT³66mD¦è[)ú{ò¸ª48d‘Åê Úåû2é¸!R|äé*Ê’:›¤I×U|),Iå“¥!ÍğAÒƒÊ®MM«J¸àİH)”ñ^©i§y×tòÂ©fmlŒL9Ğ·Rô÷¤Ui0pÈ"‹Õ´Ë÷eÒqC¤ ùÈÓU”%u6È{İK¾_Ğ…%©Üc²4¤>ÈFzPÙµ¨éiªƒ&x·´N­¾ªd²jgÕ Ôtò¢©V}Û™r o¥èïyN¥ÁÀ!,VĞ.ß—AÇ‘‚ä#OWQ–ÔYt ?.êì|<í«¤'mIÕ?õâ¤!k¬áƒ,¤Õ]SMOW”0Á»egu)4o“jgÕ ÔšE}¨¾mŒ\rÑ³Rô÷ü@#¥ÁĞ!‹,V0F.0}Ç‘‚ä#O[QfêLÈÚ“é×ò[­¼ÎŸ[’Ê=ÆHCB‹Føà€’ AØ8°ßsî)H 44[kEA[4!—5õ¯Wš_EA[´dš_EA[                            hã4®î mS< PLñ@ @AEĞH˜â €V”)8 ¨Eáª T ¨( PQ  T ¨( ZGE‚ƒ €TT sw{å \QÎ]U"# 4¼¢|»+Š~Œ                                                                         hıxê¾Ş¿Ù¶j\Ë¦Yz¾şW£a?úÀå¸å³!6mEí¬ªj!ix8Óï¶Õf¹ºÓMZQ5D-¤¢b"gÚóÁu¨¨6Ë€òßĞ¨¨F­¨&*ª¥ğ]¾³øpç£ñİÛW\ø‘—Òç¥Ü‹Ní›Jõö©4x¤²¸ûy«ø–¤öî¾ıˆµ¢H"úÑîŞ¹Ô©Öyùª}Ñ.!Vï‘vX#Ó‹²Å¢’oØI?¼	‡6a£ï™¦„îŸöË€èƒ1]>.VÓ¹è„§=cÖíæ{—tõ¦©>ºğ0Ñçw[ì›†­‚(®µèı Í!F3À(¤šÖ'Ÿ©h’âÍslN­á>§ÁZR=i‰h¹ü”‹Ñrû¹T‡‰7›S¼Tfalê¢…B,èHC«ª‡Ré«ÎÁ[©wÕtğzuËc"š9½œî³UÔl¢Ûn»Mü]êìÔLô–óúâÙTj|õ˜¼Ò·|ûyt±lñ$Mà'%O§Ú315ÜóÌSC×—İğ“fË£Gû}~NîKî1Şí”—Îú>å¿Eª.8ìO.œ4k„glµ
+2 ¸Ö¢÷ş5†¨Î  µ¢Ì¡ñ>yTÊ$Å&šGi™Zİ}&Nƒµ¤zâ‰h¹Ôv?Tˆ?Òtwû“’â·İ÷4:¼ÖÍBÅj÷¹E§œÇÜså´IˆnéM¢iê–ä:j¥~	W}¯Soù™x6¹‹s="Ö•t]ãl¾@ıë<ûÍíÊ÷¸¦ĞB~ÒemQû×Üw³nÒ3L]_vÇïbåî¸™N£œCZ·EK„{f¤ry§N¹ê+qß'Kc#À¨UÅ5Ş³0<¨Ãà´W”14Ş§•2Iq‰Ö¢´L­î>§ÁZR=ñŒD´`^rï¡vuì^+ù,yl-r³ğ€»}ÿ¾#&ĞB‘sõğş´ÛÕ-Éü>n•ì$Ú_QuİÉÉëôF¾;G·ûR\MIƒá´Ä·?›sı÷ªã']®¦+äëÃÒ’¦†®/»‡W=å¼üzJG¬ÛË¼…Q¦”6:¥¢¦º/oKc#À¨UÅ5Ş³0<¨Ãà´W”14Ş§•:I1‰Ö¢´L­î>§ÁZRMyGF"Z0ÒJçßq´Àù·/yº›Wmw³°Üİîç¼ßHRwÄ§¼+ü±[!ß|¶Šh{Â“‰Ëé~!~ĞUœZ¼Wl ÓÜ¯u™Bwùö¿£ñáègÚI5ïÒ›¦†®/;w›‰ÜÛ‘•T.ŒnŸ“)W‰TRQ/FÆF€Q« Šk½gaxP‡Áh¯(ch¼OËX‚IŠI´¥eju÷8Ö’jÊ;2ÑrùºØ»ë–·8…´Y}Ø³UÈc…?ô”«ûs«›ÚhËcÅÄÒOMBE=Oç‰ºƒÆˆ*çÖm>ÍsÜìÛïêT¶[8÷ui'½7ÛuŞ…ª´ä©¡ûo	–{f+‘{A²†J…Ñíê(Æ RmtJE­‰ö £VA×<záAó ƒUTüĞxŸúX”IŠI´¥eju÷8Ö’jªO¦–ˆ–Ë¯iä5.ÅœTĞ&ãñiaplƒœ×İ‘G=?f[.‹
+¦?ÿÎ²äŠÚ]R^û®sğ*Ív>×ºÎÿ£ÇªÀşrzZì,ùĞNºä»M\7ş$¨©¡û¯–]MÂZ¹ì´n·˜¥N©(ÅØ0jd@±æÑ{†uZæÕŠŠïS‹ŠM’=ÑZ”–©Õİgà4[5å™©l±œálıYˆş#?u]†×¯ĞÑŞÆºï·¥Ñ–8‘æ;ÿîJ®(ñCZ6>»S§‰
+÷w½èCy|Óª¯û%t¡xŠîÕOº|‹^‘¯køUŸL=—>s_^Œ]v–nõŠâ£Ó¿òö £V,5Ş;gxP‡¡e^6H;4íºGÅ&Éh-Ê˜©Uİgà4h¥šò¬©l‘lÈ«ô6~O?r|µ|‚pTÇğ°¸Ö}ê2®‹Fß,¯Ø;*[Á›«{‰²Ü^QÛˆ¼G8ÑÜsÜûçÓ;¼I3×±Ş«èCï†öGtÜ5¶`«~RÈ›=yW,î––,0z)ıİ»Ë[v¶n=?R}tá ˜± ÒÊ²üxôŞ9cˆê0ø ½i‡f.y%*6IöDkQÆL­ZQ8Z©¦¼##-–ÿ¥Ÿ{;Š‹¾¥R÷çHóäsX?ëË‚g¸åÅ§Tâ¼G¾FÊ–GWzŞYc‰¾M¿ÿ•ÎıÛQÓ~hùOœ×[èßÉ}J¼$§—ûù+:>²ŸMOt<Oè']–ætpïÛWt‘¡±ÀXè#iœû”¾4vÙiİ*kÄT]8 f¬¨´²,?½7Zcˆê0ø ½i‡f.y%*6IöDkQZ¦V¯¨œ­TSŞ‘‘ˆË@
+¾¥¾€şÏ}"]2yÖ™Ô{“òó—bV]=ŒJÈO¬7\ß…æª[’™T6uæÉ•É•WL“_ş•Afº?¿§çÈş¥ä=ês©ô’ê‘ÔmEØJ|’sˆ{ª”ÜL…—Ürqá5^h,05ô¥…tjõU%“ã—ê™¯?Rmtá ¸±`ÔÊö†E¿-­1Duø eƒôC3—|›¤˜DóSkºÏÄ©ßŠ™òt‰h±¿@l>Ig¹CJŠ¹q+ûa×'S,,<rŠ|4Sûàq%å§ü–mIêî9ºCÅè÷ĞbgçÊóo	ş•,>!•+¿À¸Ë{Ò»¯#]åvfYûC§Ë\ıê¼×8éñ§!‹Ş±ÇMŒ…¾ì¬.ÅƒæmŠ_vªg¾FüHµÑ…Ğ”`ÔÊz‰äE¿•röF£5†¨ƒĞkvhæ’¢b“—hc½•é>§~+nÊÒa&€dæT¾àİ×P$é f>¼Ó}ÈqBpëŠt  ìB‡L™=©Úƒd  áìwRY^Ùw¬E*                          Z8[ºe²ĞjfÓy YXD%)ë™ô¢}ÆÑYašƒm1Ú/lã§³iÙ‹¥¹SûGrÓ‹öµ¢Š2Û¬**I2’Í`eÒß<ÎLx²^ìÇÅÒÜ) ¸?‘^´¯U”9ØfUQIwlã§Sd*“W/öãbiî4‹…sà+ª™&&“Z`&Fİ„Õ¶QuôB)?>˜øŸE´/VâOSÍ‹—í‹× LPôÛn¹pÇ’S7O§Ï³ˆ-2ñB¿%|dÚ†úPÒŠûÅÁ?ËZ¨ãÒó%íù4ÅÏ`´ïe}^wÓóß€Ìê’–l+0½ÛˆfK)??/ŠœM´/^âJ’í‹Õ L’Pô£›‘?nÎ¥ER[)Kñ<‹Ø"/ôZrÁGUÛĞÈ\Zq¿¸1xgyu\z¾¤}¨¸˜fÃ$/£¤•#è…úgV›-ë¶l:zÑ|+rvÑ¾‰?õT¢l_¬`’„¢\€ïÓËY‹ç™b‹\¼P¶Ô•ÓfæÒ‰ûÅAÕZ(ã2ò%íÙõZòÖXMT/OÒ™îËízÖÖ?³ÚlÙf°­`ÓÑ‹æC‘³³Šö=$í,ê©DÙ¾XÀ$	E?ºÙòuµx)¶ÈÅeKMğQ9mÉ\q¿Ø1È³Ze\F¾0î€’g°Æj¢zÙsp;W¿æ>Wê²Ş™ÕfË6ƒm›^”YEÎÎ"Ú— ñ§J”í‹Õ L’Pô£{[¾¾åÿİå¬Äó±E.^è·d‚ÊiKæ2÷³a¹->.#_ËŠJÁ«	órµ›1$gM2«ÍVÜ¶l:zQ^9;‹Â]‚ÄŸz*Q¶/V0IB1xª!_·íÈZ<Ï[äâ…~K&ø¸F[Ë|(éÄıâÆàËH²Ê¸Œ|m5**yk¬&ÌËr÷eCî0Ñ€Ìj³eÁ6SQ¦ò4Í¬¨Ì$şÔS‰²}ñ€	Šêjt¥öf-gˆ-Z«	>n1*Š%YÜ/v¾¬k¡ŒË>=ZE%Í`M¼Ièå¸ÜâW™¥™å³e›Á6wÕ§èèióÁ+*3‰?õT:Ù¾@/¡èG·Ò¿ßïQñ<]lÑ2X›à£²–µ¡$‹ûÅAnj-”q%å+óLãåºS|§l§h`f•Ù²Í`[Á¦£—iE%Hü©§ÒÉöY5 %ıèî”¯×»w0Y‹çéb‹–ÁÚ™*J²¸_ìä¦ÖB—=_¡âb†3˜ÆË¶Â“Öå\©¶Ê6³úlÙf°­`èèeQQ	ê©DÙ¾8ÀD	E?ºòeîÓ·TÁ?ê!§‹-Zk|T*JJ²¸_ìj,-”qÙó*.f8ƒé¼ŒÍ¹ÒQÏÌê³e›Á6×ÑËª¢$şØ©xÙ¾8Àšd	E?ºí.¸iBAşoD†âyK¨W48]lÑ2X‹à£z½Å‡’,î;†Ke\1ÓJFf6ƒé¼¼L9Ç²'uÙfVŸ-Û¶˜^v/ñÇOÅÊöY5 =u½$	E¿íÚI‡æw»Ü<#7UU*ÒÅ-ƒµ>²;.±˜(î;†Ke\1ÓJFf6ƒé¼Ôõf_-dŸY}¶l3š;±¿Ï«­(ØÜ’ÇÕ„W¼µ!™­»¢âÄóH™uT”ÉŞ³•zg´îŠŠÏ»Lı**dîÄ‚şÛ”YĞº+ª…‹çí÷ŠÊë|Ñ¦6‘Y                          @Ëâ{ µ“±.]cØ(ñ=N‹.-‘ŒuéÒf¢—(¾‡Š­ŒuéÒf¢ô•(¾‡Š ËŠjkŸPˆÎ]^?"ù§EßÌëY.ºÆt-ø¸XuNç¢Ö¡E 1üÓ\²^‚^’øOØ:Y@p†M¤Ï”ÌLªG @ÖDBtîòÚZ‘»Tˆ½ƒr^Öşğ“fË£Gû}~NîKÂªvÈ**Tà‹×ÀKßóˆZ§´‰ô™Ò™‰ ² ÈHˆN.¯giÀ^gù_­\¿Oˆ9”wz«E8JXÕYEW}	xÉâ{zë4‚6‘>C:0CD5 êA$Dç-ò‰4wMªŸªÓà~ ¬ zÊyù›ü‹ÆµCkE%hà%‹ï­“m"}†t`†"ˆj ÔƒHˆÎ[äÛ{ØıUy÷oõnöş¤ñJ*VµCkE%hà%‹ï­ÓZDúLé@‘‘¢.I@–DBtş"_ÀÅ =½»­Dîu×)#iQ;ôÛna• —,¾g´N# hé3¥3Ad’„ ÔƒPˆÎ_äSp%¦,}¿HÖ²Š2ÅjVQ	xÉâ{fë4‚¦HŸ!˜¡T§ƒFÀ¢óÓ†ò¾gĞ3U”r¡—KŸ¹;/²ŠJĞÀKß3[§4EúéÀ¥úPQ a(BtŞbI×U|™eE•Òßİir'ĞÎKĞÀKßZk‘N@Ğé3¤3ADE†¡ÑÉÅt¯{É÷úq–5RÊ^¼W*wí¼¼dñ=¡µi‘>C:0CD¿åí•ÀÚ õ"¢sÓÇE§}•ôdvµ´N­¾ªd²ghçÅkà¥ß“0Å4‚†HŸ!#ÕWc÷XD•X ^DBtÎbª=™~í|;¯óçYU”XvV—âAó6y;¡v^¬^ñ=& ˜, hˆôÒ6©¾=¾éñŠ¢_`i€¶é 4M¤ Ğ ‘> @0Dú                                                               €ÖÃ–‡n™‡,´n¸n¶§½]#ôÓ4]7Š×…ET’jë¨©RhEµ³ªªq»6Ä+wRÉä¸›	,ÄFÏbà6¢ÙòµU”¯aßx]‡â•;) ÍÍoA°=‹mïZµ+ªY.STTcWÔçw[ÜmÔ›ŞîÊñ=ò+.üH1Ürÿà%§<îíşsjßTªï´OåNíİ:}ûßnÃy)÷‚á£	‡6a£2!ÜLu§ïù.”NÓ‹òÜ¢’oxpF?Áelúùİ('©,î~Ş*Í<t¨d,Ëú¼‚ÉãÑùZ^üjü`'ÑËc vìÒ~ ndIóçÛÛCL“EPQ“'ÍAù¯»{Ï¦Rã«Çä•¾ÎÈ7çÒ"ºÁİ[Ğ‘†VU¥ÒWİ½‰4hæôrºÏ³›ºh¡O§Ú315\©(n¦ºÓ÷<j'óèbéãIšÀƒ3û™M$/cÓÈëF9q+õ®º€^ÏÍC‡JÆ¢±Œ¢‡åñô‚–VQÌ‰w±mä1ˆHğxcÇîÙ³ âF–8¾=1Ó,‚„Š*qß†&ÓHçßu%]×8//Pÿºğ´Ìâ{Åô²:å<æ|,ç MB¼CGíâ¯ÔÏ³«Xí¼¬-jÿšûÖ-ê@3SÜ{Òëds»ò=îÎ´géG¹^I3"Ùz¢½!Ä$šÆZ.Ø”±<Igº‡¿h×³VË«(ëU·"’(Äİ·WˆYÒüöqW}‰Y	5Õ}y›Êœ¯¦‡äÁá´$<=[¾Î ³…¸Î×Ü·¼ù}Ü÷²D{¥İB:¸B<u ™)îŒ=é‚wr6=ç¶.îUÇ‚³ô£¬…4#ò#N‘sÅ÷ş´ÛùQK1(cÙsp»-Îö}t£rúŠâöADB+fì¾½@ìÈ’æ/°«¨Ä,‚„Š’Wë›)×ù·/-^ë2%|ÊKô¶|}‹J…èGşµÉBêïm|óÙ*¢íÒn¹»Xlä7¶Š™âÎØc.¼N~GãÍ?ĞÏxp–~”µfD²õÄp:å]ï¤z4æ¡B0–«é~goHÎ=äô¥åÑÈ fì½@ìÈçÏ·«¨Ä,‚„ŠZe²0ü¢êæğ´÷¼w+ÑçôFá/d÷{Ê{JÛi·Õ=QDë¼§JEq3Å±']ğNvu*Û-Äè#œ¥e-¤‘ßMtbu?¢cnİ®µƒ2–åtšs•;ÌÙiK|Eiyô#zX1cì• bG–8¾}\E%f$TÔ–(s4ÿ«ø,‰mî•N!mònpgdQaÁôçßY”Št˜Ok¥Áî¨ÍLqgìùËMíD\NO‹%ßÑ‚³ô£¬…4#ªú‰İ‘G=?æG-ÅÀÆr\îFqıŸ²ßÁê¤ŠbCT?ÏYXö±‡öQ ñ#K˜?şašeAºï£¼Ìõ¢åÁM«¾O¯ôŸ/ôP®^¡£…8‘æ;›»XE}‹^‘k¢43Å±Ç/‰d'b	](¢{µà,ıèß¤ÄHÖO¬û{®µË=t§øNÙN#ä\úÌİ~1ƒ«>oˆjE±°ìcí£ âG–0é**1‹ ³Šëß#÷¡wÃÓwÊ×ëİkúkİç¸.ãéz÷k£¼öP+j]&î:ĞÌwÆlÂ;âˆ»ÆlÕ‚³ôã¼×e6"yZ9±h´{-³’:róĞaÔŒe[áIër®4C.¥¿»ÛÓdÿ'ÆÕŠâñZÇÚGÄ,qş{b¦Y™UÔ’œ^îÕÔ¯èøÈ°|™ûÈ'Uğ!Ö—O_Ë•Õ•¢n,Ñ‘›¥9Ü‡µ+ºDhfŠ;cO6á¸ß<Ññ<¡gég‡åŸ~D5š·O©ÄùTy*¸yèĞoö¥616çJï¾Ÿ‡<’Æ¹Ï«KeÿºÛÕŠâñZÇÙ‡Ä,qş{b¦Y™U”˜K¥—T¤n+"Ãí.¸iBAşoÜ½¿Ó°êêaT²ÀÙ™IeSg\yœ‚ÀáÍTxÉ-^u ™©îô=¯	ëDˆOr¡?=8³q˜Y•Éˆjto×R®ïBs5óÀ¡¤˜&¿ÎÇ"^¦œc…òÒB:µúª’É^ÿÌ‰}ˆì¹(‹×>öĞ>
+ ndIóÚ³3Ì"È°¢ÄKg–µ?túfÅpí¤Có»õŸï~2åÈÂÂ#§Èmu÷İ¡bôûh±êğOC:¼cOÔf¦ºÓ÷jÌNÜçÃÔy¯0‚3ú‹OHå–e2¢İ[íƒÇ•”Ÿò[İ<p(ùŸòü[øXD]ïğa2yÙY]ŠÍÛäõÏœØ‡È¿i`ñZÇÚ+ÄŒ,işB{b†YÍ®’Í½–ÇqÅ[›{ øÁ+*ªåğ„÷è¤Y€ŠBEµæN,è¿½Ù€ŠBEµò:_´©ù€Š                          ´5 ˆµJ¾–š™ı7ËÿŞğšÇ™$Ğ\õ4Œ´ÃOg œÏ"Có¿<ğE…Ã»íkHEyÍë1+M(È•3s¬¨ôÊZÂ093V/Y%8\×Šòš×£¢šP ÿÊŒÆß+*}†²\KÎŒÕKVÉYBÿg7ãŠjÂKŒ¸³¢ÒgÕ$|4¾{û@¯.VœÏıô÷.	Eî¢FìÈz–Šî„«Ö‘ª`¼˜¢<(˜ú©…èı`L×Â‹Uçt.:áiuÖÙ8Bÿ?"ùçXßÌëY£Éª±YDCM–CÚQÂõÓ´PÕ\ƒÏ£ÛE¦*ñŠ™J†İkèAµD}¯7´cÂhÅ<—ê0ñ¦ssŠ—Š$q>goJ‡Kg}ß¹SY*JÑÑÓpÃ ¢UÁX1=ÅÆ%´i!ºG‡Ÿ4{\=Úèìósr_R*JGäkE®3˜½ƒr^Ö”YlÆ`üª[‹´£„ë;¦i¡³ƒ¯*iH§ò˜„b††Q÷A>­jß†ÖbØ£õòII±û—}¡ÃÅùœ½"W~kº¹SY*JÑÑÓpÃ ¢"UÁx1=Å†]bØ´İ£Çïbå^ç=J©(eªÿgiÀ^gí\­_¨°Ø,"ŒÁø·ÉE‰¦ï˜ÜB5f1Ôˆ=Ãé¿µèm]¦—PÌPÂ0ê>hÀ¦•õmh-M´0Z/Óh–|D‹’Äùœ½Ë¼y.ÓY*JÑÑÓpÃ ¢"UÁx1=ÅF«(‹¢sÔ}«\Aô”óò7ê©T”2&Ö7‘æ®IõÛ©W‹Í"ÂŒŸ¹5$%š¾crÕ˜ÅPS7–¦-z[—é%3”0Œº·VëÛĞZšha´^ú’÷Ù¾yÕö$q>gï9iæ‹ÜE,¥èèéN¸ŠaPQ‘ª`¼˜b£U”EÑ?º™È½j_IåJ³çìşÅö^…'¶Û¸™f±YDƒñ+nc¤%Š¾cú1‹¡æºÜŸºD•Ç$3”0Œº·Vï[×Zš˜Š˜­”Båk‚8Ÿ³·:ÊÚÈRQŠî„«©
+Æ‹é)6ZEY´ıœ~\5è5²‚f«íşı@³U‹Í"ÂŒ_qk“v”p}Ç4-cÃ4¬ÎŸ®D•Ç$3”0Œº×*j‹%x]k1h¢…Ñz) MJEÅŠóé"w›’*JÑÑÓ*†A¨*˜ ¦Ùh/èÏæZVQ±b}“aÂøª±YDƒñ+n-’‹Mß1¹3Vc œ‚EşÔ%ª<f ¡˜©„aØ½VQ«mÁkZ‹QE±0Z/=İ»NŸq>ş9¯6²T”¢£§;1TÃ†ª`²˜oc«(«`Ÿµ¢âüo(ï{=cı
+%ŒÍ"ÂÈÆïµ´H.Jl2±-˜±Ã˜G©\†Få1	Å,$½îƒlZµ¾5­EãªÏ£õòCªv_êê¸>Iœç\md©(EGOwb¨ºÿ(ª‚±bzª­¢¬‚}é*Š‰õ¤…k‹*¾\æÇfa´Ô‡ErÑÿP1e c[(Æ<†-âgtèf‘Vå1	ÅÌ$•îƒlZµ¾5­Å ‰.VÙjù+•~à¼Ìs0'ˆóñœ«‚õñe4‘Šî„«~é5WTcÅôT[EYûÒU”*Öw¯{É÷ú±à2<6‹£¥>,’‹›dlÅXÏOİh:qGZ•Ç$3“0Tº°iÕûæZ‹A]¬²õr•Lu&õv¯rÄùøC;¥‘wBjş©èèéNT‰=ÙF6WTcÅô[EYûÒU”âÿã¢ÎN}ï«¤'—ùc±YD-¥H.nK¨WĞ·MÒhaƒÔóóÍ±4º.­ÊcŠ™I*İûø´j}kZ‹AšXe+æ÷CJŠ¹Ñ»ççÓ~w5òNHÍ¿`"U=Í‰zJ¶‘ÍUÁX1=UyĞVQ6Á¾´ú¯=™~-¿‘Éëü9—ùc±YDmåK.n¥œ½b*ı<èÛ&É[ÄˆAùù´‚fˆt*H(f&a¨t4`Óªõ­i-†ÉÔÄ*A¦´Şÿ%“éÈæTz¿ÀYD}DmEA›×<àb¨¨V6²ùt²û¨kÛ	ÎÇÓyÇÑ¦x¢•?z@Eí÷‘íB‡L™=©Ú#.~ÊÓV8àb¨¨V8²İóN*Ë+ûîƒµmpú¸Ø#                           õU>Ğâ9 ÿù"¦Óæ¢[@ó«¨Dm»˜N}U>ÈâT”A¢WL§¾*dñ *ªQ*Jû“< ´ÈŠR…ûy»PO9ßDÑå‹´í•ølM¬MUm>¦ÿ'„&¬g‡;  é*JîÓåíBI<õD|E—/Ô¶KVâS›ª|Ö¦ª6t`Âz1ñp 4]E)Â}†¼] ‰ÇNÄ6Quù‚K·4J|šî»êÓ:´ùX#UX/.æ €&¬(E¸Ï·$ñØ‰Ø&ª._Pi”ø4İ?VQZ§‘6kä 
+ëÅÅÃ Ğ„¥÷òv$;‘Ø$ĞåÊ"Ÿ`º¬¢´N—³¸ÃF^í…Âzqñ h¢ŠR„ûy»HBP9ßDÑå‹”¸’•ø¸î«(­SåOÿª\a½¸x¸ š®¢á>SŞÎ_µìDlU—/(‹4J|šî«(­Óèc5’DÂzqñ´â¿Ì	šYE)Â}¦¼¿Ù‰Ø&ª._Pi”øâuÿŒN£‚ĞõÿTa½¸xPQ`U”"Ü§ËÛ…ëˆm¢ŠøÚvi”ølº¶¦¬ X#ïã2Ö‹‹öWE)Â}º¼]¸Ù‰Ø&ªˆ_ m—F‰Ï¦ûgkÊ
+‚5ò…õââ	Ü^ùL:hÒŠR…ûty»p!«'b›0¿@Û.Y‰Ï¦ûgmªVkä	ëÅÅã;(¢JL:hÒŠR…ûty»h!+'b›0¿PÛ.Q‰Ï¦ûgmªVkäŠ„õbâñ\QôL:hnEØïH ¬PQ„õ *ªñ€°@E5&Ö                                                             €6Î–‡n™×ÊƒhCMCãHCÕß‹Ñra•¤ôÀDštøŞ¿şW³šGæ¡Qckõ%¤ùLì¬ªÊv>“›Äµ¬«›„0¨Ä×/ˆÌ|‡Şï¶/ûL×¯¢|Úƒ‰X¸Í…h¶|Í¼¢jÜòËn>“›Äµ, ÍM9ü0¨Ä×/ˆÌ|‡Ş‡®Ë>Óõ«¨Ÿö cbéóßì*ª‰J3[õõ"ÓŠª÷êßPQŸß}lq·Qoz»+Ç÷È¯¸ğ£Ğğ‘Êâîç­
+/Ã–Á<|4á‚Ã&lt®Ï+ğ®½¢óÕëKwëŸSû¦R}§}êg{¿Ï£Û“ñ^‰6œ—ª
+ğÁ˜®…«Îé\tÂÓÖ.6ß;¸ÄbèŸ<§ĞŒü4‡–.ã}ëIå©º02û(NjïXĞéÛm´®Ô,ÅMElĞ;aEM.œ4kå¿îî=›J¯“Wú–öVê]u¼^ˆÙDêU¢¿¶ŸNµ;gbj¸{t=,ÛŒ ¼ÆA± #­ªJ¥¯
+cOúûª’æ¥ò‚T7Ó+jlê¢…á †Ÿ4{\=Úèìósr_²u1¥Ã¥³¾ï1Š<'"èIwhv)b}I¼%»03Ï‹@u2‘Íœ^N÷é3À­Ô,ÅLE|ĞÒ–aE•¸oJ“i¤óïº’®kœ—¨¿İƒŞbM‹>”ØÚ^[Ôş5÷±›{ôI:Ó=óE»µüzbC§œÇÜ×ÇrÚ¤ïI{†Óë¡q3½¢*V+öÇ;7Ñs(ït'æé4JXº(Z"Üs#ùE2ğhœ<?~O†C£Kı*)©÷ ¢df¦…êä:j¥~úğ®Ô,Ù§"!héNÏ
+È¬¢¦º/oS™óïÕô<8œ–xg‹ÈùÌÚí1u5]!>,ëâàv[œíûèFm®®£‹½è}ÏõW7–¦¡q3½¢PíİÆDO9/£ÂÒÅeîÎ;rˆÊRS¯¨„Í¡Ñ¥¾8“’ªWÔöL5ÕÉü>îGÊN¢½Úğ®Ô,Ù§"!héNÏ
+È¬¢^t_6S®óo_Z¼ÖeJğğx8ò.O<[ÛıÈ»ªØèÏçıîS¢œ5Ú\Vb!õ×÷\×ĞåfhÜL¯¨åªır?¹·+©\Xºx.¢²€”GãÔ+j¹°94ºÔgRRõŠZnÏ´:<ÃÉ7Ÿ­"Ú®Ï ³R³dŸŠ„ ¥;=+ ³ŠZåµ0ü¢êfïìê~DÇÜºİ¬¨-r·ˆÖÉƒµòèr:Í¹®È¦Oc!mş´§ô=Çß4¬Î›±^½­ª½û(z+‘s%$ÖP©°t±:
+GY@ÊÀ£qêµUØ]ê‹3)©zEmµgZğ'+&ö”›5ú0+5Kö©HZºÓ³2«¨-Qhş=‚<»=#z~lTÔj¹›Ok=+ïèq¹Åôæ4ú×ì¼ŠR÷ÜGM9‹l¥š±^ùs^oÇïk­_QZ[¬¥Æ©W”%[—úâLLªVQ5öL3[ÕÉ¢Â‚éÏ¿³Lá3ÀºR³dŸŠ„ ½ÆZV@ßGyyìEÊƒ›V}Ù®û{¯$>—>s_^”»ß¢WäÁ5—{èNñ²±—¯ĞÑúÓÿ˜G©üÃø«>iÆzM[QF5ÖŠªá×XŞ8­eu˜XQ‰IµV”‘if«:9‘æ;[»ä>¬+[Ei‰:l¬fd]Qcı›Ù>ä]?/}³¼Sè(Ä6"ymVJw_¦IûqŞ=¿¸Ûó²­ğ¤u9W†M®¥	Şñt½¾'ßF‡nÖCãf¬×´et¡1ŠUÆi­(«C³¢¬¾¤Z+Ê’if«:)—nËå>¬+5Kö©HÚİ1²²®¨%9½Ü‹ˆ_ÑñŞÉO©Äùlx*„Øá_f¤qÎ¿ï•Jû¥9Üo>Vt	æ=çJz;ì$h²¾,xd[¾Qß“ı×¦wh¡q3ÖkÚŠ²tšA±£Ê8­euhV”Õ·‘TkEY2ÍlU']éy!êÆ}¡Ï ëJÍ’}*‚vwŒ¬€¬+JÌ¥ÒKªGR·şÙk©Ç×w¡¹Îæ4`f•3……tjõU%“=û›©ğ’[..¼Æ÷ò2å«ôâ7)¦aÕÕÃ¨d0ödËo¥ÑÚ—5ÜŒ÷š®¢l]„&APì¨2N[EYše÷m$ÕzÕgfšG¢8™IeSg\y¬>jW,Kö©ˆZîèYÙW”xéÌ²ö‡N¯Áj<®¤ü”ßº›‹OHåºßT,;«Kñ y›|û?éX<ğ=¾—ºŞì7ÛAñÉ”#œâ=–â{ş[tÍĞCcf¬×´eë"0	‚bG•qZ+ÊæĞRQVßFR­eÉ4 rRwÏÑ*F¿?€›3 tÅ²3±AË=+`ÿs\ñV$€Æâ‰ğ~ ĞPæN,è¯h,ò:_´	Y                              h¶4D_¥m.ç’ ü×,E!`ƒŠJ€ëôeŞ6SåÁ°(ÿŞ›¥(`ÃG\?ÁEĞ"&Üú—!³i×ğõeQş¼7KQÀ†¸~òp Õ:—*j¿ ˆéqÁS¸ÏvLØ“2z3qCa1Tdu]>ïĞøîí@¦Ã«ı§kúE‚|±‚…ªò`BxŞ¡-÷îXrÊãÑ@«Â¿fÑL´œ²3^}Ñ˜ŒQAGŞ¨&©•ÈÇ¨‡æXM:°	×ée
+÷Ù©{Œ!nèÁ™AM—Oò\ªÃÄ›ÎÍ)^*4¾xí?MÓ/2Ô¤ùb”ãÃóıÏÈ7çÒ"OgÉ×ÊÆ¢™h9eg‚ú¢¡…˜"ÛãóÈ)ej%ò1ê¡I{t`#®Ó+Êî³Sö|=CÜP¢*2ƒ\—OòII±û×¡Ãk5¾xí?MÓ/2Ô¤ùì"~ñáÆrÑ½WL/‡ËÆ¢™h9eg’ú¢¡…˜"Ûcó¨5R*ÊĞJäc4B“ö¸êKO$\§W”)Üg9¦
+ìù2z†¸¡D3Td¹.ŸdÍ’¯ƒh‘¦Ã¯ı§iúE†š4Ÿ]Ä/>¼Àx¶|Ag‡ËÆ¢™h9eg’ú¢¡…˜"Ûcó¨5R*ÊĞJäc4B{ ÷Q™	×Ù„¹p_Œ˜_ °Èèéâ†!Š¡"3Èuù$}É»ÔÙ¼j»¦Ã¯ı§iúE†š4Ÿ]Ä/>¼ÀØ“DxKşf AÙX4-§,ãLR_4µãCd{†nÒH©(S+‘ÑªãˆŠÊ€H¸N4…ûlÇ½@FO7ôà†ŠÌ ×å“RôWÁ¹_¼öŸ¦éjÒ|v¿øğc/"gğ;ÂZ¬õŠJ7ÎxõES1>D¶Çç‘7R*ÊÔJdc4BÛŠŠÊP¸Î&Èÿ<¾å˜*°Î˜&n(Ñı<MÑ¥€6)Åtø’´ÿ˜¦_$ÈÇ¥ùì"~ñá±èÊ+í5şöÿ–øŠJg’ú¢¡…˜¢EĞŸGëü«V"£UÇ•!pM80mE©{áŒiâ†›aMÑ¥§û0A¿2
+uøbµÿtùÀHO‘æ³‹øÅ‡¯ôôv5{E%3I}ÑĞBL‘í±y´Î°j%ò1&…P„ëlÂi+JØgL7ô?vLÃ›2¢Ë©Ú}©;ªãz®Ã—¬ı§húE†º4Ÿ]Ä/>¼ÀÿòõzŸXQ÷ÌÆ™¤¾hh!&„ÈöØ<ZçGXµùí¡ñ¤ŠpM80mE©{ÑŒqqC‰Í°ÆªŒ(Ü§½¥8/óÜôL‡/AûïK¦éêÒ|v¿øğÿåËÜƒ©‚$VTàİrÊ2Î$õEC1!D¶ÇæQkô¥VQš
+¢2F{hÁğn¯üj'†H¸Î&˜¶¢˜À^¸TqÃ%Ô+èÇfXcUFô+—Lu&õv¯å™_œö_1M~iúE†º4ŸUÄ/!<hwÁM
+ò#+*ğn;s[à6I}Q×BL‘W®:¬‘—$µ¢4DuŒÖĞ‚áQ%J'E¸Î"˜¶¢˜À^X¸áTúyĞÍ°ÆªŒ(ùı’¢cnôî”U¾8í¿ÿ)Ï¿E¨š~‘¡.ÍgñK
+ÏúÚI‡æw»\¤©(ß»õòÑçVÊÙúMP_ÔµBä{ê<²F~’Ø—½LQ£5´`xWı¥³_ñÄk+
+6·’5ÂÏjçTz¿ÊZD}ZíAá‹.Wô¨(ùt²ûøsÛ	Ñ7*
+dB(nxYğT”ÃŞ!tÈ”Ù“ºĞ¨=¨(­QÜ°1VÛîy'•å•}÷ÁZŠ                                                             €$¶<tË<d ;_ÿ+Ë‹¨$UÿşÒèÕWş(¦]ÃÔ”I‹)7ÍJö)
+&íêhÅrUÿïÒ#ŠR‡O|+SûUUòõğnû²ë¨ÒÓ»Î’ »fZQaxÙÄÚHCnÎ·:)EÍ™ŸåäÿÇÌêó:äüW†-ó!ƒë²ë©€ê#tJ¶7ÏŠRå3µ‘†Üœ+*nu4RŠš1·Ğ‘+İ×µÇĞ‘ıjúK!TT‹¬¨F[Kdm»Ôjok}i»Ãqã^9¾G~Å…¹›Tw?o•L…KhúÏ©}S©¾Ó>õÓ´ùŞÁ%İF½)Xÿœ×ÎÙØp^ªÊlúÁ˜®…«Îé\tÂÓÂÒìó»-|«¡ùv[îÜ±ä”Ç½]æ»öî¾ıˆoç÷şÑ„C
+›°Q™Ynëå(/»X-cŒâÜ°1¥ß¦Ş77²MW?zÂİ=—:¹’Á_µ/ÚÅ¼X=Áx[¼ƒlRÔb¹®6ÿ“¦ëõl*5¾zL^©su+õ®º€^/Äl¢Ûn»-0]Ğ‘†VU¥ÒW½|Mépé¬ïSşëBm"¹h¶ÛÎ1›ºh¡ÙtøI³ÇåÑ£ı‡Î>?'÷¥ ¬ ;Ç`rá¤Y#<ßjhÁTÍÈ7çÒ"ºAaM¤A3§—Ó}BéıéT»±s&¦†++’›Åºc9
+ÃË.Vs¬ŠQŒ>¦´ñ{Ã4úæF¶éú/ºÔÙ­;˜Èmôæ^lÍ`‚ŠR:È*E-–ãè…`s	£­–u%]×8//Pÿ:ÑƒŞbM‹>¿¤é†N9¹;å´I+Zâ¼L§‘Î¿Qş9OTá~.MwîeçPŞéu®ƒQ–Ë„÷ıl²ô­†œ–Óñ^1½¬û~‡Ú#Ä_©ŸÒûÚ¢ö¯¹oİ¢E ™Åºc9Š»êK«1VÕÈî†‘>~9L£oÍÈ6]¯Sowät6¹+=Â½X<[‚	*Jé «µX:Ñ'ÁæVj¯­–«é!yf8-Eä\¼?ív­¢®£‹½Öä›9ÑeŞ´•9ÿFMôŠzÀ}1š>ìü»‚è)çåoÔÓ2Sİ—·¥o5´àôlù:ƒÎÖ}Ïïã.D{£Ş¯¦+¤ÁÃÑ"ĞÌbİeTQib5ÆªÙİğ ÒÇïSë[3²MW]wrJæNz#ß]ìG·û’{±x¶T”ÒAV)j±´£-Áæ^¢oøjéK‹×ºL¡»œ±ò.Ï‰4íG½£©¿<öœ»³™rez‚&zE-w_Œ¦ËeKroVR¹e
+^Œ|«¡§ß–¯oQ©áÛá›ÏVm7{ßÈï³XwUTšX±ªFv7<ˆôñËaš}s#ët]N÷ñƒ®âÔâ½b¦y±x¶T”ÒAV)jŸQùuÁjÙ"Ç]H7‹Õıˆ¹u»^Q…´QøÉLÉc«£´EMôŠÚ*„¥éf9%b»)Xí«¡§7ûÃ ºï{JÛš¨÷"Zçİ¨++’›Åºc9Š«¨becUâÜ¨A¤ßO²Ş77²N×ót¨;hŒ¨¢Åb>ÍÓ¼X<[‚±tUŠZ,ÇÓóÁæb:2\-«å8hş=œëİ‘G=?6*j“×zƒ_[”´…MôŠªñ¦DkZµ\k­(Å7M­S±Í½ á¾LşeÁ$ËŞói­4Ø-Í,ÖËQ\E¥‰Õ«jdwÃƒH°õ­Y§kwIyí»Îµİ«Î•ï…n?Ì‹Å³%[Ù¤¨ÅrCô¬ïú©¹ô™»ı¢g/úPÙ´êkùºî{îm¤ıªï:Zßƒ&ÖŠ²6M¬(Å·š{z¥ëİC÷}"Íw6w±¥ö-zE¬‰fëå(ñû¨øX±ªFv7<ˆôñËÃFß6#cº~HËæÑÇbwê4Q1P÷bñl	&¦ƒŒSÔbùDù>ªÄùè.¥¿ù€ÇçXïTô¡w¾Y^òw”ïÚuaJ®¥	^óñt½–&¥‰µ¢¬MÍŠ
+ºãS „z¿Óÿ>`¼î»@^/-g“<Î»gwG‹@3‹uÇr†—]¬ÆXU#»Dúøåa£o›‘1]ÑÜsÜÇ%§wx“fê^,-ÁÄUT¦)jÉ¿™è#¿V[; İoœ—‘4Î}rZ*Ç¹$§—ûiş+:^|J%ÎókT!Äÿ
+X¦d}YğH·|£–&¥‰µ¢¬MÍŠ
+ºãS „z/_æ>;JüC÷İÕ½´­KôEäfiN÷éøŠ.Ñ"ĞÌbİ±…áe«1VÕÈî†‘>~yØèÛfdLWMû¡å?‘‹ãßåæÅâÙL\Eeš¢ÌçäŸS=ëü4Êı°ZZH§V_U2ÙKÁ\*½¤z$u[á¾Cö¸áú.4×9z˜Y¤ä/Å4¬ºz•,°¼©†MlemjVTĞ6;Jh÷í.¸iBAşoß3©lêÌ“+’sô~3^rËÅ…×D‹@3‹uÇs„—]¬æXU#»¯´ñ{‡õ¾mFæt#/—’ÿ-†êÅæÙ&®¢2MQKæKHÉÇ,y×Õ
+±ì¬.ÅƒæmòSğÒ™eíî>˜ª}ğ¸’òS~+aœÊ-SòÉ”#œ²Î|ãQšX+ÊÖÔRQ~wúìD¡Ş×N:4¿ÛØå¦ïº{îP1úı´XíıOC:¼cO´4³Xw<GAxÙÅj«bã†‘6~ÿ°Ö·ÍÈœ®»¼ûû:ÒU†«g#˜ØŠÊ0E­€m'Ü#                                   ZLm‹šÄ:°J&¶bå<Ğâaò}Yš7”]¬U2±‰•ó²Ì V²”^k
+m²$ªdbë|Õ[„€–SQê	Th>÷9L…kùò}6©CE1¯^j\<…bjøÅD'²4õù’Ä}{Ö É¥ªĞ1½PÎ*uè¡(æÕKí‹ç©¡X4üXt¡db6İÙôù’Ä}{64 ’+JQ¡ã2zÁµ]êP¢*æÕGíOÏSB±Èæ¢ˆ5ÙvgUşKP3ìqÕ²¨(E…ËèëÈ.u(Qóê£ö§‰ç)¡XdóQÄšl»³*ÿ%¨ö¨(EE)*t\F/XGv©Ã@1¯>jšx%å>ÊE¬É¶;«ò_’8¢oŠYT”¢BÇeô‚ud—:ôPóê£ö§‰ç)¡XdóQÄšl»³*ÿ%‰#úö¨(EEÅÊèëÈ.u(Qóê£ö§‰ç)¦Ù<«(bVİY•ÿÔm	€4+£¬#»Ô¡DUÌ«ÚŸM<Ï3µÈæÙõ³éÎªü— fˆŠ«(.£ÈÑÙ¥ıÏ˜H1¯>j6ñ<ÏÔ"›g×SÌ¦;«ò_‚ša`Ï†@ÆÅeô9:»Ô¡DUÌ«ÚŸM<Ï3µÈæÙõ³éÎªü— fØîo¯üVÈ¢¢4½@Î.uèÂóê£ögÏóMMÙ<»bVİÙôùÔC{ß}UbÅ€l*ŠËè…ò}V©C¦˜Wµ?‹x^`jÈæÙõ³êÎ¦Ï—¤fØûî¯(úV ½§  PQ  ¢ @E                                                              h"¶<tË<d€Fba•¤ôƒL«éë5£py0	šR™ÊMí¿ÑY{jU¬FOI›aCl|¯•tW¸½³ªÊ’ûÃ»ík>IÁØãLB:‡™z¯wèõZåÉİ6zJÚ·Qwú Ñ½P$ÑH·óÜ\×|’ ƒ±Ç™0„t3%ô^ïĞëUQÉİ6zJÚÊC76ºW5Í-%÷lù4¨¢ê%–A·¨¨ìy.ßY|¸zä£ñİÛW\ø‘ÜşçÔ¾©TßiŸú©Ûrÿà%§<.Äú¼ï2û!:?h§Ú’$œ^‡èó»-î6êÍh"©,î~Şª°ïp×Ÿ&Úˆ>ÓµpàãbÕ9‹NxZÄ«½{`A§o?âŸßp^j†%N!úÑîË¹Ô©Öyùª}Ñ.Ù=Î„!±r|ü W¶ø?špHÁa6z{D›ï\´Ub¼ëƒvPÅ;ÑÒ›Gïàç‡Ñí¼½2…|’š.%mŸÒbñ#z#:ğ\ªÃÄ›ÎÍ)^êl/èHC«ª‡Ré«^gä›siİ Ä(zXZ üvÌö6¢Ù·İæŸ™Mt›Ü!š\8iÖÊ=˜ô[©wÕtğzß2ÚÕ×ğ“fË£Gû}~NîKqÇ&Ò ™ÓËé>ïüØÔEÍ8ş‹.uş­;˜è-çõíug3aâÙTj|õ˜¼Ò·bâ:Õnìœ‰©áAEMépé¬ïûm•Xïú İ°N´tEÅ£Ÿ¿ª¤9ZêFƒjÊ”´9j»*Äizxà“’â·İ÷<:¼Vlè”ó˜{ì±œƒ6ÉÔÉ<½WL/‹'éL÷ÌízÖú8t[ëU_‰ûF6™F=ÜZDÓ|ËhW_\Ç;·És(ïtçÚ~:Š9öµGˆ¿R?ï|ÅjaÆéò:õ–ŸÎg“»"¦Ñ#^wö8†°®¤ëçåê_gmQû×ÜwínAE-n¬#µXïú İ°N´tEôîÁ=Ãé¿õ Õ)dW}M–’6ÇKî=Ô®İÃõ6fÉ×A´H\G{'È÷4çsGîÍ ³ÅƒÛmq6ïoÁ[kEMu_Ş¦²À¢ˆœ+•÷§İî[F»úâr?iV=å¼üzÆ›ßÇ];‰öÊó8ÿqºÔu'g­ŞIoä»‹àèv_ËG‰3aWÓCòàpZbÿjºB~8¨¨Ë„¬¥2-Ö¸ŠrÀ:ÑÒ5ÒO8ëÆzï“,Hu
+YE5YJÚÒJçßq´ 8Ğ—¼ÏëÍ«¶;×½ƒ©¿LİÛrï-*uSw¿û@(gMxo¢ÙZ+êEéšr‹átÊ»J4Ñ®¾¸–ËväŞ¤­¤ò¸cß|¶Šh{xŞˆSr¹{ğ]Å©Å{Å:MËG‰3a}iñZ—)ÁWZüANÂû¨ç¸Û Ö¸ŠZ.´N´tEôÎÁkèr¡·çSÈL4UJÚ_{7˜ò*ZR¨<ö.¤Â_)ïÎZîm%Ú!–»Yß;,ÖÖZQk¢}i±ºÑ1·n,£]¿ı–`qmöúu.”Äw5Ø­˜ØSÆ[¿[İCzœ’çé<QwĞQåÜDÎ§yæòY£=³Ÿ*¤€›­ñÑ:ïÒ:ˆhµâK‰U«¨pĞ[…Ö‰–®¨‘~‚èFV'ôö|
+YE5UJÚ¿¦‘×¸wÚ~‘´I©({ƒ_%rŠÅ6y©r\îFqı_¬­µ¢¶h%v?zFõü80wıö«ƒÅUùYT”qlQaÁôçßY¬_/-N¯›’òÚw‹ªW‹ i­¹|¶Ä/åTÍÿ£Ç*küù®k÷h‘ÒVU«(6hŞ‰–.—GgEç,F{6…¬¢š,%mŒ3ü9CöôTû…Wr¯ĞÑ2u+…w#ĞÃù÷ºS|§lg¬mü÷QjE¹7³ß‹nwÃİ\úÌİy1«Š:‘æ;ÿîâ¥ÅéñCZ6>»S§‰ŠÂ\>5ñËG9Õ‹>”7­úZ_Ú}‹^‘‡Ö°ˆ¼¶j¬wÛ N´tÙóH4æQ*ÿĞhÏ¦Õ„)iClÈ«ô6~O?
+[-ïTê¸^\K¼ƒãéz™º;åŞõ4Ş}›+<i]Î•¡+Ã6ª(ç±Î^Q‹Fß,o‚:z†Ên)ıİ{N’MEÈ+Ïå¼¢´8=£¹ç¸Ï2Nïğ&ÍŒíq&a¬÷ì@ô¡wõø¥İ8ïQ„¸ÛRQj¬wÛ ÕN´tEÚ8á~nüŒİ¬É¦0T¦¤­ñ¿ôsocGq‘ÿòW*u“4Ï}½¾,x"^¾Q¦®|™ûP'Uğ9Õ9Wú÷¹.†mTQ;ü+m³¢>¥ç]ù5ªğ•İ‘4Î}š[šUEu¥ç÷‚±D_¨ğ8ı7ØöCËâ¼ŞBÿ.ÏIc{œ	CX’ÓËıˆÿoÄ/í–ætpó¬èb©(5ÖÀ»mĞj'Zº¢Š2N¸ëFÓ‰;´ Ù†ƒjÂ”´5RğİöáÆuT2yÖ™ÔÛ½-úK1«®F%¼ÔhwÁM
+ò#_¦œc_º­òÓ”#hÀÌ*ëUßµÔã†ë»ĞÜğƒ.Ø]ZH§V_U29«ŠšIeSg\yœê0‚ Î%Ô+
+éôyÕµ”‚Gñ5qq&AÌ¥ÒKªGR·FüİÍTxÉ-^C´MoËbõ½ÛÍ:	ı+c±åÑ;øÍ±4ºÉ§0TS¦¤mñ6Ÿ¤³‚Íß)):æFïö“)G9e?Mk'šßmìrÿ+ŒŞü	©f«TÔâR¹eÖŠª}ğ¸’òS~~ßí.;«Kñ y›²ª¨º{îP1úı´X ˆsjğìr—÷Ô}_Gº*rf3aB¼tfYûC§o6ã÷íş4¤cñÀ;¶RÎ^½-‹5ğn4ë$ô¯ŒÅ–G¿í§4ƒÉ§0è¶)SĞy\ñÖ·gmEÁşæ9•ŞOŸQŸÆu\ï±àW­Í¹¢ š?~œäMÊ~e>ì>cÜv‚úéØÔ{,¨¨æ[Qs'ôßŞ‚ã¼lÿÿ.fï:dÊìI]hÔÆu\ï± ¢šoEåu¾hSKú€Æ¹{ŞIeyeß}°¶¹^¸                          @óz‡ Óøê|éõDàÍá?6D14+ÅGĞ¨¤SçË^/½Şaƒ\f&+˜>€)Ö·¢¸¢ hM¤SçË^>,½Şaƒ\f&+˜>€Æ×GË ¢¸¢ hKd?íM¬w˜]@Í´¢öwÏ É¦Ô
+´èñi,PÆKĞŞËRïĞTÆ³)2£h›+r!A.2˜€EqPè'¸B ±ç+*Cì©VˆE%ßğè-aÕè=ƒ–YQ†P EUT¨m— ½—­Ş¡©ŒgS0T”m®È…¹È`B ÅA.›¨({"¡:ôy¾¦Ö“î_°V£7ÃâŠ‚ W”!hÑãc\š$hïe­wh*ãYSÔm®lÁ×Dã°)J4ÙDE!ĞØ“Š„lè›Û•Ë?‚t-d[Ââ·´àŠ2„-z|ÖŠJĞŞËZïĞTÆ³¦©ÛzE)k"ƒñØ%šl¢¢hì=`ıl©Á¶³¸W½*ªÕT”!hÑã³VT‚ö^Öz‡¦2%0ÕHİÖ+J	\ŒÀEWQd…@co¹9ôßI“?ĞÏxô–°PQ­¦¢¡@‹ÓŞ¦=A{/k½CSÏ˜j¤në¥®‰Æ`Sôà²‰ŠB ±·Õú®Ne»…ø‘«× Fl	Õj*Êøsü=>¦½L{‚ö^Öz‡¦2U*2R·õŠRüj"ƒñØ%šl¢*ò¨ïÕX†~9=-v–|G‹Ş*ªõW”r¡Ç´÷‚iOĞŞËZïĞTÆ³¦©ÛzE)~5‘Áø lŠƒM6QyÔ÷j,C_BŠ§è^-zKX¨¨6UQL{/Ğ¶KĞŞËZïĞTÆ³¦©ÛKKàšÈ`| 6ÅAÿ“˜É&ª"ú^eèâˆ»ÆlÕ¢·„eöZqE1í½@Û.A{/k½CSÏ˜j¤n.-k"ƒñØ%šl¢*ò¨ïÕX†.fÓÏÓÒe‹)
+Ş^ù,ÍV]Q\{/Ğ¶³iïùd«wh*ãÙ4ØT#uÛwi	\ŒÀ¦8(ÑdU…@}¯Æ2tñIÎ!¾h¸q«¨ ç"ªÄÒlÕÅµ÷Be<‹ö^@–z‡¦2­¢˜‘²í»´ÎEã°*
+aÈ&ª
+ú^eèB¡Î~×jô^X{ôŠò{¾¢èXš 9ÒÈ"ƒü‡­PmFDE6N#‹¢¢@[§qEQQ                                                                                                                                                                                                                                                                                                                                                                                        €ÿ¿]ûıÉªã ş¯^<ÂC0Àœ†8Š,&›Æ+WÑˆÑ"V­‡0ÊÑ¯IÔæ B3(uŒ‰$%
+§óœs Z°ÅxÓ‹ÏçÅ¹w_çºß\Ûwœó                                                                                                  ¢ªTéyrÀƒ?GáC„]‰û¨3Nüv°ƒßÄ›ã™[†»õ8[âõƒ¦û%j!ÓëÖDGmãé¯ò[÷ûÖè{XtÜKw­oİß98+¦û%j%êÒk¼8<ÔŸW+ß•K½ûËgóïËå¾o”*;Ïxçê¶’õÕ-„½u9º’äv´?K’¢=-,×ù©ú§©%ëxğ\óRº»§¶3t²ıÊ•¾U3„İ‰º³¼¼tk¬\º$“mãii#b3I†â¬a2KÔP\Îvgc®8Xnªwêã8¾fˆ°+Q¹Îù¢ğde1â$i/~yÈß£NÆÜrÕ`Läm«QªŞz&v%jjzúÛëÅ³ÛBÿóY¾ÒÕÇƒ¬´•íÊÛÉ‹‘¼smb&[oD«!Â¿Ş£27ËµC³·Íjµ±œÕ»ÉéÜâ?Ï?Ø0EØ3Q¯ÄäN†ÅYm©ØİËöÿÌ[Îo?ŠšMS„=UÓëİ¬ÖYm¢Ø}‘íÚâNŞ:İÙ:/"ì¨æ˜M_œz#Ö’d¾¦®úíi¡9ë˜«9V}ü4^.Z7šâëtYi‹)C„½5ïwu6EõÛÓH”ûGß.¿±îÆ¢Ò¡'Z¶{¯ÔÄ¹z+ñ¡Â>‰ÚúìT]ëù»ùG§™îJ}Ç¥ß‹¥k¯59>ôèïæùó-¥ÆkFÿÅÅÎ«Ùz3Úm2ºª?‹¯ŸQÃ€CÛì£ƒ#ÍÑóÌ0àğ^zµ¡ÔpæKÿ^                           üıAhZë
+endstream
 endobj
 8 0 obj
-<< /Type /Catalog /Pages 7 0 R >>
+<< /Length 30 >>
+stream
+q 612 0 0 792 0 0 cm /Im1 Do Q
+endstream
+endobj
+9 0 obj
+<< /Length 2544 >>
+stream
+BT /F2 13 Tf 72 720 Td (Notes and caveats) Tj ET
+BT /F1 11 Tf 72 694 Td (The readers were volunteers recruited through the council's newsletter, so they were) Tj ET
+BT /F1 11 Tf 72 679 Td (people who already read council documents and may have been keener than most.) Tj ET
+BT /F1 11 Tf 72 656 Td (Each reading was timed by the screen software, not by a person with a stopwatch, so) Tj ET
+BT /F1 11 Tf 72 641 Td (the times are exact to the second but include any pause a reader took.) Tj ET
+BT /F1 11 Tf 72 618 Td (The questions after each document were the same in both readings. A reader who) Tj ET
+BT /F1 11 Tf 72 603 Td (remembered a question from the first reading may have looked for its answer in the) Tj ET
+BT /F1 11 Tf 72 588 Td (second, which would favour whichever layout came second.) Tj ET
+BT /F1 11 Tf 72 565 Td (The twelve documents were chosen to be ordinary rather than difficult. Technical) Tj ET
+BT /F1 11 Tf 72 550 Td (manuals and legal texts with dense cross-references were left for a later study.) Tj ET
+BT /F1 11 Tf 72 527 Td (Three readers did not finish the second reading and were left out entirely, rather) Tj ET
+BT /F1 11 Tf 72 512 Td (than counted for the documents they did finish.) Tj ET
+BT /F1 11 Tf 72 489 Td (The printed copies used for the signed summary were set in the reset layout. The) Tj ET
+BT /F1 11 Tf 72 474 Td (study itself was read entirely on screen.) Tj ET
+BT /F1 11 Tf 72 451 Td (All the figures in this report are rounded. A change shown as a quarter or a half is) Tj ET
+BT /F1 11 Tf 72 436 Td (the nearest simple fraction to the measured value.) Tj ET
+BT /F1 11 Tf 72 413 Td (The reading times in Table 2 are averages over all two hundred readers. The spread) Tj ET
+BT /F1 11 Tf 72 398 Td (within each document was about as wide as the spread described on page 2.) Tj ET
+BT /F1 11 Tf 72 375 Td (Satisfaction was asked once per document and reading, not once per page, so it) Tj ET
+BT /F1 11 Tf 72 360 Td (cannot be compared with the times per page directly.) Tj ET
+BT /F1 11 Tf 72 337 Td (The study did not track eye movements. Where it says a reader lost their place, it) Tj ET
+BT /F1 11 Tf 72 322 Td (means the screen software saw them scroll back up by more than three lines.) Tj ET
+BT /F1 11 Tf 72 299 Td (No reader saw the same document in the same layout twice.) Tj ET
+BT /F1 11 Tf 72 276 Td (The council paid for the study, but the analysis was done by an outside team who had) Tj ET
+BT /F1 11 Tf 72 261 Td (no say in which layout was chosen.) Tj ET
+BT /F1 9 Tf 500 40 Td (Page 6) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+11 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+12 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+endobj
+13 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 6 0 R >>
+endobj
+14 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> /XObject << /Im1 7 0 R >> >> /Contents 8 0 R >>
+endobj
+15 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 9 0 R >>
+endobj
+16 0 obj
+<< /Type /Pages /Kids [10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R] /Count 6 >>
+endobj
+17 0 obj
+<< /Type /Catalog /Pages 16 0 R >>
 endobj
 xref
-0 9
+0 18
 0000000000 65535 f 
 0000000009 00000 n 
 0000000079 00000 n 
 0000000154 00000 n 
-0000002670 00000 n 
-0000003698 00000 n 
-0000003834 00000 n 
-0000003970 00000 n 
-0000004033 00000 n 
+0000003309 00000 n 
+0000005827 00000 n 
+0000010026 00000 n 
+0000012357 00000 n 
+0000038068 00000 n 
+0000038148 00000 n 
+0000040744 00000 n 
+0000040882 00000 n 
+0000041020 00000 n 
+0000041158 00000 n 
+0000041296 00000 n 
+0000041460 00000 n 
+0000041598 00000 n 
+0000041692 00000 n 
 trailer
-<< /Size 9 /Root 8 0 R >>
+<< /Size 18 /Root 17 0 R >>
 startxref
-4082
+41743
 %%EOF

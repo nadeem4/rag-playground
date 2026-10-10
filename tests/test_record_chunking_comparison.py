@@ -154,11 +154,20 @@ def test_the_committed_run_has_every_field_the_lesson_reads():
 
 @pytest.mark.models
 def test_a_fresh_run_matches_the_committed_json_in_structure():
+    """Same structure and the same questions; not the same numbers.
+
+    Docling's layout model splits a few paragraphs differently on Linux than on
+    Windows, and the embedder ranks a passage a place or two apart, so the chosen
+    passage, the piece counts and the hit rates are facts about one machine, not
+    about the sample. The lesson is hidden; the structure is what it reads.
+    """
     fresh = _script().record()
     committed = json.loads(RECORDED.read_text(encoding="utf-8"))
     assert _shape(fresh) == _shape(committed)
-    assert fresh["passage"] == committed["passage"]
+    assert fresh["questions"] == committed["questions"]
+    assert set(fresh["strategies"]) == set(committed["strategies"])
+    start, end = fresh["passage"]["start"], fresh["passage"]["end"]
+    assert 0 <= start < end <= len(fresh["doc_text"])
     for name, strategy in fresh["strategies"].items():
-        was = committed["strategies"][name]
-        assert len(strategy["chunks"]) == len(was["chunks"])
-        assert strategy["evaluation"]["hit_rate"] == was["evaluation"]["hit_rate"]
+        assert strategy["chunks"], name
+        assert strategy["evaluation"]["asked"] == len(fresh["questions"])

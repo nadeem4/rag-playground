@@ -1,7 +1,14 @@
 [
-  {"id": "how-long", "question": "How long did the survey run?", "gold_answer": "The survey ran for six weeks."},
-  {"id": "faster", "question": "Which layout were readers faster on?", "gold_answer": "Readers were faster on one column."},
-  {"id": "lost-place", "question": "By how much did the number of readers who lost their place fall?", "gold_answer": "the number of readers who lost their place halfway down a page fell by more than half"},
-  {"id": "extractor-error", "question": "When did the plain extractor join the halves of different sentences?", "gold_answer": "it joined the halves of different sentences whenever a line of the left column sat at the same height as a line of the right"},
-  {"id": "layout-never", "question": "What mistake did the layout model never make?", "gold_answer": "It never joined two columns into one line."}
+  {"id": "how-long", "question": "How long did the survey run?", "gold_answer": "The survey ran for six weeks.", "answer": "Six weeks", "tags": ["sentence"]},
+  {"id": "faster", "question": "Which layout were readers faster on?", "gold_answer": "Readers were faster on one column.", "answer": "One column", "tags": ["sentence"]},
+  {"id": "lost-place", "question": "By how much did the number of readers who lost their place fall?", "gold_answer": "the number of readers who lost their place halfway down a page fell by more than half", "answer": "By more than half", "tags": ["number", "misses if you change: Fast text"]},
+  {"id": "extractor-error", "question": "When did the plain extractor join the halves of different sentences?", "gold_answer": "it joined the halves of different sentences whenever a line of the left column sat at the same height as a line of the right", "answer": "Whenever a left-column line sat level with a right-column line", "tags": ["sentence", "misses if you change: Fast text"]},
+  {"id": "layout-never", "question": "What mistake did the layout model never make?", "gold_answer": "It never joined two columns into one line.", "answer": "Joining two columns into one line", "tags": ["sentence"]},
+  {"id": "second-wave-size", "question": "How many readers took part in the second wave?", "gold_answer": "The second wave had one hundred and forty readers", "answer": "One hundred and forty", "tags": ["number", "misses if you change: Fast text"]},
+  {"id": "second-wave-time", "question": "In the second wave, how much did the time per page fall on one column?", "gold_answer": "In the second wave the average time per page fell by a quarter on one column.", "answer": "By a quarter", "tags": ["number", "misses if you change: Fast text"]},
+  {"id": "headings", "question": "What made the biggest difference in the second wave?", "gold_answer": "Headings made the biggest difference in the second wave.", "answer": "Headings", "tags": ["sentence", "misses if you change: Fast text"]},
+  {"id": "limit", "question": "Why might the results not hold for people who read reports for a living?", "gold_answer": "All the readers were students", "answer": "All the readers were students", "tags": ["sentence"]},
+  {"id": "kept-two-column", "question": "How many participants wanted the twin-pane format afterwards?", "gold_answer": "Only nine of the one hundred and forty readers asked to keep the two-column version", "answer": "Nine of the 140", "tags": ["number", "different words", "misses if you change: Fast text"]},
+  {"id": "fieldwork", "question": "Who carried out the fieldwork, and when?", "gold_answer": "Fieldwork by the Reading Lab between 3 March and 14 April 2026.", "answer": "The Reading Lab, 3 March to 14 April 2026", "tags": ["designed to miss: footer"]},
+  {"id": "most-gain", "question": "Which title benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column", "answer": "The bus timetable guide", "tags": ["designed to miss: ranking"]}
 ]

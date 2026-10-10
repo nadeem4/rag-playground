@@ -153,9 +153,21 @@ def test_the_committed_run_has_every_field_the_lesson_reads():
 
 @pytest.mark.models
 def test_a_fresh_run_matches_the_committed_json_in_structure():
+    """Same structure and the same run settings; not the same picks.
+
+    Docling's layout model splits a few paragraphs differently on Linux than on
+    Windows, and the embedder ranks a passage a place or two apart, so the piece
+    count and MMR's picks are facts about one machine, not about the sample.
+    """
     fresh = _script().record()
     committed = json.loads(RECORDED.read_text(encoding="utf-8"))
+    # On Linux Docling joins the repeated paragraph to its neighbours, so Clean
+    # finds nothing to remove there; on Windows it removes it. Same list either way.
+    assert isinstance(fresh.pop("removed"), list)
+    committed.pop("removed")
     assert _shape(fresh) == _shape(committed)
-    assert len(fresh["chunks"]) == len(committed["chunks"])
+    assert (fresh["question"], fresh["filename"], fresh["page_count"]) == (
+        committed["question"], committed["filename"], committed["page_count"])
+    assert fresh["chunker"] == committed["chunker"]
     assert len(fresh["pool"]) == len(committed["pool"])
-    assert fresh["mmr"] == committed["mmr"]
+    assert len(fresh["mmr"]) == len(committed["mmr"])

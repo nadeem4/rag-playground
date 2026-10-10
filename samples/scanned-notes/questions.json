@@ -1,7 +1,10 @@
 [
-  {"id": "what-a-scanner-does", "question": "What does a scanner actually do to a page?", "gold_answer": "A scanner does not read a page. It photographs it."},
-  {"id": "text-layer", "question": "What is the text layer of a PDF?", "gold_answer": "A text layer is the part of a PDF that holds real characters."},
-  {"id": "what-ocr-does", "question": "What does an OCR engine do?", "gold_answer": "An OCR engine looks at the picture, guesses which shapes are letters, and writes the guesses back as text."},
-  {"id": "empty-page", "question": "What does an empty page in the parse mean?", "gold_answer": "An empty page in the parse means the file had no text layer for that page."},
-  {"id": "ocr-speed", "question": "Why leave OCR off for documents that already have text?", "gold_answer": "Reading text from an image takes seconds per page, where reading a text layer takes milliseconds."}
+  {"id": "what-a-scanner-does", "question": "What does a scanner actually do to a page?", "gold_answer": "A scanner does not read a page. It photographs it.", "answer": "It photographs it", "tags": ["sentence", "designed to miss: no text layer"]},
+  {"id": "text-layer", "question": "What is the text layer of a PDF?", "gold_answer": "A text layer is the part of a PDF that holds real characters.", "answer": "The part of a PDF that holds real characters", "tags": ["sentence", "designed to miss: no text layer"]},
+  {"id": "what-ocr-does", "question": "What does an OCR engine do?", "gold_answer": "An OCR engine looks at the picture, guesses which shapes are letters, and writes the guesses back as text.", "answer": "It guesses which shapes are letters and writes them back as text", "tags": ["sentence", "designed to miss: no text layer"]},
+  {"id": "empty-page", "question": "What does an empty page in the parse mean?", "gold_answer": "An empty page in the parse means the file had no text layer for that page.", "answer": "The file had no text layer for that page", "tags": ["sentence", "designed to miss: no text layer"]},
+  {"id": "ocr-speed", "question": "Why leave OCR off for documents that already have text?", "gold_answer": "Reading text from an image takes seconds per page, where reading a text layer takes milliseconds.", "answer": "OCR takes seconds a page, a text layer milliseconds", "tags": ["sentence", "designed to miss: no text layer"]},
+  {"id": "hardest-case", "question": "What is the hardest case for OCR?", "gold_answer": "Tables are the hardest case.", "answer": "Tables", "tags": ["sentence", "designed to miss: no text layer"]},
+  {"id": "poor-scan", "question": "What should you do first when a scan is poor?", "gold_answer": "If the scan is poor, scan it again before tuning anything.", "answer": "Scan it again", "tags": ["sentence", "designed to miss: no text layer"]},
+  {"id": "where-to-look", "question": "Where should you look first when a question misses on a scanned document?", "gold_answer": "the first place to look is what the engine read.", "answer": "At what the OCR engine read", "tags": ["sentence", "designed to miss: no text layer"]}
 ]

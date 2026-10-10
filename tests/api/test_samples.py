@@ -64,13 +64,15 @@ def test_the_route_serves_the_committed_file(questions):
 
 
 def test_every_question_has_the_i25_shape(questions):
+    """id, question and gold answer, plus the expected answer and tags every sample question carries."""
     for item in questions:
-        assert set(item) == {"id", "question", "gold_answer"}
-        assert all(isinstance(v, str) and v.strip() for v in item.values())
+        assert set(item) == {"id", "question", "gold_answer", "answer", "tags"}
+        assert all(isinstance(item[k], str) and item[k].strip() for k in ("id", "question", "gold_answer", "answer"))
+        assert item["tags"] and all(isinstance(t, str) and t for t in item["tags"])
 
 
-def test_there_are_eight_to_ten_questions_with_unique_ids(questions):
-    assert 8 <= len(questions) <= 10
+def test_there_are_eight_to_twelve_questions_with_unique_ids(questions):
+    assert 8 <= len(questions) <= 12
     ids = [item["id"] for item in questions]
     assert len(set(ids)) == len(ids)
 
@@ -173,28 +175,43 @@ def _questions_of(name: str) -> list[dict]:
 
 def test_two_column_controls_hit_under_pdfium_and_the_straddlers_miss(tmp_path):
     text = _parse_text(ROOT / "samples" / "two-column-report" / "two-column-report.pdf", "pdfium", tmp_path)
-    hits = {q["id"]: " ".join(q["gold_answer"].split()) in text for q in _questions_of("two-column-report")}
-    assert hits == {"how-long": True, "faster": True, "lost-place": False, "extractor-error": False, "layout-never": True}
+    questions = _questions_of("two-column-report")
+    hits = {q["id"]: " ".join(q["gold_answer"].split()) in text for q in questions}
+    # Every answer that wraps inside a column is broken by a plain text parse, and is
+    # tagged so; the footer fact is read by pdfium, which has no furniture layer.
+    breaks = {q["id"] for q in questions if "misses if you change: Fast text" in q["tags"]}
+    assert breaks >= {"lost-place", "extractor-error"}
+    assert {i for i, hit in hits.items() if not hit} == breaks | {"most-gain"}
+    assert hits["fieldwork"] is True
 
 
 @pytest.mark.models
-def test_two_column_gold_answers_all_hit_under_docling(tmp_path):
-    text = _parse_text(ROOT / "samples" / "two-column-report" / "two-column-report.pdf", "docling", tmp_path)
+def test_two_column_gold_answers_all_hit_under_docling_but_the_footer(tmp_path):
+    """Docling keeps every column whole; the footer fact is set aside as furniture, by design."""
+    pdf = ROOT / "samples" / "two-column-report" / "two-column-report.pdf"
+    text = _parse_text(pdf, "docling", tmp_path)
     for q in _questions_of("two-column-report"):
-        assert " ".join(q["gold_answer"].split()) in text, q["id"]
+        assert (" ".join(q["gold_answer"].split()) in text) is (q["id"] != "fieldwork"), q["id"]
+    with_footers = _parse_text(pdf, "docling", tmp_path, content_layers=["body", "furniture"])
+    assert "Fieldwork by the Reading Lab" in with_footers
 
 
 def test_table_prose_controls_hit_under_pdfium_and_the_rows_miss(tmp_path):
     text = _parse_text(ROOT / "samples" / "table-of-figures" / "table-of-figures.pdf", "pdfium", tmp_path)
     hits = {q["id"]: " ".join(q["gold_answer"].split()) in text for q in _questions_of("table-of-figures")}
+    # The bar-joined form of a row is never in a plain parse (its plain form is, which is
+    # why the rows are still found under Fast text); the scanned page has no text at all.
     assert hits == {
         "lost-place-row": False, "reading-time-row": False, "satisfaction-row": False,
         "how-many-readers": True, "largest-change": True, "caveat": True,
+        "insurance-row": False, "figure": True, "who-gained": True,
+        "lost-place-meaning": True, "average-saving": False, "left-for-later": True,
     }
 
 
 @pytest.mark.models
 def test_table_rows_are_markdown_rows_under_docling(tmp_path):
+    """Every answer is in Docling's text but the scanned page's, which needs OCR."""
     text = _parse_text(ROOT / "samples" / "table-of-figures" / "table-of-figures.pdf", "docling", tmp_path)
     for q in _questions_of("table-of-figures"):
-        assert " ".join(q["gold_answer"].split()) in text, q["id"]
+        assert (" ".join(q["gold_answer"].split()) in text) is (q["id"] != "average-saving"), q["id"]

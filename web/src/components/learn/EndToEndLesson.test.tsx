@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { clearPdfCaches } from "@/api/usePdf"
-import { chunkById, chunkStep, cleanStep, indexStep, parseStep, quoteSource, rerankStep, retrieveStep, RUN } from "@/learn/e2e"
+import { chunkById, chunkStep, cleanStep, indexStep, numberWord, parseStep, quoteSource, rerankStep, retrieveStep, RUN } from "@/learn/e2e"
 import { readProgress, resetProgressForTests } from "@/state/lessons"
 
 import { EndToEndLesson } from "./EndToEndLesson"
@@ -135,7 +135,9 @@ describe("How RAG works, end to end", () => {
   it("sums up the index step from the run, without repeating its first sentence", () => {
     lesson()
     const panel = open(indexStep(RUN).title)
-    expect(within(panel).getByText("Fourteen chunks in, fourteen lists of numbers out.")).toBeTruthy()
+    // The count comes from the recorded run, in words up to twenty and digits above.
+    const n = numberWord(RUN.index.doc_count)
+    expect(within(panel).getByText(`${n[0].toUpperCase()}${n.slice(1)} chunks in, ${n} lists of numbers out.`)).toBeTruthy()
     expect(panel.textContent).not.toContain("now has its own list")
   })
 

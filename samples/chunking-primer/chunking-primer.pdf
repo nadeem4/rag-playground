@@ -6,7 +6,7 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
 endobj
 3 0 obj
-<< /Length 2159 >>
+<< /Length 2620 >>
 stream
 BT /F2 20 Tf 72 720 Td (Chunking in Retrieval-Augmented Generation) Tj ET
 BT /F1 11 Tf 72 685 Td (Retrieval-augmented generation answers a question in two steps. First it finds passages) Tj ET
@@ -28,12 +28,16 @@ BT /F1 11 Tf 72 409 Td (and a reader will struggle to use it.) Tj ET
 BT /F1 11 Tf 72 385 Td (Bad boundaries are hard to see from the final answer. The model is fluent either way, so) Tj ET
 BT /F1 11 Tf 72 370 Td (the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks) Tj ET
 BT /F1 11 Tf 72 355 Td (themselves, before indexing, is the quickest way to catch the problem.) Tj ET
+BT /F1 11 Tf 72 331 Td (Chunking is usually done once, when documents are added, and then forgotten. That is a) Tj ET
+BT /F1 11 Tf 72 316 Td (pity, because it is one of the few settings that changes what every later step can do.) Tj ET
+BT /F1 11 Tf 72 292 Td (The examples in this primer use English prose, but the same ideas hold for any language.) Tj ET
+BT /F1 11 Tf 72 277 Td (Only the numbers change, because words and tokens have different lengths.) Tj ET
 BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
 BT /F1 9 Tf 510 760 Td (Page 1) Tj ET
 endstream
 endobj
 4 0 obj
-<< /Length 2077 >>
+<< /Length 2992 >>
 stream
 BT /F2 15 Tf 72 720 Td (Chunk size and overlap) Tj ET
 BT /F1 11 Tf 72 691 Td (Chunk size is a trade between precision and context. Small chunks match a question) Tj ET
@@ -54,12 +58,20 @@ BT /F1 11 Tf 72 454 Td (with short, self-contained entries, such as a glossary o
 BT /F1 11 Tf 72 439 Td (smaller chunks than long narrative reports.) Tj ET
 BT /F1 11 Tf 72 415 Td (Overlap should always be smaller than the chunk itself. When the two are equal, each) Tj ET
 BT /F1 11 Tf 72 400 Td (step moves forward by nothing, and a splitter either loops or refuses to run.) Tj ET
+BT /F1 11 Tf 72 376 Td (Small chunks have a second cost. A question that needs two facts may find them in two) Tj ET
+BT /F1 11 Tf 72 361 Td (different chunks, and the retriever has to bring back both for the model to answer.) Tj ET
+BT /F1 11 Tf 72 337 Td (Large chunks have the opposite problem. A chunk of a thousand tokens may hold the answer) Tj ET
+BT /F1 11 Tf 72 322 Td (in its fifth paragraph, and the model has to find it among everything else.) Tj ET
+BT /F1 11 Tf 72 298 Td (Overlap does not fix a chunk that is simply too small. It moves a few sentences across a) Tj ET
+BT /F1 11 Tf 72 283 Td (boundary; it cannot give a two-sentence chunk the context of a whole section.) Tj ET
+BT /F1 11 Tf 72 259 Td (Most splitters let you count size in characters or in tokens. Tokens match what the) Tj ET
+BT /F1 11 Tf 72 244 Td (model sees; characters are simpler to reason about and easier to show on screen.) Tj ET
 BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
 BT /F1 9 Tf 510 760 Td (Page 2) Tj ET
 endstream
 endobj
 5 0 obj
-<< /Length 2077 >>
+<< /Length 2815 >>
 stream
 BT /F2 15 Tf 72 720 Td (Structure-aware splitting) Tj ET
 BT /F1 11 Tf 72 691 Td (Fixed-size splitting ignores the document's own shape. Structure-aware splitting uses) Tj ET
@@ -81,40 +93,163 @@ BT /F1 11 Tf 72 406 Td (Start simple, look at the chunks, then ask a handful of 
 BT /F1 11 Tf 72 391 Td (chunks come back. Change one setting at a time and compare the results side by side. The) Tj ET
 BT /F1 11 Tf 72 376 Td (right configuration is the one that retrieves the passage a careful reader would have) Tj ET
 BT /F1 11 Tf 72 361 Td (picked.) Tj ET
+BT /F1 11 Tf 72 337 Td (Keep the questions you used. Each time a setting changes, ask them again; a change that) Tj ET
+BT /F1 11 Tf 72 322 Td (helps one question often hurts another, and only a fixed set of questions shows both.) Tj ET
+BT /F1 11 Tf 72 298 Td (When a question fails, look at where its answer sits in the document before changing) Tj ET
+BT /F1 11 Tf 72 283 Td (anything. The fix for an answer split across two chunks is not the fix for an answer the) Tj ET
+BT /F1 11 Tf 72 268 Td (search never found.) Tj ET
+BT /F1 11 Tf 72 244 Td (A good test set is small and specific. Ten questions with known answers, each tied to) Tj ET
+BT /F1 11 Tf 72 229 Td (one sentence in the document, show more than a hundred vague ones.) Tj ET
 BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
 BT /F1 9 Tf 510 760 Td (Page 3) Tj ET
 endstream
 endobj
 6 0 obj
-<< /Type /Page /Parent 9 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+<< /Length 3141 >>
+stream
+BT /F2 15 Tf 72 720 Td (Chunk size in numbers) Tj ET
+BT /F1 11 Tf 72 691 Td (Take a report of forty pages and about twenty thousand words. Cut into chunks of two) Tj ET
+BT /F1 11 Tf 72 676 Td (hundred tokens, it becomes roughly a hundred and thirty pieces; cut into chunks of eight) Tj ET
+BT /F1 11 Tf 72 661 Td (hundred tokens, about thirty-five.) Tj ET
+BT /F1 11 Tf 72 637 Td (The smaller cut gives the retriever more targets, each sharper and each saying less. The) Tj ET
+BT /F1 11 Tf 72 622 Td (larger cut gives fewer targets, and each one carries a paragraph or two of context with) Tj ET
+BT /F1 11 Tf 72 607 Td (it.) Tj ET
+BT /F1 11 Tf 72 583 Td (The three things that decide a good chunk size for a collection are how long the) Tj ET
+BT /F1 11 Tf 72 568 Td (passages are that answer a typical question, how many retrieved passages the prompt can) Tj ET
+BT /F1 11 Tf 72 553 Td (hold once the question, the instructions and room for the answer have been set aside,) Tj ET
+BT /F1 11 Tf 72 538 Td (and how much surrounding text a reader needs before a passage makes sense on its own,) Tj ET
+BT /F1 11 Tf 72 523 Td (which for a reference table is very little and for an argued report can be a whole page.) Tj ET
+BT /F1 11 Tf 72 499 Td (Token counts and character counts are not the same. English averages about four) Tj ET
+BT /F1 11 Tf 72 484 Td (characters per token, so a chunk of four hundred characters holds roughly a hundred) Tj ET
+BT /F1 11 Tf 72 469 Td (tokens, and a sentence of a hundred words needs about a hundred and thirty.) Tj ET
+BT /F1 11 Tf 72 445 Td (Measure rather than guess: build the index at two sizes, ask the same ten questions of) Tj ET
+BT /F1 11 Tf 72 430 Td (both, and count how many answers come back in the top five. The difference is usually) Tj ET
+BT /F1 11 Tf 72 415 Td (larger than people expect.) Tj ET
+BT /F1 11 Tf 72 391 Td (In one test of five collections the best size was different for each, and so were the) Tj ET
+BT /F1 11 Tf 72 376 Td (reasons.) Tj ET
+BT /F1 11 Tf 72 352 Td (The help-desk articles did best with pieces of about two hundred tokens, because each) Tj ET
+BT /F1 11 Tf 72 337 Td (article answered a single problem in a few short paragraphs.) Tj ET
+BT /F1 11 Tf 72 313 Td (The legal contracts did best with pieces of about eight hundred tokens, because their) Tj ET
+BT /F1 11 Tf 72 298 Td (clauses refer to each other and lose their meaning when cut apart.) Tj ET
+BT /F1 11 Tf 72 274 Td (The product questions and answers did best with one entry per piece, whatever its) Tj ET
+BT /F1 11 Tf 72 259 Td (length, because every entry already stood on its own.) Tj ET
+BT /F1 11 Tf 72 235 Td (The meeting notes did best at about three hundred tokens, cut wherever a new speaker) Tj ET
+BT /F1 11 Tf 72 220 Td (began, because each turn in the discussion made one point.) Tj ET
+BT /F1 11 Tf 72 196 Td (The research papers did best at about five hundred tokens, cut at the ends of) Tj ET
+BT /F1 11 Tf 72 181 Td (paragraphs, because their arguments ran across several sentences.) Tj ET
+BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
+BT /F1 9 Tf 510 760 Td (Page 4) Tj ET
+endstream
 endobj
 7 0 obj
-<< /Type /Page /Parent 9 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+<< /Length 2545 >>
+stream
+BT /F2 15 Tf 72 720 Td (What a heading does to a split) Tj ET
+BT /F1 11 Tf 72 691 Td (A heading is a promise about what follows. A splitter that starts a new chunk at each) Tj ET
+BT /F1 11 Tf 72 676 Td (heading keeps that promise intact, and a chunk that begins with its heading tells the) Tj ET
+BT /F1 11 Tf 72 661 Td (retriever what it is about before the first sentence.) Tj ET
+BT /F1 11 Tf 72 637 Td (Short sections are the exception. A heading followed by a single sentence makes a chunk) Tj ET
+BT /F1 11 Tf 72 622 Td (too small to answer anything, so splitters usually merge it with the next section until) Tj ET
+BT /F1 11 Tf 72 607 Td (the chunk reaches a useful size.) Tj ET
+BT /F1 11 Tf 72 583 Td (Long sections are split again inside themselves. Each part keeps the heading of its) Tj ET
+BT /F1 11 Tf 72 568 Td (section, often with the headings above it, so a piece from the middle of a chapter still) Tj ET
+BT /F1 11 Tf 72 553 Td (says which chapter it came from.) Tj ET
+BT /F1 11 Tf 72 529 Td (Headings help only when the parser finds them. In a scanned report or a plain text) Tj ET
+BT /F1 11 Tf 72 514 Td (export they look like any other line, and a heading-based splitter falls back to cutting) Tj ET
+BT /F1 11 Tf 72 499 Td (by size.) Tj ET
+BT /F1 11 Tf 72 475 Td (Some documents have headings that say little, such as Introduction or Results. Adding) Tj ET
+BT /F1 11 Tf 72 460 Td (the document's title to the heading path gives such chunks enough context to be told) Tj ET
+BT /F1 11 Tf 72 445 Td (apart.) Tj ET
+BT /F1 11 Tf 72 421 Td (Headings also travel into the embedding. When the heading path is added to the start of) Tj ET
+BT /F1 11 Tf 72 406 Td (a chunk, its embedding moves towards the topic the heading names, which helps short) Tj ET
+BT /F1 11 Tf 72 391 Td (chunks most.) Tj ET
+BT /F1 11 Tf 72 367 Td (The cost is length. A heading path of three levels can add twenty or thirty tokens to) Tj ET
+BT /F1 11 Tf 72 352 Td (every chunk, which matters when chunks are small and the context window is tight.) Tj ET
+BT /F1 11 Tf 72 328 Td (Numbered headings need care. A splitter that treats every numbered line as a heading) Tj ET
+BT /F1 11 Tf 72 313 Td (will cut a numbered list into pieces of one item each.) Tj ET
+BT /F1 11 Tf 72 289 Td (In the end, headings are a hint, not a rule. The splitter still checks the size of every) Tj ET
+BT /F1 11 Tf 72 274 Td (chunk and cuts again when a section runs long.) Tj ET
+BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
+BT /F1 9 Tf 510 760 Td (Page 5) Tj ET
+endstream
 endobj
 8 0 obj
-<< /Type /Page /Parent 9 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+<< /Length 2559 >>
+stream
+BT /F2 15 Tf 72 720 Td (A short glossary) Tj ET
+BT /F1 11 Tf 72 691 Td (Chunk. A piece of a document, cut before indexing, that the retriever scores as a whole.) Tj ET
+BT /F1 11 Tf 72 667 Td (Chunk size. How long each piece may be, counted in characters or in tokens.) Tj ET
+BT /F1 11 Tf 72 643 Td (Overlap. Text repeated at the start of a chunk from the end of the one before it.) Tj ET
+BT /F1 11 Tf 72 619 Td (Splitter. The step that decides where one chunk ends and the next begins.) Tj ET
+BT /F1 11 Tf 72 595 Td (Embedding. A list of numbers that stands for what a chunk means, used to compare it with) Tj ET
+BT /F1 11 Tf 72 580 Td (a question.) Tj ET
+BT /F1 11 Tf 72 556 Td (Index. The store of chunks and their embeddings that a search runs against.) Tj ET
+BT /F1 11 Tf 72 532 Td (Retriever. The step that scores every chunk against a question and returns the best.) Tj ET
+BT /F1 11 Tf 72 508 Td (Top k. How many of the best-scoring chunks a search hands on to the next step.) Tj ET
+BT /F1 11 Tf 72 484 Td (Reranker. A second, slower model that reads the question and each returned chunk) Tj ET
+BT /F1 11 Tf 72 469 Td (together.) Tj ET
+BT /F1 11 Tf 72 445 Td (Hybrid search. A search that combines keyword matches with embedding matches.) Tj ET
+BT /F1 11 Tf 72 421 Td (Context window. The amount of text a language model can read at once.) Tj ET
+BT /F1 11 Tf 72 397 Td (Heading path. The headings above a chunk, kept with it so it says where it came from.) Tj ET
+BT /F1 11 Tf 72 373 Td (Recall. The share of the passages that answer a question that the search brought back.) Tj ET
+BT /F1 11 Tf 72 349 Td (Precision. The share of what the search brought back that answers the question.) Tj ET
+BT /F1 11 Tf 72 325 Td (Token. A small unit of text, often part of a word, that models read and count.) Tj ET
+BT /F1 11 Tf 72 301 Td (Semantic chunking. Cutting where the meaning changes, found by comparing the embeddings) Tj ET
+BT /F1 11 Tf 72 286 Td (of neighbouring sentences.) Tj ET
+BT /F1 11 Tf 72 262 Td (Parent and child. Small chunks searched for precision, each pointing to a larger chunk) Tj ET
+BT /F1 11 Tf 72 247 Td (handed to the model for context.) Tj ET
+BT /F1 11 Tf 72 223 Td (Evidence. The sentence in a document that answers a question, used to check whether a) Tj ET
+BT /F1 11 Tf 72 208 Td (search found it.) Tj ET
+BT /F1 11 Tf 72 184 Td (Hit rate. The share of test questions whose evidence came back in the pieces checked.) Tj ET
+BT /F1 9 Tf 72 40 Td (RAG Playground sample: a primer on chunking) Tj ET
+BT /F1 9 Tf 510 760 Td (Page 6) Tj ET
+endstream
 endobj
 9 0 obj
-<< /Type /Pages /Kids [6 0 R 7 0 R 8 0 R] /Count 3 >>
+<< /Type /Page /Parent 15 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
 endobj
 10 0 obj
-<< /Type /Catalog /Pages 9 0 R >>
+<< /Type /Page /Parent 15 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+11 0 obj
+<< /Type /Page /Parent 15 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+endobj
+12 0 obj
+<< /Type /Page /Parent 15 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 6 0 R >>
+endobj
+13 0 obj
+<< /Type /Page /Parent 15 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 7 0 R >>
+endobj
+14 0 obj
+<< /Type /Page /Parent 15 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 8 0 R >>
+endobj
+15 0 obj
+<< /Type /Pages /Kids [9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R] /Count 6 >>
+endobj
+16 0 obj
+<< /Type /Catalog /Pages 15 0 R >>
 endobj
 xref
-0 11
+0 17
 0000000000 65535 f 
 0000000009 00000 n 
 0000000079 00000 n 
 0000000154 00000 n 
-0000002365 00000 n 
-0000004494 00000 n 
-0000006623 00000 n 
-0000006759 00000 n 
-0000006895 00000 n 
-0000007031 00000 n 
-0000007100 00000 n 
+0000002826 00000 n 
+0000005870 00000 n 
+0000008737 00000 n 
+0000011930 00000 n 
+0000014527 00000 n 
+0000017138 00000 n 
+0000017275 00000 n 
+0000017413 00000 n 
+0000017551 00000 n 
+0000017689 00000 n 
+0000017827 00000 n 
+0000017965 00000 n 
+0000018058 00000 n 
 trailer
-<< /Size 11 /Root 10 0 R >>
+<< /Size 17 /Root 16 0 R >>
 startxref
-7150
+18109
 %%EOF

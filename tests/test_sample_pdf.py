@@ -32,9 +32,9 @@ def test_committed_sample_matches_the_generator():
     assert SAMPLE.read_bytes() == sample.build()
 
 
-def test_sample_has_three_pages_each_with_a_footer():
+def test_sample_has_six_pages_each_with_a_footer():
     pages = _page_texts(sample.build())
-    assert len(pages) == 3
+    assert len(pages) == 6
     for n, text in enumerate(pages, start=1):
         assert "RAG Playground sample" in text
         assert f"Page {n}" in text

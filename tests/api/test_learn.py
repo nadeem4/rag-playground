@@ -102,7 +102,7 @@ def test_every_challenge_outcome_holds_on_the_real_chunkers(body, tmp_path):
 def test_learn_document_is_the_sample_the_lessons_use(document):
     assert set(document) == {"filename", "page_count", "text"}
     assert document["filename"] == "chunking-primer.pdf"
-    assert document["page_count"] == 3
+    assert document["page_count"] == 6
 
 
 def test_learn_document_text_is_what_the_chunkers_cut(document, body, tmp_path):

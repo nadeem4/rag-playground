@@ -284,6 +284,15 @@ describe("AppHeader with the lessons hidden", () => {
     for (const k of ["gap-1", "md:gap-0", "lg:gap-1"]) expect(nav).toContain(k)
   })
 
+  it("shows the app's mark beside its name, hidden from screen readers", () => {
+    header("/")
+    const home = screen.getByRole("link", { name: "RAG Playground" })
+    const mark = home.querySelector("svg")
+    expect(mark).not.toBeNull()
+    expect(mark!.getAttribute("aria-hidden")).toBe("true")
+    expect(mark!.innerHTML).toContain("#0f6e51")
+  })
+
   it("marks Read as current on /read", () => {
     header("/read", false)
     expect(screen.getByRole("link", { name: "Read" }).getAttribute("aria-current")).toBe("page")

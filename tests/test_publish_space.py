@@ -67,7 +67,7 @@ def test_binaries_are_tracked_by_lfs_in_the_space(tmp_path):
     """
     _mod.export_tree(tmp_path)
     attrs = (tmp_path / ".gitattributes").read_text(encoding="utf-8")
-    for ext in ("webm", "mp4", "jpg", "jpeg", "png", "gif", "webp", "pdf", "woff2", "lance"):
+    for ext in ("webm", "mp4", "jpg", "jpeg", "png", "gif", "webp", "pdf", "woff2", "lance", "ico"):
         assert f"*.{ext} filter=lfs diff=lfs merge=lfs -text" in attrs, ext
     # The repo's own text rule still holds.
     assert "* text=auto eol=lf" in attrs

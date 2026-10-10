@@ -51,7 +51,7 @@ def space_readme(readme: str) -> str:
 #: Binary types the Space must keep in LFS. The Space's Docker build checks files
 #: out with its own .gitattributes; without these rules it copies LFS pointers
 #: (about 130 bytes) instead of the files, and the Home clips play blank.
-SPACE_LFS = ("webm", "mp4", "jpg", "jpeg", "png", "gif", "webp", "pdf", "woff", "woff2", "ttf", "lance", "zip", "gz")
+SPACE_LFS = ("webm", "mp4", "jpg", "jpeg", "png", "ico", "gif", "webp", "pdf", "woff", "woff2", "ttf", "lance", "zip", "gz")
 
 
 def space_gitattributes(attrs: str) -> str:

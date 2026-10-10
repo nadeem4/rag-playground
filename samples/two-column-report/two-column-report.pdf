@@ -6,7 +6,7 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
 endobj
 3 0 obj
-<< /Length 2251 >>
+<< /Length 4821 >>
 stream
 BT /F2 18 Tf 60 740 Td (Reading order in two-column reports) Tj ET
 BT /F1 10 Tf 60 700 Td (The survey ran for six weeks. Two hundred) Tj ET
@@ -39,12 +39,49 @@ BT /F1 10 Tf 60 490 Td (screen, at the same size, in a quiet room.) Tj ET
 BT /F1 10 Tf 318 490 Td (and were easier to skim.) Tj ET
 BT /F1 10 Tf 60 476 Td (The study recorded the time spent on each) Tj ET
 BT /F1 10 Tf 60 462 Td (page and every place where a reader went) Tj ET
+BT /F1 10 Tf 318 462 Td (Understanding was checked with three short) Tj ET
 BT /F1 10 Tf 60 448 Td (back to an earlier line.) Tj ET
+BT /F1 10 Tf 318 448 Td (questions after each document. Scores were) Tj ET
+BT /F1 10 Tf 318 434 Td (the same for both layouts, so the faster) Tj ET
+BT /F1 10 Tf 60 420 Td (Readers came from three colleges and were) Tj ET
+BT /F1 10 Tf 318 420 Td (reading on one column did not cost) Tj ET
+BT /F1 10 Tf 60 406 Td (paid for an hour of their time. None had) Tj ET
+BT /F1 10 Tf 318 406 Td (understanding.) Tj ET
+BT /F1 10 Tf 60 392 Td (seen the documents before, and none was told) Tj ET
+BT /F1 10 Tf 60 378 Td (what the study was about until it ended.) Tj ET
+BT /F1 10 Tf 318 378 Td (Several readers said they used a finger or) Tj ET
+BT /F1 10 Tf 318 364 Td (the mouse pointer to keep their place on two) Tj ET
+BT /F1 10 Tf 60 350 Td (Each session took about an hour. Readers) Tj ET
+BT /F1 10 Tf 318 350 Td (columns. On one column almost nobody did.) Tj ET
+BT /F1 10 Tf 60 336 Td (could stop whenever they liked, but only) Tj ET
+BT /F1 10 Tf 60 322 Td (four did, all of them on the longest) Tj ET
+BT /F1 10 Tf 318 322 Td (The study did not test very short pages,) Tj ET
+BT /F1 10 Tf 60 308 Td (documents.) Tj ET
+BT /F1 10 Tf 318 308 Td (such as leaflets, where a reader can see the) Tj ET
+BT /F1 10 Tf 318 294 Td (whole page at once.) Tj ET
+BT /F1 10 Tf 60 280 Td (Nothing was printed. Everything was read on) Tj ET
+BT /F1 10 Tf 60 266 Td (screen, one page at a time, because that is) Tj ET
+BT /F1 10 Tf 318 266 Td (Readers also wrote a sentence about each) Tj ET
+BT /F1 10 Tf 60 252 Td (how most reports are read today.) Tj ET
+BT /F1 10 Tf 318 252 Td (document. Those who read on two columns were) Tj ET
+BT /F1 10 Tf 318 238 Td (more likely to mention the layout, and) Tj ET
+BT /F1 10 Tf 60 224 Td (Before the study began, a pilot with twenty) Tj ET
+BT /F1 10 Tf 318 224 Td (nearly always to complain about it.) Tj ET
+BT /F1 10 Tf 60 210 Td (readers tested the questions and the timing.) Tj ET
+BT /F1 10 Tf 60 196 Td (Two questions that nearly every reader got) Tj ET
+BT /F1 10 Tf 318 196 Td (None of this means two columns are always) Tj ET
+BT /F1 10 Tf 60 182 Td (wrong were rewritten.) Tj ET
+BT /F1 10 Tf 318 182 Td (wrong. It means they have a cost, and the) Tj ET
+BT /F1 10 Tf 318 168 Td (cost grows with the length of the text.) Tj ET
+BT /F1 10 Tf 60 154 Td (The order of the documents was fixed so that) Tj ET
+BT /F1 10 Tf 60 140 Td (every reader met the long ones after the) Tj ET
+BT /F1 10 Tf 60 126 Td (short ones, once they were used to the) Tj ET
+BT /F1 10 Tf 60 112 Td (screen.) Tj ET
 BT /F1 9 Tf 512 40 Td (Page 1) Tj ET
 endstream
 endobj
 4 0 obj
-<< /Length 2083 >>
+<< /Length 4620 >>
 stream
 BT /F1 10 Tf 60 700 Td (The second study used the same documents.) Tj ET
 BT /F1 10 Tf 318 700 Td (The layout model made a different mistake.) Tj ET
@@ -75,11 +112,48 @@ BT /F1 10 Tf 318 504 Td (from a misread page carries the mistake with) Tj ET
 BT /F1 10 Tf 60 490 Td (saved as plain text and compared line by) Tj ET
 BT /F1 10 Tf 318 490 Td (it.) Tj ET
 BT /F1 10 Tf 60 476 Td (line with the original.) Tj ET
+BT /F1 10 Tf 318 462 Td (Tables and captions were rare in the twelve) Tj ET
+BT /F1 10 Tf 60 448 Td (The extractor was the kind built into most) Tj ET
+BT /F1 10 Tf 318 448 Td (documents, so they were left out of the) Tj ET
+BT /F1 10 Tf 60 434 Td (PDF libraries. It reads the characters in) Tj ET
+BT /F1 10 Tf 318 434 Td (comparison and counted separately.) Tj ET
+BT /F1 10 Tf 60 420 Td (the order they were drawn, which for these) Tj ET
+BT /F1 10 Tf 60 406 Td (files was one row at a time across the page.) Tj ET
+BT /F1 10 Tf 318 406 Td (The authors' own text was the reference. A) Tj ET
+BT /F1 10 Tf 318 392 Td (program scored a sentence as correct only) Tj ET
+BT /F1 10 Tf 60 378 Td (The layout model looked at each page as a) Tj ET
+BT /F1 10 Tf 318 378 Td (when every word came out in the right order.) Tj ET
+BT /F1 10 Tf 60 364 Td (picture first. It found the blocks of text,) Tj ET
+BT /F1 10 Tf 60 350 Td (put them in order, and only then read the) Tj ET
+BT /F1 10 Tf 318 350 Td (On one-column pages the two programs agreed) Tj ET
+BT /F1 10 Tf 60 336 Td (characters inside them.) Tj ET
+BT /F1 10 Tf 318 336 Td (on every sentence, which is why the problem) Tj ET
+BT /F1 10 Tf 318 322 Td (is easy to miss when a team tests only one) Tj ET
+BT /F1 10 Tf 60 308 Td (Both programs ran on the same ordinary) Tj ET
+BT /F1 10 Tf 318 308 Td (kind of file.) Tj ET
+BT /F1 10 Tf 60 294 Td (laptop, one after the other, with nothing) Tj ET
+BT /F1 10 Tf 60 280 Td (else running.) Tj ET
+BT /F1 10 Tf 318 280 Td (The plain extractor's mistakes were not) Tj ET
+BT /F1 10 Tf 318 266 Td (random. They followed the rows of the page,) Tj ET
+BT /F1 10 Tf 60 252 Td (The test set was the same twelve documents,) Tj ET
+BT /F1 10 Tf 318 252 Td (so the same pair of columns was mixed on) Tj ET
+BT /F1 10 Tf 60 238 Td (each in both layouts, for a total of twenty-) Tj ET
+BT /F1 10 Tf 318 238 Td (every line.) Tj ET
+BT /F1 10 Tf 60 224 Td (four files and a little over a hundred) Tj ET
+BT /F1 10 Tf 60 210 Td (pages.) Tj ET
+BT /F1 10 Tf 318 210 Td (A reader who sees such output knows at once) Tj ET
+BT /F1 10 Tf 318 196 Td (that something is wrong. A search system) Tj ET
+BT /F1 10 Tf 60 182 Td (Every mistake was logged by hand, with the) Tj ET
+BT /F1 10 Tf 318 182 Td (does not know, and keeps the broken text as) Tj ET
+BT /F1 10 Tf 60 168 Td (page, the line and the kind of error, so the) Tj ET
+BT /F1 10 Tf 318 168 Td (if it were right.) Tj ET
+BT /F1 10 Tf 60 154 Td (two programs could be compared mistake by) Tj ET
+BT /F1 10 Tf 60 140 Td (mistake.) Tj ET
 BT /F1 9 Tf 512 40 Td (Page 2) Tj ET
 endstream
 endobj
 5 0 obj
-<< /Length 2348 >>
+<< /Length 4324 >>
 stream
 BT /F2 14 Tf 60 740 Td (A second wave, one year later) Tj ET
 BT /F1 10 Tf 60 700 Td (A year later the survey was run again with) Tj ET
@@ -109,16 +183,45 @@ BT /F1 10 Tf 318 518 Td (readers asked to keep the two-column version) Tj ET
 BT /F1 10 Tf 60 504 Td (lost their place most often were the ones) Tj ET
 BT /F1 10 Tf 318 504 Td (when the study ended.) Tj ET
 BT /F1 10 Tf 60 490 Td (who read fastest.) Tj ET
+BT /F1 10 Tf 318 476 Td (Understanding scores were again the same for) Tj ET
 BT /F1 10 Tf 60 462 Td (The second wave also asked readers to rate) Tj ET
+BT /F1 10 Tf 318 462 Td (both layouts, as in the first wave.) Tj ET
 BT /F1 10 Tf 60 448 Td (each document for clarity, from one to five.) Tj ET
 BT /F1 10 Tf 60 434 Td (The one-column version scored higher on) Tj ET
+BT /F1 10 Tf 318 434 Td (The rule between the columns was drawn in) Tj ET
 BT /F1 10 Tf 60 420 Td (every document but one.) Tj ET
+BT /F1 10 Tf 318 420 Td (light grey, one point wide. Darker rules) Tj ET
+BT /F1 10 Tf 318 406 Td (were tried in a pilot and readers found them) Tj ET
+BT /F1 10 Tf 60 392 Td (The second wave ran in the spring, at the) Tj ET
+BT /F1 10 Tf 318 392 Td (distracting.) Tj ET
+BT /F1 10 Tf 60 378 Td (same colleges, in the same rooms and on the) Tj ET
+BT /F1 10 Tf 60 364 Td (same screens as the first.) Tj ET
+BT /F1 10 Tf 318 364 Td (Long paragraphs hurt two columns most. A) Tj ET
+BT /F1 10 Tf 318 350 Td (paragraph that ran past the bottom of a) Tj ET
+BT /F1 10 Tf 60 336 Td (Readers who used two-column layouts at work) Tj ET
+BT /F1 10 Tf 318 336 Td (column forced a jump in the middle of a) Tj ET
+BT /F1 10 Tf 60 322 Td (were no faster with them than anyone else.) Tj ET
+BT /F1 10 Tf 318 322 Td (thought.) Tj ET
+BT /F1 10 Tf 60 308 Td (Practice did not remove the cost of the jump) Tj ET
+BT /F1 10 Tf 60 294 Td (between columns.) Tj ET
+BT /F1 10 Tf 318 294 Td (Readers on two columns also skipped more) Tj ET
+BT /F1 10 Tf 318 280 Td (lines by accident, most often the first line) Tj ET
+BT /F1 10 Tf 60 266 Td (The new documents were longer than the old) Tj ET
+BT /F1 10 Tf 318 266 Td (at the top of the second column.) Tj ET
+BT /F1 10 Tf 60 252 Td (ones by about a page each, which gave) Tj ET
+BT /F1 10 Tf 60 238 Td (readers more chances to lose their place.) Tj ET
+BT /F1 10 Tf 318 238 Td (The middle-ground layout cost more paper in) Tj ET
+BT /F1 10 Tf 318 224 Td (print, because the wider gap left less room) Tj ET
+BT /F1 10 Tf 60 210 Td (As before, the time on each page was) Tj ET
+BT /F1 10 Tf 318 210 Td (for text on each page.) Tj ET
+BT /F1 10 Tf 60 196 Td (recorded, along with every jump back to an) Tj ET
+BT /F1 10 Tf 60 182 Td (earlier line.) Tj ET
 BT /F1 8 Tf 60 40 Td (Fieldwork by the Reading Lab between 3 March and 14 April 2026.) Tj ET
 BT /F1 9 Tf 512 40 Td (Page 3) Tj ET
 endstream
 endobj
 6 0 obj
-<< /Length 1791 >>
+<< /Length 4082 >>
 stream
 BT /F1 10 Tf 60 700 Td (The programs were tested again on the) Tj ET
 BT /F1 10 Tf 318 700 Td (The time each program took was also) Tj ET
@@ -145,11 +248,45 @@ BT /F1 10 Tf 318 532 Td (screen reader. For them the layout made no) Tj ET
 BT /F1 10 Tf 60 518 Td (where the lines sat on the page.) Tj ET
 BT /F1 10 Tf 318 518 Td (difference at all, because the software read) Tj ET
 BT /F1 10 Tf 318 504 Td (each column in turn.) Tj ET
+BT /F1 10 Tf 60 490 Td (This time the extractor was also tried on) Tj ET
+BT /F1 10 Tf 60 476 Td (one-column pages. It made no mistakes on) Tj ET
+BT /F1 10 Tf 318 476 Td (Running both programs on all twelve) Tj ET
+BT /F1 10 Tf 60 462 Td (them at all.) Tj ET
+BT /F1 10 Tf 318 462 Td (documents took the extractor under a second) Tj ET
+BT /F1 10 Tf 318 448 Td (and the layout model about two minutes.) Tj ET
+BT /F1 10 Tf 60 434 Td (The layout model found every page number) Tj ET
+BT /F1 10 Tf 60 420 Td (correctly, along with one line that was not) Tj ET
+BT /F1 10 Tf 318 420 Td (A search system usually reads a document) Tj ET
+BT /F1 10 Tf 60 406 Td (a page number at all.) Tj ET
+BT /F1 10 Tf 318 406 Td (once and answers many questions about it, so) Tj ET
+BT /F1 10 Tf 318 392 Td (the slower model's cost is paid once per) Tj ET
+BT /F1 10 Tf 60 378 Td (Where the two programs disagreed, the) Tj ET
+BT /F1 10 Tf 318 378 Td (document.) Tj ET
+BT /F1 10 Tf 60 364 Td (authors' text settled it, as in the first) Tj ET
+BT /F1 10 Tf 60 350 Td (study.) Tj ET
+BT /F1 10 Tf 318 350 Td (For files that change every day, that cost) Tj ET
+BT /F1 10 Tf 318 336 Td (is paid every day, and a team may keep the) Tj ET
+BT /F1 10 Tf 60 322 Td (The retrained model was given a hundred new) Tj ET
+BT /F1 10 Tf 318 322 Td (fast extractor for one-column files only.) Tj ET
+BT /F1 10 Tf 60 308 Td (pages to learn from, all of them reports) Tj ET
+BT /F1 10 Tf 60 294 Td (with two columns.) Tj ET
+BT /F1 10 Tf 318 294 Td (Neither program was tuned for these) Tj ET
+BT /F1 10 Tf 318 280 Td (documents. Both were used exactly as they) Tj ET
+BT /F1 10 Tf 60 266 Td (Its mistakes were fewer and smaller. Most) Tj ET
+BT /F1 10 Tf 318 266 Td (come.) Tj ET
+BT /F1 10 Tf 60 252 Td (were short lines at the foot of a page, read) Tj ET
+BT /F1 10 Tf 60 238 Td (as footers when they were text.) Tj ET
+BT /F1 10 Tf 318 238 Td (The fast extractor needed no training and no) Tj ET
+BT /F1 10 Tf 318 224 Td (setup. That is its strength, and the reason) Tj ET
+BT /F1 10 Tf 318 210 Td (it is the default in many tools.) Tj ET
+BT /F1 10 Tf 318 182 Td (The layout model needed a download of a few) Tj ET
+BT /F1 10 Tf 318 168 Td (hundred megabytes before the first page, and) Tj ET
+BT /F1 10 Tf 318 154 Td (more memory while it ran.) Tj ET
 BT /F1 9 Tf 512 40 Td (Page 4) Tj ET
 endstream
 endobj
 7 0 obj
-<< /Length 2776 >>
+<< /Length 3820 >>
 stream
 BT /F2 14 Tf 60 740 Td (Methods and limits) Tj ET
 BT /F1 10 Tf 60 700 Td (Each document was set in both layouts, and a) Tj ET
@@ -191,6 +328,21 @@ BT /F1 10 Tf 318 406 Td (stories were short and stood alone, like a) Tj ET
 BT /F1 10 Tf 60 392 Td (short steps fitted inside one column either) Tj ET
 BT /F1 10 Tf 318 392 Td (newspaper.) Tj ET
 BT /F1 10 Tf 60 378 Td (way, so readers rarely had to jump.) Tj ET
+BT /F1 10 Tf 318 364 Td (The full results for each document are kept) Tj ET
+BT /F1 10 Tf 60 350 Td (The product manual and the pension statement) Tj ET
+BT /F1 10 Tf 318 350 Td (by the study team and are not part of this) Tj ET
+BT /F1 10 Tf 60 336 Td (had the most tables. Neither table was asked) Tj ET
+BT /F1 10 Tf 318 336 Td (summary.) Tj ET
+BT /F1 10 Tf 60 322 Td (about in the questions after each document.) Tj ET
+BT /F1 10 Tf 318 308 Td (The study was not set up to test fonts, line) Tj ET
+BT /F1 10 Tf 60 294 Td (Reading time was rounded to the nearest) Tj ET
+BT /F1 10 Tf 318 294 Td (length or colour, and those were kept the) Tj ET
+BT /F1 10 Tf 60 280 Td (second, and every average was taken over all) Tj ET
+BT /F1 10 Tf 318 280 Td (same in both layouts.) Tj ET
+BT /F1 10 Tf 60 266 Td (readers, including the slow ones.) Tj ET
+BT /F1 10 Tf 318 252 Td (A third wave is planned with people who read) Tj ET
+BT /F1 10 Tf 318 238 Td (reports at work, to test whether the results) Tj ET
+BT /F1 10 Tf 318 224 Td (hold beyond students.) Tj ET
 BT /F1 9 Tf 512 40 Td (Page 5) Tj ET
 endstream
 endobj
@@ -221,19 +373,19 @@ xref
 0000000009 00000 n 
 0000000079 00000 n 
 0000000154 00000 n 
-0000002457 00000 n 
-0000004592 00000 n 
-0000006992 00000 n 
-0000008835 00000 n 
-0000011663 00000 n 
-0000011800 00000 n 
-0000011937 00000 n 
-0000012075 00000 n 
-0000012213 00000 n 
-0000012351 00000 n 
-0000012436 00000 n 
+0000005027 00000 n 
+0000009699 00000 n 
+0000014075 00000 n 
+0000018209 00000 n 
+0000022081 00000 n 
+0000022218 00000 n 
+0000022355 00000 n 
+0000022493 00000 n 
+0000022631 00000 n 
+0000022769 00000 n 
+0000022854 00000 n 
 trailer
 << /Size 15 /Root 14 0 R >>
 startxref
-12487
+22905
 %%EOF

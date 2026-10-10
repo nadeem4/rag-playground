@@ -1,14 +1,12 @@
 {
-  "chunking-primer": [
-    {"id": "h1", "question": "Why does structure-aware splitting cut at headings?", "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."},
-    {"id": "h2", "question": "What does a section under one heading usually discuss?", "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."},
-    {"id": "h3", "question": "Why are headings natural places to cut?", "gold_answer": "A section under one heading usually discusses one subject, which is exactly what a good chunk should do."}
-  ],
+  "chunking-primer": [],
   "table-of-figures": [],
   "two-column-report": [
-    {"id": "m1", "question": "Which item benefited most from the one-column design?", "gold_answer": "The bus timetable guide gained the most from one column"},
-    {"id": "m2", "question": "Which item benefited most from the single-panel layout?", "gold_answer": "The bus timetable guide gained the most from one column"},
-    {"id": "m3", "question": "Which document benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"},
-    {"id": "m4", "question": "Which leaflet gained most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"}
+    {"id": "m5", "question": "Which publication benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m6", "question": "Which handout benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m7", "question": "Which paper benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m8", "question": "Which item benefited most from the single-column design?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m9", "question": "Which text benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"},
+    {"id": "m10", "question": "Which title benefited most from the single-panel design?", "gold_answer": "The bus timetable guide gained the most from one column"}
   ]
 }

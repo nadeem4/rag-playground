@@ -10,7 +10,7 @@ from __future__ import annotations
 from pandion.executor import NodeStatus, sweep
 from pandion.graph import Edge, Graph, Node
 from pandion.ports import Stage
-from tests.core.test_executor import (  # noqa: F401
+from test_executor import (  # noqa: F401
     CALLS,
     counting_registry,
     g_linear,

@@ -1,6 +1,6 @@
-"""Shared fake transforms for core tests.
+"""Shared fake transforms for engine tests.
 
-Every fake here is model-free and plugin-free: `core/` must be provable without
+Every fake here is model-free and plugin-free: the engine must be provable without
 importing a single RAG library.
 """
 

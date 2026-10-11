@@ -27,7 +27,7 @@ The four samples were written for the playground, and each one shows a problem:
 
 | Sample | Pages | What it shows |
 |---|---|---|
-| A primer on chunking | 6 | Headings, a running footer, a repeated paragraph and a short glossary. It is the default. |
+| A primer on chunking | 6 | Headings, a running footer and a short glossary. It is the default. |
 | Scanned notes | 4 | Pictures of text with no text layer. Without OCR the parse is empty. |
 | Two-column report | 5 | Rows drawn across both columns. A plain parser joins halves of different sentences. |
 | Table of figures | 6 | Two ruled tables, a bar chart with a caption, one scanned page and notes. A layout parser keeps each row together. |

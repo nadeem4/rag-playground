@@ -5,19 +5,14 @@ description = "A local-first bench for learning and demonstrating RAG by experim
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "anthropic>=1.7.0",
-    "docling>=2.129.0",
     "fastapi>=0.141.1",
     "lancedb>=0.38,<0.39",
-    # Docling's OCR engine. RapidOCR's ONNX checkpoints ship inside its wheel,
-    # so OCR downloads nothing; without onnxruntime Docling falls back to
-    # RapidOCR's torch backend, which fetches .pth files into site-packages.
-    "onnxruntime>=1.30.0",
     "openai>=3.17.0",
-    # The engine: packages/pandion, installed from this workspace.
-    "pandion",
+    # The engine: packages/pandion, installed from this workspace, with the
+    # extras for the strategies that have moved into it.
+    "pandion[docling,pdfium]",
     "pillow>=12.3.0",
     "pydantic>=2.9",
-    "pypdfium2>=5.13.0",
     "python-dotenv>=1.2.3",
     "python-multipart>=0.0.32",
     "sentence-transformers>=6.1.0",

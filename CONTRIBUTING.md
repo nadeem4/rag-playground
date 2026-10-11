@@ -87,7 +87,8 @@ Follow test-driven development: write the failing test first, then the code.
 A strategy is one Python module. The web app builds its settings form from the config
 model, so a new strategy needs no frontend change.
 
-1. Create `plugins/<stage>/<name>.py` with a Pydantic config model and a `Transform`
+1. Create `plugins/<stage>/<name>.py` (or, for a stage that has moved into the engine
+   package, such as parse, `packages/pandion/src/pandion/plugins/<stage>/<name>.py`) with a Pydantic config model and a `Transform`
    subclass decorated with `@register`. Give every config field a default. Give the class:
    - a `summary` of how the strategy works, in one or two plain sentences;
    - an `explain(config)` that says what these settings will do. Every number, switch and
@@ -106,8 +107,10 @@ model, so a new strategy needs no frontend change.
      stays selectable, tagged "Falls back";
    - `deterministic = False` if its output can change between runs (a model call), and
      `cacheable = False` if its output should never be reused, as for chat answers.
-2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py`. A test fails if a plugin
-   module exists but is not listed.
+2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py` (a package strategy goes
+   in `pandion/plugins/__init__.py` as well). A test fails if a plugin module exists but
+   is not listed. Import a heavy library inside the function that uses it, through
+   `pandion.errors.require`, so discovering the strategy needs no extra.
 3. Run `uv run pytest`. It runs the app's tests in `tests/` and the engine's tests in
    `packages/pandion/tests/`. The contract suite (`tests/contract/`) checks every plugin,
    including that the artifact id is deterministic, that the config round-trips through

@@ -27,7 +27,7 @@ import "@/components/learn/learn.css"
  * - Saved items and the working pipeline: localStorage (state/pipelines.ts,
  *   state/libraryExperiments.ts, state/graph.ts). The Ask panel's side, width
  *   and open or closed: localStorage (components/ask/AskDock.tsx).
- * - Run results: core/storage.py never expires an entry, api/expiry.py deletes
+ * - Run results: packages/pandion/src/pandion/storage.py never expires an entry, api/expiry.py deletes
  *   only uploads, and DELETE /api/cache (api/routes/artifacts.py) clears them.
  *   The demo runs without persistent storage: scripts/publish_space.py asks
  *   for none, and the Dockerfile writes them under /data inside the

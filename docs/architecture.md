@@ -16,7 +16,8 @@ that talks to the API.
 ## The layout of the repo
 
 ```
-core/        the engine: artifacts, transforms, the graph, the executor, the content-addressed store
+packages/pandion/  the engine as its own Python package, pandion: artifacts, transforms, the
+                   graph, the executor, the content-addressed store
 providers/   embedding models, the embedding cache, chat model calls, and the custom endpoint check
 plugins/     one module per strategy, grouped by stage
 api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode
@@ -25,6 +26,14 @@ samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
 tests/       pytest: unit, plugin contract, API and integration tests
 ```
+
+The app depends on `pandion` through a uv workspace, so `uv sync` installs it from
+`packages/pandion/` and an edit there is live at once. The engine is moving into the
+package one stage at a time; what has not moved yet still lives in `plugins/` and
+`providers/`. The app may import any public name from `pandion` but never a private one
+(a name starting with an underscore), and the package never imports the app. Two tests
+hold both rules: `tests/integration/test_package_boundary.py` and
+`packages/pandion/tests/test_boundaries.py`.
 
 ## The pipeline graph and its stages
 
@@ -104,7 +113,7 @@ in the store is not run again.
 That is what makes changing one setting cheap. Sweeping three chunkers over one parse is
 one cached parse and three new chunk sets.
 
-- **The store** (`core/storage.py`) keeps each artifact in its own folder under the
+- **The store** (`pandion/storage.py`) keeps each artifact in its own folder under the
   artifacts folder. A write goes to a temp folder and is moved into place, and its
   `meta.json` is written last, so a crash never leaves an entry that looks finished.
   Nothing expires an entry; `DELETE /api/cache` clears the store.
@@ -115,7 +124,7 @@ one cached parse and three new chunk sets.
 
 ## The run stream
 
-The executor (`core/executor.py`) walks a validated graph, skips any node whose artifact
+The executor (`pandion/executor.py`) walks a validated graph, skips any node whose artifact
 is cached, and emits an event for each step. A failure is data, not an exception: a
 failed node is recorded with its traceback, the nodes below it are skipped, and unrelated
 branches keep running.

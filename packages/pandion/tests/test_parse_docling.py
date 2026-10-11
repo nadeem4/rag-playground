@@ -26,12 +26,14 @@ from pandion.payloads import ParsedDoc
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
 
-import plugins.parse.docling as docling_plugin
-from plugins.parse.docling import elements_from_document, map_label, pdf_bbox
+import pandion.plugins.parse.docling as docling_plugin
+from pandion.plugins.parse.docling import elements_from_document, map_label, pdf_bbox
 
-from tests.plugins.conftest import build_paragraph_pdf
+from pdfs import build_paragraph_pdf
 
-ROOT = Path(__file__).resolve().parents[2]
+#: packages/pandion, and the repo root (for the lock and the private samples).
+PACKAGE = Path(__file__).resolve().parents[1]
+ROOT = PACKAGE.parents[1]
 
 
 # -- registration and config --------------------------------------------------
@@ -171,7 +173,7 @@ def test_onnxruntime_is_declared_so_ocr_never_writes_into_site_packages():
     server runs as `app`. The dependency has to be in the lock too, because
     the image installs with `uv sync --frozen`.
     """
-    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject = (PACKAGE / "pyproject.toml").read_text(encoding="utf-8")
     assert re.search(r'^\s*"onnxruntime[>=~]', pyproject, re.M), pyproject
     lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
     assert '\nname = "onnxruntime"\n' in lock
@@ -184,9 +186,9 @@ def test_importing_the_plugin_does_not_import_torch_or_docling():
     """
     code = (
         "import sys\n"
-        "import plugins\n"
-        "plugins.discover()\n"
-        "import plugins.parse.docling\n"
+        "import pandion.plugins\n"
+        "pandion.plugins.discover()\n"
+        "import pandion.plugins.parse.docling\n"
         "leaked = sorted(m for m in sys.modules "
         "if m.split('.')[0] in {'torch', 'docling', 'docling_core', "
         "'docling_ibm_models', 'transformers'})\n"
@@ -594,6 +596,33 @@ def test_job_posting_recovers_the_structure_pdfium_misses():
 
 def test_docling_provides_headings():
     """The heading chunker prefers this; the UI reads it to lock softly elsewhere."""
-    from plugins.parse.docling import DoclingParse
+    from pandion.plugins.parse.docling import DoclingParse
 
     assert DoclingParse.provides == {"structure": ["headings"]}
+
+
+def test_preload_builds_the_converter_and_its_pdf_pipeline(monkeypatch):
+    """`api/warmup.py` calls this so the first run does not wait for the models."""
+    calls: list[object] = []
+    monkeypatch.setattr(
+        docling_plugin,
+        "_converter",
+        lambda config: SimpleNamespace(initialize_pipeline=calls.append),
+    )
+    docling_plugin.preload(docling_plugin.DoclingConfig())
+    assert [str(getattr(fmt, "value", fmt)) for fmt in calls] == ["pdf"]
+
+
+def test_without_docling_the_error_names_the_extra(tmp_path, monkeypatch):
+    from pandion.errors import MissingExtra
+
+    monkeypatch.setitem(sys.modules, "docling", None)
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(build_paragraph_pdf([[["Text."]]]))
+    cls = registry.get(Stage.PARSE, "docling")
+    with pytest.raises(MissingExtra, match=r'pip install "pandion\[docling\]"'):
+        cls().apply(
+            {"file": {"sha": "a" * 64, "filename": "a.pdf", "path": str(pdf)}},
+            cls.config_model(),
+            None,
+        )

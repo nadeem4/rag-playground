@@ -38,10 +38,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
-import pypdfium2 as pdfium
 from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
+from pandion.errors import require
 from pandion.payloads import Element, ParsedDoc
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
@@ -132,6 +132,9 @@ class PdfiumParse(Transform[PdfiumConfig]):
     def apply(
         self, inputs: Mapping[str, Any], config: PdfiumConfig, ctx: RunContext
     ) -> dict[str, Any]:
+        # Imported here, not at module level: pypdfium2 comes with the
+        # `pdfium` extra, and discovering this plugin must not need it.
+        pdfium = require("pypdfium2", extra="pdfium", step="The pdfium parser")
         raw = inputs["file"]
         path = Path(raw["path"])
 

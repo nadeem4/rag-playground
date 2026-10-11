@@ -33,12 +33,10 @@ def _warm() -> None:
 
 
 def _warm_index_models() -> None:
-    from docling.datamodel.base_models import InputFormat
-
-    from plugins.parse.docling import DoclingConfig, _converter
+    from pandion.plugins.parse import docling
     from providers.embeddings import Qwen3Embedding06B, _load_model
 
-    _converter(DoclingConfig()).initialize_pipeline(InputFormat.PDF)
+    docling.preload(docling.DoclingConfig())
     qwen = Qwen3Embedding06B
     _load_model(qwen.model_id, qwen.revision, qwen.dtype)
 

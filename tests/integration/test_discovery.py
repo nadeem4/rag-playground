@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from core.ports import STAGE_OUTPUT
-from core.registry import registry
+from pandion.ports import STAGE_OUTPUT
+from pandion.registry import registry
 from plugins import PLUGIN_MODULES, discover
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,7 +73,7 @@ def test_discover_is_idempotent():
 def test_core_imports_nothing_from_plugins():
     """The arrow points `plugins -> core`, and never back."""
     offenders: list[str] = []
-    for path in sorted((ROOT / "core").rglob("*.py")):
+    for path in sorted((ROOT / "packages" / "pandion" / "src").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):

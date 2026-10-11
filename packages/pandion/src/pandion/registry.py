@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.ports import STACKABLE, Stage
-from core.transform import Transform
+from pandion.ports import STACKABLE, Stage
+from pandion.transform import Transform
 
 
 class DuplicateTransformError(ValueError):

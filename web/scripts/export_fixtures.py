@@ -13,7 +13,7 @@ What it does:
    paragraph spacing (a larger gap between paragraphs than between lines), a
    running head and a page number on every page and one repeated paragraph, so
    both cleaners have real work to do.
-3. Runs a real graph through `core.executor.run` against a throwaway store:
+3. Runs a real graph through `pandion.executor.run` against a throwaway store:
    upload -> pdfium -> header_footer_strip -> dedupe_blocks -> three chunkers.
 4. Writes each node's payload, plus the executor's event stream, as JSON.
 5. Runs the same document once more with pdfium's `join_lines` off, through the
@@ -52,12 +52,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 import plugins  # noqa: E402
-from core.artifacts import ArtifactType  # noqa: E402
-from core.executor import run  # noqa: E402
-from core.graph import Edge, Graph, Node  # noqa: E402
-from core.ports import RunContext, Stage  # noqa: E402
-from core.registry import registry  # noqa: E402
-from core.storage import Store  # noqa: E402
+from pandion.artifacts import ArtifactType  # noqa: E402
+from pandion.executor import run  # noqa: E402
+from pandion.graph import Edge, Graph, Node  # noqa: E402
+from pandion.ports import RunContext, Stage  # noqa: E402
+from pandion.registry import registry  # noqa: E402
+from pandion.storage import Store  # noqa: E402
 from plugins.source import upload  # noqa: E402
 from plugins.use_case.chat import ChatConfig, ChatUseCase  # noqa: E402
 from providers import llm  # noqa: E402

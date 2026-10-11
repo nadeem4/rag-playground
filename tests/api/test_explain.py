@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from core.ports import STAGE_LESSON, STAGE_WHAT, Stage
+from api.stage_copy import STAGE_LESSON, STAGE_WHAT
+from pandion.ports import Stage
 from tests.api.conftest import ingest_graph, read_sse, upload_pdf
 
 

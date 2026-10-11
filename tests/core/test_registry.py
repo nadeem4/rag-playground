@@ -5,16 +5,16 @@ import json
 import pytest
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.ports import PortSpec, Stage
-from core.registry import (
+from pandion.artifacts import ArtifactType
+from pandion.ports import PortSpec, Stage
+from pandion.registry import (
     DuplicateTransformError,
     Registry,
     UnknownTransformError,
     register,
 )
-from core.registry import registry as module_registry
-from core.transform import Transform
+from pandion.registry import registry as module_registry
+from pandion.transform import Transform
 
 
 class ChunkConfig(BaseModel):

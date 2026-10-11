@@ -13,7 +13,7 @@ import json
 import math
 from typing import Any
 
-from core.artifacts import ArtifactType
+from pandion.artifacts import ArtifactType
 
 
 def _reject_nonfinite(obj: Any) -> None:

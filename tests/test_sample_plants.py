@@ -20,12 +20,12 @@ from pathlib import Path
 import pytest
 
 import plugins
-from core.artifacts import ArtifactType
-from core.executor import run
-from core.graph import Edge, Graph, Node
-from core.ports import Stage
-from core.registry import registry
-from core.storage import Store
+from pandion.artifacts import ArtifactType
+from pandion.executor import run
+from pandion.graph import Edge, Graph, Node
+from pandion.ports import Stage
+from pandion.registry import registry
+from pandion.storage import Store
 from plugins.chunk import DocView
 from plugins.source import upload
 from plugins.use_case.eval import _normalise

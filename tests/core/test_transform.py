@@ -1,9 +1,9 @@
 import pytest
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.ports import PortSpec, RunContext, Stage
-from core.transform import Transform, TransformDefinitionError
+from pandion.artifacts import ArtifactType
+from pandion.ports import PortSpec, RunContext, Stage
+from pandion.transform import Transform, TransformDefinitionError
 
 
 class DummyConfig(BaseModel):

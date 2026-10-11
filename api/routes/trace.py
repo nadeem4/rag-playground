@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from api.routes.artifacts import _require
 from api.trace import StepInput, trace
-from core.storage import Store
+from pandion.storage import Store
 
 router = APIRouter()
 

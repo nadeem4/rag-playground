@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.payloads import ParsedDoc
-from core.ports import Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import ParsedDoc
+from pandion.ports import Stage
+from pandion.registry import registry
 
 import plugins.parse.pdfium  # noqa: F401  (registers the transform)
 

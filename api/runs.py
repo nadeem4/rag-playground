@@ -1,6 +1,6 @@
 """RunManager: background execution and the per-run event log.
 
-`core.executor.run` is synchronous and CPU-bound, so it runs in a worker thread
+`pandion.executor.run` is synchronous and CPU-bound, so it runs in a worker thread
 via `anyio.to_thread.run_sync`. Its `on_event` callback therefore fires on that
 worker thread, and is marshalled onto the event loop with
 `loop.call_soon_threadsafe`. The loop processes those callbacks in FIFO order,
@@ -24,7 +24,7 @@ from typing import Any, Callable
 
 import anyio
 
-from core.events import Emit, event
+from pandion.events import Emit, event
 
 #: The work a run performs in a worker thread. Called with the thread-side emit
 #: and the cancel poll; returns (ok, cancelled).

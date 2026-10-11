@@ -16,11 +16,11 @@ from typing import Any, Mapping, Sequence
 
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.payloads import ChunkSet, Element
-from core.ports import PortSpec, RunContext, Stage, set_note
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import ChunkSet, Element
+from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 from plugins.chunk import (
     DocView,
     Span,

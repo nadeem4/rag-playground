@@ -24,11 +24,11 @@ from __future__ import annotations
 import re
 from typing import Any, Collection, Mapping
 
-from core.payloads import Element, ParsedDoc
+from pandion.payloads import Element, ParsedDoc
 
 #: Where a cleaner's diff goes. A key inside `parser_meta` rather than a new
 #: top-level field, because `ParsedDoc` is a payload shared with the parse stage
-#: and `core/` is out of scope for a plugin to change.
+#: and the engine (`pandion`) is out of scope for a plugin to change.
 REPORT_KEY = "clean_report"
 
 #: Enough of a removed block to recognise it in the UI without carrying a whole

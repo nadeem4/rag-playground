@@ -9,10 +9,10 @@ from __future__ import annotations
 import pytest
 
 import plugins.rerank.llm_rerank as lr
-from core.artifacts import ArtifactType
-from core.payloads import Chunk, Hit, Query, RetrievalResult
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Chunk, Hit, Query, RetrievalResult
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
 from providers import llm
 from providers.llm import CHAT_MODELS, Completion

@@ -31,9 +31,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.artifacts import ArtifactType  # noqa: E402
-from core.graph import Edge, Graph, Node  # noqa: E402
-from core.ports import Stage  # noqa: E402
+from pandion.artifacts import ArtifactType  # noqa: E402
+from pandion.graph import Edge, Graph, Node  # noqa: E402
+from pandion.ports import Stage  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "learn" / "parsing-lab.json"
 CASES = ["two-column-report", "table-of-figures", "scanned-notes"]
@@ -172,9 +172,9 @@ def record(out: Path = OUT) -> dict:
     """Run every case through both parsers and write the lab's JSON to `out`."""
     import plugins
     from api.sample_set import all_samples
-    from core.executor import run
-    from core.registry import registry
-    from core.storage import Store
+    from pandion.executor import run
+    from pandion.registry import registry
+    from pandion.storage import Store
     from plugins.source import upload
 
     plugins.discover()

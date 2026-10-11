@@ -7,7 +7,7 @@ markdown view, idempotence, and a report that says exactly what went and why.
 
 Both cleaners are `parsed_doc -> parsed_doc`, so they stack. The composition
 tests are not decoration: stacking is the reason the CLEAN stage exists in
-`core.ports.STACKABLE`.
+`pandion.ports.STACKABLE`.
 """
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.payloads import Element, ParsedDoc
-from core.ports import PortSpec, RunContext, Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Element, ParsedDoc
+from pandion.ports import PortSpec, RunContext, Stage
+from pandion.registry import registry
 from plugins.clean.dedupe_blocks import DedupeBlocks
 from plugins.clean.drop_matching import DropMatching
 from plugins.clean.header_footer_strip import HeaderFooterStrip
@@ -259,7 +259,7 @@ def test_repeated_non_numeric_last_block_is_a_footer(tmp_path):
 
 
 def test_retyping_alone_removes_the_block_from_the_markdown(tmp_path):
-    """`core.payloads` excludes header/footer/page_number from the projection."""
+    """`pandion.payloads` excludes header/footer/page_number from the projection."""
     out = run(HeaderFooterStrip, paged_doc(), tmp_path, drop=False)
     markdown, offsets = out.render_markdown()
     assert "ACME Corp" not in markdown

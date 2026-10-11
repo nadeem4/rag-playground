@@ -34,11 +34,11 @@ import pyarrow as pa
 from lancedb.index import FTS
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.payloads import ChunkSet
-from core.ports import PortSpec, RunContext, Stage
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import ChunkSet
+from pandion.ports import PortSpec, RunContext, Stage
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 from providers.embedding_cache import embed_cached
 from providers.embeddings import EmbedderName, get_embedder
 

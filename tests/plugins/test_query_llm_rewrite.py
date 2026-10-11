@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.payloads import Query
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Query
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.query.llm_rewrite import (
     DOC_BUDGET,
     UNUSABLE_NOTE,

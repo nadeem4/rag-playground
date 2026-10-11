@@ -20,8 +20,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator, Protocol
 
-from core.artifacts import Artifact, ArtifactType
-from core.ids import shard_path
+from pandion.artifacts import Artifact, ArtifactType
+from pandion.ids import shard_path
 
 META = "meta.json"
 

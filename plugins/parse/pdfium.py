@@ -41,11 +41,11 @@ from typing import Any, Literal, Mapping
 import pypdfium2 as pdfium
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.payloads import Element, ParsedDoc
-from core.ports import PortSpec, RunContext, Stage
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Element, ParsedDoc
+from pandion.ports import PortSpec, RunContext, Stage
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 
 _NEWLINES = re.compile(r"[\r\n]+")
 _LINE = re.compile(r"[^\r\n]+")

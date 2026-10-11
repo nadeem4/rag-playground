@@ -12,8 +12,8 @@ Deriving one from the other removes the whole bug class: the projection cannot
 drift from the elements, because it has no independent existence.
 
 Everything here is plain Pydantic with a default on every optional field, so any
-payload can be constructed empty, round-tripped through `core.storage`, and fed
-to `core.ids.canonical_json` via `model_dump(mode="json")`.
+payload can be constructed empty, round-tripped through `pandion.storage`, and fed
+to `pandion.ids.canonical_json` via `model_dump(mode="json")`.
 """
 
 from __future__ import annotations

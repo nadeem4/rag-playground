@@ -5,10 +5,11 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.ports import STAGE_WHAT, Stage
-from core.registry import Registry
-from core.transform import Explanation, Transform, TransformDefinitionError
+from pandion.artifacts import ArtifactType
+from api.stage_copy import STAGE_WHAT
+from pandion.ports import Stage
+from pandion.registry import Registry
+from pandion.transform import Explanation, Transform, TransformDefinitionError
 
 
 class Cfg(BaseModel):

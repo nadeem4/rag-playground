@@ -50,11 +50,11 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, Field, field_validator
 
-from core.artifacts import ArtifactType
-from core.payloads import Element, ElementType, ParsedDoc
-from core.ports import PortSpec, RunContext, Stage, set_note
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Element, ElementType, ParsedDoc
+from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 
 #: Markdown has six heading levels.
 MAX_HEADING_LEVEL = 6

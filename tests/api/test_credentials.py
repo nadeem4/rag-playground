@@ -16,10 +16,10 @@ import pytest
 from pydantic import BaseModel
 
 from api import credentials
-from core.artifacts import ArtifactType
-from core.ports import PortSpec, Stage
-from core.registry import Registry
-from core.transform import Transform
+from pandion.artifacts import ArtifactType
+from pandion.ports import PortSpec, Stage
+from pandion.registry import Registry
+from pandion.transform import Transform
 from tests.api.conftest import make_client
 
 FAKE_KEY = "sk-ant-test-DO-NOT-LEAK-0123456789"

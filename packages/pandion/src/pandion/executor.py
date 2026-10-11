@@ -24,13 +24,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable, TypedDict
 
-from core.artifacts import Artifact
-from core.events import Emit, event
-from core.graph import Graph, Node
-from core.ids import compute_artifact_id
-from core.ports import RunContext
-from core.registry import Registry
-from core.storage import Store
+from pandion.artifacts import Artifact
+from pandion.events import Emit, event
+from pandion.graph import Graph, Node
+from pandion.ids import compute_artifact_id
+from pandion.ports import RunContext
+from pandion.registry import Registry
+from pandion.storage import Store
 
 
 class NodeStatus(StrEnum):

@@ -8,10 +8,10 @@ import time
 import pytest
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.ports import PortSpec, Stage
-from core.registry import Registry
-from core.transform import Transform
+from pandion.artifacts import ArtifactType
+from pandion.ports import PortSpec, Stage
+from pandion.registry import Registry
+from pandion.transform import Transform
 from tests.api.conftest import ingest_graph, make_client, read_sse, upload_pdf
 
 

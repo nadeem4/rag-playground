@@ -18,7 +18,7 @@ Two detectors, both anchored to the first or last block of a page:
 **Retype vs. drop.** Detected blocks are always retyped to `header` / `footer` /
 `page_number`, and additionally removed from `elements` when `drop=True` (the
 default). Retyping alone is already enough to keep them out of the text:
-`core.payloads.EXCLUDED_FROM_MARKDOWN` holds exactly these three types, so a
+`pandion.payloads.EXCLUDED_FROM_MARKDOWN` holds exactly these three types, so a
 retyped block renders to nothing and gets no offsets. `drop=False` is therefore
 the inspectable mode — the blocks stay visible in the cleaning bench's element
 list, greyed out, so a reader can check *what* was classified before trusting
@@ -41,11 +41,11 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.payloads import EXCLUDED_FROM_MARKDOWN, Element
-from core.ports import PortSpec, RunContext, Stage, set_note
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import EXCLUDED_FROM_MARKDOWN, Element
+from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 from plugins.clean import (
     NOTHING_REMOVED,
     apply_edits,

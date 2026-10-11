@@ -18,10 +18,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.payloads import Hit, Output, ParsedDoc, RetrievalResult
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Hit, Output, ParsedDoc, RetrievalResult
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.chunk.recursive_character import (
     RecursiveCharacterChunker,
     RecursiveCharacterConfig,

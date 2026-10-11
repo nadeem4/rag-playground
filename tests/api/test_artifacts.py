@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 
-from core.artifacts import Artifact, ArtifactType
+from pandion.artifacts import Artifact, ArtifactType
 from tests.api.conftest import ingest_graph, make_client, read_sse, upload_pdf
 
 

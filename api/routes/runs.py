@@ -28,10 +28,10 @@ from pydantic import BaseModel, Field, ValidationError
 from api import demo
 from api.credentials import redact, resolve_all
 from api.runs import RunState
-from core.executor import run, sweep
-from core.graph import Edge, Graph, GraphValidationError, Node
-from core.ports import Stage
-from core.registry import Registry, UnknownTransformError
+from pandion.executor import run, sweep
+from pandion.graph import Edge, Graph, GraphValidationError, Node
+from pandion.ports import Stage
+from pandion.registry import Registry, UnknownTransformError
 
 router = APIRouter()
 

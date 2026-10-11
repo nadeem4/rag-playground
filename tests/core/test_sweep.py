@@ -7,9 +7,9 @@ sweep cannot express it.
 
 from __future__ import annotations
 
-from core.executor import NodeStatus, sweep
-from core.graph import Edge, Graph, Node
-from core.ports import Stage
+from pandion.executor import NodeStatus, sweep
+from pandion.graph import Edge, Graph, Node
+from pandion.ports import Stage
 from tests.core.test_executor import (  # noqa: F401
     CALLS,
     counting_registry,

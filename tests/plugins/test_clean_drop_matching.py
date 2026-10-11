@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.payloads import ParsedDoc
+from pandion.payloads import ParsedDoc
 from plugins.clean.dedupe_blocks import DedupeBlocks
 from plugins.clean.drop_matching import DropMatching
 from tests.plugins.test_clean import doc, el, ids_in_order, messy_doc, reports, run, texts

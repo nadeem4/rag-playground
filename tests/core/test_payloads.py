@@ -11,8 +11,8 @@ and an offset ever disagree, the slice-back test fails immediately.
 
 import pytest
 
-from core.artifacts import Artifact, ArtifactType
-from core.payloads import (
+from pandion.artifacts import Artifact, ArtifactType
+from pandion.payloads import (
     Chunk,
     ChunkSet,
     Element,
@@ -24,7 +24,7 @@ from core.payloads import (
     Query,
     RetrievalResult,
 )
-from core.storage import Store
+from pandion.storage import Store
 
 EXCLUDED = ("header", "footer", "page_number")
 
@@ -415,6 +415,6 @@ def test_output_and_qa_set_round_trip_through_the_store(store):
 
 def test_round_trip_survives_the_id_canonicalizer(rich_doc):
     """model_dump(mode='json') must be canonicalizable — no tuples, no non-finite."""
-    from core.ids import canonical_json
+    from pandion.ids import canonical_json
 
     assert canonical_json(rich_doc.model_dump(mode="json"))

@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 
 from api.routes.learn import PARSE
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.chunk import DocView
 
 ROOT = Path(__file__).resolve().parents[2]

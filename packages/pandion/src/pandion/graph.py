@@ -16,9 +16,9 @@ from dataclasses import dataclass, field
 from graphlib import CycleError, TopologicalSorter
 from typing import Any
 
-from core.ports import Stage
-from core.registry import Registry, UnknownTransformError
-from core.transform import Transform
+from pandion.ports import Stage
+from pandion.registry import Registry, UnknownTransformError
+from pandion.transform import Transform
 
 
 class GraphValidationError(ValueError):

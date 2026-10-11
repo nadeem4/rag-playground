@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 
-from core.artifacts import ArtifactType
-from core.payloads import Chunk, Hit, Output, RetrievalResult
-from core.ports import Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Chunk, Hit, Output, RetrievalResult
+from pandion.ports import Stage
+from pandion.registry import registry
 from plugins.use_case.search import SearchUseCase, SearchUseCaseConfig
 
 

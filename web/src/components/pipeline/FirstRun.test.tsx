@@ -107,10 +107,11 @@ describe("FirstRun", () => {
     expect(posted).toEqual(["scanned-notes"])
   })
 
-  it("points to the bar for your uploads, and has no file picker of its own", async () => {
+  it("offers your earlier uploads through Pick a document, and has no file picker of its own", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    expect(screen.getByText("Or pick one under Documents.")).toBeTruthy()
+    expect(screen.getByText("Load a sample or upload a PDF. Your earlier uploads are in the list.")).toBeTruthy()
+    expect(screen.getByTestId("document-trigger").textContent).toBe("Pick a document")
     expect(screen.queryByRole("combobox")).toBeNull()
     expect(uploadButton()).not.toBeNull()
   })
@@ -118,7 +119,7 @@ describe("FirstRun", () => {
   it("Upload a PDF refuses a file that is not a PDF", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["hello"], "notes.txt", { type: "text/plain" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a PDF file to start"), { target: { files: [new File(["hello"], "notes.txt", { type: "text/plain" })] } })
     expect((await screen.findByRole("alert")).textContent).toBe("Upload of notes.txt failed: Only PDF files can be uploaded.")
   })
 
@@ -126,7 +127,7 @@ describe("FirstRun", () => {
     uploadRefusal = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Or split out the pages you need and upload those."
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "big.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a PDF file to start"), { target: { files: [new File(["%PDF"], "big.pdf", { type: "application/pdf" })] } })
     expect((await screen.findByRole("alert")).textContent).toBe(`Upload of big.pdf failed: ${uploadRefusal}`)
   })
 

@@ -47,7 +47,10 @@ export function FactsLine({ facts }: { facts: DocumentFacts }) {
     <span data-testid="document-facts" className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">
       <span className="font-mono text-2xs break-all">{facts.filename}</span>
       {facts.pages !== null ? <span>{facts.pages === 1 ? "1 page" : `${facts.pages} pages`}</span> : null}
-      <span className={cn("rounded-swatch px-[6px] text-2xs font-medium", facts.removed ? "bg-removed text-removed-text" : "bg-surface-elevated text-fg-muted")}>
+      <span
+        data-testid={facts.removed ? "document-removed" : undefined}
+        className={cn("rounded-swatch px-[6px] text-2xs font-medium", facts.removed ? "bg-removed text-removed-text" : "bg-surface-elevated text-fg-muted")}
+      >
         {facts.removed ? "Removed from the server" : facts.kind}
       </span>
     </span>
@@ -68,8 +71,17 @@ function Thumb({ doc, removed, className }: { doc: DocRef; removed: boolean; cla
  * everywhere. An upload the server no longer has keeps its name, says so, and
  * cannot be previewed.
  */
-export function DocumentItem({ doc, size = "full", missing }: { doc: DocRef; size?: "full" | "compact"; missing?: boolean }) {
-  const facts = useDocumentFacts(doc, missing || undefined)
+export function DocumentItem({
+  doc,
+  size = "full",
+  missing,
+}: {
+  doc: DocRef
+  size?: "full" | "compact"
+  /** The page already knows whether the file is gone (Build's Document step). Left out, the element asks the store. */
+  missing?: boolean
+}) {
+  const facts = useDocumentFacts(doc, missing)
   const [open, setOpen] = useState(false)
   const preview = (e: MouseEvent<HTMLButtonElement>) => {
     // Focus first, so the sheet gives it back on close, even where a click does not focus a button.

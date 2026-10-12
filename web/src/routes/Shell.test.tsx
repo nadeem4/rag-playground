@@ -685,7 +685,7 @@ describe("First run (plan I-15)", () => {
     render(<Shell />)
     expect(await screen.findByRole("button", { name: "Upload a PDF" })).toBeTruthy()
     // The Ask panel's status line carries the first-run guidance; no empty state sits above it.
-    expect(panel().getByTestId("index-status").textContent).toBe("Pick a document under Documents, then build the index.")
+    expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the Document step, then build the index.")
     expect(document.body.textContent).not.toContain("Nothing to show yet")
     expect(document.body.textContent).not.toContain("Run all")
     expect(card("parse")).toBeNull()
@@ -695,7 +695,7 @@ describe("First run (plan I-15)", () => {
     expect(document.querySelector("[data-testid=run-all-blocked]")).toBeNull()
   })
 
-  it("still shows when files are already uploaded, and points to the bar for them", async () => {
+  it("still shows when files are already uploaded, and offers them through Pick a document", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
@@ -706,9 +706,9 @@ describe("First run (plan I-15)", () => {
     )
     render(<Shell />)
     const upload = await found<HTMLElement>('[aria-label="Document"]')
-    expect(panel().getByTestId("index-status").textContent).toBe("Pick a document under Documents, then build the index.")
+    expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the Document step, then build the index.")
     expect(card("parse")).toBeNull()
-    expect(upload.textContent).toContain("Or pick one under Documents.")
+    expect(within(upload).getByTestId("document-trigger").textContent).toBe("Pick a document")
     expect(within(upload).getByRole("button", { name: "Upload a PDF" })).toBeTruthy()
   })
 
@@ -806,7 +806,7 @@ describe("picking a sample in the bar", () => {
     const byId = new Map(stored.nodes.map((n) => [n.id, n.config]))
     expect(byId.get("chunk")).toEqual({ ...chunk.config, chunk_size: 321 })
     expect(stored.nodes.map((n) => n.id)).toEqual(g.nodes.map((n) => n.id))
-    expect(card("source").textContent).toContain("two-column-report.pdf. Change it under Documents.")
+    expect(within(card("source")).getByTestId("document-item").textContent).toContain("two-column-report.pdf")
     expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?")
   })
 
@@ -872,11 +872,13 @@ describe("Build is pipeline first", () => {
     await starterOnScreen()
     expect(readCurrentId()).toBe(STARTER_ID)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(within(screen.getByTestId("documents-line")).getByText("chunking-primer.pdf")).toBeTruthy()
+    expect(within(card("source")).getByTestId("document-item").textContent).toContain("chunking-primer.pdf")
     expect(readStoredGraph(TEST_REGISTRY)!.nodes.find((n) => n.stage === "chunk")!.config).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
     expect((screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement).disabled).toBe(false)
-    // The document is changed under the pipeline, not in the header.
-    expect(screen.getByRole("button", { name: "Change the document. Now chunking-primer.pdf." })).toBeTruthy()
+    // The document is changed in the pipeline's Document step, not in the header or the pipeline bar.
+    expect(within(card("source")).getByRole("button", { name: "Add or change the document. Now chunking-primer.pdf." })).toBeTruthy()
+    expect(screen.getAllByTestId("document-trigger")).toHaveLength(1)
+    expect(screen.queryByTestId("documents-line")).toBeNull()
   })
 
   it("lists the Starter, your pipelines and New, in that order", async () => {
@@ -934,7 +936,7 @@ describe("Build is pipeline first", () => {
     window.history.replaceState(null, "", "/build?starter=table-of-figures")
     render(<Shell />)
     await starterOnScreen()
-    await waitFor(() => expect(within(screen.getByTestId("documents-line")).getByText("table-of-figures.pdf")).toBeTruthy())
+    await waitFor(() => expect(within(card("source")).getByTestId("document-item").textContent).toContain("table-of-figures.pdf"))
     expect(readStoredGraph(TEST_REGISTRY)!.nodes.find((n) => n.stage === "query")!.config.text).toBe("About table-of-figures?")
     // The Starter on another sample is still the Starter, not an edit.
     expect(within(bar()).queryByText("edited")).toBeNull()
@@ -1111,7 +1113,7 @@ describe("saved pipelines on Build", () => {
     setup()
     await waitFor(() =>
       expect(screen.getByTestId("document-note").textContent).toContain(
-        "report.pdf is missing. Pick a document under Documents to build the index.",
+        "report.pdf is missing. Pick a document in the Document step to build the index.",
       ),
     )
   })
@@ -1270,9 +1272,9 @@ describe("saved pipelines on Build", () => {
       await waitFor(() => expect(notice()).toBeTruthy())
     })
 
-    const cardWarning = () => card("source")?.querySelector("[data-testid=missing-file]") ?? null
+    const cardWarning = () => card("source")?.querySelector("[data-testid=document-removed]") ?? null
 
-    it("the collapsed Document card warns that the file is missing, and the column note reads as a warning", async () => {
+    it("the collapsed Document card marks the file removed from the server, and the column note reads as a warning", async () => {
       stored("ef".repeat(32))
       setup()
       await screen.findByRole("group", { name: "Pipeline" })
@@ -1283,10 +1285,8 @@ describe("saved pipelines on Build", () => {
         return w as HTMLElement
       })
       expect(card("source").getAttribute("aria-current")).toBeNull()
-      expect(warning.getAttribute("role")).toBe("status")
-      expect(warning.textContent).toBe("Missing. Pick a document under Documents.")
-      expect(warning.className).toContain("text-stale")
-      expect(warning.className).toContain("bg-stale-wash")
+      expect(warning.textContent).toBe("Removed from the server")
+      expect(warning.className).toContain("bg-removed")
       expect(notice()!.className).toContain("text-stale")
       expect(notice()!.className).toContain("bg-stale-wash")
       expect(notice()!.className).not.toContain("text-fg-muted")
@@ -1322,7 +1322,7 @@ describe("saved pipelines on Build", () => {
       ),
     )
     setup()
-    const upload = await screen.findByLabelText("Upload a PDF file")
+    const upload = await screen.findByLabelText("Upload a PDF file to start")
     await act(async () => {
       fireEvent.change(upload, { target: { files: [new File(["%PDF-1.4"], "my-notes.pdf", { type: "application/pdf" })] } })
     })
@@ -1815,9 +1815,9 @@ describe("the document comes with the pipeline", () => {
   })
 
   const stored = (sha: string, filename = "chunking-primer.pdf") => storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha, filename }))
-  const cardWarning = () => card("source")?.querySelector("[data-testid=missing-file]") ?? null
+  const cardWarning = () => card("source")?.querySelector("[data-testid=document-removed]") ?? null
 
-  it("shows the document in use on a slim Document card, with no file picker in it", async () => {
+  it("shows the document in use on the Document card, with Add or change and no file picker of its own", async () => {
     stored(SAMPLE_SHA)
     setup()
     const doc = await waitFor(() => {
@@ -1825,7 +1825,8 @@ describe("the document comes with the pipeline", () => {
       return card("source")
     })
     expect(within(doc).getByText("Document")).toBeTruthy()
-    expect(doc.textContent).toContain("chunking-primer.pdf. Change it under Documents.")
+    await waitFor(() => expect(within(doc).getByTestId("document-item").textContent).toContain("chunking-primer.pdf"))
+    expect(within(doc).getByTestId("document-trigger").textContent).toBe("Add or change")
     fireEvent.click(within(doc).getByText("Document"))
     expect(within(doc).queryByRole("combobox")).toBeNull()
     expect(within(doc).queryByRole("button", { name: /upload/i })).toBeNull()
@@ -1836,8 +1837,8 @@ describe("the document comes with the pipeline", () => {
     setup()
     await screen.findByRole("group", { name: "Pipeline" })
     await act(async () => settle.reject(new Error("down")))
-    await waitFor(() => expect(cardWarning()?.textContent).toBe("Missing. Pick a document under Documents."))
-    expect(screen.getByTestId("document-note").textContent).toContain("Pick a document under Documents to build the index.")
+    await waitFor(() => expect(cardWarning()?.textContent).toBe("Removed from the server"))
+    expect(screen.getByTestId("document-note").textContent).toContain("Pick a document in the Document step to build the index.")
     expect((screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getAllByText("Needs a document.").length).toBe(2)
     expect((screen.getByRole("button", { name: "Ask" }) as HTMLButtonElement).disabled).toBe(true)
@@ -1896,7 +1897,7 @@ describe("the document comes with the pipeline", () => {
     expect(card("parse")).toBeNull()
     await act(async () => settle.resolve(new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })))
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(card("source").textContent).toContain("chunking-primer.pdf. Change it under Documents.")
+    expect(within(card("source")).getByTestId("document-item").textContent).toContain("chunking-primer.pdf")
   })
   it("with no sample to start from, asks for a document once: the first-visit card, with no note above it", async () => {
     setup()

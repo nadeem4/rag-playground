@@ -3,6 +3,7 @@ import { Upload } from "lucide-react"
 
 import { useSamples } from "@/api/samples"
 import { useAppSettings } from "@/api/useDemo"
+import { DocumentControl } from "@/components/DocumentControl"
 import { useUpload } from "@/components/useUpload"
 import { Button } from "@/components/ui/button"
 import { documentBusy, loadSampleDocument, useDocument } from "@/state/document"
@@ -10,8 +11,8 @@ import { documentBusy, loadSampleDocument, useDocument } from "@/state/document"
 /**
  * The first-visit card on Build (plan I-15): no document yet. Load one of the
  * bundled samples (`GET /api/samples`, then `POST /api/sources/sample`), or
- * upload a PDF; either becomes the document in the header's bar. This
- * browser's earlier uploads are in the bar's menu. Nothing runs until the
+ * upload a PDF; either becomes the pipeline's document. This browser's
+ * earlier uploads are in the Pick a document menu. Nothing runs until the
  * user presses Run. A hosted demo states its limits in a note.
  */
 
@@ -22,7 +23,7 @@ export function FirstRun() {
   const { samples, error: samplesError } = useSamples()
   const { upload, busy: uploading, error: uploadError } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
-  // Shared with the header's menu: while either uploads or loads a sample, the other waits.
+  // Shared with the Pick a document menu: while either uploads or loads a sample, the other waits.
   const { sampleLoading } = useDocument()
   const waiting = uploading !== null || sampleLoading !== null
   const [busy, setBusy] = useState<string | null>(null)
@@ -52,7 +53,10 @@ export function FirstRun() {
     <section aria-label="Document" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold">Document</h3>
-        <p className="m-0 text-sm text-fg-muted">Or pick one under Documents.</p>
+        <p className="m-0 flex flex-wrap items-baseline gap-x-2 text-sm text-fg-muted">
+          <span>Load a sample or upload a PDF. Your earlier uploads are in the list.</span>
+          <DocumentControl />
+        </p>
       </div>
       {demo ? (
         <p data-testid="demo-note" className="text-sm text-fg-muted">
@@ -85,7 +89,7 @@ export function FirstRun() {
           accept=".pdf,application/pdf"
           className="sr-only"
           tabIndex={-1}
-          aria-label="Upload a PDF file"
+          aria-label="Upload a PDF file to start"
           onChange={(e) => {
             const file = e.target.files?.[0]
             e.target.value = ""

@@ -224,7 +224,7 @@ describe("the Ask panel header", () => {
     const g = sampleGraph(LIVE, SAMPLE)
     const noFile: PipelineGraph = { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: {} } : n)) }
     setup({ graph: noFile, results: {} })
-    expect(screen.getByTestId("index-status").textContent).toBe("Pick a document under Documents, then build the index.")
+    expect(screen.getByTestId("index-status").textContent).toBe("Pick a document in the Document step, then build the index.")
   })
 
   it("without a usable document, Ask is disabled and the panel says it needs one", async () => {

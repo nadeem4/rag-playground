@@ -9,12 +9,15 @@ import type { ExplainState } from "@/api/useExplain"
 import { FieldHelp } from "@/components/fields/FieldHelp"
 import type { FieldErrors } from "@/components/fields/schema"
 import { KeyHint } from "@/components/ApiKeyControl"
+import { DocumentControl } from "@/components/DocumentControl"
+import { DocumentItem } from "@/components/DocumentItem"
 import { fmt } from "@/components/inspectors/status"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { strategyLabel } from "@/learn/challenges"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { cn } from "@/lib/utils"
+import { documentsOf } from "@/state/document"
 import { STAGE_VERB } from "@/state/graph"
 import { CHUNK_CLASSES } from "@/styles/dataClasses"
 import { errorHeadline } from "@/state/pipeline"
@@ -254,8 +257,8 @@ function revealIfHidden(el: HTMLElement | null) {
 export function NodeCard(p: NodeCardProps) {
   const id = useId()
   // The Document card is deliberately plain: no run status, no explain button,
-  // no transform picker, no fields and no footer. It only says which document
-  // is in use; the header's Document control changes it.
+  // no transform picker, no fields and no footer. It lists the pipeline's
+  // documents, each with its Preview, and its Add or change link picks another.
   const isSource = p.node.stage === "source"
   const info = p.transforms.find((t) => t.name === p.node.transform)
   // The picker tags locked options; the run note needs the current pick's lock too.
@@ -299,7 +302,7 @@ export function NodeCard(p: NodeCardProps) {
       ? "Settings changed since the last run."
       : null
 
-  const filename = isSource && typeof p.node.config.filename === "string" ? p.node.config.filename : ""
+  const docs = isSource ? documentsOf({ nodes: [p.node] }) : []
 
   // The head's name and the chevron both open a closed card and close the open one.
   const toggle = (e: MouseEvent) => {
@@ -539,16 +542,16 @@ export function NodeCard(p: NodeCardProps) {
       </header>
 
       {isSource ? (
-        p.missing ? (
-          <>
-            <p className="m-0 text-xs break-words text-fg-muted">{filename}</p>
-            <p role="status" data-testid="missing-file" className="m-0 mt-1 self-start rounded-swatch bg-stale-wash px-2 py-px text-xs break-words text-stale">
-              Missing. Pick a document under Documents.
-            </p>
-          </>
-        ) : (
-          <p className="m-0 text-xs break-words text-fg-muted">{filename ? `${filename}. Change it under Documents.` : "None yet. Pick one under Documents."}</p>
-        )
+        // A click in here (the Preview, the menu) is not a click on the card.
+        <div className="mt-1 flex min-w-0 flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <p className="m-0 text-xs text-fg-muted">{docs.length ? "The documents this pipeline reads. Every step below runs on them." : "None yet."}</p>
+            <DocumentControl label="Add or change" value={docs[0] ?? null} />
+          </div>
+          {docs.map((d) => (
+            <DocumentItem key={d.sha} doc={d} missing={Boolean(p.missing)} />
+          ))}
+        </div>
       ) : (
         <p data-testid="step-transform" className="m-0 text-xs break-words text-fg-muted">
           {plain === p.node.transform ? null : `${plain}, `}

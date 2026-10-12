@@ -231,7 +231,7 @@ def test_check_custom_is_refused_in_demo_mode(client, monkeypatch):
 
 
 def test_check_openrouter_asks_openrouter_about_the_key(client, monkeypatch):
-    from providers.llm import OPENROUTER_BASE_URL
+    from pandion.llm import OPENROUTER_BASE_URL
 
     GETS.clear()
     calls = fake_openai(monkeypatch)
@@ -285,7 +285,7 @@ def test_check_custom_validates_the_endpoint_behind_the_demo_ban(client, monkeyp
 
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr(settings.demo, "enabled", lambda: False)
-    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["169.254.169.254"])
+    monkeypatch.setattr("pandion.endpoints._resolve", lambda host: ["169.254.169.254"])
     calls = fake_openai(monkeypatch)
     body = client.post(
         "/api/settings/llm/check",
@@ -301,7 +301,7 @@ def test_check_custom_in_demo_mode_does_not_follow_redirects(client, monkeypatch
 
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr(settings.demo, "enabled", lambda: False)
-    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["104.18.2.115"])
+    monkeypatch.setattr("pandion.endpoints._resolve", lambda host: ["104.18.2.115"])
     calls = fake_openai(monkeypatch)
     client.post(
         "/api/settings/llm/check",

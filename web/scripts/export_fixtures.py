@@ -61,7 +61,7 @@ from pandion.storage import Store  # noqa: E402
 from api.deps import build_deps
 from pandion.sources import Sources
 from plugins.use_case.chat import ChatConfig, ChatUseCase  # noqa: E402
-from providers import llm  # noqa: E402
+from pandion import llm  # noqa: E402
 from tests.plugins.conftest import build_paragraph_pdf  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "api" / "fixtures"

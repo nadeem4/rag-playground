@@ -1,11 +1,17 @@
-"""On the hosted demo, a custom endpoint must be a public https address.
+"""When strangers share a server, a custom endpoint must be a public https address.
 
-A custom `base_url` makes the server send a request to a URL a visitor chose.
-On the demo that could reach the host's own services (localhost, private
-ranges, cloud metadata at 169.254.169.254), so `guard_endpoint` refuses every
+A custom `base_url` makes the server send a request to a URL someone else
+chose. On a shared host (such as the RAG Playground's hosted demo) that could
+reach the host's own services (localhost, private ranges, cloud metadata at
+169.254.169.254), so `guard_endpoint(url, public_only=True)` refuses every
 `base_url` that is not a public https address before any client is built.
-Outside demo mode it does nothing, so Ollama and LM Studio on localhost keep
-working.
+With `public_only=False` it does nothing, so Ollama and LM Studio on localhost
+keep working.
+
+The package never decides on its own whether it serves strangers: the caller
+passes `public_only`, and a run hands it to its steps as
+`context_extras={"public_endpoints_only": True}`. The app turns it on for its
+hosted demo.
 
 `check_public_endpoint` accepts only:
 
@@ -19,27 +25,23 @@ working.
   address (IPv4-mapped, 6to4, Teredo, NAT64) are judged by that IPv4 address
   too.
 
-The client also stops following redirects in demo mode
-(`providers.llm.openai_client_kwargs`), so a public endpoint cannot bounce the
+The client also stops following redirects when `public_only` is on
+(`pandion.llm.openai_client_kwargs`), so a public endpoint cannot bounce the
 request to a private one.
 
 What this does not stop: the SDK resolves the name again when it connects, so a
 name whose DNS answer changes between the check and the request (DNS
-rebinding) can still slip past. The run routes refuse custom endpoints on the
-demo outright (`api.routes.runs`, `api.routes.settings`); this check is the
-second line behind that.
+rebinding) can still slip past. The app's run routes refuse custom endpoints
+on the demo outright (`api.routes.runs`, `api.routes.settings`); this check is
+the second line behind that.
 """
 
 from __future__ import annotations
 
 import ipaddress
-import os
 import re
 import socket
 from urllib.parse import urlsplit
-
-#: The same switch as `api.demo`. Read here so `providers` does not import `api`.
-DEMO_ENV_VAR = "RAG_PLAYGROUND_DEMO"
 
 DEMO_ENDPOINT_ERROR = (
     "On the demo, a custom endpoint must be a public https address. "
@@ -156,11 +158,14 @@ def check_public_endpoint(url: str) -> None:
             raise EndpointRefused()
 
 
-def demo_enabled() -> bool:
-    return os.environ.get(DEMO_ENV_VAR) == "1"
+#: The run extra that turns the check on. Never hashed or stored.
+PUBLIC_ONLY_EXTRA = "public_endpoints_only"
 
 
-def guard_endpoint(url: str) -> None:
-    """`check_public_endpoint` in demo mode; nothing otherwise."""
-    if demo_enabled():
+def guard_endpoint(url: str, *, public_only: bool) -> None:
+    """`check_public_endpoint` when `public_only` is on; nothing otherwise.
+
+    `public_only` has no default, so no caller can forget to decide.
+    """
+    if public_only:
         check_public_endpoint(url)

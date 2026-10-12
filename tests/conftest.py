@@ -97,8 +97,8 @@ def _no_anthropic_calls_outside_live_api_tests(request, monkeypatch):
     def refuse_llm(*args, **kwargs):
         raise AssertionError(
             "test tried to build a real chat model client without "
-            "@pytest.mark.live_api; monkeypatch providers.llm.make_*_client"
+            "@pytest.mark.live_api; monkeypatch pandion.llm.make_*_client"
         )
 
-    monkeypatch.setattr("providers.llm.make_anthropic_client", refuse_llm)
-    monkeypatch.setattr("providers.llm.make_openai_client", refuse_llm)
+    monkeypatch.setattr("pandion.llm.make_anthropic_client", refuse_llm)
+    monkeypatch.setattr("pandion.llm.make_openai_client", refuse_llm)

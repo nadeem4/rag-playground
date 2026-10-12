@@ -153,6 +153,21 @@ def reg():
     return r
 
 
+@pytest.fixture(autouse=True)
+def _no_real_chat_client(monkeypatch):
+    """No test reaches a model: building a real chat client fails with the
+    reason. A test that needs a client installs its own fake over this one."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError(
+            "test tried to build a real chat model client; "
+            "monkeypatch pandion.llm.make_*_client"
+        )
+
+    monkeypatch.setattr("pandion.llm.make_anthropic_client", refuse)
+    monkeypatch.setattr("pandion.llm.make_openai_client", refuse)
+
+
 @pytest.fixture
 def sample_pdf(tmp_path: Path) -> Path:
     """A three-page PDF whose text is `SAMPLE_PAGES`."""

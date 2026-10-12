@@ -7,7 +7,7 @@ from pandion.payloads import Query
 from pandion.ports import Stage
 from pandion.registry import registry
 
-import plugins.query.text  # noqa: F401  (registers the transform)
+import pandion.plugins.query.text  # noqa: F401  (registers the transform)
 
 
 def run(text: str = "", **config):

@@ -1,7 +1,7 @@
 """On the demo, a custom endpoint must be a public https address.
 
-`check_public_endpoint` is the one check; `guard_endpoint` runs it only in demo
-mode. The resolver is always mocked: no test here touches DNS.
+`check_public_endpoint` is the one check; `guard_endpoint` runs it only when
+the caller passes `public_only=True` (the app does on its hosted demo). The resolver is always mocked: no test here touches DNS.
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ import socket
 
 import pytest
 
-from providers import endpoints
-from providers.endpoints import (
+from pandion import endpoints
+from pandion.endpoints import (
     DEMO_ENDPOINT_ERROR,
     EndpointRefused,
     check_public_endpoint,
@@ -267,24 +267,28 @@ def test_the_real_resolver_returns_bare_addresses(monkeypatch):
     assert endpoints._resolve("api.example.com") == ["104.18.2.115", "2606:4700::1"]
 
 
-# --- demo mode only -----------------------------------------------------------
+# --- only when the caller asks for public endpoints ----------------------------
 
 
-def test_guard_does_nothing_outside_demo_mode(resolve, monkeypatch):
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
-    guard_endpoint("http://localhost:11434/v1")
+def test_guard_does_nothing_without_public_only(resolve):
+    guard_endpoint("http://localhost:11434/v1", public_only=False)
     assert resolve.asked == []
 
 
-def test_guard_checks_in_demo_mode(resolve, monkeypatch):
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+def test_guard_checks_with_public_only(resolve):
     with pytest.raises(EndpointRefused):
-        guard_endpoint("http://localhost:11434/v1")
+        guard_endpoint("http://localhost:11434/v1", public_only=True)
     resolve.table["api.example.com"] = [PUBLIC_V4]
-    guard_endpoint("https://api.example.com/v1")
+    guard_endpoint("https://api.example.com/v1", public_only=True)
 
 
-def test_the_demo_switch_is_the_same_one_the_api_reads():
-    from api import demo
+def test_the_guard_makes_every_caller_decide(resolve):
+    with pytest.raises(TypeError):
+        guard_endpoint("http://localhost:11434/v1")  # type: ignore[call-arg]
 
-    assert endpoints.DEMO_ENV_VAR == demo.ENV_VAR
+
+def test_the_package_reads_no_environment_switch(resolve, monkeypatch):
+    """The app's demo variable means nothing to the package: the caller decides."""
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    guard_endpoint("http://localhost:11434/v1", public_only=False)
+    assert resolve.asked == []

@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import pytest
 
-from plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
+from pandion import llm
+from pandion.plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
 from plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
 from plugins.use_case.chat import ChatConfig, ChatUseCase
-from providers import llm
 from tests.plugins.test_rerank_llm import QUESTION, payload
 from tests.plugins.test_rerank_llm import ctx as run_ctx
 from tests.plugins.test_rerank_llm import reply  # noqa: F401  (fixture)

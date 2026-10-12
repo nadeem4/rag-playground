@@ -28,12 +28,25 @@ several, and nothing about saved pipelines, links or exported files will need to
   Retrieve, no rerank and no rewrite, on the sample A primer on chunking.
 - **Your pipelines** are the ones you saved. Each keeps its own documents.
 
-On Build and Evaluate the **Pipeline** picker comes first, and a **Documents** line under it
-names the pipeline's files. Its **Change** link opens a menu with the bundled samples, your
-uploads and **Upload a PDF**. Compare stays document first: its **Document** control sits in
-the header and works on the pipeline on Build. Home, Read, Library and Privacy show neither,
-because they do not work on a document. Home has its own **Try a sample** and **Use your own
-PDF** buttons.
+On Build and Evaluate the **Pipeline** picker comes first. Wherever the app names a
+document, it shows it the same way: a small picture of page 1, the title, then the file
+name, the page count and a tag, **Sample** or **Your upload**, with a **Preview** button.
+
+- On **Build** the documents belong to the pipeline, so they are in its first step, the
+  **Document** card. Its **Add or change** link opens a menu with the bundled samples, your
+  uploads and **Upload a PDF**.
+- On **Evaluate** they are listed under **Documents**, with **Change**.
+- **Compare** stays document first: a **Document** line above the recipes shows the
+  picture and the title, with **Preview** and **Change**. It works on the pipeline on Build.
+- **Library** shows every saved document the same way.
+
+The header has no document control. Home, Read and Privacy show no document, because they
+do not work on one. Home has its own **Try a sample** and **Use your own PDF** buttons.
+
+**Preview** opens a side sheet with every page of the document. A row of page numbers at
+the top jumps to a page, and the page in view is marked as you scroll. Each page is
+captioned, such as Page 3 of 6. Escape or the close button closes it, and you are back
+where you were.
 
 The four samples were written for the playground, and each one shows a problem:
 
@@ -66,9 +79,9 @@ A question you typed stays. A question the sample filled in is cleared, so you a
 asked about the old document; the empty box then suggests asking about the new one, and
 Ask waits until there is a question.
 
-When a saved upload has expired, or was uploaded in another browser, Compare's control turns
-amber and reads Missing with the filename, and Build and Evaluate name it on the Documents
-line. Build, Compare and Evaluate then say so in one
+When a saved upload has expired, or was uploaded in another browser, the document keeps its
+name with the tag **Removed from the server**, and its Preview is off until you upload it
+again. Build, Compare and Evaluate then say so in one
 note with a **Pick a document** button, and their run buttons wait and say "Needs a
 document." A sample saved with an older copy of its PDF is not missing: when its filename
 is exactly a current sample's, and no upload in this browser has that filename, the page
@@ -104,12 +117,13 @@ opens Home.
 Build opens on a pipeline. Arriving for the first time, it is the Starter pipeline on the
 default sample, ready to build. At the top of the column, the **Pipeline** picker lists the
 Starter (marked Ready-made), your pipelines and **New pipeline**, which starts an unsaved
-pipeline from the Starter's settings on the documents in use. Under it, the **Documents**
-line names the pipeline's files, with **Change**.
+pipeline from the Starter's settings on the documents in use.
 
 The column on the left of Build is the index pipeline: Document, Parse, Clean, Chunk and
-Index, one card each with its own settings. The Document card only says which document is
-in use.
+Index, one card each with its own settings. The Document card lists the pipeline's
+documents, each with **Preview**, and its **Add or change** link picks another. On a first
+visit with no document, the first-visit card offers the samples, **Upload a PDF**, and
+**Pick a document** for your earlier uploads.
 
 - **Build the index** runs the steps. Each card also has its own **Run**.
 - The **gear** on a card opens its settings. Once the index is built, the line above the
@@ -149,7 +163,8 @@ on any sample, so for it only a step counts. Typing a different question is neve
 Once a pipeline is saved, **Copy link** puts the whole configuration and its documents in a
 URL. Whoever opens it gets the pipeline on their Build page. If it was built on a bundled
 sample, Build the index and Ask work at once. Your own uploads do not travel with the link:
-the Document card reads Missing, and picking a sample keeps every shared setting.
+the Document card tags the file Removed from the server, and picking a sample keeps every
+shared setting.
 
 Opened from Evaluate's **Open on Build to watch each step**, Build shows **Back to
 Evaluate**, and saving there goes back to Evaluate with the new pipeline selected.
@@ -265,8 +280,8 @@ pipeline, marked Ready-made), **Your pipelines**, and **On Build** when Build ha
 that is not saved (marked Not saved), then **Build your own…**. The Starter on a document
 of your own counts as not saved, so Evaluate scores it on your document. Arriving with nothing
 chosen, Evaluate opens on the Starter with its document and question set ready, so one
-press of **Evaluate** scores it. The **Documents** line under the picker names the
-pipeline's files. **Change** tries the pipeline on another document; a saved pipeline keeps
+press of **Evaluate** scores it. Under the picker, **Documents** lists the pipeline's files,
+each with **Preview**. **Change** tries the pipeline on another document; a saved pipeline keeps
 its own, and the page says so. A document of your own needs your own questions, under
 **Use your own questions**.
 

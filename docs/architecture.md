@@ -165,6 +165,15 @@ relative paths, so the same code works in development, where Vite on port 5173 p
   what Evaluate can score and picks the one it opens on. A question in a question set may
   name its `document`; the server fills in the set's one document and refuses a set that
   names two, so scoring several documents later needs no new file format.
+- **Documents on the page.** One element names a document everywhere
+  (`web/src/components/DocumentItem.tsx`): full, with page 1's picture, the title, the file
+  name, the page count and Sample or Your upload, or compact, with the picture and the
+  title. Its Preview (`DocumentPreview.tsx`) opens the shared side sheet
+  (`web/src/components/SideSheet.tsx`) on every page, from the same page sizes and page
+  images the PDF viewer uses (`GET /api/sources/{sha}/pages` and
+  `/api/sources/{sha}/pages/{n}.png`). The Document control (`DocumentControl.tsx`) is the
+  link beside it that changes the document: in Build's Document step, under Evaluate's
+  Documents and on Compare's Document line. The header has none.
 
 The app also has lessons, a guided walk through each step, but they are switched off
 (`LESSONS_ENABLED` in `web/src/state/lessons.ts`) while they are reworked.

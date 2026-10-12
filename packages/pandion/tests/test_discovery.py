@@ -22,7 +22,7 @@ PLUGINS = Path(__file__).resolve().parents[1] / "src" / "pandion" / "plugins"
 HEAVY = {
     "torch", "docling", "docling_core", "docling_ibm_models", "transformers",
     "sentence_transformers", "lancedb", "pyarrow", "pypdfium2", "numpy",
-    "openai", "anthropic",
+    "openai", "anthropic", "tantivy",
 }
 
 

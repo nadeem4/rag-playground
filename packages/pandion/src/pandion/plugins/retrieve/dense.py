@@ -2,7 +2,7 @@
 
 The config is one integer: the size of the candidate pool it hands on. Everything else a dense search needs — which model,
 which revision, which width, which distance type — is read from the index's
-`descriptor.json`; see `plugins.retrieve._base` for why that is not a shortcut
+`descriptor.json`; see `pandion.plugins.retrieve._base` for why that is not a shortcut
 but the point.
 """
 
@@ -17,7 +17,7 @@ from pandion.payloads import Query
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.retrieve import _base
+from pandion.plugins.retrieve import _base
 
 
 class DenseConfig(BaseModel):

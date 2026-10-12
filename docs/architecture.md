@@ -32,8 +32,9 @@ The app depends on `pandion` through a uv workspace, so `uv sync` installs it fr
 `packages/pandion/` and an edit there is live at once. The engine is moving into the
 package one stage at a time. The upload step (`pandion/plugins/source/`), the parsers
 (`pandion/plugins/parse/`), the cleaners (`pandion/plugins/clean/`), the chunkers
-(`pandion/plugins/chunk/`), the lancedb index (`pandion/plugins/index/`) and the query
-steps, `text` and `llm_rewrite` (`pandion/plugins/query/`), have moved,
+(`pandion/plugins/chunk/`), the lancedb index (`pandion/plugins/index/`), the query
+steps, `text` and `llm_rewrite` (`pandion/plugins/query/`), and the retrievers, `dense`,
+`bm25` and `hybrid_rrf` (`pandion/plugins/retrieve/`), have moved,
 with the token counter the chunkers use (`pandion/tokenize.py`), the sentence splitter
 (`pandion/text.py`, which the app's chat grounding also uses), the embedding models
 (`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
@@ -55,9 +56,12 @@ builds the index again from cached steps, reports what was added, changed, remov
 unchanged, and deletes the previous index from the store. The app does not use sync. The
 app runs the same strategies through its pipeline graph, and
 `tests/integration/test_app_uses_pandion_chunkers.py`,
-`tests/integration/test_app_uses_pandion_index.py` and
-`tests/integration/test_app_uses_pandion_query.py` check both give the same pieces, the
-same index and the same query.
+`tests/integration/test_app_uses_pandion_index.py`,
+`tests/integration/test_app_uses_pandion_query.py` and
+`tests/integration/test_app_uses_pandion_retrievers.py` check both give the same pieces,
+the same index, the same query and the same hits. The app's `mmr` reranker and `chat`
+step embed with the index's own model through two public names of
+`pandion.plugins.retrieve`, `read_descriptor` and `embedder_for`.
 
 The package takes every folder as an argument. A run is handed the sources folder, the
 embedding cache and the model settings in `context_extras`, which are never hashed. The

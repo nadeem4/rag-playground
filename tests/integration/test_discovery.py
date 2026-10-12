@@ -25,7 +25,7 @@ def plugin_module_names() -> list[str]:
     """Every `plugins/<stage>/<name>.py` that is meant to register something.
 
     `__init__.py` holds package-level helpers and `_`-prefixed modules are
-    private shared code (`plugins/retrieve/_base.py`), so neither is expected to
+    private shared code (`plugins/use_case/_grounding.py`), so neither is expected to
     register a transform.
     """
     out: list[str] = []

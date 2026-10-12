@@ -486,10 +486,10 @@ def _sentence_ids(
 
 def _index_embed(index: Any, extras: Mapping[str, Any]):
     """The index's own embedder at its own width, with the run's cache and model settings."""
-    from plugins.retrieve import _base
+    from pandion.plugins.retrieve import embedder_for, read_descriptor
     from pandion.embedding_cache import embed_cached
 
-    embedder, dim = _base.embedder_for(_base.read_descriptor(index), extras.get("models"))
+    embedder, dim = embedder_for(read_descriptor(index), extras.get("models"))
     cache = extras.get("embedding_cache")
 
     def embed(texts: list[str]) -> list[list[float]]:

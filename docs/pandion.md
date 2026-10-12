@@ -8,6 +8,10 @@ recipe, so the same files with the same settings are never processed twice.
 Coming next: search, rerank and ask. This guide covers what exists today: parse, clean,
 chunk, the index, keeping an index up to date, and the rewrite of a question.
 
+The three retrievers, `dense`, `bm25` and `hybrid_rrf`, already live in the package, in
+`pandion.plugins.retrieve`, and the playground searches with them. A way to search an
+index from your own code, `p.retrieve(question, k=5)`, comes in the next release.
+
 ## Contents
 
 - [Install](#install)
@@ -38,7 +42,7 @@ The base install is small. Each parser, store and model library is an extra:
 | `pdfium` | pypdfium2 | the `pdfium` parser |
 | `docling` | Docling and its OCR engine | the `docling` parser |
 | `local` | sentence-transformers and torch | the `qwen3-embedding-0.6b` and `bge-small-en-v1.5` embedders |
-| `lancedb` | LanceDB and pyarrow | the `lancedb` index |
+| `lancedb` | LanceDB and pyarrow | the `lancedb` index and the `dense`, `bm25` and `hybrid_rrf` retrievers |
 | `anthropic` | the Anthropic SDK | `llm_rewrite` with a Claude model |
 | `openai` | the OpenAI SDK | `llm_rewrite` with an OpenAI model, OpenRouter or a custom endpoint |
 

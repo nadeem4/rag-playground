@@ -7,10 +7,15 @@ the same five pieces as the retriever's top 5.
 
 from __future__ import annotations
 
-from pandion.payloads import Query, RetrievalResult
+from pathlib import Path
+
+from pandion.artifacts import Artifact, ArtifactType
+from pandion.payloads import Chunk, ChunkSet, Query, RetrievalResult
+from pandion.plugins.index.lancedb_store import LanceDbIndex, LanceDbIndexConfig
+from pandion.plugins.retrieve.dense import DenseConfig, DenseRetriever
+from pandion.ports import RunContext
+from pandion.storage import Store
 from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
-from plugins.retrieve.dense import DenseConfig, DenseRetriever
-from tests.plugins.test_retrieve import _ctx, build_index
 
 QUESTION = "What is the capital of France?"
 
@@ -23,6 +28,27 @@ CORPUS = [
         for i in range(12)
     ),
 ]
+
+
+def _ctx(root: Path) -> RunContext:
+    ctx = RunContext(output_dir=root / "out", emit=lambda e: None, tmp=root / "tmp")
+    ctx.output_dir.mkdir(parents=True, exist_ok=True)
+    ctx.tmp.mkdir(parents=True, exist_ok=True)
+    return ctx
+
+
+def build_index(tmp_path: Path, *texts: str) -> Path:
+    """Build an index with the fake embedder and return the committed folder."""
+    chunks = [Chunk(id=f"c{i}", text=text, ordinal=i, doc_id="doc-1") for i, text in enumerate(texts)]
+    chunk_set = ChunkSet(chunks=chunks, doc_id="doc-1", source_text=" ".join(texts))
+    payload = LanceDbIndex().apply(
+        {"chunks": [chunk_set.model_dump(mode="json")]},
+        LanceDbIndexConfig(embedder="fake-deterministic"),
+        _ctx(tmp_path / "index-scratch"),
+    )
+    store = Store(tmp_path / "store")
+    store.put(Artifact(id="a" * 64, type=ArtifactType.INDEX), payload)
+    return store.load("a" * 64, ArtifactType.INDEX)
 
 
 def test_mmr_chooses_5_from_a_pool_of_20(tmp_path):

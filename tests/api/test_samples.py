@@ -16,7 +16,7 @@ import pytest
 from api.routes.learn import PARSE
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from plugins.chunk import DocView
+from pandion.plugins.chunk import DocView
 
 ROOT = Path(__file__).resolve().parents[2]
 QUESTIONS = ROOT / "samples" / "chunking-primer" / "questions.json"

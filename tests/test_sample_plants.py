@@ -26,7 +26,7 @@ from pandion.graph import Edge, Graph, Node
 from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.storage import Store
-from plugins.chunk import DocView
+from pandion.plugins.chunk import DocView
 from plugins.source import upload
 from plugins.use_case.eval import _normalise
 

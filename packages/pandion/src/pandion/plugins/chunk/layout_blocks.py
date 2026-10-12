@@ -36,7 +36,7 @@ from pandion.payloads import ChunkSet, Element
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.chunk import (
+from pandion.plugins.chunk import (
     DocView,
     Span,
     add_heading_context,
@@ -46,7 +46,7 @@ from plugins.chunk import (
     normalize,
     token_spans,
 )
-from plugins.use_case._sentences import split_sentences
+from pandion.text import split_sentences
 
 #: Blocks a caption travels with.
 _CAPTIONED = ("table", "figure")

@@ -29,9 +29,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.artifacts import ArtifactType  # noqa: E402
-from core.graph import Edge, Graph, Node  # noqa: E402
-from core.ports import Stage  # noqa: E402
+from pandion.artifacts import ArtifactType  # noqa: E402
+from pandion.graph import Edge, Graph, Node  # noqa: E402
+from pandion.ports import Stage  # noqa: E402
 
 SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
 QUESTIONS_FILE = ROOT / "samples" / "chunking-primer" / "questions.json"
@@ -143,9 +143,9 @@ def pick_passage(
 def record() -> dict:
     """Run every strategy over every question and return the lesson's summary."""
     import plugins
-    from core.executor import run
-    from core.registry import registry
-    from core.storage import Store
+    from pandion.executor import run
+    from pandion.registry import registry
+    from pandion.storage import Store
     from plugins.chunk import DocView
     from plugins.source import upload
 

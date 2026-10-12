@@ -8,7 +8,7 @@ import { TEST_REGISTRY as R } from "./testRegistry"
 
 const NODES = ["source", "parse", "chunk"]
 
-/** One sweep variant's block, as `core.executor.sweep` emits it. */
+/** One sweep variant's block, as `pandion.executor.sweep` emits it. */
 function variantBlock(index: number, transform: string, hits: Record<string, boolean>): RunEvent[] {
   const out: RunEvent[] = [
     { event: "variant_started", ts: 0, index, variant: { transform, config: {} } },

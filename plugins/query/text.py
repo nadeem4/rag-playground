@@ -12,11 +12,11 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.payloads import Query
-from core.ports import RunContext, Stage
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Query
+from pandion.ports import RunContext, Stage
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 
 
 class TextQueryConfig(BaseModel):

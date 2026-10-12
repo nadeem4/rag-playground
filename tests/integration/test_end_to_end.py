@@ -23,12 +23,12 @@ from pathlib import Path
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.executor import NodeStatus, run, sweep
-from core.graph import Edge, Graph, Node
-from core.ports import Stage
-from core.registry import registry
-from core.storage import Store
+from pandion.artifacts import ArtifactType
+from pandion.executor import NodeStatus, run, sweep
+from pandion.graph import Edge, Graph, Node
+from pandion.ports import Stage
+from pandion.registry import registry
+from pandion.storage import Store
 from plugins.source import upload
 from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
 

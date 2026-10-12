@@ -1,16 +1,16 @@
-"""Shared fake transforms for core tests.
+"""Shared fake transforms for engine tests.
 
-Every fake here is model-free and plugin-free: `core/` must be provable without
+Every fake here is model-free and plugin-free: the engine must be provable without
 importing a single RAG library.
 """
 
 import pytest
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.ports import PortSpec, Stage
-from core.registry import Registry
-from core.transform import Transform
+from pandion.artifacts import ArtifactType
+from pandion.ports import PortSpec, Stage
+from pandion.registry import Registry
+from pandion.transform import Transform
 
 
 class EmptyCfg(BaseModel):

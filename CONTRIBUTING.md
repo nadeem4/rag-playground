@@ -108,7 +108,8 @@ model, so a new strategy needs no frontend change.
      `cacheable = False` if its output should never be reused, as for chat answers.
 2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py`. A test fails if a plugin
    module exists but is not listed.
-3. Run `uv run pytest`. The contract suite (`tests/contract/`) checks every plugin,
+3. Run `uv run pytest`. It runs the app's tests in `tests/` and the engine's tests in
+   `packages/pandion/tests/`. The contract suite (`tests/contract/`) checks every plugin,
    including that the artifact id is deterministic, that the config round-trips through
    JSON, that the explanation changes with each setting, and, for a chunk strategy, that
    `learn` covers every setting in full sentences with no dashes.

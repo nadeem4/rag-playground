@@ -12,13 +12,13 @@ import json
 import pytest
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.executor import NodeStatus, run
-from core.graph import Edge, Graph, Node
-from core.ports import PortSpec, Stage
-from core.registry import Registry
-from core.storage import Store
-from core.transform import Transform
+from pandion.artifacts import ArtifactType
+from pandion.executor import NodeStatus, run
+from pandion.graph import Edge, Graph, Node
+from pandion.ports import PortSpec, Stage
+from pandion.registry import Registry
+from pandion.storage import Store
+from pandion.transform import Transform
 
 
 class Cfg(BaseModel):
@@ -555,7 +555,7 @@ def test_uncancelled_run_reports_cancelled_false(store):
 
 
 def test_sweep_threads_cancel_and_stops_later_variants(store):
-    from core.executor import sweep
+    from pandion.executor import sweep
 
     flag = {"on": False}
 

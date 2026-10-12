@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from core.artifacts import Artifact, ArtifactType
-from core.payloads import Chunk, ChunkSet, Query, RetrievalResult
-from core.ports import RunContext, Stage
-from core.storage import Store
+from pandion.artifacts import Artifact, ArtifactType
+from pandion.payloads import Chunk, ChunkSet, Query, RetrievalResult
+from pandion.ports import RunContext, Stage
+from pandion.storage import Store
 from plugins.index.lancedb_store import DESCRIPTOR, LanceDbIndex, LanceDbIndexConfig
 from plugins.retrieve import _base
 from plugins.retrieve.bm25 import Bm25Config, Bm25Retriever
@@ -550,7 +550,7 @@ def test_by_default_a_retriever_hands_on_a_pool_of_20(tmp_path, transform):
 
 @pytest.mark.parametrize("transform", ALL, ids=ALL_IDS)
 def test_registered_under_the_retrieve_stage(transform):
-    from core.registry import registry
+    from pandion.registry import registry
 
     cls = type(transform)
     assert registry.get(Stage.RETRIEVE, cls.name) is cls

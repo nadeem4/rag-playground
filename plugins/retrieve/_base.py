@@ -27,8 +27,8 @@ from typing import Any, Iterator
 
 import lancedb
 
-from core.ids import canonical_json
-from core.payloads import Chunk, Hit, Query, RetrievalResult
+from pandion.ids import canonical_json
+from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from plugins.index.lancedb_store import DESCRIPTOR, TABLE, TEXT_COLUMN
 from providers.embedding_cache import embed_cached
 from providers.embeddings import EmbedKind, EmbeddingProvider, get_embedder

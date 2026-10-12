@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.artifacts import ArtifactType
+from pandion.artifacts import ArtifactType
 
 #: Artifact types a minimal payload can be synthesized for. Everything else is
 #: an explicit opt-out, not an oversight.

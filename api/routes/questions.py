@@ -31,8 +31,8 @@ from api.questions import (
     parse_question_set,
 )
 from api.routes.pages import source_path
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.chunk import DocView
 
 router = APIRouter()

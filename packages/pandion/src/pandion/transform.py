@@ -19,8 +19,8 @@ from typing import Any, Generic, Mapping, TypedDict, TypeVar
 
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.ports import STAGE_OUTPUT, PortSpec, RunContext, Stage
+from pandion.artifacts import ArtifactType
+from pandion.ports import STAGE_OUTPUT, PortSpec, RunContext, Stage
 
 C = TypeVar("C", bound=BaseModel)
 

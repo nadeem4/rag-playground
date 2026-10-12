@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from core.artifacts import ArtifactType
-from core.executor import run, sweep
-from core.graph import Edge, Graph, Node
-from core.ports import PortSpec, Stage
-from core.registry import Registry
-from core.storage import Store
-from core.transform import Transform
+from pandion.artifacts import ArtifactType
+from pandion.executor import run, sweep
+from pandion.graph import Edge, Graph, Node
+from pandion.ports import PortSpec, Stage
+from pandion.registry import Registry
+from pandion.storage import Store
+from pandion.transform import Transform
 
 FAKE_KEY = "sk-ant-test-DO-NOT-LEAK-0123456789"
 

@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.chunk import DocView, count_tokens
 
 SAMPLE = Path(__file__).resolve().parents[2] / "samples" / "chunking-primer" / "chunking-primer.pdf"

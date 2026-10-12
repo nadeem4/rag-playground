@@ -7,8 +7,8 @@ leave a directory that `has()` reports as a hit.
 
 import pytest
 
-from core.artifacts import Artifact, ArtifactType
-from core.storage import Store
+from pandion.artifacts import Artifact, ArtifactType
+from pandion.storage import Store
 
 
 @pytest.fixture
@@ -92,7 +92,7 @@ def test_replace_that_cannot_remove_the_old_entry_leaves_no_stale_hit(
     """Windows: a held handle can stop the old directory being deleted. The old
     entry must be uncommitted first, and the new one must not be nested in it."""
     store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={}), {"v": 1})
-    monkeypatch.setattr("core.storage.shutil.rmtree", lambda *a, **k: None)
+    monkeypatch.setattr("pandion.storage.shutil.rmtree", lambda *a, **k: None)
     with pytest.raises(OSError):
         store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={}), {"v": 2})
     assert store.has(AID) is False

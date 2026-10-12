@@ -1,7 +1,7 @@
 import pytest
 
-from core.graph import Edge, Graph, GraphValidationError, Node
-from core.ports import Stage
+from pandion.graph import Edge, Graph, GraphValidationError, Node
+from pandion.ports import Stage
 
 
 def n(nid, stage, transform, **config):
@@ -438,9 +438,9 @@ def test_ancestors_includes_the_targets_themselves(reg):
 
 def _heading_reg(reg):
     """Add a parser that finds headings and a chunker that needs them."""
-    from core.artifacts import ArtifactType
-    from core.ports import PortSpec
-    from tests.core.conftest import _make
+    from pandion.artifacts import ArtifactType
+    from pandion.ports import PortSpec
+    from conftest import _make
 
     reg.register(
         _make(
@@ -494,10 +494,10 @@ def test_capability_behind_clean_is_still_checked(reg):
 
 
 def test_effective_provides_own_provides_win_on_a_key(reg):
-    from core.artifacts import ArtifactType
-    from core.graph import _effective_provides
-    from core.ports import PortSpec
-    from tests.core.conftest import _make
+    from pandion.artifacts import ArtifactType
+    from pandion.graph import _effective_provides
+    from pandion.ports import PortSpec
+    from conftest import _make
 
     _heading_reg(reg)
     reg.register(

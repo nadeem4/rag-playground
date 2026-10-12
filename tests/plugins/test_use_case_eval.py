@@ -13,10 +13,10 @@ import json
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.payloads import Chunk, Hit, Output, Query, RetrievalResult
-from core.ports import Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Chunk, Hit, Output, Query, RetrievalResult
+from pandion.ports import Stage
+from pandion.registry import registry
 from plugins.use_case.eval import EvalConfig, EvalUseCase
 
 GOLD = "A retriever scores each chunk as a whole."

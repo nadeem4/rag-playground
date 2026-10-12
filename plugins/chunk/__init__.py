@@ -21,8 +21,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
-from core.ids import short_id
-from core.payloads import Chunk, ChunkSet, Element, ParsedDoc
+from pandion.ids import short_id
+from pandion.payloads import Chunk, ChunkSet, Element, ParsedDoc
 from providers.tokenize import HeuristicTokenCounter, TokenCounter
 
 #: A half-open `[start, end)` range of `DocView.text`.

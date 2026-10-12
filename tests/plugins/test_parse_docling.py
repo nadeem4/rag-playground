@@ -21,10 +21,10 @@ import pytest
 
 from docling_core.types.doc import ContentLayer
 
-from core.artifacts import ArtifactType
-from core.payloads import ParsedDoc
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import ParsedDoc
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 
 import plugins.parse.docling as docling_plugin
 from plugins.parse.docling import elements_from_document, map_label, pdf_bbox

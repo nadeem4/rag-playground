@@ -14,7 +14,7 @@ text, and a question with no gold passage. Those are refused, naming the row.
 **The check** exists because a gold passage that was retyped rather than copied
 never matches at evaluation time, and the retriever gets the blame. Each gold
 passage is looked for in the document as the parser reads it: exactly, then
-with the shared rule in core.textmatch: whitespace collapsed, straight and
+with the shared rule in pandion.textmatch: whitespace collapsed, straight and
 curly quotes treated alike, ligatures such as fi expanded, line-end hyphenation
 joined and case folded. The `eval` step and the miss trace use the same rule,
 so a `found_normalized` here is a `normalized` match there. When it
@@ -31,7 +31,7 @@ import json
 import re
 from typing import Any
 
-from core.textmatch import normalise_with_offsets
+from pandion.textmatch import normalise_with_offsets
 
 #: Several gold passages in one CSV cell.
 GOLD_SEPARATOR = "||"
@@ -283,7 +283,7 @@ def _check_gold(
 
 
 def normalise(text: str) -> tuple[str, list[int]]:
-    """The shared matching rule (core.textmatch) with offsets back into `text`,
+    """The shared matching rule (pandion.textmatch) with offsets back into `text`,
     so a normalised match can be shown in the document's own wording. The eval
     step and the miss trace use the same rule, so what this check finds, the
     score finds."""

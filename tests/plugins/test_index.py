@@ -14,10 +14,10 @@ from pathlib import Path
 import lancedb
 import pytest
 
-from core.artifacts import Artifact, ArtifactType
-from core.payloads import Chunk, ChunkSet
-from core.ports import RunContext
-from core.storage import Store
+from pandion.artifacts import Artifact, ArtifactType
+from pandion.payloads import Chunk, ChunkSet
+from pandion.ports import RunContext
+from pandion.storage import Store
 from plugins.index.lancedb_store import (
     DESCRIPTOR,
     TABLE,
@@ -396,8 +396,8 @@ def test_fingerprint_takes_no_arguments_for_the_executor():
 
 
 def test_registered_under_the_index_stage():
-    from core.ports import Stage
-    from core.registry import registry
+    from pandion.ports import Stage
+    from pandion.registry import registry
 
     assert registry.get(Stage.INDEX, "lancedb") is LanceDbIndex
     assert LanceDbIndex.provides == {"backends": ["dense", "fts"]}

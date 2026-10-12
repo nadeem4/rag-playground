@@ -10,8 +10,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 
 from api import demo
-from core.ports import STAGE_LESSON, STAGE_WHAT, Stage
-from core.registry import UnknownTransformError
+from api.stage_copy import STAGE_LESSON, STAGE_WHAT
+from pandion.ports import Stage
+from pandion.registry import UnknownTransformError
 
 router = APIRouter()
 

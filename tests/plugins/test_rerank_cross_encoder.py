@@ -16,10 +16,10 @@ import pytest
 
 import plugins.rerank.cross_encoder as ce
 from api import warmup
-from core.artifacts import ArtifactType
-from core.payloads import Chunk, Hit, Query, RetrievalResult
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Chunk, Hit, Query, RetrievalResult
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.rerank.cross_encoder import CrossEncoderConfig, CrossEncoderRerank
 
 ROOT = Path(__file__).resolve().parents[2]

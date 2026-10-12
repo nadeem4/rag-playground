@@ -19,9 +19,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from core.payloads import ChunkSet, RetrievalResult
+from pandion.payloads import ChunkSet, RetrievalResult
+from pandion.textmatch import loosen
 from plugins.chunk import DocView
-from core.textmatch import loosen
 from plugins.use_case.eval import _normalise
 
 #: How far apart the answer's words may be spread and still count as one

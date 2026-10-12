@@ -1,7 +1,7 @@
 import pytest
 
-from core.artifacts import ArtifactType
-from core.ids import canonical_json, compute_artifact_id, shard_path, short_id
+from pandion.artifacts import ArtifactType
+from pandion.ids import canonical_json, compute_artifact_id, shard_path, short_id
 
 
 def base(**over):

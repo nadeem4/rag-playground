@@ -14,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.payloads import Chunk, Hit, Query, RetrievalResult
-from core.ports import RunContext, Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Chunk, Hit, Query, RetrievalResult
+from pandion.ports import RunContext, Stage
+from pandion.registry import registry
 from plugins.index.lancedb_store import DESCRIPTOR
 from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
 from providers.embeddings import FakeDeterministicEmbedder, get_embedder

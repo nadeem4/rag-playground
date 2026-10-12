@@ -38,12 +38,12 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.payloads import Output, Query, RetrievalResult
-from core.ports import PortSpec, RunContext, Stage
-from core.registry import register
-from core.textmatch import loosen, normalise
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Output, Query, RetrievalResult
+from pandion.ports import PortSpec, RunContext, Stage
+from pandion.registry import register
+from pandion.textmatch import loosen, normalise
+from pandion.transform import Explanation, Transform
 
 NO_GOLD = (
     "This question has no gold answer, so there is nothing to look for. Set "
@@ -245,6 +245,6 @@ class EvalUseCase(Transform[EvalConfig]):
         ).model_dump(mode="json")
 
 
-#: The shared matching rule (core.textmatch), under the name the miss trace
+#: The shared matching rule (pandion.textmatch), under the name the miss trace
 #: imports it by.
 _normalise = normalise

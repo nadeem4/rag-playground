@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.ports import Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.ports import Stage
+from pandion.registry import registry
 from plugins.source import upload as upload_mod
 
 

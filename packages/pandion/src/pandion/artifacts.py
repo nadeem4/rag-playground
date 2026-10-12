@@ -1,7 +1,7 @@
 """Artifact types and the immutable artifact value.
 
 An artifact is what a transform produces: an immutable value identified by a
-recipe hash (see `core.ids`). The payload itself lives on disk and is loaded
+recipe hash (see `pandion.ids`). The payload itself lives on disk and is loaded
 lazily; `meta` is small and always in memory.
 """
 

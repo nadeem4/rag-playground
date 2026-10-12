@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from core.payloads import Element, ParsedDoc
-from core.ports import RunContext
+from pandion.payloads import Element, ParsedDoc
+from pandion.ports import RunContext
 from plugins.chunk.markdown_header import MarkdownHeaderChunker, MarkdownHeaderConfig
 from plugins.chunk.recursive_character import (
     RecursiveCharacterChunker,

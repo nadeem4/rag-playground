@@ -50,11 +50,11 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.payloads import Hit, Output, ParsedDoc, Query, RetrievalResult
-from core.ports import PortSpec, RunContext, Stage
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Hit, Output, ParsedDoc, Query, RetrievalResult
+from pandion.ports import PortSpec, RunContext, Stage
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 from plugins.use_case._grounding import (
     GroundedClaim,
     Sentence,

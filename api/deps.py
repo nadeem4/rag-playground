@@ -17,9 +17,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.registry import Registry
-from core.registry import registry as global_registry
-from core.storage import Store
+from pandion.registry import Registry
+from pandion.registry import registry as global_registry
+from pandion.storage import Store
 from plugins import discover
 from plugins.source import upload
 

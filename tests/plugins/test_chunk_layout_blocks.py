@@ -9,8 +9,8 @@ from __future__ import annotations
 import pydantic
 import pytest
 
-from core.artifacts import ArtifactType
-from core.ports import RunContext, Stage
+from pandion.artifacts import ArtifactType
+from pandion.ports import RunContext, Stage
 from plugins.chunk.layout_blocks import LayoutBlocksChunker
 from tests.plugins.test_chunk import DOCS, _doc, mixed_doc, run
 

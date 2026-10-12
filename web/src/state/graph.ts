@@ -320,7 +320,7 @@ export function setConfig(g: PipelineGraph, id: string, config: Record<string, u
 /**
  * What the server binds each unwired ambient port of `id` to: the unique
  * terminal producer of the port's type that is neither `id` nor one of its
- * descendants (core/graph.py). Nothing when there is none, or more than one.
+ * descendants (packages/pandion/src/pandion/graph.py). Nothing when there is none, or more than one.
  */
 export function ambientSources(g: PipelineGraph, registry: Registry, id: string): string[] {
   const node = g.nodes.find((n) => n.id === id)
@@ -379,7 +379,7 @@ export function upstreamFor(g: PipelineGraph, registry: Registry, id: string): R
 }
 
 /**
- * What a node provides, counting what it passes through (core/graph.py
+ * What a node provides, counting what it passes through (packages/pandion/src/pandion/graph.py
  * `_effective_provides`). A step whose input port carries the same artifact
  * type as its output (a Clean step: a parsed document in, a parsed document
  * out) passes on what its upstream on that port provides. Its own `provides`

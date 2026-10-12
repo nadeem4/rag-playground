@@ -1,7 +1,7 @@
 /**
  * Is a transform at home behind the upstream it is wired to?
  *
- * Mirrors the server's capability check (`core/graph.py`): a transform's
+ * Mirrors the server's capability check (`packages/pandion/src/pandion/graph.py`): a transform's
  * `requires` and `prefers` are per input port, and each is a subset test
  * against what the upstream on that port `provides`. The server only enforces
  * `requires`; this helper is what lets the UI say so before Run, and explain

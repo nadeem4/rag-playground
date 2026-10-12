@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from core.artifacts import ArtifactType
-from core.payloads import Query
-from core.ports import Stage
-from core.registry import registry
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Query
+from pandion.ports import Stage
+from pandion.registry import registry
 
 import plugins.query.text  # noqa: F401  (registers the transform)
 

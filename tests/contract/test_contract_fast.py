@@ -19,11 +19,11 @@ from typing import Any, Literal, Union, get_args, get_origin
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.ids import compute_artifact_id
-from core.ports import STAGE_OUTPUT, PortSpec, Stage
-from core.registry import registry
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.ids import compute_artifact_id
+from pandion.ports import STAGE_OUTPUT, PortSpec, Stage
+from pandion.registry import registry
+from pandion.transform import Explanation, Transform
 from pydantic import ValidationError
 
 IDENT = re.compile(r"^[a-z][a-z0-9_]*$")

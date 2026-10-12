@@ -8,6 +8,12 @@ resolution-markers = [
     "sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "pandion",
+    "rag-playground",
+]
+
 [[package]]
 name = "accelerate"
 version = "1.15.0"
@@ -1095,6 +1101,17 @@ wheels = [
 ]
 
 [[package]]
+name = "pandion"
+version = "0.0.1"
+source = { editable = "packages/pandion" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.9" }]
+
+[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1445,6 +1462,7 @@ dependencies = [
     { name = "lancedb" },
     { name = "onnxruntime" },
     { name = "openai" },
+    { name = "pandion" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pypdfium2" },
@@ -1476,6 +1494,7 @@ requires-dist = [
     { name = "lancedb", specifier = ">=0.38,<0.39" },
     { name = "onnxruntime", specifier = ">=1.30.0" },
     { name = "openai", specifier = ">=3.17.0" },
+    { name = "pandion", editable = "packages/pandion" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pypdfium2", specifier = ">=5.13.0" },

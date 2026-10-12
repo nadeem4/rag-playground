@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import pytest
 
-from core.artifacts import ArtifactType
-from core.payloads import Element, ParsedDoc
-from core.ports import PortSpec, RunContext, Stage
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Element, ParsedDoc
+from pandion.ports import PortSpec, RunContext, Stage
 from plugins.chunk.layout_blocks import LayoutBlocksChunker
 from plugins.chunk.markdown_header import MarkdownHeaderChunker
 from plugins.chunk.recursive_character import RecursiveCharacterChunker
@@ -314,7 +314,7 @@ def test_accepts_a_plain_dict_payload(chunker):
 
 
 def test_registered_in_the_global_registry(chunker):
-    from core.registry import registry
+    from pandion.registry import registry
 
     assert registry.get(Stage.CHUNK, chunker.name) is chunker
 

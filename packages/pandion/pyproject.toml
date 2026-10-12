@@ -1,0 +1,13 @@
+[project]
+name = "pandion"
+version = "0.0.1"
+description = "Config-driven indexing and retrieval pipelines you can inspect stage by stage"
+requires-python = ">=3.13,<3.14"
+dependencies = ["pydantic>=2.9"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pandion"]

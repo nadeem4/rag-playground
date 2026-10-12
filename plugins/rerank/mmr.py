@@ -26,11 +26,11 @@ from typing import Any, Mapping
 import numpy as np
 from pydantic import BaseModel, Field
 
-from core.artifacts import ArtifactType
-from core.payloads import Hit, RetrievalResult
-from core.ports import PortSpec, RunContext, Stage, set_note
-from core.registry import register
-from core.transform import Explanation, Transform
+from pandion.artifacts import ArtifactType
+from pandion.payloads import Hit, RetrievalResult
+from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.registry import register
+from pandion.transform import Explanation, Transform
 from plugins.retrieve import _base
 from providers.embedding_cache import embed_cached
 

@@ -19,8 +19,7 @@ that talks to the API.
 ```
 packages/pandion/  the engine as its own Python package, pandion: artifacts, transforms, the
                    graph, the executor, the content-addressed store, the embedding models
-                   and their cache, and the pipeline file
-providers/   chat model calls and the custom endpoint check
+                   and their cache, the chat model client, and the pipeline file
 plugins/     one module per strategy, grouped by stage
 api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
@@ -33,28 +32,32 @@ The app depends on `pandion` through a uv workspace, so `uv sync` installs it fr
 `packages/pandion/` and an edit there is live at once. The engine is moving into the
 package one stage at a time. The upload step (`pandion/plugins/source/`), the parsers
 (`pandion/plugins/parse/`), the cleaners (`pandion/plugins/clean/`), the chunkers
-(`pandion/plugins/chunk/`) and the lancedb index (`pandion/plugins/index/`) have moved,
+(`pandion/plugins/chunk/`), the lancedb index (`pandion/plugins/index/`) and the query
+steps, `text` and `llm_rewrite` (`pandion/plugins/query/`), have moved,
 with the token counter the chunkers use (`pandion/tokenize.py`), the sentence splitter
 (`pandion/text.py`, which the app's chat grounding also uses), the embedding models
 (`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
-model settings (`pandion/models.py`); what has not moved yet still lives in `plugins/`
-and `providers/`. A moved strategy's library is an extra of the package
-(`pandion[pdfium]`, `pandion[docling]`, `pandion[lancedb]`, and `pandion[local]` for the
-local models), imported only when the step runs, and the app installs the extras it
-uses. The cleaners and the chunkers need only the standard library and Pydantic, so they
+model settings (`pandion/models.py`), the chat model client (`pandion/llm.py`) and the
+custom endpoint check (`pandion/endpoints.py`); what has not moved yet still lives in
+`plugins/`. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
+`pandion[docling]`, `pandion[lancedb]`, `pandion[local]` for the local models, and
+`pandion[openai]` and `pandion[anthropic]` for the chat models), imported only when the
+step runs, and the app installs the extras it uses. The cleaners and the chunkers need only the standard library and Pydantic, so they
 come with the base install. A moved stage can also run on its own, with no pipeline and
 no cache: `pandion.parse` parses one file, `pandion.clean` runs a list of cleaning steps
 on one document, in the order given, and `pandion.chunk` cuts one document into pieces
-with one chunker. `Pipeline.from_file("pipeline.yaml").index.run("docs/")` builds a whole
+with one chunker, and `pandion.rewrite` turns one question into the query retrieval
+searches with. `Pipeline.from_file("pipeline.yaml").index.run("docs/")` builds a whole
 index from a config file, through the executor and a store, so it caches every step.
 `index.sync("docs/")` keeps that index in step with a folder: it records each document's
 content hash and pieces in `manifest.json` under the config's `path` (`pandion/manifest.py`),
 builds the index again from cached steps, reports what was added, changed, removed and
 unchanged, and deletes the previous index from the store. The app does not use sync. The
 app runs the same strategies through its pipeline graph, and
-`tests/integration/test_app_uses_pandion_chunkers.py` and
-`tests/integration/test_app_uses_pandion_index.py` check both give the same pieces and
-the same index.
+`tests/integration/test_app_uses_pandion_chunkers.py`,
+`tests/integration/test_app_uses_pandion_index.py` and
+`tests/integration/test_app_uses_pandion_query.py` check both give the same pieces, the
+same index and the same query.
 
 The package takes every folder as an argument. A run is handed the sources folder, the
 embedding cache and the model settings in `context_extras`, which are never hashed. The
@@ -62,6 +65,16 @@ app builds them once in `api/deps.py` from its environment variables
 (`RAG_PLAYGROUND_SOURCES`, `RAG_PLAYGROUND_ARTIFACTS`, `RAG_PLAYGROUND_EMBED_CACHE`) and
 passes them to every run as `Deps.run_extras()`. It loads models on the CPU, and the
 warm-up loads the default embedder with the public `pandion.preload_embedder`.
+
+The package never reads the demo switch either. A step that calls a chat model takes
+`public_endpoints_only` from the run (and `pandion.llm` takes `public_only=`): when it is
+on, a custom endpoint must be a public https address, its client follows no redirects,
+and no message suggests setting a key on the server. `Deps.run_extras()` turns it on
+when `RAG_PLAYGROUND_DEMO` is `1`, and the app's own chat and rerank steps read the same
+switch from `plugins/hosted_demo.py`. That check is the second line: the run routes still
+refuse a custom endpoint on the demo with a 403 first, and the second line reads the
+switch on its own, so it holds even if the first is lifted. API keys reach a run only as
+`context_extras["credentials"]`, never in a config or a hash.
 The app may import any public name from `pandion` but never a private one
 (a name starting with an underscore), and the package never imports the app. Two tests
 hold both rules: `tests/integration/test_package_boundary.py` and

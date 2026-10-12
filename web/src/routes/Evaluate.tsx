@@ -602,7 +602,8 @@ function Evaluation({
       result: result && Array.isArray(result.hits) ? result : undefined,
       resultStatus: got.status,
       failed: s ? Object.values(s.nodes).find((n) => n.status === "failed") : undefined,
-      started: s !== undefined,
+      // A question's run builds the index first; it is running once its own search starts.
+      started: s !== undefined && (s.nodes[queryId]?.status ?? "pending") !== "pending",
     }
   })
 
@@ -990,10 +991,9 @@ type Verdict = "notrun" | "waiting" | "running" | "found" | "missed" | "failed"
 
 function verdictOf(row: Row, ran: boolean): Verdict {
   if (!ran) return "notrun"
-  if (!row.started) return "waiting"
   if (row.failed) return "failed"
-  if (!row.payload) return "running"
-  return row.payload.hit ? "found" : "missed"
+  if (row.payload) return row.payload.hit ? "found" : "missed"
+  return row.started ? "running" : "waiting"
 }
 
 function reducedMotion(): boolean {

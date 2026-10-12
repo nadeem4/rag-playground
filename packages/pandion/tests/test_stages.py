@@ -1,4 +1,5 @@
-"""Run one stage on its own: `pandion.parse` on one file, `pandion.clean` on one document."""
+"""Run one stage on its own: `pandion.parse` on one file, and `pandion.clean`
+and `pandion.chunk` on one document."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import pandion
-from pandion.payloads import Element, ParsedDoc
+from pandion.payloads import ChunkSet, Element, ParsedDoc
 from pandion.registry import UnknownTransformError
 from pdfs import SAMPLE_LINES
 
@@ -139,3 +140,84 @@ def test_an_unknown_setting_is_an_error_naming_the_step():
 def test_a_wrong_setting_value_is_an_error():
     with pytest.raises(ValueError):
         pandion.clean(notice_doc(), steps=[{"use": "dedupe_blocks", "scope": "sometimes"}])
+
+
+# --- pandion.chunk ----------------------------------------------------------
+
+CHUNKERS = [
+    "recursive_character",
+    "layout_blocks",
+    "markdown_header",
+    "token_based",
+    "sentence_window",
+]
+
+
+@pytest.mark.parametrize("use", CHUNKERS)
+def test_chunk_runs_one_chunker_on_one_document(use):
+    result = pandion.chunk(notice_doc(), use=use)
+
+    assert isinstance(result, pandion.StageResult)
+    assert result.stage == "chunk"
+    assert result.transform == use
+    assert result.status == "executed"
+    assert result.artifact_id is None
+    assert result.duration_ms >= 0
+    assert isinstance(result.output, ChunkSet)
+    assert result.output.chunks
+    assert "Intro." in result.output.chunks[0].text
+
+
+def test_chunk_passes_the_settings_to_the_chunker():
+    doc = ParsedDoc(
+        source_id="e" * 64,
+        filename="long.pdf",
+        elements=[
+            Element(id=f"e{i}", type="paragraph", text=f"Paragraph {i} has some words.", order=i)
+            for i in range(20)
+        ],
+    )
+
+    small = pandion.chunk(doc, use="recursive_character", chunk_size=60, chunk_overlap=0)
+    large = pandion.chunk(doc, use="recursive_character", chunk_size=2000, chunk_overlap=0)
+
+    assert len(small.output.chunks) > len(large.output.chunks) == 1
+
+
+def test_chunk_takes_the_result_of_parse_or_clean(sample_pdf: Path):
+    parsed = pandion.parse(sample_pdf, use="pdfium", join_lines=False)
+    cleaned = pandion.clean(parsed, steps=[{"use": "dedupe_blocks"}])
+    settings = {"sentences_per_chunk": 1, "overlap_sentences": 0}
+
+    from_parse = pandion.chunk(parsed, use="sentence_window", **settings)
+    from_clean = pandion.chunk(cleaned, use="sentence_window", **settings)
+
+    assert [c.text for c in from_parse.output.chunks] == SAMPLE_LINES
+    assert [c.text for c in from_clean.output.chunks] == SAMPLE_LINES
+
+
+def test_chunk_keeps_the_chunkers_note():
+    result = pandion.chunk(
+        notice_doc(), use="sentence_window", sentences_per_chunk=2, overlap_sentences=1
+    )
+
+    assert result.note == (
+        "Cut 4 sentences into 3 pieces of up to 2 sentences, 1 shared between neighbours."
+    )
+
+
+def test_an_unknown_chunker_lists_the_chunkers():
+    with pytest.raises(UnknownTransformError, match="no_such_chunker.*layout_blocks.*token_based"):
+        pandion.chunk(notice_doc(), use="no_such_chunker")
+
+
+def test_an_unknown_chunk_setting_is_an_error_naming_the_chunker():
+    with pytest.raises(ValueError, match="recursive_character.*'size'.*chunk_size"):
+        pandion.chunk(notice_doc(), use="recursive_character", size=400)
+
+
+def test_a_wrong_chunk_setting_value_is_an_error():
+    with pytest.raises(ValueError):
+        pandion.chunk(
+            notice_doc(), use="sentence_window", sentences_per_chunk=2, overlap_sentences=2
+        )

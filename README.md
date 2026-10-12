@@ -119,6 +119,8 @@ the strategy's id in the API and in exported files.
 - [Deploy](docs/deploy.md): Docker, demo mode, variables, and running your own Space.
 - [Architecture](docs/architecture.md): the pipeline graph, plugins, the cache and the
   run stream.
+- [Lessons learned](docs/lessons-learned.md): real problems we hit building the pipeline,
+  why each happened, what fixed it and what we learned.
 - [Contributing](CONTRIBUTING.md): development setup, tests, adding a strategy and
   cutting a release.
 

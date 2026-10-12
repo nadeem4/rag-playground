@@ -41,6 +41,16 @@ def test_a_wrong_setting_is_an_error(sample_pdf: Path):
         pandion.parse(sample_pdf, use="pdfium", join_lines="sometimes")
 
 
+def test_an_unknown_parse_setting_is_an_error_naming_the_parser(sample_pdf: Path):
+    with pytest.raises(ValueError, match="pdfium.*'no_such_setting'.*join_lines"):
+        pandion.parse(sample_pdf, use="pdfium", no_such_setting=1)
+
+
+def test_an_unknown_parser_lists_the_parsers(sample_pdf: Path):
+    with pytest.raises(UnknownTransformError, match="no-such-parser.*docling.*pdfium"):
+        pandion.parse(sample_pdf, use="no-such-parser")
+
+
 # --- pandion.clean ----------------------------------------------------------
 
 

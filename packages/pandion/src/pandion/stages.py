@@ -28,8 +28,7 @@ def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
     example `pandion.parse("a.pdf", use="docling", do_ocr=True)`.
     """
     discover()
-    cls = registry.get(Stage.PARSE, use)
-    settings = cls.config_model(**config)
+    cls, settings = _strategy(Stage.PARSE, use, config, where="The parser")
     path = Path(source)
     raw = {
         "sha": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -87,20 +86,29 @@ def _clean_step(number: int, step: dict[str, Any]):
     use = settings.pop("use", None)
     if not use:
         raise ValueError(f"Clean step {number} does not say which cleaner to use.")
+    return _strategy(Stage.CLEAN, use, settings, where=f"Clean step {number}")
+
+
+def _strategy(stage: Stage, use: str, settings: dict[str, Any], *, where: str):
+    """Find the strategy named `use` for `stage` and check its settings by name.
+
+    The config models accept unknown fields, so a misspelt setting would be
+    ignored without this check. `where` starts each message, so it names the
+    step the caller asked for.
+    """
     try:
-        cls = registry.get(Stage.CLEAN, use)
+        cls = registry.get(stage, use)
     except UnknownTransformError as exc:
-        known = ", ".join(sorted(registry.all_for(Stage.CLEAN)))
+        known = ", ".join(sorted(registry.all_for(stage)))
         raise UnknownTransformError(
-            f"Clean step {number} uses '{use}', which is not a cleaner. "
-            f"The cleaners are: {known}."
+            f"{where} uses '{use}', which is not a {stage} strategy. "
+            f"The {stage} strategies are: {known}."
         ) from exc
     unknown = sorted(set(settings) - set(cls.config_model.model_fields))
     if unknown:
         names = ", ".join(f"'{name}'" for name in unknown)
         known = ", ".join(cls.config_model.model_fields)
         raise ValueError(
-            f"Clean step {number} ({use}) has no setting {names}. "
-            f"Its settings are: {known}."
+            f"{where} ({use}) has no setting {names}. Its settings are: {known}."
         )
     return cls, cls.config_model(**settings)

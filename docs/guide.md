@@ -283,7 +283,9 @@ chosen, Evaluate opens on the Starter with its document and question set ready, 
 press of **Evaluate** scores it. Under the picker, **Documents** lists the pipeline's files,
 each with **Preview**. **Change** tries the pipeline on another document; a saved pipeline keeps
 its own, and the page says so. A document of your own needs your own questions, under
-**Use your own questions**.
+**Use your own questions**: a JSON or CSV file, started from the template, with a question and
+the sentence that answers it on each line. On the hosted demo an uploaded set lasts until you
+close the browser tab; run the playground locally to keep your sets.
 
 **Build your own…** opens a side sheet with a name, the documents and one setting for each
 step (Parse, Clean, Chunk and Index on the index side, then Rewrite, Retrieve and Rerank),
@@ -348,7 +350,8 @@ demo the set is kept only in the tab; locally it is kept beside the document.
 
 While it runs, one line says whether the index came from the cache or was built now, and a
 second line and a bar count the questions: "Searching and scoring question 3 of 6. 2
-searches came from the cache."
+searches came from the cache." While the index is still being built, that line says "Building
+the index first. Questions are scored once it is ready." and every question waits.
 
 The score reads as a sentence with the last run beside it, such as "3 of 5 questions found
 the answer. The last run found 5 of 5." The line under it names what changed when one step

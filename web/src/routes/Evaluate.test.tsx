@@ -461,7 +461,9 @@ describe("the question set panel", () => {
     await screen.findByText("Use your own questions", {}, { timeout: 4000 })
     openOwn()
     const note = await screen.findByTestId("demo-note", {}, { timeout: 4000 })
-    expect(note.textContent).toMatch(/does not store question sets/)
+    // It works here, for as long as the tab stays open: the note says so instead of sending people away.
+    expect(note.textContent).toMatch(/an uploaded set lasts until you close this browser tab/)
+    expect(note.textContent).not.toMatch(/does not store/)
     expect(screen.getByRole("link", { name: "Run the playground locally" }).className).toContain("inline-flex")
   })
 
@@ -841,9 +843,11 @@ describe("while and after scoring", () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(marks().map(icon)).toEqual(["waiting", "waiting"])
     expect(rows()[0].querySelector("[data-verdict]")!.textContent).toBe("Waiting")
+    expect(screen.getByTestId("progress-line").textContent).toBe("Building the index first. Questions are scored once it is ready.")
     es.emit(4, { event: "node_started", node_id: idOf("retrieve"), transform: "x", artifact_id: "r0" })
     await waitFor(() => expect(marks().map(icon)).toEqual(["running", "waiting"]))
     expect(marks()[0].getAttribute("aria-label")).toBe("Question 1, running")
+    expect(screen.getByTestId("progress-line").textContent).toBe("Searching and scoring question 1 of 2.")
     const spinner = marks()[0].querySelector("[data-icon]")!
     expect(spinner.getAttribute("aria-hidden")).toBe("true")
     expect(spinner.getAttribute("class")).toContain("icon-spin")
@@ -859,7 +863,7 @@ describe("while and after scoring", () => {
     await waitFor(() => expect(document.body.textContent).toContain("The demo is busy with other learners. Your run starts in a moment."))
     expect(document.body.textContent).not.toContain("scoring question")
     es.emit(1, { event: "unqueued" })
-    await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Searching and scoring question 1 of 2."))
+    await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Building the index first. Questions are scored once it is ready."))
   })
 
   it("says which question it is scoring while busy, and shows the summary once done", async () => {
@@ -867,7 +871,7 @@ describe("while and after scoring", () => {
       o0: evalOut({}),
       o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }),
     })
-    await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Searching and scoring question 1 of 2."))
+    await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Building the index first. Questions are scored once it is ready."))
     expect(screen.getByTestId("index-line").textContent).toBe("Waiting to start")
     expect(screen.getByRole("progressbar", { name: "Questions scored" }).getAttribute("aria-valuemax")).toBe("2")
     // Every mark is drawn at once, and waits until its row lands.

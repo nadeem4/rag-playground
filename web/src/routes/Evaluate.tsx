@@ -877,7 +877,7 @@ function Evaluation({
                 <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <strong className="font-semibold text-fg">Questions</strong>
                   <span data-testid="progress-line" className="text-fg-muted">
-                    <MonoNumbers text={progressLine(settled, asked.length, cachedSearches)} />
+                    <MonoNumbers text={progressLine(settled, asked.length, cachedSearches, settled === 0 && !rows.some((r) => r.started))} />
                   </span>
                 </p>
                 {current ? (

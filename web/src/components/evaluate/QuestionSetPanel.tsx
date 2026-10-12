@@ -138,11 +138,11 @@ export function QuestionSetPanel({
               </p>
             ) : demo && !uploaded ? (
               <p data-testid="demo-note" className="text-xs text-fg-muted">
-                This hosted demo does not store question sets, so an uploaded set would not last.{" "}
+                On this hosted demo, an uploaded set lasts until you close this browser tab.{" "}
                 <a href={REPO} target="_blank" rel="noreferrer" className="inline-flex items-center text-fg underline">
                   Run the playground locally
                 </a>{" "}
-                to evaluate your own document with your own questions.
+                to keep your sets.
               </p>
             ) : null}
             <div className="flex flex-wrap items-center gap-2">

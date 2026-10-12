@@ -100,9 +100,14 @@ export function runSummary(searches: number, cached: number, ms: number | null):
   return `${head} Took ${s < 10 ? s.toFixed(1) : String(Math.round(s))} s.`
 }
 
-/** "Searching and scoring question 3 of 6. 2 searches came from the cache." */
-export function progressLine(scored: number, total: number, cachedSearches: number): string {
+/**
+ * "Searching and scoring question 3 of 6. 2 searches came from the cache." While the
+ * first question's run is still building the index (`indexing`), no question is being
+ * scored yet, and the line says so.
+ */
+export function progressLine(scored: number, total: number, cachedSearches: number, indexing = false): string {
   if (scored >= total) return `Scored all ${total} ${total === 1 ? "question" : "questions"}.`
+  if (indexing) return "Building the index first. Questions are scored once it is ready."
   const head = `Searching and scoring question ${scored + 1} of ${total}.`
   if (cachedSearches === 0) return head
   return `${head} ${cachedSearches} ${cachedSearches === 1 ? "search came" : "searches came"} from the cache.`

@@ -273,6 +273,9 @@ describe("the reason for a row", () => {
   it("gives each row its reason as one sentence", () => {
     expect(reasonText(pay(true, 1), 5)).toBe("Found in the 1st piece, word for word.")
     expect(reasonText(pay(true, 2, { match: "normalized" }), 5)).toBe("Found in the 2nd piece, after ignoring spacing and capitals.")
+    expect(reasonText(pay(true, 1, { match: "reworded" }), 5)).toBe(
+      "Found in the 1st piece, after setting aside list numbers, bullets and stray letters the parser changed.",
+    )
     expect(reasonText(pay(false, null, { found_at: 7 }), 5)).toBe("Found 7th, below the 5 pieces checked.")
     expect(reasonText(pay(false, null, { returned: 6 }), 5)).toBe("Not in any of the 6 pieces that came back, so no number of pieces checked would find it.")
   })

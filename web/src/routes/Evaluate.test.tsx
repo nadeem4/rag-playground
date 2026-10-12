@@ -262,6 +262,7 @@ describe("Evaluate", () => {
     const sheet = screen.getByRole("dialog", { name: "How Evaluate scores a pipeline" })
     expect(sheet.getAttribute("aria-modal")).toBe("true")
     expect(within(sheet).getByText("How the text is matched, step by step")).toBeTruthy()
+    expect(within(sheet).getByText(/Found, after setting aside the bullet and the stray D/)).toBeTruthy()
     expect(within(sheet).getByText("Mean reciprocal rank")).toBeTruthy()
     expect(within(sheet).getByText("(1 + 1/2 + 0 + 1 + 1/3 + 0) / 6 = 0.47")).toBeTruthy()
     fireEvent.keyDown(document, { key: "Escape" })

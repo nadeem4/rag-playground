@@ -9,9 +9,13 @@ hit when one of the retrieved pieces contains that sentence.
 
 Matching is deliberately narrow. Exact containment first, then a normalised
 comparison that collapses whitespace, rejoins a word hyphenated at a line end
-and folds case, because parsers disagree about spacing and nothing else. There
-is no fuzzy tier: a near miss is a miss, and the report says which kind of match
-it was, so a run is never flattered by a loose rule you cannot see.
+and folds case, because parsers disagree about spacing. Last, "reworded": the
+same comparison with list markers and lone letters set aside on both sides,
+because a parser can rewrite "1. $2,000; or" as "- $2,000; or" and a vertical
+watermark can drop single letters into a sentence. There is no fuzzy tier: every
+other word must be there, in order, so a near miss is a miss, and the report says
+which kind of match it was, so a run is never flattered by a loose rule you
+cannot see.
 
 `top_k` is what the reader would actually have looked at. A gold sentence that
 sits below it is a miss, not a hit, and `considered` says how many pieces were
@@ -38,7 +42,7 @@ from core.artifacts import ArtifactType
 from core.payloads import Output, Query, RetrievalResult
 from core.ports import PortSpec, RunContext, Stage
 from core.registry import register
-from core.textmatch import normalise
+from core.textmatch import loosen, normalise
 from core.transform import Explanation, Transform
 
 NO_GOLD = (
@@ -79,7 +83,7 @@ class EvalUseCase(Transform[EvalConfig]):
     #: before them is not served again. 3: the shared matching rule (curly
     #: quotes and ligatures fold), and a table row given with and without its
     #: | bars counts as one passage.
-    version = "3"
+    version = "4"
 
     summary = (
         "Checks whether the retrieved pieces contain the sentence that answers "
@@ -167,6 +171,7 @@ class EvalUseCase(Transform[EvalConfig]):
 
         considered = result.hits[: max(config.top_k, 0)]
         normalised = [_normalise(gold) for gold in golds]
+        loosened = [loosen(gold) for gold in golds]
         # Which passage each gold is a form of. A table row given with and
         # without its | bars is one passage written two ways, so whichever way
         # the parser wrote the table, finding either form finds the passage,
@@ -180,6 +185,7 @@ class EvalUseCase(Transform[EvalConfig]):
         for hit in considered:
             text = hit.chunk.text
             normalised_text: str | None = None
+            loosened_text: str | None = None
             for n, gold in enumerate(golds):
                 if n in found:
                     continue
@@ -188,9 +194,14 @@ class EvalUseCase(Transform[EvalConfig]):
                 else:
                     if normalised_text is None:
                         normalised_text = _normalise(text)
-                    if normalised[n] not in normalised_text:
-                        continue
-                    kind = "normalized"
+                    if normalised[n] in normalised_text:
+                        kind = "normalized"
+                    else:
+                        if loosened_text is None:
+                            loosened_text = loosen(text)
+                        if not loosened[n] or loosened[n] not in loosened_text:
+                            continue
+                        kind = "reworded"
                 found.add(n)
                 if rank is None:
                     # The first piece the reader would have reached that holds
@@ -205,8 +216,11 @@ class EvalUseCase(Transform[EvalConfig]):
         if match == "none":
             for hit in result.hits[len(considered) :]:
                 normalised_text = _normalise(hit.chunk.text)
+                loosened_text = loosen(hit.chunk.text)
                 if any(
-                    gold in hit.chunk.text or normalised[n] in normalised_text
+                    gold in hit.chunk.text
+                    or normalised[n] in normalised_text
+                    or (loosened[n] and loosened[n] in loosened_text)
                     for n, gold in enumerate(golds)
                 ):
                     found_at = hit.rank

@@ -319,7 +319,12 @@ Each question carries the sentence in the document that answers it, its gold ans
 question counts as found when a retrieved piece contains that sentence, word for word.
 Only differences parsers make on their own are ignored: spacing and line breaks, a word
 hyphenated across a line, capital letters, curly against straight quotes, and joined
-letters such as "fi". The upload check and the score use this same rule, so a sentence
+letters such as "fi". If the sentence is still not there, the score looks once more with
+list markers ("1.", "b)", bullets) and letters standing alone set aside on both sides,
+because a parser can turn a numbered list into bullets and a watermark printed down the
+page can drop single letters into the text. Every other word must still be there, in
+order. A question found this way says so: "after setting aside list numbers, bullets and
+stray letters the parser changed". The upload check and the score use this same rule, so a sentence
 the check finds is one the score can find. A question may carry several gold answers when
 the document answers it in more than one place; any of them counts. A table row given both
 with and without its `|` bars is one answer written two ways, so it counts once.

@@ -21,6 +21,7 @@ from typing import Any
 
 from core.payloads import ChunkSet, RetrievalResult
 from plugins.chunk import DocView
+from core.textmatch import loosen
 from plugins.use_case.eval import _normalise
 
 #: How far apart the answer's words may be spread and still count as one
@@ -63,8 +64,10 @@ def ordinal(n: int) -> str:
 
 
 def _holds(text: str, golds: list[str]) -> bool:
+    """The eval step's three tiers: exact, normalised, then reworded (list markers and lone letters set aside)."""
     normalised = _normalise(text)
-    return any(g in text or _normalise(g) in normalised for g in golds)
+    loosened = loosen(text)
+    return any(g in text or _normalise(g) in normalised or (loosen(g) and loosen(g) in loosened) for g in golds)
 
 
 def _word(w: str) -> str:

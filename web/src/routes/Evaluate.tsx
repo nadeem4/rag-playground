@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
+import { Circle, CircleAlert, Clock, LoaderCircle } from "lucide-react"
 
 import { api } from "@/api/client"
 import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
@@ -51,22 +52,28 @@ import {
   type RowChange,
 } from "@/state/evaluate"
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
-import { columnOrder, upstreamOfStage, useStoredGraph, type PipelineGraph } from "@/state/graph"
+import { columnOrder, storeGraph, upstreamOfStage, useStoredGraph, type PipelineGraph } from "@/state/graph"
 import { evalStripLine, evidenceCells, indexSteps, progressLine, runSummary, searchSteps, slowReadNote, staleLine } from "@/state/evaluateView"
-import { documentOf, useDocument, withDocument } from "@/state/document"
+import { sameDocuments, useDocStatus, withDocuments, type DocRef } from "@/state/document"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { RunStrip, stripSegments } from "@/components/pipeline/RunStrip"
 import { FieldHelp } from "@/components/fields/FieldHelp"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
-import { sameGraph, usableGraph, usePipelines } from "@/state/pipelines"
+import { savePipeline, setCurrentId, usePipelines } from "@/state/pipelines"
+import { BUILD_YOUR_OWN, defaultChoice, ON_BUILD, pipelineChoices, type PipelineChoice } from "@/state/pipelineChoice"
+import { plantedLine, useStarter } from "@/state/starter"
+import { DocumentControl } from "@/components/DocumentControl"
+import { BuildYourOwn } from "@/components/evaluate/BuildYourOwn"
 
 import { RegistryScreen } from "./Shell"
 
 /**
- * Evaluate: score a pipeline against the sample question set, so "did that
- * change help?" has a number behind it. The default is what Build shows: its
- * current saved pipeline while unedited, else Build's working copy. A picker
- * lets you score any saved pipeline instead.
+ * Evaluate: score a pipeline against its question set, so "did that change
+ * help?" has a number behind it. The page is pipeline first: you pick a
+ * pipeline (the ready-made Starter, a saved one, or the unsaved pipeline on
+ * Build), and its documents come with it. Change tries it on another document
+ * without altering a saved pipeline. Build your own makes a new one in a side
+ * sheet. Arriving with nothing chosen opens on the Starter, ready to score.
  *
  * It takes the chosen graph, swaps the use case for `eval`, and sweeps the
  * question node over every question, each variant carrying the question and
@@ -78,22 +85,41 @@ import { RegistryScreen } from "./Shell"
  * stored between sessions.
  */
 
-export function Evaluate() {
+const goTo = (href: string) => window.location.assign(href)
+
+export function Evaluate({ navigate = goTo }: { navigate?: (href: string) => void } = {}) {
   const reg = useRegistry()
   if (reg.kind !== "ready") return <RegistryScreen state={reg} />
-  return <EvaluatePage registry={reg.registry} />
+  return <EvaluatePage registry={reg.registry} navigate={navigate} />
 }
 
+/** The pipeline a link names (`?pipeline=<id>`, from Build after a save), read once and taken off the address. */
+function takeWanted(): string | null {
+  const params = new URLSearchParams(window.location.search)
+  const wanted = params.get("pipeline")
+  if (wanted === null) return null
+  params.delete("pipeline")
+  const rest = params.toString()
+  window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
+  return wanted
+}
+
+const names = (docs: readonly DocRef[]) => docs.map((d) => d.filename).join(", ")
+
 /**
- * Reads the working graph as a store and the document from the header's bar,
- * so a document chosen on this page opens a fresh evaluation of it, with no
- * reload. A picked saved pipeline is scored on the bar's document too.
+ * Reads the working graph and the saved pipelines as stores, so a pipeline
+ * saved or changed elsewhere shows here with no reload.
  */
-function EvaluatePage({ registry }: { registry: Registry }) {
+function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (href: string) => void }) {
   const { pipelines, currentId } = usePipelines()
+  const { starter, unavailable: samplesFailed } = useStarter(registry)
   const pickerId = useId()
-  // null until the picker is used: the default follows Build (I1).
+  const [wanted] = useState(takeWanted)
+  // null until the picker is used: the default is worked out below.
   const [choice, setChoice] = useState<string | null>(null)
+  // The documents this page is trying the chosen pipeline on, when not its own.
+  const [trial, setTrial] = useState<{ id: string; documents: DocRef[] } | null>(null)
+  const [building, setBuilding] = useState(false)
   // True while an evaluation runs, so the pipeline under it cannot change (M8).
   const [busy, setBusy] = useState(false)
   // The header's slot for the body's two controls: set by the slot's ref callback.
@@ -102,56 +128,66 @@ function EvaluatePage({ registry }: { registry: Registry }) {
   const [explaining, setExplaining] = useState(false)
   const explain = useCallback(() => setExplaining(true), [])
   const working = useStoredGraph(registry)
-  const { doc, status } = useDocument()
-  // A saved pipeline this server cannot run is listed but treated as absent (M7).
-  const usable = new Map(pipelines.map((p) => [p.id, usableGraph(p, registry)]))
-  const current = pipelines.find((p) => p.id === currentId) ?? null
-  const currentGraph = current ? usable.get(current.id) : null
-  // The current saved pipeline is the default only while Build shows it unedited;
-  // otherwise Build's working copy is what "the pipeline on Build" means (I1).
-  const unedited = Boolean(currentGraph && working && sameGraph(currentGraph, working))
-  const chosenId = choice ?? (unedited ? currentId! : "")
-  const chosen = pipelines.find((p) => p.id === chosenId && usable.get(p.id)) ?? null
-  // Every page uses the bar's document: a saved pipeline is scored on it, whatever file it was saved with.
-  const saved = chosen ? usable.get(chosen.id)! : null
-  const graph = saved ? (doc ? withDocument(saved, doc) : saved) : working
-  const sha = documentOf(graph)?.sha ?? ""
-  // The working copy of saved pipeline A is scored under A's key, so editing A
-  // and scoring it compares against A's last score.
-  const pipelineKey = chosen ? chosen.id : (currentId ?? "working")
-  const pipelineName = chosen
-    ? chosen.name
-    : current && currentGraph && !unedited
-      ? `${current.name} (edited)`
-      : "the pipeline on Build"
-  const filename = String(graph?.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
-  // Saved pipelines, then the one on Build, each with its steps as the help line.
+  const choices = pipelineChoices({ starter, saved: pipelines, registry, working, currentId })
+  const chosenId = choice ?? defaultChoice(choices, currentId, wanted)
+  const chosen = choices.find((c) => c.id === chosenId && c.graph) ?? null
+  const documents = trial && trial.id === chosen?.id ? trial.documents : (chosen?.documents ?? [])
+  const graph = chosen?.graph ? withDocuments(chosen.graph, documents) : null
+  const doc = documents[0] ?? null
+  const status = useDocStatus(doc)
+  const sha = doc?.sha ?? ""
+  const tried = Boolean(chosen && trial && trial.id === chosen.id && !sameDocuments(trial.documents, chosen.documents))
+  const pick = (id: string) => {
+    if (id === BUILD_YOUR_OWN) setBuilding(true)
+    else setChoice(id)
+  }
+  const unusable = "This server does not have every step this pipeline uses."
+  const line = (c: PipelineChoice) => [c.graph ? pipelineLine(c.graph) : "", c.documents.length ? `On ${names(c.documents)}.` : ""].filter(Boolean).join(". ")
+  // Ready to use, your pipelines, the unsaved one on Build, then the action.
   const pipelineOptions: PickerOption[] = [
-    ...pipelines.map((p) => ({
-      value: p.id,
-      name: p.name,
-      help: pipelineLine(usable.get(p.id) ?? p.graph),
-      group: "Saved",
-      lock: usable.get(p.id) ? undefined : { kind: "hard" as const, reason: "This server does not have every step this pipeline uses." },
+    ...choices.map((c) => ({
+      value: c.id,
+      name: c.name,
+      help: line(c),
+      group: c.kind === "ready" ? "Ready to use" : c.kind === "saved" ? "Your pipelines" : "On Build",
+      tags: c.kind === "ready" ? [READY_TAG] : c.kind === "build" ? [NOT_SAVED_TAG] : undefined,
+      lock: c.graph ? undefined : { kind: "hard" as const, reason: unusable },
     })),
-    {
-      value: "",
-      name: "The pipeline on Build",
-      help: working ? pipelineLine(working) : undefined,
-      group: "On Build",
-      tags: current && currentGraph && !unedited ? [{ label: "Edited since saved", tone: "soft" as const }] : undefined,
-    },
+    { value: BUILD_YOUR_OWN, name: "Build your own…", help: "Pick a setting for each step, starting from the one selected.", action: true },
   ]
+  const hint = tried
+    ? `Trying ${chosen!.label} on ${names(documents)}.${chosen!.kind === "saved" ? ` The saved pipeline keeps ${names(chosen!.documents)}.` : ""}`
+    : chosen?.kind === "ready"
+      ? "The Starter comes with the default sample. Change it to try another."
+      : null
+
+  function saveOwn(name: string, g: PipelineGraph): string | null {
+    const result = savePipeline(name, g, { documents, select: false })
+    if (!result) return "The pipeline could not be saved in this browser."
+    setChoice(result.saved.id)
+    setTrial(null)
+    setBuilding(false)
+    return null
+  }
+
+  function openOnBuild(g: PipelineGraph) {
+    storeGraph(withDocuments(g, documents))
+    setCurrentId(null)
+    navigate("/build?from=evaluate")
+  }
+
+  // Nothing to pick yet: the Starter waits on the samples list, or it could not be read.
+  const waiting = !chosen && !choices.some((c) => c.graph)
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface">
       <div className="flex flex-col gap-6 px-4 pt-4 pb-8 md:px-6">
-        <header data-testid="evaluate-header" className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <header data-testid="evaluate-header" className="grid grid-cols-1 items-start gap-x-6 gap-y-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-2xl font-semibold">Evaluate</h1>
             <div className="flex max-w-[70ch] flex-col gap-1 text-sm text-fg-muted">
-              {filename ? (
+              {chosen && documents.length ? (
                 <p>
-                  How often {pipelineName} finds the answer in <span className="font-mono break-words text-fg">{filename}</span>.
+                  How often {chosen.label} finds the answer in <span className="font-mono break-words text-fg">{names(documents)}</span>.
                 </p>
               ) : null}
               <p data-testid="evaluate-description">
@@ -165,9 +201,9 @@ function EvaluatePage({ registry }: { registry: Registry }) {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             {/* Outside the keyed body, so switching pipelines keeps this picker, and its focus (F5). */}
-            <div className="flex w-[min(360px,100%)] min-w-0 flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1">
               <label id={`${pickerId}-label`} htmlFor={pickerId} className="text-xs text-fg-muted select-none">
                 Pipeline
               </label>
@@ -175,23 +211,66 @@ function EvaluatePage({ registry }: { registry: Registry }) {
                 id={pickerId}
                 labelledBy={`${pickerId}-label`}
                 options={pipelineOptions}
-                value={chosen ? chosen.id : ""}
-                disabled={busy}
-                onChange={setChoice}
+                value={chosen?.id ?? ""}
+                disabled={busy || waiting}
+                onChange={pick}
               />
             </div>
+            {chosen ? (
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-xs text-fg-muted">Documents</span>
+                <p data-testid="documents-line" className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                  {documents.length ? (
+                    documents.map((d) => (
+                      <span key={d.sha} className="font-mono break-words">
+                        {d.filename}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-fg-muted">None yet.</span>
+                  )}
+                  {busy ? null : (
+                    <DocumentControl
+                      variant="link"
+                      value={doc}
+                      onChoose={(d) => setTrial({ id: chosen.id, documents: [d] })}
+                      foot="Trying the pipeline on another document does not change it."
+                    />
+                  )}
+                </p>
+                {hint ? (
+                  <p data-testid="documents-hint" className="text-xs text-fg-muted">
+                    {hint}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {/* The body renders Pieces checked and the run button here, through a portal. */}
             <div ref={setSlot} className="flex flex-wrap items-end gap-3" />
           </div>
         </header>
-        {graph ? <DocumentNote action="run the evaluation" /> : null}
-        {/* Keyed by what is scored, not by the score key: an edited A and A share a key but not a graph.
-            A new document opens a fresh body: its own question set and its own last run. */}
-        {graph && !sha ? null : (
+        {waiting ? (
+          samplesFailed ? (
+            <EmptyState title="The Starter pipeline is not ready">
+              The samples could not be read, so the ready-made pipeline has no document.{" "}
+              <a href="/build" className="text-fg underline">
+                Build a pipeline on Build
+              </a>
+            </EmptyState>
+          ) : (
+            <p role="status" className="text-sm text-fg-muted">
+              Getting the Starter pipeline ready
+            </p>
+          )
+        ) : null}
+        {graph ? <DocumentNote action="run the evaluation" where="under Documents" doc={doc} /> : null}
+        {/* Keyed by what is scored: the pipeline and its document. A new document opens a fresh
+            body: its own question set and its own last run. */}
+        {!graph || !sha ? null : (
           <EvaluateBody
-            key={`${chosen ? chosen.id : "working"}:${sha}`}
+            key={`${chosen!.id}:${sha}`}
             graph={graph}
-            pipelineKey={pipelineKey}
+            pipelineKey={chosen!.key}
             registry={registry}
             onBusy={setBusy}
             slot={slot}
@@ -205,9 +284,23 @@ function EvaluatePage({ registry }: { registry: Registry }) {
           <HowScored />
         </SideSheet>
       ) : null}
+      {building && chosen?.graph ? (
+        <BuildYourOwn
+          registry={registry}
+          from={{ name: chosen.kind === "build" ? "the pipeline on Build" : chosen.name, graph: withDocuments(chosen.graph, documents) }}
+          documents={documents}
+          onSave={saveOwn}
+          onOpenBuild={openOnBuild}
+          replacesUnsaved={choices.some((c) => c.id === ON_BUILD)}
+          onClose={() => setBuilding(false)}
+        />
+      ) : null}
     </main>
   )
 }
+
+const READY_TAG = { label: "Ready-made", tone: "plain" as const }
+const NOT_SAVED_TAG = { label: "Not saved", tone: "soft" as const }
 
 /**
  * The guards that depend on the chosen graph rather than the registry. Kept
@@ -644,6 +737,8 @@ function Evaluation({
     ? `Scored at ${shownK} ${shownK === 1 ? "piece" : "pieces"}.${pieces !== null ? ` The pipeline makes ${pieces} ${pieces === 1 ? "piece" : "pieces"}.` : ""}`
     : `Found means the evidence is in the top ${topK} ${topK === 1 ? "piece" : "pieces"}.`
   const search = searchSteps(graph, registry)
+  // Only a sample's own set plants misses, and says so in its tags.
+  const planted = !uploaded.set && questions ? plantedLine(questions) : null
   const opened = detail ? rows.find((r) => r.question.id === detail) : undefined
 
   return (
@@ -664,7 +759,19 @@ function Evaluation({
           disabled={busy}
           onUpload={(file) => void uploaded.upload(file)}
           onRemove={() => void uploaded.remove()}
-          extra={questions?.length ? <span data-testid="k-line">{kLine}</span> : null}
+          extra={
+            questions?.length ? (
+              <>
+                <span data-testid="k-line">{kLine}</span>
+                {planted ? (
+                  <>
+                    {" "}
+                    <span data-testid="planted-line">{planted}</span>
+                  </>
+                ) : null}
+              </>
+            ) : null
+          }
         />
         {/* The recipe in two lines: the index side, then the search side. */}
         <p data-testid="recipe-line" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
@@ -867,10 +974,35 @@ function reducedMotion(): boolean {
 const MARK: Record<Verdict, { glyph: string; tone: string }> = {
   found: { glyph: "✓", tone: "bg-kept text-kept-text" },
   missed: { glyph: "✕", tone: "bg-removed text-removed-text shadow-[inset_0_0_0_2px_var(--removed-mark)]" },
-  failed: { glyph: "!", tone: "bg-removed text-danger" },
+  failed: { glyph: "", tone: "bg-removed text-removed-mark" },
   waiting: { glyph: "", tone: "border border-hairline bg-surface text-fg-muted" },
   running: { glyph: "", tone: "border border-fg-muted bg-surface text-fg-muted" },
   notrun: { glyph: "", tone: "border border-hairline bg-surface text-fg-muted" },
+}
+
+/** The words a mark's accessible name ends with. */
+const SPOKEN: Record<Verdict, string> = { notrun: "not run", waiting: "waiting", running: "running", found: "found", missed: "missed", failed: "failed" }
+
+/**
+ * The icon for a state that is not yet a verdict: an empty circle not run, a
+ * clock waiting, a spinner running (still under reduced motion, where the word
+ * carries it), an alert failed. Found and missed keep their tick and cross.
+ * Decorative: the row's word and the mark's name already say the state.
+ */
+function StateIcon({ verdict, className }: { verdict: Verdict; className?: string }) {
+  const props = { "aria-hidden": true, strokeWidth: 2, className: cn("size-[16px] shrink-0", className) }
+  switch (verdict) {
+    case "notrun":
+      return <Circle data-icon="not-run" {...props} />
+    case "waiting":
+      return <Clock data-icon="waiting" {...props} />
+    case "running":
+      return <LoaderCircle data-icon="running" {...props} className={cn(props.className, "icon-spin")} />
+    case "failed":
+      return <CircleAlert data-icon="failed" {...props} />
+    default:
+      return null
+  }
 }
 
 /**
@@ -884,14 +1016,14 @@ function Mark({ n, verdict, onPress }: { n: number; verdict: Verdict; onPress: (
   return (
     <button
       type="button"
-      aria-label={`Question ${n}, ${verdict}`}
+      aria-label={`Question ${n}, ${SPOKEN[verdict]}`}
       onClick={onPress}
       className={cn(
         "grid size-[34px] cursor-pointer place-items-center rounded-[9px] text-[0.9375rem] font-bold transition-transform duration-(--dur-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) active:scale-[0.98] motion-reduce:transition-none",
         m.tone,
       )}
     >
-      <span aria-hidden>{m.glyph}</span>
+      {m.glyph ? <span aria-hidden>{m.glyph}</span> : <StateIcon verdict={verdict} />}
     </button>
   )
 }
@@ -908,7 +1040,7 @@ const CHANGE_TONE: Record<RowChange, string> = {
 const VERDICT: Record<Verdict, { word: string; tone: string }> = {
   found: { word: "✓ Found", tone: "text-kept-text" },
   missed: { word: "✕ Missed", tone: "text-removed-mark" },
-  failed: { word: "Failed", tone: "text-danger" },
+  failed: { word: "Failed", tone: "text-removed-mark" },
   waiting: { word: "Waiting", tone: "text-fg-muted" },
   running: { word: "Running", tone: "text-fg-muted" },
   notrun: { word: "Not run", tone: "text-fg-muted" },
@@ -971,7 +1103,8 @@ function QuestionRow({
       data-change={change === "none" ? undefined : change}
       className="grid grid-cols-1 items-baseline gap-x-[14px] gap-y-1 border-b border-hairline px-2 py-3 md:grid-cols-[92px_minmax(0,1fr)_auto]"
     >
-      <span data-verdict="" className={cn("font-sans font-semibold", verdict.tone)}>
+      <span data-verdict="" className={cn("inline-flex items-center gap-1 font-sans font-semibold", verdict.tone)}>
+        <StateIcon verdict={verdictKind} />
         {verdict.word}
       </span>
       <div className="flex min-w-0 flex-col gap-1">

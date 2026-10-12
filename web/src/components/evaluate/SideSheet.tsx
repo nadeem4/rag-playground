@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
  * does on Build. The page behind never moves. Escape, a tap on the dimmed page
  * and the close button close it, and focus goes back to whatever opened it.
  */
-export function SideSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function SideSheet({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
   const id = useId()
   const closeRef = useRef<HTMLButtonElement>(null)
 
@@ -55,6 +55,10 @@ export function SideSheet({ title, onClose, children }: { title: string; onClose
           </Button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">{children}</div>
+        {/* The sheet's actions stay in view under the scrolling body. */}
+        {footer ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-hairline px-4 py-3">{footer}</div>
+        ) : null}
       </section>
     </>
   )

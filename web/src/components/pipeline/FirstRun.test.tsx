@@ -110,7 +110,7 @@ describe("FirstRun", () => {
   it("points to the bar for your uploads, and has no file picker of its own", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    expect(screen.getByText("Or pick one in the bar above.")).toBeTruthy()
+    expect(screen.getByText("Or pick one under Documents.")).toBeTruthy()
     expect(screen.queryByRole("combobox")).toBeNull()
     expect(uploadButton()).not.toBeNull()
   })

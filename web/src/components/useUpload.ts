@@ -1,14 +1,17 @@
 import { api, ApiError } from "@/api/client"
 import { useAppSettings } from "@/api/useDemo"
-import { chooseDocument, documentBusy, refreshUploads, setUploadState, useDocument } from "@/state/document"
+import { chooseDocument, documentBusy, refreshUploads, setUploadState, useDocument, type DocRef } from "@/state/document"
 
 /** The server's own sentence when it sent one, so a visitor reads why without the status and path in front. */
 const reason = (err: unknown) =>
   err instanceof ApiError && typeof err.detail === "string" ? err.detail : err instanceof Error ? err.message : String(err)
 
 export interface Upload {
-  /** Check and send a file; a finished upload becomes the document. True when it did. */
-  upload: (file: File | undefined) => Promise<boolean>
+  /**
+   * Check and send a file; a finished upload becomes the document, or goes to
+   * `use` when a page keeps its own (Evaluate trying a pipeline on it). True when it did.
+   */
+  upload: (file: File | undefined, use?: (doc: DocRef) => Promise<void> | void) => Promise<boolean>
   /** The name of the file being sent, or null. */
   busy: string | null
   /** The sentence to show when an upload was refused or failed, or null. */
@@ -31,7 +34,7 @@ export function useUpload(): Upload {
   const mb = limits ? Math.round(limits.max_bytes / 1048576) : 0
   const { uploading: busy, uploadError: error } = useDocument()
 
-  async function upload(file: File | undefined) {
+  async function upload(file: File | undefined, use: (doc: DocRef) => Promise<void> | void = chooseDocument) {
     if (!file || documentBusy()) return false
     const refuse = (why: string) => {
       setUploadState({ uploadError: `Upload of ${file.name} failed: ${why}` })
@@ -47,7 +50,7 @@ export function useUpload(): Upload {
     try {
       const src = await api.uploadSource(file)
       refreshUploads()
-      await chooseDocument({ sha: src.sha, filename: src.filename })
+      await use({ sha: src.sha, filename: src.filename })
       return true
     } catch (err) {
       return refuse(reason(err))

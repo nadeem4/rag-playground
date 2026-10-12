@@ -410,6 +410,11 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
                       <span className="min-w-0 break-words">{item.kind === "pipeline" ? pipelineSummary(item.pipeline.graph) : experimentSummary(item.experiment)}</span>
                       <span>{savedWhen(item.savedAt, now)}</span>
                     </div>
+                    {item.kind === "pipeline" && item.documents.length ? (
+                      <span data-testid="pipeline-documents" className="text-sm break-words text-fg-muted">
+                        Documents: <span className="font-mono">{item.documents.map((d) => d.filename).join(", ")}</span>
+                      </span>
+                    ) : null}
                     <DocLine item={item} state={state} demo={demo} />
                   </div>
                   <div className="col-start-2 flex flex-wrap gap-2 md:col-start-3 md:justify-end">

@@ -84,9 +84,20 @@ describe("the questions the page asks", () => {
 
   it("reads an uploaded set, and numbers the questions that brought no id of their own", () => {
     expect(questionsFromSet(set())).toEqual([
-      { id: "refunds", question: "How long do refunds take?", gold_answers: ["Within ten working days."], tags: ["policy"], answer: "" },
-      { id: "q2", question: "Who approves an exception?", gold_answers: ["The duty manager approves it."], tags: [], answer: "" },
+      { id: "refunds", question: "How long do refunds take?", gold_answers: ["Within ten working days."], tags: ["policy"], answer: "", document: "handbook.pdf" },
+      { id: "q2", question: "Who approves an exception?", gold_answers: ["The duty manager approves it."], tags: [], answer: "", document: "handbook.pdf" },
     ])
+  })
+
+  it("keeps a question's own document, and gives one without it the set's only document", () => {
+    const own = set()
+    own.set.questions[1] = { ...own.set.questions[1], document: "annex.pdf" }
+    expect(questionsFromSet(own).map((q) => q.document)).toEqual(["handbook.pdf", "annex.pdf"])
+  })
+
+  it("carries a sample question's tags, so its planted misses can be counted", () => {
+    const sample: SampleQuestion[] = [{ id: "a", question: "Q?", gold_answer: "It is so.", tags: ["designed to miss: footer"] }]
+    expect(questionsFromSample(sample)[0].tags).toEqual(["designed to miss: footer"])
   })
 
   it("keeps a sample question's expected answer when it has one", () => {

@@ -92,15 +92,18 @@ function DevMenu({ path }: { path: string }) {
   )
 }
 
-/** The pages that build, compare or evaluate the chosen document. */
-const DOCUMENT_PAGES = ["/build", "/compare", "/evaluate"]
+/**
+ * The page that works on the chosen document first. Build and Evaluate start
+ * from a pipeline, and its documents sit under the pipeline picker there.
+ */
+const DOCUMENT_PAGES = ["/compare"]
 
 export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: string; lessonsEnabled?: boolean }) {
   // The dev pages are for working on the app, not for demo visitors.
   const demo = useDemo()
   // With the lessons hidden, there is no Lessons link. Home is always first.
   const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/learn")
-  // The Document control shows only where the page works on the document; elsewhere changing it would do nothing.
+  // The Document control shows only on Compare: Build and Evaluate show the pipeline's documents in the page.
   const withDocument = DOCUMENT_PAGES.includes(path)
   return (
     // Below md: three rows. The brand and the controls share the first, the

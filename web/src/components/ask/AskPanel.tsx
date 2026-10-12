@@ -237,7 +237,7 @@ export function AskPanel(p: AskPanelProps) {
               ? `Index ready: ${ready.join(", ")}`
               : sha
                 ? "Build the index first."
-                : "Pick a document in the bar above, then build the index."}
+                : "Pick a document under Documents, then build the index."}
           </span>
         </div>
         {p.head}

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { useUpload } from "@/components/useUpload"
 import { cn } from "@/lib/utils"
 import { documentBusy, loadSampleDocument, openDocumentMenu, useDocument, type DocumentState } from "@/state/document"
+import { defaultSample } from "@/state/starter"
 
 /**
  * Home: the front page. A plain promise, the six steps the site lets you look
@@ -173,6 +174,19 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
           ? null
           : "Your file stays on this machine."
   const line = documentLine(current, demo)
+
+  /** Try a sample: Build opens the Starter pipeline on the default sample, whatever is loaded now. */
+  async function tryStarter() {
+    let card = defaultSample(current.samples)
+    if (!card) {
+      try {
+        card = defaultSample(await api.samples())
+      } catch {
+        // Build then opens the Starter itself, or asks for a document.
+      }
+    }
+    navigate(card ? `/build?starter=${encodeURIComponent(card.name)}` : "/build")
+  }
   const waiting = busy !== null || uploading !== null || current.sampleLoading !== null
 
   return (
@@ -194,7 +208,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                 className="h-[44px] px-4 text-base font-semibold"
                 busy={busy === "hero"}
                 disabled={waiting}
-                onClick={() => void open("hero", "/build", true)}
+                onClick={() => void tryStarter()}
               >
                 Try a sample
               </Button>

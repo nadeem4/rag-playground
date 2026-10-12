@@ -131,6 +131,16 @@ describe("Picker, open", () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it("sets an action apart at the end of the list, in the accent, and picking it calls onChange", () => {
+    const { onChange } = setup("recursive_character", [...OPTIONS.slice(0, 1), { value: "new", name: "Build your own…", help: "Pick a setting for each step.", action: true }])
+    const list = openPicker(screen.getByRole("button", { name: /^Strategy/ }))
+    const action = within(list).getByRole("option", { name: /Build your own/ })
+    expect(action.hasAttribute("data-action")).toBe(true)
+    expect(action.className).toContain("border-t")
+    fireEvent.click(action)
+    expect(onChange).toHaveBeenCalledWith("new")
+  })
+
   it("picks an option with a click, closes and gives the trigger focus", () => {
     const { trigger, onChange } = setup()
     choose(trigger(), /^Fixed token count/)

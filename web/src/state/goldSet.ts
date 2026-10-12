@@ -19,6 +19,12 @@ export interface Question {
   tags: string[]
   /** The expected answer in words: shown beside the evidence, never scored. Empty when none was given. */
   answer: string
+  /**
+   * The document its evidence is in, by filename: the question's own, else the
+   * set's only document. Carried, not yet scored on: a pipeline runs on one
+   * document today, so every question is scored on it.
+   */
+  document?: string
 }
 
 /**
@@ -47,7 +53,7 @@ export function questionsFromSample(sample: readonly SampleQuestion[]): Question
       id: q.id,
       question: q.question,
       gold_answers: [q.gold_answer, ...(q.gold_answers ?? [])],
-      tags: [],
+      tags: q.tags ?? [],
       answer: q.answer ?? "",
     })),
   )
@@ -61,6 +67,7 @@ export function questionsFromSet(stored: StoredQuestionSet): Question[] {
       gold_answers: q.gold_answers ?? [],
       tags: q.tags ?? [],
       answer: q.answer ?? "",
+      document: q.document || stored.set?.document || "",
     })),
   )
 }

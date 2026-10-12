@@ -2,7 +2,7 @@ import { useRef, useState } from "react"
 import { Check, ChevronDown, FileText, Upload } from "lucide-react"
 import { DropdownMenu } from "radix-ui"
 
-import { ApiError } from "@/api/client"
+import { api, ApiError } from "@/api/client"
 import type { SampleCard } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { cn } from "@/lib/utils"
@@ -13,7 +13,9 @@ import {
   refreshUploads,
   setDocumentMenuOpen,
   takeDocumentMenuOpener,
+  useDocStatus,
   useDocument,
+  type DocRef,
 } from "@/state/document"
 
 import { useUpload } from "./useUpload"
@@ -28,14 +30,38 @@ const ITEM =
 const HEADING = "px-2 pt-2 pb-1 text-2xs text-fg-muted"
 
 /**
- * The Document control in the header: which document every page uses, and a
- * menu to change it (the samples, this browser's uploads and Upload a PDF).
- * When the saved upload is gone it turns amber and reads Missing. While the
- * lists load it looks ready, never amber. Its open state is the store's, so a
- * page's "Pick a document" button opens it too.
+ * The Document control: which document a page uses, and a menu to change it
+ * (the samples, this browser's uploads and Upload a PDF). In the header (on
+ * Compare) it is a bar; on Build and Evaluate it is the Change link on the
+ * pipeline's Documents line (`variant="link"`). When the saved upload is gone
+ * it turns amber and reads Missing. While the lists load it looks ready, never
+ * amber. Its open state is the store's, so a page's "Pick a document" button
+ * opens it too; one page shows one control.
+ *
+ * By default a pick becomes the working pipeline's document. A page that keeps
+ * its own document (Evaluate, trying a pipeline on another file) passes
+ * `value` and `onChoose`, and the pipeline on Build stays as it is.
  */
-export function DocumentControl() {
-  const { doc, status, samples, uploads, listError, menuOpen, sampleLoading, recoveredNote } = useDocument()
+export function DocumentControl({
+  variant = "bar",
+  value,
+  onChoose,
+  foot,
+}: {
+  variant?: "bar" | "link"
+  /** The document this page uses, when it is not the working pipeline's. */
+  value?: DocRef | null
+  /** Where a picked document goes, instead of the working pipeline. */
+  onChoose?: (doc: DocRef) => Promise<void> | void
+  /** The menu's first foot line, instead of the default. */
+  foot?: string
+} = {}) {
+  const store = useDocument()
+  const { samples, uploads, listError, menuOpen, sampleLoading, recoveredNote } = store
+  const own = value !== undefined
+  const doc = own ? value : store.doc
+  const ownStatus = useDocStatus(value ?? null)
+  const status = own ? ownStatus : store.status
   const demo = useDemo()
   const { upload, busy, error: uploadError, limitsLine } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -47,7 +73,15 @@ export function DocumentControl() {
   const waiting = loading !== null || busy !== null || sampleLoading !== null
   const empty = !doc
   const name = busy ? `Uploading ${busy}` : empty ? "Pick a document" : doc.filename
-  const label = busy ? `Uploading ${busy}` : missing ? `Document ${doc?.filename} is missing. Pick another or upload it again.` : empty ? "Pick a document" : `Document: ${doc.filename}. Change it.`
+  const label = busy
+    ? `Uploading ${busy}`
+    : missing
+      ? `Document ${doc?.filename} is missing. Pick another or upload it again.`
+      : empty
+        ? "Pick a document"
+        : variant === "link"
+          ? `Change the document. Now ${doc.filename}.`
+          : `Document: ${doc.filename}. Change it.`
   // Nothing is ticked while the file is missing: the menu is there to pick another.
   const current = !missing && doc ? doc.sha : ""
 
@@ -64,10 +98,17 @@ export function DocumentControl() {
     }
   }
 
+  /** A picked document: to the page that keeps its own, else to the working pipeline. */
+  const use = (d: DocRef) => (onChoose ? Promise.resolve(onChoose(d)).then(() => setDocumentMenuOpen(false)) : chooseDocument(d))
+
   function pickSample(card: SampleCard) {
     void pick(card.sha, async () => {
       try {
-        await loadSampleDocument(card)
+        if (onChoose) {
+          // Make sure the server has the sample, then hand it to the page.
+          const src = await api.sampleSource(card.name)
+          await use({ sha: src.sha, filename: src.filename })
+        } else await loadSampleDocument(card)
       } catch (err) {
         throw new Error(`${card.title}: ${reason(err)}`)
       }
@@ -89,10 +130,21 @@ export function DocumentControl() {
         onChange={(e) => {
           const file = e.target.files?.[0]
           e.target.value = ""
-          void upload(file)
+          void upload(file, onChoose ? use : undefined)
         }}
       />
       <DropdownMenu.Root open={menuOpen} onOpenChange={setDocumentMenuOpen}>
+        {variant === "link" ? (
+          <DropdownMenu.Trigger
+            data-testid="document-trigger"
+            aria-label={label}
+            title={label}
+            aria-busy={busy ? true : undefined}
+            className="inline-flex min-h-[1.5rem] items-center text-sm font-semibold text-primary underline underline-offset-4 outline-none hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
+          >
+            {busy ? `Uploading ${busy}` : empty ? "Pick a document" : "Change"}
+          </DropdownMenu.Trigger>
+        ) : (
         <DropdownMenu.Trigger
           data-testid="document-trigger"
           aria-label={label}
@@ -112,9 +164,10 @@ export function DocumentControl() {
           <span className={cn("min-w-0 flex-1 truncate", empty && !busy ? "font-normal text-fg-muted" : "font-semibold")}>{name}</span>
           <ChevronDown aria-hidden strokeWidth={1.75} className={cn("size-[18px] shrink-0", missing ? "text-stale" : "text-fg-muted")} />
         </DropdownMenu.Trigger>
+        )}
         <DropdownMenu.Portal>
           <DropdownMenu.Content
-            align="end"
+            align={variant === "link" ? "start" : "end"}
             sideOffset={6}
             collisionPadding={16}
             onCloseAutoFocus={(e) => {
@@ -190,7 +243,7 @@ export function DocumentControl() {
                     className={ITEM}
                     onSelect={(e) => {
                       e.preventDefault()
-                      if (u.sha !== current) void pick(u.sha, () => chooseDocument({ sha: u.sha, filename: u.filename }))
+                      if (u.sha !== current) void pick(u.sha, () => use({ sha: u.sha, filename: u.filename }))
                       else setDocumentMenuOpen(false)
                     }}
                   >
@@ -221,9 +274,8 @@ export function DocumentControl() {
               </p>
             ) : null}
             <p className="px-2 pt-1 text-2xs text-fg-muted">
-              {demo
-                ? "Every page uses this document. Uploads on the demo are private to this browser and expire."
-                : "Every page uses this document. Your files stay on this machine."}
+              {foot ?? (variant === "link" ? "The pipeline runs on this document." : "Every page uses this document.")}{" "}
+              {demo ? "Uploads on the demo are private to this browser and expire." : "Your files stay on this machine."}
             </p>
             <p className="px-2 pb-1 text-2xs text-fg-muted" data-testid="upload-limits">
               {limitsLine}

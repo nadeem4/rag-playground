@@ -6,6 +6,7 @@ import type { AppSettings, Registry, SampleCard, Source } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
 import { documentOf, resetDocumentForTests, useDocument } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, storedGraphJson } from "@/state/graph"
+import { readCurrentId, resetPipelinesForTests, STARTER_ID } from "@/state/pipelines"
 
 import { Home } from "./Home"
 
@@ -70,6 +71,7 @@ beforeEach(() => {
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
+  resetPipelinesForTests()
   resetAppSettingsForTests()
   holdUpload = false
   refuseUpload = null
@@ -169,46 +171,26 @@ describe("Home", () => {
     expect(g.nodes.find((n) => n.stage === "query")!.config.text).toBe(FIRST.question)
   })
 
-  it("Try a sample opens Build with the first sample", async () => {
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
-    expect(posted).toEqual([FIRST.name])
-  })
-
-  it("Try a sample loads the first sample over a missing upload, so Build is not blocked", async () => {
-    storeGraph(sampleGraph(registry, OWN))
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    await waitFor(() => expect(lines()[0]).toBe("mine.pdf is no longer on this machine."))
-    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
-    expect(posted).toEqual([FIRST.name])
-    expect(documentOf(readStoredGraph(registry))).toEqual({ sha: FIRST.sha, filename: FIRST.filename })
-  })
-
-  it("Try a sample loads the first sample even when your own file is loaded", async () => {
+  it("Try a sample opens Build on the Starter pipeline with the default sample, whatever document is loaded", async () => {
     serve({ sources: [OWN] })
     storeGraph(sampleGraph(registry, OWN))
+    const before = storedGraphJson()
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
     await waitFor(() => expect(lines()[0]).toBe("On your file: mine.pdf"))
     fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
-    expect(posted).toEqual([FIRST.name])
-  })
-
-  it("Try a sample keeps a sample that is already loaded", async () => {
-    storeGraph(sampleGraph(registry, { sha: SECOND.sha, filename: SECOND.filename }))
-    const before = storedGraphJson()
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    await waitFor(() => expect(lines()[0]).toBe("On the sample: chunking-primer.pdf"))
-    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/build?starter=${FIRST.name}`))
+    // Build opens the Starter on it; nothing is loaded or changed here.
     expect(posted).toEqual([])
     expect(storedGraphJson()).toBe(before)
+  })
+
+  it("Try it yourself on a first visit opens the Starter pipeline: the default recipe on the first sample", async () => {
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    fireEvent.click(screen.getByRole("button", { name: "Try it yourself on Build" }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    expect(readCurrentId()).toBe(STARTER_ID)
   })
 
   it("keeps the visitor's own document and just opens the page", async () => {

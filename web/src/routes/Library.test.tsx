@@ -135,6 +135,17 @@ describe("Library", () => {
     expect(within(row("Old notes test")).getByText("my-notes.pdf is no longer on the demo. Opening this asks you to upload it again.")).toBeTruthy()
   })
 
+  it("names every document a pipeline owns, and reads an old one's single document as its list", async () => {
+    seed()
+    const listed = JSON.parse(window.localStorage.getItem("rag-playground:pipelines:v1")!)
+    listed[0].documents = [{ sha: UP, filename: "NK_Resume.pdf" }, { sha: SAMPLE, filename: "chunking-primer.pdf" }]
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(listed))
+    resetPipelinesForTests()
+    render(<Library go={vi.fn()} />)
+    await waitFor(() => expect(within(row("Resume, sections whole")).getByTestId("pipeline-documents").textContent).toBe("Documents: NK_Resume.pdf, chunking-primer.pdf"))
+    expect(within(row("Old notes test")).getByTestId("pipeline-documents").textContent).toBe("Documents: my-notes.pdf")
+  })
+
   it("warns in amber when a saved item's upload has under 6 hours left, and offers to export them with the document", async () => {
     seed()
     await ready()

@@ -543,11 +543,11 @@ export function NodeCard(p: NodeCardProps) {
           <>
             <p className="m-0 text-xs break-words text-fg-muted">{filename}</p>
             <p role="status" data-testid="missing-file" className="m-0 mt-1 self-start rounded-swatch bg-stale-wash px-2 py-px text-xs break-words text-stale">
-              Missing. Pick a document in the bar above.
+              Missing. Pick a document under Documents.
             </p>
           </>
         ) : (
-          <p className="m-0 text-xs break-words text-fg-muted">{filename ? `${filename}. Change it in the bar above.` : "None yet. Pick one in the bar above."}</p>
+          <p className="m-0 text-xs break-words text-fg-muted">{filename ? `${filename}. Change it under Documents.` : "None yet. Pick one under Documents."}</p>
         )
       ) : (
         <p data-testid="step-transform" className="m-0 text-xs break-words text-fg-muted">

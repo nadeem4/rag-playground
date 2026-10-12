@@ -2,21 +2,32 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
+import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import { loadGraph, type PipelineGraph } from "./graph"
 
 /**
  * Saved pipelines: named copies of the Build graph, kept in this browser.
  * The working copy the Build page edits stays in its own key; choosing a saved
- * pipeline copies it into the working copy, and "Save changes" copies it back.
+ * pipeline copies it into the working copy, and "Save" copies it back.
  * Results are cached by recipe on the server, so switching costs nothing.
+ *
+ * A pipeline owns its documents, as a list. Today the list holds one document
+ * and the graph's source node points at it, so the run request and every
+ * cache key keep their shape. Pipelines saved before the list existed get it
+ * on read, from their source node.
  */
 
 export interface SavedPipeline {
   id: string
   name: string
   graph: PipelineGraph
+  /** The documents the pipeline runs on. One today; the graph's source node is the first. */
+  documents: DocRef[]
   savedAt: string
 }
+
+/** The ready-made Starter pipeline's id. Never a saved one's: those are eight characters. */
+export const STARTER_ID = "starter"
 
 export const MAX_PIPELINES = 20
 const LIST_KEY = "rag-playground:pipelines:v1"
@@ -53,10 +64,26 @@ export const isPipeline = (p: unknown): p is SavedPipeline =>
   typeof (p as SavedPipeline).savedAt === "string" &&
   Array.isArray((p as SavedPipeline).graph?.nodes) && Array.isArray((p as SavedPipeline).graph?.edges)
 
+const isDocRef = (d: unknown): d is DocRef =>
+  typeof d === "object" && d !== null && typeof (d as DocRef).sha === "string" && (d as DocRef).sha !== "" && typeof (d as DocRef).filename === "string"
+
+const docList = (listed: unknown): DocRef[] | null =>
+  Array.isArray(listed) && listed.every(isDocRef) ? listed.map(({ sha, filename }) => ({ sha, filename })) : null
+
+/**
+ * A stored or imported pipeline in today's shape, or null when it is not one.
+ * One saved before documents were a list gets them from its source node.
+ */
+export function asPipeline(raw: unknown): SavedPipeline | null {
+  if (!isPipeline(raw)) return null
+  const { id, name, graph, savedAt } = raw
+  return { id, name, graph, documents: docList((raw as { documents?: unknown }).documents) ?? documentsOf(graph), savedAt }
+}
+
 export function readPipelines(): SavedPipeline[] {
   if (cache === null) {
     const parsed = read(LIST_KEY, (raw) => JSON.parse(raw) as unknown)
-    cache = Array.isArray(parsed) ? parsed.filter(isPipeline) : []
+    cache = Array.isArray(parsed) ? parsed.map(asPipeline).filter((p): p is SavedPipeline => p !== null) : []
   }
   return cache
 }
@@ -91,14 +118,29 @@ function newId(): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").slice(0, 8)
 }
 
-/** The new pipeline, and the oldest one if keeping twenty meant dropping it (I3), so the page can say so. */
-export function savePipeline(name: string, graph: PipelineGraph): { saved: SavedPipeline; dropped: SavedPipeline | null } | null {
+/**
+ * The new pipeline, and the oldest one if keeping twenty meant dropping it (I3), so the page can say so.
+ * `documents` defaults to the graph's own, and the graph is pointed at the first. `select: false`
+ * leaves Build's selection alone (a pipeline saved on Evaluate).
+ */
+export function savePipeline(
+  name: string,
+  graph: PipelineGraph,
+  opts: { documents?: DocRef[]; select?: boolean } = {},
+): { saved: SavedPipeline; dropped: SavedPipeline | null } | null {
   const clean = cleanName(name)
   if (!clean) return null
-  const p: SavedPipeline = { id: newId(), name: clean, graph: structuredClone(graph), savedAt: new Date().toISOString() }
+  const documents = opts.documents ?? documentsOf(graph)
+  const p: SavedPipeline = {
+    id: newId(),
+    name: clean,
+    graph: structuredClone(withDocuments(graph, documents)),
+    documents: structuredClone(documents),
+    savedAt: new Date().toISOString(),
+  }
   const next = [p, ...freshPipelines()]
   if (!persist(next.slice(0, MAX_PIPELINES))) return null
-  setCurrentId(p.id)
+  if (opts.select !== false) setCurrentId(p.id)
   return { saved: p, dropped: next[MAX_PIPELINES] ?? null }
 }
 
@@ -115,10 +157,11 @@ export function usableGraph(p: SavedPipeline, registry: Registry): PipelineGraph
   return loadGraph(JSON.stringify(p.graph), registry)
 }
 
-export function updatePipeline(id: string, graph: PipelineGraph): boolean {
+export function updatePipeline(id: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): boolean {
   const list = freshPipelines()
   if (!list.some((p) => p.id === id)) return false
-  return persist(list.map((p) => (p.id === id ? { ...p, graph: structuredClone(graph), savedAt: new Date().toISOString() } : p)))
+  const next = { graph: structuredClone(withDocuments(graph, documents)), documents: structuredClone(documents), savedAt: new Date().toISOString() }
+  return persist(list.map((p) => (p.id === id ? { ...p, ...next } : p)))
 }
 
 export function renamePipeline(id: string, name: string): boolean {
@@ -170,9 +213,10 @@ export function mergeById<T extends { id: string; savedAt: string }>(
 }
 
 /** Library import: add saved pipelines from a file (I3 cap, I4 fresh read). Null when storage refused the write. */
-export function importPipelines(incoming: SavedPipeline[]): ImportResult<SavedPipeline> | null {
+export function importPipelines(incoming: readonly unknown[]): ImportResult<SavedPipeline> | null {
   const current = freshPipelines()
-  const { add, result } = mergeById(new Set(current.map((p) => p.id)), current.length, incoming.filter(isPipeline), MAX_PIPELINES)
+  const valid = incoming.map(asPipeline).filter((p): p is SavedPipeline => p !== null)
+  const { add, result } = mergeById(new Set(current.map((p) => p.id)), current.length, valid, MAX_PIPELINES)
   const next = [...current, ...add].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
   return persist(next) ? result : null
 }
@@ -237,20 +281,53 @@ const fromBase64Url = (s: string) => {
   return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
 }
 
-export function encodePipeline(name: string, graph: PipelineGraph): string {
-  return toBase64Url(JSON.stringify({ v: 1, name, graph }))
+/** Version 2 carries the documents; a version 1 link had them only in the graph. */
+export function encodePipeline(name: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): string {
+  return toBase64Url(JSON.stringify({ v: 2, name, graph, documents }))
 }
 
-/** null unless the code is well formed, version 1, and every node names a transform this registry has. */
-export function decodePipeline(code: string, registry: Registry): { name: string; graph: PipelineGraph } | null {
+/** null unless the code is well formed, version 1 or 2, and every node names a transform this registry has. */
+export function decodePipeline(code: string, registry: Registry): { name: string; graph: PipelineGraph; documents: DocRef[] } | null {
   try {
-    const parsed = JSON.parse(fromBase64Url(code)) as { v?: unknown; name?: unknown; graph?: unknown }
-    if (parsed.v !== 1 || typeof parsed.name !== "string") return null
-    const graph = loadGraph(JSON.stringify(parsed.graph), registry)
-    return graph ? { name: parsed.name, graph } : null
+    const parsed = JSON.parse(fromBase64Url(code)) as { v?: unknown; name?: unknown; graph?: unknown; documents?: unknown }
+    if ((parsed.v !== 1 && parsed.v !== 2) || typeof parsed.name !== "string") return null
+    const loaded = loadGraph(JSON.stringify(parsed.graph), registry)
+    if (!loaded) return null
+    const documents = (parsed.v === 2 ? docList(parsed.documents) : null) ?? documentsOf(loaded)
+    return { name: parsed.name, graph: withDocuments(loaded, documents), documents }
   } catch {
     return null
   }
+}
+
+/** A graph without what a pipeline is run on or asked: the source's document and the question. */
+function stepsOnly(g: PipelineGraph): PipelineGraph {
+  return {
+    ...g,
+    nodes: g.nodes.map((n) => {
+      if (n.stage === "source") return { ...n, config: {} }
+      if (n.stage !== "query") return n
+      const rest = { ...n.config }
+      for (const k of ["text", "gold_answer", "gold_answers"]) delete rest[k]
+      return { ...n, config: rest }
+    }),
+  }
+}
+
+/** The same steps and settings, whatever document they run on and whatever question is typed. */
+export function sameSteps(a: PipelineGraph, b: PipelineGraph): boolean {
+  return sameGraph(stepsOnly(a), stepsOnly(b))
+}
+
+/**
+ * Whether the working copy differs from the pipeline it came from. A step or
+ * a setting always counts. Another document counts for a saved pipeline,
+ * because it owns its documents and Save keeps the new ones. The Starter is
+ * ready-made and runs on any sample, so only its steps count.
+ */
+export function isEdited(p: Pick<SavedPipeline, "id" | "graph" | "documents">, working: PipelineGraph): boolean {
+  if (!sameSteps(p.graph, working)) return true
+  return p.id !== STARTER_ID && !sameDocuments(p.documents, documentsOf(working))
 }
 
 export function resetPipelinesForTests(): void {

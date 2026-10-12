@@ -1,7 +1,7 @@
 import { useDemo } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { openDocumentMenu, useDocument, type DocStatus } from "@/state/document"
+import { openDocumentMenu, useDocStatus, useDocument, type DocRef, type DocStatus } from "@/state/document"
 
 /** A run needs a document that exists: none, or a missing one, blocks it. */
 export function needsDocument(status: DocStatus): boolean {
@@ -16,8 +16,26 @@ export function needsDocument(status: DocStatus): boolean {
  * fingerprint that just moved to its current copy: one status-tone line.
  * Otherwise nothing.
  */
-export function DocumentNote({ action, changed = false, className }: { action: string; changed?: boolean; className?: string }) {
-  const { doc, status, recoveredNote } = useDocument()
+export function DocumentNote({
+  action,
+  changed = false,
+  className,
+  where = "in the bar above",
+  doc: own,
+}: {
+  action: string
+  changed?: boolean
+  className?: string
+  /** Where the document is picked: the bar on Compare, the pipeline's Documents line on Build and Evaluate. */
+  where?: string
+  /** A page's own document (Evaluate trying a pipeline on another file), judged instead of the pipeline on Build's. */
+  doc?: DocRef | null
+}) {
+  const store = useDocument()
+  const ownStatus = useDocStatus(own ?? null)
+  const doc = own !== undefined ? own : store.doc
+  const status = own !== undefined ? ownStatus : store.status
+  const recoveredNote = store.recoveredNote
   const demo = useDemo()
   const blocked = needsDocument(status)
   if (!blocked && !(changed && doc)) {
@@ -37,10 +55,10 @@ export function DocumentNote({ action, changed = false, className }: { action: s
         {status === "missing" ? (
           <>
             <b className="font-semibold">{doc?.filename} is missing.</b>
-            {demo ? " Uploads on the demo expire." : ""} Pick a document in the bar above to {action}.
+            {demo ? " Uploads on the demo expire." : ""} Pick a document {where} to {action}.
           </>
         ) : status === "empty" ? (
-          <>Pick a document in the bar above to {action}.</>
+          <>Pick a document {where} to {action}.</>
         ) : (
           <>
             The document changed to <b className="font-semibold">{doc?.filename}</b>. The results below are from the old one. Run again to update

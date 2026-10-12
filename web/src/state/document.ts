@@ -4,6 +4,7 @@ import { api } from "@/api/client"
 import { sampleQuestionTexts } from "@/api/samples"
 import type { SampleCard, Source } from "@/api/types"
 
+import { setCurrentId, STARTER_ID } from "./pipelines"
 import { initialGraph, readStoredGraph, sampleGraph, storedGraphJson, storeGraph, subscribeGraph, type PipelineGraph } from "./graph"
 
 /**
@@ -33,6 +34,22 @@ export function withDocument<G extends Pick<PipelineGraph, "nodes">>(g: G, doc: 
     ...g,
     nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { ...n.config, sha: doc.sha, filename: doc.filename } } : n)),
   }
+}
+
+/** A pipeline's documents as a list: the source node's file, or none. One today; several later. */
+export function documentsOf(g: Pick<PipelineGraph, "nodes"> | null | undefined): DocRef[] {
+  const doc = documentOf(g)
+  return doc ? [doc] : []
+}
+
+/** The graph on these documents: its source node points at the first. With none, the graph as it is. */
+export function withDocuments<G extends Pick<PipelineGraph, "nodes">>(g: G, docs: readonly DocRef[]): G {
+  return docs[0] ? withDocument(g, docs[0]) : g
+}
+
+/** The same files in the same order. */
+export function sameDocuments(a: readonly DocRef[], b: readonly DocRef[]): boolean {
+  return a.length === b.length && a.every((d, i) => d.sha === b[i].sha)
 }
 
 /**
@@ -258,6 +275,8 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
     const registry = await api.registry()
     const isSample = question !== undefined || (state.samples?.some((s) => s.sha === doc.sha) ?? false)
     storeGraph(isSample ? sampleGraph(registry, doc, question) : withDocument(readStoredGraph(registry) ?? initialGraph(registry), doc))
+    // A sample with no pipeline yet gets the default recipe: that is the Starter, on this sample.
+    if (isSample) setCurrentId(STARTER_ID)
   }
   setDocumentMenuOpen(false)
 }
@@ -291,6 +310,8 @@ export interface DocumentState {
   doc: DocRef | null
   status: DocStatus
   samples: SampleCard[] | null
+  /** True when the samples list could not be read. */
+  samplesFailed: boolean
   /** The listed files that are not a sample; null until the list answers, and if it fails. */
   uploads: Source[] | null
   /** True when this browser's uploads could not be listed. */
@@ -319,6 +340,7 @@ export function useDocument(): DocumentState {
     doc: stable,
     status: docStatus(stable, s.sources, s.samples, s.samplesFailed, s.known),
     samples: s.samples,
+    samplesFailed: s.samplesFailed,
     uploads,
     listError: s.sourcesFailed,
     menuOpen: s.menuOpen,
@@ -327,6 +349,12 @@ export function useDocument(): DocumentState {
     sampleLoading: s.sampleLoading,
     recoveredNote: s.recovered ? `The sample ${s.recovered} was updated, so this page now uses its current copy.` : null,
   }
+}
+
+/** Whether `doc`, a page's own document rather than the working pipeline's, is usable: the same rule as the bar's. */
+export function useDocStatus(doc: DocRef | null): DocStatus {
+  const s = useSyncExternalStore(subscribe, getState)
+  return docStatus(doc, s.sources, s.samples, s.samplesFailed, s.known)
 }
 
 /** Tests only: forget the lists, the files chosen and the menu, and fetch again on the next subscriber. */

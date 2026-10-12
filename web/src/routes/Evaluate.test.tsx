@@ -6,10 +6,11 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import type { GoldQuestion, QuestionSetUpload, Registry, SampleQuestion } from "@/api/types"
 import type { EvalSummary } from "@/state/evaluate"
 import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
-import { chooseDocument, resetDocumentForTests } from "@/state/document"
-import { resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
-import { resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
-import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
+import { chooseDocument, resetDocumentForTests, withDocument } from "@/state/document"
+import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
+import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID } from "@/state/pipelines"
+import { ON_BUILD } from "@/state/pipelineChoice"
+import { choose, openPicker, optionNames, optionOf } from "@/components/ui/pickerTesting"
 
 import { Evaluate } from "./Evaluate"
 
@@ -19,7 +20,7 @@ const OTHER_SHA = "ab".repeat(32)
 
 const QUESTIONS: SampleQuestion[] = [
   { id: "a", question: "What are the two steps?", gold_answer: "It answers in two steps." },
-  { id: "b", question: "How big is a chunk?", gold_answer: "A chunk should answer one question well." },
+  { id: "b", question: "How big is a chunk?", gold_answer: "A chunk should answer one question well.", tags: ["designed to miss: long sentence"] },
 ]
 
 const question = (over: Partial<GoldQuestion>): GoldQuestion => ({
@@ -200,6 +201,7 @@ function chooseFile(input: HTMLElement, name: string) {
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/evaluate")
   resetAppSettingsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -216,13 +218,6 @@ afterEach(() => {
 })
 
 describe("Evaluate", () => {
-  it("sends you to Build when nothing has been built", async () => {
-    render(<Evaluate />)
-    await waitFor(() => expect(screen.getByText("No pipeline to evaluate")).toBeTruthy())
-    expect(screen.queryByTestId("document-note")).toBeNull()
-    expect(screen.getByRole("link", { name: "Go to Build" }).getAttribute("href")).toBe("/build")
-  })
-
   it("says so plainly when the pipeline has no retriever", async () => {
     // A server with no retrieve plugin: the column is built without one, and
     // `completeGraph` cannot put it back either.
@@ -303,7 +298,7 @@ describe("Evaluate", () => {
     setup()
     await waitFor(() =>
       expect(screen.getByTestId("set-line").textContent).toBe(
-        "2 questions from the sample, A primer on chunking. Found means the evidence is in the top 5 pieces.",
+        "2 questions from the sample, A primer on chunking. Found means the evidence is in the top 5 pieces. 1 question is planted to miss. Open it after the run to see why.",
       ),
     )
     const own = screen.getByText("Use your own questions").closest("details")!
@@ -343,9 +338,11 @@ describe("Evaluate", () => {
   it("breaks the filename only where it cannot fit", async () => {
     setup()
     const header = await screen.findByTestId("evaluate-header")
-    const name = within(header).getByText("chunking-primer.pdf")
-    expect(name.className).toContain("break-words")
-    expect(name.className).not.toContain("break-all")
+    // Both the sentence and the Documents line name it; each wraps only where it must.
+    for (const name of within(header).getAllByText("chunking-primer.pdf")) {
+      expect(name.className).toContain("break-words")
+      expect(name.className).not.toContain("break-all")
+    }
   })
 
   it("uses no sm: class in its files, since the theme has no sm breakpoint", async () => {
@@ -387,7 +384,7 @@ describe("the question set panel", () => {
     await waitFor(() => expect(screen.getByTestId("set-name").textContent).toBe("A primer on chunking"))
     await waitFor(() =>
       expect(screen.getByTestId("set-line").textContent).toBe(
-        "2 questions from the sample, A primer on chunking. Found means the evidence is in the top 5 pieces.",
+        "2 questions from the sample, A primer on chunking. Found means the evidence is in the top 5 pieces. 1 question is planted to miss. Open it after the run to see why.",
       ),
     )
     openOwn()
@@ -539,97 +536,152 @@ describe("the upload report", () => {
   })
 })
 
-describe("Evaluate picks a pipeline", () => {
+describe("Evaluate is pipeline first", () => {
   const picker = () => screen.getByRole("button", { name: /^Pipeline/ }) as HTMLButtonElement
   const picked = () => picker().getAttribute("data-picked")
+  const evaluateButton = () => screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement
+  const tokens = () => setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry)
+  const UP = { sha: "12".repeat(32), filename: "my-notes.pdf", size: 7451, content_type: "application/pdf" }
 
-  it("lists the pipeline on Build and every saved pipeline, defaulting to the one current on Build", async () => {
-    // The working copy on Build is this pipeline, unedited, so it is the default (I1).
-    const graph = setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry)
-    const saved = savePipeline("Token chunks", graph)!.saved
-    serve()
-    storeGraph(graph)
+  /** Lists one upload in this browser, so Change has another document to offer. */
+  function withUpload() {
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => (url === "/api/sources" ? Promise.resolve(new Response(JSON.stringify([UP]), { status: 200 })) : base(url, init))),
+    )
+  }
+
+  it("opens on the Starter with its document and question set when nothing is chosen, so one press scores it", async () => {
+    const { sweeps } = serve()
     render(<Evaluate />)
-    await screen.findByRole("button", { name: /^Pipeline/ })
-    // Saved pipelines first, then the one on Build, as the approved design lists them.
-    expect(optionNames(picker())).toEqual(["Token chunks", "The pipeline on Build"])
-    expect(picked()).toBe(saved.id)
-    // Each pipeline says its steps in one line, closed and open.
-    expect(picker().textContent).toContain("Docling")
-    expect(optionOf(picker(), "Token chunks").textContent).toContain("Fixed token count")
-    // The name and the filename sit in separate nodes (the filename in its own <span>), so this
-    // reads the whole line rather than getByText, which cannot match text split across elements.
-    expect(document.body.textContent).toMatch(/How often Token chunks finds the answer in chunking-primer\.pdf\./)
-  })
-
-  it("scores the chosen pipeline's graph", async () => {
-    savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))
-    setCurrentId(null)
-    const p = setup()
-    await screen.findByRole("button", { name: /^Pipeline/ })
-    expect(picked()).toBe("")
-    choose(picker(), "Token chunks")
-    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
-    await waitFor(() => expect(p.sweeps.length).toBe(1))
-    const chunk = p.sweeps[0].graph.nodes.find((n) => n.stage === "chunk")
-    expect(chunk?.transform).toBe("token_based")
-  })
-
-  it("does not borrow a previous score from another pipeline", async () => {
-    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: "working", byId: {}, summary: { total: 10, hits: 10, averageRank: null } as EvalSummary })
-    const saved = savePipeline("Token chunks", sampleGraph(registry, SOURCE))!.saved
-    setup()
-    await screen.findByRole("button", { name: /^Pipeline/ })
-    expect(picked()).toBe(saved.id)
-    expect(screen.queryByTestId("previous")).toBeNull()
-  })
-
-  it("scores what is on Build when the current pipeline has been edited there (I1)", async () => {
-    // A is current on Build, but Build shows it edited: the working copy has recursive chunks.
-    savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))
-    const p = setup()
-    await screen.findByRole("button", { name: /^Pipeline/ })
-    expect(picked()).toBe("")
-    expect(document.body.textContent).toMatch(/How often Token chunks \(edited\) finds the answer in chunking-primer\.pdf\./)
-    expect(optionOf(picker(), "The pipeline on Build").textContent).toContain("Edited since saved")
-    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" })
-    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
-    await waitFor(() => expect(p.sweeps.length).toBe(1))
-    expect(p.sweeps[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("recursive_character")
-  })
-
-  it("compares an edited pipeline against its own last score, so the first edit still says what it was (I1)", async () => {
-    const saved = savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))!.saved
-    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: saved.id, byId: {}, summary: { total: 2, hits: 1, averageRank: null } as EvalSummary })
-    setup()
-    await screen.findByRole("button", { name: /^Pipeline/ })
-    expect(picked()).toBe("")
-    expect((await screen.findByTestId("previous")).textContent).toMatch(/found 1 of 2/)
-  })
-
-  it("scores a picked saved pipeline on the bar's document", async () => {
-    // The saved pipeline was built on another file; the bar (the working copy) is on SOURCE.
-    const other = setConfig(setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry), "source", { sha: OTHER_SHA, filename: "other.pdf" })
-    const savedId = savePipeline("Token chunks", other)!.saved.id
-    setCurrentId(null)
-    const { sweeps } = setup()
-    choose(await screen.findByRole("button", { name: /^Pipeline/ }), "Token chunks")
-    expect(picked()).toBe(savedId)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(picked()).toBe(STARTER_ID))
+    expect(screen.queryByText("No pipeline to evaluate")).toBeNull()
+    expect(picker().textContent).toContain("Starter pipeline")
+    await waitFor(() => expect(document.body.textContent).toMatch(/How often Starter pipeline finds the answer in chunking-primer\.pdf\./))
+    expect(within(screen.getByTestId("documents-line")).getByText("chunking-primer.pdf")).toBeTruthy()
+    expect(screen.getByTestId("documents-hint").textContent).toBe("The Starter comes with the default sample. Change it to try another.")
+    await waitFor(() => expect(evaluateButton().disabled).toBe(false))
+    fireEvent.click(evaluateButton())
     await waitFor(() => expect(sweeps).toHaveLength(1))
-    expect(sweeps[0].graph.nodes.find((n) => n.stage === "source")!.config.sha).toBe(SOURCE.sha)
-    expect(sweeps[0].graph.nodes.find((n) => n.stage === "chunk")!.transform).toBe("token_based")
+    const g = sweeps[0].graph
+    expect(g.nodes.find((n) => n.stage === "source")!.config.sha).toBe(SOURCE.sha)
+    expect(g.nodes.find((n) => n.stage === "chunk")!.config).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
+  })
+
+  it("lists Ready to use, Your pipelines, On Build and Build your own, in that order", async () => {
+    savePipeline("Token chunks", tokens())
+    setCurrentId(null)
+    storeGraph(setTransform(sampleGraph(registry, SOURCE), "chunk", "sentence_window", registry))
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(ON_BUILD))
+    expect(optionNames(picker())).toEqual(["Starter pipeline", "Token chunks", "The pipeline on Build", "Build your own…"])
+    const list = openPicker(picker())
+    expect(within(list).getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual(["Ready to use", "Your pipelines", "On Build"])
+    expect(within(list).getByRole("option", { name: /^Starter pipeline/ }).textContent).toContain("Ready-made")
+    expect(within(list).getByRole("option", { name: /^The pipeline on Build/ }).textContent).toContain("Not saved")
+  })
+
+  it("lists On Build only when Build's pipeline is not saved, and then opens on Build's own selection", async () => {
+    const saved = savePipeline("Token chunks", tokens())!.saved
+    storeGraph(tokens())
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(saved.id))
+    expect(optionNames(picker())).toEqual(["Starter pipeline", "Token chunks", "Build your own…"])
     expect(document.body.textContent).toMatch(/How often Token chunks finds the answer in chunking-primer\.pdf\./)
   })
 
-  it("keeps the picker's own element, and so its focus, when the pipeline changes (Task 3 review)", async () => {
-    savePipeline("Token chunks", setTransform(sampleGraph(registry, SOURCE), "chunk", "token_based", registry))
+  it("scores a saved pipeline on its own documents", async () => {
+    const other = withDocument(tokens(), { sha: OTHER_SHA, filename: "other.pdf" })
+    savePipeline("Token chunks", other)
     setCurrentId(null)
-    setup()
-    await screen.findByRole("button", { name: /^Pipeline/ })
+    serve()
+    render(<Evaluate />)
+    choose(await screen.findByRole("button", { name: /^Pipeline/ }), "Token chunks")
+    await waitFor(() => expect(document.body.textContent).toMatch(/How often Token chunks finds the answer in other\.pdf\./))
+    expect(within(screen.getByTestId("documents-line")).getByText("other.pdf")).toBeTruthy()
+  })
+
+  it("Change tries the pipeline on another document and leaves the saved pipeline as it was", async () => {
+    const saved = savePipeline("Token chunks", tokens())!.saved
+    setCurrentId(null)
+    serve()
+    withUpload()
+    render(<Evaluate />)
+    choose(await screen.findByRole("button", { name: /^Pipeline/ }), "Token chunks")
+    const change = await screen.findByRole("button", { name: "Change the document. Now chunking-primer.pdf." })
+    fireEvent.keyDown(change, { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    fireEvent.click(await within(menu).findByRole("menuitemradio", { name: /my-notes\.pdf/ }))
+    await waitFor(() => expect(document.body.textContent).toMatch(/How often Token chunks finds the answer in my-notes\.pdf\./))
+    expect(screen.getByTestId("documents-hint").textContent).toBe("Trying Token chunks on my-notes.pdf. The saved pipeline keeps chunking-primer.pdf.")
+    expect(readPipelines().find((p) => p.id === saved.id)!.documents).toEqual([SOURCE])
+    // Another pipeline brings its own documents back.
+    choose(picker(), "Starter pipeline")
+    await waitFor(() => expect(document.body.textContent).toMatch(/How often Starter pipeline finds the answer in chunking-primer\.pdf\./))
+  })
+
+  it("says how many questions are planted to miss", async () => {
+    render(<Evaluate />)
+    await waitFor(() => expect(screen.getByTestId("planted-line").textContent).toBe("1 question is planted to miss. Open it after the run to see why."))
+  })
+
+  it("opens on the pipeline a link names", async () => {
+    const saved = savePipeline("Token chunks", tokens())!.saved
+    setCurrentId(null)
+    window.history.replaceState(null, "", `/evaluate?pipeline=${saved.id}`)
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(saved.id))
+    expect(window.location.search).toBe("")
+  })
+
+  it("Build your own opens a side sheet, asks for a name, then saves and selects the new pipeline without touching Build", async () => {
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(STARTER_ID))
+    choose(picker(), "Build your own…")
+    const sheet = await screen.findByRole("dialog", { name: "Build your own pipeline" })
+    expect(picked()).toBe(STARTER_ID)
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save and select" }))
+    expect(within(sheet).getByRole("alert").textContent).toBe("Give it a name, so you can find it in the list.")
+    fireEvent.change(within(sheet).getByLabelText("Name"), { target: { value: "Bigger pieces" } })
+    choose(within(sheet).getByRole("button", { name: /^Chunk/ }), "By sentence")
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save and select" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    const saved = readPipelines()[0]
+    expect(saved.name).toBe("Bigger pieces")
+    expect(saved.documents).toEqual([SOURCE])
+    expect(picked()).toBe(saved.id)
+    expect(readCurrentId()).toBeNull()
+  })
+
+  it("Open on Build stores the sheet's pipeline as an unsaved one on Build and goes there", async () => {
+    const navigate = vi.fn()
+    render(<Evaluate navigate={navigate} />)
+    await waitFor(() => expect(picked()).toBe(STARTER_ID))
+    choose(picker(), "Build your own…")
+    const sheet = await screen.findByRole("dialog", { name: "Build your own pipeline" })
+    choose(within(sheet).getByRole("button", { name: /^Chunk/ }), "By sentence")
+    fireEvent.click(within(sheet).getByRole("button", { name: "Open on Build to watch each step" }))
+    expect(navigate).toHaveBeenCalledWith("/build?from=evaluate")
+    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "chunk")!.transform).toBe("sentence_window")
+    expect(readCurrentId()).toBeNull()
+  })
+
+  it("lists a saved pipeline this server cannot run as not usable, and never opens on it (M7)", async () => {
+    const graph = sampleGraph(registry, SOURCE)
+    savePipeline("Semantic", { ...graph, nodes: graph.nodes.map((n) => (n.stage === "chunk" ? { ...n, transform: "semantic" } : n)) })
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(STARTER_ID))
+    const option = optionOf(picker(), "Semantic")
+    expect(option.textContent).toContain("Cannot run")
+    expect(option.getAttribute("aria-disabled")).toBe("true")
+  })
+
+  it("keeps the picker's own element, and so its focus, when the pipeline changes", async () => {
+    savePipeline("Token chunks", tokens())
+    setCurrentId(null)
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(STARTER_ID))
     const before = picker()
     before.focus()
     choose(before, "Token chunks")
@@ -638,24 +690,30 @@ describe("Evaluate picks a pipeline", () => {
     expect(document.activeElement).toBe(before)
   })
 
-  it("lists a saved pipeline this server cannot run as not usable, and never defaults to it (M7)", async () => {
-    const graph = sampleGraph(registry, SOURCE)
-    savePipeline("Semantic", { ...graph, nodes: graph.nodes.map((n) => (n.stage === "chunk" ? { ...n, transform: "semantic" } : n)) })
-    setup()
-    await screen.findByRole("button", { name: /^Pipeline/ })
-    expect(picked()).toBe("")
-    const option = optionOf(picker(), "Semantic")
-    expect(option.textContent).toContain("Cannot run")
-    expect(option.getAttribute("aria-disabled")).toBe("true")
+  it("compares an edited pipeline on Build against its own last score", async () => {
+    const saved = savePipeline("Token chunks", tokens())!.saved
+    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: saved.id, byId: {}, summary: { total: 2, hits: 1, averageRank: null } as EvalSummary })
+    storeGraph(sampleGraph(registry, SOURCE))
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(ON_BUILD))
+    expect(document.body.textContent).toMatch(/How often Token chunks \(edited\) finds the answer in chunking-primer\.pdf\./)
+    expect((await screen.findByTestId("previous")).textContent).toMatch(/found 1 of 2/)
   })
 
   it("holds the pipeline still while an evaluation runs (M8)", async () => {
     setup()
     await screen.findByRole("button", { name: /^Pipeline/ })
     expect(picker().disabled).toBe(false)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(evaluateButton().disabled).toBe(false))
+    fireEvent.click(evaluateButton())
     await waitFor(() => expect(picker().disabled).toBe(true))
+  })
+
+  it("says so, with a way on, when the samples cannot be read and nothing is saved", async () => {
+    serve({ sampleSha: null })
+    render(<Evaluate />)
+    expect(await screen.findByText("The Starter pipeline is not ready")).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Build a pipeline on Build" }).getAttribute("href")).toBe("/build")
   })
 })
 
@@ -711,6 +769,36 @@ describe("while and after scoring", () => {
     await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
     return DrivenEventSource.instances[0]
   }
+
+  it("gives every state an icon, the same in the row and in its mark, with the word beside it in the row", async () => {
+    serve()
+    storeGraph(graph)
+    render(<Evaluate />)
+    const icon = (el: Element) => el.querySelector("[data-icon]")?.getAttribute("data-icon")
+    const rows = () => [...document.querySelectorAll("[data-question]")]
+    await waitFor(() => expect(rows()).toHaveLength(2))
+    // Before a run: a quiet empty circle and the words Not run.
+    expect(rows().map((r) => icon(r.querySelector("[data-verdict]")!))).toEqual(["not-run", "not-run"])
+    expect(rows()[0].querySelector("[data-verdict]")!.textContent).toBe("Not run")
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    DrivenEventSource.instances = []
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    const es = DrivenEventSource.instances[0]
+    const marks = () => within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    await waitFor(() => expect(marks().map(icon)).toEqual(["waiting", "waiting"]))
+    expect(rows().map((r) => icon(r.querySelector("[data-verdict]")!))).toEqual(["waiting", "waiting"])
+    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    await waitFor(() => expect(marks().map(icon)).toEqual(["running", "waiting"]))
+    expect(marks()[0].getAttribute("aria-label")).toBe("Question 1, running")
+    const spinner = marks()[0].querySelector("[data-icon]")!
+    expect(spinner.getAttribute("aria-hidden")).toBe("true")
+    expect(spinner.getAttribute("class")).toContain("icon-spin")
+    expect(rows()[0].querySelector("[data-verdict]")!.textContent).toBe("Running")
+    es.emit(2, { event: "node_failed", node_id: idOf("use_case"), error: "Traceback\nValueError: boom" })
+    await waitFor(() => expect(marks().map(icon)[0]).toBe("failed"))
+    expect(icon(rows()[0].querySelector("[data-verdict]")!)).toBe("failed")
+  })
 
   it("while the busy demo makes the run wait, says so instead of a question count", async () => {
     const es = await start({ o0: evalOut({}), o1: evalOut({}) })
@@ -1027,7 +1115,7 @@ describe("while and after scoring", () => {
   })
 })
 
-describe("the document in the bar", () => {
+describe("the pipeline's document", () => {
   /** Answers `GET /api/sources` with no uploads, so a file nobody has reads as missing. */
   function noUploads() {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
@@ -1042,7 +1130,7 @@ describe("the document in the bar", () => {
     noUploads()
     storeGraph(sampleGraph(registry, { sha: "ef".repeat(32), filename: "NK_Resume.pdf" }))
     render(<Evaluate />)
-    expect((await screen.findByTestId("document-note")).textContent).toContain("Pick a document in the bar above to run the evaluation.")
+    expect((await screen.findByTestId("document-note")).textContent).toContain("Pick a document under Documents to run the evaluation.")
     await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(true))
     expect(screen.getByText("Needs a document.")).toBeTruthy()
   })
@@ -1050,10 +1138,10 @@ describe("the document in the bar", () => {
   it("asks for a document when the pipeline has none, instead of No pipeline to evaluate", async () => {
     serve()
     noUploads()
-    storeGraph(setConfig(sampleGraph(registry, SOURCE), "source", {}))
+    savePipeline("No file yet", setConfig(sampleGraph(registry, SOURCE), "source", {}))
     render(<Evaluate />)
     expect((await screen.findByTestId("document-note")).textContent).toBe(
-      "Pick a document in the bar above to run the evaluation.Pick a document",
+      "Pick a document under Documents to run the evaluation.Pick a document",
     )
     expect(screen.queryByText("No pipeline to evaluate")).toBeNull()
   })

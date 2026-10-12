@@ -32,6 +32,7 @@ const pipeline = (id: string, savedAt: string, sha = UP): SavedPipeline => {
     name: `Pipeline ${id}`,
     savedAt,
     graph: { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { ...n.config, sha, filename: "notes.pdf" } } : n)) },
+    documents: [{ sha, filename: "notes.pdf" }],
   }
 }
 
@@ -126,6 +127,21 @@ describe("export and import", () => {
     expect(back.pipelines[0].graph).toEqual(items[1].kind === "pipeline" ? items[1].pipeline.graph : null)
     expect(back.experiments.map((e) => e.id)).toEqual(["e1"])
     expect(Array.from(base64ToBytes(back.documents[0].pdfBase64))).toEqual([37, 80, 68, 70])
+  })
+
+  it("carries each pipeline's documents, and reads an older file's pipeline as a list of one", () => {
+    const file = buildExport(libraryItems([pipeline("p1", "2026-10-01T00:00:00Z")], []), [], NOW)
+    expect((file.items[0] as SavedPipeline).documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
+    const { documents: _gone, ...old } = file.items[0] as SavedPipeline & { kind: "pipeline" }
+    const back = parseImport(JSON.stringify({ ...file, items: [old] }))
+    if (!back.ok) throw new Error(back.error)
+    expect(back.pipelines[0].documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
+  })
+
+  it("lists a pipeline with every one of its documents", () => {
+    const [item] = libraryItems([pipeline("p1", "2026-10-01T00:00:00Z")], [])
+    expect(item.kind === "pipeline" && item.documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
+    expect(item.doc).toEqual({ sha: UP, filename: "notes.pdf" })
   })
 
   it("refuses a file that is not a library export, in plain words", () => {

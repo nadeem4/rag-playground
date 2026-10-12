@@ -15,7 +15,7 @@ import {
   withDocument,
 } from "./document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, type PipelineGraph } from "./graph"
-import { sameGraph } from "./pipelines"
+import { readCurrentId, resetPipelinesForTests, sameGraph, STARTER_ID } from "./pipelines"
 
 const registry = liveRegistry as unknown as Registry
 const SAMPLE_SHA = "cd".repeat(32)
@@ -42,6 +42,7 @@ beforeEach(() => {
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
+  resetPipelinesForTests()
   registryFails = false
   posts = []
   answers = { "/api/sources": [UP], "/api/samples": [SAMPLE] }
@@ -115,6 +116,8 @@ describe("chooseDocument", () => {
   it("builds the sample pipeline when there is no document yet", async () => {
     await chooseDocument(ref(SAMPLE_SHA, "chunking-primer.pdf"), SAMPLE.question)
     expect(sameGraph(readStoredGraph(registry)!, sampleGraph(registry, ref(SAMPLE_SHA, "chunking-primer.pdf"), SAMPLE.question))).toBe(true)
+    // The default recipe on a sample is the Starter.
+    expect(readCurrentId()).toBe(STARTER_ID)
   })
 
   it("stores nothing when the registry cannot be read, so the old document stays", async () => {

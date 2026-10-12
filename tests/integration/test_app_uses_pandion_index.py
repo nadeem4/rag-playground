@@ -58,7 +58,11 @@ def test_the_app_registry_holds_the_package_index_and_upload():
     ],
 )
 def test_the_old_module_is_gone(module):
-    assert importlib.util.find_spec(module) is None
+    try:
+        spec = importlib.util.find_spec(module)
+    except ModuleNotFoundError:  # its parent package is gone too
+        spec = None
+    assert spec is None
 
 
 def rows(index_dir: Path) -> list[dict]:

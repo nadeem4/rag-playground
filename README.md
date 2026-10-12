@@ -108,6 +108,21 @@ the strategy's id in the API and in exported files.
 
 [docs/strategies.md](docs/strategies.md) explains each one and its settings.
 
+## The pandion package
+
+The playground runs on `pandion`, its engine as a Python package. You can run one stage on
+its own, or build a whole index from a config file, and every step can be inspected.
+
+```python
+import pandion
+
+doc = pandion.parse("samples/chunking-primer/chunking-primer.pdf", use="pdfium")
+pieces = pandion.chunk(doc, use="recursive_character", chunk_size=400)
+print(len(pieces.output.chunks), "pieces")
+```
+
+See the [pandion guide](docs/pandion.md). It is not on PyPI yet.
+
 ## Learn more
 
 - [Guide](docs/guide.md): every page of the app in detail.
@@ -117,6 +132,8 @@ the strategy's id in the API and in exported files.
 - [Privacy](docs/privacy.md): what is kept in your browser and on the demo server, and
   for how long.
 - [Deploy](docs/deploy.md): Docker, demo mode, variables, and running your own Space.
+- [The pandion package](docs/pandion.md): run a stage on its own, or build an index from a
+  config file.
 - [Architecture](docs/architecture.md): the pipeline graph, plugins, the cache and the
   run stream.
 - [Lessons learned](docs/lessons-learned.md): real problems we hit building the pipeline,

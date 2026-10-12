@@ -49,7 +49,7 @@ export function FactsLine({ facts }: { facts: DocumentFacts }) {
       {facts.pages !== null ? <span>{facts.pages === 1 ? "1 page" : `${facts.pages} pages`}</span> : null}
       <span
         data-testid={facts.removed ? "document-removed" : undefined}
-        className={cn("rounded-swatch px-[6px] text-2xs font-medium", facts.removed ? "bg-removed text-removed-text" : "bg-surface-elevated text-fg-muted")}
+        className={cn("rounded-swatch px-1 text-2xs font-medium", facts.removed ? "bg-removed text-removed-text" : "bg-surface-elevated text-fg-muted")}
       >
         {facts.removed ? "Removed from the server" : facts.kind}
       </span>
@@ -120,7 +120,7 @@ export function DocumentItem({
           <span className="ml-auto">{button}</span>
         </div>
       ) : (
-        <span data-testid="document-item" className="inline-flex max-w-full min-w-0 items-center gap-[6px]">
+        <span data-testid="document-item" className="inline-flex max-w-full min-w-0 items-center gap-1">
           <Thumb doc={doc} removed={facts.removed} className="w-[18px] rounded-[2px]" />
           <span className="min-w-0 truncate text-sm font-semibold text-fg" title={facts.title}>
             {facts.title}

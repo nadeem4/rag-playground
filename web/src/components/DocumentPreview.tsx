@@ -91,7 +91,7 @@ export function DocumentPreview({ doc, facts, onClose }: { doc: DocRef; facts: D
               if (el) figures.current.set(p.n, el)
               else figures.current.delete(p.n)
             }}
-            className="m-0 flex scroll-mt-4 flex-col items-center gap-[6px]"
+            className="m-0 flex scroll-mt-4 flex-col items-center gap-1"
           >
             <img
               src={api.pageImageUrl(doc.sha, p.n, 1.5)}

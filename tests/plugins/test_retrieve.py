@@ -19,12 +19,12 @@ from pandion.artifacts import Artifact, ArtifactType
 from pandion.payloads import Chunk, ChunkSet, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.storage import Store
-from plugins.index.lancedb_store import DESCRIPTOR, LanceDbIndex, LanceDbIndexConfig
+from pandion.plugins.index.lancedb_store import DESCRIPTOR, LanceDbIndex, LanceDbIndexConfig
 from plugins.retrieve import _base
 from plugins.retrieve.bm25 import Bm25Config, Bm25Retriever
 from plugins.retrieve.dense import DenseConfig, DenseRetriever
 from plugins.retrieve.hybrid_rrf import HybridRrfConfig, HybridRrfRetriever
-from providers.embeddings import FakeDeterministicEmbedder
+from pandion.embeddings import FakeDeterministicEmbedder
 
 # --------------------------------------------------------------------------
 # helpers
@@ -308,8 +308,8 @@ def test_the_query_vector_uses_the_indexed_dimensionality(tmp_path, monkeypatch)
     seen: list[tuple[int | None, int]] = []
     original = _base.embed_cached
 
-    def spy(provider, texts_, *, kind, dim):
-        out = original(provider, texts_, kind=kind, dim=dim)
+    def spy(provider, texts_, *, kind, dim, cache=None):
+        out = original(provider, texts_, kind=kind, dim=dim, cache=cache)
         seen.append((dim, len(out[0][0])))
         return out
 
@@ -343,7 +343,7 @@ class KindRecorder(FakeDeterministicEmbedder):
 @pytest.fixture
 def recorder_index(tmp_path, monkeypatch) -> Path:
     """An index whose descriptor names the recording embedder."""
-    from providers import embeddings
+    from pandion import embeddings
 
     monkeypatch.setitem(embeddings._EMBEDDERS, KindRecorder.name, KindRecorder)
     index_dir = build_index(tmp_path, *CORPUS)
@@ -645,9 +645,9 @@ def test_prf_runs_the_dense_pass_once_on_the_original_question(tmp_path, monkeyp
     lexical: list[str | None] = []
     real_embed, real_fts = _base.embed_query, _base.fts_rows
 
-    def spy_embed(descriptor, query):
+    def spy_embed(descriptor, query, extras=None):
         embedded.append(query.text)
-        return real_embed(descriptor, query)
+        return real_embed(descriptor, query, extras)
 
     def spy_fts(table, query, limit, text=None):
         lexical.append(text)

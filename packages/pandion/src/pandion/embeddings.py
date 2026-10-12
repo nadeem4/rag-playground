@@ -33,6 +33,9 @@ from abc import ABC, abstractmethod
 from functools import lru_cache
 from typing import Any, Literal, get_args
 
+from pandion.errors import require
+from pandion.models import ModelSettings, check_downloaded, resolve_device
+
 EmbedKind = Literal["document", "query"]
 
 #: The registered embedder names, as a type. Plugin configs use this directly so
@@ -65,6 +68,10 @@ class EmbeddingProvider(ABC):
     #: so this is part of the model's identity, not a performance detail. It
     #: is the single source for the loader, the fingerprint and the cache key.
     dtype: str = ""
+
+    #: Where a real model is kept, whether it may download, and its device.
+    #: Never part of the fingerprint: they do not change which vectors it makes.
+    models: ModelSettings | None = None
 
     def fingerprint(self) -> str:
         """Folded into the artifact hash of anything that embeds.
@@ -217,7 +224,10 @@ def _l2_normalize(vec: list[float]) -> list[float]:
 
 
 class SentenceTransformerEmbedder(EmbeddingProvider):
-    """A Hugging Face model run locally through sentence-transformers, on CPU.
+    """A Hugging Face model run locally through sentence-transformers.
+
+    Where it is kept, whether it may download and the device it runs on come
+    from its `models` settings (`pandion.models.ModelSettings`).
 
     The revision is a commit sha, never a branch: `main` moves, and a model that
     changes under a cached index serves vectors from two different spaces.
@@ -243,7 +253,7 @@ class SentenceTransformerEmbedder(EmbeddingProvider):
             elif self.query_prefix is not None:
                 prompt_kwargs["prompt"] = self.query_prefix
 
-        model = _load_model(self.model_id, self.revision, self.dtype)
+        model = _load_model(self.model_id, self.revision, self.dtype, self.models)
         vectors = model.encode(
             texts,
             batch_size=self.batch_size,
@@ -284,26 +294,35 @@ class BgeSmallEnV15(SentenceTransformerEmbedder):
 
 
 _LOAD_LOCK = threading.Lock()
-_MODELS: dict[tuple[str, str, str], Any] = {}
+_MODELS: dict[tuple[str, str, str, str], Any] = {}
 
 
-def _load_model(model_id: str, revision: str, dtype: str) -> Any:
+def _load_model(
+    model_id: str, revision: str, dtype: str, settings: ModelSettings | None = None
+) -> Any:
     """Load a model once per process; the import happens here, not at module top.
 
     The lock matters: the executor may run nodes concurrently, and two threads
-    racing a first load would each pull a 1 GB model into memory. `dtype` is
-    part of the key because one checkpoint in two dtypes is two models.
+    racing a first load would each pull a 1 GB model into memory. `dtype` and
+    the device are part of the key because one checkpoint in two dtypes, or on
+    two devices, is two models.
     """
-    key = (model_id, revision, dtype)
+    settings = settings or ModelSettings()
     with _LOAD_LOCK:
+        device = resolve_device(settings.device)
+        key = (model_id, revision, dtype, device)
         if key not in _MODELS:
-            import torch
-            from sentence_transformers import SentenceTransformer
+            check_downloaded(model_id, revision, settings)
+            step = f"The {model_id} embedder"
+            torch = require("torch", extra="local", step=step)
+            st = require("sentence_transformers", extra="local", step=step)
 
-            _MODELS[key] = SentenceTransformer(
+            _MODELS[key] = st.SentenceTransformer(
                 model_id,
                 revision=revision,
-                device="cpu",
+                device=device,
+                cache_folder=str(settings.cache_dir) if settings.cache_dir else None,
+                local_files_only=settings.download == "never",
                 model_kwargs={"dtype": getattr(torch, dtype)},
             )
         return _MODELS[key]
@@ -319,11 +338,17 @@ _EMBEDDERS: dict[str, type[EmbeddingProvider]] = {
 EMBEDDER_NAMES: tuple[str, ...] = get_args(EmbedderName)
 
 
-def get_embedder(name: str) -> EmbeddingProvider:
-    """Return a ready-to-use provider by registry name. Never loads a model."""
+def get_embedder(name: str, models: ModelSettings | None = None) -> EmbeddingProvider:
+    """Return a ready-to-use provider by registry name. Never loads a model.
+
+    `models` says where a real model is kept, whether it may download and the
+    device it runs on; the defaults download on first use and pick the device.
+    """
     try:
-        return _EMBEDDERS[name]()
+        provider = _EMBEDDERS[name]()
     except KeyError:
         raise KeyError(
             f"unknown embedder {name!r}. Available: {sorted(_EMBEDDERS)}"
         ) from None
+    provider.models = models
+    return provider

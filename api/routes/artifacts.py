@@ -25,7 +25,7 @@ _ID = re.compile(r"^[0-9a-f]{64}$")
 RETRIES = 5
 RETRY_DELAY_S = 0.2
 
-#: Inside an index artifact's directory, written by `plugins.index.lancedb_store`.
+#: Inside an index artifact's directory, written by `pandion.plugins.index.lancedb_store`.
 DESCRIPTOR = "descriptor.json"
 
 

@@ -1106,12 +1106,22 @@ version = "0.0.1"
 source = { editable = "packages/pandion" }
 dependencies = [
     { name = "pydantic" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
 docling = [
     { name = "docling" },
     { name = "onnxruntime" },
+]
+lancedb = [
+    { name = "lancedb" },
+    { name = "pyarrow" },
+]
+local = [
+    { name = "sentence-transformers" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
 ]
 pdfium = [
     { name = "pypdfium2" },
@@ -1120,11 +1130,17 @@ pdfium = [
 [package.metadata]
 requires-dist = [
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.129.0" },
+    { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.38,<0.39" },
     { name = "onnxruntime", marker = "extra == 'docling'", specifier = ">=1.30.0" },
+    { name = "pyarrow", marker = "extra == 'lancedb'", specifier = ">=25.0.1" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pypdfium2", marker = "extra == 'pdfium'", specifier = ">=5.13.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "sentence-transformers", marker = "extra == 'local'", specifier = ">=6.1.0" },
+    { name = "torch", marker = "sys_platform == 'linux' and extra == 'local'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform != 'linux' and extra == 'local'", specifier = ">=2.14.0" },
 ]
-provides-extras = ["pdfium", "docling"]
+provides-extras = ["pdfium", "docling", "local", "lancedb"]
 
 [[package]]
 name = "pillow"
@@ -1473,14 +1489,12 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "fastapi" },
-    { name = "lancedb" },
     { name = "openai" },
-    { name = "pandion", extra = ["docling", "pdfium"] },
+    { name = "pandion", extra = ["docling", "lancedb", "local", "pdfium"] },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
-    { name = "sentence-transformers" },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
     { name = "torchvision", version = "0.29.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
@@ -1502,16 +1516,14 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "git-cliff", marker = "extra == 'dev'", specifier = "==2.14.2" },
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.13.0" },
-    { name = "lancedb", specifier = ">=0.38,<0.39" },
     { name = "openai", specifier = ">=3.17.0" },
-    { name = "pandion", extras = ["docling", "pdfium"], editable = "packages/pandion" },
+    { name = "pandion", extras = ["docling", "lancedb", "local", "pdfium"], editable = "packages/pandion" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "python-multipart", specifier = ">=0.0.32" },
-    { name = "sentence-transformers", specifier = ">=6.1.0" },
     { name = "torch", marker = "sys_platform != 'linux'", specifier = ">=2.14.0" },
     { name = "torch", marker = "sys_platform == 'linux'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "sys_platform != 'linux'", specifier = ">=0.29.0" },

@@ -24,12 +24,13 @@ from pathlib import Path
 import pytest
 
 from pandion.artifacts import ArtifactType
-from pandion.executor import NodeStatus, run, sweep
+from pandion import executor
+from pandion.executor import NodeStatus
 from pandion.graph import Edge, Graph, Node
 from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.storage import Store
-from plugins.source import upload
+from pandion.sources import Sources
 from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
 
 
@@ -104,25 +105,37 @@ def node_ids(rerank: bool) -> set[str]:
 
 
 @pytest.fixture
-def source(tmp_path: Path, monkeypatch) -> tuple[str, str]:
-    """Put the fixture PDF into a relocated `sources/`, content-addressed.
+def source(tmp_path: Path) -> tuple[str, str]:
+    """Put the fixture PDF into `<tmp>/sources`, content-addressed.
 
-    `upload` resolves `SOURCES_DIR / f"{sha}{suffix}"`, so the stored name is
-    the sha plus the original file's extension — that is the naming rule, and a
-    test has to honour it exactly or the node just raises FileNotFoundError.
+    `upload` resolves `<sources>/<sha><suffix>`, so the stored name is the sha
+    plus the original file's extension — that is the naming rule, and a test
+    has to honour it exactly or the node just raises FileNotFoundError.
     """
     sources = tmp_path / "sources"
     sources.mkdir()
     data = build_pdf(SAMPLE_PAGES)
     sha = hashlib.sha256(data).hexdigest()
     (sources / f"{sha}.pdf").write_bytes(data)
-    monkeypatch.setattr(upload, "SOURCES_DIR", sources)
     return sha, "sample.pdf"
 
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
     return Store(tmp_path / "store")
+
+
+def _extras(store: Store) -> dict:
+    """The sources folder the `source` fixture filled, beside the store."""
+    return {"sources": Sources(store.root.parent / "sources")}
+
+
+def run(graph, registry, store, **kwargs):
+    return executor.run(graph, registry, store, context_extras=_extras(store), **kwargs)
+
+
+def sweep(graph, registry, store, **kwargs):
+    return executor.sweep(graph, registry, store, context_extras=_extras(store), **kwargs)
 
 
 def statuses(result) -> dict[str, NodeStatus]:

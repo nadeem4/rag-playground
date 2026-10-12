@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 
-from plugins.source import upload
+from pandion.plugins.source import upload
+from pandion.ports import RunContext
+from pandion.sources import Sources
 from tests.api.conftest import upload_pdf
 
 
@@ -11,7 +13,7 @@ def test_upload_is_content_addressed(client, dirs):
     assert body["filename"] == "Paper.PDF"
     assert body["size"] > 0
     assert body["content_type"] == "application/pdf"
-    # upload.py's naming rule: SOURCES_DIR / f"{sha}{Path(filename).suffix}"
+    # The upload step's naming rule: <sources>/<sha><suffix of the filename>
     assert (dirs["sources"] / f"{body['sha']}.PDF").is_file()
 
 
@@ -30,11 +32,14 @@ def test_empty_upload_is_400(client):
 
 def test_uploaded_file_is_findable_by_the_upload_transform(client, dirs):
     body = upload_pdf(client)
-    assert upload.SOURCES_DIR == dirs["sources"]
+    deps = client.app.state.deps
+    assert deps.run_extras()["sources"].root == dirs["sources"]
     cls = upload.Upload
-    out = cls().apply(
-        {}, cls.config_model(sha=body["sha"], filename=body["filename"]), None
+    ctx = RunContext(
+        output_dir=dirs["artifacts"], emit=lambda e: None, tmp=dirs["artifacts"],
+        extras={"sources": Sources(dirs["sources"])},
     )
+    out = cls().apply({}, cls.config_model(sha=body["sha"], filename=body["filename"]), ctx)
     assert out["path"] == str(dirs["sources"] / f"{body['sha']}.pdf")
 
 

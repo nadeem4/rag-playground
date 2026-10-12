@@ -208,7 +208,7 @@ async def create_run(
                 force=body.force,
                 on_event=on_event,
                 cancelled=cancelled,
-                context_extras=extras,
+                context_extras={**deps.run_extras(), **(extras or {})},
             ),
         )
         return res.ok, bool(seen)
@@ -281,7 +281,7 @@ async def create_sweep(
                 force=body.force,
                 on_event=on_event,
                 cancelled=cancelled,
-                context_extras=extras,
+                context_extras={**deps.run_extras(), **(extras or {})},
             ),
         )
         stopped_early = len(res.runs) < len(variants)

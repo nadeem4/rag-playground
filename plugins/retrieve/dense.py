@@ -75,7 +75,7 @@ class DenseRetriever(Transform[DenseConfig]):
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "embed"):
-            vector = _base.embed_query(descriptor, query)
+            vector = _base.embed_query(descriptor, query, ctx.extras)
         with _base.timed(timings, "search"):
             rows = _base.dense_rows(table, vector, descriptor, config.top_k)
 

@@ -10,7 +10,7 @@ import math
 
 import pytest
 
-from providers.embeddings import get_embedder
+from pandion.embeddings import get_embedder
 
 pytestmark = pytest.mark.models
 

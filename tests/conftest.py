@@ -40,13 +40,13 @@ def _no_model_downloads_outside_models_tests(request, monkeypatch):
     if request.node.get_closest_marker("models"):
         return
 
-    def refuse(model_id: str, revision: str):
+    def refuse(model_id: str, revision: str, *rest):
         raise AssertionError(
             f"test tried to load {model_id}@{revision} without "
             "@pytest.mark.models; pass embedder='fake-deterministic'"
         )
 
-    monkeypatch.setattr("providers.embeddings._load_model", refuse)
+    monkeypatch.setattr("pandion.embeddings._load_model", refuse)
 
 
 def pytest_configure(config):

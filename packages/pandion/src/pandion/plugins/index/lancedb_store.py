@@ -20,6 +20,11 @@ which the executor folds into `Artifact.meta` for the store and the UI.
 *Vectors come from `chunk.text_to_embed`.* That is the contextual-retrieval
 seam: an augmented text is retrieved on while the original is cited. The full
 chunk travels alongside in `chunk_json` so the citation stays exact.
+
+LanceDB and pyarrow come with the `lancedb` extra and are imported inside
+`apply()`, so discovering this plugin loads neither. Vectors go through the
+embedding cache the run passes in `ctx.extras["embedding_cache"]`; a run with
+none embeds every piece.
 """
 
 from __future__ import annotations
@@ -29,18 +34,16 @@ import shutil
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
 
-import lancedb
-import pyarrow as pa
-from lancedb.index import FTS
 from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
+from pandion.embedding_cache import embed_cached
+from pandion.embeddings import EmbedderName, get_embedder
+from pandion.errors import require
 from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from providers.embedding_cache import embed_cached
-from providers.embeddings import EmbedderName, get_embedder
 
 #: The single table every backend reads. Dense and FTS are two indexes over one
 #: set of rows, not two stores — that is what makes hybrid fusion honest.
@@ -245,10 +248,11 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             for chunk in ChunkSet.model_validate(payload).chunks
         ]
 
-        embedder = get_embedder(config.embedder)
+        embedder = get_embedder(config.embedder, ctx.extras.get("models"))
         # Before any embedding, so a bad width fails with the reason and not
         # after a model download.
         embedder.check_dim(config.truncate_dim)
+        pa = require("pyarrow", extra="lancedb", step="The lancedb index")
         dim = config.truncate_dim or embedder.native_dim
         # Through the cache at native width: a truncate_dim sweep embeds each
         # chunk once and slices the rest.
@@ -257,6 +261,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             [chunk.text_to_embed for chunk in chunks],
             kind="document",
             dim=config.truncate_dim,
+            cache=ctx.extras.get("embedding_cache"),
         )
 
         rows = [
@@ -325,7 +330,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
 def _build(
     directory: Path,
     rows: list[dict[str, Any]],
-    schema: pa.Schema,
+    schema: Any,
     descriptor: dict[str, Any],
     *,
     build_fts: bool,
@@ -336,6 +341,9 @@ def _build(
     the committed directory into place, and an open LanceDB handle is exactly
     the thing that turns that move into a WinError 32.
     """
+    lancedb = require("lancedb", extra="lancedb", step="The lancedb index")
+    from lancedb.index import FTS
+
     directory.mkdir(parents=True, exist_ok=True)
     db = lancedb.connect(directory)
 

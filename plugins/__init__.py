@@ -25,7 +25,7 @@ import importlib
 #: their place here, so the registry lists the stages in the same order as
 #: before.
 PLUGIN_MODULES: tuple[str, ...] = (
-    "plugins.source.upload",
+    "pandion.plugins.source.upload",
     "plugins.query.text",
     "plugins.query.llm_rewrite",
     "pandion.plugins.parse.pdfium",
@@ -38,7 +38,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.chunk.markdown_header",
     "pandion.plugins.chunk.token_based",
     "pandion.plugins.chunk.sentence_window",
-    "plugins.index.lancedb_store",
+    "pandion.plugins.index.lancedb_store",
     "plugins.retrieve.dense",
     "plugins.retrieve.bm25",
     "plugins.retrieve.hybrid_rrf",

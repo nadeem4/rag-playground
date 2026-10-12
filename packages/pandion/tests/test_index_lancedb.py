@@ -15,16 +15,17 @@ import lancedb
 import pytest
 
 from pandion.artifacts import Artifact, ArtifactType
+from pandion.embedding_cache import EmbeddingCache
 from pandion.payloads import Chunk, ChunkSet
 from pandion.ports import RunContext
 from pandion.storage import Store
-from plugins.index.lancedb_store import (
+from pandion.plugins.index.lancedb_store import (
     DESCRIPTOR,
     TABLE,
     LanceDbIndex,
     LanceDbIndexConfig,
 )
-from providers.embeddings import get_embedder
+from pandion.embeddings import get_embedder
 
 
 # --------------------------------------------------------------------------
@@ -49,11 +50,14 @@ def chunk_set(*texts: str, doc_id: str = "doc-1", embed_texts=None) -> dict:
     ).model_dump(mode="json")
 
 
-def build(tmp_path: Path, *sets: dict, **config) -> tuple[Path, RunContext, Store]:
+def build(
+    tmp_path: Path, *sets: dict, cache: Path | None = None, **config
+) -> tuple[Path, RunContext, Store]:
     """Run the transform the way the executor does, and read the payload back.
 
     Returns the *directory* the store hands downstream, so every assertion is
-    made against what a retriever will really see.
+    made against what a retriever will really see. Embeddings go through the
+    cache in `cache`, else a fresh one beside the store.
     """
     store = Store(tmp_path / "store")
     tf = LanceDbIndex()
@@ -64,6 +68,7 @@ def build(tmp_path: Path, *sets: dict, **config) -> tuple[Path, RunContext, Stor
         output_dir=tmp_path / "scratch" / "out",
         emit=lambda e: None,
         tmp=tmp_path / "scratch" / "tmp",
+        extras={"embedding_cache": EmbeddingCache(cache or tmp_path / "embcache")},
     )
     ctx.output_dir.mkdir(parents=True, exist_ok=True)
     ctx.tmp.mkdir(parents=True, exist_ok=True)
@@ -288,20 +293,22 @@ def test_descriptor_counts_computed_and_cached_embeddings(tmp_path):
     texts = ("Paris is the capital of France", "Bananas are yellow", "Cells")
     counts = []
     for n, dim in enumerate((None, 256, 64)):
-        index_dir, _, _ = build(tmp_path / str(n), chunk_set(*texts), truncate_dim=dim)
+        index_dir, _, _ = build(tmp_path / str(n), chunk_set(*texts), cache=tmp_path / "shared", truncate_dim=dim)
         desc = descriptor_of(index_dir)
         counts.append((desc["embeddings_computed"], desc["embeddings_cached"]))
 
     assert counts == [(3, 0), (0, 3), (0, 3)]
 
 
-def test_truncated_index_from_cache_matches_a_fresh_one(tmp_path, monkeypatch):
+def test_truncated_index_from_cache_matches_a_fresh_one(tmp_path):
     texts = ("Paris is the capital of France", "Bananas are yellow")
-    build(tmp_path / "warm", chunk_set(*texts))  # native width into the cache
-    cached_dir, _, _ = build(tmp_path / "cached", chunk_set(*texts), truncate_dim=64)
+    shared = tmp_path / "shared"
+    build(tmp_path / "warm", chunk_set(*texts), cache=shared)  # native width into the cache
+    cached_dir, _, _ = build(tmp_path / "cached", chunk_set(*texts), cache=shared, truncate_dim=64)
 
-    monkeypatch.setenv("RAG_PLAYGROUND_EMBED_CACHE", str(tmp_path / "cold-cache"))
-    fresh_dir, _, _ = build(tmp_path / "fresh", chunk_set(*texts), truncate_dim=64)
+    fresh_dir, _, _ = build(
+        tmp_path / "fresh", chunk_set(*texts), cache=tmp_path / "cold-cache", truncate_dim=64
+    )
 
     assert descriptor_of(cached_dir)["embeddings_computed"] == 0
     assert descriptor_of(fresh_dir)["embeddings_computed"] == 2
@@ -366,7 +373,7 @@ def test_fingerprint_changes_with_the_embedder_revision(monkeypatch):
     cfg = LanceDbIndexConfig(embedder="fake-deterministic")
     before = tf.fingerprint(cfg)
 
-    from providers.embeddings import FakeDeterministicEmbedder
+    from pandion.embeddings import FakeDeterministicEmbedder
 
     monkeypatch.setattr(FakeDeterministicEmbedder, "revision", "2")
     assert tf.fingerprint(cfg) != before

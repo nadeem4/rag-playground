@@ -22,8 +22,8 @@ from pandion.graph import Edge, Graph, Node
 from pandion.payloads import ChunkSet
 from pandion.ports import Stage
 from pandion.registry import registry
+from pandion.sources import Sources
 from pandion.storage import Store
-from plugins.source import upload
 from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
 
 #: Every chunker, with settings small enough that the sample PDF becomes
@@ -56,14 +56,13 @@ def test_the_old_chunk_module_is_gone():
 
 
 @pytest.fixture
-def pdf(tmp_path: Path, monkeypatch) -> tuple[Path, str]:
+def pdf(tmp_path: Path) -> tuple[Path, str]:
     """The sample PDF on disk, and stored in a relocated `sources/` for the app."""
     data = build_pdf(SAMPLE_PAGES)
     sha = hashlib.sha256(data).hexdigest()
     sources = tmp_path / "sources"
     sources.mkdir()
     (sources / f"{sha}.pdf").write_bytes(data)
-    monkeypatch.setattr(upload, "SOURCES_DIR", sources)
     path = tmp_path / "sample.pdf"
     path.write_bytes(data)
     return path, sha
@@ -83,7 +82,7 @@ def test_the_app_run_gives_the_same_pieces_as_pandion_chunk(name, pdf, tmp_path)
     )
     store = Store(tmp_path / "store")
 
-    result = run(graph, registry, store)
+    result = run(graph, registry, store, context_extras={"sources": Sources(tmp_path / "sources")})
 
     assert result.nodes["chunk"].status is NodeStatus.EXECUTED, result.nodes["chunk"].error
     in_app = ChunkSet.model_validate(

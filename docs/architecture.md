@@ -7,6 +7,7 @@ that talks to the API.
 ## Contents
 
 - [The layout of the repo](#the-layout-of-the-repo)
+- [Using the package on its own](#using-the-package-on-its-own)
 - [The pipeline graph and its stages](#the-pipeline-graph-and-its-stages)
 - [Plugins](#plugins)
 - [Artifacts and the cache](#artifacts-and-the-cache)
@@ -17,8 +18,9 @@ that talks to the API.
 
 ```
 packages/pandion/  the engine as its own Python package, pandion: artifacts, transforms, the
-                   graph, the executor, the content-addressed store
-providers/   embedding models, the embedding cache, chat model calls, and the custom endpoint check
+                   graph, the executor, the content-addressed store, the embedding models
+                   and their cache, and the pipeline file
+providers/   chat model calls and the custom endpoint check
 plugins/     one module per strategy, grouped by stage
 api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
@@ -29,23 +31,78 @@ tests/       pytest: unit, plugin contract, API and integration tests
 
 The app depends on `pandion` through a uv workspace, so `uv sync` installs it from
 `packages/pandion/` and an edit there is live at once. The engine is moving into the
-package one stage at a time. The parsers (`pandion/plugins/parse/`), the cleaners
-(`pandion/plugins/clean/`) and the chunkers (`pandion/plugins/chunk/`) have moved, with
-the token counter the chunkers use (`pandion/tokenize.py`) and the sentence splitter
-(`pandion/text.py`, which the app's chat grounding also uses); what has not moved yet
-still lives in `plugins/` and `providers/`. A moved strategy's library is an extra of
-the package (`pandion[pdfium]`, `pandion[docling]`), imported only when the step runs,
-and the app installs the extras it uses. The cleaners and the chunkers need only the
-standard library and Pydantic, so they come with the base install. A moved stage can
-also run on its own, with no pipeline and no cache: `pandion.parse` parses one file,
-`pandion.clean` runs a list of cleaning steps on one document, in the order given, and
-`pandion.chunk` cuts one document into pieces with one chunker. The app runs the same
-chunkers through its pipeline graph, and
-`tests/integration/test_app_uses_pandion_chunkers.py` checks both give the same pieces.
+package one stage at a time. The upload step (`pandion/plugins/source/`), the parsers
+(`pandion/plugins/parse/`), the cleaners (`pandion/plugins/clean/`), the chunkers
+(`pandion/plugins/chunk/`) and the lancedb index (`pandion/plugins/index/`) have moved,
+with the token counter the chunkers use (`pandion/tokenize.py`), the sentence splitter
+(`pandion/text.py`, which the app's chat grounding also uses), the embedding models
+(`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
+model settings (`pandion/models.py`); what has not moved yet still lives in `plugins/`
+and `providers/`. A moved strategy's library is an extra of the package
+(`pandion[pdfium]`, `pandion[docling]`, `pandion[lancedb]`, and `pandion[local]` for the
+local models), imported only when the step runs, and the app installs the extras it
+uses. The cleaners and the chunkers need only the standard library and Pydantic, so they
+come with the base install. A moved stage can also run on its own, with no pipeline and
+no cache: `pandion.parse` parses one file, `pandion.clean` runs a list of cleaning steps
+on one document, in the order given, and `pandion.chunk` cuts one document into pieces
+with one chunker. `Pipeline.from_file("pipeline.yaml").index.run("docs/")` builds a whole
+index from a config file, through the executor and a store, so it caches every step. The
+app runs the same strategies through its pipeline graph, and
+`tests/integration/test_app_uses_pandion_chunkers.py` and
+`tests/integration/test_app_uses_pandion_index.py` check both give the same pieces and
+the same index.
+
+The package takes every folder as an argument. A run is handed the sources folder, the
+embedding cache and the model settings in `context_extras`, which are never hashed. The
+app builds them once in `api/deps.py` from its environment variables
+(`RAG_PLAYGROUND_SOURCES`, `RAG_PLAYGROUND_ARTIFACTS`, `RAG_PLAYGROUND_EMBED_CACHE`) and
+passes them to every run as `Deps.run_extras()`. It loads models on the CPU, and the
+warm-up loads the default embedder with the public `pandion.preload_embedder`.
 The app may import any public name from `pandion` but never a private one
 (a name starting with an underscore), and the package never imports the app. Two tests
 hold both rules: `tests/integration/test_package_boundary.py` and
 `packages/pandion/tests/test_boundaries.py`.
+
+## Using the package on its own
+
+A pipeline file says how to build an index. Every setting under a step has the same
+name as in the app's settings forms, so the same pipeline built in the app and written
+in a file gives the same artifact ids and shares a cache.
+
+```yaml
+# pipeline.yaml
+path: ./my-index            # sources, artifacts and the embedding cache go here
+models:                     # optional
+  download: auto            # or never, on a server with no network
+  device: auto              # or cpu, cuda, mps
+index:
+  parse:
+    use: pdfium
+  clean:                    # optional, a list run in order
+    - use: dedupe_blocks
+  chunk:
+    use: recursive_character
+    chunk_size: 400
+  embed:
+    use: qwen3-embedding-0.6b
+  store:
+    use: lancedb
+```
+
+```python
+from pandion import Pipeline
+
+report = Pipeline.from_file("pipeline.yaml").index.run("docs/")
+report.documents["guides/chunking.pdf"].stages["chunk"].output   # the pieces
+report.index.output                                              # the index folder
+```
+
+Each document is named by its path inside the folder, with forward slashes. Each step
+has a `StageResult`: its output, whether it ran or came from the cache, how long it
+took, and its note. Running the same files with the same pipeline file again only reads the
+cache. An unknown step or setting is an error that names the step and what it accepts,
+before anything runs. `pandion install pipeline.yaml` installs the extras the file
+needs, and `--print` only prints the pip command.
 
 ## The pipeline graph and its stages
 
@@ -129,10 +186,11 @@ one cached parse and three new chunk sets.
   artifacts folder. A write goes to a temp folder and is moved into place, and its
   `meta.json` is written last, so a crash never leaves an entry that looks finished.
   Nothing expires an entry; `DELETE /api/cache` clears the store.
-- **The embedding cache** (`providers/embedding_cache.py`) keeps embeddings in SQLite at
-  full width, keyed by model, revision and text, so the same piece is embedded once.
+- **The embedding cache** (`pandion/embedding_cache.py`) keeps embeddings in SQLite at
+  full width, keyed by model, revision, dtype, kind and text, so the same piece is
+  embedded once. The app keeps it in `.embcache` under the artifacts folder.
 - **Uploads** are stored once under the sources folder, named by a fingerprint of their
-  bytes.
+  bytes (`pandion/sources.py`).
 
 ## The run stream
 

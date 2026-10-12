@@ -172,10 +172,13 @@ def record(out: Path = OUT) -> dict:
     """Run every case through both parsers and write the lab's JSON to `out`."""
     import plugins
     from api.sample_set import all_samples
+    from functools import partial
+
     from pandion.executor import run
     from pandion.registry import registry
     from pandion.storage import Store
-    from plugins.source import upload
+    from api.deps import build_deps
+    from pandion.sources import Sources
 
     plugins.discover()
     samples = {s.name: s for s in all_samples()}
@@ -201,17 +204,14 @@ def record(out: Path = OUT) -> dict:
         root = Path(tmp)
         sources = root / "sources"
         sources.mkdir()
-        previous = upload.SOURCES_DIR
-        upload.SOURCES_DIR = sources
-        try:
-            warm = samples[WARM_UP]
-            (sources / f"{warm.sha}.pdf").write_bytes(warm.pdf.read_bytes())
-            warm_up(warm, Store(root / "warm-up"), registry, run)
-            store = Store(root / "store")
-            cases = [measured(samples[name]) for name in CASES]
-            baseline = measured(samples[BASELINE])
-        finally:
-            upload.SOURCES_DIR = previous
+        extras = {**build_deps().run_extras(), "sources": Sources(sources)}
+        run = partial(run, context_extras=extras)
+        warm = samples[WARM_UP]
+        (sources / f"{warm.sha}.pdf").write_bytes(warm.pdf.read_bytes())
+        warm_up(warm, Store(root / "warm-up"), registry, run)
+        store = Store(root / "store")
+        cases = [measured(samples[name]) for name in CASES]
+        baseline = measured(samples[BASELINE])
     data = {
         "recorded_on": datetime.date.today().isoformat(),
         "chunker": CHUNKER,

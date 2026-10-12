@@ -1,7 +1,7 @@
 """The FastAPI app. `create_app(deps)` for tests; `api.main:app` for uvicorn.
 
 `app` is built lazily on first access, so importing this module (as the tests
-do) does not rebind `upload.SOURCES_DIR` to the default directory.
+do) does not build the default dependencies and their folders.
 """
 
 from __future__ import annotations

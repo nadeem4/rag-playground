@@ -75,7 +75,7 @@ def _load(model_id: str) -> Any:
     """Load a cross-encoder once per process; the import happens here.
 
     The lock stops two threads racing a first load from each pulling the model
-    into memory, the same rule as `providers.embeddings._load_model`.
+    into memory, the same rule as `pandion.embeddings._load_model`.
     """
     with _LOAD_LOCK:
         if model_id not in _MODELS:

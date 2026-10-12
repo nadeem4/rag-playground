@@ -7,14 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from providers.embedding_cache import (
-    DB_NAME,
+from pandion.embedding_cache import (
     EmbeddingCache,
-    cache_dir,
     cache_key,
     embed_cached,
 )
-from providers.embeddings import FakeDeterministicEmbedder
+from pandion.embeddings import FakeDeterministicEmbedder
 
 TEXTS = ["The capital of France is Paris.", "Bananas are yellow.", "Mitochondria."]
 
@@ -131,20 +129,17 @@ def test_no_texts_touches_nothing(cache):
     assert not cache.path.exists()
 
 
-def test_location_prefers_the_explicit_env_var(tmp_path, monkeypatch):
-    monkeypatch.setenv("RAG_PLAYGROUND_EMBED_CACHE", str(tmp_path / "x"))
-    assert cache_dir() == tmp_path / "x"
-    assert EmbeddingCache().path == tmp_path / "x" / DB_NAME
+def test_the_cache_lives_in_the_folder_it_is_given(tmp_path):
+    embed_cached(Counting(), TEXTS, cache=EmbeddingCache(tmp_path / "mine"))
+    assert (tmp_path / "mine" / "embeddings.sqlite").is_file()
 
 
-def test_location_falls_back_under_the_artifact_root(tmp_path, monkeypatch):
-    """Under the artifact root, so `DELETE /api/cache` clears it too."""
-    monkeypatch.delenv("RAG_PLAYGROUND_EMBED_CACHE", raising=False)
-    monkeypatch.setenv("RAG_PLAYGROUND_ARTIFACTS", str(tmp_path / "arts"))
-    assert cache_dir() == tmp_path / "arts" / ".embcache"
+def test_with_no_cache_every_text_is_embedded(tmp_path):
+    p = Counting()
+    first, s1 = embed_cached(p, TEXTS, dim=64)
+    second, s2 = embed_cached(p, TEXTS, dim=64)
 
-
-def test_the_default_cache_follows_the_env_var(tmp_path, monkeypatch):
-    monkeypatch.setenv("RAG_PLAYGROUND_EMBED_CACHE", str(tmp_path / "envcache"))
-    embed_cached(Counting(), TEXTS)
-    assert (tmp_path / "envcache" / DB_NAME).is_file()
+    assert (s1.computed, s1.cached) == (3, 0)
+    assert (s2.computed, s2.cached) == (3, 0)
+    assert len(p.calls) == 2
+    assert first == second == p.embed(TEXTS, dim=64)

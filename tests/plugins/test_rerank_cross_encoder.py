@@ -346,7 +346,7 @@ def test_a_failed_cross_encoder_download_is_logged_not_raised(monkeypatch, caplo
 
 def test_the_warm_up_loads_the_reranker_after_the_others(monkeypatch):
     import pandion.plugins.parse.docling as docling_plugin
-    import providers.embeddings as embeddings
+    import pandion.embeddings as embeddings
 
     calls: list[str] = []
     monkeypatch.setattr(

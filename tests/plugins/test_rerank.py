@@ -18,9 +18,9 @@ from pandion.artifacts import ArtifactType
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from plugins.index.lancedb_store import DESCRIPTOR
+from pandion.plugins.index.lancedb_store import DESCRIPTOR
 from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
-from providers.embeddings import FakeDeterministicEmbedder, get_embedder
+from pandion.embeddings import FakeDeterministicEmbedder, get_embedder
 
 QUERY_TEXT = "What is the capital of France?"
 
@@ -185,7 +185,7 @@ class KindRecorder(FakeDeterministicEmbedder):
 
 @pytest.fixture
 def recorder(monkeypatch, tmp_path) -> Path:
-    from providers import embeddings
+    from pandion import embeddings
 
     monkeypatch.setitem(embeddings._EMBEDDERS, KindRecorder.name, KindRecorder)
     KindRecorder.calls = []
@@ -217,9 +217,9 @@ def test_mmr_works_at_the_index_truncated_width(tmp_path, monkeypatch):
 
     original = mmr.embed_cached
 
-    def spy(provider, texts_, *, kind, dim):
+    def spy(provider, texts_, *, kind, dim, cache=None):
         seen.append(dim)
-        return original(provider, texts_, kind=kind, dim=dim)
+        return original(provider, texts_, kind=kind, dim=dim, cache=cache)
 
     monkeypatch.setattr(mmr, "embed_cached", spy)
     reranked = rerank(index=write_index(tmp_path / "ix64", dim=64), lambda_mult=1.0)

@@ -32,7 +32,7 @@ from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from plugins.retrieve import _base
-from providers.embedding_cache import embed_cached
+from pandion.embedding_cache import embed_cached
 
 
 class MmrRerankConfig(BaseModel):
@@ -151,7 +151,8 @@ class MmrRerank(Transform[MmrRerankConfig]):
         relevance = _normalise([hit.score for hit in hits])
 
         descriptor = _base.read_descriptor(inputs["index"])
-        embedder, dim = _base.embedder_for(descriptor)
+        extras = ctx.extras if ctx is not None else {}
+        embedder, dim = _base.embedder_for(descriptor, extras.get("models"))
         # Re-embedding the hits goes through the embedding cache, where the
         # index build already left every chunk's document vector, so with a
         # real model this is a lookup rather than inference. `text_to_embed` is
@@ -162,6 +163,7 @@ class MmrRerank(Transform[MmrRerankConfig]):
             [hit.chunk.text_to_embed for hit in hits],
             kind="document",
             dim=dim,
+            cache=extras.get("embedding_cache"),
         )
         vectors = np.asarray(doc_vectors, dtype=float)
 

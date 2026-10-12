@@ -155,7 +155,7 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "dense"):
-            vector = _base.embed_query(descriptor, query)
+            vector = _base.embed_query(descriptor, query, ctx.extras)
             dense = _base.dense_rows(table, vector, descriptor, config.top_k)
 
         expanded: str | None = None

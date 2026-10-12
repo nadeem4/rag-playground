@@ -16,6 +16,10 @@ docling = [
     # RapidOCR's torch backend, which fetches .pth files into site-packages.
     "onnxruntime>=1.30.0",
 ]
+# Local models: the embedders (and later the cross-encoder). On Linux the root
+# pyproject.toml takes torch from the CPU-only index.
+local = ["sentence-transformers>=6.1.0", "torch>=2.14.0"]
+lancedb = ["lancedb>=0.38,<0.39", "pyarrow>=25.0.1"]
 
 [build-system]
 requires = ["hatchling"]

@@ -20,7 +20,7 @@ PLUGINS = Path(__file__).resolve().parents[1] / "src" / "pandion" / "plugins"
 
 HEAVY = {
     "torch", "docling", "docling_core", "docling_ibm_models", "transformers",
-    "sentence_transformers", "lancedb", "pyarrow", "pypdfium2",
+    "sentence_transformers", "lancedb", "pyarrow", "pypdfium2", "numpy",
 }
 
 
@@ -53,7 +53,8 @@ def test_discovery_imports_no_heavy_library():
     """A subprocess, so nothing an earlier test imported can hide a leak."""
     code = (
         "import sys\n"
-        "import pandion.plugins\n"
+        "import pandion, pandion.plugins\n"
+        "import pandion.embeddings, pandion.embedding_cache\n"
         "pandion.plugins.discover()\n"
         f"heavy = {sorted(HEAVY)!r}\n"
         "leaked = sorted(m for m in sys.modules if m.split('.')[0] in heavy)\n"

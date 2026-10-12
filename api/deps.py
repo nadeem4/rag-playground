@@ -3,7 +3,12 @@
 `plugins.discover()` runs exactly once, at import. The directories default to
 `artifacts/` and `sources/` at the repo root and can be moved with
 `RAG_PLAYGROUND_ARTIFACTS` / `RAG_PLAYGROUND_SOURCES`; tests pass temp dirs to
-`build_deps` directly.
+`build_deps` directly. The embedding cache sits in `.embcache` under the
+artifacts folder, so clearing the cache clears it too, unless
+`RAG_PLAYGROUND_EMBED_CACHE` names another folder.
+
+The package takes every folder as an argument, so a run gets them through
+`Deps.run_extras()`, which the run routes pass as `context_extras`.
 
 **`plugins.source.upload.SOURCES_DIR` is rebound here.** The upload transform
 resolves `SOURCES_DIR / f"{sha}{Path(filename).suffix}"`, so the API must write
@@ -16,7 +21,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from pandion.embedding_cache import EmbeddingCache
+from pandion.models import ModelSettings
 from pandion.registry import Registry
 from pandion.registry import registry as global_registry
 from pandion.storage import Store
@@ -27,6 +35,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 discover()
 
+#: How the app loads local models: on the CPU, from the Hugging Face folder.
+APP_MODELS = ModelSettings(device="cpu")
+
 
 @dataclass
 class Deps:
@@ -34,6 +45,15 @@ class Deps:
     store: Store
     sources_dir: Path
     web_dist: Path
+    embedding_cache: EmbeddingCache
+
+    def run_extras(self) -> dict[str, Any]:
+        """What every run is handed besides credentials. Never hashed or stored.
+
+        Models load on the CPU, as they always have here, and download into
+        the Hugging Face folder (`HF_HOME`) on first use.
+        """
+        return {"embedding_cache": self.embedding_cache, "models": APP_MODELS}
 
 
 def build_deps(
@@ -57,4 +77,7 @@ def build_deps(
         store=Store(artifacts_dir),
         sources_dir=sources_dir,
         web_dist=Path(web_dist or REPO_ROOT / "web" / "dist"),
+        embedding_cache=EmbeddingCache(
+            os.environ.get("RAG_PLAYGROUND_EMBED_CACHE") or artifacts_dir / ".embcache"
+        ),
     )

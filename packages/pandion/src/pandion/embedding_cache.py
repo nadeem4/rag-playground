@@ -9,9 +9,11 @@ slices of the cached vectors.
 `kind` is part of the key because a query and a document embedding of the same
 string are different vectors for any instruction-aware model.
 
-Location: `$RAG_PLAYGROUND_EMBED_CACHE`, else
-`<$RAG_PLAYGROUND_ARTIFACTS or <repo>/artifacts>/.embcache/`. Living under the
-artifact root means `DELETE /api/cache` clears it along with everything else.
+Where the cache lives is the caller's choice: `EmbeddingCache(directory)`.
+A run hands it to the steps that embed as `context_extras={"embedding_cache":
+EmbeddingCache(...)}`, and a step with none embeds without caching. The RAG
+Playground keeps it under its artifact folder, so clearing the cache there
+clears this too.
 
 Every provider goes through here, the fake included. The fake is cheap enough
 not to need it, but routing it the same way means the fast suite exercises the
@@ -21,29 +23,19 @@ exact code path the real models use.
 from __future__ import annotations
 
 import hashlib
-import os
 import sqlite3
 from array import array
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-from providers.embeddings import EmbedKind, EmbeddingProvider, truncate
+from pandion.embeddings import EmbedKind, EmbeddingProvider, truncate
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_NAME = "embeddings.sqlite"
 
 #: SQLite's bound-parameter limit is 32766 on current builds but 999 on old
 #: ones; batching well under both keeps lookups portable.
 _BATCH = 500
-
-
-def cache_dir() -> Path:
-    explicit = os.environ.get("RAG_PLAYGROUND_EMBED_CACHE")
-    if explicit:
-        return Path(explicit)
-    artifacts = os.environ.get("RAG_PLAYGROUND_ARTIFACTS") or REPO_ROOT / "artifacts"
-    return Path(artifacts) / ".embcache"
 
 
 def cache_key(model_id: str, revision: str, kind: str, text: str, dtype: str = "") -> str:
@@ -71,8 +63,8 @@ class EmbeddingCache:
     handle on Windows would make `DELETE /api/cache` fail to remove the file.
     """
 
-    def __init__(self, directory: Path | None = None) -> None:
-        self.directory = Path(directory) if directory is not None else cache_dir()
+    def __init__(self, directory: str | Path) -> None:
+        self.directory = Path(directory)
         self.path = self.directory / DB_NAME
 
     def _connect(self) -> sqlite3.Connection:
@@ -124,12 +116,13 @@ def embed_cached(
 
     Misses are embedded at native width in one batch and stored; every vector
     is then truncated to `dim`. `dim` is validated first, so a bad truncation
-    fails before any model is loaded.
+    fails before any model is loaded. With no `cache`, every text is embedded.
     """
     provider.check_dim(dim)
     if not texts:
         return [], EmbedStats()
-    cache = cache or EmbeddingCache()
+    if cache is None:
+        return provider.embed(list(texts), kind=kind, dim=dim), EmbedStats(computed=len(texts))
 
     keys = [
         cache_key(provider.model_id, provider.revision, kind, t, provider.dtype)

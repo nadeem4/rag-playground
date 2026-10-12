@@ -297,7 +297,7 @@ class ChatUseCase(Transform[ChatConfig]):
         if uses_native(config):
             return _native(inputs, config, creds.get("anthropic_api_key"))
         model = CHAT_MODELS[config.model]
-        return _sentence_ids(inputs, config, model, llm.key_for(model, creds))
+        return _sentence_ids(inputs, config, model, llm.key_for(model, creds), ctx.extras)
 
 
 # --------------------------------------------------------------------------
@@ -422,7 +422,11 @@ def _ground(
 
 
 def _sentence_ids(
-    inputs: Mapping[str, Any], config: ChatConfig, model: ChatModel, api_key: str | None
+    inputs: Mapping[str, Any],
+    config: ChatConfig,
+    model: ChatModel,
+    api_key: str | None,
+    extras: Mapping[str, Any],
 ) -> dict[str, Any]:
     custom = model.provider == "openai_compatible"
     if custom and not _custom_complete(config):
@@ -469,22 +473,23 @@ def _sentence_ids(
         return Output(kind="chat", payload=payload).model_dump(mode="json")
 
     claims, unknown = parse_answer(completion.text, table)
-    grounded = ground(claims, table, _index_embed(inputs["index"]), config.support_threshold)
+    grounded = ground(claims, table, _index_embed(inputs["index"], extras), config.support_threshold)
     payload["answer"], payload["citations"] = _sentence_citations(grounded, table, hits, doc)
     counts = {label: sum(1 for g in grounded if g.label == label) for label in LABELS}
     payload["stats"] = _stats(**counts, unknown_ids=unknown)
     return Output(kind="chat", payload=payload).model_dump(mode="json")
 
 
-def _index_embed(index: Any):
-    """The index's own embedder at its own width, through the embedding cache."""
+def _index_embed(index: Any, extras: Mapping[str, Any]):
+    """The index's own embedder at its own width, with the run's cache and model settings."""
     from plugins.retrieve import _base
-    from providers.embedding_cache import embed_cached
+    from pandion.embedding_cache import embed_cached
 
-    embedder, dim = _base.embedder_for(_base.read_descriptor(index))
+    embedder, dim = _base.embedder_for(_base.read_descriptor(index), extras.get("models"))
+    cache = extras.get("embedding_cache")
 
     def embed(texts: list[str]) -> list[list[float]]:
-        return embed_cached(embedder, list(texts), kind="document", dim=dim)[0]
+        return embed_cached(embedder, list(texts), kind="document", dim=dim, cache=cache)[0]
 
     return embed
 

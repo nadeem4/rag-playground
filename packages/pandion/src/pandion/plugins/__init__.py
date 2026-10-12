@@ -9,7 +9,7 @@ silently not existing.
 twice raises `DuplicateTransformError`.
 
 Importing a plugin module loads no heavy library. Each one imports its
-library (pypdfium2, Docling) inside the function that uses it, through
+library (pypdfium2, Docling, LanceDB) inside the function that uses it, through
 `pandion.errors.require`, so the base install can discover every strategy.
 The cleaners and the chunkers need nothing beyond the standard library and
 Pydantic, so they come with the base install.
@@ -31,6 +31,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.chunk.markdown_header",
     "pandion.plugins.chunk.token_based",
     "pandion.plugins.chunk.sentence_window",
+    "pandion.plugins.index.lancedb_store",
 )
 
 _discovered = False

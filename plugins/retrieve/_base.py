@@ -23,15 +23,16 @@ import json
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 import lancedb
 
 from pandion.ids import canonical_json
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
-from plugins.index.lancedb_store import DESCRIPTOR, TABLE, TEXT_COLUMN
-from providers.embedding_cache import embed_cached
-from providers.embeddings import EmbedKind, EmbeddingProvider, get_embedder
+from pandion.plugins.index.lancedb_store import DESCRIPTOR, TABLE, TEXT_COLUMN
+from pandion.embedding_cache import embed_cached
+from pandion.embeddings import EmbedKind, EmbeddingProvider, get_embedder
+from pandion.models import ModelSettings
 
 
 def _limits_warning(top_k: int) -> tuple[str | None, bool]:
@@ -89,14 +90,19 @@ def require_backend(descriptor: dict[str, Any], backend: str, retriever: str) ->
         )
 
 
-def embedder_for(descriptor: dict[str, Any]) -> tuple[EmbeddingProvider, int | None]:
+def embedder_for(
+    descriptor: dict[str, Any], models: ModelSettings | None = None
+) -> tuple[EmbeddingProvider, int | None]:
     """The embedder the index was built with, and the width to truncate to.
+
+    `models` is the run's model settings (`ctx.extras["models"]`), so a query
+    is embedded on the same device as the index was.
 
     A revision mismatch is refused rather than warned about: the name still
     resolves, the vectors still have the right width, and the results would be
     quietly worse — the exact failure mode the fingerprint exists to prevent.
     """
-    embedder = get_embedder(descriptor["embedding_model"])
+    embedder = get_embedder(descriptor["embedding_model"], models)
     if embedder.revision != descriptor["embedding_revision"]:
         raise ValueError(
             f"index was built with {descriptor['embedding_model']} revision "
@@ -123,8 +129,13 @@ def query_embedding_input(query: Query) -> tuple[str, EmbedKind]:
     return query.text, "query"
 
 
-def embed_query(descriptor: dict[str, Any], query: Query) -> list[float] | None:
+def embed_query(
+    descriptor: dict[str, Any], query: Query, extras: Mapping[str, Any] | None = None
+) -> list[float] | None:
     """The query vector, in the index's own model and width.
+
+    `extras` is the run's `ctx.extras`: its embedding cache and model settings
+    are used when it has them.
 
     `None` for a blank query: an instruction-aware model would happily embed
     the bare instruction and return plausible-looking hits for nothing at all.
@@ -132,8 +143,11 @@ def embed_query(descriptor: dict[str, Any], query: Query) -> list[float] | None:
     text, kind = query_embedding_input(query)
     if not text.strip():
         return None
-    embedder, truncate_dim = embedder_for(descriptor)
-    vectors, _ = embed_cached(embedder, [text], kind=kind, dim=truncate_dim)
+    extras = extras or {}
+    embedder, truncate_dim = embedder_for(descriptor, extras.get("models"))
+    vectors, _ = embed_cached(
+        embedder, [text], kind=kind, dim=truncate_dim, cache=extras.get("embedding_cache")
+    )
     return vectors[0]
 
 

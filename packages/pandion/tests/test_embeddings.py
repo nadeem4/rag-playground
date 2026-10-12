@@ -2,18 +2,15 @@ import math
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
-from providers.embeddings import (
+from pandion.embeddings import (
     EmbeddingProvider,
     FakeDeterministicEmbedder,
     get_embedder,
 )
 
-
-ROOT = Path(__file__).resolve().parents[2]
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -119,7 +116,7 @@ def test_deterministic_across_processes():
     Run twice with opposing PYTHONHASHSEED settings — a salted hash would move.
     """
     script = (
-        "from providers.embeddings import FakeDeterministicEmbedder;"
+        "from pandion.embeddings import FakeDeterministicEmbedder;"
         "print(FakeDeterministicEmbedder().embed(['Paris is the capital of France'])[0][:8])"
     )
     outs = []
@@ -129,7 +126,6 @@ def test_deterministic_across_processes():
             capture_output=True,
             text=True,
             check=True,
-            cwd=ROOT,
             env=os.environ | {"PYTHONHASHSEED": seed},
         )
         outs.append(proc.stdout.strip())
@@ -292,7 +288,7 @@ def test_empty_input_never_reaches_the_model():
 def test_embedder_name_literal_matches_the_registry():
     from typing import get_args
 
-    from providers.embeddings import _EMBEDDERS, EmbedderName
+    from pandion.embeddings import _EMBEDDERS, EmbedderName
 
     assert set(get_args(EmbedderName)) == set(_EMBEDDERS)
     for name, cls in _EMBEDDERS.items():
@@ -331,7 +327,7 @@ def test_numeric_dtype_is_part_of_model_identity(name):
     change of dtype would silently reuse vectors computed in the old one. Pure:
     neither call loads a model.
     """
-    from providers.embedding_cache import cache_key
+    from pandion.embedding_cache import cache_key
 
     p = get_embedder(name)
     assert p.dtype == "float32"
@@ -345,7 +341,7 @@ def test_numeric_dtype_is_part_of_model_identity(name):
 
 def test_fake_embedder_identity_is_unchanged_by_the_dtype_field():
     """The fake has no dtype, so its fingerprint and cache keys stay as they were."""
-    from providers.embedding_cache import cache_key
+    from pandion.embedding_cache import cache_key
 
     fake = get_embedder("fake-deterministic")
     assert fake.dtype == ""
@@ -354,7 +350,7 @@ def test_fake_embedder_identity_is_unchanged_by_the_dtype_field():
 
 
 def test_query_instructions_are_wired_per_model():
-    from providers.embeddings import BgeSmallEnV15, Qwen3Embedding06B
+    from pandion.embeddings import BgeSmallEnV15, Qwen3Embedding06B
 
     assert Qwen3Embedding06B.query_prompt_name == "query"
     assert BgeSmallEnV15.query_prefix == (
@@ -394,7 +390,7 @@ class _FakeModel:
 def test_kind_routes_to_the_model_query_instruction(monkeypatch, name, kind, expected):
     p = get_embedder(name)
     model = _FakeModel(p.native_dim)
-    monkeypatch.setattr("providers.embeddings._load_model", lambda *a: model)
+    monkeypatch.setattr("pandion.embeddings._load_model", lambda *a: model)
 
     (v,) = p.embed(["hello"], kind=kind)
 
@@ -424,9 +420,9 @@ def test_importing_providers_does_not_import_torch():
     script = "; ".join(
         [
             "import sys",
-            "import providers.embeddings, providers.embedding_cache",
-            "import plugins.index.lancedb_store, plugins.retrieve.dense, plugins.rerank.mmr",
-            "from providers.embeddings import get_embedder",
+            "import pandion.embeddings, pandion.embedding_cache",
+            "import pandion.plugins.index.lancedb_store",
+            "from pandion.embeddings import get_embedder",
             "get_embedder('qwen3-embedding-0.6b').fingerprint()",
             "bad = [m for m in ('torch', 'sentence_transformers', 'transformers') if m in sys.modules]",
             "print(','.join(bad))",
@@ -437,6 +433,5 @@ def test_importing_providers_does_not_import_torch():
         capture_output=True,
         text=True,
         check=True,
-        cwd=ROOT,
     )
     assert proc.stdout.strip() == ""

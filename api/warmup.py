@@ -33,12 +33,12 @@ def _warm() -> None:
 
 
 def _warm_index_models() -> None:
+    from api.deps import APP_MODELS
+    from pandion.models import preload_embedder
     from pandion.plugins.parse import docling
-    from providers.embeddings import Qwen3Embedding06B, _load_model
 
     docling.preload(docling.DoclingConfig())
-    qwen = Qwen3Embedding06B
-    _load_model(qwen.model_id, qwen.revision, qwen.dtype)
+    preload_embedder("qwen3-embedding-0.6b", APP_MODELS)
 
 
 def _warm_reranker() -> None:

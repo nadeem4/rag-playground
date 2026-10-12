@@ -1,6 +1,6 @@
-"""Uploaded source files, content addressed exactly as `upload.py` resolves them.
+"""Uploaded source files, content addressed exactly as the `upload` step resolves them.
 
-The stored name is `<sha256><original suffix>`. The original filename, size and
+The stored name is `<sha256><original suffix>` (`pandion.sources.Sources`). The original filename, size and
 content type live in a sidecar under `.meta/`, since the stored name alone
 cannot give the filename back.
 """
@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
-import os
 import re
 import threading
 from datetime import datetime, timezone
@@ -20,6 +19,8 @@ from typing import Any
 import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel
+
+from pandion.sources import Sources
 
 from api import demo, sample_set, visitor, warmup
 
@@ -289,11 +290,8 @@ def seed_sample_files(sources: Path) -> None:
     visitor loads it, as before."""
     sources.mkdir(parents=True, exist_ok=True)
     for sample in sample_set.all_samples():
-        dest = sources / f"{sample.sha}{sample.pdf.suffix}"
-        if not dest.is_file():
-            tmp = dest.with_name(dest.name + ".part")
-            tmp.write_bytes(sample.pdf.read_bytes())
-            os.replace(tmp, dest)
+        if not Sources(sources).path(sample.sha, sample.pdf.name).is_file():
+            Sources(sources).add_bytes(sample.pdf.read_bytes(), sample.pdf.name)
 
 
 def _store(
@@ -310,13 +308,7 @@ def _store(
         # the sweep never deletes the shared file and no cap counts it, and one
         # visitor's filename never renames the sample for everyone.
         filename, visitor = sample.pdf.name, None
-    dest = sources / f"{sha}{Path(filename).suffix}"
-
-    sources.mkdir(parents=True, exist_ok=True)
-    if not dest.is_file():
-        tmp = dest.with_name(dest.name + ".part")
-        tmp.write_bytes(data)
-        os.replace(tmp, dest)
+    Sources(sources).add_bytes(data, filename)
 
     body = {
         "sha": sha,

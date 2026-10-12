@@ -27,7 +27,9 @@ from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.storage import Store
 from pandion.plugins.chunk import DocView
-from plugins.source import upload
+from pandion.embedding_cache import EmbeddingCache
+from pandion.models import ModelSettings
+from pandion.sources import Sources
 from plugins.use_case.eval import _normalise
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,7 +86,11 @@ class Runner:
         plugins.discover()
         folder = tmp_path / "sources"
         folder.mkdir()
-        monkeypatch.setattr(upload, "SOURCES_DIR", folder)
+        self.extras = {
+            "sources": Sources(folder),
+            "embedding_cache": EmbeddingCache(tmp_path / "embcache"),
+            "models": ModelSettings(device="cpu"),
+        }
         self.pdf = _folder(name) / f"{name}.pdf"
         self.sha = hashlib.sha256(self.pdf.read_bytes()).hexdigest()
         (folder / f"{self.sha}.pdf").write_bytes(self.pdf.read_bytes())
@@ -117,7 +123,7 @@ class Runner:
         return Graph(nodes=nodes, edges=edges)
 
     def run(self, graph: Graph):
-        result = run(graph, registry, self.store)
+        result = run(graph, registry, self.store, context_extras=self.extras)
         assert result.ok, {k: v.error for k, v in result.nodes.items() if v.error}
         return result
 

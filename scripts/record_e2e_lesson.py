@@ -118,7 +118,8 @@ def record() -> dict:
     from pandion.executor import run
     from pandion.registry import registry
     from pandion.storage import Store
-    from plugins.source import upload
+    from api.deps import build_deps
+    from pandion.sources import Sources
 
     plugins.discover()
     pdf = SAMPLE.read_bytes()
@@ -128,30 +129,26 @@ def record() -> dict:
         sources = root / "sources"
         sources.mkdir()
         (sources / f"{sha}.pdf").write_bytes(pdf)
-        previous = upload.SOURCES_DIR
-        upload.SOURCES_DIR = sources
-        try:
-            store = Store(root / "store")
-            result = run(build_graph(sha, SAMPLE.name), registry, store)
-            if not result.ok:
-                failures = {n: r.error for n, r in result.nodes.items() if r.error}
-                raise SystemExit(f"pipeline failed: {failures}")
+        extras = {**build_deps().run_extras(), "sources": Sources(sources)}
+        store = Store(root / "store")
+        result = run(build_graph(sha, SAMPLE.name), registry, store, context_extras=extras)
+        if not result.ok:
+            failures = {n: r.error for n, r in result.nodes.items() if r.error}
+            raise SystemExit(f"pipeline failed: {failures}")
 
-            def load(nid: str, t: ArtifactType):
-                return store.load(result.nodes[nid].artifact.id, t)
+        def load(nid: str, t: ArtifactType):
+            return store.load(result.nodes[nid].artifact.id, t)
 
-            index_dir = Path(load("index", ArtifactType.INDEX))
-            payloads = {
-                "parse": load("parse", ArtifactType.PARSED_DOC),
-                "clean": load("clean", ArtifactType.PARSED_DOC),
-                "chunk": load("chunk", ArtifactType.CHUNK_SET),
-                "index": json.loads((index_dir / "descriptor.json").read_text(encoding="utf-8")),
-                "retrieve": load("retrieve", ArtifactType.RETRIEVAL_RESULT),
-                "rerank": load("rerank", ArtifactType.RETRIEVAL_RESULT),
-            }
-            return summarize(payloads, QUESTION)
-        finally:
-            upload.SOURCES_DIR = previous
+        index_dir = Path(load("index", ArtifactType.INDEX))
+        payloads = {
+            "parse": load("parse", ArtifactType.PARSED_DOC),
+            "clean": load("clean", ArtifactType.PARSED_DOC),
+            "chunk": load("chunk", ArtifactType.CHUNK_SET),
+            "index": json.loads((index_dir / "descriptor.json").read_text(encoding="utf-8")),
+            "retrieve": load("retrieve", ArtifactType.RETRIEVAL_RESULT),
+            "rerank": load("rerank", ArtifactType.RETRIEVAL_RESULT),
+        }
+        return summarize(payloads, QUESTION)
 
 
 def main() -> None:

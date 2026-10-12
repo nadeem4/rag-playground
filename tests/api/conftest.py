@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 
 from api.deps import build_deps
 from api.main import create_app
-from plugins.source import upload
 from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
 
 
@@ -46,9 +45,7 @@ def no_model_warm_up(monkeypatch) -> None:
 
 
 @pytest.fixture
-def dirs(tmp_path: Path, monkeypatch) -> dict[str, Path]:
-    # build_deps rebinds the upload module's global; restore it afterwards.
-    monkeypatch.setattr(upload, "SOURCES_DIR", upload.SOURCES_DIR)
+def dirs(tmp_path: Path) -> dict[str, Path]:
     return {
         "artifacts": tmp_path / "artifacts",
         "sources": tmp_path / "sources",

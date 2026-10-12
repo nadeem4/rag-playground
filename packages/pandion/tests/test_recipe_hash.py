@@ -79,6 +79,21 @@ def test_a_source_recipe_keeps_its_id():
     ) == "8aefb26a746ed00691b742fad40d657f406db0225bb6c6b10f9fe5cb9117ab96"
 
 
+def test_the_moved_upload_node_keeps_its_id():
+    """The same literal as above, through the class that now lives in the package."""
+    discover()
+    cls = registry.get(Stage.SOURCE, "upload")
+    config = cls.config_model(sha="b" * 64, filename="sample.pdf")
+    assert compute_artifact_id(
+        transform_name=cls.name,
+        transform_version=cls.version,
+        fingerprint=cls().fingerprint(config),
+        output_type=cls.output,
+        config=config.model_dump(mode="json"),
+        inputs={},
+    ) == "8aefb26a746ed00691b742fad40d657f406db0225bb6c6b10f9fe5cb9117ab96"
+
+
 @pytest.mark.parametrize(
     "config,expected",
     [

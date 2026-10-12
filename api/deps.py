@@ -10,9 +10,9 @@ artifacts folder, so clearing the cache clears it too, unless
 The package takes every folder as an argument, so a run gets them through
 `Deps.run_extras()`, which the run routes pass as `context_extras`.
 
-**`plugins.source.upload.SOURCES_DIR` is rebound here.** The upload transform
-resolves `SOURCES_DIR / f"{sha}{Path(filename).suffix}"`, so the API must write
-uploads into that same directory under that same name, or every run fails with
+**The sources folder reaches a run as `Sources(sources_dir)`.** The upload
+step resolves `<sha><suffix>` in it, so the API stores uploads there under the
+same name (`pandion.sources.Sources`), or every run fails with
 FileNotFoundError.
 """
 
@@ -28,8 +28,8 @@ from pandion.models import ModelSettings
 from pandion.registry import Registry
 from pandion.registry import registry as global_registry
 from pandion.storage import Store
+from pandion.sources import Sources
 from plugins import discover
-from plugins.source import upload
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,7 +53,11 @@ class Deps:
         Models load on the CPU, as they always have here, and download into
         the Hugging Face folder (`HF_HOME`) on first use.
         """
-        return {"embedding_cache": self.embedding_cache, "models": APP_MODELS}
+        return {
+            "sources": Sources(self.sources_dir),
+            "embedding_cache": self.embedding_cache,
+            "models": APP_MODELS,
+        }
 
 
 def build_deps(
@@ -71,7 +75,6 @@ def build_deps(
     sources_dir = Path(
         sources_dir or os.environ.get("RAG_PLAYGROUND_SOURCES") or REPO_ROOT / "sources"
     )
-    upload.SOURCES_DIR = sources_dir
     return Deps(
         registry=registry or global_registry,
         store=Store(artifacts_dir),

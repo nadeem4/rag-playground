@@ -25,7 +25,7 @@ import importlib
 #: their place here, so the registry lists the stages in the same order as
 #: before.
 PLUGIN_MODULES: tuple[str, ...] = (
-    "plugins.source.upload",
+    "pandion.plugins.source.upload",
     "plugins.query.text",
     "plugins.query.llm_rewrite",
     "pandion.plugins.parse.pdfium",

@@ -58,7 +58,8 @@ from pandion.graph import Edge, Graph, Node  # noqa: E402
 from pandion.ports import RunContext, Stage  # noqa: E402
 from pandion.registry import registry  # noqa: E402
 from pandion.storage import Store  # noqa: E402
-from plugins.source import upload  # noqa: E402
+from api.deps import build_deps
+from pandion.sources import Sources
 from plugins.use_case.chat import ChatConfig, ChatUseCase  # noqa: E402
 from providers import llm  # noqa: E402
 from tests.plugins.conftest import build_paragraph_pdf  # noqa: E402
@@ -269,114 +270,115 @@ def main() -> None:
         sources = root / "sources"
         sources.mkdir()
         (sources / f"{sha}.pdf").write_bytes(pdf)
-        previous = upload.SOURCES_DIR
-        upload.SOURCES_DIR = sources
+        extras = {**build_deps().run_extras(), "sources": Sources(sources)}
+        store = Store(root / "store")
+        events: list[dict] = []
+        result = run(
+            build_graph(sha), registry, store, on_event=events.append, context_extras=extras
+        )
+        if not result.ok:
+            failures = {n: r.error for n, r in result.nodes.items() if r.error}
+            raise SystemExit(f"pipeline failed: {failures}")
+
+        def payload(nid: str, t: ArtifactType) -> dict:
+            return store.load(result.nodes[nid].artifact.id, t)
+
+        dump("parsed_doc.json", payload("parse", ArtifactType.PARSED_DOC))
+        dump("parsed_doc_cleaned.json", payload("clean_dedupe", ArtifactType.PARSED_DOC))
+        for nid, (transform, _) in CHUNKERS.items():
+            dump(f"chunk_set.{transform}.json", payload(nid, ArtifactType.CHUNK_SET))
+        dump(
+            "artifacts.json",
+            {
+                nid: {"id": r.artifact.id, "type": str(r.artifact.type), "meta": r.artifact.meta}
+                for nid, r in result.nodes.items()
+                if r.artifact is not None
+            },
+        )
+        # Timestamps and durations vary run to run; round them so a diff of
+        # a regenerated fixture shows shape changes, not clock noise.
+        for e in events:
+            if "ts" in e:
+                e["ts"] = round(e["ts"], 3)
+            if "duration_ms" in e:
+                e["duration_ms"] = round(e["duration_ms"], 3)
+        dump("run_events.json", events)
+
+        # The comparison pair: same document, same cleaners, one element per
+        # extracted line. Its own run, so run_events/artifacts stay the
+        # canonical graph's.
+        lines_only = {"chunk_recursive": CHUNKERS["chunk_recursive"]}
+        off = run(
+            build_graph(sha, {"join_lines": False}, lines_only),
+            registry,
+            store,
+            context_extras=extras,
+        )
+        if not off.ok:
+            failures = {n: r.error for n, r in off.nodes.items() if r.error}
+            raise SystemExit(f"join_lines=false pipeline failed: {failures}")
+        dump(
+            "parsed_doc.join_lines_off.json",
+            store.load(off.nodes["parse"].artifact.id, ArtifactType.PARSED_DOC),
+        )
+        dump(
+            "chunk_set.recursive_character.join_lines_off.json",
+            store.load(off.nodes["chunk_recursive"].artifact.id, ArtifactType.CHUNK_SET),
+        )
+
+        # Retrieval: descriptor, three retrievers, MMR, and Search.
+        ret = run(build_retrieval_graph(sha), registry, store, context_extras=extras)
+        if not ret.ok:
+            failures = {n: r.error for n, r in ret.nodes.items() if r.error}
+            raise SystemExit(f"retrieval pipeline failed: {failures}")
+        index_dir = Path(store.load(ret.nodes["index"].artifact.id, ArtifactType.INDEX))
+        dump(
+            "index.lancedb.json",
+            json.loads((index_dir / "descriptor.json").read_text(encoding="utf-8")),
+        )
+        for r in RETRIEVERS:
+            dump(
+                f"retrieval_result.{r}.json",
+                store.load(ret.nodes[f"retrieve_{r}"].artifact.id, ArtifactType.RETRIEVAL_RESULT),
+            )
+        dump(
+            "retrieval_result.mmr.json",
+            store.load(ret.nodes["rerank"].artifact.id, ArtifactType.RETRIEVAL_RESULT),
+        )
+        dump(
+            "output.search.json",
+            store.load(ret.nodes["search"].artifact.id, ArtifactType.OUTPUT),
+        )
+
+        # Chat by sentence ids, against a fake OpenAI client. Called
+        # directly, with exactly the inputs the executor would bind, so
+        # the fake stays local to this one call.
+        previous_client = llm.make_openai_client
+        llm.make_openai_client = lambda api_key, base_url=None, **options: FakeOpenAI()
         try:
-            store = Store(root / "store")
-            events: list[dict] = []
-            result = run(build_graph(sha), registry, store, on_event=events.append)
-            if not result.ok:
-                failures = {n: r.error for n, r in result.nodes.items() if r.error}
-                raise SystemExit(f"pipeline failed: {failures}")
-
-            def payload(nid: str, t: ArtifactType) -> dict:
-                return store.load(result.nodes[nid].artifact.id, t)
-
-            dump("parsed_doc.json", payload("parse", ArtifactType.PARSED_DOC))
-            dump("parsed_doc_cleaned.json", payload("clean_dedupe", ArtifactType.PARSED_DOC))
-            for nid, (transform, _) in CHUNKERS.items():
-                dump(f"chunk_set.{transform}.json", payload(nid, ArtifactType.CHUNK_SET))
-            dump(
-                "artifacts.json",
+            output = ChatUseCase().apply(
                 {
-                    nid: {"id": r.artifact.id, "type": str(r.artifact.type), "meta": r.artifact.meta}
-                    for nid, r in result.nodes.items()
-                    if r.artifact is not None
-                },
-            )
-            # Timestamps and durations vary run to run; round them so a diff of
-            # a regenerated fixture shows shape changes, not clock noise.
-            for e in events:
-                if "ts" in e:
-                    e["ts"] = round(e["ts"], 3)
-                if "duration_ms" in e:
-                    e["duration_ms"] = round(e["duration_ms"], 3)
-            dump("run_events.json", events)
-
-            # The comparison pair: same document, same cleaners, one element per
-            # extracted line. Its own run, so run_events/artifacts stay the
-            # canonical graph's.
-            lines_only = {"chunk_recursive": CHUNKERS["chunk_recursive"]}
-            off = run(
-                build_graph(sha, {"join_lines": False}, lines_only), registry, store
-            )
-            if not off.ok:
-                failures = {n: r.error for n, r in off.nodes.items() if r.error}
-                raise SystemExit(f"join_lines=false pipeline failed: {failures}")
-            dump(
-                "parsed_doc.join_lines_off.json",
-                store.load(off.nodes["parse"].artifact.id, ArtifactType.PARSED_DOC),
-            )
-            dump(
-                "chunk_set.recursive_character.join_lines_off.json",
-                store.load(off.nodes["chunk_recursive"].artifact.id, ArtifactType.CHUNK_SET),
-            )
-
-            # Retrieval: descriptor, three retrievers, MMR, and Search.
-            ret = run(build_retrieval_graph(sha), registry, store)
-            if not ret.ok:
-                failures = {n: r.error for n, r in ret.nodes.items() if r.error}
-                raise SystemExit(f"retrieval pipeline failed: {failures}")
-            index_dir = Path(store.load(ret.nodes["index"].artifact.id, ArtifactType.INDEX))
-            dump(
-                "index.lancedb.json",
-                json.loads((index_dir / "descriptor.json").read_text(encoding="utf-8")),
-            )
-            for r in RETRIEVERS:
-                dump(
-                    f"retrieval_result.{r}.json",
-                    store.load(ret.nodes[f"retrieve_{r}"].artifact.id, ArtifactType.RETRIEVAL_RESULT),
-                )
-            dump(
-                "retrieval_result.mmr.json",
-                store.load(ret.nodes["rerank"].artifact.id, ArtifactType.RETRIEVAL_RESULT),
-            )
-            dump(
-                "output.search.json",
-                store.load(ret.nodes["search"].artifact.id, ArtifactType.OUTPUT),
-            )
-
-            # Chat by sentence ids, against a fake OpenAI client. Called
-            # directly, with exactly the inputs the executor would bind, so
-            # the fake stays local to this one call.
-            previous_client = llm.make_openai_client
-            llm.make_openai_client = lambda api_key, base_url=None, **options: FakeOpenAI()
-            try:
-                output = ChatUseCase().apply(
-                    {
-                        "result": store.load(
-                            ret.nodes["rerank"].artifact.id, ArtifactType.RETRIEVAL_RESULT
-                        ),
-                        "query": store.load(ret.nodes["ask"].artifact.id, ArtifactType.QUERY),
-                        "doc": store.load(
-                            ret.nodes["clean_dedupe"].artifact.id, ArtifactType.PARSED_DOC
-                        ),
-                        "index": index_dir,
-                    },
-                    ChatConfig(model="gpt-6-astra"),
-                    RunContext(
-                        output_dir=root, emit=lambda e: None, tmp=root,
-                        extras={"credentials": {"openai_api_key": "fixture-key"}},
+                    "result": store.load(
+                        ret.nodes["rerank"].artifact.id, ArtifactType.RETRIEVAL_RESULT
                     ),
-                )
-            finally:
-                llm.make_openai_client = previous_client
-            stats = output["payload"]["stats"]
-            if not all(stats[k] >= 1 for k in ("cited", "weak", "similarity", "none", "unknown_ids")):
-                raise SystemExit(f"the chat fixture must show every label, got {stats}")
-            dump("output.chat.sentence_ids.json", output)
+                    "query": store.load(ret.nodes["ask"].artifact.id, ArtifactType.QUERY),
+                    "doc": store.load(
+                        ret.nodes["clean_dedupe"].artifact.id, ArtifactType.PARSED_DOC
+                    ),
+                    "index": index_dir,
+                },
+                ChatConfig(model="gpt-6-astra"),
+                RunContext(
+                    output_dir=root, emit=lambda e: None, tmp=root,
+                    extras={"credentials": {"openai_api_key": "fixture-key"}},
+                ),
+            )
         finally:
-            upload.SOURCES_DIR = previous
+            llm.make_openai_client = previous_client
+        stats = output["payload"]["stats"]
+        if not all(stats[k] >= 1 for k in ("cited", "weak", "similarity", "none", "unknown_ids")):
+            raise SystemExit(f"the chat fixture must show every label, got {stats}")
+        dump("output.chat.sentence_ids.json", output)
 
 
 if __name__ == "__main__":

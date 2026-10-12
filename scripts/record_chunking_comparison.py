@@ -147,7 +147,8 @@ def record() -> dict:
     from pandion.registry import registry
     from pandion.storage import Store
     from pandion.plugins.chunk import DocView
-    from plugins.source import upload
+    from api.deps import build_deps
+    from pandion.sources import Sources
 
     plugins.discover()
     questions = json.loads(QUESTIONS_FILE.read_text(encoding="utf-8"))
@@ -159,76 +160,73 @@ def record() -> dict:
         sources = root / "sources"
         sources.mkdir()
         (sources / f"{sha}.pdf").write_bytes(pdf)
-        previous = upload.SOURCES_DIR
-        upload.SOURCES_DIR = sources
-        try:
-            # One store for every run, so the parse and the clean are done once
-            # and all three strategies cut exactly the same text.
-            store = Store(root / "store")
-            strategies: dict[str, dict] = {}
-            index: dict[str, dict] = {}
-            chunks_by_strategy: dict[str, list[dict]] = {}
-            doc_text = ""
-            clean_payload: dict | None = None
+        extras = {**build_deps().run_extras(), "sources": Sources(sources)}
+        # One store for every run, so the parse and the clean are done once
+        # and all three strategies cut exactly the same text.
+        store = Store(root / "store")
+        strategies: dict[str, dict] = {}
+        index: dict[str, dict] = {}
+        chunks_by_strategy: dict[str, list[dict]] = {}
+        doc_text = ""
+        clean_payload: dict | None = None
 
-            for strategy in STRATEGIES:
-                graph = build_graph(sha, SAMPLE.name, strategy)
-                chunk_payload: dict | None = None
-                descriptor: dict | None = None
-                evals: list[dict] = []
-                for question in questions:
-                    result = run(
-                        graph,
-                        registry,
-                        store,
-                        overrides={
-                            "ask": {
-                                "text": question["question"],
-                                "gold_answer": question["gold_answer"],
-                            }
-                        },
-                    )
-                    if not result.ok:
-                        failures = {
-                            n: r.error for n, r in result.nodes.items() if r.error
+        for strategy in STRATEGIES:
+            graph = build_graph(sha, SAMPLE.name, strategy)
+            chunk_payload: dict | None = None
+            descriptor: dict | None = None
+            evals: list[dict] = []
+            for question in questions:
+                result = run(
+                    graph,
+                    registry,
+                    store,
+                    context_extras=extras,
+                    overrides={
+                        "ask": {
+                            "text": question["question"],
+                            "gold_answer": question["gold_answer"],
                         }
-                        raise SystemExit(f"{strategy} failed: {failures}")
+                    },
+                )
+                if not result.ok:
+                    failures = {
+                        n: r.error for n, r in result.nodes.items() if r.error
+                    }
+                    raise SystemExit(f"{strategy} failed: {failures}")
 
-                    def load(nid: str, t: ArtifactType, res=result):
-                        return store.load(res.nodes[nid].artifact.id, t)
+                def load(nid: str, t: ArtifactType, res=result):
+                    return store.load(res.nodes[nid].artifact.id, t)
 
-                    if chunk_payload is None:
-                        clean_payload = load("clean", ArtifactType.PARSED_DOC)
-                        chunk_payload = load("chunk", ArtifactType.CHUNK_SET)
-                        doc_text = chunk_payload["source_text"]
-                        index_dir = Path(load("index", ArtifactType.INDEX))
-                        descriptor = json.loads(
-                            (index_dir / "descriptor.json").read_text(encoding="utf-8")
-                        )
-                    evals.append(load("score", ArtifactType.OUTPUT)["payload"])
+                if chunk_payload is None:
+                    clean_payload = load("clean", ArtifactType.PARSED_DOC)
+                    chunk_payload = load("chunk", ArtifactType.CHUNK_SET)
+                    doc_text = chunk_payload["source_text"]
+                    index_dir = Path(load("index", ArtifactType.INDEX))
+                    descriptor = json.loads(
+                        (index_dir / "descriptor.json").read_text(encoding="utf-8")
+                    )
+                evals.append(load("score", ArtifactType.OUTPUT)["payload"])
 
-                assert chunk_payload is not None and descriptor is not None
-                strategies[strategy] = summarize(chunk_payload, evals, questions)
-                chunks_by_strategy[strategy] = strategies[strategy]["chunks"]
-                index[strategy] = {
-                    "embedder": descriptor["embedding_model"],
-                    "dim": descriptor["dim"],
-                    "doc_count": descriptor["doc_count"],
-                }
-
-            view = DocView.of(clean_payload)
-            paragraphs = [
-                (e.md_start, e.md_end) for e in view.rendered if e.type == "paragraph"
-            ]
-            return {
-                "doc_text": doc_text,
-                "passage": pick_passage(paragraphs, chunks_by_strategy),
-                "questions": questions,
-                "index": index,
-                "strategies": strategies,
+            assert chunk_payload is not None and descriptor is not None
+            strategies[strategy] = summarize(chunk_payload, evals, questions)
+            chunks_by_strategy[strategy] = strategies[strategy]["chunks"]
+            index[strategy] = {
+                "embedder": descriptor["embedding_model"],
+                "dim": descriptor["dim"],
+                "doc_count": descriptor["doc_count"],
             }
-        finally:
-            upload.SOURCES_DIR = previous
+
+        view = DocView.of(clean_payload)
+        paragraphs = [
+            (e.md_start, e.md_end) for e in view.rendered if e.type == "paragraph"
+        ]
+        return {
+            "doc_text": doc_text,
+            "passage": pick_passage(paragraphs, chunks_by_strategy),
+            "questions": questions,
+            "index": index,
+            "strategies": strategies,
+        }
 
 
 def main() -> None:

@@ -21,6 +21,7 @@ import importlib
 
 #: Every module that registers a transform, in stage order.
 PLUGIN_MODULES: tuple[str, ...] = (
+    "pandion.plugins.source.upload",
     "pandion.plugins.parse.pdfium",
     "pandion.plugins.parse.docling",
     "pandion.plugins.clean.header_footer_strip",

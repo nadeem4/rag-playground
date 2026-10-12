@@ -96,6 +96,10 @@ describe("progressLine", () => {
     expect(progressLine(1, 6, 1)).toBe("Searching and scoring question 2 of 6. 1 search came from the cache.")
     expect(progressLine(6, 6, 0)).toBe("Scored all 6 questions.")
   })
+
+  it("says the index comes first while it is being built, instead of a question count", () => {
+    expect(progressLine(0, 6, 0, true)).toBe("Building the index first. Questions are scored once it is ready.")
+  })
 })
 
 describe("staleLine", () => {

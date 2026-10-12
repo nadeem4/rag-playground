@@ -150,7 +150,7 @@ describe("the theme and contrast switches", () => {
     expect(option("Contrast", "More contrast").getAttribute("aria-pressed")).toBe("true")
   })
 
-  it("in the header row each switch carries no caption, so the Document control keeps its room at 1280; each is still named", () => {
+  it("in the header row each switch carries no caption, so the row keeps its room at 1280; each is still named", () => {
     header()
     for (const name of ["Theme", "Contrast"]) {
       const group = screen.getByRole("group", { name })
@@ -167,13 +167,7 @@ describe("the header on a phone", () => {
     const c = nav.className.split(/\s+/)
     for (const k of ["flex-wrap", "min-w-0", "order-3", "w-full", "md:order-2", "md:w-auto"]) expect(c).toContain(k)
     const right = screen.getByTestId("header-controls").className.split(/\s+/)
-    for (const k of ["order-2", "ml-auto", "md:order-5", "md:ml-0"]) expect(right).toContain(k)
-  })
-
-  it("gives the Document control its own full-width row under the tabs below md", () => {
-    header("/compare")
-    const c = screen.getByTestId("header-document").className.split(/\s+/)
-    for (const k of ["order-4", "w-full", "md:ml-auto", "md:w-auto"]) expect(c).toContain(k)
+    for (const k of ["order-2", "ml-auto", "md:order-5", "md:ml-auto"]) expect(right).toContain(k)
   })
 
   it("keeps the inline switches for xl and up, and a Display menu holds them below xl, so the header is one row from md", async () => {
@@ -202,26 +196,9 @@ describe("the header on a phone", () => {
     expect(screen.getByRole("button", { name: words })).toBe(button)
   })
 
-  it("caps the Document control so the header stays one row from md up", () => {
-    header("/compare")
-    const c = screen.getByTestId("document-trigger").className.split(/\s+/)
-    for (const k of ["md:max-w-[240px]", "xl:max-w-[360px]"]) expect(c).toContain(k)
-    expect(c).not.toContain("md:max-w-[360px]")
-    // From md up its slot takes what the row has left rather than wrapping to a row of its own.
-    const slot = screen.getByTestId("header-document").className.split(/\s+/)
-    for (const k of ["md:flex-1", "md:basis-0", "md:justify-end"]) expect(slot).toContain(k)
-    // The small Document label shows from lg, where there is room for it.
-    expect(within(screen.getByTestId("document-trigger")).getByText("Document").className.split(/\s+/)).toContain("lg:inline")
-  })
 })
 
 describe("AppHeader with the lessons hidden", () => {
-  it("never turns the control amber when the lists cannot be read", async () => {
-    header("/compare", false)
-    await new Promise((r) => setTimeout(r, 0))
-    expect(screen.getByTestId("document-trigger").className).not.toContain("bg-stale-wash")
-  })
-
   it("shows Home first, then Build, Compare, Evaluate, Read and Library, with no Lessons", () => {
     header("/build", false)
     const main = screen.getByRole("navigation", { name: "Main" })
@@ -236,7 +213,7 @@ describe("AppHeader with the lessons hidden", () => {
     expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/")
   })
 
-  it("leaves GitHub to Home, so the Home tab costs the Document control no width", () => {
+  it("leaves GitHub to Home, so the Home tab costs the row no width", () => {
     header("/build", false)
     expect(screen.queryByRole("link", { name: "GitHub" })).toBeNull()
   })
@@ -263,7 +240,7 @@ describe("AppHeader with the lessons hidden", () => {
     expect(link.getAttribute("aria-current")).toBe("page")
   })
 
-  it("shows the privacy link as Privacy from xl up only, so the Document control keeps its room", () => {
+  it("shows the privacy link as Privacy from xl up only, so the row keeps its room", () => {
     header("/compare", false)
     const link = within(screen.getByTestId("header-controls")).getByRole("link", { name: "Your data and privacy" })
     expect(link.textContent).toBe("Privacy")
@@ -272,9 +249,7 @@ describe("AppHeader with the lessons hidden", () => {
     expect(c).toContain("xl:flex")
     expect(c).not.toContain("md:flex")
     expect(c).not.toContain("lg:flex")
-    // Below xl the footer and the Library lead link reach the page. The trigger never shrinks to an icon.
-    expect(screen.getByTestId("document-trigger").className.split(/\s+/)).toContain("md:min-w-[7rem]")
-    expect(screen.getByTestId("header-document").className.split(/\s+/)).toContain("md:min-w-[7rem]")
+    // Below xl the footer and the Library lead link reach the page.
     // From md to lg the tabs and the gaps tighten, so the Library tab still fits the one row at 768 px.
     const tab = within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Library" }).className.split(/\s+/)
     for (const k of ["px-2", "md:px-1", "lg:px-2"]) expect(tab).toContain(k)
@@ -380,14 +355,9 @@ describe("routes", () => {
   })
 })
 
-describe("where the Document control shows", () => {
-  it("only on Compare, which works on a document first", () => {
-    header("/compare")
-    expect(screen.getByTestId("document-trigger")).toBeTruthy()
-  })
-
-  it("not on Build or Evaluate, where the pipeline's Documents line holds it, nor on Home, Read, Library or Privacy", () => {
-    for (const path of ["/build", "/evaluate", "/", "/read", "/library", "/privacy"]) {
+describe("the header holds no Document control", () => {
+  it("on any page: Build's Document step, Evaluate's Documents and Compare's own Document line hold it", () => {
+    for (const path of ["/compare", "/build", "/evaluate", "/", "/read", "/library", "/privacy"]) {
       header(path)
       expect(screen.queryByTestId("document-trigger"), path).toBeNull()
       expect(screen.queryByTestId("header-document"), path).toBeNull()

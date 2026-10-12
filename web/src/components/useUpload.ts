@@ -25,7 +25,7 @@ export interface Upload {
  * and Build's first-visit card. Three checks, in the words the upload card
  * always used: PDF only, the demo's size limit, and the server's own sentence
  * when it refuses. The busy file and the error live in the document store, so
- * every caller (and the header's trigger) shows the same one, and a second
+ * every caller (and the Document control's trigger) shows the same one, and a second
  * upload or a sample cannot start while one runs.
  */
 export function useUpload(): Upload {

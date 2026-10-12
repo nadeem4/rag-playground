@@ -135,15 +135,34 @@ describe("Library", () => {
     expect(within(row("Old notes test")).getByText("my-notes.pdf is no longer on the demo. Opening this asks you to upload it again.")).toBeTruthy()
   })
 
-  it("names every document a pipeline owns, and reads an old one's single document as its list", async () => {
+  it("shows every document a pipeline owns with the Document element, and reads an old one's single document as its list", async () => {
     seed()
     const listed = JSON.parse(window.localStorage.getItem("rag-playground:pipelines:v1")!)
     listed[0].documents = [{ sha: UP, filename: "NK_Resume.pdf" }, { sha: SAMPLE, filename: "chunking-primer.pdf" }]
     window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(listed))
     resetPipelinesForTests()
     render(<Library go={vi.fn()} />)
-    await waitFor(() => expect(within(row("Resume, sections whole")).getByTestId("pipeline-documents").textContent).toBe("Documents: NK_Resume.pdf, chunking-primer.pdf"))
-    expect(within(row("Old notes test")).getByTestId("pipeline-documents").textContent).toBe("Documents: my-notes.pdf")
+    const files = (name: string) =>
+      within(within(row(name)).getByTestId("item-documents"))
+        .getAllByTestId("document-item")
+        .map((i) => within(i).getByTestId("document-facts").firstElementChild!.textContent)
+    await waitFor(() => expect(files("Resume, sections whole")).toEqual(["NK_Resume.pdf", "chunking-primer.pdf"]))
+    expect(files("Old notes test")).toEqual(["my-notes.pdf"])
+    expect(within(row("Resume, sections whole")).getByRole("button", { name: "Preview NK Resume" })).toBeTruthy()
+    await waitFor(() => expect(within(row("Resume, sections whole")).getByRole("button", { name: "Preview A primer on chunking" })).toBeTruthy())
+  })
+
+  it("an experiment's document has the element too, and a removed upload says so and cannot be previewed", async () => {
+    seed()
+    await ready()
+    const exp = within(within(row("Chunk sizes on the primer")).getByTestId("item-documents")).getByTestId("document-item")
+    await waitFor(() => expect(within(exp).getByText("A primer on chunking")).toBeTruthy())
+    fireEvent.click(within(exp).getByRole("button", { name: "Preview A primer on chunking" }))
+    expect(screen.getByRole("dialog", { name: "A primer on chunking" })).toBeTruthy()
+    fireEvent.keyDown(document, { key: "Escape" })
+    const gone = within(within(row("Old notes test")).getByTestId("item-documents")).getByTestId("document-item")
+    await waitFor(() => expect(within(gone).getByText("Removed from the server")).toBeTruthy())
+    expect((within(gone).getByRole("button", { name: /^Preview/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it("warns in amber when a saved item's upload has under 6 hours left, and offers to export them with the document", async () => {

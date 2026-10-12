@@ -211,7 +211,7 @@ export function refreshUploads(): void {
 // The page button that opened the menu, so focus goes back to it when the menu closes.
 let opener: HTMLElement | null = null
 
-/** Open or close the menu. Opening it here (the header's own trigger) forgets any page opener. */
+/** Open or close the menu. Opening it here (the control's own trigger) forgets any page opener. */
 export function setDocumentMenuOpen(open: boolean): void {
   if (open) opener = null
   if (state.menuOpen !== open) set({ menuOpen: open })
@@ -234,7 +234,7 @@ export function documentBusy(): boolean {
   return state.uploading !== null || state.sampleLoading !== null
 }
 
-/** A page's "Pick a document" or "Change" button: open the header's menu, and give focus back to that button when it closes. */
+/** A page's "Pick a document" or "Change" button: open the page's Document control menu, and give focus back to that button when it closes. */
 export function openDocumentMenu(event?: { currentTarget: EventTarget | null }): void {
   setDocumentMenuOpen(true)
   opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
@@ -351,7 +351,7 @@ export function useDocument(): DocumentState {
   }
 }
 
-/** Whether `doc`, a page's own document rather than the working pipeline's, is usable: the same rule as the bar's. */
+/** Whether `doc`, a page's own document rather than the working pipeline's, is usable: the same rule as the working pipeline's. */
 export function useDocStatus(doc: DocRef | null): DocStatus {
   const s = useSyncExternalStore(subscribe, getState)
   return docStatus(doc, s.sources, s.samples, s.samplesFailed, s.known)

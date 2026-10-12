@@ -204,3 +204,15 @@ def test_in_demo_mode_an_uploads_pages_are_cached_privately(dirs, monkeypatch):
         assert c.get(f"/api/sources/{sample}/pages/1.png").headers["cache-control"] == (
             "public, max-age=31536000, immutable"
         )
+
+
+def test_many_renders_at_once_all_succeed(client):
+    """Preview asks for every page together. pdfium is not thread-safe, so the
+    server's thread pool must not run two renders at the same moment."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    sha = upload_pdf(client)["sha"]
+    urls = [f"/api/sources/{sha}/pages/{n}.png?scale=1.5" for n in range(1, len(SAMPLE_PAGES) + 1)] * 8
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        codes = list(pool.map(lambda u: client.get(u).status_code, urls))
+    assert codes == [200] * len(urls)

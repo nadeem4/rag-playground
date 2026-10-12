@@ -1,7 +1,6 @@
 import { useEffect, useId, useState } from "react"
 
 import type { Registry } from "@/api/types"
-import { DocumentControl } from "@/components/DocumentControl"
 import { CONTROL } from "@/components/fields/types"
 import { Button } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
@@ -160,8 +159,6 @@ export function PipelineBar({
     onLoad(loaded)
   }
 
-  const docs = documentsOf(graph)
-
   return (
     <div role="group" aria-label="Pipeline" className="flex flex-col gap-2 border-b border-hairline px-3 py-2">
       {fromEvaluate ? (
@@ -176,19 +173,6 @@ export function PipelineBar({
         <Picker id={`${id}-pick`} labelledBy={`${id}-label`} className="w-[min(320px,100%)]" options={options} value={currentId && current ? currentId : ""} onChange={pick} />
         {edited ? <span className="meta">edited</span> : null}
       </div>
-      <p data-testid="documents-line" className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-        <span className="text-xs text-fg-muted">Documents</span>
-        {docs.length ? (
-          docs.map((d) => (
-            <span key={d.sha} className="font-mono break-words">
-              {d.filename}
-            </span>
-          ))
-        ) : (
-          <span className="text-fg-muted">None yet.</span>
-        )}
-        <DocumentControl variant="link" />
-      </p>
       {naming ? (
         <form
           className="flex flex-wrap items-center gap-2"

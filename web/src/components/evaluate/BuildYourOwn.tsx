@@ -26,7 +26,7 @@ import {
   type RewriteMode,
 } from "@/state/graph"
 
-import { SideSheet } from "./SideSheet"
+import { SideSheet } from "@/components/SideSheet"
 
 /**
  * Build your own, on Evaluate: one side sheet with a name, the documents, and

@@ -9,9 +9,9 @@ export function needsDocument(status: DocStatus): boolean {
 }
 
 /**
- * The one stale-tone note Build, Compare and Evaluate share about the
- * document in the header's bar. Missing or none: what it blocks, and a "Pick
- * a document" button that opens the bar's menu. Changed since the results on
+ * The one stale-tone note Build, Compare and Evaluate share about the page's
+ * document. Missing or none: what it blocks, and a "Pick a document" button
+ * that opens the page's Document control menu. Changed since the results on
  * the page were made: says so, with no button. A sample saved with an old
  * fingerprint that just moved to its current copy: one status-tone line.
  * Otherwise nothing.
@@ -20,13 +20,13 @@ export function DocumentNote({
   action,
   changed = false,
   className,
-  where = "in the bar above",
+  where = "above",
   doc: own,
 }: {
   action: string
   changed?: boolean
   className?: string
-  /** Where the document is picked: the bar on Compare, the pipeline's Documents line on Build and Evaluate. */
+  /** Where the document is picked: the Document line above on Compare, the Document step on Build, Documents on Evaluate. */
   where?: string
   /** A page's own document (Evaluate trying a pipeline on another file), judged instead of the pipeline on Build's. */
   doc?: DocRef | null

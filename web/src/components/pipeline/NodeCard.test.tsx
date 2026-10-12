@@ -302,23 +302,38 @@ describe("click to close, and scroll into view", () => {
     const source = initialGraph(R).nodes.find((n) => n.stage === "source")!
     const withFile = { ...source, config: { sha: "ab".repeat(32), filename: "report.pdf" } }
 
-    it("names the document and points to the bar, with nothing to edit when open", () => {
+    it("lists the pipeline's documents with the full element and offers Add or change, with nothing to edit when open", () => {
       const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), selected: true })
-      expect(card.textContent).toContain("report.pdf. Change it under Documents.")
+      const items = within(card).getAllByTestId("document-item")
+      expect(items).toHaveLength(1)
+      expect(within(items[0]).getByText("report.pdf")).toBeTruthy()
+      expect(within(items[0]).getByRole("button", { name: "Preview Report" })).toBeTruthy()
+      expect(within(card).getByTestId("document-trigger").textContent).toBe("Add or change")
       expect(within(card).queryByRole("textbox")).toBeNull()
       expect(within(card).queryByRole("button", { name: /^Transform/ })).toBeNull()
     })
 
-    it("says there is none yet", () => {
+    it("says there is none yet, and offers Pick a document", () => {
       const card = renderCard({ node: source, title: "Document", transforms: transformsFor(R, "source") })
-      expect(card.textContent).toContain("None yet. Pick one under Documents.")
+      expect(within(card).queryByTestId("document-item")).toBeNull()
+      expect(card.textContent).toContain("None yet.")
+      expect(within(card).getByRole("button", { name: "Pick a document" })).toBeTruthy()
     })
 
-    it("names a missing file and says where to pick another", () => {
+    it("keeps a missing file's name, marks it removed from the server, and offers no Preview", () => {
       const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), missing: true })
-      expect(card.textContent).toContain("report.pdf")
-      expect(card.textContent).not.toContain("Change it under Documents.")
-      expect(within(card).getByTestId("missing-file").textContent).toBe("Missing. Pick a document under Documents.")
+      const item = within(card).getByTestId("document-item")
+      expect(within(item).getByText("report.pdf")).toBeTruthy()
+      expect(within(item).getByText("Removed from the server")).toBeTruthy()
+      expect((within(item).getByRole("button", { name: /^Preview/ }) as HTMLButtonElement).disabled).toBe(true)
+    })
+
+    it("a Preview opens the sheet without selecting the card", () => {
+      const onSelect = vi.fn()
+      const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), onSelect })
+      fireEvent.click(within(card).getByRole("button", { name: "Preview Report" }))
+      expect(screen.getByRole("dialog", { name: "Report" })).toBeTruthy()
+      expect(onSelect).not.toHaveBeenCalled()
     })
   })
 

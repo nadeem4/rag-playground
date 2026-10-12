@@ -120,7 +120,7 @@ function dropParam(name: string): void {
 }
 
 function Build({ registry, navigate }: { registry: Registry; navigate: (href: string) => void }) {
-  // The working copy, a store every page reads (the header's Document control
+  // The working copy, a store every page reads (the Document control
   // too): whatever was last stored under its own key, else the graph of
   // whichever saved pipeline is selected (a session that starts with a
   // selection already made but no working-copy storage of its own yet), else
@@ -316,7 +316,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     setRunTarget(target)
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
-      setErrors((e) => ({ ...e, [source.id]: { message: "Pick a document under Documents first." } }))
+      setErrors((e) => ({ ...e, [source.id]: { message: "Pick a document in the Document step first." } }))
       selectCard(source.id)
       return
     }
@@ -387,7 +387,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   }
 
   // Plan I-15: the first-visit card, whenever no file is selected. This
-  // browser's uploads are in the bar's menu.
+  // browser's uploads are in its Pick a document menu.
   const sourceNode = graph.nodes.find((n) => n.stage === "source")
   const firstRun = sourceNode !== undefined && !sourceNode.config.sha
   // The working copy's document may not exist in this browser (opened from a
@@ -499,7 +499,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         )}
         {/* On a first visit the first-visit card already asks for a document. */}
         {firstRun ? null : (
-          <DocumentNote action="build the index" where="under Documents" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />
+          <DocumentNote action="build the index" where="in the Document step" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />
         )}
         {/* A source blocker is the no-file case, which the first-visit card covers. Right after a
             sample loads, the Document card's old explanation can linger for a moment; no red flash. */}

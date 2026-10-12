@@ -15,7 +15,7 @@ import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { EvalNumbers } from "@/components/evaluate/EvalMetrics"
 import { HowScored } from "@/components/evaluate/HowScored"
-import { SideSheet } from "@/components/evaluate/SideSheet"
+import { SideSheet } from "@/components/SideSheet"
 import { MissTrace } from "@/components/evaluate/MissTrace"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { CONTROL } from "@/components/fields/types"
@@ -63,6 +63,7 @@ import { savePipeline, setCurrentId, usePipelines } from "@/state/pipelines"
 import { BUILD_YOUR_OWN, defaultChoice, ON_BUILD, pipelineChoices, type PipelineChoice } from "@/state/pipelineChoice"
 import { plantedLine, useStarter } from "@/state/starter"
 import { DocumentControl } from "@/components/DocumentControl"
+import { DocumentItem } from "@/components/DocumentItem"
 import { BuildYourOwn } from "@/components/evaluate/BuildYourOwn"
 
 import { RegistryScreen } from "./Shell"
@@ -228,26 +229,23 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
             </div>
             {chosen ? (
               <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-xs text-fg-muted">Documents</span>
-                <p data-testid="documents-line" className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-                  {documents.length ? (
-                    documents.map((d) => (
-                      <span key={d.sha} className="font-mono break-words">
-                        {d.filename}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-fg-muted">None yet.</span>
-                  )}
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="text-xs text-fg-muted">Documents</span>
                   {busy ? null : (
                     <DocumentControl
-                      variant="link"
                       value={doc}
                       onChoose={(d) => setTrial({ id: chosen.id, documents: [d] })}
                       foot="Trying the pipeline on another document does not change it."
                     />
                   )}
-                </p>
+                </div>
+                <div data-testid="documents-line" className="flex min-w-0 flex-col gap-2">
+                  {documents.length ? (
+                    documents.map((d) => <DocumentItem key={d.sha} doc={d} />)
+                  ) : (
+                    <p className="text-sm text-fg-muted">None yet.</p>
+                  )}
+                </div>
                 {hint ? (
                   <p data-testid="documents-hint" className="text-xs text-fg-muted">
                     {hint}

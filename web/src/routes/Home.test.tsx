@@ -395,11 +395,12 @@ describe("Home's document line", () => {
     expect(lines()).toEqual([])
   })
 
-  it("Change opens the Document menu, named for its page, 44 px tall", async () => {
+  it("Change goes to its page with the Document menu open, named for its page, 44 px tall", async () => {
+    const navigate = vi.fn()
     render(
       <>
         <MenuProbe />
-        <Home navigate={vi.fn()} />
+        <Home navigate={navigate} />
       </>,
     )
     const change = await screen.findByRole("button", { name: "Change the document for Compare" })
@@ -410,6 +411,8 @@ describe("Home's document line", () => {
     expect(screen.getByTestId("menu").textContent).toBe("closed")
     fireEvent.click(change)
     expect(screen.getByTestId("menu").textContent).toBe("open")
+    // Home has no menu of its own: the page that owns the document opens with it.
+    expect(navigate).toHaveBeenCalledWith("/compare")
   })
 })
 

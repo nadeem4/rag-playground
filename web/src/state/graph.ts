@@ -564,7 +564,7 @@ const STORAGE_KEY = "rag-playground:graph:v1"
 
 /**
  * The working graph is a small store every page reads: Build edits it, the
- * header's Document control and Compare and Evaluate follow it. Navigation is
+ * Document control and Compare and Evaluate follow it. Navigation is
  * a full page load, so localStorage is what carries it between pages; within
  * a page, `storeGraph` tells every subscriber.
  *

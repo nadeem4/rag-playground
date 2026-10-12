@@ -1,11 +1,10 @@
 import { useRef, useState } from "react"
-import { Check, ChevronDown, FileText, Upload } from "lucide-react"
+import { Check, Upload } from "lucide-react"
 import { DropdownMenu } from "radix-ui"
 
 import { api, ApiError } from "@/api/client"
 import type { SampleCard } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
-import { cn } from "@/lib/utils"
 import {
   chooseDocument,
   documentBusy,
@@ -30,25 +29,27 @@ const ITEM =
 const HEADING = "px-2 pt-2 pb-1 text-2xs text-fg-muted"
 
 /**
- * The Document control: which document a page uses, and a menu to change it
- * (the samples, this browser's uploads and Upload a PDF). In the header (on
- * Compare) it is a bar; on Build and Evaluate it is the Change link on the
- * pipeline's Documents line (`variant="link"`). When the saved upload is gone
- * it turns amber and reads Missing. While the lists load it looks ready, never
- * amber. Its open state is the store's, so a page's "Pick a document" button
- * opens it too; one page shows one control.
+ * The Document control: a link that opens a menu to change the document (the
+ * samples, this browser's uploads and Upload a PDF). It sits beside the
+ * Document element that names the document: in Build's Document step ("Add or
+ * change"), under Evaluate's Documents, and on Compare's Document line. When
+ * the saved upload is gone its name says so, and the menu opens on a warning.
+ * While the lists load it reads as ready, never missing. Its open state is the
+ * store's, so a page's "Pick a document" button opens it too; one page shows
+ * one control.
  *
  * By default a pick becomes the working pipeline's document. A page that keeps
  * its own document (Evaluate, trying a pipeline on another file) passes
  * `value` and `onChoose`, and the pipeline on Build stays as it is.
  */
 export function DocumentControl({
-  variant = "bar",
+  label = "Change",
   value,
   onChoose,
   foot,
 }: {
-  variant?: "bar" | "link"
+  /** The link's words, such as "Add or change" on Build. */
+  label?: string
   /** The document this page uses, when it is not the working pipeline's. */
   value?: DocRef | null
   /** Where a picked document goes, instead of the working pipeline. */
@@ -72,16 +73,13 @@ export function DocumentControl({
   // While an upload, a sample or a pick is in flight, every other choice waits, so two cannot race.
   const waiting = loading !== null || busy !== null || sampleLoading !== null
   const empty = !doc
-  const name = busy ? `Uploading ${busy}` : empty ? "Pick a document" : doc.filename
-  const label = busy
+  const name = busy
     ? `Uploading ${busy}`
     : missing
       ? `Document ${doc?.filename} is missing. Pick another or upload it again.`
       : empty
         ? "Pick a document"
-        : variant === "link"
-          ? `Change the document. Now ${doc.filename}.`
-          : `Document: ${doc.filename}. Change it.`
+        : `${label} the document. Now ${doc.filename}.`
   // Nothing is ticked while the file is missing: the menu is there to pick another.
   const current = !missing && doc ? doc.sha : ""
 
@@ -134,40 +132,18 @@ export function DocumentControl({
         }}
       />
       <DropdownMenu.Root open={menuOpen} onOpenChange={setDocumentMenuOpen}>
-        {variant === "link" ? (
-          <DropdownMenu.Trigger
-            data-testid="document-trigger"
-            aria-label={label}
-            title={label}
-            aria-busy={busy ? true : undefined}
-            className="inline-flex min-h-[1.5rem] items-center text-sm font-semibold text-primary underline underline-offset-4 outline-none hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
-          >
-            {busy ? `Uploading ${busy}` : empty ? "Pick a document" : "Change"}
-          </DropdownMenu.Trigger>
-        ) : (
         <DropdownMenu.Trigger
           data-testid="document-trigger"
-          aria-label={label}
+          aria-label={name}
           title={name}
           aria-busy={busy ? true : undefined}
-          className={cn(
-            "flex h-row w-full min-w-0 items-center gap-2 rounded-control border px-2 text-left text-sm md:w-auto md:min-w-[7rem] md:max-w-[240px] xl:max-w-[360px]",
-            missing
-              ? "border-stale bg-stale-wash text-stale hover:bg-stale-wash"
-              : "border-hairline bg-surface-raised text-fg hover:bg-surface-hover",
-          )}
+          className="inline-flex min-h-[1.5rem] items-center text-sm font-semibold text-primary underline underline-offset-4 outline-none hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
         >
-          <FileText aria-hidden strokeWidth={1.75} className="size-[18px] shrink-0" />
-          <span className={cn("hidden shrink-0 text-2xs whitespace-nowrap lg:inline", missing ? "text-stale" : "text-fg-muted xl:hidden")}>
-            {missing ? "Missing" : "Document"}
-          </span>
-          <span className={cn("min-w-0 flex-1 truncate", empty && !busy ? "font-normal text-fg-muted" : "font-semibold")}>{name}</span>
-          <ChevronDown aria-hidden strokeWidth={1.75} className={cn("size-[18px] shrink-0", missing ? "text-stale" : "text-fg-muted")} />
+          {busy ? `Uploading ${busy}` : empty ? "Pick a document" : label}
         </DropdownMenu.Trigger>
-        )}
         <DropdownMenu.Portal>
           <DropdownMenu.Content
-            align={variant === "link" ? "start" : "end"}
+            align="start"
             sideOffset={6}
             collisionPadding={16}
             onCloseAutoFocus={(e) => {
@@ -274,7 +250,7 @@ export function DocumentControl({
               </p>
             ) : null}
             <p className="px-2 pt-1 text-2xs text-fg-muted">
-              {foot ?? (variant === "link" ? "The pipeline runs on this document." : "Every page uses this document.")}{" "}
+              {foot ?? "The pipeline runs on this document."}{" "}
               {demo ? "Uploads on the demo are private to this browser and expire." : "Your files stay on this machine."}
             </p>
             <p className="px-2 pb-1 text-2xs text-fg-muted" data-testid="upload-limits">

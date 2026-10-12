@@ -77,12 +77,8 @@ describe("DocumentControl", () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     render(<DocumentControl />)
-    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: chunking-primer.pdf. Change it."))
-    // A narrow bar cuts the name; hovering shows it whole.
-    expect(trigger().getAttribute("title")).toBe("chunking-primer.pdf")
-    // The small "Document" word gives its room to the file name from xl up; "Missing" always stays.
-    const word = within(trigger()).getByText("Document")
-    expect(word.className.split(/\s+/)).toContain("xl:hidden")
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now chunking-primer.pdf."))
+    expect(trigger().textContent).toBe("Change")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     // Above the round Ask button (z-40) on a phone, which otherwise covered its foot.
@@ -91,17 +87,22 @@ describe("DocumentControl", () => {
     expect(items.map((i) => i.getAttribute("aria-checked"))).toEqual(["true", "false"])
     expect(within(menu).getByText("Your uploads")).toBeTruthy()
     expect(within(menu).getByRole("menuitem", { name: "Upload a PDF" })).toBeTruthy()
-    expect(menu.textContent).toContain("Every page uses this document. Your files stay on this machine.")
+    expect(menu.textContent).toContain("The pipeline runs on this document. Your files stay on this machine.")
   })
 
-  it("turns amber and reads Missing when the saved upload is gone, and the menu opens on a warning", async () => {
+  it("names its action with the page's own words, such as Add or change on Build", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    serve({ sources: [UP], samples: [SAMPLE] })
+    render(<DocumentControl label="Add or change" />)
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Add or change the document. Now chunking-primer.pdf."))
+    expect(trigger().textContent).toBe("Add or change")
+  })
+
+  it("says the saved upload is missing in its name, and the menu opens on a warning", async () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
-    await waitFor(() => expect(trigger().className).toContain("bg-stale-wash"))
-    expect(trigger().className).toContain("text-stale")
-    expect(within(trigger()).getByText("Missing")).toBeTruthy()
-    expect(trigger().getAttribute("aria-label")).toBe("Document NK_Resume.pdf is missing. Pick another or upload it again.")
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document NK_Resume.pdf is missing. Pick another or upload it again."))
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     expect(menu.textContent).toContain("NK_Resume.pdf is no longer on this machine. Upload it again, or pick a sample.")
@@ -113,7 +114,7 @@ describe("DocumentControl", () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     serve({ sources: [], samples: [SAMPLE], app: { demo: true } })
     render(<DocumentControl />)
-    await waitFor(() => expect(trigger().className).toContain("bg-stale-wash"))
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toContain("is missing"))
     await waitFor(() => expect(requests.some((r) => r.url === "/api/settings/app")).toBe(true))
     await act(async () => {})
     fireEvent.keyDown(trigger(), { key: "Enter" })
@@ -122,7 +123,7 @@ describe("DocumentControl", () => {
     )
   })
 
-  it("gives focus back to the button that opened the menu from a page, not the header trigger", async () => {
+  it("gives focus back to the button that opened the menu from a page, not the control's trigger", async () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     render(
@@ -133,7 +134,7 @@ describe("DocumentControl", () => {
         </button>
       </>,
     )
-    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: chunking-primer.pdf. Change it."))
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now chunking-primer.pdf."))
     const opener = screen.getByRole("button", { name: "Change" })
     opener.focus()
     fireEvent.click(opener)
@@ -143,7 +144,7 @@ describe("DocumentControl", () => {
     await waitFor(() => expect(document.activeElement).toBe(opener))
   })
 
-  it("gives focus back to the header trigger when the trigger opened the menu", async () => {
+  it("gives focus back to the trigger when the trigger opened the menu", async () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     render(
@@ -183,29 +184,25 @@ describe("DocumentControl", () => {
     await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe("34".repeat(32)))
   })
 
-  it("shows an upload started on the first-visit card in the bar too", async () => {
+  it("shows an upload started on the first-visit card in the control too", async () => {
     serve({ sources: [], samples: [SAMPLE] })
     holdUpload = true
-    render(
-      <>
-        <DocumentControl />
-        <FirstRun />
-      </>,
-    )
+    // The first-visit card holds the control itself.
+    render(<FirstRun />)
     const inputs = screen.getAllByLabelText("Upload a PDF file")
     fireEvent.change(inputs[inputs.length - 1], { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Uploading fresh.pdf"))
     expect(trigger().getAttribute("aria-busy")).toBe("true")
     await act(async () => releaseUpload())
-    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: fresh.pdf. Change it."))
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now fresh.pdf."))
   })
 
-  it("moves a sample saved with an old fingerprint to its current copy, never amber, and the menu says so in status tone", async () => {
+  it("moves a sample saved with an old fingerprint to its current copy, never missing, and the menu says so in status tone", async () => {
     stored("ab".repeat(32), "chunking-primer.pdf")
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
     await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA))
-    expect(trigger().className).not.toContain("bg-stale-wash")
+    expect(trigger().getAttribute("aria-label")).not.toContain("missing")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     const note = within(menu).getByText("The sample chunking-primer.pdf was updated, so this page now uses its current copy.")
@@ -218,22 +215,14 @@ describe("DocumentControl", () => {
     serve({ sources: never, samples: never })
     render(<DocumentControl />)
     await act(async () => {})
-    expect(trigger().className).not.toContain("bg-stale-wash")
-    expect(trigger().getAttribute("aria-label")).toBe("Document: NK_Resume.pdf. Change it.")
+    expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now NK_Resume.pdf.")
   })
 
   it("reads Pick a document when there is none", async () => {
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Pick a document"))
-    expect(within(trigger()).getByText("Pick a document").className).toContain("text-fg-muted")
-  })
-
-  it("gives the trigger the full width below md and caps it at 360 px from md", () => {
-    serve({ sources: [], samples: [] })
-    render(<DocumentControl />)
-    const c = trigger().className.split(/\s+/)
-    for (const k of ["h-row", "w-full", "md:w-auto", "md:max-w-[240px]", "xl:max-w-[360px]", "rounded-control", "border-hairline"]) expect(c).toContain(k)
+    expect(trigger().textContent).toBe("Pick a document")
   })
 
   it("picks an upload without a request, and a sample through the sample endpoint", async () => {
@@ -271,7 +260,7 @@ describe("DocumentControl", () => {
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
     fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
-    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Document: fresh.pdf. Change it."))
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now fresh.pdf."))
     expect(documentOf(readStoredGraph(registry))?.sha).toBe("34".repeat(32))
   })
 
@@ -283,7 +272,7 @@ describe("DocumentControl", () => {
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     await waitFor(() => expect(within(menu).getByTestId("upload-limits").textContent).toBe("PDF only, up to 10 MB and 20 pages."))
-    expect(menu.textContent).toContain("Every page uses this document. Uploads on the demo are private to this browser and expire.")
+    expect(menu.textContent).toContain("The pipeline runs on this document. Uploads on the demo are private to this browser and expire.")
   })
 
   it("says PDF only when running locally", async () => {
@@ -316,19 +305,11 @@ describe("DocumentControl", () => {
     expect(await screen.findByRole("menu")).toBeTruthy()
   })
 
-  it("as a Change link, names the document in its accessible name", async () => {
-    stored(SAMPLE_SHA, "chunking-primer.pdf")
-    serve({ sources: [UP], samples: [SAMPLE] })
-    render(<DocumentControl variant="link" />)
-    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now chunking-primer.pdf."))
-    expect(trigger().textContent).toBe("Change")
-  })
-
   it("with its own document and onChoose, a pick goes to the page and the pipeline on Build stays", async () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     const chosen: unknown[] = []
-    render(<DocumentControl variant="link" value={{ sha: UP.sha, filename: UP.filename }} onChoose={(d) => void chosen.push(d)} foot="Trying another document does not change a saved pipeline." />)
+    render(<DocumentControl value={{ sha: UP.sha, filename: UP.filename }} onChoose={(d) => void chosen.push(d)} foot="Trying another document does not change a saved pipeline." />)
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     await waitFor(() => expect(within(menu).getByRole("menuitemradio", { name: /my-notes\.pdf/ }).getAttribute("aria-checked")).toBe("true"))
@@ -345,7 +326,7 @@ describe("DocumentControl", () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [], samples: [SAMPLE] })
     const chosen: unknown[] = []
-    render(<DocumentControl variant="link" value={null} onChoose={(d) => void chosen.push(d)} />)
+    render(<DocumentControl value={null} onChoose={(d) => void chosen.push(d)} />)
     fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(chosen).toEqual([{ sha: "34".repeat(32), filename: "fresh.pdf" }]))
     expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA)

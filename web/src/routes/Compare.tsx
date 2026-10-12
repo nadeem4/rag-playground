@@ -20,6 +20,8 @@ import { Overview, type OverviewRow } from "@/components/compare/Overview"
 import { RecipeStatus } from "@/components/compare/RecipeStatus"
 import { RetrieveEvidence } from "@/components/compare/RetrieveEvidence"
 import { ValueEditor } from "@/components/compare/ValueEditor"
+import { DocumentControl } from "@/components/DocumentControl"
+import { DocumentItem } from "@/components/DocumentItem"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { CONTROL } from "@/components/fields/types"
@@ -113,8 +115,8 @@ export function Compare() {
 }
 
 /**
- * Reads the working graph as a store, so a document chosen in the header's
- * bar on this page re-renders the comparison on it, with no reload.
+ * Reads the working graph as a store, so a document chosen on the Document
+ * line on this page re-renders the comparison on it, with no reload.
  */
 /** The open experiment, as page state: its id and name, and what it holds as saved, to tell an edit. */
 export interface OpenExperiment {
@@ -170,7 +172,7 @@ function ComparePage({ registry }: { registry: Registry }) {
     window.addEventListener("popstate", onPop)
     return () => window.removeEventListener("popstate", onPop)
   }, [])
-  /** Open a saved experiment: its step, its recipes on the cards, and its document in the bar. */
+  /** Open a saved experiment: its step, its recipes on the cards, and its document. */
   const openExperiment = (e: SavedExperiment) => {
     const node = graph?.nodes.find((n) => n.stage === e.stage)
     if (!graph || !node) {
@@ -509,7 +511,7 @@ function Sweep({
   const labels = variantLabels(submitted.variants, registry, target.stage)
   const upstream = order.filter((n) => n.stage !== "source" && ancestors(graph, target.id, registry).has(n.id) && n.stage !== "query")
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
-  // The document is the header bar's. Missing or none blocks a run; a new one leaves the results on the old.
+  // The document is the working pipeline's, changed on the Document line. Missing or none blocks a run; a new one leaves the results on the old.
   const { status: docStatus } = useDocument()
   const noDocument = needsDocument(docStatus)
 
@@ -943,6 +945,12 @@ function Sweep({
       <div ref={scroller} className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="flex min-w-0 flex-col gap-1 px-3 pt-3 pb-2">
           <h1 className="text-xl font-semibold">Compare</h1>
+          {/* Compare works on a document first: it is named once, above the recipes, with a way to change it. */}
+          <div data-testid="document-line" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-xs text-fg-muted">Document</span>
+            {doc ? <DocumentItem doc={doc} size="compact" /> : null}
+            <DocumentControl foot="Every page uses this document." />
+          </div>
           {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
           <p className="text-sm text-fg-muted">
             The {verb} step over {filename ? <span className="font-mono">{filename}</span> : "no document yet"}

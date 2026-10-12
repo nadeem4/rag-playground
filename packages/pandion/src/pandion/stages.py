@@ -17,7 +17,7 @@ from typing import Any
 from pandion.payloads import ParsedDoc
 from pandion.plugins import discover
 from pandion.ports import RunContext, Stage
-from pandion.registry import registry
+from pandion.registry import UnknownTransformError, registry
 from pandion.results import StageResult
 
 
@@ -49,3 +49,58 @@ def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
         duration_ms=duration_ms,
         note=ctx.extras.get("meta", {}).get("note"),
     )
+
+
+def clean(doc: ParsedDoc | StageResult, *, steps: list[dict[str, Any]]) -> StageResult:
+    """Run cleaners on one parsed document, one after another, in the order given.
+
+    Each step names its cleaner with `use` and holds its settings by name, for
+    example `pandion.clean(doc, steps=[{"use": "drop_matching", "pattern": "Draft"}])`.
+    `doc` may be a `ParsedDoc` or the result of `pandion.parse`. The note has one
+    line per step, `name: what it removed`, in the order the steps ran.
+    """
+    discover()
+    current = doc.output if isinstance(doc, StageResult) else doc
+    planned = [_clean_step(n, step) for n, step in enumerate(steps, start=1)]
+    notes: list[str] = []
+    started = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
+        for cls, settings in planned:
+            ctx = RunContext(output_dir=Path(scratch), emit=lambda e: None, tmp=Path(scratch))
+            out = cls().apply({"doc": current}, settings, ctx)
+            current = out if isinstance(out, ParsedDoc) else ParsedDoc.model_validate(out)
+            note = ctx.extras.get("meta", {}).get("note")
+            if note:
+                notes.append(f"{cls.name}: {note}")
+    return StageResult(
+        stage=str(Stage.CLEAN),
+        transform=", ".join(cls.name for cls, _ in planned),
+        output=current,
+        duration_ms=(time.perf_counter() - started) * 1000,
+        note="\n".join(notes) or None,
+    )
+
+
+def _clean_step(number: int, step: dict[str, Any]):
+    """Look up one step's cleaner and check its settings, before anything runs."""
+    settings = dict(step)
+    use = settings.pop("use", None)
+    if not use:
+        raise ValueError(f"Clean step {number} does not say which cleaner to use.")
+    try:
+        cls = registry.get(Stage.CLEAN, use)
+    except UnknownTransformError as exc:
+        known = ", ".join(sorted(registry.all_for(Stage.CLEAN)))
+        raise UnknownTransformError(
+            f"Clean step {number} uses '{use}', which is not a cleaner. "
+            f"The cleaners are: {known}."
+        ) from exc
+    unknown = sorted(set(settings) - set(cls.config_model.model_fields))
+    if unknown:
+        names = ", ".join(f"'{name}'" for name in unknown)
+        known = ", ".join(cls.config_model.model_fields)
+        raise ValueError(
+            f"Clean step {number} ({use}) has no setting {names}. "
+            f"Its settings are: {known}."
+        )
+    return cls, cls.config_model(**settings)

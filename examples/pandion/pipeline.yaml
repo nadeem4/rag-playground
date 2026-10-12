@@ -1,0 +1,24 @@
+# An index for pandion: parse, clean, chunk, embed and store.
+# Run it with index_samples.py, or read docs/pandion.md for every field.
+
+# Sources, artifacts and the embedding cache are kept here.
+# A relative path is read from the folder this file is in.
+path: ./index
+
+models:
+  download: auto   # "never" loads only models that are already on disk
+  device: auto     # or cpu, cuda, mps
+
+index:
+  parse:
+    use: pdfium
+  clean:           # optional; the steps run in order
+    - use: dedupe_blocks
+  chunk:
+    use: recursive_character
+    chunk_size: 400
+    chunk_overlap: 40
+  embed:
+    use: qwen3-embedding-0.6b   # index_samples.py --embedder changes this
+  store:
+    use: lancedb

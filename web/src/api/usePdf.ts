@@ -41,8 +41,9 @@ function useLoad<T>(key: string | null, load: () => Promise<T>): Loaded<T> {
   return state.key === key ? state.value : { kind: "loading" }
 }
 
-export function usePageSizes(sha: string): Loaded<PdfPageSize[]> {
-  return useLoad(sha, () => once(pagesCache, sha, () => api.pages(sha)))
+/** `sha` null skips the request (a file the server no longer has, or a count already known). */
+export function usePageSizes(sha: string | null): Loaded<PdfPageSize[]> {
+  return useLoad(sha, () => once(pagesCache, sha!, () => api.pages(sha!)))
 }
 
 /** `text` null skips the search. */

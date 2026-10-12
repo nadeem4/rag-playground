@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pandion.payloads import ChunkSet, ParsedDoc
+from pandion.payloads import ChunkSet, ParsedDoc, Query
 from pandion.plugins import discover
 from pandion.ports import RunContext, Stage
 from pandion.registry import UnknownTransformError, registry
@@ -98,6 +98,46 @@ def chunk(doc: ParsedDoc | StageResult, *, use: str, **config: Any) -> StageResu
         stage=str(Stage.CHUNK),
         transform=use,
         output=out if isinstance(out, ChunkSet) else ChunkSet.model_validate(out),
+        duration_ms=(time.perf_counter() - started) * 1000,
+        note=ctx.extras.get("meta", {}).get("note"),
+    )
+
+
+def rewrite(
+    question: str,
+    *,
+    use: str,
+    doc: ParsedDoc | StageResult | None = None,
+    credentials: dict[str, str] | None = None,
+    **config: Any,
+) -> StageResult:
+    """Turn one question into the query retrieval searches with.
+
+    `use="text"` keeps the question as typed; `use="llm_rewrite"` asks a chat
+    model to restate it in the document's words, keeping the question as typed
+    in `Query.original`. `config` holds the step's settings by name, for
+    example `pandion.rewrite(q, use="llm_rewrite", style="keywords")`. `doc`, a
+    `ParsedDoc` or the result of `pandion.parse` or `pandion.clean`, lets the
+    model read the start of the document. A model's key goes in `credentials`
+    (for example `{"anthropic_api_key": ...}`), never in the settings.
+    """
+    discover()
+    cls, settings = _strategy(
+        Stage.QUERY, use, {**config, "text": question}, where="The query step"
+    )
+    if isinstance(doc, StageResult):
+        doc = doc.output
+    inputs = {} if doc is None else {"doc": doc}
+    with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
+        ctx = RunContext(output_dir=Path(scratch), emit=lambda e: None, tmp=Path(scratch))
+        if credentials:
+            ctx.extras["credentials"] = dict(credentials)
+        started = time.perf_counter()
+        out = cls().apply(inputs, settings, ctx)
+    return StageResult(
+        stage=str(Stage.QUERY),
+        transform=use,
+        output=Query.model_validate(out),
         duration_ms=(time.perf_counter() - started) * 1000,
         note=ctx.extras.get("meta", {}).get("note"),
     )

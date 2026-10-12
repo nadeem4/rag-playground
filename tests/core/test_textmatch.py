@@ -12,7 +12,7 @@ import pytest
 
 from api.questions import check_questions
 from core.payloads import Chunk, Hit, Output, Query, RetrievalResult
-from core.textmatch import normalise, normalise_with_offsets
+from core.textmatch import loosen, normalise, normalise_with_offsets
 from plugins.use_case.eval import EvalConfig, EvalUseCase, _normalise
 
 
@@ -76,3 +76,33 @@ def test_what_the_check_finds_the_score_finds(gold: str, document: str) -> None:
     out = _eval_hit(gold, document)
     assert out.payload["hit"] is True
     assert out.payload["match"] == ("exact" if row["status"] == "found" else "normalized")
+
+
+# --------------------------------------------------------------------------
+# loosen: the reworded tier
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Numbered, lettered and bulleted list markers are set aside.
+        ("benefit: 1. $2,000; or 2. the limit", "benefit: $2,000; or the limit"),
+        ("benefit:\n- $2,000; or\n- the limit", "benefit: $2,000; or the limit"),
+        ("ends when: a) repairs are done; b) settlement", "ends when: repairs are done; settlement"),
+        ("• one • two (3) three iv. four", "one two three four"),
+        # A letter standing alone, as a vertical watermark leaves it, is set aside.
+        ("D If an insured person dies", "if an insured person dies"),
+        ("or\n\nO 2. the Coverage", "or the coverage"),
+        # Everything else is the plain normalised text.
+        ("Coverage CC limit", "coverage cc limit"),
+        ("$2,000", "$2,000"),
+    ],
+)
+def test_loosen_sets_aside_list_markers_and_stray_letters_only(raw, expected):
+    assert loosen(raw) == expected
+
+
+def test_loosen_keeps_every_word_and_number_that_is_not_a_marker():
+    assert loosen("pay $2,000 within 60 days") == "pay $2,000 within 60 days"
+    assert loosen("pay $2,000 within 60 days") != loosen("pay $3,000 within 60 days")

@@ -14,6 +14,8 @@ can be shown back in the document's own wording.
 
 from __future__ import annotations
 
+import re
+
 #: Curly and typographic quotes fold to the straight ones.
 QUOTES = {
     "‘": "'", "’": "'", "‚": "'", "′": "'",
@@ -62,3 +64,24 @@ def normalise_with_offsets(text: str) -> tuple[str, list[int]]:
 def normalise(text: str) -> str:
     """The same passage as a parser with other habits would have written it."""
     return normalise_with_offsets(text)[0]
+
+
+#: A list marker standing alone: a bullet, or a number, letter or roman numeral
+#: followed by "." or ")", or held in brackets: "1.", "b)", "(3)", "iv.", "-".
+_MARKER = re.compile(r"^(?:[-•*–·▪‣◦]|\(?(?:\d{1,3}|[a-z]|[ivx]{1,4})[.)])$")
+
+
+def loosen(text: str) -> str:
+    """The normalised text with list markers and lone letters set aside.
+
+    The third and loosest tier, "reworded". A parser can rewrite a numbered list
+    as bullets ("1. $2,000; or" becomes "- $2,000; or"), and a vertical watermark
+    can drop single letters into a sentence ("D If an insured person dies"). Both
+    are layout, not words of the answer. Set aside on both sides of a comparison,
+    they cannot make different words match: every other word and number stays.
+    """
+    return " ".join(
+        word
+        for word in normalise(text).split(" ")
+        if not (_MARKER.match(word) or (len(word) == 1 and word.isalpha()))
+    )

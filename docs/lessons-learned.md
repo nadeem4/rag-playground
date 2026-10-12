@@ -212,14 +212,14 @@ This is a working document. We keep it up to date as we build RAG Playground. Ea
 
 ### A reworded passage counts as a miss
 
-Found 2026-10-12 on a sample auto insurance policy PDF.
+Found 2026-10-12 on a sample auto insurance policy PDF; fixed the same day.
 
-**The problem.** Search returned the right passage at rank 1, but the evaluation counted the question as a miss, and the miss trace said "Lost at Parse".
+**The problem.** Search returned the right passage at rank 1, but the evaluation counted the question as a miss, and the miss trace said "Lost at Parse". Two of ten questions on the policy scored this way.
 
-**Why it was broken.** Docling changed the text in two ways. It rewrote a numbered list ("1. $2,000; or 2. the Coverage CC limit") as bullets ("- $2,000; or"). It also mixed letters from a vertical "SAMPLE DOCUMENT" watermark into the sentences ("D If an insured person dies", "O 2. the Coverage"). The evaluation looks for the expected answer inside each piece: first exactly, then after a narrow clean-up that collapses spaces and line breaks, rejoins a word split by a hyphen at a line end, ignores capital letters, treats straight and curly quotes alike and expands ligatures such as "fi". There is deliberately no fuzzy matching, so a list marker that changed or a stray letter in the middle makes the passage "different text". The miss trace uses the same rule, so it blamed the parser.
+**Why it was broken.** Docling changed the text in two ways. It rewrote a numbered list ("1. $2,000; or 2. the Coverage CC limit") as bullets ("- $2,000; or"). It also mixed letters from a vertical "SAMPLE DOCUMENT" watermark into the sentences ("D If an insured person dies", "O 2. the Coverage"). The evaluation looked for the expected answer inside each piece: first exactly, then after a narrow clean-up that collapses spaces and line breaks, rejoins a word split by a hyphen at a line end, ignores capital letters, treats straight and curly quotes alike and expands ligatures such as "fi". A list marker that changed or a stray letter in the middle made the passage "different text". The miss trace used the same rule, so it blamed the parser.
 
-**What fixed it.** Not fixed yet. The proposed fix is to also ignore list markers and stray single letters when matching, and to report a new kind of result, "found but reworded", so it is counted apart from an exact or normalised match.
+**What fixed it.** A third, last matching tier called `reworded` (`loosen` in `core/textmatch.py`). It takes the normalised text and sets aside list markers ("1.", "b)", "(3)", "iv.", bullets) and letters standing alone, on both the expected answer and the piece, then compares again. The eval step (version 4, so scores made under the old rule are not reused), the miss trace and the "How it is scored" panel all use it, and a question found this way says so in its row.
 
-**Why the fix worked.** Not fixed yet. The idea is that list markers and watermark letters are layout noise, not words of the answer. Ignoring only them would match this passage while still refusing real near misses. Reporting it as its own kind keeps the score honest about how loose the match was.
+**Why the fix worked.** List markers and watermark letters are layout, not words of the answer. Setting them aside on both sides lets the policy's passage match, while every other word and number must still be there, in order: a passage with "$3,000" instead of "$2,000" is still a miss. Reporting `reworded` as its own kind keeps the score honest about how loose the match was.
 
-**What we learned.** A text-match evaluation measures the parser as well as the search. When search looks right but the score says miss, read the piece itself. Parsers reword more than spacing: list markers and watermarks change the text too.
+**What we learned.** A text-match evaluation measures the parser as well as the search. When search looks right but the score says miss, read the piece itself. Parsers reword more than spacing: list markers and watermarks change the text too. Loosen a match only by things you can name, apply it to both sides, and say when it was used.

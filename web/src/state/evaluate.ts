@@ -203,7 +203,13 @@ export function piecesWarning(pieces: number | null, topK: number, misses: reado
 export function reasonText(p: EvalPayload, topK: number): string {
   if (p.hit) {
     const where = typeof p.rank === "number" ? `Found in the ${ordinal(p.rank)} piece` : `Found in the top ${topK} pieces`
-    return `${where}, ${p.match === "normalized" ? "after ignoring spacing and capitals" : "word for word"}.`
+    const how =
+      p.match === "normalized"
+        ? "after ignoring spacing and capitals"
+        : p.match === "reworded"
+          ? "after setting aside list numbers, bullets and stray letters the parser changed"
+          : "word for word"
+    return `${where}, ${how}.`
   }
   if (typeof p.found_at === "number") return `Found ${ordinal(p.found_at)}, below the ${topK} ${topK === 1 ? "piece" : "pieces"} checked.`
   if (typeof p.returned === "number") {

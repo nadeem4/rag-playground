@@ -76,8 +76,8 @@ def test_declares_an_explicit_result_port_and_an_ambient_query():
     assert EvalUseCase.inputs["query"].ambient is True
 
 
-def test_version_is_3_so_reports_scored_by_an_older_rule_are_not_served():
-    assert EvalUseCase.version == "3"
+def test_version_is_4_so_reports_scored_by_an_older_rule_are_not_served():
+    assert EvalUseCase.version == "4"
 
 
 def test_is_cacheable_and_deterministic():
@@ -467,3 +467,48 @@ def test_the_table_sample_reads_full_recall_when_every_row_is_found():
         text = "A table\n" + q["gold_answer"] + "\n"
         payload = run(hit(text), gold=q["gold_answer"], golds=golds).payload
         assert (payload["golds_total"], payload["golds_found"]) == (1, 1)
+
+
+# --------------------------------------------------------------------------
+# a passage the parser reworded: list markers and stray letters
+# --------------------------------------------------------------------------
+
+#: A real insurance policy, as printed: a numbered list inside a sentence.
+POLICY_GOLD = (
+    "we will pay the least of the following as a funeral service expenses benefit: "
+    "1. $2,000; or 2. the Coverage CC limit of liability stated on the Policy Declarations; or"
+)
+
+#: The same passage as Docling wrote it: the numbers became bullets, and letters of
+#: a vertical "SAMPLE DOCUMENT" watermark landed in the text.
+POLICY_PIECE = (
+    "D If an insured person dies as the result of a covered auto accident, we will pay the least\n"
+    "of the following as a funeral service expenses benefit:\n\n- $2,000; or\n\n"
+    "- O 2. the Coverage CC limit of liability stated on the Policy Declarations; or"
+)
+
+
+def test_a_passage_whose_list_markers_and_stray_letters_changed_is_found_as_reworded():
+    payload = run(hit("Unrelated text about deductibles.", rank=1), hit(POLICY_PIECE, rank=2), gold=POLICY_GOLD).payload
+    assert payload["hit"] is True
+    assert payload["rank"] == 2
+    assert payload["match"] == "reworded"
+
+
+def test_exact_and_normalised_matches_still_win_over_reworded():
+    assert run(hit(POLICY_GOLD), gold=POLICY_GOLD).payload["match"] == "exact"
+    assert run(hit(POLICY_GOLD.upper()), gold=POLICY_GOLD).payload["match"] == "normalized"
+
+
+def test_reworded_never_matches_different_words():
+    """Only markers and lone letters are set aside: a changed amount is still a miss."""
+    piece = POLICY_PIECE.replace("$2,000", "$3,000")
+    payload = run(hit(piece), gold=POLICY_GOLD).payload
+    assert payload["hit"] is False
+    assert payload["match"] == "none"
+
+
+def test_found_at_uses_the_reworded_match_too():
+    payload = run(hit("Unrelated.", rank=1), hit(POLICY_PIECE, rank=2), gold=POLICY_GOLD, top_k=1).payload
+    assert payload["hit"] is False
+    assert payload["found_at"] == 2

@@ -607,7 +607,7 @@ export interface SampleQuestion {
   tags?: string[]
 }
 
-export type MatchKind = "exact" | "normalized" | "none"
+export type MatchKind = "exact" | "normalized" | "reworded" | "none"
 
 export interface EvalPayload {
   question: string

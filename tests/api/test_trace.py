@@ -162,6 +162,21 @@ def test_line_hyphens_and_case_are_matched_like_the_eval_step():
     assert t["steps"][0]["status"] == "pass"
 
 
+
+def test_list_markers_and_watermark_letters_are_matched_like_the_eval_step():
+    """A parser that turned "1." into a bullet and let in a watermark letter lost nothing."""
+    gold = "pay the least of: 1. $2,000; or 2. the Coverage CC limit"
+    reworded = "D We pay the least of:\n\n- $2,000; or\n\n- O 2. the Coverage CC limit"
+    t = run(
+        golds=[gold],
+        parse=StepInput("Docling", doc(reworded)),
+        cleans=[],
+        chunks=chunk_set(OTHER, reworded),
+        retrieve=result(reworded, OTHER),
+    )
+    assert t["lost_at"] is None
+    assert t["steps"][0]["status"] == "pass"
+
 # ------------------------------------------------------------------ route --
 
 

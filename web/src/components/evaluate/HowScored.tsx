@@ -66,6 +66,26 @@ export function HowScored() {
             />
           </li>
           <li>
+            <strong>If it is still not there, set aside list markers and stray letters:</strong> a parser can turn &ldquo;1.&rdquo; into a bullet,
+            and a watermark printed down the page can drop single letters into a sentence. Numbers and bullets that start a list item, and letters
+            standing alone, are set aside on both sides. Every other word must still be there, in order.
+            <Example
+              rows={[
+                ["Evidence", "we pay the least of: 1. $2,000; or 2. the limit"],
+                [
+                  "Piece 1",
+                  <>
+                    D <Hit>we pay the least of:</Hit>
+                    <br />- <Hit>$2,000; or</Hit>
+                    <br />- <Hit>2. the limit</Hit>
+                  </>,
+                ],
+              ]}
+              result="Found, after setting aside the bullet and the stray D"
+              ok
+            />
+          </li>
+          <li>
             <strong>The first piece that holds it gives the rank.</strong> Found in piece 2 means rank 2. If no top piece holds it, the question is
             missed, and the rest of what the search returned is checked so the miss can say how far down it was.
           </li>

@@ -5,8 +5,8 @@ playground runs on it. Every stage can be run and inspected on its own, and a wh
 index can be built from one config file. Each step's result is cached under a hash of its
 recipe, so the same files with the same settings are never processed twice.
 
-Coming next: search, rerank, ask and sync. This guide covers what exists today: parse,
-clean, chunk and the index.
+Coming next: search, rerank and ask. This guide covers what exists today: parse, clean,
+chunk, the index, and keeping an index up to date.
 
 ## Contents
 
@@ -14,6 +14,7 @@ clean, chunk and the index.
 - [Try one stage at a time](#try-one-stage-at-a-time)
 - [The pipeline file](#the-pipeline-file)
 - [Build an index](#build-an-index)
+- [Keep an index up to date](#keep-an-index-up-to-date)
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
@@ -85,7 +86,8 @@ the package reads.
 # pipeline.yaml
 
 # Required. Pandion keeps three folders here: sources/ (each file once),
-# artifacts/ (the cache) and embeddings/ (the embedding cache).
+# artifacts/ (the cache) and embeddings/ (the embedding cache), and after a
+# sync, manifest.json (what the index was built from).
 # A relative path is read from the folder this file is in.
 path: ./my-index
 
@@ -152,6 +154,54 @@ report.index.output                                              # the index fol
 Each `StageResult` also has `status` (`executed`, `cached` or `failed`), `artifact_id`
 (the recipe hash it is stored under), `duration_ms`, `note` and `error`. A step that
 fails is reported, not raised, and the steps after it are skipped.
+
+## Keep an index up to date
+
+When files in a folder are added, changed or removed, sync the index with the folder:
+
+```python
+from pandion import Pipeline
+
+report = Pipeline.from_file("pipeline.yaml").index.sync("docs/")
+print("added", report.added)
+print("changed", report.changed)
+print("removed", report.removed)
+print("unchanged", report.unchanged)
+```
+
+`sync` takes the same paths as `run` and names documents the same way. It keeps a file
+called `manifest.json` under the pipeline's `path`. For each document, the manifest
+records its name, a hash of its bytes and the id of its pieces. It also records a hash
+of the index settings and the id of the index.
+
+Each sync compares the folder with the manifest:
+
+- A new file is parsed, cleaned, chunked and added to the index.
+- A changed file is parsed again. Its old pieces leave the index and its new ones go in.
+- A removed file has its pieces taken out of the index.
+- An unchanged file costs nothing. Every one of its steps is read from the cache.
+
+A document is in `report.changed` when its bytes changed, or when its pieces came out
+different because the settings changed. `report.config_changed` is true when the index
+settings differ from the last sync. Then only the steps from the first changed setting
+on run again, as in [The cache](#the-cache).
+
+The index is built again on each sync rather than edited in place. That is cheap: the
+steps of unchanged files are cache hits, and their vectors come from the embedding
+cache. A sync of a folder where nothing changed only reads what is stored.
+
+After a sync that worked, the manifest is written and the previous index is deleted, so
+the pieces of a removed file are gone from the index. The report is also a full index
+report, so `report.documents`, `report.index` and `report.ok` work as in
+[Build an index](#build-an-index). If a step fails, the manifest and the previous index
+are left as they were, and the next sync tries again.
+
+A removed file's earlier steps stay in `artifacts/` and its bytes stay in `sources/`, so
+putting it back costs nothing. To remove every copy, delete the pipeline's `path` folder
+and sync again.
+
+When to sync is up to you: by hand, from a scheduled job, or from a script that watches
+the folder.
 
 ## The cache
 
@@ -232,4 +282,5 @@ model that is not on disk raises `pandion.models.ModelNotDownloaded`.
 
 [`examples/pandion/`](../examples/pandion) has a small pipeline file and a script that
 indexes two sample PDFs, prints each step's note, then runs again to show every step was
-reused. A test runs it, so it stays correct.
+reused. A second script syncs a folder, adds a sample, syncs again, removes it, and
+syncs once more. A test runs both, so they stay correct.

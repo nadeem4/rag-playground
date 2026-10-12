@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import math
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -35,6 +36,11 @@ PRIVATE_CACHE_CONTROL = "private, max-age=31536000, immutable"
 MAX_PIXELS = 25_000_000
 MIN_SCALE = 0.25
 
+#: pdfium is not thread-safe, and FastAPI runs these routes on a thread pool: a
+#: document's Preview asks for every page at once, and two renders at the same
+#: moment crash inside pdfium. One request uses pdfium at a time.
+PDFIUM_LOCK = threading.Lock()
+
 #: Characters pdfium reports for a hyphen it decided was a soft line-end break.
 _SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}
 
@@ -52,14 +58,15 @@ def source_path(request: Request, sha: str) -> Path:
 @contextmanager
 def _open(request: Request, sha: str) -> Iterator[pdfium.PdfDocument]:
     data = source_path(request, sha).read_bytes()
-    try:
-        doc = pdfium.PdfDocument(data)
-    except pdfium.PdfiumError as exc:
-        raise HTTPException(status_code=415, detail="source is not a PDF") from exc
-    try:
-        yield doc
-    finally:
-        doc.close()
+    with PDFIUM_LOCK:
+        try:
+            doc = pdfium.PdfDocument(data)
+        except pdfium.PdfiumError as exc:
+            raise HTTPException(status_code=415, detail="source is not a PDF") from exc
+        try:
+            yield doc
+        finally:
+            doc.close()
 
 
 def _page(doc: pdfium.PdfDocument, n: int) -> pdfium.PdfPage:

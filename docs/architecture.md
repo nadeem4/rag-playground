@@ -29,10 +29,14 @@ tests/       pytest: unit, plugin contract, API and integration tests
 
 The app depends on `pandion` through a uv workspace, so `uv sync` installs it from
 `packages/pandion/` and an edit there is live at once. The engine is moving into the
-package one stage at a time. The parsers have moved (`pandion/plugins/parse/`); what has
-not moved yet still lives in `plugins/` and `providers/`. A moved strategy's library is
-an extra of the package (`pandion[pdfium]`, `pandion[docling]`), imported only when the
-step runs, and the app installs the extras it uses. The app may import any public name from `pandion` but never a private one
+package one stage at a time. The parsers (`pandion/plugins/parse/`) and the cleaners
+(`pandion/plugins/clean/`) have moved; what has not moved yet still lives in `plugins/`
+and `providers/`. A moved strategy's library is an extra of the package
+(`pandion[pdfium]`, `pandion[docling]`), imported only when the step runs, and the app
+installs the extras it uses. The cleaners need only the standard library, so they come
+with the base install. A moved stage can also run on its own, with no pipeline and no
+cache: `pandion.parse` parses one file, and `pandion.clean` runs a list of cleaning steps
+on one document, in the order given. The app may import any public name from `pandion` but never a private one
 (a name starting with an underscore), and the package never imports the app. Two tests
 hold both rules: `tests/integration/test_package_boundary.py` and
 `packages/pandion/tests/test_boundaries.py`.

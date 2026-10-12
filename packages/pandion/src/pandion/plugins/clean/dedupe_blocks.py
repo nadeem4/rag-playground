@@ -36,7 +36,7 @@ from pandion.payloads import Element, EXCLUDED_FROM_MARKDOWN
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.clean import (
+from pandion.plugins.clean import (
     NOTHING_REMOVED,
     apply_edits,
     as_parsed_doc,

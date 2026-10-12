@@ -36,6 +36,13 @@ describe("the pipelines Evaluate can score", () => {
     expect(starterEdited.find((c) => c.id === ON_BUILD)).toMatchObject({ label: "the pipeline on Build", key: "working" })
   })
 
+  it("lists the Starter on another document as the unsaved pipeline on Build, and opens on it", () => {
+    const upload = { sha: "c".repeat(64), filename: "my-notes.pdf" }
+    const choices = pipelineChoices({ starter, saved: [], registry: R, working: withDocument(starter.graph, upload), currentId: STARTER_ID })
+    expect(choices.find((c) => c.id === ON_BUILD)).toMatchObject({ documents: [upload], label: "the pipeline on Build" })
+    expect(defaultChoice(choices, STARTER_ID)).toBe(ON_BUILD)
+  })
+
   it("leaves out the pipeline on Build when it has no document", () => {
     expect(pipelineChoices({ starter, saved: [], registry: R, working: initialGraph(R), currentId: null }).map((c) => c.id)).toEqual([STARTER_ID])
   })

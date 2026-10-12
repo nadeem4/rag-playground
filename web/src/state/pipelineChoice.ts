@@ -2,7 +2,7 @@ import type { Registry } from "@/api/types"
 
 import { documentOf, documentsOf, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
-import { isEdited, STARTER_ID, usableGraph, type SavedPipeline } from "./pipelines"
+import { isUnsaved, STARTER_ID, usableGraph, type SavedPipeline } from "./pipelines"
 import type { StarterPipeline } from "./starter"
 
 /**
@@ -49,7 +49,8 @@ export function pipelineChoices({
   for (const p of saved) out.push({ id: p.id, name: p.name, label: p.name, kind: "saved", graph: usableGraph(p, registry), documents: p.documents, key: p.id })
   if (working && documentOf(working)) {
     const current = currentId === STARTER_ID ? starter : (saved.find((p) => p.id === currentId) ?? null)
-    if (!current || isEdited(current, working)) {
+    // The Starter on the visitor's own document is unsaved work too, even though Build does not call it edited.
+    if (isUnsaved(current, working)) {
       const own = current && current.id !== STARTER_ID ? current : null
       out.push({
         id: ON_BUILD,

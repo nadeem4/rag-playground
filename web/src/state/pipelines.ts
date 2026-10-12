@@ -77,7 +77,11 @@ const docList = (listed: unknown): DocRef[] | null =>
 export function asPipeline(raw: unknown): SavedPipeline | null {
   if (!isPipeline(raw)) return null
   const { id, name, graph, savedAt } = raw
-  return { id, name, graph, documents: docList((raw as { documents?: unknown }).documents) ?? documentsOf(graph), savedAt }
+  const own = documentsOf(graph)
+  const listed = docList((raw as { documents?: unknown }).documents)
+  // The graph's source node is what runs: a list that disagrees with it is not trusted.
+  const documents = listed && (!own[0] || listed[0]?.sha === own[0].sha) ? listed : own
+  return { id, name, graph, documents, savedAt }
 }
 
 export function readPipelines(): SavedPipeline[] {
@@ -272,6 +276,15 @@ const byId = <T extends { id: string }>(xs: T[]) => [...xs].sort((a, b) => a.id.
 export function sameGraph(a: PipelineGraph, b: PipelineGraph): boolean {
   const edges = (g: PipelineGraph) => [...g.edges].map((e) => `${e.src}>${e.dst}:${e.port}`).sort()
   return JSON.stringify(byId(a.nodes)) === JSON.stringify(byId(b.nodes)) && JSON.stringify(edges(a)) === JSON.stringify(edges(b))
+}
+
+/**
+ * Whether the working copy is work no saved pipeline holds: a new pipeline, a
+ * changed step, or another document, the Starter included. Evaluate lists such
+ * a copy as the pipeline on Build, and nothing replaces it without a word.
+ */
+export function isUnsaved(p: Pick<SavedPipeline, "id" | "graph" | "documents"> | null, working: PipelineGraph): boolean {
+  return !p || isEdited(p, working) || !sameDocuments(p.documents, documentsOf(working))
 }
 
 const toBase64Url = (s: string) =>

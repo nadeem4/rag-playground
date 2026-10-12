@@ -170,6 +170,16 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
     return null
   }
 
+  /** Change a step or the search settings: Build opens on the pipeline selected here, from Evaluate. */
+  function openSelected() {
+    if (!chosen?.graph) return
+    if (chosen.id !== ON_BUILD) {
+      storeGraph(withDocuments(chosen.graph, documents))
+      setCurrentId(chosen.kind === "build" ? null : chosen.id)
+    }
+    navigate("/build?from=evaluate")
+  }
+
   function openOnBuild(g: PipelineGraph) {
     storeGraph(withDocuments(g, documents))
     setCurrentId(null)
@@ -276,6 +286,8 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
             slot={slot}
             needsDocument={needsDocument(status)}
             onExplain={explain}
+            onOpenBuild={openSelected}
+            replacesUnsaved={chosen!.id !== ON_BUILD && choices.some((c) => c.id === ON_BUILD)}
           />
         )}
       </div>
@@ -316,6 +328,8 @@ function EvaluateBody({
   slot,
   needsDocument,
   onExplain,
+  onOpenBuild,
+  replacesUnsaved,
 }: {
   graph: PipelineGraph | null
   pipelineKey: string
@@ -325,6 +339,10 @@ function EvaluateBody({
   /** The bar's document is missing or not chosen: the run button waits for one. */
   needsDocument: boolean
   onExplain: () => void
+  /** Open the selected pipeline on Build. */
+  onOpenBuild: () => void
+  /** Opening it on Build would replace an unsaved pipeline there. */
+  replacesUnsaved: boolean
 }) {
   const source = graph?.nodes.find((n) => n.stage === "source")
   const sourceSha = String(source?.config.sha ?? "")
@@ -363,6 +381,8 @@ function EvaluateBody({
       slot={slot}
       needsDocument={needsDocument}
       onExplain={onExplain}
+      onOpenBuild={onOpenBuild}
+      replacesUnsaved={replacesUnsaved}
     />
   )
 }
@@ -411,6 +431,8 @@ function Evaluation({
   slot,
   needsDocument,
   onExplain,
+  onOpenBuild,
+  replacesUnsaved,
 }: {
   registry: Registry
   graph: PipelineGraph
@@ -424,6 +446,8 @@ function Evaluation({
   /** The bar's document is missing or not chosen: the run button waits for one. */
   needsDocument: boolean
   onExplain: () => void
+  onOpenBuild: () => void
+  replacesUnsaved: boolean
 }) {
   const topKId = useId()
   const questionsId = useId()
@@ -781,9 +805,9 @@ function Evaluation({
               {s.label}: <strong className="font-semibold text-fg">{s.name}</strong>, <span className="font-mono">{s.transform}</span>
             </span>
           ))}
-          <a href="/build" className="inline-flex items-center text-primary underline underline-offset-4">
+          <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center underline")} onClick={onOpenBuild}>
             Change a step on Build
-          </a>
+          </button>
         </p>
         <p data-testid="search-line" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
           <span>Search side:</span>
@@ -798,10 +822,15 @@ function Evaluation({
               {s.detail ? `, ${s.detail}` : null}
             </span>
           ))}
-          <a href="/build" className="inline-flex items-center text-primary underline underline-offset-4">
+          <button type="button" className={cn(LINK_BUTTON, "inline-flex items-center underline")} onClick={onOpenBuild}>
             Change the search settings
-          </a>
+          </button>
         </p>
+        {replacesUnsaved ? (
+          <p data-testid="replaces-unsaved" className="text-xs text-fg-muted">
+            Opening it on Build replaces the unsaved pipeline there.
+          </p>
+        ) : null}
       </div>
 
       <section aria-label="Score" className="flex flex-col gap-3">

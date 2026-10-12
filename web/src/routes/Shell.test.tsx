@@ -941,6 +941,19 @@ describe("Build is pipeline first", () => {
     expect(window.location.search).toBe("")
   })
 
+  it("Home's Try a sample keeps an unsaved pipeline on Build instead of replacing it", async () => {
+    const mine = setTransform(sampleGraph(TEST_REGISTRY, PRIMER), "chunk", "token_based", TEST_REGISTRY)
+    storeGraph(mine)
+    window.history.replaceState(null, "", "/build?starter=table-of-figures")
+    render(<Shell />)
+    await waitFor(() => expect(window.location.search).toBe(""))
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    expect(readStoredGraph(TEST_REGISTRY)!.nodes.find((n) => n.stage === "chunk")!.transform).toBe("token_based")
+    expect(readCurrentId()).toBeNull()
+    // The Starter is still there to pick.
+    expect(optionNames(picker())).toContain("Starter pipeline")
+  })
+
   it("from Evaluate's link: Back to Evaluate, and saving returns there with the new pipeline selected", async () => {
     const navigate = vi.fn()
     window.history.replaceState(null, "", "/build?from=evaluate")

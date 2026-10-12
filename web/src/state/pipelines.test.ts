@@ -236,6 +236,13 @@ describe("a pipeline owns its documents, as a list", () => {
     expect(readPipelines()[0].documents).toEqual([primer])
   })
 
+  it("trusts the graph's document when a stored list disagrees with it", () => {
+    const odd = { id: "odd12345", name: "Odd", graph: on(primer), documents: [table], savedAt: "2026-09-30T00:00:00Z" }
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([odd]))
+    resetPipelinesForTests()
+    expect(readPipelines()[0].documents).toEqual([primer])
+  })
+
   it("migrates an old pipeline with no document to an empty list", () => {
     const old = { id: "old12345", name: "Old", graph: g(), savedAt: "2026-09-30T00:00:00Z" }
     window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([old]))

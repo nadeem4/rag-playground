@@ -80,7 +80,8 @@ filename.
 Home (`/`) is the first page. It has:
 
 - a **Try a sample** button, which opens Build on the Starter pipeline with the default
-  sample, whatever was loaded before;
+  sample. An unsaved pipeline on Build is kept rather than replaced, and the Starter waits
+  in its picker;
 - a **Use your own PDF** button, which opens a file picker and opens Build once the upload
   is done. If the upload is refused, it says why under the buttons. One line under the
   buttons says what happens to your file: on the demo, the page and size limits and how
@@ -261,7 +262,8 @@ needs no key.
 
 Pick the pipeline first. The **Pipeline** picker lists **Ready to use** (the Starter
 pipeline, marked Ready-made), **Your pipelines**, and **On Build** when Build has a pipeline
-that is not saved (marked Not saved), then **Build your own…**. Arriving with nothing
+that is not saved (marked Not saved), then **Build your own…**. The Starter on a document
+of your own counts as not saved, so Evaluate scores it on your document. Arriving with nothing
 chosen, Evaluate opens on the Starter with its document and question set ready, so one
 press of **Evaluate** scores it. The **Documents** line under the picker names the
 pipeline's files. **Change** tries the pipeline on another document; a saved pipeline keeps
@@ -273,6 +275,10 @@ step (Parse, Clean, Chunk and Index on the index side, then Rewrite, Retrieve an
 starting from the selected pipeline. **Save and select** saves it and scores it next; with
 no name it asks for one. **Open on Build to watch each step** opens Build with those
 settings and documents, and says first when that replaces an unsaved pipeline there.
+
+**Change a step on Build** and **Change the search settings** open the selected pipeline on
+Build, with **Back to Evaluate**; when that replaces an unsaved pipeline there, the page says
+so first.
 
 When the sample's question set has questions planted to miss, the set line says how many:
 "2 questions are planted to miss. Open them after the run to see why."

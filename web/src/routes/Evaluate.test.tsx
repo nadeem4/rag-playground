@@ -317,15 +317,14 @@ describe("Evaluate", () => {
     expect(screen.getByTestId("recipe-line").textContent).toMatch(/Parse: Docling, docling/)
     expect(screen.getByTestId("recipe-line").textContent).toMatch(/Chunk: Recursive \(natural breaks\), recursive_character/)
     expect(screen.getByTestId("recipe-line").textContent).not.toMatch(/Retrieve/)
-    const change = within(screen.getByTestId("recipe-line")).getByRole("link", { name: "Change a step on Build" })
-    expect(change.getAttribute("href")).toBe("/build")
+    const change = within(screen.getByTestId("recipe-line")).getByRole("button", { name: "Change a step on Build" })
     expect(change.className).toContain("inline-flex")
     const search = screen.getByTestId("search-line").textContent!
     expect(search).toMatch(/^Search side:/)
     expect(search).toMatch(/Rewrite: None/)
     expect(search).toMatch(/Retrieve: Hybrid \(RRF\), hybrid_rrf, returns \d+/)
     expect(search).toMatch(/Rerank: None/)
-    expect(within(screen.getByTestId("search-line")).getByRole("link", { name: "Change the search settings" }).getAttribute("href")).toBe("/build")
+    expect(within(screen.getByTestId("search-line")).getByRole("button", { name: "Change the search settings" })).toBeTruthy()
   })
 
   it("uses only spacing steps the theme defines (0, 1, 2, 3, 4, 6, 8), since any other step compiles to nothing", async () => {
@@ -619,6 +618,38 @@ describe("Evaluate is pipeline first", () => {
     // Another pipeline brings its own documents back.
     choose(picker(), "Starter pipeline")
     await waitFor(() => expect(document.body.textContent).toMatch(/How often Starter pipeline finds the answer in chunking-primer\.pdf\./))
+  })
+
+  it("a visitor's own PDF on the Starter is the pipeline on Build: Evaluate lists it and opens on it", async () => {
+    // A fresh visitor on Build (the Starter) uploads a PDF with Change: the selection stays the Starter.
+    serve()
+    withUpload()
+    storeGraph(withDocument(sampleGraph(registry, SOURCE, "What are the two steps?"), { sha: UP.sha, filename: UP.filename }))
+    setCurrentId(STARTER_ID)
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(ON_BUILD))
+    expect(optionNames(picker())).toEqual(["Starter pipeline", "The pipeline on Build", "Build your own…"])
+    await waitFor(() => expect(document.body.textContent).toMatch(/How often the pipeline on Build finds the answer in my-notes\.pdf\./))
+  })
+
+  it("Change a step on Build opens the selected pipeline there, from Evaluate, and warns when that replaces unsaved work", async () => {
+    const saved = savePipeline("Token chunks", tokens())!.saved
+    setCurrentId(null)
+    storeGraph(setTransform(sampleGraph(registry, SOURCE), "chunk", "sentence_window", registry))
+    const navigate = vi.fn()
+    render(<Evaluate navigate={navigate} />)
+    await waitFor(() => expect(picked()).toBe(ON_BUILD))
+    // The pipeline on Build is already there: opening it replaces nothing.
+    expect(screen.queryByTestId("replaces-unsaved")).toBeNull()
+    choose(picker(), "Token chunks")
+    await waitFor(() => expect(screen.getByTestId("replaces-unsaved").textContent).toBe("Opening it on Build replaces the unsaved pipeline there."))
+    fireEvent.click(screen.getByRole("button", { name: "Change a step on Build" }))
+    expect(navigate).toHaveBeenCalledWith("/build?from=evaluate")
+    expect(readCurrentId()).toBe(saved.id)
+    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "chunk")!.transform).toBe("token_based")
+    navigate.mockClear()
+    fireEvent.click(screen.getByRole("button", { name: "Change the search settings" }))
+    expect(navigate).toHaveBeenCalledWith("/build?from=evaluate")
   })
 
   it("says how many questions are planted to miss", async () => {

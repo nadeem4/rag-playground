@@ -57,6 +57,8 @@ import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } 
 import {
   decodePipeline,
   droppedText,
+  isEdited,
+  isUnsaved,
   readCurrentId,
   readPipelines,
   sameGraph,
@@ -140,8 +142,19 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     starterApplied.current = true
     const asked = new URLSearchParams(window.location.search).get("starter")
     if (asked !== null) dropParam("starter")
-    const fresh = !documentOf(readStoredGraph(registry))
+    const stored = readStoredGraph(registry)
+    const doc = documentOf(stored)
+    const fresh = !doc
     if (!starter || (asked === null && !fresh)) return
+    if (stored && !fresh) {
+      // Try a sample never replaces unsaved work: the Starter stays in the picker instead. The Starter
+      // unedited on any sample is not work; on the visitor's own file it is.
+      const id = readCurrentId()
+      const current = id === STARTER_ID ? starter : (readPipelines().find((p) => p.id === id) ?? null)
+      const onSample = samples?.some((c) => c.sha === doc.sha) ?? false
+      const kept = current?.id === STARTER_ID ? isEdited(current, stored) || !onSample : isUnsaved(current, stored)
+      if (kept) return
+    }
     const on = asked !== null ? starterPipeline(registry, samples, asked) : starter
     if (!on) return
     setCurrentId(STARTER_ID)

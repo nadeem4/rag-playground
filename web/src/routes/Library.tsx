@@ -2,6 +2,7 @@ import { useRef, useState, type DragEvent } from "react"
 
 import { api, ApiError } from "@/api/client"
 import { useAppSettings } from "@/api/useDemo"
+import { DocumentItem } from "@/components/DocumentItem"
 import { SiteFooter } from "@/components/SiteFooter"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -380,6 +381,8 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
             {shown.map((item) => {
               const k = key(item)
               const state = stateOf(item)
+              // A pipeline owns a list of documents; an experiment has one.
+              const docs = item.kind === "pipeline" ? item.documents : item.doc ? [item.doc] : []
               return (
                 <li key={k} className="grid grid-cols-[44px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-b border-hairline px-1 py-3 md:grid-cols-[44px_minmax(0,1fr)_auto]">
                   <label className="grid min-h-[44px] cursor-pointer place-items-center self-start">
@@ -410,10 +413,12 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
                       <span className="min-w-0 break-words">{item.kind === "pipeline" ? pipelineSummary(item.pipeline.graph) : experimentSummary(item.experiment)}</span>
                       <span>{savedWhen(item.savedAt, now)}</span>
                     </div>
-                    {item.kind === "pipeline" && item.documents.length ? (
-                      <span data-testid="pipeline-documents" className="text-sm break-words text-fg-muted">
-                        Documents: <span className="font-mono">{item.documents.map((d) => d.filename).join(", ")}</span>
-                      </span>
+                    {docs.length ? (
+                      <div data-testid="item-documents" className="flex min-w-0 flex-col gap-2">
+                        {docs.map((d) => (
+                          <DocumentItem key={d.sha} doc={d} />
+                        ))}
+                      </div>
                     ) : null}
                     <DocLine item={item} state={state} demo={demo} />
                   </div>

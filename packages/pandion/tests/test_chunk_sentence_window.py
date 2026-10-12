@@ -11,8 +11,8 @@ from pydantic import ValidationError
 
 from pandion.artifacts import ArtifactType
 from pandion.ports import RunContext, Stage
-from plugins.chunk.sentence_window import SentenceWindowChunker
-from tests.plugins.test_chunk import DOCS, _doc, mixed_doc, run
+from pandion.plugins.chunk.sentence_window import SentenceWindowChunker
+from chunkdocs import DOCS, _doc, mixed_doc, run
 
 FIVE = "One is here. Two is here. Three is here. Four is here. Five is here."
 
@@ -51,9 +51,9 @@ def test_declares_its_ports_and_name():
 
 
 def test_listed_in_plugin_modules():
-    from plugins import PLUGIN_MODULES
+    from pandion.plugins import PLUGIN_MODULES
 
-    assert "plugins.chunk.sentence_window" in PLUGIN_MODULES
+    assert "pandion.plugins.chunk.sentence_window" in PLUGIN_MODULES
 
 
 def test_config_defaults():

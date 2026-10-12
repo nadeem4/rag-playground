@@ -21,7 +21,7 @@ from typing import Any
 
 from pandion.payloads import ChunkSet, RetrievalResult
 from pandion.textmatch import loosen
-from plugins.chunk import DocView
+from pandion.plugins.chunk import DocView
 from plugins.use_case.eval import _normalise
 
 #: How far apart the answer's words may be spread and still count as one

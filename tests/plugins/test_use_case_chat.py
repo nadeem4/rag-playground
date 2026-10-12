@@ -22,7 +22,7 @@ from pandion.artifacts import ArtifactType
 from pandion.payloads import Hit, Output, ParsedDoc, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from plugins.chunk.recursive_character import (
+from pandion.plugins.chunk.recursive_character import (
     RecursiveCharacterChunker,
     RecursiveCharacterConfig,
 )

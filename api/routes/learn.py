@@ -18,7 +18,7 @@ from fastapi import APIRouter
 from api import sample_set
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from plugins.chunk import DocView, count_tokens
+from pandion.plugins.chunk import DocView, count_tokens
 
 router = APIRouter()
 

@@ -1,9 +1,11 @@
 """Split text into sentences, as exact character ranges (I-19).
 
-Used by sentence-id grounding: every retrieved chunk is cut into sentences, each
-gets an id the model can cite, and a cited id maps straight back to a range of
-the chunk's text. So the ranges must be exact: `text[s:e]` is the sentence,
-trimmed of surrounding whitespace, in order and never overlapping.
+Used by two chunkers (`layout_blocks` and `sentence_window`), which cut only
+where a sentence ends, and by the app's sentence-id grounding: every retrieved
+chunk is cut into sentences, each gets an id the model can cite, and a cited id
+maps straight back to a range of the chunk's text. So the ranges must be exact:
+`text[s:e]` is the sentence, trimmed of surrounding whitespace, in order and
+never overlapping.
 
 Two passes. First the text is cut into *units* at structure: a blank line, and
 every line that is a list item, a table row or a heading. A list item or a table

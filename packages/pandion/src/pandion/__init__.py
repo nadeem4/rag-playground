@@ -6,8 +6,8 @@ private; the RAG Playground app may import every other name.
 """
 
 from pandion.results import StageResult
-from pandion.stages import clean, parse
+from pandion.stages import chunk, clean, parse
 
 __version__ = "0.0.1"
 
-__all__ = ["StageResult", "clean", "parse", "__version__"]
+__all__ = ["StageResult", "chunk", "clean", "parse", "__version__"]

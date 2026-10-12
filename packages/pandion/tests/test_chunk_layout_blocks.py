@@ -11,8 +11,8 @@ import pytest
 
 from pandion.artifacts import ArtifactType
 from pandion.ports import RunContext, Stage
-from plugins.chunk.layout_blocks import LayoutBlocksChunker
-from tests.plugins.test_chunk import DOCS, _doc, mixed_doc, run
+from pandion.plugins.chunk.layout_blocks import LayoutBlocksChunker
+from chunkdocs import DOCS, _doc, mixed_doc, run
 
 
 def _ctx(tmp_path) -> RunContext:
@@ -54,9 +54,9 @@ def test_declares_its_ports_and_name():
 
 
 def test_listed_in_plugin_modules():
-    from plugins import PLUGIN_MODULES
+    from pandion.plugins import PLUGIN_MODULES
 
-    assert "plugins.chunk.layout_blocks" in PLUGIN_MODULES
+    assert "pandion.plugins.chunk.layout_blocks" in PLUGIN_MODULES
 
 
 def test_config_defaults():

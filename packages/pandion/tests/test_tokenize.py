@@ -1,6 +1,6 @@
 import pytest
 
-from providers.tokenize import HeuristicTokenCounter, TokenCounter
+from pandion.tokenize import HeuristicTokenCounter, TokenCounter
 
 
 @pytest.fixture

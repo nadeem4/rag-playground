@@ -6,12 +6,12 @@ import pytest
 
 from pandion.payloads import Element, ParsedDoc
 from pandion.ports import RunContext
-from plugins.chunk.markdown_header import MarkdownHeaderChunker, MarkdownHeaderConfig
-from plugins.chunk.recursive_character import (
+from pandion.plugins.chunk.markdown_header import MarkdownHeaderChunker, MarkdownHeaderConfig
+from pandion.plugins.chunk.recursive_character import (
     RecursiveCharacterChunker,
     RecursiveCharacterConfig,
 )
-from plugins.chunk.token_based import TokenBasedChunker, TokenBasedConfig
+from pandion.plugins.chunk.token_based import TokenBasedChunker, TokenBasedConfig
 from pandion.plugins.clean.drop_matching import DropMatching, DropMatchingConfig
 from pandion.plugins.clean.header_footer_strip import HeaderFooterStrip, HeaderFooterStripConfig
 from plugins.index.lancedb_store import LanceDbIndex, LanceDbIndexConfig

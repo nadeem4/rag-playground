@@ -20,7 +20,7 @@ from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.chunk import (
+from pandion.plugins.chunk import (
     DocView,
     Span,
     build_chunk_set,

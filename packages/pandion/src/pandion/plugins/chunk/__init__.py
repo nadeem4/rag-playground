@@ -23,7 +23,7 @@ from typing import Any, Iterable, Sequence
 
 from pandion.ids import short_id
 from pandion.payloads import Chunk, ChunkSet, Element, ParsedDoc
-from providers.tokenize import HeuristicTokenCounter, TokenCounter
+from pandion.tokenize import HeuristicTokenCounter, TokenCounter
 
 #: A half-open `[start, end)` range of `DocView.text`.
 Span = tuple[int, int]

@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Sequence
 
-from plugins.use_case._sentences import split_sentences
+from pandion.text import split_sentences
 
 #: One marker, and a run of adjacent markers (spaces allowed between them).
 MARKER = re.compile(r"\[(\d+)\.(\d+)\]")

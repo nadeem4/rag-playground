@@ -251,7 +251,7 @@ def test_enum_labels_are_accepted():
 def test_nested_section_headers_give_a_two_level_heading_path():
     """With the hierarchy on, Docling sets SectionHeaderItem.level; the levels
     carry through to the heading path the chunkers read."""
-    from plugins.chunk import DocView
+    from pandion.plugins.chunk import DocView
 
     doc = _FakeDoc([
         _item("section_header", "EXPERIENCE", level=1),

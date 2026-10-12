@@ -33,7 +33,7 @@ from api.questions import (
 from api.routes.pages import source_path
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from plugins.chunk import DocView
+from pandion.plugins.chunk import DocView
 
 router = APIRouter()
 

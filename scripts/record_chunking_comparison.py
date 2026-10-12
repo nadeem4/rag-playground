@@ -146,7 +146,7 @@ def record() -> dict:
     from pandion.executor import run
     from pandion.registry import registry
     from pandion.storage import Store
-    from plugins.chunk import DocView
+    from pandion.plugins.chunk import DocView
     from plugins.source import upload
 
     plugins.discover()

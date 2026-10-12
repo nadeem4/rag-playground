@@ -142,7 +142,7 @@ def first_excerpt(text: str, passages: list[str]) -> str | None:
 
 
 def _measure(sample, parser: str, store, registry, run) -> dict:
-    from plugins.chunk import DocView
+    from pandion.plugins.chunk import DocView
 
     cfg = parse_config(parser, sample.name)
     questions = sample.questions()

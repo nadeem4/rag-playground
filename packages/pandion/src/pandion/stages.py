@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pandion.payloads import ParsedDoc
+from pandion.payloads import ChunkSet, ParsedDoc
 from pandion.plugins import discover
 from pandion.ports import RunContext, Stage
 from pandion.registry import UnknownTransformError, registry
@@ -77,6 +77,29 @@ def clean(doc: ParsedDoc | StageResult, *, steps: list[dict[str, Any]]) -> Stage
         output=current,
         duration_ms=(time.perf_counter() - started) * 1000,
         note="\n".join(notes) or None,
+    )
+
+
+def chunk(doc: ParsedDoc | StageResult, *, use: str, **config: Any) -> StageResult:
+    """Cut one parsed document into pieces with the chunker named `use`.
+
+    `config` holds the chunker's settings by name, as in its config model, for
+    example `pandion.chunk(doc, use="recursive_character", chunk_size=400)`.
+    `doc` may be a `ParsedDoc` or the result of `pandion.parse` or `pandion.clean`.
+    """
+    discover()
+    cls, settings = _strategy(Stage.CHUNK, use, config, where="The chunker")
+    current = doc.output if isinstance(doc, StageResult) else doc
+    started = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
+        ctx = RunContext(output_dir=Path(scratch), emit=lambda e: None, tmp=Path(scratch))
+        out = cls().apply({"doc": current}, settings, ctx)
+    return StageResult(
+        stage=str(Stage.CHUNK),
+        transform=use,
+        output=out if isinstance(out, ChunkSet) else ChunkSet.model_validate(out),
+        duration_ms=(time.perf_counter() - started) * 1000,
+        note=ctx.extras.get("meta", {}).get("note"),
     )
 
 

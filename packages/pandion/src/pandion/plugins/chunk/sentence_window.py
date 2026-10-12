@@ -22,8 +22,8 @@ from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.chunk import DocView, Span, build_chunk_set, normalize
-from plugins.use_case._sentences import split_sentences
+from pandion.plugins.chunk import DocView, Span, build_chunk_set, normalize
+from pandion.text import split_sentences
 
 _OVERLAP_TOO_BIG = "Overlap must be smaller than the number of sentences per chunk."
 

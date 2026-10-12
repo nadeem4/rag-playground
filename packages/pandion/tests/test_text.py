@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from plugins.use_case._sentences import split_sentences
+from pandion.text import split_sentences
 
 
 def sentences(text: str) -> list[str]:

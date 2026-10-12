@@ -7,12 +7,16 @@ p = Pipeline.from_file("pipeline.yaml")
 report = p.index.run("docs/")
 report.documents["guides/chunking.pdf"].stages["parse"].output   # a ParsedDoc
 report.index.output                                              # the index folder
+
+report = p.index.sync("docs/")      # later, after files were added, changed or removed
+report.added, report.changed, report.removed, report.unchanged
 ```
 
 Every step is cached by its recipe hash, so running the same files with the
 same config again only reads what is stored. Under the config's `path` Pandion
-keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store)
-and `embeddings/` (the embedding cache).
+keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store),
+`embeddings/` (the embedding cache) and, after a sync, `manifest.json` (see
+`pandion.manifest`).
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from pandion.config import PipelineConfig, load
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.graph import Edge, Graph, Node
+from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, ParsedDoc
 from pandion.plugins import discover
 from pandion.ports import Stage
@@ -59,6 +64,19 @@ class IndexReport:
         )
 
 
+@dataclass
+class SyncReport(IndexReport):
+    """One sync: the index run, and which document ids it added, changed,
+    removed or left unchanged since the last sync."""
+
+    added: list[str] = field(default_factory=list)
+    changed: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    unchanged: list[str] = field(default_factory=list)
+    #: The index settings differ from the last sync's.
+    config_changed: bool = False
+
+
 class Pipeline:
     """The parts of a pipeline file. For now, the index."""
 
@@ -90,8 +108,62 @@ class IndexPipeline:
         file is named by its file name. A step that fails is reported, not
         raised, and the steps after it are skipped.
         """
+        return self._index(self._documents(paths))
+
+    def sync(self, paths: str | Path | list[str | Path]) -> SyncReport:
+        """Bring the index in line with the files at `paths` now.
+
+        Reads `manifest.json` under the config's `path`, indexes the files the
+        same way as `run`, and says which documents were added, changed,
+        removed or left unchanged. A changed document is one with new bytes,
+        or whose pieces came out different because the settings changed.
+
+        The index is rebuilt, not edited in place, but every step whose inputs
+        and settings did not change is a cache hit, so a sync of an unchanged
+        folder only reads what is stored. After a sync that worked, the
+        manifest is written and the previous index is deleted from the store,
+        so the pieces of a removed or changed document are gone. After a sync
+        with a failed step, both are left as they were.
+        """
+        manifest_path = self.config.path / MANIFEST
+        before = Manifest.load(manifest_path)
+        documents = self._documents(paths)
+        report = self._index(documents)
+        recipe = recipe_hash(self.config.index)
+        after = Manifest(
+            index_recipe=recipe,
+            index_artifact=report.index.artifact_id,
+            documents={
+                doc_id: {
+                    "content_hash": file.sha,
+                    "chunk_set": report.documents[doc_id].stages["chunk"].artifact_id,
+                }
+                for doc_id, file in documents.items()
+            },
+        )
+        sync = SyncReport(
+            documents=report.documents,
+            index=report.index,
+            added=sorted(set(after.documents) - set(before.documents)),
+            changed=sorted(
+                d for d in after.documents if d in before.documents and after.documents[d] != before.documents[d]
+            ),
+            removed=sorted(set(before.documents) - set(after.documents)),
+            unchanged=sorted(d for d in after.documents if after.documents[d] == before.documents.get(d)),
+            config_changed=before.index_recipe is not None and before.index_recipe != recipe,
+        )
+        if sync.ok:
+            after.save(manifest_path)
+            if before.index_artifact and before.index_artifact != after.index_artifact:
+                self.store.delete(before.index_artifact)
+        return sync
+
+    def _documents(self, paths: str | Path | list[str | Path]) -> dict[str, SourceFile]:
+        """Every file at `paths`, kept in `sources/`, by document id."""
+        return {doc_id: self.sources.add(path) for doc_id, path in _files(paths)}
+
+    def _index(self, documents: dict[str, SourceFile]) -> IndexReport:
         discover()
-        documents = {doc_id: self.sources.add(path) for doc_id, path in _files(paths)}
         graph, roles = self.graph(documents)
         result = run(
             graph,

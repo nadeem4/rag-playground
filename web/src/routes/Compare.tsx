@@ -49,6 +49,8 @@ import {
   type PipelineGraph,
 } from "@/state/graph"
 import { chooseDocument, documentOf, useDocument, type DocRef } from "@/state/document"
+import { setCurrentId, STARTER_ID } from "@/state/pipelines"
+import { useStarter } from "@/state/starter"
 import {
   deleteExperiment,
   droppedText,
@@ -131,6 +133,14 @@ function ComparePage({ registry }: { registry: Registry }) {
   // The node under comparison: from the URL on arrival, then from the picker.
   const [wanted, setWanted] = useState<string | null>(() => new URLSearchParams(window.location.search).get("node"))
   const graph = useStoredGraph(registry)
+  // With no pipeline yet, Compare starts from the ready-made Starter on the default sample. It stays
+  // document-first: the bar then changes the document, and the Starter's steps stay.
+  const { starter } = useStarter(registry)
+  useEffect(() => {
+    if (graph || !starter) return
+    setCurrentId(STARTER_ID)
+    storeGraph(starter.graph)
+  }, [graph, starter])
   const [experiment, setExperiment] = useState<OpenExperiment | null>(null)
   // The recipes an experiment opened with, and a count that remounts the comparison on them.
   const [opening, setOpening] = useState<{ n: number; recipes: Variant[] } | null>(null)

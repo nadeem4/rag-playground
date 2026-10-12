@@ -304,21 +304,21 @@ describe("click to close, and scroll into view", () => {
 
     it("names the document and points to the bar, with nothing to edit when open", () => {
       const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), selected: true })
-      expect(card.textContent).toContain("report.pdf. Change it in the bar above.")
+      expect(card.textContent).toContain("report.pdf. Change it under Documents.")
       expect(within(card).queryByRole("textbox")).toBeNull()
       expect(within(card).queryByRole("button", { name: /^Transform/ })).toBeNull()
     })
 
     it("says there is none yet", () => {
       const card = renderCard({ node: source, title: "Document", transforms: transformsFor(R, "source") })
-      expect(card.textContent).toContain("None yet. Pick one in the bar above.")
+      expect(card.textContent).toContain("None yet. Pick one under Documents.")
     })
 
     it("names a missing file and says where to pick another", () => {
       const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), missing: true })
       expect(card.textContent).toContain("report.pdf")
-      expect(card.textContent).not.toContain("Change it in the bar above.")
-      expect(within(card).getByTestId("missing-file").textContent).toBe("Missing. Pick a document in the bar above.")
+      expect(card.textContent).not.toContain("Change it under Documents.")
+      expect(within(card).getByTestId("missing-file").textContent).toBe("Missing. Pick a document under Documents.")
     })
   })
 

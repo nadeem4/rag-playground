@@ -71,6 +71,7 @@ def parse_question_set(data: bytes, filename: str = "") -> dict[str, Any]:
         raise QuestionSetError(
             "the file has no questions in it; the template shows what one looks like"
         )
+    document = _one_document(document, questions, [label for label, _ in records])
     return {
         "format": fmt,
         "version": version,
@@ -163,6 +164,27 @@ def _question(label: str, record: dict, fmt: str) -> dict[str, Any]:
         "tags": _list(record.get("tags"), ","),
         "document": _one(record.get("document")),
     }
+
+
+def _one_document(document: str, questions: list[dict], labels: list[str]) -> str:
+    """The set's one document, written into every question that leaves it out.
+
+    A question's `document` says which document its evidence is in. A pipeline
+    runs on one document today, so a set covers one: the set's own `document`,
+    else the first a question names. A question naming another is refused,
+    naming its row. When pipelines take several documents, this check is what
+    goes; the field's shape stays.
+    """
+    document = document or next((q["document"] for q in questions if q["document"]), "")
+    for label, question in zip(labels, questions):
+        own = question["document"]
+        if own and document and own != document:
+            raise QuestionSetError(
+                f"{label}: its evidence is in {own}, but this set is for {document}. "
+                f"A set covers one document for now, so put {own}'s questions in a set of their own"
+            )
+        question["document"] = own or document
+    return document
 
 
 def _golds(record: dict, fmt: str) -> list[str]:

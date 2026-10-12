@@ -36,6 +36,7 @@ import {
   indexNode,
   infoFor,
   initialGraph,
+  readStoredGraph,
   removeNode,
   setConfig,
   setReranker,
@@ -49,17 +50,21 @@ import {
   useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
-import { useDocument } from "@/state/document"
+import { documentOf, useDocument } from "@/state/document"
+import { starterPipeline, useStarter } from "@/state/starter"
 import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
 import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   decodePipeline,
   droppedText,
+  isEdited,
+  isUnsaved,
   readCurrentId,
   readPipelines,
   sameGraph,
   savePipeline,
   setCurrentId,
+  STARTER_ID,
   usableGraph,
   usePipelines,
 } from "@/state/pipelines"
@@ -69,10 +74,12 @@ import {
  * the main pane, and the Ask panel docked at the right (or left) edge. The
  * graph is the state; all three render it.
  */
-export function Shell() {
+const goTo = (href: string) => window.location.assign(href)
+
+export function Shell({ navigate = goTo }: { navigate?: (href: string) => void } = {}) {
   const reg = useRegistry()
   if (reg.kind !== "ready") return <RegistryScreen state={reg} />
-  return <Build registry={reg.registry} />
+  return <Build registry={reg.registry} navigate={navigate} />
 }
 
 export function RegistryScreen({ state }: { state: ReturnType<typeof useRegistry> }) {
@@ -104,7 +111,15 @@ function blockedTitle(blocker: GraphNode): string {
   return `Fix the ${titleFor(blocker)} settings to run the pipeline.`
 }
 
-function Build({ registry }: { registry: Registry }) {
+/** Take one parameter off the address, keeping the rest. */
+function dropParam(name: string): void {
+  const params = new URLSearchParams(window.location.search)
+  params.delete(name)
+  const rest = params.toString()
+  window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
+}
+
+function Build({ registry, navigate }: { registry: Registry; navigate: (href: string) => void }) {
   // The working copy, a store every page reads (the header's Document control
   // too): whatever was last stored under its own key, else the graph of
   // whichever saved pipeline is selected (a session that starts with a
@@ -115,8 +130,36 @@ function Build({ registry }: { registry: Registry }) {
     const current = currentId ? readPipelines().find((p) => p.id === currentId) : undefined
     return (current ? usableGraph(current, registry) : null) ?? initialGraph(registry)
   })
-  // The document comes from the bar in the header. Missing or none blocks a run.
+  // The document is the pipeline's, changed on its Documents line. Missing or none blocks a run.
   const { status: docStatus } = useDocument()
+  const { starter, samples, unavailable: noStarter } = useStarter(registry)
+  // Opened from Evaluate's Build your own: Back to Evaluate, and a save goes back there.
+  const [fromEvaluate] = useState(() => new URLSearchParams(window.location.search).get("from") === "evaluate")
+  // Arriving fresh, or from Home's sample (`?starter=<sample>`), Build opens the Starter, ready to build.
+  const starterApplied = useRef(false)
+  useEffect(() => {
+    if (starterApplied.current || (!starter && !noStarter)) return
+    starterApplied.current = true
+    const asked = new URLSearchParams(window.location.search).get("starter")
+    if (asked !== null) dropParam("starter")
+    const stored = readStoredGraph(registry)
+    const doc = documentOf(stored)
+    const fresh = !doc
+    if (!starter || (asked === null && !fresh)) return
+    if (stored && !fresh) {
+      // Try a sample never replaces unsaved work: the Starter stays in the picker instead. The Starter
+      // unedited on any sample is not work; on the visitor's own file it is.
+      const id = readCurrentId()
+      const current = id === STARTER_ID ? starter : (readPipelines().find((p) => p.id === id) ?? null)
+      const onSample = samples?.some((c) => c.sha === doc.sha) ?? false
+      const kept = current?.id === STARTER_ID ? isEdited(current, stored) || !onSample : isUnsaved(current, stored)
+      if (kept) return
+    }
+    const on = asked !== null ? starterPipeline(registry, samples, asked) : starter
+    if (!on) return
+    setCurrentId(STARTER_ID)
+    storeGraph(on.graph)
+  }, [starter, noStarter, samples, registry])
   const noDocument = needsDocument(docStatus)
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -248,7 +291,7 @@ function Build({ registry }: { registry: Registry }) {
       if (existing) {
         setCurrentId(existing.id)
       } else {
-        const result = savePipeline(name, decoded.graph)
+        const result = savePipeline(name, decoded.graph, { documents: decoded.documents })
         if (result?.dropped) setBarNotice(droppedText(result.dropped))
         if (!result) {
           // Keeping the old selection would let "Save changes" overwrite it with this graph.
@@ -273,7 +316,7 @@ function Build({ registry }: { registry: Registry }) {
     setRunTarget(target)
     const source = graph.nodes.find((n) => n.stage === "source")
     if (source && !source.config.sha) {
-      setErrors((e) => ({ ...e, [source.id]: { message: "Pick a document in the bar above first." } }))
+      setErrors((e) => ({ ...e, [source.id]: { message: "Pick a document under Documents first." } }))
       selectCard(source.id)
       return
     }
@@ -402,7 +445,7 @@ function Build({ registry }: { registry: Registry }) {
         dock.open && dock.side === "left" && "lg:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
       )}
     >
-      <section aria-label="Pipeline" className="flex flex-col bg-surface md:min-h-0">
+      <section aria-label="Index pipeline" className="flex flex-col bg-surface md:min-h-0">
         {/* Grows rather than clipping: on a touch screen its buttons are 44px tall. */}
         <div className="flex min-h-row shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-hairline px-3 py-1">
           <h1 className="text-xl font-semibold">Index pipeline</h1>
@@ -428,6 +471,9 @@ function Build({ registry }: { registry: Registry }) {
         <PipelineBar
           graph={graph}
           registry={registry}
+          starter={starter}
+          fromEvaluate={fromEvaluate}
+          onSaved={fromEvaluate ? (id) => navigate(`/evaluate?pipeline=${encodeURIComponent(id)}`) : undefined}
           onLoad={(g) => {
             // Errors from the last run belong to the graph being replaced (M4).
             setErrors({})
@@ -452,7 +498,9 @@ function Build({ registry }: { registry: Registry }) {
           </p>
         )}
         {/* On a first visit the first-visit card already asks for a document. */}
-        {firstRun ? null : <DocumentNote action="build the index" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />}
+        {firstRun ? null : (
+          <DocumentNote action="build the index" where="under Documents" changed={sourceNode ? stale.has(sourceNode.id) : false} className="mx-3 mt-3" />
+        )}
         {/* A source blocker is the no-file case, which the first-visit card covers. Right after a
             sample loads, the Document card's old explanation can linger for a moment; no red flash. */}
         {blocker && !firstRun && blocker.stage !== "source" ? (
@@ -480,7 +528,11 @@ function Build({ registry }: { registry: Registry }) {
         {/* Keyed by the screen it holds: the column after a sample loads starts at the top,
             not at the first-visit card's scroll position. Below md the page scrolls as one. */}
         <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" data-scroll-box className="md:min-h-0 md:flex-1 md:overflow-y-auto">
-          {firstRun && sourceNode ? (
+          {firstRun && sourceNode && !noStarter ? (
+            <p role="status" className="p-3 text-sm text-fg-muted">
+              Getting the Starter pipeline ready
+            </p>
+          ) : firstRun && sourceNode ? (
             <FirstRun />
           ) : (
             <>

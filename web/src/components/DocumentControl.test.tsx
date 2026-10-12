@@ -315,4 +315,39 @@ describe("DocumentControl", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Pick a document" }))
     expect(await screen.findByRole("menu")).toBeTruthy()
   })
+
+  it("as a Change link, names the document in its accessible name", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    serve({ sources: [UP], samples: [SAMPLE] })
+    render(<DocumentControl variant="link" />)
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now chunking-primer.pdf."))
+    expect(trigger().textContent).toBe("Change")
+  })
+
+  it("with its own document and onChoose, a pick goes to the page and the pipeline on Build stays", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    serve({ sources: [UP], samples: [SAMPLE] })
+    const chosen: unknown[] = []
+    render(<DocumentControl variant="link" value={{ sha: UP.sha, filename: UP.filename }} onChoose={(d) => void chosen.push(d)} foot="Trying another document does not change a saved pipeline." />)
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    await waitFor(() => expect(within(menu).getByRole("menuitemradio", { name: /my-notes\.pdf/ }).getAttribute("aria-checked")).toBe("true"))
+    expect(menu.textContent).toContain("Trying another document does not change a saved pipeline.")
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /A primer on chunking/ }))
+    await waitFor(() => expect(chosen).toEqual([{ sha: SAMPLE_SHA, filename: "chunking-primer.pdf" }]))
+    expect(posts()).toEqual([{ url: "/api/sources/sample", method: "POST", body: { name: "chunking-primer" } }])
+    // Build's working copy is untouched.
+    expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA)
+    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "source")!.config.filename).toBe("chunking-primer.pdf")
+  })
+
+  it("with onChoose, an uploaded PDF goes to the page, not to the pipeline on Build", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    serve({ sources: [], samples: [SAMPLE] })
+    const chosen: unknown[] = []
+    render(<DocumentControl variant="link" value={null} onChoose={(d) => void chosen.push(d)} />)
+    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    await waitFor(() => expect(chosen).toEqual([{ sha: "34".repeat(32), filename: "fresh.pdf" }]))
+    expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA)
+  })
 })

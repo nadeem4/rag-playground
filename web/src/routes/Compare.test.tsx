@@ -12,7 +12,8 @@ import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Registry } from "@/api/types"
 import { chooseDocument, resetDocumentForTests } from "@/state/document"
 import { requestOpenExperiment, resetExperimentsForTests, saveExperiment } from "@/state/experiments"
-import { resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, terminalNode, transformsFor } from "@/state/graph"
+import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, terminalNode, transformsFor } from "@/state/graph"
+import { readCurrentId, resetPipelinesForTests, STARTER_ID } from "@/state/pipelines"
 
 import { Compare, seedVariants, VariantResult } from "./Compare"
 import { FakeResizeObserver } from "./fakeResizeObserver"
@@ -132,6 +133,7 @@ beforeEach(() => {
   window.sessionStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
+  resetPipelinesForTests()
   resetExperimentsForTests()
   vi.stubGlobal("EventSource", SilentEventSource)
   serve()
@@ -1024,10 +1026,33 @@ describe("the document in the bar", () => {
     expect((screen.getByRole("button", { name: "Run 3 recipes" }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it("says No pipeline to compare when there is no pipeline at all", async () => {
+  it("says No pipeline to compare when there is no pipeline at all and no Starter, because the samples cannot be read", async () => {
     window.localStorage.clear()
     render(<Compare />)
     expect(await screen.findByText("No pipeline to compare")).toBeTruthy()
+  })
+
+  it("with no pipeline yet, compares the Starter pipeline on the default sample", async () => {
+    window.localStorage.clear()
+    const card = {
+      name: "chunking-primer",
+      title: "A primer on chunking",
+      blurb: "b",
+      shows: "s",
+      stresses: "chunk",
+      pages: 6,
+      default: true,
+      filename: "chunking-primer.pdf",
+      sha: "cd".repeat(32),
+      question: "Why do chunk boundaries matter?",
+    }
+    serve({}, { "/api/sources": [], "/api/samples": [card] })
+    render(<Compare />)
+    await waitFor(() => expect(screen.getAllByRole("article").length).toBeGreaterThan(0))
+    expect(screen.queryByText("No pipeline to compare")).toBeNull()
+    expect(text()).toContain("chunking-primer.pdf")
+    expect(readCurrentId()).toBe(STARTER_ID)
+    expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "chunk")!.config).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
   })
 })
 

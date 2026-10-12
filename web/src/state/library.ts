@@ -1,10 +1,9 @@
 import type { SampleCard, Source } from "@/api/types"
 
-import { documentOf } from "./document"
 import { STAGE_VERB, type PipelineGraph } from "./graph"
 import { pipelineSteps } from "./evaluate"
 import { asIncomingExperiment, MAX_EXPERIMENTS, rawExperiment, type SavedExperiment } from "./libraryExperiments"
-import { isPipeline, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
+import { asPipeline, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
 
 /**
  * The Library page's arithmetic, kept pure so it is testable without a
@@ -15,13 +14,22 @@ import { isPipeline, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
 export type DocRef = { sha: string; filename: string }
 
 export type LibraryItem =
-  | { kind: "pipeline"; id: string; name: string; savedAt: string; doc: DocRef | null; pipeline: SavedPipeline }
+  | { kind: "pipeline"; id: string; name: string; savedAt: string; doc: DocRef | null; documents: DocRef[]; pipeline: SavedPipeline }
   | { kind: "experiment"; id: string; name: string; savedAt: string; doc: DocRef | null; experiment: SavedExperiment }
 
 /** Pipelines and experiments in one list, newest first. */
 export function libraryItems(pipelines: readonly SavedPipeline[], experiments: readonly SavedExperiment[]): LibraryItem[] {
   const items: LibraryItem[] = [
-    ...pipelines.map((p) => ({ kind: "pipeline" as const, id: p.id, name: p.name, savedAt: p.savedAt, doc: documentOf(p.graph), pipeline: p })),
+    ...pipelines.map((p) => ({
+      kind: "pipeline" as const,
+      id: p.id,
+      name: p.name,
+      savedAt: p.savedAt,
+      // The first document decides the item's state; every one is named.
+      doc: p.documents[0] ?? null,
+      documents: p.documents,
+      pipeline: p,
+    })),
     ...experiments.map((e) => ({ kind: "experiment" as const, id: e.id, name: e.name, savedAt: e.savedAt, doc: e.doc, experiment: e })),
   ]
   return items.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
@@ -176,9 +184,9 @@ export function parseImport(text: string): ParsedImport {
   let skipped = 0
   for (const raw of file.items as unknown[]) {
     const item = raw as { kind?: unknown } | null
-    if (item?.kind === "pipeline" && isPipeline(item)) {
-      const { id, name, graph, savedAt } = item as SavedPipeline
-      pipelines.push({ id, name, graph, savedAt })
+    const pipeline = item?.kind === "pipeline" ? asPipeline(item) : null
+    if (pipeline) {
+      pipelines.push(pipeline)
       continue
     }
     if (item?.kind === "experiment" && asIncomingExperiment(item)) {

@@ -52,7 +52,7 @@ export function FirstRun() {
     <section aria-label="Document" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold">Document</h3>
-        <p className="m-0 text-sm text-fg-muted">Or pick one in the bar above.</p>
+        <p className="m-0 text-sm text-fg-muted">Or pick one under Documents.</p>
       </div>
       {demo ? (
         <p data-testid="demo-note" className="text-sm text-fg-muted">

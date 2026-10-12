@@ -61,6 +61,19 @@ describe("DocumentNote", () => {
     )
   })
 
+  it("on Build and Evaluate, points at the Documents line instead of the bar", async () => {
+    stored("ef".repeat(32), "NK_Resume.pdf")
+    render(<DocumentNote action="build the index" where="under Documents" />)
+    const note = await screen.findByTestId("document-note")
+    expect(note.textContent).toBe("NK_Resume.pdf is missing. Pick a document under Documents to build the index.Pick a document")
+  })
+
+  it("judges a page's own document when given one, not the pipeline on Build", async () => {
+    stored(SAMPLE.sha, SAMPLE.filename)
+    render(<DocumentNote action="run the evaluation" where="under Documents" doc={{ sha: "ef".repeat(32), filename: "gone.pdf" }} />)
+    await waitFor(() => expect(screen.getByTestId("document-note").textContent).toContain("gone.pdf is missing."))
+  })
+
   it("asks for a document when there is none", async () => {
     render(<DocumentNote action="run the evaluation" />)
     const note = await screen.findByTestId("document-note")

@@ -480,3 +480,47 @@ def test_a_source_that_is_not_a_pdf_says_so(client):
     )
     got = post_set(client, r.json()["sha"], one_json("hello there"), "q.json")
     assert got.status_code == 415
+
+
+def test_a_question_without_a_document_gets_the_sets_only_document():
+    blob = json.dumps(
+        {
+            "document": "handbook.pdf",
+            "questions": [
+                {"question": "q?", "gold_answers": ["g."]},
+                {"question": "r?", "gold_answers": ["h."], "document": "handbook.pdf"},
+            ],
+        }
+    )
+    out = parse_question_set(blob.encode(), "q.json")
+    assert [q["document"] for q in out["questions"]] == ["handbook.pdf", "handbook.pdf"]
+
+
+def test_a_set_without_a_document_of_its_own_takes_the_one_its_questions_name():
+    blob = json.dumps(
+        [
+            {"question": "q?", "gold_answers": ["g."], "document": "handbook.pdf"},
+            {"question": "r?", "gold_answers": ["h."]},
+        ]
+    )
+    out = parse_question_set(blob.encode(), "q.json")
+    assert out["document"] == "handbook.pdf"
+    assert [q["document"] for q in out["questions"]] == ["handbook.pdf", "handbook.pdf"]
+
+
+def test_a_set_covers_one_document_for_now_and_names_the_question_that_does_not():
+    blob = json.dumps(
+        {
+            "document": "handbook.pdf",
+            "questions": [
+                {"question": "q?", "gold_answers": ["g."]},
+                {"question": "r?", "gold_answers": ["h."], "document": "annex.pdf"},
+            ],
+        }
+    )
+    with pytest.raises(QuestionSetError) as err:
+        parse_question_set(blob.encode(), "q.json")
+    assert str(err.value) == (
+        "question 2: its evidence is in annex.pdf, but this set is for handbook.pdf. "
+        "A set covers one document for now, so put annex.pdf's questions in a set of their own"
+    )

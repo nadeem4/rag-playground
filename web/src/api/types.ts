@@ -603,6 +603,8 @@ export interface SampleQuestion {
   gold_answers?: string[]
   /** The expected answer in words, shown beside the evidence and never scored. */
   answer?: string
+  /** What the question tests, such as "designed to miss: footer" for a planted miss. */
+  tags?: string[]
 }
 
 export type MatchKind = "exact" | "normalized" | "none"
@@ -653,7 +655,7 @@ export interface GoldQuestion {
   gold_answers: string[]
   answer: string
   tags: string[]
-  /** Accepted and stored now, ignored while the pipeline takes one document. */
+  /** The document its evidence is in; empty means the set's only document. Carried, not yet scored on. */
   document: string
 }
 

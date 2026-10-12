@@ -1,11 +1,15 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { initialGraph, setTransform } from "./graph"
+import { withDocument } from "./document"
+import { initialGraph, setConfig, setTransform } from "./graph"
 import {
   MAX_PIPELINES,
   clearPipelines,
   importPipelines,
+  isEdited,
+  sameSteps,
+  STARTER_ID,
   decodePipeline,
   deletePipeline,
   encodePipeline,
@@ -139,12 +143,12 @@ describe("the share link codec", () => {
     const graph = setTransform(g(), "chunk", "token_based", R)
     const code = encodePipeline("Token chunks", graph)
     expect(code).toMatch(/^[A-Za-z0-9_-]+$/)
-    expect(decodePipeline(code, R)).toEqual({ name: "Token chunks", graph })
+    expect(decodePipeline(code, R)).toEqual({ name: "Token chunks", graph, documents: [] })
   })
 
   it("refuses garbage, a wrong version, and a graph with an unknown transform", () => {
     expect(decodePipeline("not base64url!", R)).toBeNull()
-    expect(decodePipeline(btoa(JSON.stringify({ v: 2, name: "x", graph: g() })).replace(/=+$/, ""), R)).toBeNull()
+    expect(decodePipeline(btoa(JSON.stringify({ v: 3, name: "x", graph: g() })).replace(/=+$/, ""), R)).toBeNull()
     const foreign = { ...g(), nodes: g().nodes.map((n) => (n.stage === "chunk" ? { ...n, transform: "semantic" } : n)) }
     expect(decodePipeline(encodePipeline("x", foreign), R)).toBeNull()
   })
@@ -156,7 +160,7 @@ describe("the share link codec", () => {
 })
 
 describe("importing and clearing for the Library", () => {
-  const saved = (id: string, savedAt: string) => ({ id, name: `P ${id}`, graph: g(), savedAt })
+  const saved = (id: string, savedAt: string) => ({ id, name: `P ${id}`, graph: g(), documents: [], savedAt })
 
   it("merges by id and never duplicates", () => {
     const mine = savePipeline("Mine", g())!.saved
@@ -199,5 +203,92 @@ describe("importing and clearing for the Library", () => {
     clearPipelines()
     expect(readPipelines()).toEqual([])
     expect(readCurrentId()).toBeNull()
+  })
+})
+
+describe("a pipeline owns its documents, as a list", () => {
+  const primer = { sha: "a".repeat(64), filename: "chunking-primer.pdf" }
+  const table = { sha: "b".repeat(64), filename: "table-of-figures.pdf" }
+  const on = (doc: typeof primer) => withDocument(g(), doc)
+
+  it("saves the graph's document as a list of one", () => {
+    const p = savePipeline("Mine", on(primer))!.saved
+    expect(p.documents).toEqual([primer])
+    expect(readPipelines()[0].documents).toEqual([primer])
+  })
+
+  it("saves the documents it is given, and points the graph at the first", () => {
+    const p = savePipeline("Mine", on(primer), { documents: [table] })!.saved
+    expect(p.documents).toEqual([table])
+    expect(p.graph.nodes.find((n) => n.stage === "source")?.config.sha).toBe(table.sha)
+  })
+
+  it("can save without changing which pipeline Build has selected", () => {
+    setCurrentId("other123")
+    savePipeline("From Evaluate", on(primer), { select: false })
+    expect(readCurrentId()).toBe("other123")
+  })
+
+  it("migrates old saved data with one document in the graph to a list of one, on read", () => {
+    const old = { id: "old12345", name: "Old", graph: on(primer), savedAt: "2026-09-30T00:00:00Z" }
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([old]))
+    resetPipelinesForTests()
+    expect(readPipelines()[0].documents).toEqual([primer])
+  })
+
+  it("trusts the graph's document when a stored list disagrees with it", () => {
+    const odd = { id: "odd12345", name: "Odd", graph: on(primer), documents: [table], savedAt: "2026-09-30T00:00:00Z" }
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([odd]))
+    resetPipelinesForTests()
+    expect(readPipelines()[0].documents).toEqual([primer])
+  })
+
+  it("migrates an old pipeline with no document to an empty list", () => {
+    const old = { id: "old12345", name: "Old", graph: g(), savedAt: "2026-09-30T00:00:00Z" }
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([old]))
+    resetPipelinesForTests()
+    expect(readPipelines()[0].documents).toEqual([])
+  })
+
+  it("updates the documents with the graph", () => {
+    const p = savePipeline("Mine", on(primer))!.saved
+    updatePipeline(p.id, on(table))
+    expect(readPipelines()[0].documents).toEqual([table])
+  })
+
+  it("imports old files without documents as a list of one", () => {
+    const r = importPipelines([{ id: "imp12345", name: "Imp", graph: on(primer), savedAt: "2026-09-30T00:00:00Z" } as never])!
+    expect(r.added).toBe(1)
+    expect(readPipelines()[0].documents).toEqual([primer])
+  })
+
+  it("share links carry the documents, and an old link without them still opens", () => {
+    const code = encodePipeline("Mine", on(primer))
+    expect(decodePipeline(code, R)?.documents).toEqual([primer])
+    const v1 = btoa(JSON.stringify({ v: 1, name: "Old link", graph: on(table) })).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_")
+    expect(decodePipeline(v1, R)).toMatchObject({ name: "Old link", documents: [table] })
+  })
+})
+
+describe("sameSteps and isEdited", () => {
+  const primer = { sha: "a".repeat(64), filename: "chunking-primer.pdf" }
+  const table = { sha: "b".repeat(64), filename: "table-of-figures.pdf" }
+  const query = (graph: ReturnType<typeof g>) => graph.nodes.find((n) => n.stage === "query")!.id
+
+  it("ignores the document and the question, not the steps", () => {
+    const a = withDocument(g(), primer)
+    expect(sameSteps(a, withDocument(g(), table))).toBe(true)
+    expect(sameSteps(a, setConfig(a, query(a), { text: "Another question?" }))).toBe(true)
+    expect(sameSteps(a, setTransform(a, "chunk", "token_based", R))).toBe(false)
+  })
+
+  it("a saved pipeline is edited by a step or by another document; the Starter only by a step", () => {
+    const graph = withDocument(g(), primer)
+    const saved = { id: "mine1234", graph, documents: [primer] }
+    const starter = { id: STARTER_ID, graph, documents: [primer] }
+    expect(isEdited(saved, graph)).toBe(false)
+    expect(isEdited(saved, withDocument(graph, table))).toBe(true)
+    expect(isEdited(starter, withDocument(graph, table))).toBe(false)
+    expect(isEdited(starter, setTransform(graph, "chunk", "token_based", R))).toBe(true)
   })
 })

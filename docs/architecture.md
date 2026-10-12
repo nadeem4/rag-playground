@@ -155,6 +155,16 @@ relative paths, so the same code works in development, where Vite on port 5173 p
 - **Keys.** A key typed in the app is sent as a header on runs, sweeps and key checks.
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
   storage; see [privacy.md](privacy.md).
+- **Pipelines and documents.** A saved pipeline is a name, a graph and a list of documents
+  (`web/src/state/pipelines.ts`). The graph's source node points at the first document, so
+  the run request, recipe hashes and cache keys are what they were. Pipelines stored, shared
+  or exported before the list existed get it on read, from the source node; share links are
+  version 2 and still read version 1. The ready-made Starter pipeline
+  (`web/src/state/starter.ts`) is the default recipe `sampleGraph` builds, on the default
+  sample, and is never stored as a saved pipeline. `web/src/state/pipelineChoice.ts` lists
+  what Evaluate can score and picks the one it opens on. A question in a question set may
+  name its `document`; the server fills in the set's one document and refuses a set that
+  names two, so scoring several documents later needs no new file format.
 
 The app also has lessons, a guided walk through each step, but they are switched off
 (`LESSONS_ENABLED` in `web/src/state/lessons.ts`) while they are reworked.

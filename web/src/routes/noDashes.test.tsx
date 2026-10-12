@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
@@ -16,6 +16,7 @@ import { ArtifactInspector } from "@/components/inspectors/registry"
 import { sampleGraph, storeGraph } from "@/state/graph"
 
 import { Compare } from "./Compare"
+import { choose } from "@/components/ui/pickerTesting"
 import { Evaluate } from "./Evaluate"
 import { Shell } from "./Shell"
 
@@ -122,7 +123,9 @@ describe("no em-dashes or en-dashes in visible text", () => {
     window.localStorage.clear()
     serve([])
     render(<Shell />)
-    await waitFor(() => expect(visibleText()).toMatch(/Try a sample document/))
+    // A first visit opens the ready-made Starter pipeline on the default sample.
+    await waitFor(() => expect(visibleText()).toMatch(/Starter pipeline/))
+    await waitFor(() => expect(visibleText()).toMatch(/Documents/))
     expect(visibleText()).not.toMatch(DASH)
   })
 
@@ -148,6 +151,16 @@ describe("no em-dashes or en-dashes in visible text", () => {
     render(<Evaluate />)
     await waitFor(() => expect(visibleText()).toMatch(/questions? ready/))
     expect(visibleText()).toMatch(/1 question ready/)
+    expect(visibleText()).not.toMatch(DASH)
+  })
+
+  it("Evaluate, on a first visit, with Build your own open", async () => {
+    window.localStorage.clear()
+    serve([])
+    render(<Evaluate />)
+    await waitFor(() => expect(visibleText()).toMatch(/The Starter comes with the default sample/))
+    choose(screen.getByRole("button", { name: /^Pipeline/ }), "Build your own…")
+    await waitFor(() => expect(visibleText()).toMatch(/Open on Build to watch each step/))
     expect(visibleText()).not.toMatch(DASH)
   })
 

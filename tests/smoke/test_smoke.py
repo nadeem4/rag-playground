@@ -144,8 +144,11 @@ def test_the_main_flows_work_end_to_end(base, browser):
         raise AssertionError(f"Compare did not finish: {page.locator('main').inner_text()[:1500]}") from e
     assert finding.inner_text().strip(), "Compare finished without a finding sentence"
 
-    # Evaluate: the question set runs and the score is a sentence.
+    # Evaluate: pipeline first. Build left the Starter unedited, so Evaluate opens on it,
+    # with its document under the picker; the question set runs and the score is a sentence.
     page.goto(base + "/evaluate")
+    page.get_by_role("button", name=re.compile(r"^Pipeline.*Starter pipeline")).wait_for()
+    page.get_by_test_id("documents-line").wait_for()
     page.get_by_role("button", name="Evaluate", exact=True).click()
     page.get_by_role("button", name="Evaluate again").wait_for(timeout=LONG)
     page.get_by_text(re.compile(r"^\d+ of \d+ questions found the answer\.")).wait_for()

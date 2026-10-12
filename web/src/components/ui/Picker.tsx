@@ -42,6 +42,8 @@ export interface PickerOption {
   tags?: PickerTag[]
   /** Options with a group are listed under its name, in the order given. */
   group?: string
+  /** Not a value but something to do, such as Build your own: set apart by a hairline, its name in the accent. */
+  action?: boolean
 }
 
 export interface PickerProps {
@@ -107,7 +109,7 @@ export function OptionFace({ option, selected }: { option: PickerOption; selecte
         {selected ? <Check className="size-[14px]" strokeWidth={2.5} /> : null}
       </span>
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-px">
-        <span data-name className={cn("text-sm font-semibold", isDisabled(option) ? "text-fg-muted" : "text-fg")}>
+        <span data-name className={cn("text-sm font-semibold", isDisabled(option) ? "text-fg-muted" : option.action ? "text-primary" : "text-fg")}>
           {option.name}
         </span>
         {/* The spaces keep the words apart in the option's accessible name; flex ignores them. */}
@@ -217,6 +219,7 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
         aria-selected={selected}
         aria-disabled={isDisabled(o)}
         data-active={i === active || undefined}
+        data-action={o.action || undefined}
         onMouseMove={() => (isDisabled(o) || i === active ? undefined : setActive(i))}
         onClick={() => pick(i)}
         className={cn(
@@ -227,6 +230,7 @@ export function Picker({ id, labelledBy, options, value, onChange, disabled, cla
           i === active && "outline-2 -outline-offset-2 outline-primary",
           i === active && !selected && "bg-muted",
           isDisabled(o) && "cursor-not-allowed",
+          o.action && "mt-1 rounded-t-none border-t border-hairline",
         )}
       >
         <OptionFace option={o} selected={selected} />

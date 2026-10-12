@@ -120,7 +120,8 @@ def pick_sample(page: Page, base: str, title: str | None) -> None:
     page.wait_for_url("**/build")
     page.get_by_role("button", name="Build the index").wait_for()
     if title:
-        page.get_by_role("button", name="Document:", exact=False).click()
+        # The document is the pipeline's: Change sits on its Documents line.
+        page.get_by_role("button", name="Change the document", exact=False).click()
         page.get_by_text(title, exact=True).click()
         page.wait_for_timeout(1500)
 
@@ -195,12 +196,12 @@ def evaluate_setup(page: Page, base: str) -> None:
     pick_sample(page, base, "Two-column report")
     page.get_by_role("button", name="Parse settings").click()
     pick(page, "Transform", "Fast text")
-    page.get_by_role("button", name="Save as").click()
+    page.get_by_role("button", name="Save as new").click()
     page.get_by_label("Pipeline name").fill(FAST_TEXT)
     page.get_by_role("button", name="Save", exact=True).click()
     page.wait_for_timeout(500)
-    # The working copy goes back to Docling: the pipeline on Build.
-    pick(page, "Pipeline", "Working copy")
+    # A new, unsaved pipeline on the same document goes back to Docling: the pipeline on Build.
+    pick(page, "Pipeline", "New pipeline")
     page.wait_for_timeout(300)
     pick(page, "Transform", "Docling")
     page.wait_for_timeout(500)

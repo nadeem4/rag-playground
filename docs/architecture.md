@@ -46,7 +46,11 @@ come with the base install. A moved stage can also run on its own, with no pipel
 no cache: `pandion.parse` parses one file, `pandion.clean` runs a list of cleaning steps
 on one document, in the order given, and `pandion.chunk` cuts one document into pieces
 with one chunker. `Pipeline.from_file("pipeline.yaml").index.run("docs/")` builds a whole
-index from a config file, through the executor and a store, so it caches every step. The
+index from a config file, through the executor and a store, so it caches every step.
+`index.sync("docs/")` keeps that index in step with a folder: it records each document's
+content hash and pieces in `manifest.json` under the config's `path` (`pandion/manifest.py`),
+builds the index again from cached steps, reports what was added, changed, removed and
+unchanged, and deletes the previous index from the store. The app does not use sync. The
 app runs the same strategies through its pipeline graph, and
 `tests/integration/test_app_uses_pandion_chunkers.py` and
 `tests/integration/test_app_uses_pandion_index.py` check both give the same pieces and
@@ -148,7 +152,8 @@ one cached parse and three new chunk sets.
 - **The store** (`pandion/storage.py`) keeps each artifact in its own folder under the
   artifacts folder. A write goes to a temp folder and is moved into place, and its
   `meta.json` is written last, so a crash never leaves an entry that looks finished.
-  Nothing expires an entry; `DELETE /api/cache` clears the store.
+  Nothing expires an entry; `DELETE /api/cache` clears the store. Only the package's
+  sync deletes one entry, the index a sync has replaced.
 - **The embedding cache** (`pandion/embedding_cache.py`) keeps embeddings in SQLite at
   full width, keyed by model, revision, dtype, kind and text, so the same piece is
   embedded once. The app keeps it in `.embcache` under the artifacts folder.

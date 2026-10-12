@@ -36,6 +36,16 @@ def test_missing_artifact_is_not_a_hit(store):
     assert store.has(AID) is False
 
 
+def test_delete_removes_an_entry_and_is_safe_to_repeat(store):
+    store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={}), {"chunks": []})
+
+    store.delete(AID)
+    store.delete(AID)
+
+    assert store.has(AID) is False
+    assert not store.path_for(AID).exists()
+
+
 def test_meta_json_is_the_sole_cache_hit_signal(store):
     """A payload without meta.json is a half-written entry, not a hit."""
     d = store.path_for(AID)

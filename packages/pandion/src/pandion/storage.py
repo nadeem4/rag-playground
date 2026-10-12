@@ -136,5 +136,12 @@ class Store:
     def load(self, artifact_id: str, t: ArtifactType) -> Any:
         return SERIALIZERS[t].read(self.path_for(artifact_id))
 
+    def delete(self, artifact_id: str) -> None:
+        """Remove one entry. Uncommit first, so a directory Windows will not
+        fully delete is never served as a hit. Deleting a missing entry is fine."""
+        dest = self.path_for(artifact_id)
+        (dest / META).unlink(missing_ok=True)
+        shutil.rmtree(dest, ignore_errors=True)
+
     def clear(self) -> None:
         shutil.rmtree(self.root, ignore_errors=True)

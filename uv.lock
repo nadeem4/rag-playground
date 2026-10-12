@@ -1108,8 +1108,23 @@ dependencies = [
     { name = "pydantic" },
 ]
 
+[package.optional-dependencies]
+docling = [
+    { name = "docling" },
+    { name = "onnxruntime" },
+]
+pdfium = [
+    { name = "pypdfium2" },
+]
+
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.9" }]
+requires-dist = [
+    { name = "docling", marker = "extra == 'docling'", specifier = ">=2.129.0" },
+    { name = "onnxruntime", marker = "extra == 'docling'", specifier = ">=1.30.0" },
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "pypdfium2", marker = "extra == 'pdfium'", specifier = ">=5.13.0" },
+]
+provides-extras = ["pdfium", "docling"]
 
 [[package]]
 name = "pillow"
@@ -1457,15 +1472,12 @@ version = "0.34.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
-    { name = "docling" },
     { name = "fastapi" },
     { name = "lancedb" },
-    { name = "onnxruntime" },
     { name = "openai" },
-    { name = "pandion" },
+    { name = "pandion", extra = ["docling", "pdfium"] },
     { name = "pillow" },
     { name = "pydantic" },
-    { name = "pypdfium2" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "sentence-transformers" },
@@ -1487,17 +1499,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=1.7.0" },
-    { name = "docling", specifier = ">=2.129.0" },
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "git-cliff", marker = "extra == 'dev'", specifier = "==2.14.2" },
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.13.0" },
     { name = "lancedb", specifier = ">=0.38,<0.39" },
-    { name = "onnxruntime", specifier = ">=1.30.0" },
     { name = "openai", specifier = ">=3.17.0" },
-    { name = "pandion", editable = "packages/pandion" },
+    { name = "pandion", extras = ["docling", "pdfium"], editable = "packages/pandion" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.9" },
-    { name = "pypdfium2", specifier = ">=5.13.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "python-dotenv", specifier = ">=1.2.3" },

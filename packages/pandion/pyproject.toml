@@ -5,6 +5,18 @@ description = "Config-driven indexing and retrieval pipelines you can inspect st
 requires-python = ">=3.13,<3.14"
 dependencies = ["pydantic>=2.9"]
 
+# Parsers, models and stores are extras, so the base install stays small.
+# A step whose extra is missing says which one to install.
+[project.optional-dependencies]
+pdfium = ["pypdfium2>=5.13.0"]
+docling = [
+    "docling>=2.129.0",
+    # Docling's OCR engine. RapidOCR's ONNX checkpoints ship inside its wheel,
+    # so OCR downloads nothing; without onnxruntime Docling falls back to
+    # RapidOCR's torch backend, which fetches .pth files into site-packages.
+    "onnxruntime>=1.30.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

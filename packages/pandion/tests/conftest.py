@@ -4,6 +4,8 @@ Every fake here is model-free and plugin-free: the engine must be provable witho
 importing a single RAG library.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import BaseModel
 
@@ -149,3 +151,13 @@ def reg():
         )
     )
     return r
+
+
+@pytest.fixture
+def sample_pdf(tmp_path: Path) -> Path:
+    """A three-page PDF whose text is `SAMPLE_PAGES`."""
+    from pdfs import SAMPLE_PAGES, build_pdf
+
+    path = tmp_path / "sample.pdf"
+    path.write_bytes(build_pdf(SAMPLE_PAGES))
+    return path

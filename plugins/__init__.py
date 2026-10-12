@@ -20,13 +20,16 @@ from __future__ import annotations
 import importlib
 
 #: Every module that registers a transform, in stage order. Keep in sync with
-#: `plugins/*/*.py`; the discovery test enforces it.
+#: `plugins/*/*.py`; the discovery test enforces it. The `pandion.plugins.*`
+#: entries are the strategies that moved into the pandion package; they keep
+#: their place here, so the registry lists the stages in the same order as
+#: before.
 PLUGIN_MODULES: tuple[str, ...] = (
     "plugins.source.upload",
     "plugins.query.text",
     "plugins.query.llm_rewrite",
-    "plugins.parse.pdfium",
-    "plugins.parse.docling",
+    "pandion.plugins.parse.pdfium",
+    "pandion.plugins.parse.docling",
     "plugins.clean.header_footer_strip",
     "plugins.clean.dedupe_blocks",
     "plugins.clean.drop_matching",

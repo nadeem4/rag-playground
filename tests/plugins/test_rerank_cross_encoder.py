@@ -345,7 +345,7 @@ def test_a_failed_cross_encoder_download_is_logged_not_raised(monkeypatch, caplo
 
 
 def test_the_warm_up_loads_the_reranker_after_the_others(monkeypatch):
-    import plugins.parse.docling as docling_plugin
+    import pandion.plugins.parse.docling as docling_plugin
     import providers.embeddings as embeddings
 
     calls: list[str] = []
@@ -401,7 +401,7 @@ def test_explain_says_scores_differ_between_models():
 
 
 def test_the_reranker_warms_even_when_the_index_models_fail(monkeypatch, caplog):
-    import plugins.parse.docling as docling_plugin
+    import pandion.plugins.parse.docling as docling_plugin
 
     def broken(config):
         raise RuntimeError("docling broke")

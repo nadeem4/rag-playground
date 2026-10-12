@@ -15,6 +15,7 @@ import pytest
 
 from pandion.ports import STAGE_OUTPUT
 from pandion.registry import registry
+from pandion.plugins import PLUGIN_MODULES as PANDION_MODULES
 from plugins import PLUGIN_MODULES, discover
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +46,8 @@ def registered_modules() -> set[str]:
 
 
 def test_manifest_lists_every_plugin_module():
-    assert sorted(PLUGIN_MODULES) == sorted(plugin_module_names()), (
+    own = [m for m in PLUGIN_MODULES if not m.startswith("pandion.")]
+    assert sorted(own) == sorted(plugin_module_names()), (
         "plugins/__init__.py's PLUGIN_MODULES is out of sync with the files on "
         "disk — a plugin that is not discovered is also not contract-tested"
     )
@@ -66,3 +68,9 @@ def test_discover_is_idempotent():
     discover()
     discover()
     assert len(registered_modules()) == before
+
+
+def test_the_manifest_loads_every_pandion_strategy():
+    """The app loads the package's strategies too, in their old place in the order."""
+    assert set(PANDION_MODULES) <= set(PLUGIN_MODULES)
+    assert set(PANDION_MODULES) <= registered_modules()

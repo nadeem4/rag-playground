@@ -51,6 +51,7 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel, Field, field_validator
 
 from pandion.artifacts import ArtifactType
+from pandion.errors import require
 from pandion.payloads import Element, ElementType, ParsedDoc
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -297,7 +298,13 @@ def pipeline_options(config: DoclingConfig) -> Any:
     )
 
 
+def _require_docling() -> None:
+    """Docling comes with the `docling` extra; say so if it is missing."""
+    require("docling", extra="docling", step="The docling parser")
+
+
 def _converter(config: DoclingConfig) -> Any:
+    _require_docling()
     key = converter_key(config)
     if key not in _CONVERTERS:
         from docling.datamodel.base_models import InputFormat
@@ -308,6 +315,19 @@ def _converter(config: DoclingConfig) -> Any:
             format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
         )
     return _CONVERTERS[key]
+
+
+def preload(config: DoclingConfig | None = None) -> None:
+    """Build the converter for `config` and load its PDF models now.
+
+    The first run otherwise waits for the layout and table models to download
+    and load; a caller that knows a run is coming (the app's warm-up) can pay
+    that cost up front. Later runs with the same options reuse the converter.
+    """
+    _require_docling()
+    from docling.datamodel.base_models import InputFormat
+
+    _converter(config or DoclingConfig()).initialize_pipeline(InputFormat.PDF)
 
 
 @register
@@ -392,6 +412,7 @@ class DoclingParse(Transform[DoclingConfig]):
     def apply(
         self, inputs: Mapping[str, Any], config: DoclingConfig, ctx: RunContext
     ) -> dict[str, Any]:
+        _require_docling()
         from docling.datamodel.base_models import DocumentStream
 
         raw = inputs["file"]

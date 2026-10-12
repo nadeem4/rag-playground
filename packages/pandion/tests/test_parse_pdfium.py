@@ -20,9 +20,9 @@ from pandion.payloads import ParsedDoc
 from pandion.ports import Stage
 from pandion.registry import registry
 
-import plugins.parse.pdfium  # noqa: F401  (registers the transform)
+import pandion.plugins.parse.pdfium  # noqa: F401  (registers the transform)
 
-from tests.plugins.conftest import (
+from pdfs import (
     SAMPLE_LINES,
     SAMPLE_PAGES,
     build_paragraph_pdf,
@@ -258,6 +258,32 @@ def test_hyphenation_is_repaired_only_at_a_real_word_break(
 
 def test_pdfium_provides_no_structure():
     """pdfium finds no headings, so it claims none: heading chunking then falls back."""
-    from plugins.parse.pdfium import PdfiumParse
+    from pandion.plugins.parse.pdfium import PdfiumParse
 
     assert PdfiumParse.provides == {}
+
+
+def test_the_default_pdfium_node_keeps_its_artifact_id():
+    """Computed on main before the parser moved into pandion: caches stay valid."""
+    from pandion.ids import compute_artifact_id
+
+    cls = registry.get(Stage.PARSE, "pdfium")
+    config = cls.config_model()
+    assert compute_artifact_id(
+        transform_name=cls.name,
+        transform_version=cls.version,
+        fingerprint=cls().fingerprint(config),
+        output_type=cls.output,
+        config=config.model_dump(mode="json"),
+        inputs={"file": "a" * 64},
+    ) == "8869fbcb4ba83d60f4b765e03459c1d515a7e504af807f1371b7c3100bdf0e8f"
+
+
+def test_without_pypdfium2_the_error_names_the_extra(sample_pdf: Path, monkeypatch):
+    import sys
+
+    from pandion.errors import MissingExtra
+
+    monkeypatch.setitem(sys.modules, "pypdfium2", None)
+    with pytest.raises(MissingExtra, match=r'pip install "pandion\[pdfium\]"'):
+        parse(sample_pdf)

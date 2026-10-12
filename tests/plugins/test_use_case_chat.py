@@ -26,7 +26,7 @@ from plugins.chunk.recursive_character import (
     RecursiveCharacterChunker,
     RecursiveCharacterConfig,
 )
-from plugins.parse.pdfium import PdfiumConfig, PdfiumParse
+from pandion.plugins.parse.pdfium import PdfiumConfig, PdfiumParse
 from plugins.use_case import chat as chat_module
 from plugins.use_case.chat import ChatConfig, ChatUseCase
 from tests.plugins.conftest import SAMPLE_PAGES, build_pdf

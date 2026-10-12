@@ -5,4 +5,9 @@ The engine lives in plain modules (`pandion.graph`, `pandion.executor`,
 private; the RAG Playground app may import every other name.
 """
 
+from pandion.results import StageResult
+from pandion.stages import parse
+
 __version__ = "0.0.1"
+
+__all__ = ["StageResult", "parse", "__version__"]

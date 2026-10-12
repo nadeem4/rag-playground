@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
 import { ApiKeyControl } from "./ApiKeyControl"
-import { DocumentControl } from "./DocumentControl"
 import { DisplaySettings } from "./ThemeToggle"
 import { BrandMark } from "@/components/BrandMark"
 
@@ -92,26 +91,16 @@ function DevMenu({ path }: { path: string }) {
   )
 }
 
-/**
- * The page that works on the chosen document first. Build and Evaluate start
- * from a pipeline, and its documents sit under the pipeline picker there.
- */
-const DOCUMENT_PAGES = ["/compare"]
-
 export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: string; lessonsEnabled?: boolean }) {
   // The dev pages are for working on the app, not for demo visitors.
   const demo = useDemo()
   // With the lessons hidden, there is no Lessons link. Home is always first.
   const primary = lessonsEnabled ? PRIMARY : PRIMARY.filter((l) => l.href !== "/learn")
-  // The Document control shows only on Compare: Build and Evaluate show the pipeline's documents in the page.
-  const withDocument = DOCUMENT_PAGES.includes(path)
   return (
-    // Below md: three rows. The brand and the controls share the first, the
-    // nav takes the second (wrapping inside its own box at most once), and the
-    // Document control the third, at full width. From md up it is one row:
-    // the Document control's slot takes what the row has left (flex-1 from a
-    // zero basis, so it shrinks rather than wrapping) and holds the trigger at
-    // its right end, before the controls. The page itself never scrolls sideways.
+    // Below md: two rows. The brand and the controls share the first, the nav
+    // takes the second (wrapping inside its own box at most once). From md up
+    // it is one row. No page has a document control up here: each page shows
+    // its documents itself. The page never scrolls sideways.
     <header className="flex min-h-row shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-hairline bg-surface px-3 py-1 md:gap-x-3 lg:gap-x-4">
       <a href="/" className="order-1 inline-flex items-center gap-2 text-sm font-semibold whitespace-nowrap text-fg no-underline">
         <BrandMark />
@@ -121,25 +110,20 @@ export function AppHeader({ path, lessonsEnabled = LESSONS_ENABLED }: { path: st
         {primary.map((l) => (
           <NavLink key={l.href} {...l} path={path} />
         ))}
-        {/* GitHub is on Home (More and the footer), so the Home tab costs the Document control no width. */}
+        {/* GitHub is on Home (More and the footer), so the Home tab costs the row no width. */}
       </nav>
       {demo ? null : <DevMenu path={path} />}
-      {withDocument ? (
-        <div data-testid="header-document" className="order-4 flex w-full min-w-0 md:order-4 md:ml-auto md:w-auto md:min-w-[7rem] md:flex-1 md:basis-0 md:justify-end">
-          <DocumentControl />
-        </div>
-      ) : null}
       <div
         data-testid="header-controls"
-        className={cn("order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5", withDocument ? "md:ml-0" : "md:ml-auto")}
+        className="order-2 ml-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 md:order-5 md:ml-auto"
       >
         <a
           href="/privacy"
           aria-label="Your data and privacy"
           aria-current={path === "/privacy" ? "page" : undefined}
           className={cn(
-            // From xl only: below it the Document control needs the room. The
-            // footer and Library's lead link reach the page at every width.
+            // From xl only: below it the row needs the room. The footer and
+            // Library's lead link reach the page at every width.
             "hidden h-row-compact items-center rounded-control px-1 text-sm underline underline-offset-4 whitespace-nowrap xl:flex",
             path === "/privacy" ? "font-semibold text-fg" : "text-fg-muted hover:text-fg",
           )}

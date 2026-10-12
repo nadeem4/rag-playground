@@ -310,7 +310,11 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                         type="button"
                         aria-label={`Change the document for ${p.page}`}
                         className="inline-flex min-h-[44px] items-center font-semibold underline underline-offset-4 hover:text-fg"
-                        onClick={openDocumentMenu}
+                        onClick={(e) => {
+                          // Home has no menu of its own: open the page that owns the document, with its menu open.
+                          openDocumentMenu(e)
+                          navigate(p.href)
+                        }}
                       >
                         Change
                       </button>

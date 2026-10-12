@@ -31,7 +31,7 @@ from pandion.payloads import Hit, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.retrieve import _base
+from pandion.plugins.retrieve import embedder_for, read_descriptor
 from pandion.embedding_cache import embed_cached
 
 
@@ -150,9 +150,9 @@ class MmrRerank(Transform[MmrRerankConfig]):
         # order (when the retriever set the scores). A pool with no spread (one hit, or all equal) is all 1.0.
         relevance = _normalise([hit.score for hit in hits])
 
-        descriptor = _base.read_descriptor(inputs["index"])
+        descriptor = read_descriptor(inputs["index"])
         extras = ctx.extras if ctx is not None else {}
-        embedder, dim = _base.embedder_for(descriptor, extras.get("models"))
+        embedder, dim = embedder_for(descriptor, extras.get("models"))
         # Re-embedding the hits goes through the embedding cache, where the
         # index build already left every chunk's document vector, so with a
         # real model this is a lookup rather than inference. `text_to_embed` is

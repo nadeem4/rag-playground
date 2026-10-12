@@ -561,6 +561,7 @@ function Evaluation({
 
   // How many pieces the pipeline made, read once from the chunk step of the
   // first variant that finished it. Every variant shares that step.
+  const searchId = graph.nodes.find((n) => n.stage === "retrieve")?.id ?? queryId
   const chunkId = graph.nodes.find((n) => n.stage === "chunk")?.id
   const chunkArtifact = asked.map((_, i) => artifactOf(i, chunkId)).find((id) => id !== undefined)
   const [pieces, setPieces] = useState<number | null>(null)
@@ -600,8 +601,9 @@ function Evaluation({
       result: result && Array.isArray(result.hits) ? result : undefined,
       resultStatus: got.status,
       failed: s ? Object.values(s.nodes).find((n) => n.status === "failed") : undefined,
-      // A question's run builds the index first; it is running once its own search starts.
-      started: s !== undefined && (s.nodes[queryId]?.status ?? "pending") !== "pending",
+      // A question's run builds the index first; it is running once Retrieve starts, the first
+      // step that needs the finished index. (The question step has no inputs and runs at once.)
+      started: s !== undefined && (s.nodes[searchId]?.status ?? "pending") !== "pending",
     }
   })
 

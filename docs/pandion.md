@@ -6,12 +6,13 @@ index can be built from one config file. Each step's result is cached under a ha
 recipe, so the same files with the same settings are never processed twice.
 
 Coming next: search, rerank and ask. This guide covers what exists today: parse, clean,
-chunk, the index, and keeping an index up to date.
+chunk, the index, keeping an index up to date, and the rewrite of a question.
 
 ## Contents
 
 - [Install](#install)
 - [Try one stage at a time](#try-one-stage-at-a-time)
+- [Rewrite a question](#rewrite-a-question)
 - [The pipeline file](#the-pipeline-file)
 - [Build an index](#build-an-index)
 - [Keep an index up to date](#keep-an-index-up-to-date)
@@ -38,8 +39,10 @@ The base install is small. Each parser, store and model library is an extra:
 | `docling` | Docling and its OCR engine | the `docling` parser |
 | `local` | sentence-transformers and torch | the `qwen3-embedding-0.6b` and `bge-small-en-v1.5` embedders |
 | `lancedb` | LanceDB and pyarrow | the `lancedb` index |
+| `anthropic` | the Anthropic SDK | `llm_rewrite` with a Claude model |
+| `openai` | the OpenAI SDK | `llm_rewrite` with an OpenAI model, OpenRouter or a custom endpoint |
 
-The cleaners and the chunkers need only the base install. The `fake-deterministic`
+The cleaners, the chunkers and the `text` query step need only the base install. The `fake-deterministic`
 embedder needs no extra and no download, so it is good for trying things out.
 
 Inside the repo, `uv sync --extra dev` installs the package with the extras the app
@@ -76,6 +79,57 @@ names its cleaner with `use` and holds its settings beside it, for example
 `{"use": "drop_matching", "pattern": "Draft"}`. Its note has one line per step, saying
 what it removed. `clean` and `chunk` accept either a parsed document or the result of
 the stage before, as above.
+
+## Rewrite a question
+
+The query step turns a question into the query that retrieval searches with.
+`pandion.rewrite` runs one on its own and returns a `StageResult` whose `.output` is a
+`Query`.
+
+```python
+import pandion
+
+typed = pandion.rewrite("Who is my current employer?", use="text")
+print(typed.output.text)          # the question, as typed
+
+rewritten = pandion.rewrite(
+    "Who is my current employer?",
+    use="llm_rewrite",
+    model="claude-haiku-4-5",
+    style="keywords",             # or "document words", the default
+    doc=parsed,                   # optional: the model reads the start of the document
+    credentials={"anthropic_api_key": "sk-ant-..."},
+)
+print(rewritten.output.text)      # the model's words, which retrieval searches with
+print(rewritten.output.asked)     # the question as typed, which the answer uses
+print(rewritten.note)             # Rewrote the question as: ...
+```
+
+`llm_rewrite` asks a chat model to restate the question in the words the document would
+use, so keyword search can find a passage that shares no word with the question. It makes
+one model call each time and is never cached. If the reply is empty, too long or more than
+one line, the question is used as typed and the note says so.
+
+The `model` setting picks the model. The settings have the same names as in the app:
+
+- a Claude model (`claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5`) needs
+  `anthropic_api_key` in `credentials`;
+- an OpenAI model (`gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-luna`) needs `openai_api_key`;
+- `openrouter` needs `openrouter_model` (an OpenRouter model id, such as
+  `openai/gpt-4o-mini`) and `openrouter_api_key`;
+- `custom` is any OpenAI-compatible server, such as Ollama. It needs `custom_base_url`
+  (for example `http://localhost:11434/v1`) and `custom_model`. Its key,
+  `custom_api_key`, is optional.
+
+A key is never a setting. It goes in `credentials`, so it is never part of a recipe hash,
+an artifact or a note, and every error message has it removed. Pandion does not read keys
+from the environment; read the key yourself and pass it in.
+
+If you serve pandion to people you do not trust, run the graph with
+`pandion.executor.run(..., context_extras={"public_endpoints_only": True})`, or call
+`pandion.llm.complete(..., public_only=True)`. A custom endpoint must then be a public
+https address, so a stranger cannot point the server at its own network. The playground's
+hosted demo does this. `pandion.rewrite` is for trying a step yourself and leaves it off.
 
 ## The pipeline file
 
@@ -265,8 +319,9 @@ An unknown strategy lists the ones there are:
 index.chunk uses 'fixed', which is not a chunk strategy. The chunk strategies are: layout_blocks, markdown_header, recursive_character, sentence_window, token_based.
 ```
 
-The same checks apply to `pandion.parse`, `pandion.clean` and `pandion.chunk`, where the
-message starts with "The chunker" or "Clean step 1" instead of the place in the file. A
+The same checks apply to `pandion.parse`, `pandion.clean`, `pandion.chunk` and
+`pandion.rewrite`, where the message starts with "The chunker", "Clean step 1" or "The
+query step" instead of the place in the file. A
 pipeline file problem is a `pandion.config.ConfigError`.
 
 A missing extra says which one to install:
@@ -283,4 +338,6 @@ model that is not on disk raises `pandion.models.ModelNotDownloaded`.
 [`examples/pandion/`](../examples/pandion) has a small pipeline file and a script that
 indexes two sample PDFs, prints each step's note, then runs again to show every step was
 reused. A second script syncs a folder, adds a sample, syncs again, removes it, and
-syncs once more. A test runs both, so they stay correct.
+syncs once more. `rewrite_question.py` prints a question as typed and, with
+`ANTHROPIC_API_KEY` set, as a model rewrites it. A test runs all three, so they stay
+correct.

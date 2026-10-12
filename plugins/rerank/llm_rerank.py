@@ -12,7 +12,7 @@ ambient `query`, and every returned hit carries `prior_rank` and `prior_score`.
 The model gives no score, so `score` stays the retriever's.
 
 The key comes from `ctx.extras["credentials"]` exactly as the chat step reads
-it, and `providers.llm.complete` keeps it out of every error message. A model
+it, and `pandion.llm.complete` keeps it out of every error message. A model
 call is not a function of its inputs, so the step is never cached.
 """
 
@@ -29,8 +29,9 @@ from pandion.payloads import Hit, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from providers import llm
-from providers.llm import CHAT_MODELS
+from pandion import llm
+from pandion.llm import CHAT_MODELS
+from plugins import hosted_demo
 
 #: How much of each candidate the model reads.
 TEXT_BUDGET = 600
@@ -57,7 +58,7 @@ def _key_words(provider: str) -> str:
             "local server usually needs none. Custom endpoints are turned off in "
             "the hosted demo."
         )
-    return llm.key_sentence(provider)
+    return llm.key_sentence(provider, public_only=hosted_demo.enabled())
 
 
 class LlmRerankConfig(BaseModel):
@@ -184,7 +185,9 @@ class LlmRerank(Transform[LlmRerankConfig]):
                 "custom_base_url and custom_model on the rerank node."
             )
         if not custom and not api_key:
-            raise ValueError(llm.no_key_message(model.provider))
+            raise ValueError(
+                llm.no_key_message(model.provider, public_only=hosted_demo.enabled())
+            )
 
         prior_ids = [hit.chunk.id for hit in hits]
         for hit in hits:
@@ -202,6 +205,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
                 model, config.custom_model, config.openrouter_model
             ),
             max_tokens=MAX_TOKENS,
+            public_only=hosted_demo.enabled(),
         )
         elapsed = time.perf_counter() - started
 

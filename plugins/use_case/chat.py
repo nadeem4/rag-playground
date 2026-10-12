@@ -30,7 +30,7 @@ Three rules carry the design:
   key scrubbed and the original chain dropped, so it cannot surface in a
   traceback.
 
-The SDKs are imported lazily (`providers.llm`), so registering the plugin
+The SDKs are imported lazily (`pandion.llm`), so registering the plugin
 (every API start, every test run) costs nothing.
 
 **Native API call shape**, per the claude-api skill: non-streaming
@@ -62,8 +62,9 @@ from plugins.use_case._grounding import (
     number_sources,
     parse_answer,
 )
-from providers import llm
-from providers.llm import CHAT_MODELS, ChatModel
+from pandion import llm
+from pandion.llm import CHAT_MODELS, ChatModel
+from plugins import hosted_demo
 
 
 SYSTEM_PROMPT = (
@@ -168,7 +169,7 @@ def _key_words(provider: str) -> str:
             "usually needs none. Every run is a new request, never a cached "
             "answer. Custom endpoints are turned off in the hosted demo."
         )
-    return llm.key_sentence(provider) + " Every run is a new paid request, never a cached answer."
+    return llm.key_sentence(provider, public_only=hosted_demo.enabled()) + " Every run is a new paid request, never a cached answer."
 
 
 def make_client(api_key: str) -> Any:
@@ -309,7 +310,7 @@ def _native(
     inputs: Mapping[str, Any], config: ChatConfig, api_key: str | None
 ) -> dict[str, Any]:
     if not api_key:
-        raise ValueError(llm.no_key_message("anthropic"))
+        raise ValueError(llm.no_key_message("anthropic", public_only=hosted_demo.enabled()))
 
     hits = RetrievalResult.model_validate(inputs["result"]).hits[: config.max_chunks]
     question = Query.model_validate(inputs["query"]).asked
@@ -435,7 +436,9 @@ def _sentence_ids(
             "custom_base_url and custom_model on the chat node."
         )
     if not custom and not api_key:
-        raise ValueError(llm.no_key_message(model.provider))
+        raise ValueError(
+            llm.no_key_message(model.provider, public_only=hosted_demo.enabled())
+        )
     if inputs.get("index") is None:
         raise ValueError(
             "Sentence-id citations need the index: its embedder checks each "
@@ -455,6 +458,7 @@ def _sentence_ids(
         base_url=config.custom_base_url.strip() if custom else None,
         model_name=llm.model_name_for(model, config.custom_model, config.openrouter_model),
         max_tokens=MAX_TOKENS,
+        public_only=hosted_demo.enabled(),
     )
 
     payload: dict[str, Any] = {

@@ -39,7 +39,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY packages/ packages/
 COPY api/ api/
 COPY plugins/ plugins/
-COPY providers/ providers/
 COPY samples/ samples/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev

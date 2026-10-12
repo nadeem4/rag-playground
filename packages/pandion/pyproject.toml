@@ -20,6 +20,10 @@ docling = [
 # pyproject.toml takes torch from the CPU-only index.
 local = ["sentence-transformers>=6.1.0", "torch>=2.14.0"]
 lancedb = ["lancedb>=0.38,<0.39", "pyarrow>=25.0.1"]
+# Chat models, for llm_rewrite: OpenAI, OpenRouter and any OpenAI-compatible
+# server through the OpenAI SDK, and Claude through the Anthropic SDK.
+openai = ["openai>=3.17.0"]
+anthropic = ["anthropic>=1.7.0"]
 
 [project.scripts]
 pandion = "pandion.cli:main"

@@ -1,7 +1,8 @@
 # pandion example
 
-A small pipeline file and a script that indexes two bundled sample PDFs, then indexes
-them again.
+A small pipeline file and three scripts: one indexes two bundled sample PDFs, then
+indexes them again; one keeps an index in step with a folder; and one turns a question
+into the query retrieval searches with.
 
 - `pipeline.yaml`: the pdfium parser, the `dedupe_blocks` cleaner, the
   `recursive_character` chunker and a lancedb index.
@@ -10,6 +11,9 @@ them again.
 - `sync_samples.py`: copies two samples into a folder and syncs the index with it, then
   adds a third sample and syncs, then removes it and syncs. Each sync prints what it
   added, changed, removed and left unchanged.
+- `rewrite_question.py`: prints a question as typed and, with `ANTHROPIC_API_KEY` set,
+  as Claude Haiku 4.5 rewrites it in the words of a sample PDF. The rewrite is one paid
+  call.
 
 From the root of the repo:
 
@@ -28,6 +32,12 @@ uv run python examples/pandion/index_samples.py --embedder fake-deterministic
 
 ```bash
 uv run python examples/pandion/sync_samples.py --embedder fake-deterministic
+```
+
+To rewrite a question, pass it as the argument:
+
+```bash
+uv run python examples/pandion/rewrite_question.py "How long should a piece be?"
 ```
 
 The index is written to `pandion-example/` (or `pandion-sync-example/` for the sync

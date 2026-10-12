@@ -1,6 +1,6 @@
 """Contract tests for the LLM reranker.
 
-No test calls a model: `providers.llm.complete` is replaced by a fake that
+No test calls a model: `pandion.llm.complete` is replaced by a fake that
 records the prompt and returns whatever reply the test names.
 """
 
@@ -14,8 +14,8 @@ from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
 from plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
-from providers import llm
-from providers.llm import CHAT_MODELS, Completion
+from pandion import llm
+from pandion.llm import CHAT_MODELS, Completion
 
 QUESTION = "What is the capital of France?"
 TEXTS = ["t0", "t1", "t2", "t3", "t4", "t5", "t6"]

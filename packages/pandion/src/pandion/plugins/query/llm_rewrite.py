@@ -11,6 +11,12 @@ The parsed document is an optional ambient input: when there is one, the model
 reads its first 1,500 characters to learn its vocabulary. The key comes from
 `ctx.extras["credentials"]` as for the chat step and the LLM reranker, and a
 model call is not a function of its inputs, so the step is never cached.
+
+A server that strangers share passes `ctx.extras["public_endpoints_only"]`,
+and a custom endpoint must then be a public https address (`pandion.endpoints`).
+
+The SDK it needs is an extra: `pandion[anthropic]` for Claude models, and
+`pandion[openai]` for OpenAI, OpenRouter and a custom endpoint.
 """
 
 from __future__ import annotations
@@ -24,9 +30,10 @@ from pandion.payloads import ParsedDoc, Query
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.query.text import TextQueryConfig
-from providers import llm
-from providers.llm import CHAT_MODELS
+from pandion import llm
+from pandion.endpoints import PUBLIC_ONLY_EXTRA
+from pandion.llm import CHAT_MODELS
+from pandion.plugins.query.text import TextQueryConfig
 
 #: How much of the document the model reads for its vocabulary.
 DOC_BUDGET = 1500
@@ -194,13 +201,14 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
         model = CHAT_MODELS[config.model]
         custom = model.provider == "openai_compatible"
         api_key = llm.key_for(model, ctx.extras.get("credentials"))
+        public_only = bool(ctx.extras.get(PUBLIC_ONLY_EXTRA, False))
         if custom and not _custom_complete(config):
             raise ValueError(
                 "A custom endpoint needs both a base URL and a model name. Set "
                 "custom_base_url and custom_model on the query node."
             )
         if not custom and not api_key:
-            raise ValueError(llm.no_key_message(model.provider))
+            raise ValueError(llm.no_key_message(model.provider, public_only=public_only))
 
         completion = llm.complete(
             model,
@@ -212,6 +220,7 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
                 model, config.custom_model, config.openrouter_model
             ),
             max_tokens=MAX_TOKENS,
+            public_only=public_only,
         )
         reply = "" if completion.stop_reason == "refusal" else completion.text.strip()
         if not reply or len(reply) > MAX_REWRITE or "\n" in reply:

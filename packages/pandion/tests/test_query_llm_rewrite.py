@@ -1,6 +1,6 @@
 """Contract tests for the LLM rewrite of the question.
 
-No test calls a model: `providers.llm.complete` is replaced by a fake that
+No test calls a model: `pandion.llm.complete` is replaced by a fake that
 records the prompt and returns whatever reply the test names.
 """
 
@@ -12,14 +12,14 @@ from pandion.artifacts import ArtifactType
 from pandion.payloads import Query
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from plugins.query.llm_rewrite import (
+from pandion.plugins.query.llm_rewrite import (
     DOC_BUDGET,
     UNUSABLE_NOTE,
     LlmRewrite,
     LlmRewriteConfig,
 )
-from providers import llm
-from providers.llm import CHAT_MODELS, Completion
+from pandion import llm
+from pandion.llm import CHAT_MODELS, Completion
 
 QUESTION = "Who is my current employer?"
 REWRITE = "current employer company present role"
@@ -217,6 +217,59 @@ def test_a_custom_model_without_url_and_name_is_refused(reply, tmp_path):
     reply(REWRITE)
     with pytest.raises(ValueError, match="base URL and a model name"):
         rewrite(tmp_path, run_ctx=ctx(tmp_path, creds=None), model="custom")
+
+
+# -- a server that strangers share ----------------------------------------------------
+
+
+def test_the_run_extra_asks_complete_for_public_endpoints_only(reply, tmp_path):
+    fake = reply(REWRITE)
+    run_ctx = ctx(tmp_path)
+    run_ctx.extras["public_endpoints_only"] = True
+    rewrite(tmp_path, run_ctx=run_ctx)
+    assert fake.calls[0]["public_only"] is True
+
+
+def test_without_the_run_extra_endpoints_are_not_limited(reply, tmp_path):
+    fake = reply(REWRITE)
+    rewrite(tmp_path)
+    assert fake.calls[0]["public_only"] is False
+
+
+def test_with_public_endpoints_only_a_private_endpoint_is_refused_before_any_client(
+    monkeypatch, tmp_path
+):
+    from pandion.endpoints import DEMO_ENDPOINT_ERROR, EndpointRefused
+
+    built: list[str | None] = []
+
+    def make(api_key, base_url=None, **options):
+        built.append(base_url)
+        raise AssertionError("no client may be built for a refused endpoint")
+
+    monkeypatch.setattr("pandion.endpoints._resolve", lambda host: ["127.0.0.1"])
+    monkeypatch.setattr(llm, "make_openai_client", make)
+    run_ctx = ctx(tmp_path, creds=None)
+    run_ctx.extras["public_endpoints_only"] = True
+    with pytest.raises(EndpointRefused) as info:
+        rewrite(
+            tmp_path, run_ctx=run_ctx, model="custom",
+            custom_base_url="https://rebind.example.com/v1", custom_model="m",
+        )
+    assert str(info.value) == DEMO_ENDPOINT_ERROR
+    assert built == []
+
+
+def test_with_public_endpoints_only_a_missing_key_never_points_at_the_server(
+    reply, tmp_path
+):
+    reply(REWRITE)
+    run_ctx = ctx(tmp_path, creds=None)
+    run_ctx.extras["public_endpoints_only"] = True
+    with pytest.raises(ValueError) as err:
+        rewrite(tmp_path, run_ctx=run_ctx)
+    assert str(err.value) == llm.no_key_message("anthropic", public_only=True)
+    assert "_API_KEY" not in str(err.value)
 
 
 # -- explain ------------------------------------------------------------------------

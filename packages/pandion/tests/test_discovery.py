@@ -2,8 +2,9 @@
 
 `PLUGIN_MODULES` is the manifest: a plugin file that is not on it is not
 loaded, and this test fails rather than letting it vanish. Importing pandion
-and calling `discover()` must not load torch, Docling, LanceDB or a model
-library: those come with extras, and only the step that needs one imports it.
+and calling `discover()` must not load torch, Docling, LanceDB, a model
+library or a chat SDK: those come with extras, and only the step that needs one
+imports it.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ PLUGINS = Path(__file__).resolve().parents[1] / "src" / "pandion" / "plugins"
 HEAVY = {
     "torch", "docling", "docling_core", "docling_ibm_models", "transformers",
     "sentence_transformers", "lancedb", "pyarrow", "pypdfium2", "numpy",
+    "openai", "anthropic",
 }
 
 
@@ -56,6 +58,7 @@ def test_discovery_imports_no_heavy_library():
         "import pandion, pandion.plugins\n"
         "import pandion.embeddings, pandion.embedding_cache, pandion.models\n"
         "import pandion.config, pandion.pipeline, pandion.sources\n"
+        "import pandion.llm, pandion.endpoints\n"
         "pandion.plugins.discover()\n"
         f"heavy = {sorted(HEAVY)!r}\n"
         "leaked = sorted(m for m in sys.modules if m.split('.')[0] in heavy)\n"

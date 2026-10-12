@@ -9,8 +9,9 @@ silently not existing.
 twice raises `DuplicateTransformError`.
 
 Importing a plugin module loads no heavy library. Each one imports its
-library (pypdfium2, Docling, LanceDB) inside the function that uses it, through
-`pandion.errors.require`, so the base install can discover every strategy.
+library (pypdfium2, Docling, LanceDB, the OpenAI and Anthropic SDKs) inside
+the function that uses it, through `pandion.errors.require`, so the base
+install can discover every strategy.
 The cleaners and the chunkers need nothing beyond the standard library and
 Pydantic, so they come with the base install.
 """
@@ -22,6 +23,8 @@ import importlib
 #: Every module that registers a transform, in stage order.
 PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.source.upload",
+    "pandion.plugins.query.text",
+    "pandion.plugins.query.llm_rewrite",
     "pandion.plugins.parse.pdfium",
     "pandion.plugins.parse.docling",
     "pandion.plugins.clean.header_footer_strip",

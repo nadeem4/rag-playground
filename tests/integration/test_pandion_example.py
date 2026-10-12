@@ -1,6 +1,7 @@
 """The example in examples/pandion runs, so the guide's example cannot go out of date.
 
 It uses the fake embedder, so nothing is downloaded, and a temporary folder.
+The rewrite example runs with a fake model, so no call leaves the machine.
 """
 
 from __future__ import annotations
@@ -49,3 +50,30 @@ def test_example_pipeline_file_is_a_valid_pipeline():
     config = Pipeline.from_file(EXAMPLE / "pipeline.yaml").config
     assert config.index.parse[0] == "pdfium"
     assert config.index.store["embedder"] == "qwen3-embedding-0.6b"
+
+
+def test_rewrite_example_without_a_key_shows_the_question_as_typed(capsys):
+    typed, rewritten = _load_script("rewrite_question").main("How big should a piece be?")
+
+    assert typed.output.text == "How big should a piece be?" and rewritten is None
+    assert "ANTHROPIC_API_KEY" in capsys.readouterr().out
+
+
+def test_rewrite_example_with_a_key_shows_the_models_rewrite(monkeypatch, capsys):
+    """A fake model: no call leaves the machine."""
+    from pandion import llm
+
+    calls: list[dict] = []
+
+    def fake(model, **kwargs):
+        calls.append({"model": model.id, **kwargs})
+        return llm.Completion(text="chunk size tokens characters", usage={}, stop_reason="end_turn")
+
+    monkeypatch.setattr(llm, "complete", fake)
+    _, rewritten = _load_script("rewrite_question").main("How big should a piece be?", "sk-test")
+
+    assert rewritten.output.text == "chunk size tokens characters"
+    assert rewritten.output.asked == "How big should a piece be?"
+    assert calls[0]["model"] == "claude-haiku-4-5" and calls[0]["api_key"] == "sk-test"
+    assert "The document begins" in calls[0]["user"]
+    assert "Rewritten: chunk size tokens characters" in capsys.readouterr().out

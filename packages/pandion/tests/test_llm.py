@@ -1,7 +1,7 @@
 """I-16: the chat model registry and `complete()`, against fake clients only.
 
-The root conftest refuses to build a real client, so a test here that forgets to
-patch a factory fails instead of reaching the network.
+The package's conftest refuses to build a real client, so a test here that
+forgets to patch a factory fails instead of reaching the network.
 """
 
 from __future__ import annotations
@@ -11,10 +11,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from providers import llm
-from providers.llm import CHAT_MODELS, ChatModel, Completion, complete
+from pandion import llm
+from pandion.llm import CHAT_MODELS, ChatModel, Completion, complete
 
 KEY = "sk-test-SECRET-0123456789"
+
+#: The real factories, taken at import, before the conftest replaces them.
+REAL_FACTORIES = {"anthropic": llm.make_anthropic_client, "openai": llm.make_openai_client}
 
 
 # --- the registry -------------------------------------------------------------
@@ -325,7 +328,7 @@ def test_importing_the_module_does_not_import_either_sdk():
 
     code = (
         "import sys\n"
-        "import providers.llm\n"
+        "import pandion.llm\n"
         "leaked = sorted(m for m in sys.modules if m.split('.')[0] in ('openai', 'anthropic'))\n"
         "print(leaked)\n"
         "sys.exit(1 if leaked else 0)\n"
@@ -340,7 +343,7 @@ def test_importing_the_module_does_not_import_either_sdk():
 
 
 def test_key_for_reads_the_providers_credential():
-    from providers.llm import key_for
+    from pandion.llm import key_for
 
     creds = {
         "anthropic_api_key": "a",
@@ -355,42 +358,43 @@ def test_key_for_reads_the_providers_credential():
     assert key_for(CHAT_MODELS["claude-opus-5"], None) is None
 
 
-# --- demo mode: a custom endpoint must be a public https address -------------
+# --- public_only: a custom endpoint must be a public https address -----------
 
 
-def test_compatible_in_demo_mode_refuses_a_private_endpoint_before_any_client(
+def test_compatible_with_public_only_refuses_a_private_endpoint_before_any_client(
     fake_openai, monkeypatch
 ):
-    from providers.endpoints import DEMO_ENDPOINT_ERROR, EndpointRefused
+    from pandion.endpoints import DEMO_ENDPOINT_ERROR, EndpointRefused
 
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["127.0.0.1"])
+    monkeypatch.setattr("pandion.endpoints._resolve", lambda host: ["127.0.0.1"])
     with pytest.raises(EndpointRefused, match="public https address") as info:
         complete(
             CHAT_MODELS["custom"], system="s", user="u", api_key=None,
             base_url="https://rebind.example.com/v1", model_name="m",
+            public_only=True,
         )
     assert str(info.value) == DEMO_ENDPOINT_ERROR
     assert fake_openai.built == []
 
 
-def test_compatible_in_demo_mode_accepts_a_public_https_endpoint(fake_openai, monkeypatch):
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    monkeypatch.setattr("providers.endpoints._resolve", lambda host: ["104.18.2.115"])
+def test_compatible_with_public_only_accepts_a_public_https_endpoint(fake_openai, monkeypatch):
+    monkeypatch.setattr("pandion.endpoints._resolve", lambda host: ["104.18.2.115"])
     complete(
         CHAT_MODELS["custom"], system="s", user="u", api_key=None,
         base_url="https://api.example.com/v1", model_name="m",
+        public_only=True,
     )
     assert fake_openai.built[0]["base_url"] == "https://api.example.com/v1"
+    # The client it builds follows no redirects either.
+    assert fake_openai.options == [{"public_only": True}]
 
 
-def test_outside_demo_mode_a_local_endpoint_still_works(fake_openai, monkeypatch):
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+def test_without_public_only_a_local_endpoint_still_works(fake_openai, monkeypatch):
 
     def no_dns(host):
-        raise AssertionError("no DNS lookup outside demo mode")
+        raise AssertionError("no DNS lookup without public_only")
 
-    monkeypatch.setattr("providers.endpoints._resolve", no_dns)
+    monkeypatch.setattr("pandion.endpoints._resolve", no_dns)
     complete(
         CHAT_MODELS["custom"], system="s", user="u", api_key=None,
         base_url="http://localhost:11434/v1", model_name="m",
@@ -398,18 +402,16 @@ def test_outside_demo_mode_a_local_endpoint_still_works(fake_openai, monkeypatch
     assert fake_openai.built[0]["base_url"] == "http://localhost:11434/v1"
 
 
-def test_in_demo_mode_a_custom_client_does_not_follow_redirects(monkeypatch):
+def test_with_public_only_a_custom_client_does_not_follow_redirects():
     import openai
 
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    kwargs = llm.openai_client_kwargs(None, "https://api.example.com/v1")
+    kwargs = llm.openai_client_kwargs(None, "https://api.example.com/v1", public_only=True)
     assert kwargs["http_client"].follow_redirects is False
     client = openai.OpenAI(**kwargs)
     assert client._client.follow_redirects is False
 
 
-def test_outside_demo_mode_the_client_keeps_the_sdk_default(monkeypatch):
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+def test_without_public_only_the_client_keeps_the_sdk_default():
     assert "http_client" not in llm.openai_client_kwargs(None, "http://localhost:1/v1")
 
 
@@ -448,17 +450,16 @@ def test_openrouter_requires_a_model_id(fake_openai, model_name):
     assert fake_openai.built == []
 
 
-def test_openrouter_is_not_a_custom_endpoint_on_the_demo(fake_openai, monkeypatch):
-    """The URL is fixed, so the demo check has nothing to look up."""
+def test_openrouter_is_not_a_custom_endpoint_with_public_only(fake_openai, monkeypatch):
+    """The URL is fixed, so the public-endpoint check has nothing to look up."""
 
     def no_dns(host):
         raise AssertionError("OpenRouter's fixed URL needs no check")
 
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    monkeypatch.setattr("providers.endpoints._resolve", no_dns)
+    monkeypatch.setattr("pandion.endpoints._resolve", no_dns)
     complete(
         CHAT_MODELS["openrouter"], system="s", user="u", api_key=KEY,
-        model_name="google/gemini-2.5-flash",
+        model_name="google/gemini-2.5-flash", public_only=True,
     )
     assert fake_openai.built[0]["base_url"] == llm.OPENROUTER_BASE_URL
 
@@ -483,7 +484,6 @@ def test_openrouter_errors_name_openrouter_and_never_carry_the_key(fake_openai):
 def test_openrouter_client_sends_the_app_attribution_headers(monkeypatch):
     import openai
 
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
     kwargs = llm.openai_client_kwargs(KEY, llm.OPENROUTER_BASE_URL, openrouter=True)
     assert kwargs["default_headers"]["HTTP-Referer"] == "https://github.com/nadeem4/rag-playground"
     assert kwargs["default_headers"]["X-Title"] == "RAG Playground"
@@ -493,7 +493,6 @@ def test_openrouter_client_sends_the_app_attribution_headers(monkeypatch):
 
 
 def test_openrouter_is_chosen_by_the_provider_not_the_url(fake_openai, monkeypatch):
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
     # The URL alone is not enough to send OpenRouter's headers...
     by_url = llm.openai_client_kwargs(KEY, llm.OPENROUTER_BASE_URL)
     assert "X-Title" not in by_url.get("default_headers", {})
@@ -525,7 +524,6 @@ def test_a_non_openai_endpoint_never_gets_the_openai_org_or_project(
 ):
     import openai
 
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
     monkeypatch.setenv("OPENAI_ORG_ID", "org-ENV-must-not-travel")
     monkeypatch.setenv("OPENAI_PROJECT_ID", "proj-ENV-must-not-travel")
     client = openai.OpenAI(**llm.openai_client_kwargs(KEY, base_url, openrouter=openrouter))
@@ -536,24 +534,28 @@ def test_a_non_openai_endpoint_never_gets_the_openai_org_or_project(
     assert plain["openai-organization"] == "org-ENV-must-not-travel"
 
 
-def test_in_demo_mode_a_custom_client_ignores_proxy_settings(monkeypatch):
+def test_with_public_only_a_custom_client_ignores_proxy_settings():
     import openai
 
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    kwargs = llm.openai_client_kwargs(None, "https://api.example.com/v1")
+    kwargs = llm.openai_client_kwargs(None, "https://api.example.com/v1", public_only=True)
     assert kwargs["http_client"].trust_env is False
     assert openai.OpenAI(**kwargs)._client.trust_env is False
 
 
-def test_no_key_message_mentions_the_server_variable_only_locally(monkeypatch):
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+def test_no_key_message_mentions_the_server_variable_only_locally():
     local = llm.no_key_message("openrouter")
     assert local.startswith("No OpenRouter API key. Add one with the key button at the top right.")
     assert "Running locally, you can also set OPENROUTER_API_KEY." in local
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     for provider in ("anthropic", "openai", "openrouter"):
-        demo = llm.no_key_message(provider)
-        assert "_API_KEY" not in demo and "server" not in demo
+        shared = llm.no_key_message(provider, public_only=True)
+        assert "_API_KEY" not in shared and "server" not in shared
+
+
+@pytest.mark.parametrize("model_id", ["claude-opus-5", "gpt-6-astra"])
+def test_with_public_only_a_missing_key_never_points_at_the_server(model_id):
+    with pytest.raises(ValueError) as info:
+        complete(CHAT_MODELS[model_id], system="s", user="u", api_key=None, public_only=True)
+    assert "_API_KEY" not in str(info.value)
 
 
 def test_model_schema_carries_each_models_provider():
@@ -562,8 +564,28 @@ def test_model_schema_carries_each_models_provider():
     assert extra["x-labels"]["openrouter"] == "OpenRouter"
 
 
-def test_key_sentence_mentions_the_server_variable_only_locally(monkeypatch):
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+def test_key_sentence_mentions_the_server_variable_only_locally():
     assert "Running locally, you can also set OPENAI_API_KEY." in llm.key_sentence("openai")
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    assert "OPENAI_API_KEY" not in llm.key_sentence("openai")
+    assert "OPENAI_API_KEY" not in llm.key_sentence("openai", public_only=True)
+
+
+@pytest.mark.parametrize(
+    "factory,module,extra",
+    [
+        (lambda: llm.make_anthropic_client("k"), "anthropic", "anthropic"),
+        (lambda: llm.make_openai_client("k"), "openai", "openai"),
+    ],
+    ids=["anthropic", "openai"],
+)
+def test_a_missing_sdk_names_its_extra(monkeypatch, factory, module, extra):
+    """The conftest refuses real clients; the real factories are put back here,
+    and the SDK is hidden, so no client is ever built."""
+    import sys
+
+    from pandion.errors import MissingExtra
+
+    monkeypatch.setattr(llm, "make_anthropic_client", REAL_FACTORIES["anthropic"])
+    monkeypatch.setattr(llm, "make_openai_client", REAL_FACTORIES["openai"])
+    monkeypatch.setitem(sys.modules, module, None)
+    with pytest.raises(MissingExtra, match=rf'pip install "pandion\[{extra}\]"'):
+        factory()

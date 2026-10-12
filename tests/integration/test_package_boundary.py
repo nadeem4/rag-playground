@@ -1,7 +1,7 @@
 """The app uses only pandion's public names.
 
 A module or name that starts with an underscore is private to the package and
-may change without notice. The app (`api`, `plugins`, `providers`, `scripts`)
+may change without notice. The app (`api`, `plugins`, `scripts`)
 must not import one, so that the package can change its insides freely and the
 playground keeps testing the same API a package user gets.
 """
@@ -12,7 +12,7 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-APP_DIRS = ("api", "plugins", "providers", "scripts")
+APP_DIRS = ("api", "plugins", "scripts")
 
 
 def private_pandion_imports(source: str) -> list[str]:

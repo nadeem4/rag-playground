@@ -1,4 +1,4 @@
-"""Chat models: which ones the playground offers, and one call to ask any of them.
+"""Chat models: which ones pandion offers, and one call to ask any of them.
 
 `CHAT_MODELS` is the registry the chat node's `model` setting is built from.
 `complete()` sends one system prompt and one user message and returns the text,
@@ -27,13 +27,17 @@ request and the request holds the key. A custom endpoint with no key gets a
 placeholder, never `None`: the OpenAI SDK would otherwise read
 `OPENAI_API_KEY` from the environment and send it to the custom URL.
 
-**Custom endpoints on the demo.** In demo mode a custom `base_url` must be a
-public https address (`providers.endpoints`), checked before any client is
-built, and that client does not follow redirects.
+**Custom endpoints on a shared host.** With `public_only=True` a custom
+`base_url` must be a public https address (`pandion.endpoints`), checked
+before any client is built, that client does not follow redirects, and no
+message suggests setting a key on the server. The caller decides: a run hands
+it to its steps as `context_extras={"public_endpoints_only": True}`, and the
+app turns it on for its hosted demo.
 
-Both SDKs are imported lazily, inside the factories and the calls, so importing
-this module (every API start, every test run) costs nothing. Tests patch
-`make_anthropic_client` and `make_openai_client`.
+Both SDKs are extras (`pandion[anthropic]`, `pandion[openai]`), imported
+inside the factories and the calls through `pandion.errors.require`, so
+importing this module costs nothing and a missing SDK says which extra to
+install. Tests patch `make_anthropic_client` and `make_openai_client`.
 """
 
 from __future__ import annotations
@@ -41,7 +45,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from providers import endpoints
+from pandion import endpoints
+from pandion.errors import require
 
 Provider = Literal["anthropic", "openai", "openrouter", "openai_compatible"]
 
@@ -99,24 +104,24 @@ NO_KEY: dict[str, str] = {
 }
 
 
-def _locally(provider: str) -> str:
-    """The server variable, but only off the demo: a demo visitor cannot set it."""
-    if endpoints.demo_enabled():
+def _locally(provider: str, public_only: bool) -> str:
+    """The server variable, but only when the caller's users run the server."""
+    if public_only:
         return ""
     return f" Running locally, you can also set {KEY_NAMES[provider][1]}."
 
 
-def no_key_message(provider: str) -> str:
+def no_key_message(provider: str, *, public_only: bool = False) -> str:
     """What a step says when its provider's key is missing."""
-    return NO_KEY[provider] + _locally(provider)
+    return NO_KEY[provider] + _locally(provider, public_only)
 
 
-def key_sentence(provider: str) -> str:
+def key_sentence(provider: str, *, public_only: bool = False) -> str:
     """How a step's explanation says it needs this provider's key."""
     name = KEY_NAMES[provider][0]
     return (
         f"It needs an {name} API key, added with the key button at the top right."
-        + _locally(provider)
+        + _locally(provider, public_only)
     )
 
 
@@ -186,15 +191,25 @@ ANTHROPIC_FALLBACKS: dict[str, dict[str, Any]] = {
 ADAPTIVE_THINKING = {"claude-opus-5", "claude-sonnet-5"}
 
 
+def _anthropic() -> Any:
+    return require("anthropic", extra="anthropic", step="An Anthropic model")
+
+
+def _openai() -> Any:
+    return require("openai", extra="openai", step="An OpenAI or OpenAI-compatible model")
+
+
 def make_anthropic_client(api_key: str) -> Any:
     """The one place a real Anthropic client is built. Tests patch this."""
-    import anthropic
-
-    return anthropic.Anthropic(api_key=api_key)
+    return _anthropic().Anthropic(api_key=api_key)
 
 
 def openai_client_kwargs(
-    api_key: str | None, base_url: str | None, *, openrouter: bool = False
+    api_key: str | None,
+    base_url: str | None,
+    *,
+    openrouter: bool = False,
+    public_only: bool = False,
 ) -> dict[str, Any]:
     """Always an explicit key, so the SDK never falls back to the environment.
 
@@ -203,14 +218,14 @@ def openai_client_kwargs(
     the `OpenAI-Organization` or `OpenAI-Project` header, which the SDK would
     otherwise fill from `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID`.
 
-    In demo mode a custom endpoint's client does not follow redirects, so a
-    public endpoint cannot bounce the request to a private address
-    (`providers.endpoints`), and ignores proxy settings in the environment.
+    With `public_only` a custom endpoint's client does not follow redirects,
+    so a public endpoint cannot bounce the request to a private address
+    (`pandion.endpoints`), and ignores proxy settings in the environment.
     """
     kwargs: dict[str, Any] = {"api_key": api_key or NO_KEY_PLACEHOLDER}
     if not (openrouter or base_url):
         return kwargs
-    import openai
+    openai = _openai()
 
     kwargs["default_headers"] = {
         "OpenAI-Organization": openai.Omit(),
@@ -221,7 +236,7 @@ def openai_client_kwargs(
         kwargs["default_headers"].update(OPENROUTER_HEADERS)
         return kwargs
     kwargs["base_url"] = base_url
-    if endpoints.demo_enabled():
+    if public_only:
         kwargs["http_client"] = openai.DefaultHttpxClient(
             follow_redirects=False, trust_env=False
         )
@@ -229,12 +244,18 @@ def openai_client_kwargs(
 
 
 def make_openai_client(
-    api_key: str | None, base_url: str | None = None, *, openrouter: bool = False
+    api_key: str | None,
+    base_url: str | None = None,
+    *,
+    openrouter: bool = False,
+    public_only: bool = False,
 ) -> Any:
     """The one place a real OpenAI client is built. Tests patch this."""
-    import openai
-
-    return openai.OpenAI(**openai_client_kwargs(api_key, base_url, openrouter=openrouter))
+    return _openai().OpenAI(
+        **openai_client_kwargs(
+            api_key, base_url, openrouter=openrouter, public_only=public_only
+        )
+    )
 
 
 def anthropic_request_extras(model_id: str) -> dict[str, Any]:
@@ -254,11 +275,16 @@ def complete(
     base_url: str | None = None,
     model_name: str | None = None,
     max_tokens: int = 2048,
+    public_only: bool = False,
 ) -> Completion:
-    """One answer from any registered model. Raises a readable error, key-free."""
+    """One answer from any registered model. Raises a readable error, key-free.
+
+    `public_only` is for a server that strangers share: a custom endpoint must
+    then be a public https address (`pandion.endpoints`).
+    """
     if model.provider == "anthropic":
         if not api_key:
-            raise ValueError(no_key_message("anthropic"))
+            raise ValueError(no_key_message("anthropic", public_only=public_only))
         request = {
             "model": model.id,
             "max_tokens": max_tokens,
@@ -284,14 +310,14 @@ def complete(
     }
     if model.provider == "openai":
         if not api_key:
-            raise ValueError(no_key_message("openai"))
+            raise ValueError(no_key_message("openai", public_only=public_only))
         request["model"] = model.id
         request["max_completion_tokens"] = max_tokens
         client = make_openai_client(api_key)
         where = "OpenAI"
     elif model.provider == "openrouter":
         if not api_key:
-            raise ValueError(no_key_message("openrouter"))
+            raise ValueError(no_key_message("openrouter", public_only=public_only))
         if not (model_name or "").strip():
             raise ValueError(OPENROUTER_NEEDS_MODEL)
         request["model"] = model_name.strip()
@@ -303,10 +329,12 @@ def complete(
             raise ValueError(
                 "A custom endpoint needs both a base URL and a model name."
             )
-        endpoints.guard_endpoint(base_url)
+        endpoints.guard_endpoint(base_url, public_only=public_only)
         request["model"] = model_name
         request["max_tokens"] = max_tokens
-        client = make_openai_client(api_key or NO_KEY_PLACEHOLDER, base_url)
+        client = make_openai_client(
+            api_key or NO_KEY_PLACEHOLDER, base_url, public_only=public_only
+        )
         where = f"the custom endpoint at {base_url}"
 
     response = _call_openai(client, request, api_key, where)
@@ -333,7 +361,7 @@ def call_anthropic(client: Any, request: dict[str, Any], api_key: str) -> Any:
 
     Most specific first, as the claude-api skill prescribes.
     """
-    import anthropic
+    anthropic = _anthropic()
 
     def fail(message: str) -> RuntimeError:
         return _scrub(message, api_key)
@@ -360,7 +388,7 @@ def _call_openai(
     client: Any, request: dict[str, Any], api_key: str | None, where: str
 ) -> Any:
     """Chat Completions, with the same error rules as `call_anthropic`."""
-    import openai
+    openai = _openai()
 
     def fail(message: str) -> RuntimeError:
         return _scrub(message[0].upper() + message[1:], api_key)

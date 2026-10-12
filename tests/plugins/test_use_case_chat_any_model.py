@@ -19,7 +19,7 @@ from pandion.ports import RunContext
 from plugins.use_case import chat as chat_module
 from plugins.use_case._grounding import number_sources
 from plugins.use_case.chat import SENTENCE_PROMPT, ChatConfig, ChatUseCase
-from providers import llm
+from pandion import llm
 from tests.plugins.test_rerank import write_index
 from tests.plugins.test_use_case_chat import (  # noqa: F401  (fixtures)
     KEY,

@@ -1110,6 +1110,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+anthropic = [
+    { name = "anthropic" },
+]
 docling = [
     { name = "docling" },
     { name = "onnxruntime" },
@@ -1123,15 +1126,20 @@ local = [
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
 ]
+openai = [
+    { name = "openai" },
+]
 pdfium = [
     { name = "pypdfium2" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=1.7.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.129.0" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.38,<0.39" },
     { name = "onnxruntime", marker = "extra == 'docling'", specifier = ">=1.30.0" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=3.17.0" },
     { name = "pyarrow", marker = "extra == 'lancedb'", specifier = ">=25.0.1" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pypdfium2", marker = "extra == 'pdfium'", specifier = ">=5.13.0" },
@@ -1140,7 +1148,7 @@ requires-dist = [
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'local'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform != 'linux' and extra == 'local'", specifier = ">=2.14.0" },
 ]
-provides-extras = ["pdfium", "docling", "local", "lancedb"]
+provides-extras = ["pdfium", "docling", "local", "lancedb", "openai", "anthropic"]
 
 [[package]]
 name = "pillow"
@@ -1490,7 +1498,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "fastapi" },
     { name = "openai" },
-    { name = "pandion", extra = ["docling", "lancedb", "local", "pdfium"] },
+    { name = "pandion", extra = ["anthropic", "docling", "lancedb", "local", "openai", "pdfium"] },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -1517,7 +1525,7 @@ requires-dist = [
     { name = "git-cliff", marker = "extra == 'dev'", specifier = "==2.14.2" },
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.13.0" },
     { name = "openai", specifier = ">=3.17.0" },
-    { name = "pandion", extras = ["docling", "lancedb", "local", "pdfium"], editable = "packages/pandion" },
+    { name = "pandion", extras = ["anthropic", "docling", "lancedb", "local", "openai", "pdfium"], editable = "packages/pandion" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },

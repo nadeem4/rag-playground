@@ -1,5 +1,5 @@
-"""Run one stage on its own: `pandion.parse` on one file, and `pandion.clean`
-and `pandion.chunk` on one document."""
+"""Run one stage on its own: `pandion.parse` on one file, `pandion.clean`
+and `pandion.chunk` on one document, and `pandion.rewrite` on one question."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import pandion
-from pandion.payloads import ChunkSet, Element, ParsedDoc
+from pandion.payloads import ChunkSet, Element, ParsedDoc, Query
 from pandion.registry import UnknownTransformError
 from pdfs import SAMPLE_LINES
 
@@ -221,3 +221,84 @@ def test_a_wrong_chunk_setting_value_is_an_error():
         pandion.chunk(
             notice_doc(), use="sentence_window", sentences_per_chunk=2, overlap_sentences=2
         )
+
+
+# --- rewrite --------------------------------------------------------------------
+
+
+QUESTION = "Who is my current employer?"
+REWRITE = "current employer company present role"
+
+
+class FakeComplete:
+    """Stands in for `pandion.llm.complete`: no model is ever called."""
+
+    def __init__(self, reply: str):
+        self.reply = reply
+        self.calls: list[dict] = []
+
+    def __call__(self, model, **kwargs):
+        from pandion.llm import Completion
+
+        self.calls.append({"model": model, **kwargs})
+        return Completion(text=self.reply, usage={}, stop_reason="end_turn")
+
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    fake = FakeComplete(REWRITE)
+    monkeypatch.setattr("pandion.llm.complete", fake)
+    return fake
+
+
+def test_rewrite_with_text_gives_the_question_as_typed():
+    result = pandion.rewrite(QUESTION, use="text")
+
+    assert result.stage == "query" and result.transform == "text"
+    assert isinstance(result.output, Query)
+    assert result.output.text == QUESTION and result.output.original == ""
+
+
+def test_rewrite_with_llm_rewrite_searches_with_the_models_words(fake_llm):
+    result = pandion.rewrite(
+        QUESTION,
+        use="llm_rewrite",
+        style="keywords",
+        credentials={"anthropic_api_key": "sk-ant-test"},
+    )
+
+    assert result.output.text == REWRITE
+    assert result.output.original == QUESTION
+    assert result.note == f"Rewrote the question as: {REWRITE}."
+    [call] = fake_llm.calls
+    assert call["api_key"] == "sk-ant-test"
+    assert call["public_only"] is False
+    assert "six to ten search words" in call["system"]
+
+
+def test_rewrite_reads_the_start_of_a_document(fake_llm):
+    doc = ParsedDoc(
+        doc_id="d",
+        elements=[
+            Element(id="e1", type="paragraph", text="Experience: Acme, 2021 to Present", order=0)
+        ],
+    )
+    pandion.rewrite(QUESTION, use="llm_rewrite", doc=doc, credentials={"anthropic_api_key": "k"})
+
+    assert "Experience: Acme, 2021 to Present" in fake_llm.calls[0]["user"]
+
+
+def test_rewrite_without_a_key_says_which_key(fake_llm):
+    with pytest.raises(ValueError, match="No Anthropic API key"):
+        pandion.rewrite(QUESTION, use="llm_rewrite")
+    assert fake_llm.calls == []
+
+
+def test_an_unknown_rewrite_lists_the_query_steps():
+    with pytest.raises(UnknownTransformError, match="no_such_step.*llm_rewrite.*text"):
+        pandion.rewrite(QUESTION, use="no_such_step")
+
+
+def test_an_unknown_rewrite_setting_is_an_error_naming_the_step():
+    with pytest.raises(ValueError, match="llm_rewrite.*'temperature'.*style"):
+        pandion.rewrite(QUESTION, use="llm_rewrite", temperature=0)

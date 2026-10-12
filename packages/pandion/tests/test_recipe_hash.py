@@ -132,3 +132,39 @@ def test_an_embedding_cache_key_stays_the_same(name, kind, expected):
     """Computed on main at 8894d6d. A moved key would make every cached vector a miss."""
     p = get_embedder(name)
     assert cache_key(p.model_id, p.revision, kind, "How big should a chunk be?", p.dtype) == expected
+
+
+QUESTION = "How big should a chunk be?"
+
+
+@pytest.mark.parametrize(
+    "name,config,expected",
+    [
+        ("text", {}, "1f84ab7d7461a49703e5adfb3a0e2a2d86d22fe975c54769cc85592180618493"),
+        (
+            "text",
+            {"text": QUESTION},
+            "7e65b0c9455e026523a421126d47177cc18029428e47a01e0616be59d7f86b47",
+        ),
+        ("llm_rewrite", {}, "4413fa2b50f077ea8b338118ce00d93375998e24bfeac742efb5e041a15adf68"),
+        (
+            "llm_rewrite",
+            {"text": QUESTION},
+            "d346b0ea222f2c39e1ea4deac1c7e7c74791075839459d8c957638133f9f87d0",
+        ),
+    ],
+)
+def test_a_query_node_keeps_its_id(name, config, expected):
+    """Computed on main at 8148f42, while the query steps still lived in the app."""
+    discover()
+    cls = registry.get(Stage.QUERY, name)
+    settings = cls.config_model(**config)
+    assert cls.__module__ == f"pandion.plugins.query.{name}"
+    assert compute_artifact_id(
+        transform_name=cls.name,
+        transform_version=cls.version,
+        fingerprint=cls().fingerprint(settings),
+        output_type=cls.output,
+        config=settings.model_dump(mode="json"),
+        inputs={},
+    ) == expected

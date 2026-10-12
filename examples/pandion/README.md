@@ -7,6 +7,9 @@ them again.
   `recursive_character` chunker and a lancedb index.
 - `index_samples.py`: runs the pipeline twice and prints each step's note. The second
   run shows every step was reused.
+- `sync_samples.py`: copies two samples into a folder and syncs the index with it, then
+  adds a third sample and syncs, then removes it and syncs. Each sync prints what it
+  added, changed, removed and left unchanged.
 
 From the root of the repo:
 
@@ -21,6 +24,13 @@ a download, use the fake embedder, or pick the smaller `bge-small-en-v1.5`:
 uv run python examples/pandion/index_samples.py --embedder fake-deterministic
 ```
 
-The index is written to `pandion-example/` in the folder you run from. Use `--work` to
+`sync_samples.py` takes the same `--embedder` option:
+
+```bash
+uv run python examples/pandion/sync_samples.py --embedder fake-deterministic
+```
+
+The index is written to `pandion-example/` (or `pandion-sync-example/` for the sync
+script) in the folder you run from. Use `--work` to
 choose another folder. The full format of the pipeline file is in
 [docs/pandion.md](../../docs/pandion.md).

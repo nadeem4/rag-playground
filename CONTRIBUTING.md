@@ -2,7 +2,9 @@
 
 How to set up RAG Playground for development, run the tests, add a strategy, cut a
 release and record the Home clips. For how the code fits together, see
-[docs/architecture.md](docs/architecture.md).
+[docs/architecture.md](docs/architecture.md). If you work on the `pandion` package, read
+[docs/pandion.md](docs/pandion.md) first; it shows how to use the package, and
+`examples/pandion/` is tested, so update it when the package's API changes.
 
 ## Contents
 

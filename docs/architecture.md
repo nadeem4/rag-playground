@@ -65,44 +65,7 @@ hold both rules: `tests/integration/test_package_boundary.py` and
 
 ## Using the package on its own
 
-A pipeline file says how to build an index. Every setting under a step has the same
-name as in the app's settings forms, so the same pipeline built in the app and written
-in a file gives the same artifact ids and shares a cache.
-
-```yaml
-# pipeline.yaml
-path: ./my-index            # sources, artifacts and the embedding cache go here
-models:                     # optional
-  download: auto            # or never, on a server with no network
-  device: auto              # or cpu, cuda, mps
-index:
-  parse:
-    use: pdfium
-  clean:                    # optional, a list run in order
-    - use: dedupe_blocks
-  chunk:
-    use: recursive_character
-    chunk_size: 400
-  embed:
-    use: qwen3-embedding-0.6b
-  store:
-    use: lancedb
-```
-
-```python
-from pandion import Pipeline
-
-report = Pipeline.from_file("pipeline.yaml").index.run("docs/")
-report.documents["guides/chunking.pdf"].stages["chunk"].output   # the pieces
-report.index.output                                              # the index folder
-```
-
-Each document is named by its path inside the folder, with forward slashes. Each step
-has a `StageResult`: its output, whether it ran or came from the cache, how long it
-took, and its note. Running the same files with the same pipeline file again only reads the
-cache. An unknown step or setting is an error that names the step and what it accepts,
-before anything runs. `pandion install pipeline.yaml` installs the extras the file
-needs, and `--print` only prints the pip command.
+See the [pandion guide](pandion.md).
 
 ## The pipeline graph and its stages
 

@@ -36,6 +36,9 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.chunk.token_based",
     "pandion.plugins.chunk.sentence_window",
     "pandion.plugins.index.lancedb_store",
+    "pandion.plugins.retrieve.dense",
+    "pandion.plugins.retrieve.bm25",
+    "pandion.plugins.retrieve.hybrid_rrf",
 )
 
 _discovered = False

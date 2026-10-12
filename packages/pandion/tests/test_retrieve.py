@@ -20,10 +20,10 @@ from pandion.payloads import Chunk, ChunkSet, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.storage import Store
 from pandion.plugins.index.lancedb_store import DESCRIPTOR, LanceDbIndex, LanceDbIndexConfig
-from plugins.retrieve import _base
-from plugins.retrieve.bm25 import Bm25Config, Bm25Retriever
-from plugins.retrieve.dense import DenseConfig, DenseRetriever
-from plugins.retrieve.hybrid_rrf import HybridRrfConfig, HybridRrfRetriever
+from pandion.plugins.retrieve import _base
+from pandion.plugins.retrieve.bm25 import Bm25Config, Bm25Retriever
+from pandion.plugins.retrieve.dense import DenseConfig, DenseRetriever
+from pandion.plugins.retrieve.hybrid_rrf import HybridRrfConfig, HybridRrfRetriever
 from pandion.embeddings import FakeDeterministicEmbedder
 
 # --------------------------------------------------------------------------
@@ -585,7 +585,7 @@ def test_explain_describes_a_pool_for_the_next_step(transform):
 # hybrid rrf: pseudo-relevance feedback (PRF) query expansion
 # --------------------------------------------------------------------------
 
-from plugins.retrieve import _prf  # noqa: E402
+from pandion.plugins.retrieve import _prf  # noqa: E402
 
 
 def test_prf_skips_stopwords_digits_short_tokens_and_the_questions_words():
@@ -776,3 +776,34 @@ def test_explain_names_the_expansion_parameters():
 
 def test_hybrid_version_is_bumped_for_the_expansion():
     assert HybridRrfRetriever.version == "2"
+
+
+# --------------------------------------------------------------------------
+# the package boundary
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("transform", ALL, ids=ALL_IDS)
+def test_a_retriever_without_lancedb_says_which_extra_to_install(
+    transform, tmp_path, monkeypatch
+):
+    import sys
+
+    from pandion.errors import MissingExtra
+
+    index_dir = build_index(tmp_path, *CORPUS)
+    monkeypatch.setitem(sys.modules, "lancedb", None)
+    with pytest.raises(MissingExtra, match=r'pip install "pandion\[lancedb\]"'):
+        retrieve(transform, index_dir, Query(text="capital"), tmp_path)
+
+
+def test_a_step_outside_retrieve_reads_the_index_model_through_public_names(tmp_path):
+    from pandion.plugins import retrieve as public
+
+    index_dir = build_index(tmp_path, *CORPUS)
+    descriptor = public.read_descriptor(index_dir)
+    embedder, dim = public.embedder_for(descriptor)
+
+    assert descriptor["embedding_model"] == "fake-deterministic"
+    assert isinstance(embedder, FakeDeterministicEmbedder)
+    assert dim is None

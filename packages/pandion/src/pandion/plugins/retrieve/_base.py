@@ -25,8 +25,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
-import lancedb
-
+from pandion.errors import require
 from pandion.ids import canonical_json
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.plugins.index.lancedb_store import DESCRIPTOR, TABLE, TEXT_COLUMN
@@ -65,6 +64,7 @@ def open_index(raw: Any) -> tuple[Any, dict[str, Any]]:
     the committed directory and the consumer opens it, so the store never holds
     a database handle of its own.
     """
+    lancedb = require("lancedb", extra="lancedb", step="A retriever")
     directory = Path(raw)
     return lancedb.connect(directory).open_table(TABLE), read_descriptor(directory)
 

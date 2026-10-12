@@ -168,3 +168,32 @@ def test_a_query_node_keeps_its_id(name, config, expected):
         config=settings.model_dump(mode="json"),
         inputs={},
     ) == expected
+
+
+@pytest.mark.parametrize(
+    "name,config,expected",
+    [
+        ("dense", {}, "24d583bf7e4a1202421a47de71caf84e60d763a8029aca823037f08a341e68eb"),
+        ("bm25", {}, "0eea8e79d356a2d3712c94ecdcfbd54e83868f12c0f004f2f38baa7a5b170826"),
+        ("hybrid_rrf", {}, "eb943bf5d5dfe4c68804418cf137de563b04d0dfa1b94d0cf145c5474c57e390"),
+        (
+            "hybrid_rrf",
+            {"query_expansion": "prf"},
+            "c50aa263fb2e2b0d1c53e8eef29ff01dc13147961f566f16197ad533fb037905",
+        ),
+    ],
+)
+def test_a_retrieve_node_keeps_its_id(name, config, expected):
+    """Computed on main at 410807c, while the retrievers still lived in the app."""
+    discover()
+    cls = registry.get(Stage.RETRIEVE, name)
+    settings = cls.config_model(**config)
+    assert cls.__module__ == f"pandion.plugins.retrieve.{name}"
+    assert compute_artifact_id(
+        transform_name=cls.name,
+        transform_version=cls.version,
+        fingerprint=cls().fingerprint(settings),
+        output_type=cls.output,
+        config=settings.model_dump(mode="json"),
+        inputs={"index": "e" * 64, "query": "f" * 64},
+    ) == expected

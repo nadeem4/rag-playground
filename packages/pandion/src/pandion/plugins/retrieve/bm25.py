@@ -17,7 +17,7 @@ from pandion.payloads import Query
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.retrieve import _base
+from pandion.plugins.retrieve import _base
 
 
 class Bm25Config(BaseModel):

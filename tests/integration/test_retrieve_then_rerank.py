@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pandion.payloads import Query, RetrievalResult
 from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
-from plugins.retrieve.dense import DenseConfig, DenseRetriever
+from pandion.plugins.retrieve.dense import DenseConfig, DenseRetriever
 from tests.plugins.test_retrieve import _ctx, build_index
 
 QUESTION = "What is the capital of France?"

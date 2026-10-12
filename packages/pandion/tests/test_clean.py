@@ -20,9 +20,9 @@ from pandion.artifacts import ArtifactType
 from pandion.payloads import Element, ParsedDoc
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import registry
-from plugins.clean.dedupe_blocks import DedupeBlocks
-from plugins.clean.drop_matching import DropMatching
-from plugins.clean.header_footer_strip import HeaderFooterStrip
+from pandion.plugins.clean.dedupe_blocks import DedupeBlocks
+from pandion.plugins.clean.drop_matching import DropMatching
+from pandion.plugins.clean.header_footer_strip import HeaderFooterStrip
 
 # --------------------------------------------------------------------------
 # helpers

@@ -11,6 +11,8 @@ twice raises `DuplicateTransformError`.
 Importing a plugin module loads no heavy library. Each one imports its
 library (pypdfium2, Docling) inside the function that uses it, through
 `pandion.errors.require`, so the base install can discover every strategy.
+The cleaners need nothing beyond the standard library, so they come with the
+base install.
 """
 
 from __future__ import annotations
@@ -21,6 +23,9 @@ import importlib
 PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.parse.pdfium",
     "pandion.plugins.parse.docling",
+    "pandion.plugins.clean.header_footer_strip",
+    "pandion.plugins.clean.dedupe_blocks",
+    "pandion.plugins.clean.drop_matching",
 )
 
 _discovered = False

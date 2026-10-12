@@ -21,6 +21,9 @@ docling = [
 local = ["sentence-transformers>=6.1.0", "torch>=2.14.0"]
 lancedb = ["lancedb>=0.38,<0.39", "pyarrow>=25.0.1"]
 
+[project.scripts]
+pandion = "pandion.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -1004,13 +1004,41 @@ describe("seedVariants", () => {
   })
 })
 
-describe("the document in the bar", () => {
+describe("the document on the page", () => {
+  const CARD = {
+    name: "chunking-primer",
+    title: "A primer on chunking",
+    blurb: "",
+    shows: "",
+    stresses: "chunk",
+    pages: 3,
+    default: true,
+    filename: SOURCE.filename,
+    sha: SOURCE.sha,
+    question: "Why?",
+  }
+
+  it("names the document once above the recipes, compact, with Preview and Change", async () => {
+    storeGraph(sampleGraph(registry, SOURCE))
+    serve({}, { "/api/sources": [], "/api/samples": [CARD] })
+    render(<Compare />)
+    const line = await screen.findByTestId("document-line")
+    await waitFor(() => expect(within(line).getByTestId("document-item").textContent).toContain("A primer on chunking"))
+    expect(within(line).getByText("Document")).toBeTruthy()
+    expect(within(line).getByRole("button", { name: "Preview A primer on chunking" })).toBeTruthy()
+    expect(within(line).getByTestId("document-trigger").textContent).toBe("Change")
+    // Above the recipes and their tools.
+    expect(line.compareDocumentPosition(picker()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(within(line).getByRole("button", { name: "Preview A primer on chunking" }))
+    expect(screen.getByRole("dialog", { name: "A primer on chunking" })).toBeTruthy()
+  })
+
   it("says the document is missing and disables the run", async () => {
     storeGraph(sampleGraph(registry, { sha: "ef".repeat(32), filename: "NK_Resume.pdf" }))
     serve({}, { "/api/sources": [], "/api/samples": [] })
     render(<Compare />)
     const note = await screen.findByTestId("document-note")
-    expect(note.textContent).toContain("Pick a document in the bar above to run these recipes.")
+    expect(note.textContent).toContain("Pick a document above to run these recipes.")
     expect((screen.getByRole("button", { name: "Run 3 recipes" }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText("Needs a document.")).toBeTruthy()
   })
@@ -1021,8 +1049,9 @@ describe("the document in the bar", () => {
     serve({}, { "/api/sources": [], "/api/samples": [] })
     render(<Compare />)
     const note = await screen.findByTestId("document-note")
-    expect(note.textContent).toContain("Pick a document in the bar above to run these recipes.")
+    expect(note.textContent).toContain("Pick a document above to run these recipes.")
     expect(screen.queryByText("No pipeline to compare")).toBeNull()
+    expect(within(screen.getByTestId("document-line")).getByTestId("document-trigger").textContent).toBe("Pick a document")
     expect((screen.getByRole("button", { name: "Run 3 recipes" }) as HTMLButtonElement).disabled).toBe(true)
   })
 

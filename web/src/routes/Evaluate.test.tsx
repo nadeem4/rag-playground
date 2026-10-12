@@ -601,6 +601,20 @@ describe("Evaluate is pipeline first", () => {
     expect(within(screen.getByTestId("documents-line")).getByText("other.pdf")).toBeTruthy()
   })
 
+  it("lists the pipeline's documents with the full element, its Preview, and Change beside the Documents label", async () => {
+    serve()
+    render(<Evaluate />)
+    await waitFor(() => expect(picked()).toBe(STARTER_ID))
+    const list = screen.getByTestId("documents-line")
+    const items = await within(list).findAllByTestId("document-item")
+    expect(items).toHaveLength(1)
+    await waitFor(() => expect(within(items[0]).getByText("A primer on chunking")).toBeTruthy())
+    expect(within(items[0]).getByTestId("document-facts").textContent).toContain("Sample")
+    fireEvent.click(within(items[0]).getByRole("button", { name: "Preview A primer on chunking" }))
+    expect(screen.getByRole("dialog", { name: "A primer on chunking" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Change the document. Now chunking-primer.pdf." })).toBeTruthy()
+  })
+
   it("Change tries the pipeline on another document and leaves the saved pipeline as it was", async () => {
     const saved = savePipeline("Token chunks", tokens())!.saved
     setCurrentId(null)

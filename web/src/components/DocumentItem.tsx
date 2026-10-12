@@ -45,7 +45,7 @@ export function useDocumentFacts(doc: DocRef, removed?: boolean): DocumentFacts 
 export function FactsLine({ facts }: { facts: DocumentFacts }) {
   return (
     <span data-testid="document-facts" className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">
-      <span className="font-mono text-2xs break-all">{facts.filename}</span>
+      <span className="min-w-0 font-mono text-2xs break-words">{facts.filename}</span>
       {facts.pages !== null ? <span>{facts.pages === 1 ? "1 page" : `${facts.pages} pages`}</span> : null}
       <span
         data-testid={facts.removed ? "document-removed" : undefined}
@@ -110,14 +110,14 @@ export function DocumentItem({
       {size === "full" ? (
         <div
           data-testid="document-item"
-          className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-panel border border-hairline bg-surface-raised py-2 pr-3 pl-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-panel border border-hairline bg-surface-raised py-2 pr-3 pl-2"
         >
           <Thumb doc={doc} removed={facts.removed} className="w-[36px]" />
-          <span className="flex min-w-0 flex-col">
+          <span className="flex min-w-0 flex-[1_1_10rem] flex-col">
             <span className="text-sm font-semibold [overflow-wrap:anywhere] text-fg">{facts.title}</span>
             <FactsLine facts={facts} />
           </span>
-          <span className="col-start-2 justify-self-start sm:col-start-3">{button}</span>
+          <span className="ml-auto">{button}</span>
         </div>
       ) : (
         <span data-testid="document-item" className="inline-flex max-w-full min-w-0 items-center gap-[6px]">

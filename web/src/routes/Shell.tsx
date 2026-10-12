@@ -120,7 +120,7 @@ function dropParam(name: string): void {
 }
 
 function Build({ registry, navigate }: { registry: Registry; navigate: (href: string) => void }) {
-  // The working copy, a store every page reads (the header's Document control
+  // The working copy, a store every page reads (the Document control
   // too): whatever was last stored under its own key, else the graph of
   // whichever saved pipeline is selected (a session that starts with a
   // selection already made but no working-copy storage of its own yet), else

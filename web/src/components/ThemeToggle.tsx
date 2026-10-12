@@ -20,7 +20,7 @@ const CONTRASTS = [
 
 /**
  * The theme and contrast switches. From xl up they sit in the header, named
- * by their aria-label with no caption so the Document control keeps its room; below xl they wait behind a Display button, so the
+ * by their aria-label with no caption so the header row keeps its room; below xl they wait behind a Display button, so the
  * header stays one row from md up and three rows on a phone. One state feeds
  * both places.
  */

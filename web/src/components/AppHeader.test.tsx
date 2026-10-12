@@ -150,7 +150,7 @@ describe("the theme and contrast switches", () => {
     expect(option("Contrast", "More contrast").getAttribute("aria-pressed")).toBe("true")
   })
 
-  it("in the header row each switch carries no caption, so the Document control keeps its room at 1280; each is still named", () => {
+  it("in the header row each switch carries no caption, so the row keeps its room at 1280; each is still named", () => {
     header()
     for (const name of ["Theme", "Contrast"]) {
       const group = screen.getByRole("group", { name })
@@ -213,7 +213,7 @@ describe("AppHeader with the lessons hidden", () => {
     expect(screen.getByRole("link", { name: "RAG Playground" }).getAttribute("href")).toBe("/")
   })
 
-  it("leaves GitHub to Home, so the Home tab costs the Document control no width", () => {
+  it("leaves GitHub to Home, so the Home tab costs the row no width", () => {
     header("/build", false)
     expect(screen.queryByRole("link", { name: "GitHub" })).toBeNull()
   })
@@ -240,7 +240,7 @@ describe("AppHeader with the lessons hidden", () => {
     expect(link.getAttribute("aria-current")).toBe("page")
   })
 
-  it("shows the privacy link as Privacy from xl up only, so the Document control keeps its room", () => {
+  it("shows the privacy link as Privacy from xl up only, so the row keeps its room", () => {
     header("/compare", false)
     const link = within(screen.getByTestId("header-controls")).getByRole("link", { name: "Your data and privacy" })
     expect(link.textContent).toBe("Privacy")

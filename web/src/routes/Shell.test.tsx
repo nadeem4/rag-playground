@@ -753,7 +753,7 @@ function storedQuestion() {
   return read.nodes?.find((n) => n.stage === "query")?.config.text
 }
 
-describe("picking a sample in the bar", () => {
+describe("picking a sample in the Document menu", () => {
   const TWO_COL = { sha: "11".repeat(32), filename: "two-column-report.pdf", size: 8192, content_type: "application/pdf" }
   const CARD = {
     name: "two-column-report",
@@ -1216,7 +1216,7 @@ describe("saved pipelines on Build", () => {
   })
 
   describe("the missing document notice while samples load (M1)", () => {
-    // Every reader of the samples list (the bar's store, the Ask panel) waits on its own request; settle answers them all.
+    // Every reader of the samples list (the document store, the Ask panel) waits on its own request; settle answers them all.
     // A request made after the answer gets the same answer.
     let pending: { resolve: (r: Response) => void; reject: (e: Error) => void }[] = []
     let answered: ((p: (typeof pending)[number]) => void) | null = null
@@ -1775,7 +1775,7 @@ describe("the document comes with the pipeline", () => {
     sha: SAMPLE_SHA,
     question: "Why do chunk boundaries matter?",
   }
-  // Every reader of the samples list (the bar's store, the Ask panel) waits on its own request; settle answers them all.
+  // Every reader of the samples list (the document store, the Ask panel) waits on its own request; settle answers them all.
   // A request made after the answer gets the same answer.
   let pending: { resolve: (r: Response) => void; reject: (e: Error) => void }[] = []
   let answered: ((p: (typeof pending)[number]) => void) | null = null
@@ -1844,7 +1844,7 @@ describe("the document comes with the pipeline", () => {
     expect((screen.getByRole("button", { name: "Ask" }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it("a document chosen in the bar marks every built step out of date and says so", async () => {
+  it("a document chosen in the Document menu marks every built step out of date and says so", async () => {
     vi.stubGlobal("EventSource", OpenEventSource)
     stored(SAMPLE_SHA)
     setup()

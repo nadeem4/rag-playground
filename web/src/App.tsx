@@ -24,8 +24,8 @@ import { LESSONS_ENABLED } from "@/state/lessons"
 // and experiments, with export and import, and /privacy says what is kept,
 // where and for how long. Navigation is a full page load, so
 // Build, Compare and Evaluate share the pipeline graph through per-viewer
-// storage (state/graph.ts). Within a page the graph is a store: the header's
-// Document control and the page both read it, so a document chosen in the bar
+// storage (state/graph.ts). Within a page the graph is a store: the
+// Document control and the page both read it, so a document chosen there
 // shows on the page at once (state/document.ts).
 //
 // The lessons list is at /learn and each lesson has its own page under it.

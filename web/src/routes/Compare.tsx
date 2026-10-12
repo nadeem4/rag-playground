@@ -115,8 +115,8 @@ export function Compare() {
 }
 
 /**
- * Reads the working graph as a store, so a document chosen in the header's
- * bar on this page re-renders the comparison on it, with no reload.
+ * Reads the working graph as a store, so a document chosen on the Document
+ * line on this page re-renders the comparison on it, with no reload.
  */
 /** The open experiment, as page state: its id and name, and what it holds as saved, to tell an edit. */
 export interface OpenExperiment {
@@ -172,7 +172,7 @@ function ComparePage({ registry }: { registry: Registry }) {
     window.addEventListener("popstate", onPop)
     return () => window.removeEventListener("popstate", onPop)
   }, [])
-  /** Open a saved experiment: its step, its recipes on the cards, and its document in the bar. */
+  /** Open a saved experiment: its step, its recipes on the cards, and its document. */
   const openExperiment = (e: SavedExperiment) => {
     const node = graph?.nodes.find((n) => n.stage === e.stage)
     if (!graph || !node) {

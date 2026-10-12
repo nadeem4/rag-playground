@@ -1106,6 +1106,7 @@ version = "0.0.1"
 source = { editable = "packages/pandion" }
 dependencies = [
     { name = "pydantic" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -1134,6 +1135,7 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'lancedb'", specifier = ">=25.0.1" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pypdfium2", marker = "extra == 'pdfium'", specifier = ">=5.13.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sentence-transformers", marker = "extra == 'local'", specifier = ">=6.1.0" },
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'local'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform != 'linux' and extra == 'local'", specifier = ">=2.14.0" },

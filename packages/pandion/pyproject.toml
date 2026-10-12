@@ -3,7 +3,7 @@ name = "pandion"
 version = "0.0.1"
 description = "Config-driven indexing and retrieval pipelines you can inspect stage by stage"
 requires-python = ">=3.13,<3.14"
-dependencies = ["pydantic>=2.9"]
+dependencies = ["pydantic>=2.9", "pyyaml>=6.0.3"]
 
 # Parsers, models and stores are extras, so the base install stays small.
 # A step whose extra is missing says which one to install.

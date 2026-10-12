@@ -54,7 +54,8 @@ def test_discovery_imports_no_heavy_library():
     code = (
         "import sys\n"
         "import pandion, pandion.plugins\n"
-        "import pandion.embeddings, pandion.embedding_cache\n"
+        "import pandion.embeddings, pandion.embedding_cache, pandion.models\n"
+        "import pandion.config, pandion.pipeline, pandion.sources\n"
         "pandion.plugins.discover()\n"
         f"heavy = {sorted(HEAVY)!r}\n"
         "leaked = sorted(m for m in sys.modules if m.split('.')[0] in heavy)\n"

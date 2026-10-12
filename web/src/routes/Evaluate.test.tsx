@@ -834,19 +834,21 @@ describe("while and after scoring", () => {
     await waitFor(() => expect(marks().map(icon)).toEqual(["waiting", "waiting"]))
     expect(rows().map((r) => icon(r.querySelector("[data-verdict]")!))).toEqual(["waiting", "waiting"])
     es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    // The first question's run builds the index first: it waits until its search starts.
-    es.emit(2, { event: "node_started", node_id: idOf("chunk"), transform: "x", artifact_id: "c0" })
+    // The first question's run builds the index first. The question step has no inputs, so it
+    // runs at once; the question waits until Retrieve starts, which needs the finished index.
+    es.emit(2, { event: "node_started", node_id: idOf("query"), transform: "x", artifact_id: "q0" })
+    es.emit(3, { event: "node_started", node_id: idOf("chunk"), transform: "x", artifact_id: "c0" })
     await new Promise((r) => setTimeout(r, 20))
     expect(marks().map(icon)).toEqual(["waiting", "waiting"])
     expect(rows()[0].querySelector("[data-verdict]")!.textContent).toBe("Waiting")
-    es.emit(3, { event: "node_started", node_id: idOf("query"), transform: "x", artifact_id: "q0" })
+    es.emit(4, { event: "node_started", node_id: idOf("retrieve"), transform: "x", artifact_id: "r0" })
     await waitFor(() => expect(marks().map(icon)).toEqual(["running", "waiting"]))
     expect(marks()[0].getAttribute("aria-label")).toBe("Question 1, running")
     const spinner = marks()[0].querySelector("[data-icon]")!
     expect(spinner.getAttribute("aria-hidden")).toBe("true")
     expect(spinner.getAttribute("class")).toContain("icon-spin")
     expect(rows()[0].querySelector("[data-verdict]")!.textContent).toBe("Running")
-    es.emit(4, { event: "node_failed", node_id: idOf("use_case"), error: "Traceback\nValueError: boom" })
+    es.emit(5, { event: "node_failed", node_id: idOf("use_case"), error: "Traceback\nValueError: boom" })
     await waitFor(() => expect(marks().map(icon)[0]).toBe("failed"))
     expect(icon(rows()[0].querySelector("[data-verdict]")!)).toBe("failed")
   })

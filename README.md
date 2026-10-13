@@ -2,16 +2,25 @@
 
 See why a RAG pipeline finds the answer, or misses it.
 
-[Live demo](https://rag.codewithnk.com) | [Docs](https://github.com/nadeem4/rag-playground/tree/main/docs) | [GitHub](https://github.com/nadeem4/rag-playground)
+[Live demo](https://rag.codewithnk.com) | [Docs](https://github.com/nadeem4/rag-playground/tree/main/docs) | [Pandion](docs/pandion.md) | [GitHub](https://github.com/nadeem4/rag-playground)
 
 ![The Build page: the index pipeline on the left, the Ask panel docked on the right with the rerank slope](web/public/clips/build.jpg)
 
-RAG Playground runs a retrieval-augmented generation (RAG) pipeline on a PDF and shows
-you every step: what the parser read, what the cleaners removed, where each chunk was cut,
-what the search found and how the reranker moved it. Each step is a strategy you can swap,
-so you can change one setting and see what it does.
+RAG Playground is two things:
 
-## What you can do
+- **A web app** that runs a retrieval-augmented generation (RAG) pipeline on a PDF and
+  shows you every step: what the parser read, what the cleaners removed, where each chunk
+  was cut, what the search found and how the reranker moved it. Change one setting and
+  see what it does.
+- **Pandion**, the Python package that runs every one of those steps. The app is built on
+  it, and you can use it in your own code to build, search and question an index.
+
+There are four ways in: [try it online](#try-it-online),
+[run your own copy on Hugging Face](#run-your-own-copy-on-hugging-face),
+[run it on your machine](#run-it-on-your-machine), or
+[use Pandion in your own code](#use-pandion-in-your-own-code).
+
+## What you can do in the app
 
 - **Build.** Run the index pipeline one card at a time: Document, Parse, Clean, Chunk and
   Index. The Document bar at the top of Build, Compare and Evaluate picks the PDF, and the Ask panel docked
@@ -42,6 +51,26 @@ Open the [live demo](https://rag.codewithnk.com). There is no sign in.
 The [privacy page](https://rag.codewithnk.com/privacy) in the app says what
 is kept, where and for how long. [docs/privacy.md](docs/privacy.md) says the same.
 
+## Run your own copy on Hugging Face
+
+1. Open the [Space](https://huggingface.co/spaces/nadeem4nk/rag-playground) and choose
+   **Duplicate this Space**.
+2. In the copy's settings, set the variable `RAG_PLAYGROUND_DEMO` to `0` to lift the
+   demo's limits, or leave it at `1`. With demo mode off:
+   - uploads have no size, page or count limit, and nothing deletes them on a timer;
+   - uploads are no longer private to one browser: every visitor sees every upload;
+   - server keys from the Space's secrets are used;
+   - custom OpenAI-compatible endpoints are allowed;
+   - question sets you upload are kept beside their document;
+   - the Dev menu shows in the header.
+3. Optionally add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY` as
+   secrets. Server keys are used only with demo mode off. With demo mode on, only a key a
+   visitor types into the app is used.
+
+The free CPU Space works; Docling parsing is slow on it. With demo mode off the copy has
+no sign in, so anyone with its address can use your keys: make the Space private if you
+add them. See [docs/deploy.md](docs/deploy.md) for hardware, storage and updates.
+
 ## Run it on your machine
 
 You need [uv](https://docs.astral.sh/uv/) (it fetches Python 3.13 if you do not have it),
@@ -69,25 +98,37 @@ Nothing expires locally; your files stay on your machine. You can upload larger 
 use server keys from your environment or a `.env` file, and point chat at a local model
 server such as Ollama. See [docs/deploy.md](docs/deploy.md) for the details.
 
-## Run your own copy on Hugging Face
+## Use Pandion in your own code
 
-1. Open the [Space](https://huggingface.co/spaces/nadeem4nk/rag-playground) and choose
-   **Duplicate this Space**.
-2. In the copy's settings, set the variable `RAG_PLAYGROUND_DEMO` to `0` to lift the
-   demo's limits, or leave it at `1`. With demo mode off:
-   - uploads have no size, page or count limit, and nothing deletes them on a timer;
-   - uploads are no longer private to one browser: every visitor sees every upload;
-   - server keys from the Space's secrets are used;
-   - custom OpenAI-compatible endpoints are allowed;
-   - question sets you upload are kept beside their document;
-   - the Dev menu shows in the header.
-3. Optionally add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY` as
-   secrets. Server keys are used only with demo mode off. With demo mode on, only a key a
-   visitor types into the app is used.
+Pandion is the engine of the playground: every step the app shows is a Pandion step. Run
+one step on its own, or build a whole pipeline from a YAML file, from settings by step
+name, or from classes, then index, search and ask. Every step tells you what it did, and
+each result is cached, so the same files with the same settings are never processed twice.
 
-The free CPU Space works; Docling parsing is slow on it. With demo mode off the copy has
-no sign in, so anyone with its address can use your keys: make the Space private if you
-add them. See [docs/deploy.md](docs/deploy.md) for hardware, storage and updates.
+It needs Python 3.13. Until it is on PyPI, install it from GitHub:
+
+```bash
+pip install "pandion[pdfium,lancedb,local] @ git+https://github.com/nadeem4/rag-playground#subdirectory=packages/pandion"
+```
+
+```python
+from pandion import Pipeline
+
+p = Pipeline(
+    path="./my-index",
+    parse="pdfium",
+    chunk={"use": "recursive_character", "chunk_size": 400, "chunk_overlap": 40},
+    embed="bge-small-en-v1.5",
+    store="lancedb",
+    search="hybrid_rrf",
+    answer="search",
+)
+p.index.run("report.pdf")
+print(p.ask("What does the report recommend?").text)
+```
+
+The [Pandion guide](docs/pandion.md) covers every step, setting and error, and
+[examples/pandion/](examples/pandion) has scripts that index, sync, search and ask.
 
 ## What's inside
 
@@ -108,24 +149,6 @@ the strategy's id in the API and in exported files.
 
 [docs/strategies.md](docs/strategies.md) explains each one and its settings.
 
-## The pandion package
-
-The playground runs on `pandion`, its engine as a Python package. You can run one stage on
-its own, or build a whole pipeline as a YAML file, as dicts or as classes, then index,
-search and ask. Every step can be inspected.
-
-```python
-from pandion import Pipeline
-from pandion.parse import Pdfium
-
-p = Pipeline(path="./my-index", parse=Pdfium(), chunk="recursive_character",
-             embed="fake-deterministic", store="lancedb", search="bm25", answer="search")
-p.index.run("samples/chunking-primer/chunking-primer.pdf")
-print(p.ask("How big should a chunk be?").text)
-```
-
-See the [pandion guide](docs/pandion.md). It is not on PyPI yet.
-
 ## Learn more
 
 - [Guide](docs/guide.md): every page of the app in detail.
@@ -135,7 +158,7 @@ See the [pandion guide](docs/pandion.md). It is not on PyPI yet.
 - [Privacy](docs/privacy.md): what is kept in your browser and on the demo server, and
   for how long.
 - [Deploy](docs/deploy.md): Docker, demo mode, variables, and running your own Space.
-- [The pandion package](docs/pandion.md): run a stage on its own, or build a pipeline in a
+- [Pandion](docs/pandion.md): the package. Run a step on its own, or build a pipeline in a
   file or in code, then index, search and ask.
 - [Architecture](docs/architecture.md): the pipeline graph, plugins, the cache and the
   run stream.

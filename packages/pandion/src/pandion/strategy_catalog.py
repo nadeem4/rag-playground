@@ -9,6 +9,7 @@ strategy will do with given settings, without running anything.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from pandion.config import ConfigError
@@ -31,9 +32,12 @@ DEFAULTS: dict[str, str] = {
 
 
 def catalog() -> dict[str, dict[str, dict[str, Any]]]:
-    """Every registered strategy by stage, with its settings as a JSON schema."""
+    """Every registered strategy by stage, with its settings as a JSON schema.
+
+    It is a copy: changing it changes nothing in Pandion.
+    """
     discover()
-    return registry.export_schema()
+    return copy.deepcopy(registry.export_schema())
 
 
 def defaults() -> dict[str, str]:

@@ -228,13 +228,17 @@ a list of both. A folder gives every file under it except hidden ones. Each docu
 named by its path inside the folder with forward slashes, such as `guides/chunking.pdf`.
 A file given by itself is named by its file name.
 
+To choose the names, pass a mapping: `p.index.run({"report.pdf": "/uploads/0f3a.pdf"})`
+indexes that file as `report.pdf`. The same bytes under the same name give the same
+results wherever the file is kept.
+
 The report holds:
 
 - `report.documents`, a dict from document name to a `DocumentReport`. Its `.stages`
   has one `StageResult` for each step, under the names `source`, `parse`, `clean.1`
   (then `clean.2` and so on), and `chunk`.
 - `report.index`, the `StageResult` of the index. Its `.output` is the index folder.
-- `report.ok`, which is false if any step failed.
+- `report.ok`, which is false if any step failed or was skipped.
 
 ```python
 report.documents["guides/chunking.pdf"].stages["chunk"].output   # the pieces
@@ -242,7 +246,7 @@ report.documents["guides/chunking.pdf"].stages["clean.1"].note   # what the clea
 report.index.output                                              # the index folder
 ```
 
-Each `StageResult` also has `status` (`executed`, `cached` or `failed`), `artifact_id`
+Each `StageResult` also has `status` (`executed`, `cached`, `failed` or `skipped`), `artifact_id`
 (the recipe hash it is stored under), `duration_ms`, `note` and `error`. A step that
 fails is reported, not raised, and the steps after it are skipped.
 
@@ -596,7 +600,8 @@ Pandion's public API. This section lists what it needs.
 summary and its settings as a JSON schema with defaults. `pandion.defaults()` names the
 strategy a new pipeline starts with for each required part. `pandion.explain(stage, use,
 settings)` says in plain words what one strategy will do with those settings, and warns
-when they make no sense, without running anything.
+when they make no sense, without running anything. `catalog()` returns a copy each time,
+so changing it changes nothing in Pandion.
 
 ```python
 import pandion
@@ -613,6 +618,46 @@ Every `StageResult` has an `artifact_id`. `p.result(id)` reads that result back 
 store later, for example when a page asks for one card's output: a dict for every result
 but an index, whose result is its folder. An id that is not a result id, or that has no
 stored result, is a `KeyError`.
+
+### One step, progress, stop, keys and re-runs
+
+`index.run` takes five optional keywords. Without them it runs exactly as before.
+
+```python
+import threading
+
+stop = threading.Event()               # set it from another thread to stop the run
+report = p.index.run(
+    "report.pdf",
+    through="chunk",                   # stop after this step; report.index is then None
+    on_event=print,                    # every event, with its "document" and "step"
+    cancel=stop,
+    credentials={"openai_api_key": key},   # for this call only; never stored
+    force=True,                        # run every step again, even when it is stored
+)
+```
+
+An app that keeps uploads under names of its own passes a mapping of document id to file,
+so results keep the names people gave their files.
+
+- `through` names the step to stop after: `parse`, `clean` (the last cleaner, or parse
+  when there are none), `clean.1`, `clean.2` ..., or `chunk`. `index` is the whole run.
+  The steps above it come from the cache when they ran before.
+- `on_event` is called with each event as a plain dict, ready for JSON: `run_started`,
+  `node_started`, `node_finished` (with `cache_hit` and the result's `artifact_id`),
+  `node_failed` (with the error), `node_skipped` (a step after one that failed),
+  `warning` (with a `message`), `run_cancelled` and `run_finished`. To an event about
+  one step, Pandion adds `document` (the document id, or None for the index) and
+  `step`. Events about several steps name each one as `{"document": ..., "step": ...}`:
+  `run_started` has `steps` (every step of the run) and `selected_steps` (the ones
+  this run asked for), and `run_cancelled` has `skipped_steps`. The raw ids in
+  `node_id`, `nodes`, `selected` and `skipped` are internal and may change; use the
+  named fields. If the callback raises, the run stops and the exception reaches your
+  code.
+- `cancel` is checked between steps: a step that is running finishes, the rest are
+  reported with status `skipped`, and `report.ok` is False.
+- `credentials` are the model keys for this call, as for `p.retrieve`.
+- `force` runs every step that was asked for again, even when its result is stored.
 
 ## Three ways to write a pipeline
 

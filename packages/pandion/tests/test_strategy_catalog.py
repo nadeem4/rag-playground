@@ -22,6 +22,24 @@ def test_catalog_lists_every_stage_with_each_strategys_settings():
     assert json.loads(json.dumps(catalog)) == catalog
 
 
+def test_changing_what_catalog_returns_does_not_change_the_next_call():
+    first = pandion.catalog()
+    before = json.dumps(first, sort_keys=True)
+
+    def scribble(value):
+        if isinstance(value, dict):
+            for item in list(value.values()):
+                scribble(item)
+            value["scribbled"] = True
+        elif isinstance(value, list):
+            for item in value:
+                scribble(item)
+            value.append("scribbled")
+
+    scribble(first)
+    assert json.dumps(pandion.catalog(), sort_keys=True) == before
+
+
 def test_defaults_name_a_strategy_for_every_required_part():
     assert pandion.defaults() == {
         "parse": "docling",

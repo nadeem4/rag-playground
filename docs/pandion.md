@@ -1,6 +1,6 @@
 # The pandion package
 
-Pandion (a working name) is the engine of RAG Playground as a Python package. The
+Pandion is the engine of RAG Playground as a Python package. The
 playground runs on it. Every stage can be run and inspected on its own, and a whole
 index can be built from one config file. Each step's result is cached under a hash of its
 recipe, so the same files with the same settings are never processed twice.

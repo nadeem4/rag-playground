@@ -21,7 +21,7 @@ from pandion.pipeline import (
 from pandion.results import StageResult
 from pandion import answer, chunk, clean, parse, rerank, retrieve, rewrite
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 __all__ = [
     "Answer",

@@ -105,7 +105,7 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         "query": PortSpec(ArtifactType.QUERY, ambient=True),
     }
     output = ArtifactType.RETRIEVAL_RESULT
-    requires = {"index": {"backends": ["dense", "fts"]}}
+    requires = {"index": {"backends": ["dense", "fts"], "format": ["lancedb"]}}
     config_model = HybridRrfConfig
     summary = (
         "Runs vector search and keyword search side by side, then merges the "

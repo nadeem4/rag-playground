@@ -1091,6 +1091,9 @@
         "backends": [
           "dense",
           "fts"
+        ],
+        "format": [
+          "lancedb"
         ]
       },
       "prefers": {},
@@ -1175,6 +1178,9 @@
         "index": {
           "backends": [
             "dense"
+          ],
+          "format": [
+            "lancedb"
           ]
         }
       },
@@ -1222,6 +1228,9 @@
         "index": {
           "backends": [
             "fts"
+          ],
+          "format": [
+            "lancedb"
           ]
         }
       },
@@ -1270,6 +1279,9 @@
           "backends": [
             "dense",
             "fts"
+          ],
+          "format": [
+            "lancedb"
           ]
         }
       },

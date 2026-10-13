@@ -159,7 +159,7 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
             "The answer needs a retrieve section: the answer step reads what "
             "retrieval found."
         )
-    return PipelineConfig(
+    config = PipelineConfig(
         path=_resolve(data["path"], base),
         models=settings,
         index=_index(data["index"]),
@@ -167,6 +167,50 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         answer=_answer(data["answer"]) if "answer" in data else None,
         plugins=plugins,
     )
+    if config.retrieve is not None:
+        _check_compatible(config)
+    return config
+
+
+def _check_compatible(config: PipelineConfig) -> None:
+    """Build the retrieval graph for one placeholder document and validate it,
+    so a retriever that cannot read the chosen store is refused now, not when
+    it runs."""
+    from pandion.graph import GraphValidationError
+    from pandion.pipeline import IndexPipeline, RetrievalPipeline
+    from pandion.sources import SourceFile
+
+    index = IndexPipeline._of(config)
+    if index._uploads():
+        index.documents = {"placeholder": SourceFile(sha="0" * 64, filename="placeholder.pdf")}
+    else:
+        index.documents = {"placeholder": "placeholder"}
+    graph, _ = RetrievalPipeline._of(config, index).graph("placeholder")
+    try:
+        graph.validate(registry)
+    except GraphValidationError as exc:
+        message = str(exc)
+        if message.startswith("edge index->search.") and "requires" in message:
+            search = config.retrieve.search[0]
+            store = config.index.store_use
+            needed = registry.get(Stage.RETRIEVE, search).requires.get("index", {})
+            provided = registry.get(Stage.INDEX, store).provides
+            raise ConfigError(
+                f"retrieve.search uses '{search}', which needs a store with "
+                f"{_capabilities(needed)}, but index.store uses '{store}', which has "
+                f"{_capabilities(provided) or 'nothing in provides'}."
+            ) from None
+        raise ConfigError(message) from None
+
+
+def _capabilities(claims: dict[str, Any]) -> str:
+    """`{"backends": ["dense", "fts"], "format": ["lancedb"]}` as
+    "backends dense, fts and format lancedb"."""
+    parts = [
+        f"{key} {', '.join(map(str, value)) if isinstance(value, list) else value}"
+        for key, value in claims.items()
+    ]
+    return " and ".join(parts)
 
 
 def build(

@@ -418,8 +418,9 @@ answer = p.ask(question, credentials={"anthropic_api_key": "sk-ant-..."})
 
 - `answer.text`, the output's `payload["text"]` when your own answer step sets one,
   otherwise the chat answer as one text, or the pieces found one after another.
-- `answer.output`, the answer step's whole output. Its `kind` is `search` or `chat`, and
-  its `payload` holds the pieces, or the answer with its `citations` and counts.
+- `answer.output`, the answer step's whole output. The built-in steps set its `kind` to
+  `search` or `chat`, and its `payload` holds the pieces, or the answer with its `citations`
+  and counts. Your own answer step chooses its own `kind` and `payload`.
 - `answer.hits`, what retrieval found, best first.
 - `answer.stages`, with `rewrite`, `search`, `rerank` and `answer`, each a `StageResult`
   as in [Search an index](#search-an-index).
@@ -708,6 +709,18 @@ class, and it is read again on every run.
 To search after a run with your own source, call `p.retrieve` or `p.ask` in the same process
 as `p.index.run`. Only `upload` has a manifest, written by `p.index.sync`, that a later
 process can read.
+
+### A store and the retriever that reads it
+
+A store says what it can be searched by in `provides`, and a retriever says what it needs
+from the store in `requires`, on its `index` port. The built-in `lancedb` store provides
+`{"backends": ["dense", "fts"], "format": ["lancedb"]}`, and the built-in retrievers
+(`dense`, `bm25` and `hybrid_rrf`) each need the backends they search and the `lancedb`
+format, because they open a LanceDB table. Pandion compares the two when the pipeline is
+read, so a mismatch is refused before anything runs, for example: "retrieve.search uses
+'dense', which needs a store with backends dense and format lancedb, but index.store uses
+'my_store', which has backends dense." So a new store in another format brings its own
+retriever, whose `requires` asks for what that store provides.
 
 ## Loading your strategies
 

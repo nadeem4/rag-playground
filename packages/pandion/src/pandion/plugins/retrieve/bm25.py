@@ -41,7 +41,7 @@ class Bm25Retriever(Transform[Bm25Config]):
         "query": PortSpec(ArtifactType.QUERY, ambient=True),
     }
     output = ArtifactType.RETRIEVAL_RESULT
-    requires = {"index": {"backends": ["fts"]}}
+    requires = {"index": {"backends": ["fts"], "format": ["lancedb"]}}
     config_model = Bm25Config
     summary = (
         "Scores pieces by the words they share with the question, counting rare "

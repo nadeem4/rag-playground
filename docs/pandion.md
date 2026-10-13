@@ -169,6 +169,8 @@ models:
   device: auto          # auto, cpu, cuda or mps
 
 index:
+  # source:             # optional; upload (the files given to index.run) when left out.
+  #   use: my_source    # see Your own source
   parse:                # required
     use: pdfium         # pdfium or docling
   clean:                # optional; a list, run in order
@@ -380,7 +382,9 @@ answer = p.ask("How big should a chunk be?")
 print(answer.text)
 ```
 
-The `answer` section of the file names the answer step. There are two:
+The `answer` section of the file names the answer step. It takes any registered answer
+strategy, built in or your own, except `eval`, which scores retrieval rather than
+answering. Two are built in:
 
 - `search` shows the pieces that retrieval found, as they are, with their rank, score
   and pages. It needs no model and no key, so it costs nothing. Its `top_k` is how many
@@ -389,6 +393,9 @@ The `answer` section of the file names the answer step. There are two:
   those pieces. Every claim in the answer points at the passage it relied on, and each
   citation is checked against the parsed document. It needs a key, and it is a new model
   call every time, so it is never cached.
+
+A rewrite or answer step is given the first document, as parsed, only when its class
+declares a `doc` input, as `llm_rewrite` and `chat` do.
 
 ```yaml
 answer:
@@ -409,9 +416,11 @@ answer = p.ask(question, credentials={"anthropic_api_key": "sk-ant-..."})
 
 `ask` returns an `Answer`:
 
-- `answer.text`, the chat answer as one text, or the pieces found one after another.
-- `answer.output`, the answer step's whole output. Its `kind` is `search` or `chat`, and
-  its `payload` holds the pieces, or the answer with its `citations` and counts.
+- `answer.text`, the output's `payload["text"]` when your own answer step sets one,
+  otherwise the chat answer as one text, or the pieces found one after another.
+- `answer.output`, the answer step's whole output. The built-in steps set its `kind` to
+  `search` or `chat`, and its `payload` holds the pieces, or the answer with its `citations`
+  and counts. Your own answer step chooses its own `kind` and `payload`.
 - `answer.hits`, what retrieval found, best first.
 - `answer.stages`, with `rewrite`, `search`, `rerank` and `answer`, each a `StageResult`
   as in [Search an index](#search-an-index).
@@ -651,6 +660,67 @@ class LetterCounts(Embedder):
 `kind` is `"document"` for a piece and `"query"` for a question. Return vectors of length 1
 (divide each by its length), because search compares them as if they were. A name that is already
 taken is refused.
+
+### Your own source
+
+By default each document is a local file given to `p.index.run`. To read documents from
+somewhere else, such as a database, a web page or a bucket, write a source step and set it
+under `index.source:`. Its settings must have a `location: str = ""` field: each item you
+pass to `p.index.run([...])` becomes one document, its id is the item as text, and the
+source is run with the item as its `location`. A source without a `location` field is
+refused. The source returns `raw_file(ctx, data, filename)`, which keeps the bytes in the
+`sources/` folder and hands the parser the same file record the built-in `upload` source does.
+
+```python
+from pydantic import BaseModel
+from pandion.extend import ArtifactType, Stage, Transform, raw_file, register
+
+class NoteSettings(BaseModel):
+    location: str = ""
+
+@register
+class Note(Transform[NoteSettings]):
+    name = "note"
+    stage = Stage.SOURCE
+    output = ArtifactType.RAW_FILE
+    config_model = NoteSettings
+    summary = "Treats the location itself as a short text document."
+
+    def apply(self, inputs, config, ctx):
+        return raw_file(ctx, config.location.encode("utf-8"), "note.txt")
+```
+
+```yaml
+index:
+  source: {use: note}
+  parse: {use: txt_lines}   # your own parser, from the example above
+```
+
+In code it is the `source=` keyword:
+`Pipeline(path="./index", source="note", parse="txt_lines", chunk="recursive_character", embed="fake-deterministic", store="lancedb")`.
+
+`p.index.sync` works with local files only (the `upload` source); `p.index.run` works with
+any source.
+
+A source's result is cached by its settings, so by `location`: the same location is read
+once and reused. If the content at a location can change, set `cacheable = False` on the
+class, and it is read again on every run.
+
+To search after a run with your own source, call `p.retrieve` or `p.ask` in the same process
+as `p.index.run`. Only `upload` has a manifest, written by `p.index.sync`, that a later
+process can read.
+
+### A store and the retriever that reads it
+
+A store says what it can be searched by in `provides`, and a retriever says what it needs
+from the store in `requires`, on its `index` port. The built-in `lancedb` store provides
+`{"backends": ["dense", "fts"], "format": ["lancedb"]}`, and the built-in retrievers
+(`dense`, `bm25` and `hybrid_rrf`) each need the backends they search and the `lancedb`
+format, because they open a LanceDB table. Pandion compares the two when the pipeline is
+read, so a mismatch is refused before anything runs, for example: "retrieve.search uses
+'dense', which needs a store with backends dense and format lancedb, but index.store uses
+'my_store', which has backends dense." So a new store in another format brings its own
+retriever, whose `requires` asks for what that store provides.
 
 ## Loading your strategies
 

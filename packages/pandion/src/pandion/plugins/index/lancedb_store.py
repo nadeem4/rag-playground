@@ -131,7 +131,9 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
     stage = Stage.INDEX
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)}
     output = ArtifactType.INDEX
-    provides = {"backends": ["dense", "fts"]}
+    #: `format` says the index is a LanceDB table, which every built-in
+    #: retriever opens; a store in another format brings its own retriever.
+    provides = {"backends": ["dense", "fts"], "format": ["lancedb"]}
     config_model = LanceDbIndexConfig
     summary = (
         "Turns every piece into a vector (a list of numbers that captures its "

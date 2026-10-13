@@ -66,11 +66,11 @@ from pandion.stages import _strategy
 
 TOP_KEYS = ("plugins", "path", "models", "index", "retrieve", "answer")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
-INDEX_KEYS = ("parse", "clean", "chunk", "embed", "store")
+INDEX_KEYS = ("source", "parse", "clean", "chunk", "embed", "store")
+#: The source step when the file has none: the files given to index.run.
+DEFAULT_SOURCE: tuple[str, dict[str, Any]] = ("upload", {})
 #: Settings written under `embed` that the store receives with `embedder`.
 EMBED_KEYS = ("truncate_dim",)
-#: The answer steps. `eval` is a use case too, but it scores, it does not answer.
-ANSWER_STEPS = ("search", "chat")
 
 #: Where each stage's step sits in the file, for messages.
 WHERE = {
@@ -100,6 +100,9 @@ class IndexConfig:
     clean: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     #: The index strategy that stores the pieces.
     store_use: str = "lancedb"
+    #: Where each document comes from. `upload` reads the files given to
+    #: index.run; another source is told each item as its `location` setting.
+    source: tuple[str, dict[str, Any]] = DEFAULT_SOURCE
 
 
 @dataclass
@@ -156,7 +159,7 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
             "The answer needs a retrieve section: the answer step reads what "
             "retrieval found."
         )
-    return PipelineConfig(
+    config = PipelineConfig(
         path=_resolve(data["path"], base),
         models=settings,
         index=_index(data["index"]),
@@ -164,6 +167,50 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         answer=_answer(data["answer"]) if "answer" in data else None,
         plugins=plugins,
     )
+    if config.retrieve is not None:
+        _check_compatible(config)
+    return config
+
+
+def _check_compatible(config: PipelineConfig) -> None:
+    """Build the retrieval graph for one placeholder document and validate it,
+    so a retriever that cannot read the chosen store is refused now, not when
+    it runs."""
+    from pandion.graph import GraphValidationError
+    from pandion.pipeline import IndexPipeline, RetrievalPipeline
+    from pandion.sources import SourceFile
+
+    index = IndexPipeline._of(config)
+    if index._uploads():
+        index.documents = {"placeholder": SourceFile(sha="0" * 64, filename="placeholder.pdf")}
+    else:
+        index.documents = {"placeholder": "placeholder"}
+    graph, _ = RetrievalPipeline._of(config, index).graph("placeholder")
+    try:
+        graph.validate(registry)
+    except GraphValidationError as exc:
+        message = str(exc)
+        if message.startswith("edge index->search.") and "requires" in message:
+            search = config.retrieve.search[0]
+            store = config.index.store_use
+            needed = registry.get(Stage.RETRIEVE, search).requires.get("index", {})
+            provided = registry.get(Stage.INDEX, store).provides
+            raise ConfigError(
+                f"retrieve.search uses '{search}', which needs a store with "
+                f"{_capabilities(needed)}, but index.store uses '{store}', which has "
+                f"{_capabilities(provided) or 'nothing in provides'}."
+            ) from None
+        raise ConfigError(message) from None
+
+
+def _capabilities(claims: dict[str, Any]) -> str:
+    """`{"backends": ["dense", "fts"], "format": ["lancedb"]}` as
+    "backends dense, fts and format lancedb"."""
+    parts = [
+        f"{key} {', '.join(map(str, value)) if isinstance(value, list) else value}"
+        for key, value in claims.items()
+    ]
+    return " and ".join(parts)
 
 
 def build(
@@ -223,7 +270,10 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     models = config.models.model_dump(mode="json", exclude_defaults=True)
     if models:
         data["models"] = models
-    data["index"] = {"parse": _out(index.parse)}
+    data["index"] = {}
+    if index.source != DEFAULT_SOURCE:
+        data["index"]["source"] = _out(index.source)
+    data["index"]["parse"] = _out(index.parse)
     if index.clean:
         data["index"]["clean"] = [_out(step) for step in index.clean]
     data["index"]["chunk"] = _out(index.chunk)
@@ -306,11 +356,11 @@ def _load_plugins(plugins: Any) -> list[str]:
 
 
 def _answer(answer: Any) -> tuple[str, dict[str, Any]]:
-    use, settings = _use(answer, "answer")
-    if use not in ANSWER_STEPS:
+    use, _ = _use(answer, "answer")
+    if use == "eval":
         raise ConfigError(
-            f"answer uses '{use}', which is not an answer step. "
-            f"The answer steps are: {', '.join(ANSWER_STEPS)}."
+            "answer uses 'eval', which scores retrieval rather than answering. "
+            "Use pandion.evaluate for scoring."
         )
     discover()
     return _step(Stage.USE_CASE, answer, "answer")
@@ -339,7 +389,26 @@ def _index(index: Any) -> IndexConfig:
         chunk=_step(Stage.CHUNK, index["chunk"], "index.chunk"),
         store=store,
         store_use=store_use,
+        source=_source(index["source"]) if "source" in index else DEFAULT_SOURCE,
     )
+
+
+def _source(step: Any) -> tuple[str, dict[str, Any]]:
+    """The source step. Any source but upload is told which document to read."""
+    use, settings = _step(Stage.SOURCE, step, "index.source")
+    if use == "upload":
+        if settings:
+            raise ConfigError(
+                "index.source uses 'upload', which takes no settings in a pipeline "
+                "file: the files are the ones given to index.run."
+            )
+        return DEFAULT_SOURCE
+    if "location" not in registry.get(Stage.SOURCE, use).config_model.model_fields:
+        raise ConfigError(
+            f"index.source uses '{use}', whose settings have no location field, "
+            "so it cannot be told which document to read."
+        )
+    return use, settings
 
 
 def _retrieve(retrieve: Any) -> RetrieveConfig:

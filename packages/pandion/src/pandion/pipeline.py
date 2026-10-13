@@ -170,10 +170,13 @@ class Answer:
 
     @property
     def text(self) -> str:
-        """The chat answer as one text, or the found pieces one after another."""
+        """The answer step's `text` when it gives one, else the chat answer as
+        one text, or the found pieces one after another."""
         if self.output is None:
             return ""
         payload = self.output.payload
+        if isinstance(payload.get("text"), str) and payload["text"]:
+            return payload["text"]
         if self.output.kind == "chat":
             return "".join(segment["text"] for segment in payload["answer"])
         return "\n\n".join(row["snippet"] for row in payload["results"])
@@ -191,6 +194,8 @@ class Pipeline:
                  answer="search")
 
     Each stage is a dict (the file's block for it), a step class or a name.
+    `source` is optional, as in the file: left out, the documents are the
+    files given to index.run (see "Your own source" in docs/pandion.md).
     `retrieval` is None without a search step and `query` is None without an
     answer step.
     """
@@ -204,6 +209,7 @@ class Pipeline:
         embed: Step,
         store: Step,
         clean: Step = None,
+        source: Step = None,
         rewrite: Step = None,
         search: Step = None,
         rerank: Step = None,
@@ -214,7 +220,10 @@ class Pipeline:
             build(
                 path=path,
                 models=models,
-                index={"parse": parse, "clean": clean, "chunk": chunk, "embed": embed, "store": store},
+                index={
+                    "source": source, "parse": parse, "clean": clean,
+                    "chunk": chunk, "embed": embed, "store": store,
+                },
                 retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
                 answer=answer,
             )
@@ -271,7 +280,7 @@ class IndexPipeline:
     """Parse, clean, chunk, embed and store, for many documents into one index.
 
     In code: `IndexPipeline(path=..., parse=..., chunk=..., embed=..., store=...)`,
-    with `clean` (one cleaner or a list) and `models` optional.
+    with `source`, `clean` (one cleaner or a list) and `models` optional.
     """
 
     def __init__(
@@ -283,13 +292,17 @@ class IndexPipeline:
         embed: Step,
         store: Step,
         clean: Step = None,
+        source: Step = None,
         models: Any = None,
     ) -> None:
         self._setup(
             build(
                 path=path,
                 models=models,
-                index={"parse": parse, "clean": clean, "chunk": chunk, "embed": embed, "store": store},
+                index={
+                    "source": source, "parse": parse, "clean": clean,
+                    "chunk": chunk, "embed": embed, "store": store,
+                },
             )
         )
 
@@ -314,8 +327,9 @@ class IndexPipeline:
         self.sources = Sources(root / "sources")
         self.store = Store(root / "artifacts")
         self.embedding_cache = EmbeddingCache(root / "embeddings")
-        #: The documents the last run or sync in this process indexed.
-        self.documents: dict[str, SourceFile] | None = None
+        #: The documents the last run or sync in this process indexed: stored
+        #: files with the upload source, locations with any other.
+        self.documents: dict[str, SourceFile | str] | None = None
 
     def run(self, paths: str | Path | list[str | Path]) -> IndexReport:
         """Index the files at `paths`: files, folders, or a list of both.
@@ -342,6 +356,10 @@ class IndexPipeline:
         so the pieces of a removed or changed document are gone. After a sync
         with a failed step, both are left as they were.
         """
+        if not self._uploads():
+            raise ValueError(
+                "sync works with local files (the upload source); index.run works with any source."
+            )
         manifest_path = self.config.path / MANIFEST
         before = Manifest.load(manifest_path)
         documents = self._documents(paths)
@@ -375,11 +393,19 @@ class IndexPipeline:
                 self.store.delete(before.index_artifact)
         return sync
 
-    def _documents(self, paths: str | Path | list[str | Path]) -> dict[str, SourceFile]:
-        """Every file at `paths`, kept in `sources/`, by document id."""
+    def _uploads(self) -> bool:
+        """The documents are local files (the upload source)."""
+        return self.config.index.source[0] == "upload"
+
+    def _documents(self, paths: str | Path | list[str | Path]) -> dict[str, SourceFile | str]:
+        """By document id: with upload, every file at `paths`, kept in
+        `sources/`; with another source, each item as its location."""
+        if not self._uploads():
+            items = paths if isinstance(paths, list) else [paths]
+            return {str(item).replace("\\", "/"): str(item) for item in items}
         return {doc_id: self.sources.add(path) for doc_id, path in _files(paths)}
 
-    def _index(self, documents: dict[str, SourceFile]) -> IndexReport:
+    def _index(self, documents: dict[str, SourceFile | str]) -> IndexReport:
         graph, roles = self.graph(documents)
         result = self.execute(graph)
         reports = {doc_id: DocumentReport() for doc_id in documents}
@@ -409,11 +435,15 @@ class IndexPipeline:
             extras["credentials"] = dict(credentials)
         return run(graph, registry, self.store, context_extras=extras)
 
-    def indexed(self) -> dict[str, SourceFile]:
+    def indexed(self) -> dict[str, SourceFile | str]:
         """The documents in the index: the last run's or sync's in this
-        process, or else the last sync's, read from its manifest."""
+        process, or else the last sync's, read from its manifest (upload only)."""
         if self.documents is not None:
             return self.documents
+        if not self._uploads():
+            raise ValueError(
+                "There is no index to search yet: index some documents first, with p.index.run."
+            )
         manifest = Manifest.load(self.config.path / MANIFEST)
         if not manifest.documents:
             raise ValueError(
@@ -425,10 +455,12 @@ class IndexPipeline:
             for doc_id, entry in manifest.documents.items()
         }
 
-    def graph(self, documents: dict[str, SourceFile]) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
+    def graph(self, documents: dict[str, SourceFile | str]) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph for `documents`, and each node's (document id, step name).
 
-        The index takes every document's chunks in document-id order.
+        The index takes every document's chunks in document-id order. With
+        the upload source a document is a stored file; with another source it
+        is the location that source is told to read.
         """
         index = self.config.index
         nodes: list[Node] = []
@@ -443,8 +475,12 @@ class IndexPipeline:
 
         chunk_nodes = []
         for doc_id in sorted(documents):
-            file = documents[doc_id]
-            last = add(doc_id, "source", Stage.SOURCE, "upload", {"sha": file.sha, "filename": file.filename})
+            if self._uploads():
+                file = documents[doc_id]
+                last = add(doc_id, "source", Stage.SOURCE, "upload", {"sha": file.sha, "filename": file.filename})
+            else:
+                use, settings = index.source
+                last = add(doc_id, "source", Stage.SOURCE, use, {**settings, "location": documents[doc_id]})
             parse = add(doc_id, "parse", Stage.PARSE, *index.parse)
             edges.append(Edge(last, parse, "file"))
             last = parse
@@ -532,7 +568,7 @@ class RetrievalPipeline:
         use, settings = retrieve.rewrite or ("text", {})
         nodes.append(Node("rewrite", Stage.QUERY, use, {**settings, "text": question}))
         roles["rewrite"] = (None, "rewrite")
-        if use != "text":
+        if _reads_doc(Stage.QUERY, use):
             # A rewrite may read the start of a document. With several, the
             # ambient port cannot choose, so it reads the first one by id.
             edges.append(Edge(_first_doc(roles), "rewrite", "doc"))
@@ -635,10 +671,10 @@ class QueryPipeline:
         nodes.append(Node("answer", Stage.USE_CASE, use, settings))
         roles["answer"] = (None, "answer")
         edges.append(Edge(last, "answer", "result"))
-        if use == "chat":
-            # chat finds each citation in the parsed document. With several
-            # documents the ambient port cannot choose, so, as for a rewrite,
-            # it reads the first one by id.
+        if _reads_doc(Stage.USE_CASE, use):
+            # chat, for one, finds each citation in the parsed document. With
+            # several documents the ambient port cannot choose, so, as for a
+            # rewrite, it reads the first one by id.
             edges.append(Edge(_first_doc(roles), "answer", "doc"))
         return Graph(nodes=nodes, edges=edges), roles
 
@@ -659,6 +695,11 @@ class QueryPipeline:
             retrieval=self.retrieval._retrieval(graph, result),
             answer=self.index.stage_result(answer, "answer", result),
         )
+
+
+def _reads_doc(stage: Stage, use: str) -> bool:
+    """True when the strategy declares a doc input, so it is given the parsed document."""
+    return "doc" in registry.get(stage, use).inputs
 
 
 def _first_doc(roles: dict[str, tuple[str | None, str]]) -> str:

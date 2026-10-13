@@ -407,5 +407,5 @@ def test_registered_under_the_index_stage():
     from pandion.registry import registry
 
     assert registry.get(Stage.INDEX, "lancedb") is LanceDbIndex
-    assert LanceDbIndex.provides == {"backends": ["dense", "fts"]}
+    assert LanceDbIndex.provides == {"backends": ["dense", "fts"], "format": ["lancedb"]}
     assert LanceDbIndex.inputs["chunks"].variadic

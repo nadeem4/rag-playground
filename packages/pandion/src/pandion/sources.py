@@ -9,9 +9,14 @@ here through the run's `context_extras={"sources": Sources(folder)}`.
 from __future__ import annotations
 
 import hashlib
+import mimetypes
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+#: What a file with no recognised extension is called.
+DEFAULT_MIME = "application/octet-stream"
 
 
 @dataclass(frozen=True)
@@ -49,3 +54,33 @@ class Sources:
             part.write_bytes(data)
             os.replace(part, dest)
         return SourceFile(sha=sha, filename=filename)
+
+
+def run_sources(ctx: Any, step: str) -> Sources:
+    """The run's sources folder, or a plain error that names `step`."""
+    sources = ctx.extras.get("sources") if ctx is not None else None
+    if not isinstance(sources, Sources):
+        raise ValueError(
+            f"{step}: the run did not say where source files are kept. Pass "
+            'context_extras={"sources": Sources(folder)} to the run.'
+        )
+    return sources
+
+
+def file_record(sha: str, filename: str, path: Path) -> dict[str, Any]:
+    """What a source step returns: a raw file is a stored file, not its bytes."""
+    return {
+        "sha": sha,
+        "filename": filename,
+        "path": str(path),
+        "mime": mimetypes.guess_type(filename)[0] or DEFAULT_MIME,
+    }
+
+
+def raw_file(ctx: Any, data: bytes, filename: str) -> dict[str, Any]:
+    """Store `data` as a source file called `filename` and return what a
+    source step returns, the same as the upload source: sha, filename, path
+    and mime. A custom source ends with `return raw_file(ctx, data, filename)`."""
+    sources = run_sources(ctx, "raw_file")
+    stored = sources.add_bytes(data, filename)
+    return file_record(stored.sha, filename, sources.path(stored.sha, filename))

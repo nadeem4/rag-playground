@@ -69,6 +69,11 @@ before it tags a release. You can run it for any branch, tag or commit:
 gh workflow run "Release checks" -f ref=feat/some-branch
 ```
 
+To check the `pandion` wheel the way a user would install it, run
+`uv run python checks/pandion-install/run_check.py`. It installs the built wheel in a new
+environment and tests it there; [checks/pandion-install/README.md](checks/pandion-install/README.md)
+says what it checks.
+
 Follow test-driven development: write the failing test first, then the code.
 
 ## Styling and fixtures

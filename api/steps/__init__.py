@@ -1,7 +1,8 @@
 """Step discovery: import every step module so `@register` fires.
 
-The pipeline steps live in the pandion package (`pandion.plugins.*`); the app
-adds one of its own, `api.steps.eval`, the Evaluate step.
+Every step lives in the pandion package (`pandion.plugins.*`), the Evaluate
+step `eval` too, so the app has no steps of its own. This list is the app's
+manifest of them, in the order the registry lists them.
 
 **Explicit, not `pkgutil`.** The list below is the manifest, and a module that is
 not on it is not loaded. That reads as a maintenance burden until you notice what
@@ -50,7 +51,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.rerank.llm_rerank",
     "pandion.plugins.answer.search",
     "pandion.plugins.answer.chat",
-    "api.steps.eval",
+    "pandion.plugins.answer.eval",
 )
 
 _discovered = False

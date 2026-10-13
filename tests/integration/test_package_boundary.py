@@ -93,18 +93,14 @@ ENGINE_IMPORTS: frozenset[str] = frozenset(
         "pandion.models:preload_embedder",
         "pandion.models:preload_reranker",
         "pandion.payloads:ChunkSet",
-        "pandion.payloads:Output",
-        "pandion.payloads:Query",
         "pandion.payloads:RetrievalResult",
         "pandion.plugins.chunk:DocView",
         "pandion.plugins.chunk:count_tokens",
         "pandion.plugins.parse:docling",
-        "pandion.ports:PortSpec",
         "pandion.ports:RunContext",
         "pandion.ports:Stage",
         "pandion.registry:Registry",
         "pandion.registry:UnknownTransformError",
-        "pandion.registry:register",
         "pandion.registry:registry",
         "pandion.sources:Sources",
         "pandion.storage:META",
@@ -112,8 +108,6 @@ ENGINE_IMPORTS: frozenset[str] = frozenset(
         "pandion.textmatch:loosen",
         "pandion.textmatch:normalise",
         "pandion.textmatch:normalise_with_offsets",
-        "pandion.transform:Explanation",
-        "pandion.transform:Transform",
     }
 )
 

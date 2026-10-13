@@ -99,9 +99,8 @@ A strategy is one Python module. The web app builds its settings form from the c
 model, so a new strategy needs no frontend change.
 
 1. Create `packages/pandion/src/pandion/plugins/<stage>/<name>.py` with a Pydantic config
-   model and a `Transform` subclass decorated with `@register`. Every stage lives in the
-   package. Only a step that belongs to the playground alone, like the Evaluate step, goes in
-   the app, as `api/steps/<name>.py`. Give every config field a default. Give the class:
+   model and a `Transform` subclass decorated with `@register`. Every step lives in the
+   package, the Evaluate step too; the app has no steps of its own. Give every config field a default. Give the class:
    - a `summary` of how the strategy works, in one or two plain sentences;
    - an `explain(config)` that says what these settings will do. Every number, switch and
      choice must change the explanation, unless it is listed in `EXPLAIN_EXEMPT` with a

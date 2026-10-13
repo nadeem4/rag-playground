@@ -263,3 +263,26 @@ def test_an_answer_node_keeps_its_id(name, config, expected):
         config=settings.model_dump(mode="json"),
         inputs=ANSWER_INPUTS[name],
     ) == expected
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        ({}, "1e82ebf61a8958e610daf1704eb57e182a2cba5cec469d69d4f4b4af60e38090"),
+        ({"top_k": 10}, "4dcf6bfeee7b5da4ce714514714a25b02633bcaa3aa80c2e6dcb712187668db2"),
+    ],
+)
+def test_the_eval_node_keeps_its_id(config, expected):
+    """Computed on main at 1042e94, while eval still lived in the app (api/steps/eval.py)."""
+    discover()
+    cls = registry.get(Stage.USE_CASE, "eval")
+    settings = cls.config_model(**config)
+    assert cls.__module__ == "pandion.plugins.answer.eval"
+    assert compute_artifact_id(
+        transform_name=cls.name,
+        transform_version=cls.version,
+        fingerprint=cls().fingerprint(settings),
+        output_type=cls.output,
+        config=settings.model_dump(mode="json"),
+        inputs={"result": "a" * 64, "query": "b" * 64},
+    ) == expected

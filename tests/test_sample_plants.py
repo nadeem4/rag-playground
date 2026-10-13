@@ -30,7 +30,7 @@ from pandion.plugins.chunk import DocView
 from pandion.embedding_cache import EmbeddingCache
 from pandion.models import ModelSettings
 from pandion.sources import Sources
-from api.steps.eval import _normalise
+from pandion.textmatch import normalise as _normalise
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = ["chunking-primer", "two-column-report", "table-of-figures", "scanned-notes"]

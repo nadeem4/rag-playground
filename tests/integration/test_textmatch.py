@@ -13,7 +13,7 @@ import pytest
 from api.questions import check_questions
 from pandion.payloads import Chunk, Hit, Output, Query, RetrievalResult
 from pandion.textmatch import loosen, normalise, normalise_with_offsets
-from api.steps.eval import EvalConfig, EvalUseCase, _normalise
+from pandion.plugins.answer.eval import EvalConfig, EvalUseCase, _normalise
 
 
 @pytest.mark.parametrize(

@@ -346,7 +346,7 @@ It needs a key for the chosen provider. A custom endpoint's key is optional.
 Checks whether the retrieved pieces contain the sentence that answers the question, and
 reports where it was found: hit or miss, the rank, and which piece. No language model, no
 API key and no cost: it compares text with text. The Evaluate page runs it over every
-question in a set.
+question in a set, and so does `pandion.evaluate` (see [the pandion guide](pandion.md#evaluate-a-pipeline)). It is not an answer step: `answer: {use: eval}` is refused.
 
 - `top_k` (5): how many pieces are checked.
 

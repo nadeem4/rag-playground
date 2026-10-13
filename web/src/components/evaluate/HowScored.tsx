@@ -5,7 +5,7 @@ import type { ReactNode } from "react"
  * is marked, the matching step by step with real examples from the Table of
  * figures sample, each number with its technical name and a worked sum, and
  * where to look when a question misses. Every example is the matching the eval
- * step really does (api/steps/eval.py).
+ * step really does (packages/pandion/src/pandion/plugins/answer/eval.py).
  */
 export function HowScored() {
   return (

@@ -30,6 +30,10 @@ answers the same question in more than one place. Any one of them counts as
 found: `hit`, `rank` and `match` speak for the first retrieved piece that holds
 any of them, and `golds_found` out of `golds_total` says how many were covered,
 which is what a recall-at-k number is made of.
+
+It lives in Pandion with the other answer-stage steps, under the use_case
+stage, but it is not an answer: `answer: {use: eval}` is refused, and
+`pandion.evaluate` runs it over a question set.
 """
 
 from __future__ import annotations

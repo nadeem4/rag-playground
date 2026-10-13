@@ -47,3 +47,6 @@ brag-output*/
 skills-lock.json
 # Agent worktrees
 .claude/worktrees/
+
+# The own-strategies example writes its index here
+examples/pandion/own_strategies/work/

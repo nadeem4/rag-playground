@@ -50,6 +50,7 @@ it accepts.
 from __future__ import annotations
 
 import importlib
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
@@ -136,7 +137,7 @@ def load(file: str | Path) -> PipelineConfig:
 def from_dict(data: Any, *, base: Path) -> PipelineConfig:
     """Check a loaded pipeline file. Relative paths are read from `base`."""
     _keys(data, TOP_KEYS, "The pipeline file")
-    plugins = _load_plugins(data.get("plugins"))
+    plugins = _load_plugins(data.get("plugins"), base)
     if not data.get("path"):
         raise ConfigError(
             "The pipeline file has no path: the folder where Pandion keeps the "
@@ -334,8 +335,12 @@ def step_class(stage: Stage, use: str, module: str) -> type[BaseModel]:
     )
 
 
-def _load_plugins(plugins: Any) -> list[str]:
-    """Import each module under `plugins:`, so its @register calls run first."""
+def _load_plugins(plugins: Any, base: Path) -> list[str]:
+    """Import each module under `plugins:`, so its @register calls run first.
+
+    `base` (the folder the file is in) is searched too, the way a relative
+    path is read from it; it is on sys.path only while the modules import.
+    """
     if plugins is None:
         return []
     if not isinstance(plugins, list) or not all(isinstance(p, str) and p for p in plugins):
@@ -344,14 +349,22 @@ def _load_plugins(plugins: Any) -> list[str]:
             "plugins: [my_company.rag_steps]."
         )
     discover()  # built-ins first, so a clashing plugin fails at its own import
-    for module in plugins:
-        try:
-            importlib.import_module(module)
-        except Exception as exc:
-            raise ConfigError(
-                f"plugins lists '{module}', which could not be imported: "
-                f"{type(exc).__name__}: {exc}"
-            ) from None
+    folder = str(Path(base).resolve())
+    added = folder not in sys.path
+    if added:
+        sys.path.insert(0, folder)
+    try:
+        for module in plugins:
+            try:
+                importlib.import_module(module)
+            except Exception as exc:
+                raise ConfigError(
+                    f"plugins lists '{module}', which could not be imported: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from None
+    finally:
+        if added:
+            sys.path.remove(folder)
     return list(plugins)
 
 

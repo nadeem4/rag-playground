@@ -68,6 +68,10 @@ class EmbeddingProvider(ABC):
     #: is the single source for the loader, the fingerprint and the cache key.
     dtype: str = ""
 
+    #: The pip extra this model needs, for `pandion install`, or "" for none.
+    #: Never part of the fingerprint.
+    extra: str = ""
+
     #: Where a real model is kept, whether it may download, and its device.
     #: Never part of the fingerprint: they do not change which vectors it makes.
     models: ModelSettings | None = None
@@ -272,6 +276,7 @@ class Qwen3Embedding06B(SentenceTransformerEmbedder):
     """
 
     name = "qwen3-embedding-0.6b"
+    extra = "local"
     model_id = "Qwen/Qwen3-Embedding-0.6B"
     revision = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
     native_dim = 1024
@@ -284,6 +289,7 @@ class BgeSmallEnV15(SentenceTransformerEmbedder):
     """The labelled 2024 baseline: small, fast, and not Matryoshka-trained."""
 
     name = "bge-small-en-v1.5"
+    extra = "local"
     model_id = "BAAI/bge-small-en-v1.5"
     revision = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
     native_dim = 384

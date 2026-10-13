@@ -19,6 +19,10 @@ the API and exported files use it.
 - [Search](#search)
 - [Rerank](#rerank)
 - [Answer](#answer)
+- [What each step passes to its library](#what-each-step-passes-to-its-library)
+
+To write a strategy of your own for any step, see "Write your own strategy" in
+[pandion.md](pandion.md#write-your-own-strategy).
 
 ## The steps
 
@@ -291,7 +295,8 @@ the small pool of candidates the search found.
 Maximal Marginal Relevance picks results one at a time, each time taking the piece the
 search scored highest while being least like the pieces already picked. It trades
 relevance for variety, so it can drop near-duplicates instead of only reordering them. It
-reuses the index's own vectors to judge likeness, so it needs no extra model.
+reuses the index's own vectors to judge likeness, so it needs no extra model. It does need
+numpy, from the `local` extra; see "mmr (numpy)" below for what it sets.
 
 - `lambda_mult` (0.5): the balance between relevance and variety.
 
@@ -344,3 +349,113 @@ API key and no cost: it compares text with text. The Evaluate page runs it over 
 question in a set.
 
 - `top_k` (5): how many pieces are checked.
+
+## What each step passes to its library
+
+Many steps call a library to do the work. This section says, for each built-in step, which
+of the library's options Pandion sets and which it leaves at the library's own default, so
+you know what a result depends on. A setting that is not listed here is not passed, and
+the library's default applies.
+
+These steps call no library and run only Pandion's own code: `upload`, `header_footer_strip`,
+`drop_matching`, `recursive_character`, `markdown_header`, `token_based`, `layout_blocks`,
+`sentence_window`, `text`, `search` and `eval`. `hybrid_rrf` runs LanceDB's two
+searches, then fuses them with Pandion's own code.
+
+### pdfium (pypdfium2)
+
+- Sets: the PDF is opened from its bytes with `PdfDocument(data)`. Each page's text is read
+  with `get_text_range()`. With `join_lines` on, the box of each character is read with
+  `get_charbox(i, loose=True)`, to rebuild paragraphs from the layout.
+- Leaves at the default: `get_text_range` reads the whole page (`index=0`, `count=-1`) and
+  ignores characters it cannot decode (`errors="ignore"`). No password is given. pdfium
+  has no OCR.
+
+### docling (Docling)
+
+- Sets in `PdfPipelineOptions`: `do_ocr`, `do_table_structure`,
+  `table_structure_options.mode` (from `table_mode`), `heading_hierarchy_options.enabled`
+  (from `heading_hierarchy`), and `generate_parsed_pages`, which is on only when
+  `heading_hierarchy` is. The text is read with
+  `iterate_items(included_content_layers=...)` from `content_layers`, and each table with
+  `export_to_markdown()`.
+- Leaves at the default: the OCR engine (`ocr_options`, `auto`), table cell matching
+  (`do_cell_matching`, on), the device and threads (`accelerator_options`, `auto`), the
+  page image scale (`images_scale`, 1.0), the layout model (`layout_options`, Heron),
+  picture classification and description, chart extraction, code and formula enrichment
+  (all off), page, picture and table images (off), and the time limit per document
+  (`document_timeout`, none).
+
+Note that Docling's own default for `table_structure_options.mode` is `accurate`;
+Pandion's default `table_mode` is `fast`.
+
+### dedupe_blocks (Python's difflib)
+
+- Sets: with `scope: near`, two blocks are compared with `SequenceMatcher(None, a, b)`
+  and its `ratio()`.
+- Leaves at the default: `autojunk` (on), which ignores very common characters in texts
+  of 200 characters or more.
+
+### lancedb (LanceDB and pyarrow)
+
+- Sets: one table called `chunks`, with the vector column as a fixed-size list of float32
+  numbers, so LanceDB can search it. With `build_fts` on, a full-text index on the `text`
+  column with `FTS()`.
+- Leaves at the default: every `FTS()` option: the `simple` tokenizer, English, lower
+  case, stemming, stop words removed, ASCII folding, and no positions (so no phrase
+  search). No vector index is built, so a search compares the question with every vector
+  exactly instead of approximately.
+
+### dense, bm25 and hybrid_rrf (LanceDB)
+
+- Sets: `dense` runs `table.search(vector).distance_type(metric).limit(top_k)`, with the
+  metric the index was built with. `bm25` runs
+  `table.search(question, query_type="fts").limit(top_k)`. `hybrid_rrf` runs both, each
+  with `limit(top_k)`.
+- Leaves at the default: LanceDB's BM25 scoring parameters, and no filter.
+
+### Embedders (sentence-transformers)
+
+`qwen3-embedding-0.6b` and `bge-small-en-v1.5`; `fake-deterministic` calls no library.
+
+- Sets in `SentenceTransformer(...)`: the model id and a pinned `revision` (a commit), the
+  `device`, `cache_folder` and `local_files_only` from the model settings, and float32
+  (`model_kwargs={"dtype": torch.float32}`). In `encode(...)`: `batch_size=16` and
+  `normalize_embeddings=True`. For a question, Qwen3 gets its own `query` prompt
+  (`prompt_name="query"`), and bge-small gets the prefix "Represent this sentence for
+  searching relevant passages: ".
+- Leaves at the default: the longest text the model reads (`max_seq_length`, the model's
+  own; a longer text is cut by the model), and the model's pooling.
+
+### cross_encoder (sentence-transformers)
+
+- Sets in `CrossEncoder(...)`: the model id, the `device`, `cache_folder` and
+  `local_files_only` from the model settings. In `predict(...)`: one (question, piece)
+  pair per candidate.
+- Leaves at the default: the model's revision (its main branch, not pinned), the longest
+  pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
+  the scores are the ones the model gives.
+
+### mmr (numpy)
+
+MMR needs the `local` extra, which brings numpy.
+
+- Sets: the hits' vectors, embedded again with the index's own embedder and width
+  (through the embedding cache, so usually a lookup), become a float64 array
+  (`np.asarray(..., dtype=float)`). The likeness of two pieces is the dot product of their
+  vectors (`vectors @ vectors.T`), which is the cosine because the vectors have length 1.
+  The search scores are scaled to 0 to 1 with numpy. The first pick is the most relevant
+  piece, and each next pick is the `np.argmax` of `lambda_mult` times relevance minus
+  `1 - lambda_mult` times the highest likeness to a piece already picked.
+- Leaves at the default: nothing else is passed to numpy. The embedder's own options are
+  as listed under Embedders.
+
+### llm_rewrite, llm_rerank and chat (Anthropic and OpenAI SDKs)
+
+- Sets: the model, a system prompt, one user message, and a limit of 16,000 output
+  tokens (`max_tokens`, or `max_completion_tokens` for OpenAI). For Claude Opus 5 and
+  Sonnet 5, adaptive thinking is on. `chat` with a Claude model and `citation_method:
+  auto` sends each piece as a document with citations on, through
+  `client.beta.messages.create`.
+- Leaves at the default: `temperature`, `top_p` and the other sampling settings, so the
+  provider's defaults apply and two runs can give different text.

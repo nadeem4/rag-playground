@@ -65,6 +65,19 @@ def test_the_check_tests_a_given_wheel_without_building_one(tmp_path, monkeypatc
     built, checked = [], []
     monkeypatch.setattr(module, "run", lambda *args, **kwargs: built.append(args))
     monkeypatch.setattr(module, "check", lambda work, w, *rest: checked.append(w) or 0)
+    examples = []
+    monkeypatch.setattr(module, "run_own_strategies", lambda work, venv: examples.append(venv) or 0)
     assert module.main(tmp_path / "work", with_models=False, wheel=wheel) == 0
     assert built == []
     assert checked == [wheel, wheel]
+    # The own-strategies example runs with the first environment, which has the extras.
+    assert examples == [tmp_path / "work" / "venv"]
+
+
+def test_the_check_fails_when_the_own_strategies_example_fails(tmp_path, monkeypatch):
+    module = run_check()
+    wheel = tmp_path / "pandion-0.1.0-py3-none-any.whl"
+    wheel.write_bytes(b"")
+    monkeypatch.setattr(module, "check", lambda *args: 0)
+    monkeypatch.setattr(module, "run_own_strategies", lambda work, venv: 1)
+    assert module.main(tmp_path / "work", with_models=False, wheel=wheel) == 1

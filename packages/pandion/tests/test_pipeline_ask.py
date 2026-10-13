@@ -188,7 +188,7 @@ def test_an_answer_needs_a_retrieve_section(tmp_path):
 def test_a_file_without_an_answer_section_cannot_ask(tmp_path):
     p = built(tmp_path, "")
 
-    with pytest.raises(ValueError, match="no answer section"):
+    with pytest.raises(ValueError, match="no answer section.*any answer strategy, for example search or chat"):
         p.ask(QUESTION)
 
 

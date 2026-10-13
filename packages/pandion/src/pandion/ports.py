@@ -11,7 +11,11 @@ from pandion.artifacts import ArtifactType
 
 
 class Stage(StrEnum):
-    """The slots a transform can plug into."""
+    """The slots a transform can plug into.
+
+    ENRICH and QUERY_TRANSFORM are reserved: no strategy uses them yet, and
+    they are kept so result ids stay stable.
+    """
 
     SOURCE = "source"
     QUERY = "query"

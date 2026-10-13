@@ -112,3 +112,12 @@ def test_a_custom_store_runs_in_a_pipeline(tmp_path):
     f.write_bytes(build_pdf(SAMPLE_PAGES))
     report = Pipeline._of(from_dict(_config({"use": "test_jsonl_store"}), base=tmp_path)).index.run(f)
     assert report.ok and report.index.transform == "test_jsonl_store"
+
+
+def test_a_self_embedding_store_needs_no_embed_argument_in_code(tmp_path):
+    from pandion import IndexPipeline
+
+    steps = {"path": tmp_path / "index", "parse": "pdfium", "chunk": "recursive_character",
+             "store": "test_self_embedding_store"}
+    assert Pipeline(**steps).config.index.store_use == "test_self_embedding_store"
+    assert IndexPipeline(**steps).config.index.store_use == "test_self_embedding_store"

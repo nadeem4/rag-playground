@@ -31,17 +31,16 @@ import re
 import threading
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import Any, Literal, get_args
+from typing import Annotated, Any, Literal
+
+from pydantic import AfterValidator, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 from pandion.errors import require
 from pandion.models import ModelSettings, check_downloaded, resolve_device
 
 EmbedKind = Literal["document", "query"]
-
-#: The registered embedder names, as a type. Plugin configs use this directly so
-#: the form renderer offers a dropdown and a typo fails config validation.
-#: `test_embedder_name_literal_matches_the_registry` keeps it honest.
-EmbedderName = Literal["qwen3-embedding-0.6b", "bge-small-en-v1.5", "fake-deterministic"]
 
 
 class EmbeddingProvider(ABC):
@@ -335,8 +334,45 @@ _EMBEDDERS: dict[str, type[EmbeddingProvider]] = {
     for cls in (Qwen3Embedding06B, BgeSmallEnV15, FakeDeterministicEmbedder)
 }
 
-EMBEDDER_NAMES: tuple[str, ...] = get_args(EmbedderName)
 
+def register_embedder(cls: type[EmbeddingProvider]) -> type[EmbeddingProvider]:
+    """Add an embedder, so `embed: {use: <its name>}` and `get_embedder` find it."""
+    existing = _EMBEDDERS.get(cls.name)
+    if existing is not None and existing is not cls:
+        raise ValueError(
+            f"An embedder named '{cls.name}' is already registered "
+            f"({existing.__module__}.{existing.__qualname__}); choose another name."
+        )
+    _EMBEDDERS[cls.name] = cls
+    return cls
+
+
+def embedder_names() -> tuple[str, ...]:
+    """Every registered embedder's name, built-in or added."""
+    return tuple(_EMBEDDERS)
+
+
+def _known_embedder(name: str) -> str:
+    if name not in _EMBEDDERS:
+        raise ValueError(f"'{name}' is not an embedder. The embedders are: {', '.join(_EMBEDDERS)}.")
+    return name
+
+
+class _EmbedderChoices:
+    """Fills the schema's `enum` from the registry each time a schema is made."""
+
+    def __get_pydantic_json_schema__(
+        self, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        schema = handler(core_schema)
+        schema["enum"] = list(_EMBEDDERS)
+        return schema
+
+
+#: An embedder's name, checked against the registry when a config is read. The
+#: settings form offers the registered names as choices, so an embedder added
+#: with `register_embedder` shows up there too.
+EmbedderName = Annotated[str, AfterValidator(_known_embedder), _EmbedderChoices()]
 
 def get_embedder(name: str, models: ModelSettings | None = None) -> EmbeddingProvider:
     """Return a ready-to-use provider by registry name. Never loads a model.
@@ -352,3 +388,7 @@ def get_embedder(name: str, models: ModelSettings | None = None) -> EmbeddingPro
         ) from None
     provider.models = models
     return provider
+
+
+#: The public name for an embedder's base class, used by `pandion.extend`.
+Embedder = EmbeddingProvider

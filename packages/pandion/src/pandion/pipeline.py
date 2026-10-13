@@ -455,7 +455,7 @@ class IndexPipeline:
             chunk = add(doc_id, "chunk", Stage.CHUNK, *index.chunk)
             edges.append(Edge(last, chunk, "doc"))
             chunk_nodes.append(chunk)
-        store = add(None, "index", Stage.INDEX, "lancedb", index.store)
+        store = add(None, "index", Stage.INDEX, index.store_use, index.store)
         edges += [Edge(chunk, store, "chunks") for chunk in chunk_nodes]
         return Graph(nodes=nodes, edges=edges), roles
 

@@ -176,11 +176,11 @@ index:
   chunk:                # required
     use: recursive_character
     chunk_size: 400     # any other key is a setting of this chunker
-  embed:                # required
+  embed:                # required when the store has an embedder setting, as lancedb does
     use: qwen3-embedding-0.6b   # or bge-small-en-v1.5, fake-deterministic
     truncate_dim: null  # optional
   store:                # required
-    use: lancedb        # the only store for now
+    use: lancedb        # or any registered index strategy
     metric: cosine      # optional
     build_fts: true     # optional
 
@@ -204,8 +204,11 @@ file gives the same artifact ids and shares a cache. [Strategies](strategies.md)
 every step and setting. The chunkers are `recursive_character`, `markdown_header`,
 `token_based`, `layout_blocks` and `sentence_window`.
 
-`embed` and `store` are one step when it runs, because the index embeds the pieces as it
-writes them.
+`store` takes any registered index strategy, built in or your own. `embed` and `store` are
+one step when it runs, because the index embeds the pieces as it writes them. The rule for
+`embed` fits in one sentence: if the store has an `embedder` setting, `embed` is required
+and its `use` becomes that setting, and if it does not, the store embeds by itself and
+`embed` must be left out.
 
 ## Build an index
 
@@ -498,7 +501,8 @@ default settings. The classes are in:
 | `pandion.answer` | `Search`, `Chat` |
 
 `embed` takes the embedder's name, or a dict with `truncate_dim`. `store` takes
-`"lancedb"`, or a dict with `metric` and `build_fts`. `models` takes a dict or
+`"lancedb"` or any other index strategy's name, or a dict with `use` and its settings, such
+as `metric` and `build_fts` for lancedb. `models` takes a dict or
 `pandion.ModelSettings`.
 
 `pandion.parse`, `pandion.clean`, `pandion.chunk` and `pandion.rewrite` still run one
@@ -615,6 +619,38 @@ class TxtLines(Transform[NoSettings]):
         return ParsedDoc(elements=[Element(id=f"l{i}", type="paragraph", text=t, order=i)
                                    for i, t in enumerate(lines) if t.strip()])
 ```
+
+### Your own embedder
+
+An embedder is set under `embed:` and not as a step, because the store embeds the pieces
+with it and the retriever embeds the question with the same one. To add one, subclass
+`pandion.extend.Embedder`, give it a name and its sizes, and write `_embed()`, which returns
+one vector per text. The same `@register` adds it, and then `embed: {use: letter_counts}`
+picks it.
+
+```python
+from pandion.extend import Embedder, register
+
+@register
+class LetterCounts(Embedder):
+    name = "letter_counts"
+    model_id = "local/letter-counts"
+    revision = "1"
+    native_dim = 26
+    max_seq_len = 10_000
+
+    def _embed(self, texts, kind):
+        vectors = []
+        for t in texts:
+            counts = [t.lower().count(chr(97 + i)) for i in range(26)]
+            length = sum(c * c for c in counts) ** 0.5 or 1.0  # no letters: avoid dividing by zero
+            vectors.append([c / length for c in counts])
+        return vectors
+```
+
+`kind` is `"document"` for a piece and `"query"` for a question. Return vectors of length 1
+(divide each by its length), because search compares them as if they were. A name that is already
+taken is refused.
 
 ## Loading your strategies
 

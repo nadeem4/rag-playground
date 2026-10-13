@@ -34,7 +34,9 @@ def extras_for(config: PipelineConfig) -> list[str]:
     """The extras the pipeline's steps need, sorted."""
     index = config.index
     names = [index.parse[0], *(use for use, _ in index.clean), index.chunk[0]]
-    names += ["lancedb", index.store["embedder"]]
+    names.append(index.store_use)
+    if index.store.get("embedder") is not None:
+        names.append(index.store["embedder"])
     extras = {EXTRAS[name] for name in names if name in EXTRAS}
     retrieve = config.retrieve
     if retrieve is not None:

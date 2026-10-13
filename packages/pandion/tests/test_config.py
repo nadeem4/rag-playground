@@ -126,7 +126,7 @@ def test_embed_and_store_settings_stay_in_their_own_step(tmp_path):
         load(write(tmp_path, text))
 
 
-def test_the_only_store_is_lancedb(tmp_path):
+def test_an_unknown_store_lists_the_stores(tmp_path):
     text = GOOD.replace("use: lancedb", "use: qdrant")
     with pytest.raises(ConfigError, match="qdrant.*lancedb"):
         load(write(tmp_path, text))

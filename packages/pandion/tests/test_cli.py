@@ -116,3 +116,11 @@ def test_extra_is_not_part_of_a_result_id():
 
     assert PdfiumParse().fingerprint() == "none"
     assert "local" not in get_embedder("qwen3-embedding-0.6b").fingerprint()
+
+
+def test_an_unknown_strategy_name_is_a_plain_sentence(tmp_path):
+    config = cli.load(write(tmp_path, parser="pdfium", embedder="fake-deterministic"))
+    config.index.parse = ("nope", {})
+
+    with pytest.raises(ValueError, match="index.parse uses 'nope', which is not registered, so its extra is unknown."):
+        cli.extras_for(config)

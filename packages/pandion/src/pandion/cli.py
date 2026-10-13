@@ -38,7 +38,15 @@ def extras_for(config: PipelineConfig) -> list[str]:
         (Stage.CHUNK, index.chunk[0]),
         (Stage.INDEX, index.store_use),
     ]
-    extras = {registry.get(stage, use).extra for stage, use in steps}
+    def extra_of(stage: Stage, use: str, where: str) -> str:
+        try:
+            return registry.get(stage, use).extra
+        except KeyError:
+            raise ValueError(
+                f"{where} uses '{use}', which is not registered, so its extra is unknown."
+            ) from None
+
+    extras = {extra_of(stage, use, f"index.{stage.value}") for stage, use in steps}
     if index.store.get("embedder") is not None:
         extras.add(get_embedder(index.store["embedder"]).extra)
     retrieve = config.retrieve
@@ -54,7 +62,7 @@ def extras_for(config: PipelineConfig) -> list[str]:
             if use in CHAT_STEPS:
                 extras.add(_chat_extra(use, settings))
             else:
-                extras.add(registry.get(stage, use).extra)
+                extras.add(extra_of(stage, use, f"retrieve.{stage.value}"))
     extras.discard("")
     return sorted(extras)
 

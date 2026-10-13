@@ -616,6 +616,33 @@ class TxtLines(Transform[NoSettings]):
                                    for i, t in enumerate(lines) if t.strip()])
 ```
 
+### Your own embedder
+
+An embedder is set under `embed:` and not as a step, because the store embeds the pieces
+with it and the retriever embeds the question with the same one. To add one, subclass
+`pandion.extend.Embedder`, give it a name and its sizes, and write `_embed()`, which returns
+one vector per text. The same `@register` adds it, and then `embed: {use: letter_counts}`
+picks it.
+
+```python
+from pandion.extend import Embedder, register
+
+@register
+class LetterCounts(Embedder):
+    name = "letter_counts"
+    model_id = "local/letter-counts"
+    revision = "1"
+    native_dim = 26
+    max_seq_len = 10_000
+
+    def _embed(self, texts, kind):
+        return [[t.lower().count(chr(97 + i)) / max(len(t), 1) for i in range(26)]
+                for t in texts]
+```
+
+`kind` is `"document"` for a piece and `"query"` for a question. A name that is already
+taken is refused.
+
 ## Loading your strategies
 
 A strategy only works by name once the module that registers it has been imported. There are

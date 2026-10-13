@@ -38,7 +38,7 @@ from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
 from pandion.embedding_cache import embed_cached
-from pandion.embeddings import EmbedderName, get_embedder
+from pandion.embeddings import EmbedderName, embedder_names, get_embedder
 from pandion.errors import require
 from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage
@@ -56,18 +56,26 @@ VECTOR_COLUMN = "vector"
 TEXT_COLUMN = "text"
 
 
+#: The settings form's names for the built-in embedders. An added embedder is
+#: shown by its own name.
+_EMBEDDER_LABELS = {
+    "bge-small-en-v1.5": "BGE small, English",
+    "fake-deterministic": "Fake, for tests",
+    "qwen3-embedding-0.6b": "Qwen3 Embedding 0.6B",
+}
+
+
+def _embedder_labels(schema: dict[str, Any]) -> None:
+    """Label every registered embedder, so each choice in the form has a name."""
+    schema["x-labels"] = {name: _EMBEDDER_LABELS.get(name, name) for name in sorted(embedder_names())}
+
+
 class LanceDbIndexConfig(BaseModel):
     #: The first real run downloads the model (Qwen3 is about 1.2 GB).
     embedder: EmbedderName = Field(
         default="qwen3-embedding-0.6b",
         title="Embedding model",
-        json_schema_extra={
-            "x-labels": {
-                "qwen3-embedding-0.6b": "Qwen3 Embedding 0.6B",
-                "bge-small-en-v1.5": "BGE small, English",
-                "fake-deterministic": "Fake, for tests",
-            }
-        },
+        json_schema_extra=_embedder_labels,
         description=(
             "The model that turns each piece into a vector. The first run "
             "downloads it."

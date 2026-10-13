@@ -285,12 +285,11 @@ def test_empty_input_never_reaches_the_model():
 # --- the real models, as declared (no model is loaded here) ---------------
 
 
-def test_embedder_name_literal_matches_the_registry():
-    from typing import get_args
+def test_every_built_in_embedder_is_registered_under_its_name():
+    from pandion.embeddings import _EMBEDDERS, embedder_names
 
-    from pandion.embeddings import _EMBEDDERS, EmbedderName
-
-    assert set(get_args(EmbedderName)) == set(_EMBEDDERS)
+    for name in ("qwen3-embedding-0.6b", "bge-small-en-v1.5", "fake-deterministic"):
+        assert name in embedder_names()
     for name, cls in _EMBEDDERS.items():
         assert cls.name == name
 

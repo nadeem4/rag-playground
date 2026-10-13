@@ -55,7 +55,7 @@ from typing import Any, ClassVar
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from pandion.embeddings import EMBEDDER_NAMES
+from pandion.embeddings import embedder_names
 from pandion.models import ModelSettings
 from pandion.plugins import discover
 from pandion.ports import Stage
@@ -376,10 +376,10 @@ def _step(stage: Stage, step: Any, where: str) -> tuple[str, dict[str, Any]]:
 def _store(embed: Any, store: Any) -> dict[str, Any]:
     embedder, embed_settings = _use(embed, "index.embed")
     kind, store_settings = _use(store, "index.store")
-    if embedder not in EMBEDDER_NAMES:
+    if embedder not in embedder_names():
         raise ConfigError(
             f"index.embed uses '{embedder}', which is not an embedder. "
-            f"The embedders are: {', '.join(EMBEDDER_NAMES)}."
+            f"The embedders are: {', '.join(embedder_names())}."
         )
     if kind != "lancedb":
         raise ConfigError(f"index.store uses '{kind}'. The only store is lancedb.")

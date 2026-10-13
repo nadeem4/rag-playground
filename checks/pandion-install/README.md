@@ -1,6 +1,6 @@
 # pandion install check
 
-This checks the `pandion` wheel the way a user would get it, before it goes to PyPI. It
+This checks the `pandion` wheel the way a user would get it, before each release to PyPI. It
 is not part of the uv workspace, and `uv run pytest` at the root does not run it.
 
 `run_check.py` builds the wheel and makes two brand new virtual environments in a scratch

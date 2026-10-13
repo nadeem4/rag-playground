@@ -10,8 +10,8 @@ to date, the rewrite of a question, searching an index with rerankers, asking a 
 and three ways to write the same pipeline: a YAML file, a dict per stage, and classes in
 code.
 
-Before it goes to PyPI, [checks/pandion-install/](../checks/pandion-install) installs
-the built package in new environments, with and without extras, and tests it there.
+Before each release to PyPI, [checks/pandion-install/](../checks/pandion-install)
+installs the built package in new environments, with and without extras, and tests it there.
 
 ## Contents
 
@@ -32,12 +32,14 @@ the built package in new environments, with and without extras, and tests it the
 
 ## Install
 
-Pandion is not on PyPI yet. Install it from a clone of the repo. It needs Python 3.13.
+Pandion is [on PyPI](https://pypi.org/project/pandion/). It needs Python 3.13.
 
 ```bash
-git clone https://github.com/nadeem4/rag-playground.git && cd rag-playground
-pip install "./packages/pandion[pdfium,lancedb,local]"
+pip install "pandion[pdfium,lancedb,local]"
 ```
+
+To try the examples in this guide, which use the bundled sample PDFs, clone the repo too:
+`git clone https://github.com/nadeem4/rag-playground.git`.
 
 The base install is small. Each parser, store and model library is an extra:
 

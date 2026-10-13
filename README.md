@@ -105,10 +105,10 @@ one step on its own, or build a whole pipeline from a YAML file, from settings b
 name, or from classes, then index, search and ask. Every step tells you what it did, and
 each result is cached, so the same files with the same settings are never processed twice.
 
-It needs Python 3.13. Until it is on PyPI, install it from GitHub:
+It is [on PyPI](https://pypi.org/project/pandion/) and needs Python 3.13:
 
 ```bash
-pip install "pandion[pdfium,lancedb,local] @ git+https://github.com/nadeem4/rag-playground#subdirectory=packages/pandion"
+pip install "pandion[pdfium,lancedb,local]"
 ```
 
 ```python

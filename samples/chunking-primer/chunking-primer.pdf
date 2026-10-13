@@ -71,13 +71,13 @@ BT /F1 9 Tf 510 760 Td (Page 2) Tj ET
 endstream
 endobj
 5 0 obj
-<< /Length 2824 >>
+<< /Length 2815 >>
 stream
 BT /F2 15 Tf 72 720 Td (Structure-aware splitting) Tj ET
-BT /F1 11 Tf 72 691 Td (Fixed-size splitting ignores the document's own shape. A section under one heading) Tj ET
-BT /F1 11 Tf 72 676 Td (usually discusses one subject, which is exactly what a good chunk should do. Structure-) Tj ET
-BT /F1 11 Tf 72 661 Td (aware splitting uses that shape: headings, paragraphs, list items and tables become the) Tj ET
-BT /F1 11 Tf 72 646 Td (natural places to cut.) Tj ET
+BT /F1 11 Tf 72 691 Td (A section under one heading usually discusses one subject, which is exactly what a good) Tj ET
+BT /F1 11 Tf 72 676 Td (chunk should do. Fixed-size splitting ignores the document's own shape. Structure-aware) Tj ET
+BT /F1 11 Tf 72 661 Td (splitting uses it: headings, paragraphs, list items and tables become the natural places) Tj ET
+BT /F1 11 Tf 72 646 Td (to cut.) Tj ET
 BT /F1 11 Tf 72 622 Td (This only works when the parser recovers the structure. A layout-aware parser labels) Tj ET
 BT /F1 11 Tf 72 607 Td (headings, footers and tables, while a plain text extractor returns a flat stream of) Tj ET
 BT /F1 11 Tf 72 592 Td (lines. Cleaning comes next: running headers, footers and page numbers are removed, so) Tj ET
@@ -237,19 +237,19 @@ xref
 0000000154 00000 n 
 0000002826 00000 n 
 0000005870 00000 n 
-0000008746 00000 n 
-0000011939 00000 n 
-0000014536 00000 n 
-0000017147 00000 n 
-0000017284 00000 n 
-0000017422 00000 n 
-0000017560 00000 n 
-0000017698 00000 n 
-0000017836 00000 n 
-0000017974 00000 n 
-0000018067 00000 n 
+0000008737 00000 n 
+0000011930 00000 n 
+0000014527 00000 n 
+0000017138 00000 n 
+0000017275 00000 n 
+0000017413 00000 n 
+0000017551 00000 n 
+0000017689 00000 n 
+0000017827 00000 n 
+0000017965 00000 n 
+0000018058 00000 n 
 trailer
 << /Size 17 /Root 16 0 R >>
 startxref
-18118
+18109
 %%EOF

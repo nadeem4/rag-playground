@@ -97,10 +97,14 @@ when `RAG_PLAYGROUND_DEMO` is `1`, read by `api.demo.public_endpoints_only()`. T
 refuse a custom endpoint on the demo with a 403 first, and the second line reads the
 switch on its own, so it holds even if the first is lifted. API keys reach a run only as
 `context_extras["credentials"]`, never in a config or a hash.
-The app may import any public name from `pandion` but never a private one
-(a name starting with an underscore), and the package never imports the app. Two tests
-hold both rules: `tests/integration/test_package_boundary.py` and
-`packages/pandion/tests/test_boundaries.py`.
+The app imports Pandion through its public API: `pandion`, the stage namespaces
+(`pandion.parse` to `pandion.answer`) and `pandion.extend`, each a name in the module's
+`__all__`. It never imports a private name (one starting with an underscore), and the
+package never imports the app. The engine names the app still imports from Pandion's
+inner modules (`pandion.graph`, `pandion.executor`, `pandion.storage` and the rest) are
+listed in `ENGINE_IMPORTS` in `tests/integration/test_package_boundary.py`. That list may
+only shrink: a new engine import fails the test, and so does a line the app no longer
+needs. `packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
 
 ## Using the package on its own
 

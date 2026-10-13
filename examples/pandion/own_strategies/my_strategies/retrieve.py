@@ -32,17 +32,20 @@ class JsonlSearch(Transform[JsonlSearchConfig]):
         "query": PortSpec(ArtifactType.QUERY, ambient=True),
     }
     output = ArtifactType.RETRIEVAL_RESULT
-    # Only a store that provides the dense backend can be searched by this.
-    # A pipeline file that pairs it with another store is refused when read.
-    requires = {"index": {"backends": ["dense"]}}
+    # Only a store that provides the dense backend and writes jsonl files can
+    # be searched by this. Asking for the format stops it pairing with a store
+    # whose files it cannot read, such as lancedb: that pipeline file is
+    # refused when it is read.
+    requires = {"index": {"backends": ["dense"], "format": ["jsonl"]}}
     config_model = JsonlSearchConfig
     summary = "Embeds the question with the store's embedder and returns the closest pieces."
 
     def apply(self, inputs, config, ctx):
         folder = Path(inputs["index"])
         query = Query.model_validate(inputs["query"])
-        # Embed the question with the same embedder the store used.
-        embedder = get_embedder((folder / EMBEDDER).read_text(encoding="utf-8"))
+        # Embed the question with the same embedder the store used, and the
+        # run's model settings.
+        embedder = get_embedder((folder / EMBEDDER).read_text(encoding="utf-8"), ctx.extras.get("models"))
         [question] = embedder.embed([query.text], kind="query")
 
         rows = [json.loads(line) for line in (folder / PIECES).read_text(encoding="utf-8").splitlines()]

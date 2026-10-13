@@ -30,9 +30,10 @@ class JsonlStore(Transform[JsonlStoreConfig]):
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)}
     output = ArtifactType.INDEX
     # What this store offers. A retriever's `requires` is checked against it
-    # when the pipeline file is read. The built-in retrievers also require
-    # format lancedb, so this store comes with its own retriever, jsonl_search.
-    provides = {"backends": ["dense"]}
+    # when the pipeline file is read. `format` names the files it writes: the
+    # built-in retrievers require format lancedb, so they are refused with this
+    # store, and it comes with its own retriever, jsonl_search.
+    provides = {"backends": ["dense"], "format": ["jsonl"]}
     config_model = JsonlStoreConfig
     summary = "Embeds every piece and writes the pieces and their vectors to a JSON Lines file."
 
@@ -43,7 +44,10 @@ class JsonlStore(Transform[JsonlStoreConfig]):
 
     def apply(self, inputs, config, ctx):
         chunks = [c for payload in inputs["chunks"] for c in ChunkSet.model_validate(payload).chunks]
-        vectors = get_embedder(config.embedder).embed([c.text_to_embed for c in chunks], kind="document")
+        # Pass the run's model settings, so an embedder that loads a model
+        # finds it where the pipeline's `models:` section says.
+        embedder = get_embedder(config.embedder, ctx.extras.get("models"))
+        vectors = embedder.embed([c.text_to_embed for c in chunks], kind="document")
         lines = [
             json.dumps({"chunk": c.model_dump(mode="json"), "vector": v})
             for c, v in zip(chunks, vectors)

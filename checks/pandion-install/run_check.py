@@ -7,7 +7,8 @@ test_base_install.py. Each test file runs from a copy in the work folder, so
 `import pandion` can only find the installed wheel and never the repo's source.
 Then it copies examples/pandion/own_strategies into the work folder and runs its
 run_yaml.py with the first environment's Python, so a strategy written outside
-the package is proven to work against the installed wheel.
+the package is proven to work against the installed wheel, and runs the
+installed `pandion install --print` on its pipeline file from another folder.
 
 With --with-models, the first environment also gets the local extra (torch and
 sentence-transformers) and runs test_models.py, which downloads one small model.
@@ -88,15 +89,22 @@ def check(work: Path, wheel: Path, name: str, extras: str, test_files: list[str]
 
 
 def run_own_strategies(work: Path, venv: Path) -> int:
-    """Run the own-strategies example from a copy, with the environment's Python."""
+    """Run the own-strategies example from a copy, with the environment's
+    Python, and the installed `pandion` command on its pipeline file from
+    another folder, so its plugins are found beside the file."""
     example = work / "own_strategies"
     shutil.copytree(OWN_STRATEGIES, example, ignore=shutil.ignore_patterns("work", "__pycache__"))
-    script = [str(venv_python(venv)), "run_yaml.py", "--work", str(work / "own_strategies-work")]
-    print("$", " ".join(script), flush=True)
-    code = subprocess.run(script, cwd=example, env=clean_env()).returncode
-    if code:
-        print(f"The own-strategies example failed with exit code {code}.")
-    return code
+    command = venv / ("Scripts/pandion.exe" if os.name == "nt" else "bin/pandion")
+    for script in (
+        [str(venv_python(venv)), str(example / "run_yaml.py")],
+        [str(command), "install", "--print", str(example / "pipeline.yaml")],
+    ):
+        print("$", " ".join(script), flush=True)
+        code = subprocess.run(script, cwd=work, env=clean_env()).returncode
+        if code:
+            print(f"The own-strategies example failed with exit code {code}.")
+            return code
+    return 0
 
 
 def main(work: Path, with_models: bool, wheel: Path | None = None) -> int:

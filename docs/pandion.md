@@ -622,8 +622,9 @@ Every strategy follows the same pattern:
    - `config_model`, the settings model;
    - `summary`, one plain sentence saying what it does.
 3. `apply(self, inputs, config, ctx)`, which gets the inputs by port name, the settings as
-   an instance of your model, and the run's context, and returns the stage's output. Return
-   the payload as a dict, for example `doc.model_dump(mode="json")`.
+   an instance of your model, and the run's context, and returns the stage's output. A
+   payload model, such as a `ParsedDoc`, and a plain dict, such as
+   `doc.model_dump(mode="json")`, both work.
 4. `@register` on the class.
 
 A mistake in the class, such as a stage with the wrong output or a setting with no
@@ -642,6 +643,8 @@ The ports each stage reads:
 | search | `Stage.RETRIEVE` | `index`: the store's folder; `query`: a `Query` (`ambient=True`) | `RetrievalResult` |
 | rerank | `Stage.RERANK` | `result`: a `RetrievalResult` | `RetrievalResult` |
 | answer | `Stage.USE_CASE` | `result`: a `RetrievalResult`; `doc` if declared | `Output` |
+
+`Stage.ENRICH` and `Stage.QUERY_TRANSFORM` are reserved: no strategy uses them yet, and they are kept so result ids stay stable.
 
 An `ambient=True` port is found for you: the `query` port is filled by the rewrite step
 without any wiring. Everything in the table, and `register`, `set_note`, `get_embedder`
@@ -765,19 +768,21 @@ from the store in `requires`, on its `index` port. The built-in `lancedb` store 
 format, because they open a LanceDB table. Pandion compares the two when the pipeline is
 read, so a mismatch is refused before anything runs, for example: "retrieve.search uses
 'dense', which needs a store with backends dense and format lancedb, but index.store uses
-'my_store', which has backends dense." So a new store in another format brings its own
-retriever, whose `requires` asks for what that store provides.
+'my_store', which has backends dense and format jsonl." So a new store in another format
+brings its own retriever, whose `requires` asks for what that store provides. Name the
+format on both sides: it stops your retriever pairing with a store whose files it cannot
+read, such as `lancedb`.
 
 ```python
 class JsonlStore(Transform[JsonlStoreConfig]):
     stage = Stage.INDEX
-    provides = {"backends": ["dense"]}
+    provides = {"backends": ["dense"], "format": ["jsonl"]}
     ...
 
 class JsonlSearch(Transform[JsonlSearchConfig]):
     stage = Stage.RETRIEVE
     inputs = {"index": PortSpec(ArtifactType.INDEX), "query": PortSpec(ArtifactType.QUERY, ambient=True)}
-    requires = {"index": {"backends": ["dense"]}}
+    requires = {"index": {"backends": ["dense"], "format": ["jsonl"]}}
     ...
 ```
 
@@ -787,7 +792,9 @@ the function only write files. Pandion keeps the folder with the other results, 
 retriever gets the same folder as `inputs["index"]`, so it reads its files with
 `Path(inputs["index"]) / "pieces.jsonl"`. A store with an `embedder` setting gets it from
 `embed:`, so write the embedder's name into the folder too, and the retriever can embed
-the question with the same one. To make a new embedder revision build a new index, return
+the question with the same one. In `apply()`, get the embedder with the run's model
+settings, `get_embedder(name, ctx.extras.get("models"))`, so a model is found where the
+pipeline's `models:` section says. To make a new embedder revision build a new index, return
 `get_embedder(config.embedder).fingerprint()` from the store's `fingerprint()`.
 
 ### A rewrite and an answer
@@ -824,8 +831,16 @@ three ways to make that happen.
      parse: {use: txt_lines}
    ```
 
-   A module that cannot be imported is a `ConfigError` that names the module and the error.
-   `build(..., plugins=[...])` takes the same list in code.
+   Each module is imported from the folder the pipeline file is in first, the same way a
+   relative path is read from it, so a module next to the file works from any folder,
+   including with `pandion install`. A module that cannot be imported is a `ConfigError`
+   that names the module and the error. `build(..., plugins=[...])` takes the same list in
+   code, and then the current folder is searched.
+
+   `pandion install` imports the modules to read the file, before it installs anything.
+   So import a heavy library, such as one that loads a model, inside `apply()` and not at
+   the top of the module: then `pandion install` can run before that library is
+   installed.
 3. Ship it as a package. Add an entry point in the `pandion.strategies` group, and Pandion
    loads the package the first time it looks up a strategy:
 
@@ -886,4 +901,4 @@ that the artifact ids match. A test runs all six, so they stay correct.
 [`examples/pandion/own_strategies/`](../examples/pandion/own_strategies) writes a
 strategy for every stage and runs them from a pipeline file (`run_yaml.py`) and mixed with
 built-in steps in code (`run_mixed.py`). A test runs both, and the install check runs
-`run_yaml.py` against the built package.
+`run_yaml.py` and `pandion install --print` on its pipeline file against the built package.

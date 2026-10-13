@@ -196,6 +196,7 @@ class Pipeline:
     Each stage is a dict (the file's block for it), a step class or a name.
     `source` is optional, as in the file: left out, the documents are the
     files given to index.run (see "Your own source" in docs/pandion.md).
+    `embed` is left out for a store that embeds by itself.
     `retrieval` is None without a search step and `query` is None without an
     answer step.
     """
@@ -206,8 +207,8 @@ class Pipeline:
         path: str | Path,
         parse: Step,
         chunk: Step,
-        embed: Step,
         store: Step,
+        embed: Step = None,
         clean: Step = None,
         source: Step = None,
         rewrite: Step = None,
@@ -271,7 +272,7 @@ class Pipeline:
         if self.query is None:
             raise ValueError(
                 "The pipeline has no answer section, so there is nothing to answer "
-                "with. Add answer: with search or chat."
+                "with. Add answer: with any answer strategy, for example search or chat."
             )
         return self.query.ask(question, k, credentials=credentials)
 
@@ -280,7 +281,8 @@ class IndexPipeline:
     """Parse, clean, chunk, embed and store, for many documents into one index.
 
     In code: `IndexPipeline(path=..., parse=..., chunk=..., embed=..., store=...)`,
-    with `source`, `clean` (one cleaner or a list) and `models` optional.
+    with `source`, `clean` (one cleaner or a list) and `models` optional, and
+    `embed` left out for a store that embeds by itself.
     """
 
     def __init__(
@@ -289,8 +291,8 @@ class IndexPipeline:
         path: str | Path,
         parse: Step,
         chunk: Step,
-        embed: Step,
         store: Step,
+        embed: Step = None,
         clean: Step = None,
         source: Step = None,
         models: Any = None,
@@ -532,6 +534,7 @@ class RetrievalPipeline:
             models=index.config.models,
             index=base["index"],
             retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
+            plugins=index.config.plugins,
         )
         self._setup(config, index)
 
@@ -636,6 +639,7 @@ class QueryPipeline:
             index=base["index"],
             retrieve=base["retrieve"],
             answer=answer,
+            plugins=retrieval.config.plugins,
         )
         self._setup(config, retrieval)
 

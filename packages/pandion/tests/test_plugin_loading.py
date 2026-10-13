@@ -134,3 +134,80 @@ def test_entry_points_load_in_discover_and_a_broken_one_only_warns(monkeypatch):
         plugins.discover()
     assert "good" in loaded
     assert any("bad" in str(w.message) and "boom" in str(w.message) for w in caught)
+
+
+BESIDE = MODULE.replace("loaded_from_plugins", "beside_the_file")
+
+PIPELINE_BESIDE = textwrap.dedent("""
+    plugins: [mymod_beside_file]
+    path: ./index
+    index:
+      parse: {use: beside_the_file}
+      chunk: {use: recursive_character}
+      embed: {use: fake-deterministic}
+      store: {use: lancedb}
+    retrieve:
+      search: {use: dense}
+""")
+
+
+@pytest.fixture
+def beside_the_file(tmp_path):
+    """A pipeline file with its plugin module in the same folder."""
+    folder = tmp_path / "project"
+    folder.mkdir()
+    (folder / "mymod_beside_file.py").write_text(BESIDE, encoding="utf-8")
+    (folder / "pipeline.yaml").write_text(PIPELINE_BESIDE, encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    yield folder, elsewhere
+    sys.modules.pop("mymod_beside_file", None)
+    from pandion.registry import registry
+
+    registry._by_stage[Stage.PARSE].pop("beside_the_file", None)
+
+
+def test_load_imports_a_plugin_from_the_files_folder(beside_the_file, monkeypatch):
+    from pandion.config import load
+
+    folder, elsewhere = beside_the_file
+    monkeypatch.chdir(elsewhere)
+    path_before = list(sys.path)
+    config = load(folder / "pipeline.yaml")
+    assert config.index.parse[0] == "beside_the_file"
+    assert sys.path == path_before
+    assert "mymod_beside_file" in sys.modules
+
+
+def test_from_dict_imports_a_plugin_from_base(beside_the_file, monkeypatch):
+    import yaml
+
+    folder, elsewhere = beside_the_file
+    monkeypatch.chdir(elsewhere)
+    data = yaml.safe_load((folder / "pipeline.yaml").read_text(encoding="utf-8"))
+    path_before = list(sys.path)
+    assert from_dict(data, base=folder).index.parse[0] == "beside_the_file"
+    assert sys.path == path_before
+
+
+def test_the_cli_finds_a_plugin_beside_the_file(beside_the_file):
+    folder, elsewhere = beside_the_file
+    run = subprocess.run(
+        [sys.executable, "-m", "pandion.cli", "install", "--print", str(folder / "pipeline.yaml")],
+        cwd=elsewhere, capture_output=True, text=True, timeout=120,
+    )
+    assert run.returncode == 0, run.stderr
+    assert "pip install" in run.stdout
+
+
+def test_the_retrieval_and_query_parts_keep_the_plugins(beside_the_file):
+    from pandion import Pipeline, QueryPipeline, RetrievalPipeline
+
+    folder, _ = beside_the_file
+    p = Pipeline.from_yaml(folder / "pipeline.yaml")
+    retrieval = RetrievalPipeline(p.index, search="dense")
+    assert retrieval.config.plugins == ["mymod_beside_file"]
+    assert to_dict(retrieval.config)["plugins"] == ["mymod_beside_file"]
+    query = QueryPipeline(retrieval, answer="search")
+    assert query.config.plugins == ["mymod_beside_file"]
+    assert to_dict(query.config)["plugins"] == ["mymod_beside_file"]

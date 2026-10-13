@@ -1,8 +1,8 @@
 # A pipeline where every stage uses a strategy from my_strategies/.
-plugins: [my_strategies]       # imported first, so the names below exist
-path: ./work/index             # run_yaml.py points this at its --work folder
+plugins: [my_strategies]       # imported first, from this folder, so the names below exist
+path: ./work/index             # read from this folder: work/ next to this file
 index:
-  source: {use: folder_of_text, suffix: .md}
+  source: {use: text_file, suffix: .md}
   parse: {use: markdown}
   clean:
     - {use: drop_short, min_chars: 20}

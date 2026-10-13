@@ -295,7 +295,8 @@ the small pool of candidates the search found.
 Maximal Marginal Relevance picks results one at a time, each time taking the piece the
 search scored highest while being least like the pieces already picked. It trades
 relevance for variety, so it can drop near-duplicates instead of only reordering them. It
-reuses the index's own vectors to judge likeness, so it needs no extra model.
+reuses the index's own vectors to judge likeness, so it needs no extra model. It does need
+numpy, from the `local` extra; see "mmr (numpy)" below for what it sets.
 
 - `lambda_mult` (0.5): the balance between relevance and variety.
 

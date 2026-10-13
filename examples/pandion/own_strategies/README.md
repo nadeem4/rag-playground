@@ -12,11 +12,11 @@ marked with `@register`. Everything you need comes from `pandion.extend`. The fu
 
 ## The strategies, stage by stage
 
-### Source: `folder_of_text`
+### Source: `text_file`
 
-Open `my_strategies/source.py`. A source's settings must have a `location` field, because
-each item given to `p.index.run([...])` becomes one document and reaches the source as its
-`location`. It reads nothing from another step (`inputs = {}`) and returns
+Open `my_strategies/source.py`. It reads the one text file at `location`. A source's
+settings must have a `location` field, because each item given to `p.index.run([...])`
+becomes one document and reaches the source as its `location`. It reads nothing from another step (`inputs = {}`) and returns
 `raw_file(ctx, data, filename)`.
 
 ### Parse: `markdown`
@@ -48,7 +48,8 @@ store embeds the pieces and `"query"` when the retriever embeds the question.
 Open `my_strategies/store.py`. A store reads the `chunks` port, one `ChunkSet` per
 document, and returns a function that writes the index into a folder. Because its settings
 have an `embedder` field, `embed: {use: letter_counts}` fills it in, and `provides` says
-what a retriever can count on.
+what a retriever can count on: the dense backend, in jsonl files. It gets the embedder
+with `get_embedder(name, ctx.extras.get("models"))`, so the run's model settings reach it.
 
 ### Rewrite: `lowercase`
 
@@ -60,7 +61,9 @@ question as typed in `original`.
 
 Open `my_strategies/retrieve.py`. A retriever reads the `index` port, the folder the store
 wrote, and the `query` port, which Pandion fills from the rewrite. Its `requires` must
-match the store's `provides`, or the pipeline file is refused when it is read.
+match the store's `provides`, or the pipeline file is refused when it is read. It asks for
+format jsonl as well as the dense backend, so it is refused with the `lancedb` store,
+whose files it cannot read.
 
 ### Rerank: `shortest_first`
 
@@ -75,8 +78,10 @@ Open `my_strategies/answer.py`. An answer step reads the `result` port and retur
 ## Use them
 
 `pipeline.yaml` lists `plugins: [my_strategies]`, so reading the file imports the package
-and every strategy in it is registered before the steps are checked. Then every stage
-names a strategy from this folder.
+from the folder the file is in, and every strategy in it is registered before the steps
+are checked. Then every stage names a strategy from this folder. This works from any
+folder, so `pandion install --print examples/pandion/own_strategies/pipeline.yaml` works
+from the root of the repo too.
 
 `run_mixed.py` imports `my_strategies` in code instead, and mixes the built-in `pdfium`
 parser and `recursive_character` chunker with the custom embedder, store, search and
@@ -92,7 +97,8 @@ uv run python examples/pandion/own_strategies/run_mixed.py
 ```
 
 Each prints the strategy of every step and the answer to "What causes the tides?". The
-index goes in `work/` next to the scripts; use `--work <folder>` to put it somewhere else.
+index goes in `work/` next to the scripts: for `run_yaml.py` that is the file's `path`, and
+`run_mixed.py` takes `--work <folder>` to put it somewhere else.
 `run_mixed.py` needs the pdfium extra: `pip install "pandion[pdfium]"`.
 
 ## Ship it as a package

@@ -39,7 +39,9 @@ Its `source_text` is the text the pieces were cut from, so each piece's `start_c
 
 Open `my_strategies/embed.py`. An embedder is an `Embedder` subclass, not a stage
 strategy, and the same `@register` adds it. It sets `name`, `model_id`, `revision`,
-`native_dim` and `max_seq_len`, and its `_embed()` returns one vector of length 1 per text.
+`native_dim` and `max_seq_len`, and its `_embed(texts, kind)` returns a unit vector (its
+length is 1.0), `native_dim` numbers long, for each text. `kind` is `"document"` when the
+store embeds the pieces and `"query"` when the retriever embeds the question.
 
 ### Store: `jsonl_store`
 

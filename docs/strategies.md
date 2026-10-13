@@ -358,7 +358,7 @@ the library's default applies.
 
 These steps call no library and run only Pandion's own code: `upload`, `header_footer_strip`,
 `drop_matching`, `recursive_character`, `markdown_header`, `token_based`, `layout_blocks`,
-`sentence_window`, `text`, `mmr`, `search` and `eval`. `hybrid_rrf` runs LanceDB's two
+`sentence_window`, `text`, `search` and `eval`. `hybrid_rrf` runs LanceDB's two
 searches, then fuses them with Pandion's own code.
 
 ### pdfium (pypdfium2)
@@ -434,6 +434,20 @@ Pandion's default `table_mode` is `fast`.
 - Leaves at the default: the model's revision (its main branch, not pinned), the longest
   pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
   the scores are the ones the model gives.
+
+### mmr (numpy)
+
+MMR needs the `local` extra, which brings numpy.
+
+- Sets: the hits' vectors, embedded again with the index's own embedder and width
+  (through the embedding cache, so usually a lookup), become a float64 array
+  (`np.asarray(..., dtype=float)`). The likeness of two pieces is the dot product of their
+  vectors (`vectors @ vectors.T`), which is the cosine because the vectors have length 1.
+  The search scores are scaled to 0 to 1 with numpy. The first pick is the most relevant
+  piece, and each next pick is the `np.argmax` of `lambda_mult` times relevance minus
+  `1 - lambda_mult` times the highest likeness to a piece already picked.
+- Leaves at the default: nothing else is passed to numpy. The embedder's own options are
+  as listed under Embedders.
 
 ### llm_rewrite, llm_rerank and chat (Anthropic and OpenAI SDKs)
 

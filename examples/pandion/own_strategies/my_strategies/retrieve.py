@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from pandion.extend import (
     ArtifactType, Chunk, Hit, PortSpec, Query, RetrievalResult, Stage, Transform, get_embedder, register,
 )
+
 from my_strategies.store import EMBEDDER, PIECES
 
 

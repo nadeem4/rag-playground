@@ -22,6 +22,7 @@ def test_the_yaml_pipeline_uses_a_custom_strategy_at_every_stage(tmp_path):
     out = _run("run_yaml.py", tmp_path)
     assert "strategies used: folder_of_text, markdown, drop_short, per_block, letter_counts, jsonl_store, lowercase, jsonl_search, shortest_first, bullets" in out
     assert "- " in out and "tide" in out.lower()    # the answer quotes the tides note
+    assert "The pull of the Moon on the oceans causes the tides." in out
 
 
 def test_custom_strategies_mix_with_built_ins_in_code(tmp_path):

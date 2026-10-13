@@ -645,9 +645,15 @@ so results keep the names people gave their files.
   The steps above it come from the cache when they ran before.
 - `on_event` is called with each event as a plain dict, ready for JSON: `run_started`,
   `node_started`, `node_finished` (with `cache_hit` and the result's `artifact_id`),
-  `node_failed` (with the error), `run_cancelled` and `run_finished`. Pandion adds
-  `document` (the document id, or None for the index) and `step`. If the callback
-  raises, the run stops and the exception reaches your code.
+  `node_failed` (with the error), `node_skipped` (a step after one that failed),
+  `warning` (with a `message`), `run_cancelled` and `run_finished`. To an event about
+  one step, Pandion adds `document` (the document id, or None for the index) and
+  `step`. Events about several steps name each one as `{"document": ..., "step": ...}`:
+  `run_started` has `steps` (every step of the run) and `selected_steps` (the ones
+  this run asked for), and `run_cancelled` has `skipped_steps`. The raw ids in
+  `node_id`, `nodes`, `selected` and `skipped` are internal and may change; use the
+  named fields. If the callback raises, the run stops and the exception reaches your
+  code.
 - `cancel` is checked between steps: a step that is running finishes, the rest are
   reported with status `skipped`, and `report.ok` is False.
 - `credentials` are the model keys for this call, as for `p.retrieve`.

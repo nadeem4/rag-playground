@@ -73,11 +73,14 @@ _OUTPUTS = {
 Step = Any
 
 #: What index.run, retrieve and ask take as documents: a file, a folder, a
-#: list of both, or (Task 5) a mapping of document id to file.
+#: list of both, or a mapping of document id to file.
 Documents = Any
 
 #: The callback a run reports each event to (see IndexPipeline.execute).
 OnEvent = Callable[[dict[str, Any]], None]
+
+#: Events that list several node ids, and the field that names their steps.
+_NAMED_LISTS = (("nodes", "steps"), ("selected", "selected_steps"), ("skipped", "skipped_steps"))
 
 #: What a result id looks like: a sha256 in lowercase hex.
 _RESULT_ID = re.compile(r"[0-9a-f]{64}")
@@ -415,17 +418,12 @@ class IndexPipeline:
         """The step each document stops after, or None for the whole run."""
         if through is None or through == "index":
             return None
-        cleans = len(self.config.index.clean)
-        if through == "parse" or (through == "clean" and not cleans):
-            return "parse"
+        cleans = [f"clean.{n}" for n in range(1, len(self.config.index.clean) + 1)]
         if through == "clean":
-            return f"clean.{cleans}"
-        if through == "chunk":
-            return "chunk"
-        number = through.removeprefix("clean.")
-        if through.startswith("clean.") and number.isdigit() and 1 <= int(number) <= cleans:
+            return cleans[-1] if cleans else "parse"
+        if through in ("parse", "chunk", *cleans):
             return through
-        named = ", ".join(["parse", "clean", *(f"clean.{n}" for n in range(1, cleans + 1)), "chunk", "index"])
+        named = ", ".join(["parse", "clean", *cleans, "chunk", "index"])
         raise ValueError(f"through names the step to stop after: one of {named}, not '{through}'.")
 
     def sync(self, paths: Documents) -> SyncReport:
@@ -571,10 +569,16 @@ class IndexPipeline:
         if on_event is not None:
             names = roles or {}
 
+            def named(node_id: str) -> tuple[str | None, str]:
+                return names.get(node_id, (None, node_id))
+
             def emit(e: dict[str, Any]) -> None:
                 if "node_id" in e:
-                    doc_id, step = names.get(e["node_id"], (None, e["node_id"]))
+                    doc_id, step = named(e["node_id"])
                     e = {**e, "document": doc_id, "step": step}
+                for ids, field_name in _NAMED_LISTS:
+                    if isinstance(e.get(ids), list):
+                        e = {**e, field_name: [{"document": d, "step": s} for d, s in map(named, e[ids])]}
                 on_event(e)
 
         return run(
@@ -589,8 +593,9 @@ class IndexPipeline:
         )
 
     def indexed(self) -> dict[str, SourceFile | str]:
-        """The documents in the index: the last run's or sync's in this
-        process, or else the last sync's, read from its manifest (upload only)."""
+        """The documents of the last run or sync in this process, including a
+        run stopped early by `through` or `cancel`, or else the last sync's,
+        read from its manifest (upload only)."""
         if self.documents is not None:
             return self.documents
         if not self._uploads():

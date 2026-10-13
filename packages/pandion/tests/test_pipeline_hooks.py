@@ -190,3 +190,64 @@ def test_a_named_document_in_a_folder_keeps_its_folder(p, pdf):
 def test_an_empty_mapping_is_refused(p):
     with pytest.raises(ValueError, match="There are no documents to index"):
         p.index.run({})
+
+
+def test_run_started_names_every_step_and_the_selected_ones(p, pdf):
+    events = []
+    p.index.run(pdf, through="parse", on_event=events.append)
+    started = events[0]
+    assert started["event"] == "run_started"
+    assert started["steps"] == [
+        {"document": "report.pdf", "step": "source"},
+        {"document": "report.pdf", "step": "parse"},
+        {"document": "report.pdf", "step": "clean.1"},
+        {"document": "report.pdf", "step": "chunk"},
+        {"document": None, "step": "index"},
+    ]
+    assert started["selected_steps"] == [
+        {"document": "report.pdf", "step": "parse"},
+        {"document": "report.pdf", "step": "source"},
+    ]
+    assert json.loads(json.dumps(events)) == events
+
+
+def test_run_cancelled_names_the_skipped_steps(p, pdf):
+    stop = threading.Event()
+    events = []
+
+    def on_event(e):
+        events.append(e)
+        if e["event"] == "node_finished" and e.get("step") == "parse":
+            stop.set()
+
+    p.index.run(pdf, on_event=on_event, cancel=stop)
+    cancelled = next(e for e in events if e["event"] == "run_cancelled")
+    assert cancelled["skipped_steps"] == [
+        {"document": "report.pdf", "step": "clean.1"},
+        {"document": "report.pdf", "step": "chunk"},
+        {"document": None, "step": "index"},
+    ]
+
+
+@pytest.mark.parametrize("through", ["clean.01", "clean.2", "clean.0", "clean. 1", "Chunk"])
+def test_through_must_be_an_exact_step_name(p, pdf, through):
+    with pytest.raises(ValueError, match="one of parse, clean, clean.1, chunk, index"):
+        p.index.run(pdf, through=through)
+    assert not (p.config.path / "artifacts").exists()
+
+
+def test_through_stops_each_of_several_documents_at_that_step(p, pdf, tmp_path):
+    other = tmp_path / "other.pdf"
+    other.write_bytes(pdf.read_bytes())
+    report = p.index.run([pdf, other], through="clean.1")
+    assert steps(report, "report.pdf") == ["source", "parse", "clean.1"]
+    assert steps(report, "other.pdf") == ["source", "parse", "clean.1"]
+    assert report.index is None and report.ok
+
+
+def test_sync_takes_a_mapping_of_names(p, pdf, tmp_path):
+    kept = tmp_path / "0f3a9c.pdf"
+    kept.write_bytes(pdf.read_bytes())
+    report = p.index.sync({"report.pdf": kept})
+    assert report.ok and report.added == ["report.pdf"]
+    assert p.index.sync({"report.pdf": kept}).unchanged == ["report.pdf"]

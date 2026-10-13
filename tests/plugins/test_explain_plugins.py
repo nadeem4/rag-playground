@@ -15,7 +15,7 @@ from pandion.plugins.chunk.token_based import TokenBasedChunker, TokenBasedConfi
 from pandion.plugins.clean.drop_matching import DropMatching, DropMatchingConfig
 from pandion.plugins.clean.header_footer_strip import HeaderFooterStrip, HeaderFooterStripConfig
 from pandion.plugins.index.lancedb_store import LanceDbIndex, LanceDbIndexConfig
-from plugins.use_case.chat import ChatConfig, ChatUseCase
+from pandion.plugins.answer.chat import ChatConfig, ChatUseCase
 
 
 # --- blocking warnings -----------------------------------------------------

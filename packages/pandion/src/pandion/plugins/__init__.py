@@ -43,6 +43,8 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.rerank.mmr",
     "pandion.plugins.rerank.cross_encoder",
     "pandion.plugins.rerank.llm_rerank",
+    "pandion.plugins.answer.search",
+    "pandion.plugins.answer.chat",
 )
 
 _discovered = False

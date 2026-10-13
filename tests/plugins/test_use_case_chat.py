@@ -27,8 +27,8 @@ from pandion.plugins.chunk.recursive_character import (
     RecursiveCharacterConfig,
 )
 from pandion.plugins.parse.pdfium import PdfiumConfig, PdfiumParse
-from plugins.use_case import chat as chat_module
-from plugins.use_case.chat import ChatConfig, ChatUseCase
+from pandion.plugins.answer import chat as chat_module
+from pandion.plugins.answer.chat import ChatConfig, ChatUseCase
 from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -426,7 +426,7 @@ def test_importing_the_plugin_does_not_import_the_sdk():
         "import sys\n"
         "import plugins\n"
         "plugins.discover()\n"
-        "import plugins.use_case.chat\n"
+        "import pandion.plugins.answer.chat\n"
         "leaked = sorted(m for m in sys.modules if m.split('.')[0] == 'anthropic')\n"
         "print(leaked)\n"
         "sys.exit(1 if leaked else 0)\n"
@@ -458,11 +458,12 @@ def test_live_api_round_trip(pipeline):
     assert key not in json.dumps(out.model_dump(mode="json"))
 
 
-def test_key_help_points_to_the_button_and_the_server_not_to_dotenv(monkeypatch) -> None:
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
+def test_key_help_points_to_the_button_never_to_dotenv_or_the_server() -> None:
+    """An explanation has no run to read the demo switch from, so it never
+    names the server variable, as llm_rewrite and llm_rerank do not."""
     for provider in ("anthropic", "openai", "openrouter", "openai_compatible"):
         words = chat_module._key_words(provider)
         assert ".env" not in words, provider
         assert "the key button at the top right" in words, provider
         assert "API key button" not in words, provider
-        assert "_API_KEY" in words, provider
+        assert "_API_KEY" not in words, provider

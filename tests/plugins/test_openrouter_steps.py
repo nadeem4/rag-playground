@@ -10,7 +10,7 @@ import pytest
 from pandion import llm
 from pandion.plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
 from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
-from plugins.use_case.chat import ChatConfig, ChatUseCase
+from pandion.plugins.answer.chat import ChatConfig, ChatUseCase
 from tests.plugins.rerank_fakes import QUESTION, payload
 from tests.plugins.rerank_fakes import ctx as run_ctx
 from tests.plugins.rerank_fakes import reply  # noqa: F401  (fixture)
@@ -63,10 +63,9 @@ def test_explain_names_the_model_id_and_the_key(cls, config_cls, base):
     exp = cls().explain(config_cls(model="openrouter", openrouter_model=MODEL_ID, **base))
     assert not exp.blocking
     assert MODEL_ID in exp.settings
-    if cls is ChatUseCase:  # only the app's own step names the server variable
-        assert "OPENROUTER_API_KEY" in exp.settings
-    elif cls is LlmRerank:
+    if cls in (ChatUseCase, LlmRerank):  # neither names the server variable
         assert "OpenRouter API key" in exp.settings
+        assert "OPENROUTER_API_KEY" not in exp.settings
     for text in (exp.settings, exp.tradeoff or ""):
         assert "—" not in text and "–" not in text
 
@@ -164,12 +163,9 @@ def test_on_the_demo_explain_never_asks_for_a_server_variable(
     assert "_API_KEY" not in exp.settings and "key button" in exp.settings
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
     local = cls().explain(config_cls(model=model, openrouter_model=MODEL_ID, **base))
-    # The app's chat step reads the demo switch. The package's llm_rerank has no
-    # run to read it from when it explains, so it never names the variable.
-    if cls is LlmRerank:
-        assert "_API_KEY" not in local.settings
-    else:
-        assert "Running locally, you can also set" in local.settings
+    # chat and llm_rerank live in the package, which has no run to read the
+    # demo switch from when it explains, so neither ever names the variable.
+    assert "_API_KEY" not in local.settings
 
 
 def test_the_model_field_carries_each_choices_provider():

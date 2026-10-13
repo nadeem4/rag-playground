@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from plugins.use_case._grounding import (
+from pandion.plugins.answer._grounding import (
     Claim,
     Sentence,
     ground,

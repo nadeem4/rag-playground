@@ -81,3 +81,16 @@ def preload_embedder(name: str, settings: ModelSettings | None = None) -> None:
         embeddings._load_model(
             embedder.model_id, embedder.revision, embedder.dtype, embedder.models
         )
+
+
+def preload_reranker(
+    model: str | None = None, settings: ModelSettings | None = None
+) -> None:
+    """Load a cross-encoder reranker now, so its first use does not wait.
+
+    `model` is one of the cross_encoder step's models; None means the step's
+    default. A model is loaded once per process, so a later run reuses it.
+    """
+    from pandion.plugins.rerank import cross_encoder
+
+    cross_encoder._load(model or cross_encoder.CrossEncoderConfig().model, settings)

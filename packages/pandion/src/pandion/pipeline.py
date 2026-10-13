@@ -10,6 +10,10 @@ report.index.output                                              # the index fol
 
 report = p.index.sync("docs/")      # later, after files were added, changed or removed
 report.added, report.changed, report.removed, report.unchanged
+
+result = p.retrieve("How big should a chunk be?", k=5)
+result.hits                         # the hits, best first
+result.stages["search"].output      # what the search step found, before reranking
 ```
 
 Every step is cached by its recipe hash, so running the same files with the
@@ -22,7 +26,7 @@ keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store),
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pandion.config import PipelineConfig, load
@@ -30,7 +34,7 @@ from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
-from pandion.payloads import ChunkSet, ParsedDoc
+from pandion.payloads import ChunkSet, Hit, ParsedDoc, Query, RetrievalResult
 from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import registry
@@ -39,7 +43,14 @@ from pandion.sources import SourceFile, Sources
 from pandion.storage import Store
 
 #: How each stored payload is handed back in a `StageResult`.
-_OUTPUTS = {Stage.PARSE: ParsedDoc, Stage.CLEAN: ParsedDoc, Stage.CHUNK: ChunkSet}
+_OUTPUTS = {
+    Stage.PARSE: ParsedDoc,
+    Stage.CLEAN: ParsedDoc,
+    Stage.CHUNK: ChunkSet,
+    Stage.QUERY: Query,
+    Stage.RETRIEVE: RetrievalResult,
+    Stage.RERANK: RetrievalResult,
+}
 
 
 @dataclass
@@ -77,17 +88,54 @@ class SyncReport(IndexReport):
     config_changed: bool = False
 
 
+@dataclass
+class Retrieval:
+    """One question searched: the hits, and what each step did.
+
+    `stages` holds "rewrite" (the query step, `text` when the file has no
+    rewrite), "search", and "rerank", a list with one entry per reranker in
+    order. `index` is the index step the search read. A step that fails is
+    reported, not raised; the steps after it are skipped and `hits` is empty.
+    """
+
+    stages: dict[str, Any]
+    index: StageResult
+
+    def _steps(self) -> list[StageResult]:
+        return [self.index, self.stages["rewrite"], self.stages["search"], *self.stages["rerank"]]
+
+    @property
+    def ok(self) -> bool:
+        return all(s.status in ("executed", "cached") for s in self._steps())
+
+    @property
+    def result(self) -> RetrievalResult | None:
+        """The last step's output: the last reranker's, or the search's."""
+        return self._steps()[-1].output if self.ok else None
+
+    @property
+    def hits(self) -> list[Hit]:
+        return self.result.hits if self.result is not None else []
+
+
 class Pipeline:
-    """The parts of a pipeline file. For now, the index."""
+    """The parts of a pipeline file: the index and the retrieval."""
 
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config
         self.index = IndexPipeline(config)
+        self.retrieval = RetrievalPipeline(config, self.index)
 
     @classmethod
     def from_file(cls, file: str | Path) -> Pipeline:
         """Read and check `file` (see `pandion.config`); nothing runs yet."""
         return cls(load(file))
+
+    def retrieve(
+        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+    ) -> Retrieval:
+        """Search the index for `question`. See `RetrievalPipeline.retrieve`."""
+        return self.retrieval.retrieve(question, k, credentials=credentials)
 
 
 class IndexPipeline:
@@ -99,6 +147,8 @@ class IndexPipeline:
         self.sources = Sources(root / "sources")
         self.store = Store(root / "artifacts")
         self.embedding_cache = EmbeddingCache(root / "embeddings")
+        #: The documents the last run or sync in this process indexed.
+        self.documents: dict[str, SourceFile] | None = None
 
     def run(self, paths: str | Path | list[str | Path]) -> IndexReport:
         """Index the files at `paths`: files, folders, or a list of both.
@@ -163,27 +213,50 @@ class IndexPipeline:
         return {doc_id: self.sources.add(path) for doc_id, path in _files(paths)}
 
     def _index(self, documents: dict[str, SourceFile]) -> IndexReport:
-        discover()
         graph, roles = self.graph(documents)
-        result = run(
-            graph,
-            registry,
-            self.store,
-            context_extras={
-                "sources": self.sources,
-                "embedding_cache": self.embedding_cache,
-                "models": self.config.models,
-            },
-        )
+        result = self.execute(graph)
         reports = {doc_id: DocumentReport() for doc_id in documents}
         for node in graph.nodes:
             doc_id, role = roles[node.id]
-            stage = self._result(node, role, result)
+            stage = self.stage_result(node, role, result)
             if doc_id is None:
                 index = stage
             else:
                 reports[doc_id].stages[role] = stage
+        self.documents = documents
         return IndexReport(documents=reports, index=index)
+
+    def execute(self, graph: Graph, credentials: dict[str, str] | None = None) -> RunResult:
+        """Run `graph` through the store, with this pipeline's files and models.
+
+        `credentials` (model keys) reach the steps that call a model; the
+        executor never hashes or stores them.
+        """
+        discover()
+        extras: dict[str, Any] = {
+            "sources": self.sources,
+            "embedding_cache": self.embedding_cache,
+            "models": self.config.models,
+        }
+        if credentials:
+            extras["credentials"] = dict(credentials)
+        return run(graph, registry, self.store, context_extras=extras)
+
+    def indexed(self) -> dict[str, SourceFile]:
+        """The documents in the index: the last run's or sync's in this
+        process, or else the last sync's, read from its manifest."""
+        if self.documents is not None:
+            return self.documents
+        manifest = Manifest.load(self.config.path / MANIFEST)
+        if not manifest.documents:
+            raise ValueError(
+                "There is no index to search yet: index some files first, with "
+                "p.index.run or p.index.sync."
+            )
+        return {
+            doc_id: SourceFile(sha=entry["content_hash"], filename=PurePosixPath(doc_id).name)
+            for doc_id, entry in manifest.documents.items()
+        }
 
     def graph(self, documents: dict[str, SourceFile]) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph for `documents`, and each node's (document id, step name).
@@ -219,7 +292,8 @@ class IndexPipeline:
         edges += [Edge(chunk, store, "chunks") for chunk in chunk_nodes]
         return Graph(nodes=nodes, edges=edges), roles
 
-    def _result(self, node: Node, role: str, result: RunResult) -> StageResult:
+    def stage_result(self, node: Node, role: str, result: RunResult) -> StageResult:
+        """What the node did in `result`, with its stored output read back."""
         done: NodeResult = result.nodes[node.id]
         artifact = done.artifact
         output = None
@@ -236,6 +310,72 @@ class IndexPipeline:
             duration_ms=done.duration_ms,
             note=artifact.meta.get("note") if artifact else None,
             error=done.error,
+        )
+
+
+class RetrievalPipeline:
+    """Rewrite (optional), search, and rerank (none, one, or several in order)."""
+
+    def __init__(self, config: PipelineConfig, index: IndexPipeline) -> None:
+        self.config = config
+        self.index = index
+
+    def retrieve(
+        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+    ) -> Retrieval:
+        """Search the index for `question`, and say what every step did.
+
+        The search runs against the index this pipeline built, through the
+        executor and the store, so asking the same question again only reads
+        what is stored. `k`, when given, is how many hits the last step keeps
+        (its `top_k`); otherwise the file's setting holds. A model's key goes
+        in `credentials`, for example `{"anthropic_api_key": ...}`, never in
+        the file.
+        """
+        retrieve = self.config.retrieve
+        if retrieve is None:
+            raise ValueError(
+                "The pipeline file has no retrieve section, so there is nothing to "
+                "search with. Add retrieve: with at least a search step."
+            )
+        graph, roles = self.index.graph(self.index.indexed())
+        nodes, edges = list(graph.nodes), list(graph.edges)
+
+        use, settings = retrieve.rewrite or ("text", {})
+        nodes.append(Node("rewrite", Stage.QUERY, use, {**settings, "text": question}))
+        if use != "text":
+            # A rewrite may read the start of a document. With several, the
+            # ambient port cannot choose, so it reads the first one by id: the
+            # last step before its chunker.
+            first = min(doc_id for doc_id, _ in roles.values() if doc_id is not None)
+            doc = [n for n, (d, role) in roles.items() if d == first and role not in ("source", "chunk")][-1]
+            edges.append(Edge(doc, "rewrite", "doc"))
+
+        steps = [("search", Stage.RETRIEVE, *retrieve.search)]
+        steps += [(f"rerank.{n}", Stage.RERANK, *step) for n, step in enumerate(retrieve.rerank, 1)]
+        if k is not None:
+            node_id, stage, use, settings = steps[-1]
+            steps[-1] = (node_id, stage, use, {**settings, "top_k": k})
+        source, port = "index", "index"
+        for node_id, stage, use, settings in steps:
+            nodes.append(Node(node_id, stage, use, settings))
+            edges.append(Edge(source, node_id, port))
+            source, port = node_id, "result"
+
+        whole = Graph(nodes=nodes, edges=edges)
+        result = self.index.execute(whole, credentials)
+        by_id = {node.id: node for node in whole.nodes}
+
+        def stage_result(node_id: str) -> StageResult:
+            return self.index.stage_result(by_id[node_id], node_id.split(".")[0], result)
+
+        return Retrieval(
+            stages={
+                "rewrite": stage_result("rewrite"),
+                "search": stage_result("search"),
+                "rerank": [stage_result(f"rerank.{n}") for n in range(1, len(retrieve.rerank) + 1)],
+            },
+            index=stage_result("index"),
         )
 
 

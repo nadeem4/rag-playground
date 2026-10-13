@@ -19,7 +19,7 @@ from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
 from pandion.plugins.index.lancedb_store import DESCRIPTOR
-from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
+from pandion.plugins.rerank.mmr import MmrRerank, MmrRerankConfig
 from pandion.embeddings import FakeDeterministicEmbedder, get_embedder
 
 QUERY_TEXT = "What is the capital of France?"
@@ -213,7 +213,7 @@ def test_mmr_does_not_embed_the_question(recorder):
 
 def test_mmr_works_at_the_index_truncated_width(tmp_path, monkeypatch):
     seen: list[int | None] = []
-    import plugins.rerank.mmr as mmr
+    import pandion.plugins.rerank.mmr as mmr
 
     original = mmr.embed_cached
 

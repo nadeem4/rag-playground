@@ -5,8 +5,8 @@ The engine lives in plain modules (`pandion.graph`, `pandion.executor`,
 private; the RAG Playground app may import every other name.
 """
 
-from pandion.models import ModelSettings, preload_embedder
-from pandion.pipeline import Pipeline
+from pandion.models import ModelSettings, preload_embedder, preload_reranker
+from pandion.pipeline import Pipeline, Retrieval
 from pandion.results import StageResult
 from pandion.stages import chunk, clean, parse, rewrite
 
@@ -20,6 +20,8 @@ __all__ = [
     "clean",
     "parse",
     "preload_embedder",
+    "preload_reranker",
+    "Retrieval",
     "rewrite",
     "__version__",
 ]

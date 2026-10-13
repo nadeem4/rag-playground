@@ -9,7 +9,8 @@ silently not existing.
 twice raises `DuplicateTransformError`.
 
 Importing a plugin module loads no heavy library. Each one imports its
-library (pypdfium2, Docling, LanceDB, the OpenAI and Anthropic SDKs) inside
+library (pypdfium2, Docling, LanceDB, numpy, sentence-transformers, the
+OpenAI and Anthropic SDKs) inside
 the function that uses it, through `pandion.errors.require`, so the base
 install can discover every strategy.
 The cleaners and the chunkers need nothing beyond the standard library and
@@ -39,6 +40,9 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.retrieve.dense",
     "pandion.plugins.retrieve.bm25",
     "pandion.plugins.retrieve.hybrid_rrf",
+    "pandion.plugins.rerank.mmr",
+    "pandion.plugins.rerank.cross_encoder",
+    "pandion.plugins.rerank.llm_rerank",
 )
 
 _discovered = False

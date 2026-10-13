@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import pytest
 
-import plugins.rerank.llm_rerank as lr
+import pandion.plugins.rerank.llm_rerank as lr
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
+from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
 from pandion import llm
 from pandion.llm import CHAT_MODELS, Completion
 
@@ -365,3 +365,38 @@ def test_explain_says_scores_stay_the_retrievers():
         "The model gives no score, so each piece keeps the score it had from the "
         "retriever. Read the rank, not the score."
     ) in exp.tradeoff
+
+
+# -- a server strangers share ----------------------------------------------------
+
+
+def test_public_endpoints_only_reaches_the_model_call(reply, tmp_path):
+    fake = reply("1, 2")
+    run_ctx = ctx(tmp_path)
+    run_ctx.extras["public_endpoints_only"] = True
+    rerank(["a", "b"], tmp_path, run_ctx=run_ctx)
+    assert fake.calls[0]["public_only"] is True
+
+
+def test_without_the_extra_any_endpoint_may_be_used(reply, tmp_path):
+    fake = reply("1, 2")
+    rerank(["a", "b"], tmp_path)
+    assert fake.calls[0]["public_only"] is False
+
+
+def test_a_missing_key_names_the_server_variable_only_when_not_shared(tmp_path):
+    with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+        rerank(["a"], tmp_path, run_ctx=ctx(tmp_path, creds=None))
+    shared = ctx(tmp_path, creds=None)
+    shared.extras["public_endpoints_only"] = True
+    with pytest.raises(ValueError) as info:
+        rerank(["a"], tmp_path, run_ctx=shared)
+    assert "_API_KEY" not in str(info.value)
+
+
+def test_the_explanation_never_names_the_server_variable():
+    for model in ("claude-haiku-4-5", "gpt-6-astra", "openrouter"):
+        settings = LlmRerank().explain(
+            LlmRerankConfig(model=model, openrouter_model="m/x")
+        ).settings
+        assert "_API_KEY" not in settings and "key button" in settings

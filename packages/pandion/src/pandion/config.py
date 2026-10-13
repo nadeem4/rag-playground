@@ -11,6 +11,12 @@ index:
   chunk: {use: recursive_character, chunk_size: 400}
   embed: {use: qwen3-embedding-0.6b, truncate_dim: null}
   store: {use: lancedb, metric: cosine, build_fts: true}
+retrieve:                   # optional: what p.retrieve runs
+  rewrite: none             # optional: none, or {use: llm_rewrite, style: keywords}
+  search: {use: hybrid_rrf, top_k: 20}
+  rerank:                   # optional: none, one step, or a list run in order
+    - use: cross_encoder
+      top_k: 5
 ```
 
 Every key under a step other than `use` is a setting of that step, with the
@@ -19,6 +25,10 @@ RAG Playground hash to the same artifact ids. `embed` and `store` are one step
 when it runs: the lancedb index embeds while it writes, so `embed.use` becomes
 its `embedder` setting. A relative `path` or `models.cache_dir` is read from
 the folder the file is in.
+
+The question is not part of the file: it is passed to `p.retrieve`, which
+puts it in the query step's `text`. A model's key is never in the file either:
+it is passed to `p.retrieve` as `credentials`.
 
 Anything the file gets wrong is a `ConfigError` that names the step and what
 it accepts.
@@ -40,7 +50,8 @@ from pandion.ports import Stage
 from pandion.registry import UnknownTransformError
 from pandion.stages import _strategy
 
-TOP_KEYS = ("path", "models", "index")
+TOP_KEYS = ("path", "models", "index", "retrieve")
+RETRIEVE_KEYS = ("rewrite", "search", "rerank")
 INDEX_KEYS = ("parse", "clean", "chunk", "embed", "store")
 EMBED_KEYS = ("truncate_dim",)
 STORE_KEYS = ("metric", "build_fts")
@@ -62,10 +73,20 @@ class IndexConfig:
 
 
 @dataclass
+class RetrieveConfig:
+    """The retrieval steps. No rewrite means the question is searched as asked."""
+
+    search: tuple[str, dict[str, Any]]
+    rewrite: tuple[str, dict[str, Any]] | None = None
+    rerank: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+
+
+@dataclass
 class PipelineConfig:
     path: Path
     models: ModelSettings
     index: IndexConfig
+    retrieve: RetrieveConfig | None = None
 
 
 def load(file: str | Path) -> PipelineConfig:
@@ -96,7 +117,10 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
     if "index" not in data:
         raise ConfigError("The pipeline file has no index section.")
     return PipelineConfig(
-        path=_resolve(data["path"], base), models=settings, index=_index(data["index"])
+        path=_resolve(data["path"], base),
+        models=settings,
+        index=_index(data["index"]),
+        retrieve=_retrieve(data["retrieve"]) if "retrieve" in data else None,
     )
 
 
@@ -121,6 +145,41 @@ def _index(index: Any) -> IndexConfig:
         chunk=_step(Stage.CHUNK, index["chunk"], "index.chunk"),
         store=_store(index["embed"], index["store"]),
     )
+
+
+def _retrieve(retrieve: Any) -> RetrieveConfig:
+    _keys(retrieve, RETRIEVE_KEYS, "retrieve")
+    if not retrieve.get("search"):
+        raise ConfigError(
+            "retrieve has no search step. Retrieval needs search; rewrite and "
+            "rerank may be left out."
+        )
+    discover()
+    rewrite = retrieve.get("rewrite")
+    if _none(rewrite):
+        rewrite = None
+    else:
+        if isinstance(rewrite, dict) and "text" in rewrite:
+            raise ConfigError(
+                "retrieve.rewrite sets text, but the question is not part of the "
+                "file: it is passed to p.retrieve."
+            )
+        rewrite = _step(Stage.QUERY, rewrite, "retrieve.rewrite")
+    rerank = retrieve.get("rerank")
+    steps = [] if _none(rerank) else rerank if isinstance(rerank, list) else [rerank]
+    return RetrieveConfig(
+        rewrite=rewrite,
+        search=_step(Stage.RETRIEVE, retrieve["search"], "retrieve.search"),
+        rerank=[
+            _step(Stage.RERANK, step, "retrieve.rerank" if len(steps) == 1 else f"retrieve.rerank step {n}")
+            for n, step in enumerate(steps, start=1)
+        ],
+    )
+
+
+def _none(step: Any) -> bool:
+    """Left out, or written as `none`."""
+    return step is None or step == "none"
 
 
 def _step(stage: Stage, step: Any, where: str) -> tuple[str, dict[str, Any]]:

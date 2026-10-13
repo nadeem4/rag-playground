@@ -17,16 +17,19 @@ The rank movement is the pedagogy. Every returned hit carries `prior_rank` and
 `prior_score` from its pre-rerank position, so the bench can draw the arrows
 that show what the reranker actually did. A reranker that only reordered a list
 would be indistinguishable from a broken one.
+
+numpy comes with the `local` extra and is imported only when MMR runs, so
+discovering the rerankers loads no heavy library.
 """
 
 from __future__ import annotations
 
 from typing import Any, Mapping
 
-import numpy as np
 from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
+from pandion.errors import require
 from pandion.payloads import Hit, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -165,6 +168,7 @@ class MmrRerank(Transform[MmrRerankConfig]):
             dim=dim,
             cache=extras.get("embedding_cache"),
         )
+        np = _numpy()
         vectors = np.asarray(doc_vectors, dtype=float)
 
         # Vectors arrive L2-normalized, so a dot product is already the cosine.
@@ -181,8 +185,13 @@ class MmrRerank(Transform[MmrRerankConfig]):
         return result.model_dump(mode="json")
 
 
-def _normalise(scores: list[float]) -> np.ndarray:
+def _numpy() -> Any:
+    return require("numpy", extra="local", step="The mmr reranker")
+
+
+def _normalise(scores: list[float]) -> Any:
     """Min-max to 0..1; with no spread every candidate is fully relevant."""
+    np = _numpy()
     values = np.asarray(scores, dtype=float)
     spread = values.max() - values.min()
     if spread <= 0:
@@ -200,7 +209,7 @@ def _note(picked: list[Hit]) -> str:
 
 
 def _select(
-    relevance: np.ndarray, similarity: np.ndarray, lambda_mult: float, top_k: int
+    relevance: Any, similarity: Any, lambda_mult: float, top_k: int
 ) -> list[int]:
     """Indices, in MMR order.
 
@@ -212,6 +221,7 @@ def _select(
     Ties fall to the lower index, so the retriever's order breaks them and the
     whole function is deterministic.
     """
+    np = _numpy()
     candidates = list(range(len(relevance)))
     selected: list[int] = [int(np.argmax(relevance))]
     candidates.remove(selected[0])

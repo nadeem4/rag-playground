@@ -77,3 +77,24 @@ def test_rewrite_example_with_a_key_shows_the_models_rewrite(monkeypatch, capsys
     assert calls[0]["model"] == "claude-haiku-4-5" and calls[0]["api_key"] == "sk-test"
     assert "The document begins" in calls[0]["user"]
     assert "Rewritten: chunk size tokens characters" in capsys.readouterr().out
+
+
+def test_search_example_finds_hits_then_reuses_every_step(tmp_path, capsys):
+    first, second = _load_script("search_samples").main(tmp_path, embedder="fake-deterministic")
+
+    assert first.ok and second.ok
+    assert len(first.hits) == 5
+    assert [s.transform for s in first.stages["rerank"]] == ["mmr"]
+    steps = [second.stages["rewrite"], second.stages["search"], *second.stages["rerank"]]
+    assert all(s.status == "cached" for s in steps)
+    assert [h.chunk.id for h in second.hits] == [h.chunk.id for h in first.hits]
+    assert "3 of 3 steps reused" in capsys.readouterr().out
+
+
+def test_example_pipeline_file_searches_with_hybrid_then_mmr():
+    from pandion import Pipeline
+
+    retrieve = Pipeline.from_file(EXAMPLE / "pipeline.yaml").config.retrieve
+    assert retrieve.rewrite is None
+    assert retrieve.search[0] == "hybrid_rrf"
+    assert [use for use, _ in retrieve.rerank] == ["mmr"]

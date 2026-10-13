@@ -90,7 +90,7 @@ A strategy is one Python module. The web app builds its settings form from the c
 model, so a new strategy needs no frontend change.
 
 1. Create `plugins/<stage>/<name>.py` (or, for a stage that has moved into the engine
-   package, such as parse, clean, chunk, index, query and retrieve, `packages/pandion/src/pandion/plugins/<stage>/<name>.py`) with a Pydantic config model and a `Transform`
+   package, such as parse, clean, chunk, index, query, retrieve and rerank, `packages/pandion/src/pandion/plugins/<stage>/<name>.py`) with a Pydantic config model and a `Transform`
    subclass decorated with `@register`. Give every config field a default. Give the class:
    - a `summary` of how the strategy works, in one or two plain sentences;
    - an `explain(config)` that says what these settings will do. Every number, switch and

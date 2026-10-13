@@ -22,3 +22,12 @@ index:
     use: qwen3-embedding-0.6b   # index_samples.py --embedder changes this
   store:
     use: lancedb
+
+retrieve:          # what p.retrieve runs; search_samples.py uses it
+  rewrite: none    # or {use: llm_rewrite, style: keywords}, with a key
+  search:
+    use: hybrid_rrf
+    top_k: 20
+  rerank:          # none, one step, or a list run in order
+    - use: mmr
+      top_k: 5

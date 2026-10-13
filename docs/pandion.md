@@ -5,12 +5,11 @@ playground runs on it. Every stage can be run and inspected on its own, and a wh
 index can be built from one config file. Each step's result is cached under a hash of its
 recipe, so the same files with the same settings are never processed twice.
 
-Coming next: search, rerank and ask. This guide covers what exists today: parse, clean,
-chunk, the index, keeping an index up to date, and the rewrite of a question.
+This guide covers what exists today: parse, clean, chunk, the index, keeping an index up
+to date, the rewrite of a question, and searching an index with rerankers.
 
-The three retrievers, `dense`, `bm25` and `hybrid_rrf`, already live in the package, in
-`pandion.plugins.retrieve`, and the playground searches with them. A way to search an
-index from your own code, `p.retrieve(question, k=5)`, comes in the next release.
+Coming next: ask, which turns the hits into an answer, and three ways to write the same
+pipeline: a YAML file, plain dicts, and typed classes in code.
 
 ## Contents
 
@@ -20,6 +19,7 @@ index from your own code, `p.retrieve(question, k=5)`, comes in the next release
 - [The pipeline file](#the-pipeline-file)
 - [Build an index](#build-an-index)
 - [Keep an index up to date](#keep-an-index-up-to-date)
+- [Search an index](#search-an-index)
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
@@ -41,10 +41,10 @@ The base install is small. Each parser, store and model library is an extra:
 |---|---|---|
 | `pdfium` | pypdfium2 | the `pdfium` parser |
 | `docling` | Docling and its OCR engine | the `docling` parser |
-| `local` | sentence-transformers and torch | the `qwen3-embedding-0.6b` and `bge-small-en-v1.5` embedders |
+| `local` | sentence-transformers and torch | the `qwen3-embedding-0.6b` and `bge-small-en-v1.5` embedders, and the `mmr` and `cross_encoder` rerankers |
 | `lancedb` | LanceDB and pyarrow | the `lancedb` index and the `dense`, `bm25` and `hybrid_rrf` retrievers |
-| `anthropic` | the Anthropic SDK | `llm_rewrite` with a Claude model |
-| `openai` | the OpenAI SDK | `llm_rewrite` with an OpenAI model, OpenRouter or a custom endpoint |
+| `anthropic` | the Anthropic SDK | `llm_rewrite` and `llm_rerank` with a Claude model |
+| `openai` | the OpenAI SDK | `llm_rewrite` and `llm_rerank` with an OpenAI model, OpenRouter or a custom endpoint |
 
 The cleaners, the chunkers and the `text` query step need only the base install. The `fake-deterministic`
 embedder needs no extra and no download, so it is good for trying things out.
@@ -137,8 +137,8 @@ hosted demo does this. `pandion.rewrite` is for trying a step yourself and leave
 
 ## The pipeline file
 
-A pipeline file says how to build an index. This is the full format, with every field
-the package reads.
+A pipeline file says how to build an index and how to search it. This is the full
+format, with every field the package reads.
 
 ```yaml
 # pipeline.yaml
@@ -171,6 +171,15 @@ index:
     use: lancedb        # the only store for now
     metric: cosine      # optional
     build_fts: true     # optional
+
+retrieve:               # optional; what p.retrieve runs
+  rewrite: none         # optional; none, or a query step such as llm_rewrite
+  search:               # required
+    use: hybrid_rrf     # or dense, bm25
+    top_k: 20           # how many pieces the search hands on
+  rerank:               # optional; none, one step, or a list run in order
+    - use: cross_encoder   # also mmr, llm_rerank
+      top_k: 5
 ```
 
 Every key under a step, other than `use`, is a setting of that step. The names are the
@@ -261,6 +270,84 @@ and sync again.
 When to sync is up to you: by hand, from a scheduled job, or from a script that watches
 the folder.
 
+## Search an index
+
+Once a pipeline has built its index, search it with a question:
+
+```python
+from pandion import Pipeline
+
+p = Pipeline.from_file("pipeline.yaml")
+p.index.run("docs/")
+result = p.retrieve("How big should a chunk be?", k=5)
+for hit in result.hits:
+    print(hit.rank, hit.score, hit.chunk.text)
+```
+
+The `retrieve` section of the file says what runs, in this order:
+
+1. **rewrite**, optional. Left out or `none`, the question is searched as asked. With
+   `use: llm_rewrite`, a chat model restates it first, as in
+   [Rewrite a question](#rewrite-a-question).
+2. **search**, required. One retriever: `dense` (by meaning), `bm25` (by words) or
+   `hybrid_rrf` (both, fused). Its `top_k` is how many pieces it hands on.
+3. **rerank**, optional. None, one step, or a list that runs in order. Each step
+   reorders the pieces the step before it handed on:
+   - `mmr` trades some relevance for variety. It needs no extra model.
+   - `cross_encoder` reads the question and each piece together and scores the pair. It
+     is slower and more accurate. Its model loads with the `models` settings, as the
+     embedders do.
+   - `llm_rerank` asks a chat model to put the pieces in order. It needs a key, and it
+     makes one model call per question, so it is never cached.
+
+Search wide and narrow late: a search `top_k` of 20 and a reranker `top_k` of 5 lets the
+reranker choose.
+
+`k`, when given, is how many hits the last step keeps: it sets that step's `top_k`. Left
+out, the file's setting holds. The question is never written in the file; it is what you
+pass to `retrieve`.
+
+A model's key is never in the file either. Pass it to `retrieve` as `credentials`:
+
+```python
+result = p.retrieve(question, credentials={"anthropic_api_key": "sk-ant-..."})
+```
+
+The names are the same as for `pandion.rewrite`: `anthropic_api_key`,
+`openai_api_key` and `openrouter_api_key`.
+
+**Which index it searches.** `retrieve` searches the documents that the last
+`p.index.run` or `p.index.sync` of this pipeline indexed. In a new process with no run
+yet, it reads the manifest that the last sync wrote. With neither, it says to index some
+files first. The search runs through the same cache as the index, so the index is read,
+not built again.
+
+**What each step did.** `retrieve` returns a `Retrieval`:
+
+- `result.hits`, the hits, best first. Each has `rank`, `score` and `chunk`, and after a
+  reranker also `prior_rank` and `prior_score`, which say where it stood before.
+- `result.result`, the last step's whole `RetrievalResult`.
+- `result.stages["rewrite"]`, `result.stages["search"]` and `result.stages["rerank"]`.
+  The last is a list with one entry per reranker. Each is a `StageResult` with its
+  `output`, `status`, `artifact_id`, `duration_ms` and `note`, as in
+  [Build an index](#build-an-index). The search's output shows the pieces before any
+  reranker moved them.
+- `result.index`, the index step the search read.
+- `result.ok`, which is false if any step failed. A step that fails is reported, not
+  raised, and then `hits` is empty.
+
+```python
+result.stages["search"].output.hits     # the pieces before reranking
+result.stages["rerank"][0].note         # what the first reranker did
+```
+
+Ask the same question again and every step is `cached`, except `llm_rewrite` and
+`llm_rerank`, whose model answers can change.
+
+To load the default cross-encoder before the first search, call
+`pandion.preload_reranker()`. It takes a model name and `pandion.ModelSettings`, like
+`preload_embedder`.
+
 ## The cache
 
 An artifact's id is a hash of its recipe: the strategy, its settings and its inputs. Run
@@ -276,8 +363,8 @@ text is embedded once.
 
 ## Models
 
-The local embedders (`qwen3-embedding-0.6b` and `bge-small-en-v1.5`) use a model from
-Hugging Face. `models.download` decides what happens when it is not on disk yet.
+The local embedders (`qwen3-embedding-0.6b` and `bge-small-en-v1.5`) and the
+`cross_encoder` reranker use a model from Hugging Face. `models.download` decides what happens when it is not on disk yet.
 
 - `auto` downloads the model the first time it is used.
 - `never` only loads a model that is already in the folder. If it is missing, the run
@@ -323,6 +410,9 @@ An unknown strategy lists the ones there are:
 index.chunk uses 'fixed', which is not a chunk strategy. The chunk strategies are: layout_blocks, markdown_header, recursive_character, sentence_window, token_based.
 ```
 
+A step in the `retrieve` section is named the same way, for example
+`retrieve.search (dense)` or `retrieve.rerank step 2 (cross_encoder)`.
+
 The same checks apply to `pandion.parse`, `pandion.clean`, `pandion.chunk` and
 `pandion.rewrite`, where the message starts with "The chunker", "Clean step 1" or "The
 query step" instead of the place in the file. A
@@ -343,5 +433,6 @@ model that is not on disk raises `pandion.models.ModelNotDownloaded`.
 indexes two sample PDFs, prints each step's note, then runs again to show every step was
 reused. A second script syncs a folder, adds a sample, syncs again, removes it, and
 syncs once more. `rewrite_question.py` prints a question as typed and, with
-`ANTHROPIC_API_KEY` set, as a model rewrites it. A test runs all three, so they stay
-correct.
+`ANTHROPIC_API_KEY` set, as a model rewrites it. `search_samples.py` indexes two samples,
+searches them, prints what each step did and the hits, then searches again to show
+every step was reused. A test runs all four, so they stay correct.

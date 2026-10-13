@@ -9,9 +9,14 @@ test_base_install.py. Each test file runs from a copy in the work folder, so
 With --with-models, the first environment also gets the local extra (torch and
 sentence-transformers) and runs test_models.py, which downloads one small model.
 
+With --wheel, it tests that wheel instead of building one, so the publish
+workflow tests the exact file it uploads. With --tag, it first checks that the
+release tag names the package's version.
+
     uv run python checks/pandion-install/run_check.py
     uv run python checks/pandion-install/run_check.py --with-models
     uv run python checks/pandion-install/run_check.py --work D:/scratch/pandion-check
+    uv run python checks/pandion-install/run_check.py --wheel dist/pandion-0.1.0-py3-none-any.whl --tag pandion-v0.1.0
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -29,6 +35,16 @@ SAMPLES = [
     REPO / "samples" / "chunking-primer" / "chunking-primer.pdf",
     REPO / "samples" / "two-column-report" / "two-column-report.pdf",
 ]
+
+
+def package_version() -> str:
+    pyproject = REPO / "packages" / "pandion" / "pyproject.toml"
+    return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+
+
+def tag_matches(tag: str, version: str) -> bool:
+    """A pandion release tag is `pandion-v` and the package's version."""
+    return tag == f"pandion-v{version}"
 
 
 def run(*args: str | Path, **kwargs) -> None:
@@ -59,13 +75,14 @@ def check(work: Path, wheel: Path, name: str, extras: str, test_files: list[str]
     return subprocess.run([str(python), *pytest, "-v", *test_files], cwd=tests, env=env).returncode
 
 
-def main(work: Path, with_models: bool) -> int:
+def main(work: Path, with_models: bool, wheel: Path | None = None) -> int:
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
-    dist = work / "dist"
-    run("uv", "build", REPO / "packages" / "pandion", "--wheel", "--out-dir", dist, cwd=REPO)
-    wheel = next(dist.glob("pandion-*.whl"))
+    if wheel is None:
+        dist = work / "dist"
+        run("uv", "build", REPO / "packages" / "pandion", "--wheel", "--out-dir", dist, cwd=REPO)
+        wheel = next(dist.glob("pandion-*.whl"))
 
     if with_models:
         full = ("[pdfium,lancedb,local]", ["test_installed.py", "test_models.py"])
@@ -86,5 +103,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--with-models", action="store_true", help="also install the local extra and download one small model"
     )
+    parser.add_argument("--wheel", type=Path, help="test this wheel instead of building one")
+    parser.add_argument("--tag", help="a release tag, which must be pandion-v and the package's version")
     args = parser.parse_args()
-    sys.exit(main(args.work.resolve(), args.with_models))
+    if args.tag and not tag_matches(args.tag, package_version()):
+        sys.exit(f"The tag {args.tag} does not match the package version {package_version()}.")
+    sys.exit(main(args.work.resolve(), args.with_models, args.wheel and args.wheel.resolve()))

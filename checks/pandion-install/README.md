@@ -61,3 +61,15 @@ uv run python checks/pandion-install/run_check.py --with-models
 ```
 
 This installs torch, so it is slow on a first run. The default run leaves it out.
+
+## Before a release
+
+The **Publish pandion** workflow builds the wheel once and tests that file, so the
+wheel that reaches PyPI is the one that passed:
+
+```bash
+uv run python checks/pandion-install/run_check.py --wheel dist/pandion-0.1.0-py3-none-any.whl --tag pandion-v0.1.0
+```
+
+`--wheel` tests that wheel instead of building one. `--tag` first checks that the tag is
+`pandion-v` and the version in `packages/pandion/pyproject.toml`, and stops if not.

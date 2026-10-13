@@ -15,6 +15,7 @@ release and record the Home clips. For how the code fits together, see
 - [The samples](#the-samples)
 - [Staging](#staging)
 - [Releasing](#releasing)
+- [Publishing pandion](#publishing-pandion)
 - [Recording the Home clips](#recording-the-home-clips)
 
 ## Development setup
@@ -246,6 +247,32 @@ publish and the verification, then marks that release Latest. Publishing needs t
 repository secret `HF_TOKEN`, a Hugging Face token with write access. See
 [docs/deploy.md](docs/deploy.md#publishing-with-publish_spacepy) for what the publish
 script does.
+
+## Publishing pandion
+
+The pandion package goes to PyPI on its own schedule, separate from the app's
+releases. Like a production release, it needs the owner's explicit yes for that version.
+
+1. Set the version in `packages/pandion/pyproject.toml` and `pandion.__version__`, in a
+   PR. A test fails if the two differ.
+2. Push a tag named `pandion-v` and that version, on a commit on main:
+
+   ```bash
+   git tag pandion-v0.1.0 && git push origin pandion-v0.1.0
+   ```
+
+The **Publish pandion** workflow (`.github/workflows/publish-pandion.yml`) then:
+
+1. checks the tag names the package's version;
+2. builds the wheel and the source archive;
+3. installs that exact wheel in new environments and tests it there
+   (`checks/pandion-install/run_check.py --wheel ... --tag ...`);
+4. uploads both files to PyPI.
+
+PyPI trusts this workflow through trusted publishing, so no token is stored in the
+repo. The publisher on pypi.org names the repo, the file `publish-pandion.yml` and the
+`pypi` environment, so renaming either one breaks publishing. A `pandion-v` tag never
+counts as an app release, because the app's release tags must start with `v`.
 
 ## Recording the Home clips
 

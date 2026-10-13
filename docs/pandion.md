@@ -27,6 +27,8 @@ installs the built package in new environments, with and without extras, and tes
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
+- [Write your own strategy](#write-your-own-strategy)
+- [Loading your strategies](#loading-your-strategies)
 - [Errors](#errors)
 - [Run the example](#run-the-example)
 
@@ -148,6 +150,10 @@ the full format, with every field the package reads.
 
 ```yaml
 # pipeline.yaml
+
+# Optional. Modules to import before the steps are checked, so strategies
+# you wrote can be used by name. See Loading your strategies.
+plugins: [my_company.rag_steps]
 
 # Required. Pandion keeps three folders here: sources/ (each file once),
 # artifacts/ (the cache) and embeddings/ (the embedding cache), and after a
@@ -577,6 +583,67 @@ in the Python that runs it. With `--print`, it only prints the command:
 ```bash
 pandion install pipeline.yaml --print
 ```
+
+## Write your own strategy
+
+Every stage takes a strategy, and you can write your own. A strategy is a class that
+subclasses `pandion.extend.Transform`. You say which stage it is for, what it reads, and
+what its settings are, and you write `apply()`. Then `@register` makes its `name` work in
+a pipeline file and in `Pipeline(...)`, the same as a built-in. A full guide with one
+example per stage will be added here.
+
+```python
+from pathlib import Path
+
+from pydantic import BaseModel
+from pandion.extend import ArtifactType, Element, ParsedDoc, PortSpec, Stage, Transform, register
+
+class NoSettings(BaseModel):
+    pass
+
+@register
+class TxtLines(Transform[NoSettings]):
+    name = "txt_lines"
+    stage = Stage.PARSE
+    inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
+    output = ArtifactType.PARSED_DOC
+    config_model = NoSettings
+    summary = "One block per line of a text file."
+
+    def apply(self, inputs, config, ctx):
+        lines = Path(inputs["file"]["path"]).read_text(encoding="utf-8").splitlines()
+        return ParsedDoc(elements=[Element(id=f"l{i}", type="paragraph", text=t, order=i)
+                                   for i, t in enumerate(lines) if t.strip()])
+```
+
+## Loading your strategies
+
+A strategy only works by name once the module that registers it has been imported. There are
+three ways to make that happen.
+
+1. Import it in code, before you build the pipeline: `import my_company.rag_steps`.
+2. List it under `plugins:` in the pipeline file. A YAML file cannot import anything, so the
+   CLI, or a server that reads the file, needs to be told which modules to load.
+
+   ```yaml
+   plugins: [my_company.rag_steps]
+   path: ./my-index
+   index:
+     parse: {use: txt_lines}
+   ```
+
+   A module that cannot be imported is a `ConfigError` that names the module and the error.
+   `build(..., plugins=[...])` takes the same list in code.
+3. Ship it as a package. Add an entry point in the `pandion.strategies` group, and Pandion
+   loads the package the first time it looks up a strategy:
+
+   ```toml
+   [project.entry-points."pandion.strategies"]
+   qdrant = "pandion_qdrant"
+   ```
+
+   A package that fails to load gives a warning that names it, and the other strategies keep
+   working.
 
 ## Errors
 

@@ -20,6 +20,12 @@ Pydantic, so they come with the base install.
 from __future__ import annotations
 
 import importlib
+import warnings
+from importlib import metadata
+
+#: Installed packages add strategies under this entry point group, for example
+#: [project.entry-points."pandion.strategies"] qdrant = "pandion_qdrant".
+ENTRY_POINT_GROUP = "pandion.strategies"
 
 #: Every module that registers a transform, in stage order.
 PLUGIN_MODULES: tuple[str, ...] = (
@@ -50,11 +56,28 @@ PLUGIN_MODULES: tuple[str, ...] = (
 _discovered = False
 
 
+def _entry_points():
+    return list(metadata.entry_points(group=ENTRY_POINT_GROUP))
+
+
+def _load_entry_point(ep):
+    return ep.load()
+
+
 def discover() -> tuple[str, ...]:
-    """Import every plugin module. Safe to call repeatedly."""
+    """Import every plugin module and installed strategy package. Safe to call repeatedly."""
     global _discovered
     if not _discovered:
         for module in PLUGIN_MODULES:
             importlib.import_module(module)
+        for ep in _entry_points():
+            try:
+                _load_entry_point(ep)
+            except Exception as exc:  # a broken third-party package must not break Pandion
+                warnings.warn(
+                    f"The strategy package '{ep.name}' ({ep.value}) could not be loaded, "
+                    f"so its strategies are not available: {exc}",
+                    stacklevel=2,
+                )
         _discovered = True
     return PLUGIN_MODULES

@@ -1,6 +1,7 @@
 """Read a pipeline.yaml and check it before anything runs.
 
 ```yaml
+plugins: [my_company.rag_steps]  # optional: modules to import, so their strategies can be named
 path: ./my-index            # where sources, artifacts and the embedding cache go
 models:                     # optional: pandion.models.ModelSettings
   download: auto
@@ -46,6 +47,7 @@ it accepts.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
@@ -60,7 +62,7 @@ from pandion.ports import Stage
 from pandion.registry import UnknownTransformError, registry
 from pandion.stages import _strategy
 
-TOP_KEYS = ("path", "models", "index", "retrieve", "answer")
+TOP_KEYS = ("plugins", "path", "models", "index", "retrieve", "answer")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
 INDEX_KEYS = ("parse", "clean", "chunk", "embed", "store")
 EMBED_KEYS = ("truncate_dim",)
@@ -112,6 +114,8 @@ class PipelineConfig:
     retrieve: RetrieveConfig | None = None
     #: The answer step, as (strategy name, its settings).
     answer: tuple[str, dict[str, Any]] | None = None
+    #: Modules imported before the steps were checked, so their strategies exist.
+    plugins: list[str] = field(default_factory=list)
 
 
 def load(file: str | Path) -> PipelineConfig:
@@ -124,6 +128,7 @@ def load(file: str | Path) -> PipelineConfig:
 def from_dict(data: Any, *, base: Path) -> PipelineConfig:
     """Check a loaded pipeline file. Relative paths are read from `base`."""
     _keys(data, TOP_KEYS, "The pipeline file")
+    plugins = _load_plugins(data.get("plugins"))
     if not data.get("path"):
         raise ConfigError(
             "The pipeline file has no path: the folder where Pandion keeps the "
@@ -152,6 +157,7 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         index=_index(data["index"]),
         retrieve=_retrieve(data["retrieve"]) if "retrieve" in data else None,
         answer=_answer(data["answer"]) if "answer" in data else None,
+        plugins=plugins,
     )
 
 
@@ -162,6 +168,7 @@ def build(
     index: dict[str, Any],
     retrieve: dict[str, Any] | None = None,
     answer: Any = None,
+    plugins: list[str] | None = None,
 ) -> PipelineConfig:
     """Check a pipeline written in code; relative paths are read from the
     current folder.
@@ -173,6 +180,8 @@ def build(
     if isinstance(models, BaseModel):
         models = models.model_dump(exclude_unset=True)
     data: dict[str, Any] = {"path": path, "models": models or {}}
+    if plugins is not None:
+        data["plugins"] = plugins
     data["index"] = {k: _block(v) for k, v in index.items() if v is not None}
     if isinstance(data["index"].get("clean"), dict):
         data["index"]["clean"] = [data["index"]["clean"]]
@@ -200,7 +209,10 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     store = dict(index.store)
     embed = {"use": store.pop("embedder")}
     embed.update({key: store.pop(key) for key in EMBED_KEYS if key in store})
-    data: dict[str, Any] = {"path": config.path.as_posix()}
+    data: dict[str, Any] = {}
+    if config.plugins:
+        data["plugins"] = list(config.plugins)
+    data["path"] = config.path.as_posix()
     models = config.models.model_dump(mode="json", exclude_defaults=True)
     if models:
         data["models"] = models
@@ -260,6 +272,27 @@ def step_class(stage: Stage, use: str, module: str) -> type[BaseModel]:
             "use": use,
         },
     )
+
+
+def _load_plugins(plugins: Any) -> list[str]:
+    """Import each module under `plugins:`, so its @register calls run first."""
+    if plugins is None:
+        return []
+    if not isinstance(plugins, list) or not all(isinstance(p, str) and p for p in plugins):
+        raise ConfigError(
+            "plugins must be a list of Python module names, for example "
+            "plugins: [my_company.rag_steps]."
+        )
+    discover()  # built-ins first, so a clashing plugin fails at its own import
+    for module in plugins:
+        try:
+            importlib.import_module(module)
+        except Exception as exc:
+            raise ConfigError(
+                f"plugins lists '{module}', which could not be imported: "
+                f"{type(exc).__name__}: {exc}"
+            ) from None
+    return list(plugins)
 
 
 def _answer(answer: Any) -> tuple[str, dict[str, Any]]:

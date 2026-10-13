@@ -45,7 +45,7 @@ def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
     return StageResult(
         stage=str(Stage.PARSE),
         transform=use,
-        output=ParsedDoc(**payload),
+        output=ParsedDoc.model_validate(payload),
         duration_ms=duration_ms,
         note=ctx.extras.get("meta", {}).get("note"),
     )

@@ -7,7 +7,7 @@ recipe, so the same files with the same settings are never processed twice.
 
 This guide covers what exists today: parse, clean, chunk, the index, keeping an index up
 to date, the rewrite of a question, searching an index with rerankers, asking a question,
-and three ways to write the same pipeline: a YAML file, a dict per stage, and classes in
+evaluating a pipeline on a question set, and three ways to write the same pipeline: a YAML file, a dict per stage, and classes in
 code.
 
 Before each release to PyPI, [checks/pandion-install/](../checks/pandion-install)
@@ -23,6 +23,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Keep an index up to date](#keep-an-index-up-to-date)
 - [Search an index](#search-an-index)
 - [Ask a question](#ask-a-question)
+- [Evaluate a pipeline](#evaluate-a-pipeline)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [The cache](#the-cache)
 - [Models](#models)
@@ -430,6 +431,76 @@ answer = p.ask(question, credentials={"anthropic_api_key": "sk-ant-..."})
 With several documents in the index, `chat` finds its citations in the first document by
 name, the same rule as for a rewrite. A citation from another document is kept, and
 marked as not verified.
+
+## Evaluate a pipeline
+
+`pandion.evaluate` asks every question in a question set and says whether the sentence
+that answers it came back in the top pieces, at which rank, and, for a miss, where the
+answer was lost.
+
+```python
+import pandion
+from pandion import Pipeline
+
+p = Pipeline.from_yaml("pipeline.yaml")
+report = pandion.evaluate(p, "questions.json", top_k=5, documents="docs/")
+report.found, report.total            # 10, 12
+for q in report.questions:
+    q.id, q.found, q.rank, q.lost_at  # "heading-sections", True, 2, None
+    q.trace                           # for a miss: why, step by step
+report.totals()                       # hit_rate, mrr, recall, mean_rank, median_rank
+report.by_tag()                       # the same numbers per tag
+report.to_dict()                      # all of it as plain JSON
+```
+
+The pipeline needs a retrieve section. With `documents=`, those documents are indexed
+first (every step is a cache hit when they were indexed before) and the search covers
+exactly them. Without it, the search covers what `p.index.run` or `p.index.sync` indexed
+last.
+
+**The question set.** A JSON file in the format the bundled samples use
+(`samples/*/questions.json`), a CSV file with the same columns, or the same list in code:
+
+```json
+[
+  {
+    "id": "two-steps",
+    "question": "What are the two steps a retrieval-augmented system takes?",
+    "gold_answer": "First it finds passages that look relevant, then it asks a language model to answer from those passages alone.",
+    "tags": ["basics"]
+  }
+]
+```
+
+Each question needs `question` and at least one gold passage: `gold_answer`, or a list
+in `gold_answers`, copied from the document word for word. `id`, `answer`, `tags` and
+`document` (the document the evidence is in) are optional. The file may also be an
+object with a `questions` list, a `version` and a `document`. In a CSV file, several gold
+passages share one cell, separated by `||`. A set with a problem is refused before
+anything runs, with a `QuestionSetError` naming the question:
+"The question set at questions.json cannot be used: question 3: no question text."
+`pandion.evaluation.load_questions` reads a set on its own, and
+`pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
+is really in a document's text.
+
+**How a question is scored.** By the `eval` step, the same one the playground's
+Evaluate page runs. A piece holds the answer when it contains a gold passage exactly,
+or after spacing, line-end hyphens, capital letters, curly quotes and ligatures such as
+fi are evened out, or with list markers and stray single letters set aside on both
+sides. `q.score["match"]` says which (`exact`, `normalized`, `reworded`). `top_k`
+(default 5) is how many of the top pieces are checked: an answer below it is a miss.
+With several gold passages, any one counts as found, and `golds_found` out of
+`golds_total` feeds recall.
+
+**Where a miss was lost.** `q.lost_at` is the first step that no longer holds the
+answer: `parse`, `clean`, `chunk`, or one of the three ways an answer is lost at rank:
+`search` (it never came back), `rerank` (the reranker dropped it) and `top_k` (it came
+back below the pieces checked). `q.trace` has a one-sentence `finding`, a suggested
+`fix`, every step's sentence and evidence, and the `document` it was traced in: the one
+the question names, else the first whose parsed text holds the answer.
+
+A retrieval step that fails is reported, not raised: `q.error` names it, and the
+question is left out of the rates.
 
 ## Three ways to write a pipeline
 

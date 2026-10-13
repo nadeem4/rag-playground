@@ -74,10 +74,13 @@ app runs the same strategies through its pipeline graph, and
 `tests/integration/test_app_uses_pandion_index.py`,
 `tests/integration/test_app_uses_pandion_query.py`,
 `tests/integration/test_app_uses_pandion_retrievers.py`,
-`tests/integration/test_app_uses_pandion_rerankers.py` and
-`tests/integration/test_app_uses_pandion_answer.py` check both give the same pieces,
-the same index, the same query, the same hits, before and after a reranker, and the same
-answer. The `mmr` reranker and the `chat` step embed with the index's own model through two
+`tests/integration/test_app_uses_pandion_rerankers.py`,
+`tests/integration/test_app_uses_pandion_answer.py` and
+`tests/integration/test_app_uses_pandion_evaluation.py` check both give the same pieces,
+the same index, the same query, the same hits, before and after a reranker, the same
+answer, and the same eval verdict. `pandion.evaluate(p, questions)` asks every question
+and scores it with the same `eval` step; the app's Evaluate page still runs that step
+through `POST /api/sweeps` and adds up the scores in the browser. The `mmr` reranker and the `chat` step embed with the index's own model through two
 public names of `pandion.plugins.retrieve`, `read_descriptor` and `embedder_for`.
 
 The package takes every folder as an argument. A run is handed the sources folder, the

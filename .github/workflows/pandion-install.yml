@@ -1,0 +1,47 @@
+name: Pandion install check
+
+# Builds the pandion wheel, installs it in a new environment and tests it there.
+# Runs when pandion or the check changes. The model download check is run by hand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/pandion/**"
+      - "checks/pandion-install/**"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/pandion-install.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/pandion/**"
+      - "checks/pandion-install/**"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/pandion-install.yml"
+  workflow_dispatch:
+    inputs:
+      with_models:
+        description: "Also install the local extra and download the models"
+        type: boolean
+        default: false
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv run python checks/pandion-install/run_check.py
+
+  install-with-models:
+    if: github.event_name == 'workflow_dispatch' && inputs.with_models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv run python checks/pandion-install/run_check.py --with-models

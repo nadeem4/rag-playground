@@ -191,6 +191,8 @@ class Pipeline:
                  answer="search")
 
     Each stage is a dict (the file's block for it), a step class or a name.
+    `source` is optional, as in the file: left out, the documents are the
+    files given to index.run (see "Your own source" in docs/pandion.md).
     `retrieval` is None without a search step and `query` is None without an
     answer step.
     """
@@ -204,6 +206,7 @@ class Pipeline:
         embed: Step,
         store: Step,
         clean: Step = None,
+        source: Step = None,
         rewrite: Step = None,
         search: Step = None,
         rerank: Step = None,
@@ -214,7 +217,10 @@ class Pipeline:
             build(
                 path=path,
                 models=models,
-                index={"parse": parse, "clean": clean, "chunk": chunk, "embed": embed, "store": store},
+                index={
+                    "source": source, "parse": parse, "clean": clean,
+                    "chunk": chunk, "embed": embed, "store": store,
+                },
                 retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
                 answer=answer,
             )
@@ -271,7 +277,7 @@ class IndexPipeline:
     """Parse, clean, chunk, embed and store, for many documents into one index.
 
     In code: `IndexPipeline(path=..., parse=..., chunk=..., embed=..., store=...)`,
-    with `clean` (one cleaner or a list) and `models` optional.
+    with `source`, `clean` (one cleaner or a list) and `models` optional.
     """
 
     def __init__(
@@ -283,13 +289,17 @@ class IndexPipeline:
         embed: Step,
         store: Step,
         clean: Step = None,
+        source: Step = None,
         models: Any = None,
     ) -> None:
         self._setup(
             build(
                 path=path,
                 models=models,
-                index={"parse": parse, "clean": clean, "chunk": chunk, "embed": embed, "store": store},
+                index={
+                    "source": source, "parse": parse, "clean": clean,
+                    "chunk": chunk, "embed": embed, "store": store,
+                },
             )
         )
 

@@ -130,3 +130,12 @@ def test_raw_file_without_sources_says_so(tmp_path):
     ctx = RunContext(output_dir=tmp_path / "out", emit=lambda e: None, tmp=tmp_path / "tmp", extras={})
     with pytest.raises(ValueError, match="did not say where source files are kept"):
         raw_file(ctx, b"x", "x.txt")
+
+
+def test_a_source_in_code_gives_the_same_config_as_the_file(tmp_path):
+    in_code = Pipeline(path=tmp_path / "index", source={"use": "test_inline_text", "prefix": "N: "},
+                       parse="test_lines_parser", chunk="recursive_character",
+                       embed="fake-deterministic", store="lancedb")
+    from_file = from_dict(_config({"use": "test_inline_text", "prefix": "N: "}), base=tmp_path)
+    assert in_code.config == from_file
+    assert in_code.index.config.index.source == from_file.index.source

@@ -689,6 +689,9 @@ index:
   parse: {use: txt_lines}
 ```
 
+In code it is the `source=` keyword:
+`Pipeline(path="./index", source="note", parse="txt_lines", chunk="recursive_character", embed="fake-deterministic", store="lancedb")`.
+
 `p.index.sync` works with local files only (the `upload` source); `p.index.run` works with
 any source.
 

@@ -1,0 +1,51 @@
+name: Publish pandion
+
+# Publishes the pandion package to PyPI. Only the owner starts it, after an
+# explicit yes in chat for that version, by pushing a tag:
+#   git tag pandion-v0.1.0 && git push origin pandion-v0.1.0
+# In order, stopping at the first that fails:
+#   1. Check the tag names the version in packages/pandion/pyproject.toml.
+#   2. Build the wheel and the source archive.
+#   3. Install that exact wheel in new environments and test it there
+#      (checks/pandion-install/run_check.py).
+#   4. Upload both files to PyPI. PyPI trusts this workflow by its file name and
+#      the `pypi` environment (trusted publishing), so no token is stored here.
+#      Do not rename either without changing the publisher on pypi.org.
+on:
+  push:
+    tags: ["pandion-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv build packages/pandion --out-dir dist
+      - run: >-
+          uv run python checks/pandion-install/run_check.py
+          --wheel dist/pandion-*.whl --tag "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pandion/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

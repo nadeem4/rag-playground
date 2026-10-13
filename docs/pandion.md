@@ -228,13 +228,17 @@ a list of both. A folder gives every file under it except hidden ones. Each docu
 named by its path inside the folder with forward slashes, such as `guides/chunking.pdf`.
 A file given by itself is named by its file name.
 
+To choose the names, pass a mapping: `p.index.run({"report.pdf": "/uploads/0f3a.pdf"})`
+indexes that file as `report.pdf`. The same bytes under the same name give the same
+results wherever the file is kept.
+
 The report holds:
 
 - `report.documents`, a dict from document name to a `DocumentReport`. Its `.stages`
   has one `StageResult` for each step, under the names `source`, `parse`, `clean.1`
   (then `clean.2` and so on), and `chunk`.
 - `report.index`, the `StageResult` of the index. Its `.output` is the index folder.
-- `report.ok`, which is false if any step failed.
+- `report.ok`, which is false if any step failed or was skipped.
 
 ```python
 report.documents["guides/chunking.pdf"].stages["chunk"].output   # the pieces
@@ -242,7 +246,7 @@ report.documents["guides/chunking.pdf"].stages["clean.1"].note   # what the clea
 report.index.output                                              # the index folder
 ```
 
-Each `StageResult` also has `status` (`executed`, `cached` or `failed`), `artifact_id`
+Each `StageResult` also has `status` (`executed`, `cached`, `failed` or `skipped`), `artifact_id`
 (the recipe hash it is stored under), `duration_ms`, `note` and `error`. A step that
 fails is reported, not raised, and the steps after it are skipped.
 
@@ -632,6 +636,9 @@ report = p.index.run(
     force=True,                        # run every step again, even when it is stored
 )
 ```
+
+An app that keeps uploads under names of its own passes a mapping of document id to file,
+so results keep the names people gave their files.
 
 - `through` names the step to stop after: `parse`, `clean` (the last cleaner, or parse
   when there are none), `clean.1`, `clean.2` ..., or `chunk`. `index` is the whole run.

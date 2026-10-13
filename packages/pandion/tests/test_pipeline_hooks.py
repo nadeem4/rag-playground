@@ -165,3 +165,28 @@ def test_an_on_event_callback_that_raises_stops_the_run(p, pdf):
     p.index.run(pdf, on_event=events.append)
     hits = {e["step"]: e["cache_hit"] for e in finished(events)}
     assert hits["parse"] is True and hits["chunk"] is False
+
+
+def test_a_named_document_gives_the_same_results_as_the_file_of_that_name(tmp_path, pdf):
+    kept = tmp_path / "uploads"
+    kept.mkdir()
+    renamed = kept / "0f3a9c.pdf"
+    renamed.write_bytes(pdf.read_bytes())
+    p = Pipeline.from_dict(CONFIG, base=tmp_path)
+    by_file = p.index.run(pdf, through="chunk").documents["report.pdf"].stages
+    report = p.index.run({"report.pdf": renamed}, through="chunk")
+    assert list(report.documents) == ["report.pdf"]
+    by_name = report.documents["report.pdf"].stages
+    assert [s.artifact_id for s in by_name.values()] == [s.artifact_id for s in by_file.values()]
+    assert by_name["source"].output["filename"] == "report.pdf"
+
+
+def test_a_named_document_in_a_folder_keeps_its_folder(p, pdf):
+    report = p.index.run({"guides/intro.pdf": pdf}, through="parse")
+    assert list(report.documents) == ["guides/intro.pdf"]
+    assert report.documents["guides/intro.pdf"].stages["source"].output["filename"] == "intro.pdf"
+
+
+def test_an_empty_mapping_is_refused(p):
+    with pytest.raises(ValueError, match="There are no documents to index"):
+        p.index.run({})

@@ -391,8 +391,10 @@ class IndexPipeline:
 
         A folder gives every file under it except hidden ones, named by its
         path inside the folder with forward slashes (`guides/chunking.pdf`); a
-        file is named by its file name. A step that fails is reported, not
-        raised, and the steps after it are skipped.
+        file is named by its file name. A mapping names each document:
+        `{"report.pdf": "/uploads/0f3a.pdf"}` indexes that file as report.pdf.
+        A step that fails is reported, not raised, and the steps after it are
+        skipped.
 
         `through` stops every document after that step: "parse", "clean" (the
         last cleaner, or parse when there are none), "clean.1", "clean.2" ...,
@@ -426,7 +428,7 @@ class IndexPipeline:
         named = ", ".join(["parse", "clean", *(f"clean.{n}" for n in range(1, cleans + 1)), "chunk", "index"])
         raise ValueError(f"through names the step to stop after: one of {named}, not '{through}'.")
 
-    def sync(self, paths: str | Path | list[str | Path]) -> SyncReport:
+    def sync(self, paths: Documents) -> SyncReport:
         """Bring the index in line with the files at `paths` now.
 
         Reads `manifest.json` under the config's `path`, indexes the files the
@@ -482,9 +484,19 @@ class IndexPipeline:
         """The documents are local files (the upload source)."""
         return self.config.index.source[0] == "upload"
 
-    def _documents(self, paths: str | Path | list[str | Path]) -> dict[str, SourceFile | str]:
+    def _documents(self, paths: Documents) -> dict[str, SourceFile | str]:
         """By document id: with upload, every file at `paths`, kept in
-        `sources/`; with another source, each item as its location."""
+        `sources/`; with another source, each item as its location. A mapping
+        names each document: {document id: file or location}."""
+        if isinstance(paths, dict):
+            if not paths:
+                raise ValueError("There are no documents to index: the mapping is empty.")
+            if not self._uploads():
+                return {str(doc_id): str(location) for doc_id, location in sorted(paths.items())}
+            return {
+                str(doc_id): self.sources.add_bytes(Path(path).read_bytes(), PurePosixPath(str(doc_id)).name)
+                for doc_id, path in sorted(paths.items())
+            }
         if not self._uploads():
             items = paths if isinstance(paths, list) else [paths]
             return {str(item).replace("\\", "/"): str(item) for item in items}

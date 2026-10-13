@@ -32,37 +32,34 @@ def extras_for(config: PipelineConfig) -> list[str]:
     discover()
     index = config.index
     steps = [
-        (Stage.SOURCE, index.source[0]),
-        (Stage.PARSE, index.parse[0]),
-        *((Stage.CLEAN, use) for use, _ in index.clean),
-        (Stage.CHUNK, index.chunk[0]),
-        (Stage.INDEX, index.store_use),
+        ("index.source", Stage.SOURCE, index.source),
+        ("index.parse", Stage.PARSE, index.parse),
+        *(("index.clean", Stage.CLEAN, step) for step in index.clean),
+        ("index.chunk", Stage.CHUNK, index.chunk),
+        ("index.store", Stage.INDEX, (index.store_use, index.store)),
     ]
-    def extra_of(stage: Stage, use: str, where: str) -> str:
-        try:
-            return registry.get(stage, use).extra
-        except KeyError:
-            raise ValueError(
-                f"{where} uses '{use}', which is not registered, so its extra is unknown."
-            ) from None
+    if config.retrieve is not None:
+        retrieve = config.retrieve
+        if retrieve.rewrite:
+            steps.append(("retrieve.rewrite", Stage.QUERY, retrieve.rewrite))
+        steps.append(("retrieve.search", Stage.RETRIEVE, retrieve.search))
+        steps.extend(("retrieve.rerank", Stage.RERANK, step) for step in retrieve.rerank)
+        if config.answer is not None:
+            steps.append(("answer", Stage.USE_CASE, config.answer))
 
-    extras = {extra_of(stage, use, f"index.{stage.value}") for stage, use in steps}
+    extras = set()
+    for key, stage, (use, settings) in steps:
+        if stage != Stage.INDEX and use in CHAT_STEPS:
+            extras.add(_chat_extra(use, settings))
+            continue
+        try:
+            extras.add(registry.get(stage, use).extra)
+        except KeyError:
+            raise ConfigError(
+                f"{key} uses '{use}', which is not registered, so its extra is unknown."
+            ) from None
     if index.store.get("embedder") is not None:
         extras.add(get_embedder(index.store["embedder"]).extra)
-    retrieve = config.retrieve
-    if retrieve is not None:
-        later = [
-            *([(Stage.QUERY, retrieve.rewrite)] if retrieve.rewrite else []),
-            (Stage.RETRIEVE, retrieve.search),
-            *((Stage.RERANK, step) for step in retrieve.rerank),
-        ]
-        if config.answer is not None:
-            later.append((Stage.USE_CASE, config.answer))
-        for stage, (use, settings) in later:
-            if use in CHAT_STEPS:
-                extras.add(_chat_extra(use, settings))
-            else:
-                extras.add(extra_of(stage, use, f"retrieve.{stage.value}"))
     extras.discard("")
     return sorted(extras)
 

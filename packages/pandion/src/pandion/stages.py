@@ -11,6 +11,7 @@ import hashlib
 import mimetypes
 import tempfile
 import time
+import types
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +142,19 @@ def rewrite(
         duration_ms=(time.perf_counter() - started) * 1000,
         note=ctx.extras.get("meta", {}).get("note"),
     )
+
+
+class StageModule(types.ModuleType):
+    """A module that can be called: its `run`.
+
+    `pandion.parse`, `pandion.clean`, `pandion.chunk` and `pandion.rewrite` are
+    modules that hold their stage's step classes (`from pandion.parse import
+    Docling`), and calling one runs its stage on its own, as before:
+    `pandion.parse("a.pdf", use="pdfium")`.
+    """
+
+    def __call__(self, *args: Any, **kwargs: Any) -> StageResult:
+        return self.run(*args, **kwargs)
 
 
 def _clean_step(number: int, step: dict[str, Any]):

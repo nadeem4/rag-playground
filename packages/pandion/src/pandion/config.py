@@ -17,6 +17,9 @@ retrieve:                   # optional: what p.retrieve runs
   rerank:                   # optional: none, one step, or a list run in order
     - use: cross_encoder
       top_k: 5
+answer:                     # optional: what p.ask runs after retrieval
+  use: chat                 # search (the pieces as they are) or chat
+  model: claude-haiku-4-5
 ```
 
 Every key under a step other than `use` is a setting of that step, with the
@@ -26,9 +29,16 @@ when it runs: the lancedb index embeds while it writes, so `embed.use` becomes
 its `embedder` setting. A relative `path` or `models.cache_dir` is read from
 the folder the file is in.
 
-The question is not part of the file: it is passed to `p.retrieve`, which
-puts it in the query step's `text`. A model's key is never in the file either:
-it is passed to `p.retrieve` as `credentials`.
+The question is not part of the file: it is passed to `p.retrieve` or `p.ask`,
+which put it in the query step's `text`. A model's key is never in the file
+either: it is passed to `p.retrieve` or `p.ask` as `credentials`.
+
+The same pipeline can be written in code (`build`): each stage as a dict that
+is the file's block for that stage, as a step class such as
+`pandion.parse.Docling(do_ocr=False)` (`step_class`), or as a plain name, which
+is short for `{"use": name}`. Every way goes through `from_dict`, so it is
+checked the same way and gives the same `PipelineConfig`. `to_dict` turns a
+`PipelineConfig` back into the file's shape.
 
 Anything the file gets wrong is a `ConfigError` that names the step and what
 it accepts.
@@ -38,23 +48,36 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import yaml
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from pandion.embeddings import EMBEDDER_NAMES
 from pandion.models import ModelSettings
 from pandion.plugins import discover
 from pandion.ports import Stage
-from pandion.registry import UnknownTransformError
+from pandion.registry import UnknownTransformError, registry
 from pandion.stages import _strategy
 
-TOP_KEYS = ("path", "models", "index", "retrieve")
+TOP_KEYS = ("path", "models", "index", "retrieve", "answer")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
 INDEX_KEYS = ("parse", "clean", "chunk", "embed", "store")
 EMBED_KEYS = ("truncate_dim",)
 STORE_KEYS = ("metric", "build_fts")
+#: The answer steps. `eval` is a use case too, but it scores, it does not answer.
+ANSWER_STEPS = ("search", "chat")
+
+#: Where each stage's step sits in the file, for messages.
+WHERE = {
+    Stage.PARSE: "index.parse",
+    Stage.CLEAN: "index.clean",
+    Stage.CHUNK: "index.chunk",
+    Stage.QUERY: "retrieve.rewrite",
+    Stage.RETRIEVE: "retrieve.search",
+    Stage.RERANK: "retrieve.rerank",
+    Stage.USE_CASE: "answer",
+}
 
 
 class ConfigError(ValueError):
@@ -87,6 +110,8 @@ class PipelineConfig:
     models: ModelSettings
     index: IndexConfig
     retrieve: RetrieveConfig | None = None
+    #: The answer step, as (strategy name, its settings).
+    answer: tuple[str, dict[str, Any]] | None = None
 
 
 def load(file: str | Path) -> PipelineConfig:
@@ -116,12 +141,136 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         raise ConfigError(problems) from None
     if "index" not in data:
         raise ConfigError("The pipeline file has no index section.")
+    if "answer" in data and "retrieve" not in data:
+        raise ConfigError(
+            "The answer needs a retrieve section: the answer step reads what "
+            "retrieval found."
+        )
     return PipelineConfig(
         path=_resolve(data["path"], base),
         models=settings,
         index=_index(data["index"]),
         retrieve=_retrieve(data["retrieve"]) if "retrieve" in data else None,
+        answer=_answer(data["answer"]) if "answer" in data else None,
     )
+
+
+def build(
+    *,
+    path: str | Path,
+    models: ModelSettings | dict[str, Any] | None = None,
+    index: dict[str, Any],
+    retrieve: dict[str, Any] | None = None,
+    answer: Any = None,
+) -> PipelineConfig:
+    """Check a pipeline written in code; relative paths are read from the
+    current folder.
+
+    Each stage is a dict (the file's block for that stage), a step class
+    (`step_class`), a plain name for `{"use": name}`, or a list of these
+    where the file takes a list. A stage that is None is left out.
+    """
+    if isinstance(models, BaseModel):
+        models = models.model_dump(exclude_unset=True)
+    data: dict[str, Any] = {"path": path, "models": models or {}}
+    data["index"] = {k: _block(v) for k, v in index.items() if v is not None}
+    if isinstance(data["index"].get("clean"), dict):
+        data["index"]["clean"] = [data["index"]["clean"]]
+    if retrieve is not None and any(v is not None for v in retrieve.values()):
+        data["retrieve"] = {k: _block(v) for k, v in retrieve.items() if v is not None}
+    if answer is not None:
+        data["answer"] = _block(answer)
+    return from_dict(data, base=Path("."))
+
+
+def _block(value: Any) -> Any:
+    """One stage written in code, as the file's block for it."""
+    if isinstance(value, str):
+        return value if value == "none" else {"use": value}
+    if isinstance(value, BaseModel) and isinstance(getattr(type(value), "use", None), str):
+        return {"use": type(value).use, **value.model_dump(mode="json", exclude_unset=True)}
+    if isinstance(value, (list, tuple)):
+        return [_block(v) for v in value]
+    return value
+
+
+def to_dict(config: PipelineConfig) -> dict[str, Any]:
+    """`config` in the file's shape: `from_dict` of it gives `config` again."""
+    index = config.index
+    store = dict(index.store)
+    embed = {"use": store.pop("embedder")}
+    embed.update({key: store.pop(key) for key in EMBED_KEYS if key in store})
+    data: dict[str, Any] = {"path": config.path.as_posix()}
+    models = config.models.model_dump(mode="json", exclude_defaults=True)
+    if models:
+        data["models"] = models
+    data["index"] = {"parse": _out(index.parse)}
+    if index.clean:
+        data["index"]["clean"] = [_out(step) for step in index.clean]
+    data["index"].update(chunk=_out(index.chunk), embed=embed, store={"use": "lancedb", **store})
+    if config.retrieve is not None:
+        retrieve = config.retrieve
+        data["retrieve"] = {}
+        if retrieve.rewrite is not None:
+            data["retrieve"]["rewrite"] = _out(retrieve.rewrite)
+        data["retrieve"]["search"] = _out(retrieve.search)
+        if retrieve.rerank:
+            data["retrieve"]["rerank"] = [_out(step) for step in retrieve.rerank]
+    if config.answer is not None:
+        data["answer"] = _out(config.answer)
+    return data
+
+
+def _out(step: tuple[str, dict[str, Any]]) -> dict[str, Any]:
+    use, settings = step
+    return {"use": use, **settings}
+
+
+def step_class(stage: Stage, use: str, module: str) -> type[BaseModel]:
+    """A typed class for the `use` strategy of `stage`: its config model, which
+    also knows its strategy's name, so a pipeline can take it in place of a dict.
+
+    `Docling(do_ocr=False)` has the same fields and validation as the docling
+    config model, keeps only the settings it was given (so it makes the same
+    node as `{"use": "docling", "do_ocr": False}`), and refuses an unknown
+    setting at once, naming the stage and listing the settings it has.
+    """
+    discover()
+    strategy = registry.get(stage, use)
+    model = strategy.config_model
+    where = WHERE[stage]
+
+    def __init__(self, **settings: Any) -> None:
+        try:
+            _strategy(stage, use, settings, where=where)
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from None
+        model.__init__(self, **settings)
+
+    name = "".join(part.capitalize() for part in use.split("_"))
+    return type(
+        name,
+        (model,),
+        {
+            "__init__": __init__,
+            "__module__": module,
+            "__qualname__": name,
+            "__doc__": f"The {use} {stage} step. {strategy.summary}",
+            "__annotations__": {"use": ClassVar[str]},
+            "use": use,
+        },
+    )
+
+
+def _answer(answer: Any) -> tuple[str, dict[str, Any]]:
+    use, settings = _use(answer, "answer")
+    if use not in ANSWER_STEPS:
+        raise ConfigError(
+            f"answer uses '{use}', which is not an answer step. "
+            f"The answer steps are: {', '.join(ANSWER_STEPS)}."
+        )
+    discover()
+    return _step(Stage.USE_CASE, answer, "answer")
 
 
 def _index(index: Any) -> IndexConfig:

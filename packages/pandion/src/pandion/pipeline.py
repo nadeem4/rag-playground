@@ -1,9 +1,9 @@
-"""A pipeline from a config file, run through the executor and the store.
+"""A pipeline in three parts, run through the executor and the store.
 
 ```python
 from pandion import Pipeline
 
-p = Pipeline.from_file("pipeline.yaml")
+p = Pipeline.from_yaml("pipeline.yaml")
 report = p.index.run("docs/")
 report.documents["guides/chunking.pdf"].stages["parse"].output   # a ParsedDoc
 report.index.output                                              # the index folder
@@ -14,7 +14,18 @@ report.added, report.changed, report.removed, report.unchanged
 result = p.retrieve("How big should a chunk be?", k=5)
 result.hits                         # the hits, best first
 result.stages["search"].output      # what the search step found, before reranking
+
+answer = p.ask("How big should a chunk be?")
+answer.text                         # the answer, or the pieces found
+answer.stages["answer"].output      # the answer step's Output
 ```
+
+The three parts are `IndexPipeline` (parse, clean, chunk, embed, store),
+`RetrievalPipeline` (rewrite, search, rerank) and `QueryPipeline` (the answer
+step). Each can be built on its own, from a file (`from_yaml`) or in code, with
+each stage as a dict, a step class or a name (see `pandion.config`). Every way
+gives the same `PipelineConfig`, so the same graph and the same artifact ids.
+`to_yaml()` writes any of them back as a file.
 
 Every step is cached by its recipe hash, so running the same files with the
 same config again only reads what is stored. Under the config's `path` Pandion
@@ -25,16 +36,18 @@ keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store),
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from pandion.config import PipelineConfig, load
+import yaml
+
+from pandion.config import PipelineConfig, build, load, to_dict
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
-from pandion.payloads import ChunkSet, Hit, ParsedDoc, Query, RetrievalResult
+from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import registry
@@ -50,7 +63,11 @@ _OUTPUTS = {
     Stage.QUERY: Query,
     Stage.RETRIEVE: RetrievalResult,
     Stage.RERANK: RetrievalResult,
+    Stage.USE_CASE: Output,
 }
+
+#: Settings a stage may take: a dict (the file's block), a step class, a name.
+Step = Any
 
 
 @dataclass
@@ -118,31 +135,181 @@ class Retrieval:
         return self.result.hits if self.result is not None else []
 
 
-class Pipeline:
-    """The parts of a pipeline file: the index and the retrieval."""
+@dataclass
+class Answer:
+    """One question answered: what retrieval found, and what the answer step made.
 
-    def __init__(self, config: PipelineConfig) -> None:
+    `stages` holds the retrieval's steps ("rewrite", "search", "rerank") and
+    "answer". `output` is the answer step's `Output`: kind "search" with the
+    found pieces, or kind "chat" with the answer, its citations and counts.
+    A step that fails is reported, not raised, and `output` is then None.
+    """
+
+    retrieval: Retrieval
+    answer: StageResult
+
+    @property
+    def stages(self) -> dict[str, Any]:
+        return {**self.retrieval.stages, "answer": self.answer}
+
+    @property
+    def index(self) -> StageResult:
+        return self.retrieval.index
+
+    @property
+    def ok(self) -> bool:
+        return self.retrieval.ok and self.answer.status in ("executed", "cached")
+
+    @property
+    def hits(self) -> list[Hit]:
+        return self.retrieval.hits
+
+    @property
+    def output(self) -> Output | None:
+        return self.answer.output if self.ok else None
+
+    @property
+    def text(self) -> str:
+        """The chat answer as one text, or the found pieces one after another."""
+        if self.output is None:
+            return ""
+        payload = self.output.payload
+        if self.output.kind == "chat":
+            return "".join(segment["text"] for segment in payload["answer"])
+        return "\n\n".join(row["snippet"] for row in payload["results"])
+
+
+class Pipeline:
+    """All three parts: the index, the retrieval and the answer step.
+
+    Build one from a file with `from_yaml`, or in code with a keyword per stage:
+
+        Pipeline(path="./my-index", parse=Docling(do_ocr=False),
+                 chunk={"use": "recursive_character", "chunk_size": 400},
+                 embed="qwen3-embedding-0.6b", store="lancedb",
+                 search=HybridRrf(top_k=20), rerank=[CrossEncoder(top_k=5)],
+                 answer="search")
+
+    Each stage is a dict (the file's block for it), a step class or a name.
+    `retrieval` is None without a search step and `query` is None without an
+    answer step.
+    """
+
+    def __init__(
+        self,
+        *,
+        path: str | Path,
+        parse: Step,
+        chunk: Step,
+        embed: Step,
+        store: Step,
+        clean: Step = None,
+        rewrite: Step = None,
+        search: Step = None,
+        rerank: Step = None,
+        answer: Step = None,
+        models: Any = None,
+    ) -> None:
+        self._setup(
+            build(
+                path=path,
+                models=models,
+                index={"parse": parse, "clean": clean, "chunk": chunk, "embed": embed, "store": store},
+                retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
+                answer=answer,
+            )
+        )
+
+    def _setup(self, config: PipelineConfig) -> None:
         self.config = config
-        self.index = IndexPipeline(config)
-        self.retrieval = RetrievalPipeline(config, self.index)
+        self.index = IndexPipeline._of(config)
+        self.retrieval = RetrievalPipeline._of(config, self.index) if config.retrieve else None
+        self.query = QueryPipeline._of(config, self.retrieval) if config.answer else None
 
     @classmethod
-    def from_file(cls, file: str | Path) -> Pipeline:
+    def _of(cls, config: PipelineConfig) -> Pipeline:
+        pipeline = cls.__new__(cls)
+        pipeline._setup(config)
+        return pipeline
+
+    @classmethod
+    def from_yaml(cls, file: str | Path) -> Pipeline:
         """Read and check `file` (see `pandion.config`); nothing runs yet."""
-        return cls(load(file))
+        return cls._of(load(file))
+
+    #: The name this had before the other ways to build a pipeline.
+    from_file = from_yaml
+
+    def to_yaml(self, file: str | Path | None = None) -> str:
+        """The pipeline as a file (see `pandion.config`), also written to `file` if given."""
+        return _write(self.config, file)
 
     def retrieve(
         self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
     ) -> Retrieval:
         """Search the index for `question`. See `RetrievalPipeline.retrieve`."""
+        if self.retrieval is None:
+            raise ValueError(
+                "The pipeline has no retrieve section, so there is nothing to "
+                "search with. Add retrieve: with at least a search step."
+            )
         return self.retrieval.retrieve(question, k, credentials=credentials)
+
+    def ask(
+        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+    ) -> Answer:
+        """Answer `question`. See `QueryPipeline.ask`."""
+        if self.query is None:
+            raise ValueError(
+                "The pipeline has no answer section, so there is nothing to answer "
+                "with. Add answer: with search or chat."
+            )
+        return self.query.ask(question, k, credentials=credentials)
 
 
 class IndexPipeline:
-    """Parse, clean, chunk, embed and store, for many documents into one index."""
+    """Parse, clean, chunk, embed and store, for many documents into one index.
 
-    def __init__(self, config: PipelineConfig) -> None:
-        self.config = config
+    In code: `IndexPipeline(path=..., parse=..., chunk=..., embed=..., store=...)`,
+    with `clean` (one cleaner or a list) and `models` optional.
+    """
+
+    def __init__(
+        self,
+        *,
+        path: str | Path,
+        parse: Step,
+        chunk: Step,
+        embed: Step,
+        store: Step,
+        clean: Step = None,
+        models: Any = None,
+    ) -> None:
+        self._setup(
+            build(
+                path=path,
+                models=models,
+                index={"parse": parse, "clean": clean, "chunk": chunk, "embed": embed, "store": store},
+            )
+        )
+
+    @classmethod
+    def _of(cls, config: PipelineConfig) -> IndexPipeline:
+        part = cls.__new__(cls)
+        part._setup(config)
+        return part
+
+    @classmethod
+    def from_yaml(cls, file: str | Path) -> IndexPipeline:
+        """The index part of the pipeline file at `file`."""
+        return Pipeline.from_yaml(file).index
+
+    def to_yaml(self, file: str | Path | None = None) -> str:
+        """The index part as a file, also written to `file` if given."""
+        return _write(self.config, file)
+
+    def _setup(self, config: PipelineConfig) -> None:
+        self.config = replace(config, retrieve=None, answer=None)
         root = config.path
         self.sources = Sources(root / "sources")
         self.store = Store(root / "artifacts")
@@ -314,11 +481,74 @@ class IndexPipeline:
 
 
 class RetrievalPipeline:
-    """Rewrite (optional), search, and rerank (none, one, or several in order)."""
+    """Rewrite (optional), search, and rerank (none, one, or several in order).
 
-    def __init__(self, config: PipelineConfig, index: IndexPipeline) -> None:
-        self.config = config
+    In code: `RetrievalPipeline(index, search=..., rewrite=..., rerank=...)`,
+    where `index` is the `IndexPipeline` it searches.
+    """
+
+    def __init__(
+        self, index: IndexPipeline, *, search: Step, rewrite: Step = None, rerank: Step = None
+    ) -> None:
+        base = to_dict(index.config)
+        config = build(
+            path=index.config.path,
+            models=index.config.models,
+            index=base["index"],
+            retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
+        )
+        self._setup(config, index)
+
+    @classmethod
+    def _of(cls, config: PipelineConfig, index: IndexPipeline) -> RetrievalPipeline:
+        part = cls.__new__(cls)
+        part._setup(config, index)
+        return part
+
+    def _setup(self, config: PipelineConfig, index: IndexPipeline) -> None:
+        self.config = replace(config, answer=None)
         self.index = index
+
+    @classmethod
+    def from_yaml(cls, file: str | Path) -> RetrievalPipeline:
+        """The index and retrieval parts of the pipeline file at `file`."""
+        retrieval = Pipeline.from_yaml(file).retrieval
+        if retrieval is None:
+            raise ValueError(f"{file} has no retrieve section.")
+        return retrieval
+
+    def to_yaml(self, file: str | Path | None = None) -> str:
+        """The index and retrieval parts as a file, also written to `file` if given."""
+        return _write(self.config, file)
+
+    def graph(self, question: str, k: int | None = None) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
+        """The graph that searches the index for `question`, and each node's
+        (document id, step name): the index's nodes, then rewrite, search and
+        rerank.1, rerank.2 ... with no document id."""
+        retrieve = self.config.retrieve
+        graph, roles = self.index.graph(self.index.indexed())
+        nodes, edges = list(graph.nodes), list(graph.edges)
+
+        use, settings = retrieve.rewrite or ("text", {})
+        nodes.append(Node("rewrite", Stage.QUERY, use, {**settings, "text": question}))
+        roles["rewrite"] = (None, "rewrite")
+        if use != "text":
+            # A rewrite may read the start of a document. With several, the
+            # ambient port cannot choose, so it reads the first one by id.
+            edges.append(Edge(_first_doc(roles), "rewrite", "doc"))
+
+        steps = [("search", Stage.RETRIEVE, *retrieve.search)]
+        steps += [(f"rerank.{n}", Stage.RERANK, *step) for n, step in enumerate(retrieve.rerank, 1)]
+        if k is not None:
+            node_id, stage, use, settings = steps[-1]
+            steps[-1] = (node_id, stage, use, {**settings, "top_k": k})
+        source, port = "index", "index"
+        for node_id, stage, use, settings in steps:
+            nodes.append(Node(node_id, stage, use, settings))
+            roles[node_id] = (None, node_id)
+            edges.append(Edge(source, node_id, port))
+            source, port = node_id, "result"
+        return Graph(nodes=nodes, edges=edges), roles
 
     def retrieve(
         self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
@@ -332,39 +562,11 @@ class RetrievalPipeline:
         in `credentials`, for example `{"anthropic_api_key": ...}`, never in
         the file.
         """
-        retrieve = self.config.retrieve
-        if retrieve is None:
-            raise ValueError(
-                "The pipeline file has no retrieve section, so there is nothing to "
-                "search with. Add retrieve: with at least a search step."
-            )
-        graph, roles = self.index.graph(self.index.indexed())
-        nodes, edges = list(graph.nodes), list(graph.edges)
+        graph, _ = self.graph(question, k)
+        return self._retrieval(graph, self.index.execute(graph, credentials))
 
-        use, settings = retrieve.rewrite or ("text", {})
-        nodes.append(Node("rewrite", Stage.QUERY, use, {**settings, "text": question}))
-        if use != "text":
-            # A rewrite may read the start of a document. With several, the
-            # ambient port cannot choose, so it reads the first one by id: the
-            # last step before its chunker.
-            first = min(doc_id for doc_id, _ in roles.values() if doc_id is not None)
-            doc = [n for n, (d, role) in roles.items() if d == first and role not in ("source", "chunk")][-1]
-            edges.append(Edge(doc, "rewrite", "doc"))
-
-        steps = [("search", Stage.RETRIEVE, *retrieve.search)]
-        steps += [(f"rerank.{n}", Stage.RERANK, *step) for n, step in enumerate(retrieve.rerank, 1)]
-        if k is not None:
-            node_id, stage, use, settings = steps[-1]
-            steps[-1] = (node_id, stage, use, {**settings, "top_k": k})
-        source, port = "index", "index"
-        for node_id, stage, use, settings in steps:
-            nodes.append(Node(node_id, stage, use, settings))
-            edges.append(Edge(source, node_id, port))
-            source, port = node_id, "result"
-
-        whole = Graph(nodes=nodes, edges=edges)
-        result = self.index.execute(whole, credentials)
-        by_id = {node.id: node for node in whole.nodes}
+    def _retrieval(self, graph: Graph, result: RunResult) -> Retrieval:
+        by_id = {node.id: node for node in graph.nodes}
 
         def stage_result(node_id: str) -> StageResult:
             return self.index.stage_result(by_id[node_id], node_id.split(".")[0], result)
@@ -373,10 +575,104 @@ class RetrievalPipeline:
             stages={
                 "rewrite": stage_result("rewrite"),
                 "search": stage_result("search"),
-                "rerank": [stage_result(f"rerank.{n}") for n in range(1, len(retrieve.rerank) + 1)],
+                "rerank": [
+                    stage_result(f"rerank.{n}")
+                    for n in range(1, len(self.config.retrieve.rerank) + 1)
+                ],
             },
             index=stage_result("index"),
         )
+
+
+class QueryPipeline:
+    """The answer step: `search` (the found pieces as they are) or `chat` (an
+    answer whose claims cite them), after the retrieval.
+
+    In code: `QueryPipeline(retrieval, answer=...)`, where `retrieval` is the
+    `RetrievalPipeline` whose results it answers from.
+    """
+
+    def __init__(self, retrieval: RetrievalPipeline, *, answer: Step) -> None:
+        base = to_dict(retrieval.config)
+        config = build(
+            path=retrieval.config.path,
+            models=retrieval.config.models,
+            index=base["index"],
+            retrieve=base["retrieve"],
+            answer=answer,
+        )
+        self._setup(config, retrieval)
+
+    @classmethod
+    def _of(cls, config: PipelineConfig, retrieval: RetrievalPipeline) -> QueryPipeline:
+        part = cls.__new__(cls)
+        part._setup(config, retrieval)
+        return part
+
+    def _setup(self, config: PipelineConfig, retrieval: RetrievalPipeline) -> None:
+        self.config = config
+        self.retrieval = retrieval
+        self.index = retrieval.index
+
+    @classmethod
+    def from_yaml(cls, file: str | Path) -> QueryPipeline:
+        """All three parts of the pipeline file at `file`."""
+        query = Pipeline.from_yaml(file).query
+        if query is None:
+            raise ValueError(f"{file} has no answer section.")
+        return query
+
+    def to_yaml(self, file: str | Path | None = None) -> str:
+        """All three parts as a file, also written to `file` if given."""
+        return _write(self.config, file)
+
+    def graph(self, question: str, k: int | None = None) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
+        """The retrieval's graph for `question` with the answer step at the end."""
+        graph, roles = self.retrieval.graph(question, k)
+        nodes, edges = list(graph.nodes), list(graph.edges)
+        last = graph.nodes[-1].id
+        use, settings = self.config.answer
+        nodes.append(Node("answer", Stage.USE_CASE, use, settings))
+        roles["answer"] = (None, "answer")
+        edges.append(Edge(last, "answer", "result"))
+        if use == "chat":
+            # chat finds each citation in the parsed document. With several
+            # documents the ambient port cannot choose, so, as for a rewrite,
+            # it reads the first one by id.
+            edges.append(Edge(_first_doc(roles), "answer", "doc"))
+        return Graph(nodes=nodes, edges=edges), roles
+
+    def ask(
+        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+    ) -> Answer:
+        """Retrieve for `question`, then run the answer step on what was found.
+
+        `k` and `credentials` work as for `RetrievalPipeline.retrieve`: chat's
+        model key goes in `credentials`, for example `{"anthropic_api_key":
+        ...}`. A search answer is cached like any step; a chat answer is a new
+        model call every time.
+        """
+        graph, _ = self.graph(question, k)
+        result = self.index.execute(graph, credentials)
+        answer = next(node for node in graph.nodes if node.id == "answer")
+        return Answer(
+            retrieval=self.retrieval._retrieval(graph, result),
+            answer=self.index.stage_result(answer, "answer", result),
+        )
+
+
+def _first_doc(roles: dict[str, tuple[str | None, str]]) -> str:
+    """The node holding the first document by id as parsed and cleaned: the
+    last step before its chunker."""
+    first = min(doc_id for doc_id, _ in roles.values() if doc_id is not None)
+    return [n for n, (d, role) in roles.items() if d == first and role not in ("source", "chunk")][-1]
+
+
+def _write(config: PipelineConfig, file: str | Path | None) -> str:
+    text = yaml.safe_dump(to_dict(config), sort_keys=False, allow_unicode=True)
+    if file is not None:
+        Path(file).write_text(text, encoding="utf-8")
+    return text
 
 
 def _files(paths: str | Path | list[str | Path]) -> list[tuple[str, Path]]:

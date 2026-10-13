@@ -26,8 +26,8 @@ EXTRAS = {
     "cross_encoder": "local",
 }
 
-#: Steps that call a chat model; their extra depends on the model's provider.
-CHAT_STEPS = ("llm_rewrite", "llm_rerank")
+#: Steps that call a chat model, by stage; their extra depends on the model's provider.
+CHAT_STEPS = {"llm_rewrite": "query", "llm_rerank": "rerank", "chat": "use_case"}
 
 
 def extras_for(config: PipelineConfig) -> list[str]:
@@ -39,6 +39,8 @@ def extras_for(config: PipelineConfig) -> list[str]:
     retrieve = config.retrieve
     if retrieve is not None:
         steps = [*([retrieve.rewrite] if retrieve.rewrite else []), retrieve.search, *retrieve.rerank]
+        if config.answer is not None:
+            steps.append(config.answer)
         for use, settings in steps:
             if use in CHAT_STEPS:
                 extras.add(_chat_extra(use, settings))
@@ -55,8 +57,7 @@ def _chat_extra(use: str, settings: dict) -> str:
     from pandion.registry import registry
 
     discover()
-    stage = Stage.QUERY if use == "llm_rewrite" else Stage.RERANK
-    model = registry.get(stage, use).config_model(**settings).model
+    model = registry.get(Stage(CHAT_STEPS[use]), use).config_model(**settings).model
     return "anthropic" if CHAT_MODELS[model].provider == "anthropic" else "openai"
 
 

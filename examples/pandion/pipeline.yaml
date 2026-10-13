@@ -31,3 +31,7 @@ retrieve:          # what p.retrieve runs; search_samples.py uses it
   rerank:          # none, one step, or a list run in order
     - use: mmr
       top_k: 5
+
+answer:            # what p.ask runs after retrieval; ask_samples.py uses it
+  use: search      # the pieces found, as they are; or chat, with a key
+  top_k: 3

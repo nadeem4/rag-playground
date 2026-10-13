@@ -20,7 +20,7 @@ that talks to the API.
 packages/pandion/  the engine as its own Python package, pandion: artifacts, transforms, the
                    graph, the executor, the content-addressed store, the embedding models
                    and their cache, the chat model client, and the pipeline file
-plugins/     the app's own steps: the use cases (search, chat, eval) and the demo switch
+plugins/     the app's own steps: the eval use case and the demo switch
 api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
 samples/     the bundled sample PDFs, each with its question set
@@ -35,14 +35,16 @@ package one stage at a time. The upload step (`pandion/plugins/source/`), the pa
 (`pandion/plugins/chunk/`), the lancedb index (`pandion/plugins/index/`), the query
 steps, `text` and `llm_rewrite` (`pandion/plugins/query/`), the retrievers, `dense`,
 `bm25` and `hybrid_rrf` (`pandion/plugins/retrieve/`), and the rerankers, `mmr`,
-`cross_encoder` and `llm_rerank` (`pandion/plugins/rerank/`), have moved,
+`cross_encoder` and `llm_rerank` (`pandion/plugins/rerank/`), and the answer steps,
+`search` and `chat` with its sentence-id grounding (`pandion/plugins/answer/`, still
+registered under the `use_case` stage), have moved,
 with the token counter the chunkers use (`pandion/tokenize.py`), the sentence splitter
-(`pandion/text.py`, which the app's chat grounding also uses), the embedding models
+(`pandion/text.py`, which the chat grounding also uses), the embedding models
 (`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
 model settings (`pandion/models.py`), the chat model client (`pandion/llm.py`) and the
 custom endpoint check (`pandion/endpoints.py`). The app's `plugins/` now holds only the
-use-case steps, `search`, `chat` and `eval` (`plugins/use_case/`), and
-`plugins/hosted_demo.py`, the demo switch the chat step reads. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
+`eval` use case (`plugins/use_case/eval.py`) and `plugins/hosted_demo.py`, the demo
+switch the app passes to every run. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
 `pandion[docling]`, `pandion[lancedb]`, `pandion[local]` for the local models, and
 `pandion[openai]` and `pandion[anthropic]` for the chat models), imported only when the
 step runs, and the app installs the extras it uses. The cleaners and the chunkers need only the standard library and Pydantic, so they
@@ -50,23 +52,33 @@ come with the base install. A moved stage can also run on its own, with no pipel
 no cache: `pandion.parse` parses one file, `pandion.clean` runs a list of cleaning steps
 on one document, in the order given, and `pandion.chunk` cuts one document into pieces
 with one chunker, and `pandion.rewrite` turns one question into the query retrieval
-searches with. `Pipeline.from_file("pipeline.yaml").index.run("docs/")` builds a whole
+searches with. `Pipeline.from_yaml("pipeline.yaml").index.run("docs/")` builds a whole
 index from a config file, through the executor and a store, so it caches every step.
+A pipeline has three parts, `IndexPipeline`, `RetrievalPipeline` and `QueryPipeline`,
+and can be written three ways: a YAML file, a dict per stage, or step classes such as
+`pandion.parse.Docling` (each the transform's own config model with its name added, made
+by `pandion.config.step_class`). Every way goes through `pandion.config.from_dict`, so
+the same settings give the same graph and the same artifact ids, and `to_yaml()` writes
+any of them back as a file. `pandion.parse`, `clean`, `chunk` and `rewrite` are modules
+that hold their stage's classes and still run one stage when called.
 `index.sync("docs/")` keeps that index in step with a folder: it records each document's
 content hash and pieces in `manifest.json` under the config's `path` (`pandion/manifest.py`),
 builds the index again from cached steps, reports what was added, changed, removed and
 unchanged, and deletes the previous index from the store. The app does not use sync.
 `p.retrieve(question, k=5)` searches that index with the file's `retrieve` section
 (rewrite, search, rerank) in one graph with the index steps, so the index is a cache hit,
-and returns the hits with every step's `StageResult`. The app does not use it either. The
+and returns the hits with every step's `StageResult`. `p.ask(question)` adds the file's
+`answer` step, `search` or `chat`, to that graph and returns an `Answer` with the
+answer step's output and every step's `StageResult`. The app uses neither. The
 app runs the same strategies through its pipeline graph, and
 `tests/integration/test_app_uses_pandion_chunkers.py`,
 `tests/integration/test_app_uses_pandion_index.py`,
 `tests/integration/test_app_uses_pandion_query.py`,
-`tests/integration/test_app_uses_pandion_retrievers.py` and
-`tests/integration/test_app_uses_pandion_rerankers.py` check both give the same pieces,
-the same index, the same query and the same hits, before and after a reranker. The
-`mmr` reranker and the app's `chat` step embed with the index's own model through two
+`tests/integration/test_app_uses_pandion_retrievers.py`,
+`tests/integration/test_app_uses_pandion_rerankers.py` and
+`tests/integration/test_app_uses_pandion_answer.py` check both give the same pieces,
+the same index, the same query, the same hits, before and after a reranker, and the same
+answer. The `mmr` reranker and the `chat` step embed with the index's own model through two
 public names of `pandion.plugins.retrieve`, `read_descriptor` and `embedder_for`.
 
 The package takes every folder as an argument. A run is handed the sources folder, the
@@ -81,9 +93,8 @@ The package never reads the demo switch either. A step that calls a chat model t
 `public_endpoints_only` from the run (and `pandion.llm` takes `public_only=`): when it is
 on, a custom endpoint must be a public https address, its client follows no redirects,
 and no message suggests setting a key on the server. `Deps.run_extras()` turns it on
-when `RAG_PLAYGROUND_DEMO` is `1`, and the app's own chat step reads the same switch
-from `plugins/hosted_demo.py`. The package's `llm_rewrite` and `llm_rerank` take it from
-the run. That check is the second line: the run routes still
+when `RAG_PLAYGROUND_DEMO` is `1`, read from `plugins/hosted_demo.py`. The package's
+`llm_rewrite`, `llm_rerank` and `chat` take it from the run. That check is the second line: the run routes still
 refuse a custom endpoint on the demo with a 403 first, and the second line reads the
 switch on its own, so it holds even if the first is lifted. API keys reach a run only as
 `context_extras["credentials"]`, never in a config or a hash.

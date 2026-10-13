@@ -111,14 +111,17 @@ the strategy's id in the API and in exported files.
 ## The pandion package
 
 The playground runs on `pandion`, its engine as a Python package. You can run one stage on
-its own, or build a whole index from a config file, and every step can be inspected.
+its own, or build a whole pipeline as a YAML file, as dicts or as classes, then index,
+search and ask. Every step can be inspected.
 
 ```python
-import pandion
+from pandion import Pipeline
+from pandion.parse import Pdfium
 
-doc = pandion.parse("samples/chunking-primer/chunking-primer.pdf", use="pdfium")
-pieces = pandion.chunk(doc, use="recursive_character", chunk_size=400)
-print(len(pieces.output.chunks), "pieces")
+p = Pipeline(path="./my-index", parse=Pdfium(), chunk="recursive_character",
+             embed="fake-deterministic", store="lancedb", search="bm25", answer="search")
+p.index.run("samples/chunking-primer/chunking-primer.pdf")
+print(p.ask("How big should a chunk be?").text)
 ```
 
 See the [pandion guide](docs/pandion.md). It is not on PyPI yet.
@@ -132,8 +135,8 @@ See the [pandion guide](docs/pandion.md). It is not on PyPI yet.
 - [Privacy](docs/privacy.md): what is kept in your browser and on the demo server, and
   for how long.
 - [Deploy](docs/deploy.md): Docker, demo mode, variables, and running your own Space.
-- [The pandion package](docs/pandion.md): run a stage on its own, or build an index from a
-  config file.
+- [The pandion package](docs/pandion.md): run a stage on its own, or build a pipeline in a
+  file or in code, then index, search and ask.
 - [Architecture](docs/architecture.md): the pipeline graph, plugins, the cache and the
   run stream.
 - [Lessons learned](docs/lessons-learned.md): real problems we hit building the pipeline,

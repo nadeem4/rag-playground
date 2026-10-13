@@ -14,7 +14,7 @@ A root conftest is imported before collection of any test module, so calling
 
 from __future__ import annotations
 
-from plugins import discover
+from api.steps import discover
 
 discover()
 

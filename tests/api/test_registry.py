@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plugins import PLUGIN_MODULES
+from api.steps import PLUGIN_MODULES
 
 
 def test_registry_lists_every_plugin_with_its_contract(client):

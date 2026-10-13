@@ -1,4 +1,7 @@
-"""Plugin discovery: import every plugin module so `@register` fires.
+"""Step discovery: import every step module so `@register` fires.
+
+The pipeline steps live in the pandion package (`pandion.plugins.*`); the app
+adds one of its own, `api.steps.eval`, the Evaluate step.
 
 **Explicit, not `pkgutil`.** The list below is the manifest, and a module that is
 not on it is not loaded. That reads as a maintenance burden until you notice what
@@ -20,7 +23,7 @@ from __future__ import annotations
 import importlib
 
 #: Every module that registers a transform, in stage order. Keep in sync with
-#: `plugins/*/*.py`; the discovery test enforces it. The `pandion.plugins.*`
+#: `api/steps/*.py`; the discovery test enforces it. The `pandion.plugins.*`
 #: entries are the strategies that moved into the pandion package; they keep
 #: their place here, so the registry lists the stages in the same order as
 #: before.
@@ -47,7 +50,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.rerank.llm_rerank",
     "pandion.plugins.answer.search",
     "pandion.plugins.answer.chat",
-    "plugins.use_case.eval",
+    "api.steps.eval",
 )
 
 _discovered = False

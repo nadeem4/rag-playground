@@ -36,6 +36,16 @@ def enabled() -> bool:
     return os.environ.get(ENV_VAR) == "1"
 
 
+def public_endpoints_only() -> bool:
+    """The second line of the custom endpoint ban: on the demo, a custom endpoint
+    must be a public https address (`pandion.endpoints`).
+
+    It reads the environment itself, not `enabled()`, which the routes' 403s
+    read, so it holds even if that first line is lifted.
+    """
+    return os.environ.get(ENV_VAR) == "1"
+
+
 def limits() -> dict[str, int]:
     return {
         "max_bytes": MAX_UPLOAD_BYTES,

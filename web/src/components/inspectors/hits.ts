@@ -83,7 +83,7 @@ export function stripHeadingMarks(text: string): string {
   return body.trim() ? body : text.replace(/^[ \t]*#{1,6}[ \t]+/gm, "")
 }
 
-/** A row of the `search` use case's output (plugins/use_case/search.py). */
+/** A row of the `search` use case's output (pandion/plugins/answer/search.py). */
 export interface SearchRow {
   rank: number
   score: number

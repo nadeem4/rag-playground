@@ -7,7 +7,7 @@ mocked to answer 127.0.0.1, as a DNS name pointed at the host would.
 
 pandion never reads the demo switch. The package's chat, llm_rewrite and
 llm_rerank get it from the run, as `context_extras["public_endpoints_only"]`,
-which the app sets in `Deps.run_extras()` from `plugins.hosted_demo`.
+which the app sets in `Deps.run_extras()` from the demo switch.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from pandion.executor import NodeStatus, run
 from pandion.graph import Graph, Node
 from pandion.plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
 from pandion.ports import Stage
-from plugins import hosted_demo
 from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
 from tests.plugins.rerank_fakes import QUESTION, payload
 from tests.plugins.rerank_fakes import ctx as rerank_ctx
@@ -98,7 +97,7 @@ def test_on_the_demo_every_run_asks_for_public_endpoints_only(monkeypatch, tmp_p
 
 
 def test_the_run_extra_holds_even_if_the_route_ban_is_lifted(monkeypatch, tmp_path):
-    """The 403 reads `api.demo`; the second line reads its own switch."""
+    """The 403 reads `api.demo.enabled()`; the second line reads `public_endpoints_only()`."""
     deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr(api_demo, "enabled", lambda: False)
@@ -118,9 +117,6 @@ def test_a_demo_run_of_llm_rewrite_fails_on_a_private_endpoint(demo, tmp_path):
     assert DEMO_ENDPOINT_ERROR in (result.nodes["q"].error or "")
     assert demo == []
 
-
-def test_the_demo_switch_is_the_same_one_the_api_reads():
-    assert hosted_demo.ENV_VAR == api_demo.ENV_VAR
 
 
 def test_a_demo_run_of_llm_rerank_fails_on_a_private_endpoint(demo, tmp_path):

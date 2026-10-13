@@ -18,7 +18,6 @@ from api import demo, visitor
 from api.credentials import PROVIDERS, redact, resolve_key, server_source
 from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.llm import openai_client_kwargs
-from plugins import hosted_demo
 
 router = APIRouter()
 
@@ -80,7 +79,7 @@ def check_llm_key(
         if not body.base_url:
             return {"ok": False, "source": source, "error": NO_BASE_URL}
         try:
-            guard_endpoint(body.base_url, public_only=hosted_demo.enabled())
+            guard_endpoint(body.base_url, public_only=demo.public_endpoints_only())
         except EndpointRefused as exc:
             return {"ok": False, "source": source, "error": str(exc)}
     elif not key:
@@ -102,7 +101,7 @@ def check_llm_key(
                     key,
                     base_url,
                     openrouter=provider == "openrouter",
-                    public_only=hosted_demo.enabled(),
+                    public_only=demo.public_endpoints_only(),
                 ),
                 "max_retries": 0,
                 "timeout": 15.0,

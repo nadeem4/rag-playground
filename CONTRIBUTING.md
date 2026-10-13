@@ -97,10 +97,10 @@ Follow test-driven development: write the failing test first, then the code.
 A strategy is one Python module. The web app builds its settings form from the config
 model, so a new strategy needs no frontend change.
 
-1. Create `plugins/<stage>/<name>.py` (or, for a stage that has moved into the engine
-   package, such as parse, clean, chunk, index, query, retrieve, rerank and the answer steps
-   (`search` and `chat`, in `plugins/answer/`), `packages/pandion/src/pandion/plugins/<stage>/<name>.py`) with a Pydantic config model and a `Transform`
-   subclass decorated with `@register`. Give every config field a default. Give the class:
+1. Create `packages/pandion/src/pandion/plugins/<stage>/<name>.py` with a Pydantic config
+   model and a `Transform` subclass decorated with `@register`. Every stage lives in the
+   package. Only a step that belongs to the playground alone, like the Evaluate step, goes in
+   the app, as `api/steps/<name>.py`. Give every config field a default. Give the class:
    - a `summary` of how the strategy works, in one or two plain sentences;
    - an `explain(config)` that says what these settings will do. Every number, switch and
      choice must change the explanation, unless it is listed in `EXPLAIN_EXEMPT` with a
@@ -118,8 +118,8 @@ model, so a new strategy needs no frontend change.
      stays selectable, tagged "Falls back";
    - `deterministic = False` if its output can change between runs (a model call), and
      `cacheable = False` if its output should never be reused, as for chat answers.
-2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py` (a package strategy goes
-   in `pandion/plugins/__init__.py` as well). A test fails if a plugin module exists but
+2. Add the module to `PLUGIN_MODULES` in `pandion/plugins/__init__.py` and in the app's
+   `api/steps/__init__.py`. A test fails if a plugin module exists but
    is not listed. Import a heavy library inside the function that uses it, through
    `pandion.errors.require`, so discovering the strategy needs no extra. A package
    strategy also gets a step class, one line in its stage's module (for example

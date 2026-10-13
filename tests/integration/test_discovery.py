@@ -1,6 +1,6 @@
 """Discovery is complete.
 
-A plugin module that nobody wired into `plugins.discover()` must fail, not
+A plugin module that nobody wired into `api.steps.discover()` must fail, not
 vanish: otherwise it would also vanish from the contract suite, which
 parametrizes over the registry and would report it as covered by saying nothing
 about it. That the engine never imports the app is checked in the package's own
@@ -16,23 +16,18 @@ import pytest
 from pandion.ports import STAGE_OUTPUT
 from pandion.registry import registry
 from pandion.plugins import PLUGIN_MODULES as PANDION_MODULES
-from plugins import PLUGIN_MODULES, discover
+from api.steps import PLUGIN_MODULES, discover
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def plugin_module_names() -> list[str]:
-    """Every `plugins/<stage>/<name>.py` that is meant to register something.
-
-    `__init__.py` holds package-level helpers and `_`-prefixed modules are
-    private shared code, so neither is expected to register a transform.
-    """
-    out: list[str] = []
-    for path in sorted((ROOT / "plugins").glob("*/*.py")):
-        if path.name == "__init__.py" or path.name.startswith("_"):
-            continue
-        out.append(f"plugins.{path.parent.name}.{path.stem}")
-    return out
+    """Every `api/steps/<name>.py`: the app's own steps, each meant to register something."""
+    return [
+        f"api.steps.{path.stem}"
+        for path in sorted((ROOT / "api" / "steps").glob("*.py"))
+        if path.name != "__init__.py"
+    ]
 
 
 def registered_modules() -> set[str]:
@@ -47,7 +42,7 @@ def registered_modules() -> set[str]:
 def test_manifest_lists_every_plugin_module():
     own = [m for m in PLUGIN_MODULES if not m.startswith("pandion.")]
     assert sorted(own) == sorted(plugin_module_names()), (
-        "plugins/__init__.py's PLUGIN_MODULES is out of sync with the files on "
+        "api/steps/__init__.py's PLUGIN_MODULES is out of sync with the files on "
         "disk — a plugin that is not discovered is also not contract-tested"
     )
 
@@ -56,7 +51,7 @@ def test_manifest_lists_every_plugin_module():
 def test_every_plugin_module_registers_a_transform(module):
     assert module in registered_modules(), (
         f"{module} defines no registered transform, or is missing from "
-        "plugins.PLUGIN_MODULES"
+        "api.steps.PLUGIN_MODULES"
     )
 
 

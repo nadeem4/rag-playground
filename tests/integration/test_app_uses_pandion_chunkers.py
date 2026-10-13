@@ -52,7 +52,11 @@ def test_the_app_registry_has_no_chunker_of_its_own():
 
 
 def test_the_old_chunk_module_is_gone():
-    assert importlib.util.find_spec("plugins.chunk") is None
+    try:
+        spec = importlib.util.find_spec("plugins.chunk")
+    except ModuleNotFoundError:  # its parent package is gone too
+        spec = None
+    assert spec is None
 
 
 @pytest.fixture

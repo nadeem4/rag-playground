@@ -142,7 +142,7 @@ def pick_passage(
 
 def record() -> dict:
     """Run every strategy over every question and return the lesson's summary."""
-    import plugins
+    import api.steps
     from pandion.executor import run
     from pandion.registry import registry
     from pandion.storage import Store
@@ -150,7 +150,7 @@ def record() -> dict:
     from api.deps import build_deps
     from pandion.sources import Sources
 
-    plugins.discover()
+    api.steps.discover()
     questions = json.loads(QUESTIONS_FILE.read_text(encoding="utf-8"))
     pdf = SAMPLE.read_bytes()
     sha = hashlib.sha256(pdf).hexdigest()

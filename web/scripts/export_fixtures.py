@@ -7,7 +7,7 @@ hand: every shape in `web/src/api/fixtures/` is exactly what the API will serve.
 
 What it does:
 
-1. `plugins.discover()` then `registry.export_schema()` -> `registry.json`.
+1. `api.steps.discover()` then `registry.export_schema()` -> `registry.json`.
 2. Builds a three-page technical PDF with the same generator the plugin tests use
    (`tests/plugins/conftest.py::build_paragraph_pdf`), typeset with real
    paragraph spacing (a larger gap between paragraphs than between lines), a
@@ -51,7 +51,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import plugins  # noqa: E402
+import api.steps  # noqa: E402
 from pandion.artifacts import ArtifactType  # noqa: E402
 from pandion.executor import run  # noqa: E402
 from pandion.graph import Edge, Graph, Node  # noqa: E402
@@ -60,7 +60,7 @@ from pandion.registry import registry  # noqa: E402
 from pandion.storage import Store  # noqa: E402
 from api.deps import build_deps
 from pandion.sources import Sources
-from plugins.use_case.chat import ChatConfig, ChatUseCase  # noqa: E402
+from pandion.plugins.answer.chat import ChatConfig, ChatUseCase  # noqa: E402
 from pandion import llm  # noqa: E402
 from tests.plugins.conftest import build_paragraph_pdf  # noqa: E402
 
@@ -256,7 +256,7 @@ def dump(name: str, data: object) -> None:
 
 
 def main() -> None:
-    plugins.discover()
+    api.steps.discover()
     OUT.mkdir(parents=True, exist_ok=True)
     dump("registry.json", registry.export_schema())
 

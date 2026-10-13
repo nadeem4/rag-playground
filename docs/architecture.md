@@ -20,8 +20,8 @@ that talks to the API.
 packages/pandion/  the engine as its own Python package, pandion: artifacts, transforms, the
                    graph, the executor, the content-addressed store, the embedding models
                    and their cache, the chat model client, and the pipeline file
-plugins/     the app's own steps: the eval use case and the demo switch
-api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode
+api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode,
+             and the app's own step, eval, in api/steps/
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
 samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
@@ -42,9 +42,8 @@ with the token counter the chunkers use (`pandion/tokenize.py`), the sentence sp
 (`pandion/text.py`, which the chat grounding also uses), the embedding models
 (`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
 model settings (`pandion/models.py`), the chat model client (`pandion/llm.py`) and the
-custom endpoint check (`pandion/endpoints.py`). The app's `plugins/` now holds only the
-`eval` use case (`plugins/use_case/eval.py`) and `plugins/hosted_demo.py`, the demo
-switch the app passes to every run. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
+custom endpoint check (`pandion/endpoints.py`). The app keeps only one step of its own, the
+`eval` use case (`api/steps/eval.py`), because it belongs to the Evaluate page. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
 `pandion[docling]`, `pandion[lancedb]`, `pandion[local]` for the local models, and
 `pandion[openai]` and `pandion[anthropic]` for the chat models), imported only when the
 step runs, and the app installs the extras it uses. The cleaners and the chunkers need only the standard library and Pydantic, so they
@@ -93,7 +92,7 @@ The package never reads the demo switch either. A step that calls a chat model t
 `public_endpoints_only` from the run (and `pandion.llm` takes `public_only=`): when it is
 on, a custom endpoint must be a public https address, its client follows no redirects,
 and no message suggests setting a key on the server. `Deps.run_extras()` turns it on
-when `RAG_PLAYGROUND_DEMO` is `1`, read from `plugins/hosted_demo.py`. The package's
+when `RAG_PLAYGROUND_DEMO` is `1`, read by `api.demo.public_endpoints_only()`. The package's
 `llm_rewrite`, `llm_rerank` and `chat` take it from the run. That check is the second line: the run routes still
 refuse a custom endpoint on the demo with a 403 first, and the second line reads the
 switch on its own, so it holds even if the first is lifted. API keys reach a run only as
@@ -158,12 +157,13 @@ several times, for example two cleaners in a row.
 
 ## Plugins
 
-A strategy is one Python module under `plugins/<stage>/`. It defines a Pydantic config
+A strategy is one Python module under `packages/pandion/src/pandion/plugins/<stage>/`,
+or, for the app's own `eval` step, under `api/steps/`. It defines a Pydantic config
 model and a `Transform` subclass registered with `@register`. The class declares its
 stage, its input ports, its output type, a `summary`, and an `explain(config)` that says
 what these settings will do.
 
-- `plugins/__init__.py` lists every module in `PLUGIN_MODULES`. A test fails if a plugin
+- `api/steps/__init__.py` lists every module the app loads in `PLUGIN_MODULES`. A test fails if a plugin
   module exists but is not listed.
 - `GET /api/registry` exports every transform with its summary, its config's JSON schema,
   and what it requires, provides and prefers. The web app builds every settings form from

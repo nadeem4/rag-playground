@@ -1,8 +1,8 @@
 """The package stands on its own: nothing in it imports the app.
 
-The RAG Playground (`api`, `plugins`, `providers`) depends on pandion, never
-the other way round. `core` is listed too, because that is where the engine
-lived before it moved here.
+The RAG Playground (`api`) depends on pandion, never the other way round.
+`core`, `plugins` and `providers` are listed too, because that is where the
+engine lived before it moved here.
 """
 
 from __future__ import annotations

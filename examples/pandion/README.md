@@ -27,6 +27,10 @@ question; and one builds the same pipeline three ways.
   stage and as classes, in one folder. The first indexes and asks; the other two find every
   step already stored. It prints that the artifact ids match, then the classes pipeline
   written back as YAML.
+- [`own_strategies/`](own_strategies): writes your own strategy for every stage, from
+  the source to the answer, and runs them from a pipeline file (`run_yaml.py`) and mixed
+  with built-in steps in code (`run_mixed.py`). Nothing is downloaded. Its README walks
+  through it stage by stage.
 
 From the root of the repo:
 

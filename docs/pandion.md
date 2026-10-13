@@ -602,8 +602,52 @@ pandion install pipeline.yaml --print
 Every stage takes a strategy, and you can write your own. A strategy is a class that
 subclasses `pandion.extend.Transform`. You say which stage it is for, what it reads, and
 what its settings are, and you write `apply()`. Then `@register` makes its `name` work in
-a pipeline file and in `Pipeline(...)`, the same as a built-in. A full guide with one
-example per stage will be added here.
+a pipeline file and in `Pipeline(...)`, the same as a built-in.
+
+[`examples/pandion/own_strategies/`](../examples/pandion/own_strategies) writes one
+strategy for every stage, from the source to the answer, and runs them from a pipeline
+file and from code. It needs no download and no network. Its README walks through it
+stage by stage.
+
+Every strategy follows the same pattern:
+
+1. A settings model: a pydantic `BaseModel` where every field has a default, so the step
+   runs with no settings at all. A strategy with no settings still has an empty model.
+2. A class that subclasses `Transform[YourSettings]` and sets:
+   - `name`, the name you write after `use:`;
+   - `stage`, one of `Stage.SOURCE`, `PARSE`, `CLEAN`, `CHUNK`, `INDEX`, `QUERY`,
+     `RETRIEVE`, `RERANK` or `USE_CASE`;
+   - `inputs`, the ports it reads, each a `PortSpec` (see the table below);
+   - `output`, which the stage fixes (a parser must make a `PARSED_DOC`, and so on);
+   - `config_model`, the settings model;
+   - `summary`, one plain sentence saying what it does.
+3. `apply(self, inputs, config, ctx)`, which gets the inputs by port name, the settings as
+   an instance of your model, and the run's context, and returns the stage's output. Return
+   the payload as a dict, for example `doc.model_dump(mode="json")`.
+4. `@register` on the class.
+
+A mistake in the class, such as a stage with the wrong output or a setting with no
+default, is a `TypeError` when the module is imported, so it never reaches a pipeline.
+
+The ports each stage reads:
+
+| Stage | `stage =` | Reads (port: what) | Returns |
+|---|---|---|---|
+| source | `Stage.SOURCE` | nothing; the document is the `location` setting | `raw_file(ctx, data, filename)` |
+| parse | `Stage.PARSE` | `file`: a dict with `sha`, `filename`, `path` and `mime` | `ParsedDoc` |
+| clean | `Stage.CLEAN` | `doc`: a `ParsedDoc` | `ParsedDoc` |
+| chunk | `Stage.CHUNK` | `doc`: a `ParsedDoc` | `ChunkSet` |
+| store | `Stage.INDEX` | `chunks`: a list of `ChunkSet`, one per document (`variadic=True`) | a function that writes into a folder |
+| rewrite | `Stage.QUERY` | nothing; the question is the `text` setting; `doc` if declared | `Query` |
+| search | `Stage.RETRIEVE` | `index`: the store's folder; `query`: a `Query` (`ambient=True`) | `RetrievalResult` |
+| rerank | `Stage.RERANK` | `result`: a `RetrievalResult` | `RetrievalResult` |
+| answer | `Stage.USE_CASE` | `result`: a `RetrievalResult`; `doc` if declared | `Output` |
+
+An `ambient=True` port is found for you: the `query` port is filled by the rewrite step
+without any wiring. Everything in the table, and `register`, `set_note`, `get_embedder`
+and `raw_file`, comes from `pandion.extend`.
+
+A short parser, for a start:
 
 ```python
 from pathlib import Path
@@ -724,6 +768,46 @@ read, so a mismatch is refused before anything runs, for example: "retrieve.sear
 'my_store', which has backends dense." So a new store in another format brings its own
 retriever, whose `requires` asks for what that store provides.
 
+```python
+class JsonlStore(Transform[JsonlStoreConfig]):
+    stage = Stage.INDEX
+    provides = {"backends": ["dense"]}
+    ...
+
+class JsonlSearch(Transform[JsonlSearchConfig]):
+    stage = Stage.RETRIEVE
+    inputs = {"index": PortSpec(ArtifactType.INDEX), "query": PortSpec(ArtifactType.QUERY, ambient=True)}
+    requires = {"index": {"backends": ["dense"]}}
+    ...
+```
+
+A store returns a function that takes a folder and writes the index into it. Do the work,
+such as embedding, in `apply()`, so a failure is reported as the store's failure, and let
+the function only write files. Pandion keeps the folder with the other results, and the
+retriever gets the same folder as `inputs["index"]`, so it reads its files with
+`Path(inputs["index"]) / "pieces.jsonl"`. A store with an `embedder` setting gets it from
+`embed:`, so write the embedder's name into the folder too, and the retriever can embed
+the question with the same one. To make a new embedder revision build a new index, return
+`get_embedder(config.embedder).fingerprint()` from the store's `fingerprint()`.
+
+### A rewrite and an answer
+
+A rewrite step has a `text: str = ""` setting, and Pandion puts the question there when
+you call `p.retrieve` or `p.ask`, so the file never sets it. It returns a `Query`: put the
+question to search with in `text`, and the question as typed in `original`, which the
+answer uses.
+
+An answer step returns `Output(kind=..., payload={...})`. Put the answer as text in
+`payload["text"]`, and `p.ask(question).text` gives it back.
+
+A rewrite or an answer gets the parsed document only when it declares a `doc` input:
+`inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC, ambient=True, required=False)}`. With
+several documents, it gets the first one by id.
+
+Any step can record one plain sentence about what it did with `set_note(ctx, "...")`, for
+example a cleaner saying how many blocks it removed. The note is shown with the step's
+result, as `StageResult.note`.
+
 ## Loading your strategies
 
 A strategy only works by name once the module that registers it has been imported. There are
@@ -798,3 +882,8 @@ every step was reused. `ask_samples.py` asks the samples a question and prints t
 found, and with `ANTHROPIC_API_KEY` set, Claude's answer with citations.
 `three_styles.py` builds the same pipeline as a file, as dicts and as classes, and prints
 that the artifact ids match. A test runs all six, so they stay correct.
+
+[`examples/pandion/own_strategies/`](../examples/pandion/own_strategies) writes a
+strategy for every stage and runs them from a pipeline file (`run_yaml.py`) and mixed with
+built-in steps in code (`run_mixed.py`). A test runs both, and the install check runs
+`run_yaml.py` against the built package.

@@ -1,0 +1,16 @@
+# A pipeline where every stage uses a strategy from my_strategies/.
+plugins: [my_strategies]       # imported first, so the names below exist
+path: ./work/index             # run_yaml.py points this at its --work folder
+index:
+  source: {use: folder_of_text, suffix: .md}
+  parse: {use: markdown}
+  clean:
+    - {use: drop_short, min_chars: 20}
+  chunk: {use: per_block}
+  embed: {use: letter_counts}  # fills in jsonl_store's embedder setting
+  store: {use: jsonl_store}
+retrieve:
+  rewrite: {use: lowercase}
+  search: {use: jsonl_search, top_k: 3}
+  rerank: {use: shortest_first, top_k: 3}
+answer: {use: bullets, top_k: 3}

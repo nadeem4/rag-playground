@@ -129,6 +129,9 @@ print(p.ask("What does the report recommend?").text)
 
 The [Pandion guide](docs/pandion.md) covers every step, setting and error, and
 [examples/pandion/](examples/pandion) has scripts that index, sync, search and ask.
+To write your own strategy for any step, start from
+[examples/pandion/own_strategies/](examples/pandion/own_strategies), which replaces the
+strategy at every step and runs with no download.
 
 ## What's inside
 

@@ -206,6 +206,33 @@ def test_two_designed_misses_one_per_side_each_described_in_the_card(name):
         assert t["why"] and t["fix_text"]
 
 
+#: Shorter than this, a paragraph's last line is a fragment. On the Space,
+#: Docling's layout model moved three such fragments from page 3 of the primer
+#: into one block of their own, so a sentence that ended on one was cut in two.
+SHORT_LINE = 45
+
+
+@pytest.mark.parametrize("name", TEXT_SAMPLES)
+def test_no_answer_to_be_found_ends_on_a_short_last_line(name):
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(_folder(name) / f"{name}.pdf"))
+    try:
+        lines = [" ".join(line.split()) for page in doc for line in page.get_textpage().get_text_range().splitlines()]
+    finally:
+        doc.close()
+    short = [line for line in lines if 0 < len(line) < SHORT_LINE]
+    designed = _designed(name)
+    for q in _questions(name):
+        if q["id"] in designed:
+            continue
+        for gold in q.get("gold_answers") or [q["gold_answer"]]:
+            gold = " ".join(gold.split())
+            # A table cell is its own short line on purpose; only a sentence's tail is at risk.
+            tails = [line for line in short if gold.endswith(line) and " " in line and len(line) < len(gold)]
+            assert not tails, f"{q['id']} ends on the short line {tails[0]!r}"
+
+
 def test_every_scanned_question_is_planted_to_miss_without_a_text_layer():
     assert _designed(SCANNED) == {q["id"] for q in _questions(SCANNED)}
     for q in _questions(SCANNED):

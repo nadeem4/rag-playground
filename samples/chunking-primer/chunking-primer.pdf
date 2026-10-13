@@ -74,10 +74,10 @@ endobj
 << /Length 2815 >>
 stream
 BT /F2 15 Tf 72 720 Td (Structure-aware splitting) Tj ET
-BT /F1 11 Tf 72 691 Td (Fixed-size splitting ignores the document's own shape. Structure-aware splitting uses) Tj ET
-BT /F1 11 Tf 72 676 Td (it: headings, paragraphs, list items and tables become the natural places to cut. A) Tj ET
-BT /F1 11 Tf 72 661 Td (section under one heading usually discusses one subject, which is exactly what a good) Tj ET
-BT /F1 11 Tf 72 646 Td (chunk should do.) Tj ET
+BT /F1 11 Tf 72 691 Td (A section under one heading usually discusses one subject, which is exactly what a good) Tj ET
+BT /F1 11 Tf 72 676 Td (chunk should do. Fixed-size splitting ignores the document's own shape. Structure-aware) Tj ET
+BT /F1 11 Tf 72 661 Td (splitting uses it: headings, paragraphs, list items and tables become the natural places) Tj ET
+BT /F1 11 Tf 72 646 Td (to cut.) Tj ET
 BT /F1 11 Tf 72 622 Td (This only works when the parser recovers the structure. A layout-aware parser labels) Tj ET
 BT /F1 11 Tf 72 607 Td (headings, footers and tables, while a plain text extractor returns a flat stream of) Tj ET
 BT /F1 11 Tf 72 592 Td (lines. Cleaning comes next: running headers, footers and page numbers are removed, so) Tj ET

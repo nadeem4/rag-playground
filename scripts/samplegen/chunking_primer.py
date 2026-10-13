@@ -170,10 +170,13 @@ PAGES: list[list[tuple[tuple, str]]] = [
         (HEADING, "Structure-aware splitting"),
         (
             BODY,
-            "Fixed-size splitting ignores the document's own shape. Structure-aware "
-            "splitting uses it: headings, paragraphs, list items and tables become the "
-            "natural places to cut. A section under one heading usually discusses one "
-            "subject, which is exactly what a good chunk should do.",
+            # The answer to heading-sections opens the section, right under its
+            # heading, and never sits on a short last line: on the Space, Docling
+            # moved such lines into a block of their own.
+            "A section under one heading usually discusses one subject, which is exactly "
+            "what a good chunk should do. Fixed-size splitting ignores the document's own "
+            "shape. Structure-aware splitting uses it: headings, paragraphs, list items "
+            "and tables become the natural places to cut.",
         ),
         (
             BODY,

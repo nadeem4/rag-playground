@@ -1,5 +1,5 @@
 {
- "recorded_on": "2026-10-10",
+ "recorded_on": "2026-10-13",
  "chunker": {
   "chunker": "recursive_character",
   "chunk_size": 400,
@@ -17,14 +17,14 @@
    "question": "How long did the survey run?",
    "parsers": {
     "pdfium": {
-     "ms": 102,
+     "ms": 72,
      "chars": 11745,
      "hits": 4,
      "ocr": false,
      "excerpt": "Reading order in two-column reports The survey ran for six weeks. Two hundred Errors followed the same pattern. When a readers took part, and each read the same"
     },
     "docling": {
-     "ms": 3928,
+     "ms": 4806,
      "chars": 11719,
      "hits": 10,
      "ocr": false,
@@ -42,14 +42,14 @@
    "question": "How many readers lost their place before and after the reset?",
    "parsers": {
     "pdfium": {
-     "ms": 191,
+     "ms": 69,
      "chars": 7292,
      "hits": 10,
      "ocr": false,
      "excerpt": "Measure Before After Change Reading time per page 84 s 61 s -27% Readers who lost their place 41 16 -61% Questions answered correctly 72% 88% +16 pts Pages rer"
     },
     "docling": {
-     "ms": 5145,
+     "ms": 5009,
      "chars": 8086,
      "hits": 10,
      "ocr": false,
@@ -67,14 +67,14 @@
    "question": "What does a scanner actually do to a page?",
    "parsers": {
     "pdfium": {
-     "ms": 82,
+     "ms": 43,
      "chars": 0,
      "hits": 0,
      "ocr": false,
      "excerpt": null
     },
     "docling": {
-     "ms": 13619,
+     "ms": 14045,
      "chars": 5760,
      "hits": 8,
      "ocr": true,
@@ -86,21 +86,21 @@
  "baseline": {
   "name": "chunking-primer",
   "title": "A primer on chunking",
-  "sha": "94282f52781e91a862fe99e44140167e890aeb2643d0564888bebe3b6da13567",
+  "sha": "2a1919e3d05c624f4e1e58ed36c3faa97ad4bcab6b8638e9342a110615f6e3bd",
   "filename": "chunking-primer.pdf",
   "pages": 6,
   "questions": 12,
   "question": "What are the two steps a retrieval-augmented system takes to answer a question?",
   "parsers": {
    "pdfium": {
-    "ms": 115,
+    "ms": 75,
     "chars": 11482,
     "hits": 10,
     "ocr": false,
     "excerpt": "Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it a"
    },
    "docling": {
-    "ms": 3916,
+    "ms": 4570,
     "chars": 11207,
     "hits": 10,
     "ocr": false,

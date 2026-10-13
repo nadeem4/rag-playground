@@ -25,10 +25,12 @@ answer:                     # optional: what p.ask runs after retrieval
 
 Every key under a step other than `use` is a setting of that step, with the
 same name as in its config model, so a file and the same pipeline built in the
-RAG Playground hash to the same artifact ids. `embed` and `store` are one step
-when it runs: the lancedb index embeds while it writes, so `embed.use` becomes
-its `embedder` setting. A relative `path` or `models.cache_dir` is read from
-the folder the file is in.
+RAG Playground hash to the same artifact ids. `store` takes any index
+strategy. `embed` and `store` are one step when it runs: a store with an
+`embedder` setting (such as lancedb) embeds while it writes, so `embed.use`
+becomes that setting and `embed` is required; a store without one embeds by
+itself, so `embed` is left out. A relative `path` or `models.cache_dir` is
+read from the folder the file is in.
 
 The question is not part of the file: it is passed to `p.retrieve` or `p.ask`,
 which put it in the query step's `text`. A model's key is never in the file
@@ -65,8 +67,8 @@ from pandion.stages import _strategy
 TOP_KEYS = ("plugins", "path", "models", "index", "retrieve", "answer")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
 INDEX_KEYS = ("parse", "clean", "chunk", "embed", "store")
+#: Settings written under `embed` that the store receives with `embedder`.
 EMBED_KEYS = ("truncate_dim",)
-STORE_KEYS = ("metric", "build_fts")
 #: The answer steps. `eval` is a use case too, but it scores, it does not answer.
 ANSWER_STEPS = ("search", "chat")
 
@@ -92,9 +94,12 @@ class IndexConfig:
 
     parse: tuple[str, dict[str, Any]]
     chunk: tuple[str, dict[str, Any]]
-    #: The lancedb index's settings, with `embedder` taken from `embed.use`.
+    #: The store's settings, with `embedder` taken from `embed.use` when the
+    #: store has that setting.
     store: dict[str, Any]
     clean: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    #: The index strategy that stores the pieces.
+    store_use: str = "lancedb"
 
 
 @dataclass
@@ -207,8 +212,10 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     """`config` in the file's shape: `from_dict` of it gives `config` again."""
     index = config.index
     store = dict(index.store)
-    embed = {"use": store.pop("embedder")}
-    embed.update({key: store.pop(key) for key in EMBED_KEYS if key in store})
+    embed = None
+    if "embedder" in store:
+        embed = {"use": store.pop("embedder")}
+        embed.update({key: store.pop(key) for key in EMBED_KEYS if key in store})
     data: dict[str, Any] = {}
     if config.plugins:
         data["plugins"] = list(config.plugins)
@@ -219,7 +226,10 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     data["index"] = {"parse": _out(index.parse)}
     if index.clean:
         data["index"]["clean"] = [_out(step) for step in index.clean]
-    data["index"].update(chunk=_out(index.chunk), embed=embed, store={"use": "lancedb", **store})
+    data["index"]["chunk"] = _out(index.chunk)
+    if embed is not None:
+        data["index"]["embed"] = embed
+    data["index"]["store"] = {"use": index.store_use, **store}
     if config.retrieve is not None:
         retrieve = config.retrieve
         data["retrieve"] = {}
@@ -308,16 +318,18 @@ def _answer(answer: Any) -> tuple[str, dict[str, Any]]:
 
 def _index(index: Any) -> IndexConfig:
     _keys(index, INDEX_KEYS, "index")
-    for stage in ("parse", "chunk", "embed", "store"):
+    for stage in ("parse", "chunk", "store"):
         if stage not in index:
             raise ConfigError(
-                f"The index has no {stage} step. An index needs parse, chunk, "
-                "embed and store; clean may be left out."
+                f"The index has no {stage} step. An index needs parse, chunk "
+                "and store, and embed when the store takes an embedder; clean "
+                "may be left out."
             )
     discover()
     steps = index.get("clean") or []
     if not isinstance(steps, list):
         raise ConfigError("index.clean must be a list of cleaners, each with use.")
+    store_use, store = _store(index.get("embed"), index["store"])
     return IndexConfig(
         parse=_step(Stage.PARSE, index["parse"], "index.parse"),
         clean=[
@@ -325,7 +337,8 @@ def _index(index: Any) -> IndexConfig:
             for n, step in enumerate(steps, start=1)
         ],
         chunk=_step(Stage.CHUNK, index["chunk"], "index.chunk"),
-        store=_store(index["embed"], index["store"]),
+        store=store,
+        store_use=store_use,
     )
 
 
@@ -373,24 +386,48 @@ def _step(stage: Stage, step: Any, where: str) -> tuple[str, dict[str, Any]]:
     return use, settings
 
 
-def _store(embed: Any, store: Any) -> dict[str, Any]:
-    embedder, embed_settings = _use(embed, "index.embed")
+def _store(embed: Any, store: Any) -> tuple[str, dict[str, Any]]:
+    """The store step, with the embedder merged in when the store takes one."""
     kind, store_settings = _use(store, "index.store")
-    if embedder not in embedder_names():
-        raise ConfigError(
-            f"index.embed uses '{embedder}', which is not an embedder. "
-            f"The embedders are: {', '.join(embedder_names())}."
-        )
-    if kind != "lancedb":
-        raise ConfigError(f"index.store uses '{kind}'. The only store is lancedb.")
-    _keys(embed_settings, EMBED_KEYS, "index.embed")
-    _keys(store_settings, STORE_KEYS, "index.store")
-    settings = {"embedder": embedder, **embed_settings, **store_settings}
     try:
-        _strategy(Stage.INDEX, "lancedb", settings, where="index.store")
+        cls = registry.get(Stage.INDEX, kind)
+    except UnknownTransformError:
+        known = ", ".join(sorted(registry.all_for(Stage.INDEX)))
+        raise ConfigError(
+            f"index.store uses '{kind}', which is not a store. The stores are: {known}."
+        ) from None
+    takes_embedder = "embedder" in cls.config_model.model_fields
+    if not takes_embedder:
+        if embed is not None:
+            raise ConfigError(
+                f"index.store uses '{kind}', which embeds by itself, so index.embed must be left out."
+            )
+        settings = dict(store_settings)
+    else:
+        if embed is None:
+            raise ConfigError(
+                f"The index has no embed step. index.store uses '{kind}', which needs one: "
+                "add embed: {use: <an embedder>}."
+            )
+        embedder, embed_settings = _use(embed, "index.embed")
+        if embedder not in embedder_names():
+            raise ConfigError(
+                f"index.embed uses '{embedder}', which is not an embedder. "
+                f"The embedders are: {', '.join(embedder_names())}."
+            )
+        _keys(embed_settings, EMBED_KEYS, "index.embed")
+        misplaced = [key for key in store_settings if key == "embedder" or key in EMBED_KEYS]
+        if misplaced:
+            names = ", ".join(f"'{key}'" for key in misplaced)
+            raise ConfigError(
+                f"index.store sets {names}, which belongs under index.embed."
+            )
+        settings = {"embedder": embedder, **embed_settings, **store_settings}
+    try:
+        _strategy(Stage.INDEX, kind, settings, where="index.store")
     except ValueError as exc:
         raise ConfigError(str(exc)) from None
-    return settings
+    return kind, settings
 
 
 def _use(step: Any, where: str) -> tuple[str, dict[str, Any]]:

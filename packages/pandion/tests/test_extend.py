@@ -20,7 +20,16 @@ class NoSettings(BaseModel):
     pass
 
 
-def test_a_minimal_outside_parser_registers_and_runs(tmp_path):
+@pytest.fixture
+def _forget_txt_lines():
+    """Remove the test parser after the test, so no other test sees it."""
+    yield
+    from pandion.registry import registry
+
+    registry._by_stage[Stage.PARSE].pop("test_txt_lines", None)
+
+
+def test_a_minimal_outside_parser_registers_and_runs(tmp_path, _forget_txt_lines):
     @register
     class TxtLines(Transform[NoSettings]):
         name = "test_txt_lines"

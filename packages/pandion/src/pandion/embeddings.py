@@ -374,10 +374,6 @@ class _EmbedderChoices:
 #: with `register_embedder` shows up there too.
 EmbedderName = Annotated[str, AfterValidator(_known_embedder), _EmbedderChoices()]
 
-#: The built-in embedder names. `embedder_names()` also lists added ones.
-EMBEDDER_NAMES: tuple[str, ...] = tuple(_EMBEDDERS)
-
-
 def get_embedder(name: str, models: ModelSettings | None = None) -> EmbeddingProvider:
     """Return a ready-to-use provider by registry name. Never loads a model.
 

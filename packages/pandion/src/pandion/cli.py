@@ -22,7 +22,12 @@ EXTRAS = {
     "lancedb": "lancedb",
     "qwen3-embedding-0.6b": "local",
     "bge-small-en-v1.5": "local",
+    "mmr": "local",
+    "cross_encoder": "local",
 }
+
+#: Steps that call a chat model; their extra depends on the model's provider.
+CHAT_STEPS = ("llm_rewrite", "llm_rerank")
 
 
 def extras_for(config: PipelineConfig) -> list[str]:
@@ -30,7 +35,29 @@ def extras_for(config: PipelineConfig) -> list[str]:
     index = config.index
     names = [index.parse[0], *(use for use, _ in index.clean), index.chunk[0]]
     names += ["lancedb", index.store["embedder"]]
-    return sorted({EXTRAS[name] for name in names if name in EXTRAS})
+    extras = {EXTRAS[name] for name in names if name in EXTRAS}
+    retrieve = config.retrieve
+    if retrieve is not None:
+        steps = [*([retrieve.rewrite] if retrieve.rewrite else []), retrieve.search, *retrieve.rerank]
+        for use, settings in steps:
+            if use in CHAT_STEPS:
+                extras.add(_chat_extra(use, settings))
+            elif use in EXTRAS:
+                extras.add(EXTRAS[use])
+    return sorted(extras)
+
+
+def _chat_extra(use: str, settings: dict) -> str:
+    """Claude models need the Anthropic SDK; every other model the OpenAI SDK."""
+    from pandion.llm import CHAT_MODELS
+    from pandion.plugins import discover
+    from pandion.ports import Stage
+    from pandion.registry import registry
+
+    discover()
+    stage = Stage.QUERY if use == "llm_rewrite" else Stage.RERANK
+    model = registry.get(stage, use).config_model(**settings).model
+    return "anthropic" if CHAT_MODELS[model].provider == "anthropic" else "openai"
 
 
 def main(argv: list[str] | None = None) -> int:

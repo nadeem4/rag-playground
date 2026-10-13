@@ -56,3 +56,19 @@ def test_a_broken_file_says_what_is_wrong(tmp_path, capsys):
 
     assert cli.main(["install", str(path), "--print"]) == 2
     assert "no index" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "retrieve,extras",
+    [
+        ("  search: {use: bm25}\n", ["lancedb", "pdfium"]),
+        ("  search: {use: dense}\n  rerank: [{use: mmr}, {use: cross_encoder}]\n", ["lancedb", "local", "pdfium"]),
+        ("  rewrite: {use: llm_rewrite}\n  search: {use: dense}\n", ["anthropic", "lancedb", "pdfium"]),
+        ("  search: {use: dense}\n  rerank: {use: llm_rerank, model: openrouter}\n", ["lancedb", "openai", "pdfium"]),
+    ],
+)
+def test_the_retrieve_steps_add_their_extras(tmp_path, retrieve, extras):
+    path = write(tmp_path, parser="pdfium", embedder="fake-deterministic")
+    path.write_text(path.read_text(encoding="utf-8") + "retrieve:\n" + retrieve, encoding="utf-8")
+
+    assert cli.extras_for(cli.load(path)) == extras

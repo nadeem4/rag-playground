@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from api.routes.artifacts import _require
-from api.trace import StepInput, trace
+from pandion.evaluation import StepInput, trace
 from pandion.storage import Store
 
 router = APIRouter()

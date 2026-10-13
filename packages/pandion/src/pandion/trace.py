@@ -11,6 +11,10 @@ Matching is the eval step's own: exact containment, then its normalised form
 holds every word of the answer in order, but with other text between them, is
 "broken" rather than "missing", and the evidence shows which words are which.
 That is what a parser that reads straight across two columns does.
+
+Each payload may be the stored JSON or the object a `StageResult` holds.
+`pandion.evaluate` runs this for every miss; the playground's `POST /api/trace`
+runs it on the results a finished run stored.
 """
 
 from __future__ import annotations
@@ -20,8 +24,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from pandion.payloads import ChunkSet, RetrievalResult
-from pandion.textmatch import loosen
 from pandion.plugins.chunk import DocView
+from pandion.textmatch import loosen
 from pandion.textmatch import normalise as _normalise
 
 #: How far apart the answer's words may be spread and still count as one

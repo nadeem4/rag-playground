@@ -24,16 +24,16 @@ import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile
 
 from api import demo
+from api.routes.pages import source_path
 from pandion.evaluation import (
     GOLD_SEPARATOR,
     QuestionSetError,
     check_questions,
     parse_question_set,
 )
-from api.routes.pages import source_path
+from pandion.plugins.chunk import DocView
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from pandion.plugins.chunk import DocView
 
 router = APIRouter()
 

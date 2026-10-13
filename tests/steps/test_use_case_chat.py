@@ -29,7 +29,7 @@ from pandion.plugins.chunk.recursive_character import (
 from pandion.plugins.parse.pdfium import PdfiumConfig, PdfiumParse
 from pandion.plugins.answer import chat as chat_module
 from pandion.plugins.answer.chat import ChatConfig, ChatUseCase
-from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 ROOT = Path(__file__).resolve().parents[2]
 KEY = "sk-ant-test-SECRET-0123456789"

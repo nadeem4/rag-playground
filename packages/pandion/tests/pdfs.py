@@ -1,5 +1,5 @@
 """Deterministic test PDFs, built byte for byte (a copy of the app's
-`tests/plugins/conftest.py` builders; the app copy goes when its last user moves).
+`tests/steps/conftest.py` builders; the app copy goes when its last user moves).
 """
 
 from __future__ import annotations

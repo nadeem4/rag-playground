@@ -31,7 +31,7 @@ from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.storage import Store
 from pandion.sources import Sources
-from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 
 #: The query driven through the whole pipeline. The fake embedder is graded

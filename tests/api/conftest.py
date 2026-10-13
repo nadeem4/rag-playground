@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import build_deps
 from api.main import create_app
-from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 
 @pytest.fixture(autouse=True)

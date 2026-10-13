@@ -11,11 +11,11 @@ from pandion import llm
 from pandion.plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
 from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
 from pandion.plugins.answer.chat import ChatConfig, ChatUseCase
-from tests.plugins.rerank_fakes import QUESTION, payload
-from tests.plugins.rerank_fakes import ctx as run_ctx
-from tests.plugins.rerank_fakes import reply  # noqa: F401  (fixture)
-from tests.plugins.test_use_case_chat import pipeline  # noqa: F401  (fixture)
-from tests.plugins.test_use_case_chat_any_model import (  # noqa: F401
+from tests.steps.rerank_fakes import QUESTION, payload
+from tests.steps.rerank_fakes import ctx as run_ctx
+from tests.steps.rerank_fakes import reply  # noqa: F401  (fixture)
+from tests.steps.test_use_case_chat import pipeline  # noqa: F401  (fixture)
+from tests.steps.test_use_case_chat_any_model import (  # noqa: F401
     ask,
     context,
     index,

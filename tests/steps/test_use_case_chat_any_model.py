@@ -20,8 +20,8 @@ from pandion.plugins.answer import chat as chat_module
 from pandion.plugins.answer._grounding import number_sources
 from pandion.plugins.answer.chat import SENTENCE_PROMPT, ChatConfig, ChatUseCase
 from pandion import llm
-from tests.plugins.rerank_fakes import write_index
-from tests.plugins.test_use_case_chat import (  # noqa: F401  (fixtures)
+from tests.steps.rerank_fakes import write_index
+from tests.steps.test_use_case_chat import (  # noqa: F401  (fixtures)
     KEY,
     QUESTION,
     SHA,

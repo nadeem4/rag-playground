@@ -9,7 +9,7 @@ What it does:
 
 1. `api.steps.discover()` then `registry.export_schema()` -> `registry.json`.
 2. Builds a three-page technical PDF with the same generator the plugin tests use
-   (`tests/plugins/conftest.py::build_paragraph_pdf`), typeset with real
+   (`tests/steps/conftest.py::build_paragraph_pdf`), typeset with real
    paragraph spacing (a larger gap between paragraphs than between lines), a
    running head and a page number on every page and one repeated paragraph, so
    both cleaners have real work to do.
@@ -62,7 +62,7 @@ from api.deps import build_deps
 from pandion.sources import Sources
 from pandion.plugins.answer.chat import ChatConfig, ChatUseCase  # noqa: E402
 from pandion import llm  # noqa: E402
-from tests.plugins.conftest import build_paragraph_pdf  # noqa: E402
+from tests.steps.conftest import build_paragraph_pdf  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "api" / "fixtures"
 FILENAME = "chunking-notes.pdf"

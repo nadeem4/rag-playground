@@ -24,7 +24,7 @@ from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.sources import Sources
 from pandion.storage import Store
-from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 #: Every chunker, with settings small enough that the sample PDF becomes
 #: several pieces rather than one.

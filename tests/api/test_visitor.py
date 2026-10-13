@@ -7,7 +7,7 @@ import re
 from api import visitor
 from api.routes.sources import META_DIR, owners
 from tests.api.conftest import build_pdf, ingest_graph, make_client, upload_pdf
-from tests.plugins.conftest import SAMPLE_PAGES
+from tests.steps.conftest import SAMPLE_PAGES
 
 
 def demo_on(monkeypatch) -> None:

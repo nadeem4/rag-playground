@@ -114,14 +114,14 @@ def summarize(payloads: dict, question: str) -> dict:
 
 def record() -> dict:
     """Run the real pipeline on the sample and return the lesson's summary."""
-    import plugins
+    import api.steps
     from pandion.executor import run
     from pandion.registry import registry
     from pandion.storage import Store
     from api.deps import build_deps
     from pandion.sources import Sources
 
-    plugins.discover()
+    api.steps.discover()
     pdf = SAMPLE.read_bytes()
     sha = hashlib.sha256(pdf).hexdigest()
     with tempfile.TemporaryDirectory() as tmp:

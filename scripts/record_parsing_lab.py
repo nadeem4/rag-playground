@@ -170,7 +170,7 @@ def _measure(sample, parser: str, store, registry, run) -> dict:
 
 def record(out: Path = OUT) -> dict:
     """Run every case through both parsers and write the lab's JSON to `out`."""
-    import plugins
+    import api.steps
     from api.sample_set import all_samples
     from functools import partial
 
@@ -180,7 +180,7 @@ def record(out: Path = OUT) -> dict:
     from api.deps import build_deps
     from pandion.sources import Sources
 
-    plugins.discover()
+    api.steps.discover()
     samples = {s.name: s for s in all_samples()}
     def measured(sample) -> dict:
         (sources / f"{sample.sha}.pdf").write_bytes(sample.pdf.read_bytes())

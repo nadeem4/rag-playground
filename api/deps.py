@@ -1,6 +1,6 @@
 """Process-wide dependencies: the registry, the store, and where files live.
 
-`plugins.discover()` runs exactly once, at import. The directories default to
+`api.steps.discover()` runs exactly once, at import. The directories default to
 `artifacts/` and `sources/` at the repo root and can be moved with
 `RAG_PLAYGROUND_ARTIFACTS` / `RAG_PLAYGROUND_SOURCES`; tests pass temp dirs to
 `build_deps` directly. The embedding cache sits in `.embcache` under the
@@ -29,7 +29,8 @@ from pandion.registry import Registry
 from pandion.registry import registry as global_registry
 from pandion.storage import Store
 from pandion.sources import Sources
-from plugins import discover, hosted_demo
+from api import demo
+from api.steps import discover
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,15 +54,15 @@ class Deps:
         Models load on the CPU, as they always have here, and download into
         the Hugging Face folder (`HF_HOME`) on first use. On the hosted demo a
         step that calls a custom endpoint accepts only a public https address
-        (`pandion.endpoints`). The switch is read per run from
-        `plugins.hosted_demo`, apart from `api.demo`, which the run routes'
-        403 reads, so this second line holds even if the first is lifted.
+        (`pandion.endpoints`). The switch is read per run
+        from `api.demo.public_endpoints_only()`, which holds even if the run
+        routes' 403 is lifted.
         """
         return {
             "sources": Sources(self.sources_dir),
             "embedding_cache": self.embedding_cache,
             "models": APP_MODELS,
-            "public_endpoints_only": hosted_demo.enabled(),
+            "public_endpoints_only": demo.public_endpoints_only(),
         }
 
 

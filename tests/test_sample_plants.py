@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-import plugins
+import api.steps
 from pandion.artifacts import ArtifactType
 from pandion.executor import run
 from pandion.graph import Edge, Graph, Node
@@ -30,7 +30,7 @@ from pandion.plugins.chunk import DocView
 from pandion.embedding_cache import EmbeddingCache
 from pandion.models import ModelSettings
 from pandion.sources import Sources
-from plugins.use_case.eval import _normalise
+from api.steps.eval import _normalise
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = ["chunking-primer", "two-column-report", "table-of-figures", "scanned-notes"]
@@ -83,7 +83,7 @@ class Runner:
     """One sample in a fresh store, run through the real pipeline in-process."""
 
     def __init__(self, name: str, tmp_path: Path, monkeypatch) -> None:
-        plugins.discover()
+        api.steps.discover()
         folder = tmp_path / "sources"
         folder.mkdir()
         self.extras = {

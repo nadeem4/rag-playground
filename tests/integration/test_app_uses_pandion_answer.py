@@ -40,12 +40,21 @@ def test_the_app_registry_holds_the_package_answer_step(name):
     "module", ["plugins.use_case.search", "plugins.use_case.chat", "plugins.use_case._grounding"]
 )
 def test_the_old_module_is_gone(module):
-    assert importlib.util.find_spec(module) is None
+    try:
+        spec = importlib.util.find_spec(module)
+    except ModuleNotFoundError:  # its parent package is gone too
+        spec = None
+    assert spec is None
 
 
-def test_the_apps_own_plugins_are_only_eval_and_the_demo_switch():
-    files = sorted(p.relative_to(ROOT / "plugins").as_posix() for p in (ROOT / "plugins").rglob("*.py"))
-    assert files == ["__init__.py", "hosted_demo.py", "use_case/__init__.py", "use_case/eval.py"]
+def test_the_root_plugins_folder_is_gone():
+    assert not (ROOT / "plugins").exists()
+    assert importlib.util.find_spec("plugins") is None
+
+
+def test_the_apps_own_step_is_only_eval():
+    files = sorted(p.name for p in (ROOT / "api" / "steps").glob("*.py"))
+    assert files == ["__init__.py", "eval.py"]
 
 
 CHUNK = {"chunk_size": 70, "chunk_overlap": 10}

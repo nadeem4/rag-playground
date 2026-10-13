@@ -170,3 +170,55 @@ def test_a_failed_question_prints_its_error_and_is_not_counted():
         "q7 error: The search step (dense) failed: no key.",
         "Found 0 of 0. 1 question could not be scored.",
     ]
+
+
+BEES = {
+    "id": "bees",
+    "question": "How do bees show the hive where flowers are?",
+    "gold_answer": "Bees dance to show the hive where the flowers are.",
+}
+
+
+def test_one_set_covers_several_documents(tmp_path, docs):
+    bees = tmp_path / "bees.pdf"
+    bees.write_bytes(build_pdf(OTHER_DOC))
+    named = [
+        {**FOUND, "document": "sample.pdf"},
+        {**BEES, "document": "bees.pdf"},
+        {**NOT_IN_DOC, "document": "sample.pdf"},   # bees.pdf is first by name, so naming matters
+    ]
+    report = pandion.evaluate(pipeline(tmp_path), named, documents=[docs / "sample.pdf", bees])
+    assert [q.found for q in report.questions] == [True, True, False]
+    assert report.questions[2].trace["document"] == "sample.pdf"
+
+
+def test_a_question_without_an_id_is_named_by_its_position(tmp_path, docs):
+    unnamed = {k: v for k, v in FOUND.items() if k != "id"}
+    report = pandion.evaluate(pipeline(tmp_path), [FOUND, NOT_IN_DOC, unnamed], documents=docs)
+    assert str(report).splitlines()[2] == "question 3 found at rank 1"
+    assert report.to_dict()["questions"][2]["id"] == "question 3"
+
+
+def test_a_miss_is_traced_in_the_first_document_whose_pieces_hold_the_answer_whole(tmp_path, docs):
+    from pandion.evaluation import _document_for
+
+    # First by name, and its parsed text holds the answer, but its pieces cut it in two.
+    split = ["Paris notes. Long ago people said that, as everyone knows, The capital of France is Paris."]
+    (docs / "aaa-split.pdf").write_bytes(build_pdf([split]))
+    p = pipeline(tmp_path)
+    p.index.run(docs)
+    index = p.index._index(p.index.indexed())
+    chunks = [c.text for c in index.documents["aaa-split.pdf"].stages["chunk"].output.chunks]
+    assert not any(FOUND["gold_answer"] in c for c in chunks)
+    assert _document_for(index, {"gold_answers": [FOUND["gold_answer"]]}) == "sample.pdf"
+
+
+def test_a_question_as_a_dict_carries_the_id_of_its_final_result(tmp_path, docs):
+    report = pandion.evaluate(pipeline(tmp_path), [FOUND], documents=docs)
+    q = report.questions[0]
+    assert q.to_dict()["result_id"] == q.retrieval.stages["search"].artifact_id
+    failed = pandion.QuestionResult(
+        id="q7", question="Why?", golds=["Because."], tags=[], found=False, rank=None,
+        lost_at=None, trace=None, score={}, error="failed",
+    )
+    assert failed.to_dict()["result_id"] is None

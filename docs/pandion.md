@@ -486,8 +486,11 @@ A question whose retrieval failed prints `error:` and its message, and is not co
 
 Each question needs `question` and at least one gold passage: `gold_answer`, or a list
 in `gold_answers`, copied from the document word for word. `id`, `answer`, `tags` and
-`document` (the document the evidence is in) are optional. The file may also be an
-object with a `questions` list, a `version` and a `document`. In a CSV file, several gold
+`document` (the document the evidence is in) are optional. A question without an `id` is
+named by its place in the set, such as `question 3`. The file may also be an object with
+a `questions` list, a `version` and a `document`, which every question that names no
+document takes. One set can cover several documents: give each question the `document`
+its evidence is in, and pass them all in `documents=`. In a CSV file, several gold
 passages share one cell, separated by `||`. A set with a problem is refused before
 anything runs, with a `QuestionSetError` naming the question:
 "The question set at questions.json cannot be used: question 3: no question text."
@@ -511,10 +514,16 @@ answer: `parse`, `clean`, `chunk`, or one of the three ways an answer is lost at
 `search` (it never came back), `rerank` (the reranker dropped it) and `top_k` (it came
 back below the pieces checked). `q.trace` has a one-sentence `finding`, a suggested
 `fix`, every step's sentence and evidence, and the `document` it was traced in: the one
-the question names, else the first whose parsed text holds the answer.
+the question names, else the first whose pieces hold the answer whole, else the first
+whose parsed text holds it. With several rerankers, the trace checks the last one,
+whose result was scored.
 
 A retrieval step that fails is reported, not raised: `q.error` names it, and the
 question is left out of the rates.
+
+`q.result_id`, also in `q.to_dict()` as `"result_id"`, is the artifact id of the final
+retrieval result (the last reranker's, or the search's), so the hits can be read back
+by id later. It is None when the retrieval failed.
 
 ## Compare settings
 
@@ -569,6 +578,11 @@ A variant without questions prints `indexed, no questions asked`, and one whose 
 run failed prints `the index run failed`. When several variants tie for best, the line
 names the others after `tied with`. When no variant found an answer, the last line
 says `No variant found an answer.` instead.
+
+`results.best` is the list of best comparisons, every one tied for first, in order. It
+is empty when no variant was scored or none found an answer. `results.to_dict()` is
+plain JSON with `comparisons`, each comparison's `to_dict()`, and `best`, the places of
+the best ones in the list, such as `[1]`.
 
 ## Three ways to write a pipeline
 

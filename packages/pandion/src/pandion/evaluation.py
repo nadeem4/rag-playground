@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from pandion.config import ConfigError, _block, from_dict, to_dict
-from pandion.payloads import Query
+from pandion.payloads import ChunkSet, Query
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
 from pandion.plugins import discover
 from pandion.plugins.chunk import DocView
@@ -65,6 +65,7 @@ class QuestionResult:
     document it was traced in. `score` is the eval step's whole payload.
     `error` says which retrieval step failed, when one did; the question is
     then left out of the rates. `retrieval` is what `p.retrieve` returned.
+    A question with no `id` in the set is named by its place, "question 3".
     """
 
     id: str
@@ -79,8 +80,17 @@ class QuestionResult:
     error: str | None = None
     retrieval: Retrieval | None = field(default=None, repr=False)
 
+    @property
+    def result_id(self) -> str | None:
+        """The artifact id of the retrieval's final result (the last
+        reranker's, or the search's), or None when retrieval failed."""
+        if self.retrieval is None or not self.retrieval.ok:
+            return None
+        return self.retrieval._steps()[-1].artifact_id
+
     def to_dict(self) -> dict[str, Any]:
-        """Plain JSON, without the retrieval."""
+        """Plain JSON, without the retrieval, but with its final result's id
+        (`result_id`), so the hit rows can be fetched by id."""
         return {
             "id": self.id,
             "question": self.question,
@@ -92,6 +102,7 @@ class QuestionResult:
             "trace": self.trace,
             "score": dict(self.score),
             "error": self.error,
+            "result_id": self.result_id,
         }
 
 
@@ -218,9 +229,9 @@ def evaluate(
     settings = step.config_model(top_k=top_k)
     index: IndexReport | None = None
     results: list[QuestionResult] = []
-    for q in asked:
+    for n, q in enumerate(asked, start=1):
         retrieval = p.retrieve(q["question"], credentials=credentials)
-        common = {"id": q["id"], "question": q["question"], "golds": q["gold_answers"], "tags": q["tags"]}
+        common = {"id": q["id"] or f"question {n}", "question": q["question"], "golds": q["gold_answers"], "tags": q["tags"]}
         if not retrieval.ok:
             results.append(QuestionResult(
                 **common, found=False, rank=None, lost_at=None, trace=None, score={},
@@ -258,14 +269,20 @@ def _failure(retrieval: Retrieval) -> str:
 
 def _document_for(index: IndexReport, question: dict[str, Any]) -> str:
     """The document a miss is traced in: the one the question names when it
-    is indexed, else the first whose parsed text holds a gold passage, else
-    the first by id."""
+    is indexed, else the first whose pieces hold a gold passage whole, else
+    the first whose parsed text holds one, else the first by id."""
     if question.get("document") in index.documents:
         return question["document"]
+    golds = question["gold_answers"]
     ids = sorted(index.documents)
     for doc_id in ids:
+        step = index.documents[doc_id].stages.get("chunk")
+        chunks = step.output if step is not None else None
+        if chunks is not None and any(_holds(c.text, golds) for c in ChunkSet.model_validate(chunks).chunks):
+            return doc_id
+    for doc_id in ids:
         parsed = index.documents[doc_id].stages["parse"].output
-        if parsed is not None and _holds(DocView.of(parsed).text, question["gold_answers"]):
+        if parsed is not None and _holds(DocView.of(parsed).text, golds):
             return doc_id
     return ids[0]
 
@@ -381,23 +398,44 @@ class Comparisons(list[Comparison]):
     highest hit rate (found out of scored), then the highest mean reciprocal
     rank. A slice such as `results[:2]` is a plain list."""
 
+    def _scored(self) -> list[Comparison]:
+        return [c for c in self if c.report is not None and c.report.totals()["scored"]]
+
+    @property
+    def best(self) -> list[Comparison]:
+        """The best comparisons, every one tied for first, in order; empty when
+        no variant was scored or none found an answer."""
+        scored = self._scored()
+        if not any(c.report.found for c in scored):
+            return []
+
+        def key(c: Comparison) -> tuple[float, float]:
+            t = c.report.totals()
+            return (t["hit_rate"], t["mrr"])
+
+        top = key(max(scored, key=key))
+        return [c for c in scored if key(c) == top]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Plain JSON: every comparison's `to_dict()`, and the best as their
+        places in the list."""
+        best = self.best
+        return {
+            "comparisons": [c.to_dict() for c in self],
+            "best": [n for n, c in enumerate(self) if any(c is b for b in best)],
+        }
+
     def __str__(self) -> str:
         lines = [str(c) for c in self]
-        scored = [c for c in self if c.report is not None and c.report.totals()["scored"]]
-        if scored and not any(c.report.found for c in scored):
-            lines.append("No variant found an answer.")
-        elif scored:
-            def key(c: Comparison) -> tuple[float, float]:
-                t = c.report.totals()
-                return (t["hit_rate"], t["mrr"])
-
-            top = key(max(scored, key=key))
-            best = [c for c in scored if key(c) == top]
+        best = self.best
+        if best:
             t = best[0].report.totals()
             line = f"Best: {best[0].settings}, found {t['found']} of {t['scored']}"
             if len(best) > 1:
                 line += ", tied with " + " and ".join(c.settings for c in best[1:])
             lines.append(line + ".")
+        elif self._scored():
+            lines.append("No variant found an answer.")
         return "\n".join(lines)
 
 
@@ -421,8 +459,8 @@ def compare(
     `questions`, each variant is evaluated (see `evaluate`); without them,
     each result holds the changed step's output, and a retrieval stage
     cannot be compared, because nothing is searched. The best variant is the
-    one that found the most answers, then the one with the higher mean
-    reciprocal rank.
+    one with the highest hit rate (answers found out of questions scored),
+    then the highest mean reciprocal rank; see `Comparisons.best`.
     """
     section = COMPARE_STAGES.get(stage)
     if section is None:

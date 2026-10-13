@@ -58,11 +58,14 @@ class QuestionSetError(ValueError):
 # ---------------------------------------------------------------------------
 
 
-def parse_question_set(data: bytes, filename: str = "") -> dict[str, Any]:
+def parse_question_set(data: bytes, filename: str = "", *, one_document: bool = True) -> dict[str, Any]:
     """Read JSON or CSV into `{format, version, document, questions}`.
 
     Every question has the same keys, present even when empty, so a caller
-    never has to ask whether an optional field is there.
+    never has to ask whether an optional field is there. With `one_document`
+    (the default, which the app's upload uses), every question must be about
+    the set's one document; `load_questions` turns it off, because
+    `pandion.evaluate` searches several documents.
     """
     text = _decode(data)
     if text.lstrip()[:1] in ("{", "["):
@@ -75,7 +78,7 @@ def parse_question_set(data: bytes, filename: str = "") -> dict[str, Any]:
         raise QuestionSetError(
             "the file has no questions in it; the template shows what one looks like"
         )
-    document = _one_document(document, questions, [label for label, _ in records])
+    document = _one_document(document, questions, [label for label, _ in records], strict=one_document)
     return {
         "format": fmt,
         "version": version,
@@ -88,7 +91,7 @@ def load_questions(questions: str | Path | list[dict] | dict) -> dict[str, Any]:
     """A question set from a JSON or CSV file, or from a list or dict in code, checked.
 
     Returns `{format, version, document, questions}`, as `parse_question_set`
-    does. A problem is a `QuestionSetError` whose message is one sentence that
+    does. Its questions may name different documents. A problem is a `QuestionSetError` whose message is one sentence that
     says where the set came from and which question is at fault.
     """
     if isinstance(questions, (str, Path)):
@@ -104,7 +107,7 @@ def load_questions(questions: str | Path | list[dict] | dict) -> dict[str, Any]:
             f"or a dict with a questions list, not {type(questions).__name__}."
         )
     try:
-        return parse_question_set(data, filename)
+        return parse_question_set(data, filename, one_document=False)
     except QuestionSetError as exc:
         reason = str(exc).rstrip(".")
         raise QuestionSetError(f"The question set {where} cannot be used: {reason}.") from None
@@ -196,19 +199,21 @@ def _question(label: str, record: dict, fmt: str) -> dict[str, Any]:
     }
 
 
-def _one_document(document: str, questions: list[dict], labels: list[str]) -> str:
-    """The set's one document, written into every question that leaves it out.
+def _one_document(document: str, questions: list[dict], labels: list[str], *, strict: bool = True) -> str:
+    """The set's document, written into every question that leaves it out.
 
-    A question's `document` says which document its evidence is in. A pipeline
-    runs on one document today, so a set covers one: the set's own `document`,
-    else the first a question names. A question naming another is refused,
-    naming its row. When pipelines take several documents, this check is what
-    goes; the field's shape stays.
+    A question's `document` says which document its evidence is in. The set's
+    document is its own `document`, else the first a question names. With
+    `strict`, the app's path, a set covers that one document, because the
+    app's Evaluate page runs on one document: a question naming another is
+    refused, naming its row. `load_questions` passes `strict=False`, because
+    `pandion.evaluate` indexes several documents and traces each question in
+    the one it names.
     """
     document = document or next((q["document"] for q in questions if q["document"]), "")
     for label, question in zip(labels, questions):
         own = question["document"]
-        if own and document and own != document:
+        if strict and own and document and own != document:
             raise QuestionSetError(
                 f"{label}: its evidence is in {own}, but this set is for {document}. "
                 f"A set covers one document for now, so put {own}'s questions in a set of their own"

@@ -108,12 +108,15 @@ def test_the_results_print_one_plain_line_per_variant_and_the_best(tmp_path, doc
     ]
 
 
-def test_without_questions_the_lines_say_nothing_was_asked(tmp_path, docs):
+def test_a_single_variant_that_found_the_answer_is_named_best(tmp_path, docs):
     results = pandion.compare(pipeline(tmp_path), "search", ["bm25"], docs, [FOUND])
     assert str(results).splitlines() == [
         "search bm25: found 1 of 1",
         "Best: bm25, found 1 of 1.",
     ]
+
+
+def test_without_questions_the_lines_say_nothing_was_asked(tmp_path, docs):
     results = pandion.compare(pipeline(tmp_path), "chunk", [V70], docs)
     assert str(results).splitlines() == [
         "chunk recursive_character chunk_size=70 chunk_overlap=10: indexed, no questions asked",
@@ -203,7 +206,7 @@ def test_the_best_is_the_higher_hit_rate_then_the_higher_mean_reciprocal_rank():
     ]
 
 
-def test_comparisons_slice_to_a_plain_list(tmp_path, docs):
+def test_comparisons_slice_to_a_plain_list():
     assert "Comparisons" in pandion.__all__
     results = pandion.Comparisons([_made("bm25", 1)])
     assert type(results[:1]) is list
@@ -216,3 +219,103 @@ def test_a_bare_name_for_clean_or_rerank_is_taken_as_a_list_of_one(tmp_path, doc
     results = pandion.compare(pipeline(tmp_path), "rerank", ["mmr"], docs, [FOUND])
     assert results[0].pipeline.config.retrieve.rerank == [("mmr", {})]
     assert results[0].report.found == 1
+
+
+def test_best_is_every_tied_comparison_by_hit_rate_then_mean_reciprocal_rank():
+    first, second, third = _made("bm25", 1, None), _made("dense", 1, None), _made("hybrid", 2, None)
+    assert pandion.Comparisons([first, second, third]).best == [first, second]
+    assert pandion.Comparisons([_made("bm25", None)]).best == []          # nothing found
+    assert pandion.Comparisons([_made("bm25", "error")]).best == []       # nothing scored
+    unasked = pandion.Comparison(stage="chunk", variant=V70, pipeline=None, index=None, report=None)
+    assert pandion.Comparisons([unasked]).best == []
+
+
+def test_comparisons_as_a_dict_is_plain_json_with_the_best_by_index(tmp_path, docs):
+    results = pandion.compare(pipeline(tmp_path), "chunk", [V30, V70, V70], docs, [FOUND])
+    data = json.loads(json.dumps(results.to_dict()))
+    assert [c["variant"] for c in data["comparisons"]] == [V30, V70, V70]
+    assert data["comparisons"][1] == json.loads(json.dumps(results[1].to_dict()))
+    assert data["best"] == [1, 2]
+
+
+@pytest.fixture
+def drop_all_reranker():
+    """A reranker that keeps no pieces, removed after the test."""
+    from pydantic import BaseModel
+
+    from pandion.extend import ArtifactType, PortSpec, Stage, Transform, register
+    from pandion.payloads import RetrievalResult
+    from pandion.registry import registry
+
+    class NoSettings(BaseModel):
+        pass
+
+    @register
+    class DropAll(Transform[NoSettings]):
+        name = "test_drop_all"
+        stage = Stage.RERANK
+        inputs = {"result": PortSpec(ArtifactType.RETRIEVAL_RESULT)}
+        output = ArtifactType.RETRIEVAL_RESULT
+        config_model = NoSettings
+        summary = "Keeps no pieces."
+
+        def apply(self, inputs, config, ctx):
+            result = RetrievalResult.model_validate(inputs["result"])
+            return result.model_copy(update={"hits": []}).model_dump(mode="json")
+
+    yield "test_drop_all"
+    registry._by_stage[Stage.RERANK].pop("test_drop_all", None)
+
+
+def test_evaluate_traces_a_miss_through_the_last_reranker(tmp_path, docs, drop_all_reranker):
+    p = Pipeline(
+        path=tmp_path / "index", parse="pdfium", chunk=V70, embed="fake-deterministic", store="lancedb",
+        search={"use": "hybrid_rrf", "top_k": 5}, rerank=["mmr", drop_all_reranker],
+    )
+    q = pandion.evaluate(p, [FOUND], documents=docs).questions[0]
+    assert (q.found, q.lost_at) == (False, "rerank")
+    assert q.trace["finding"] == "Lost at Rerank. test_drop_all dropped piece 1."
+    assert q.result_id == q.retrieval.stages["rerank"][-1].artifact_id
+
+
+@pytest.fixture
+def broken_search():
+    """A search that raises when it runs, removed after the test."""
+    from pydantic import BaseModel
+
+    from pandion.extend import ArtifactType, PortSpec, Stage, Transform, register
+    from pandion.registry import registry
+
+    class NoSettings(BaseModel):
+        pass
+
+    @register
+    class Broken(Transform[NoSettings]):
+        name = "test_broken_search"
+        stage = Stage.RETRIEVE
+        inputs = {
+            "index": PortSpec(ArtifactType.INDEX),
+            "query": PortSpec(ArtifactType.QUERY, ambient=True),
+        }
+        output = ArtifactType.RETRIEVAL_RESULT
+        config_model = NoSettings
+        summary = "Always fails."
+
+        def apply(self, inputs, config, ctx):
+            raise RuntimeError("this search always fails")
+
+    yield "test_broken_search"
+    registry._by_stage[Stage.RETRIEVE].pop("test_broken_search", None)
+
+
+def test_a_question_whose_retrieval_fails_carries_the_error_and_is_left_out_of_the_rates(
+    tmp_path, docs, broken_search
+):
+    p = Pipeline(path=tmp_path / "index", parse="pdfium", chunk=V70, embed="fake-deterministic",
+                 store="lancedb", search=broken_search)
+    report = pandion.evaluate(p, [FOUND], documents=docs)
+    q = report.questions[0]
+    assert "test_broken_search" in q.error and "this search always fails" in q.error
+    assert (q.found, q.lost_at, q.trace, q.result_id) == (False, None, None, None)
+    t = report.totals()
+    assert (t["total"], t["scored"], t["hit_rate"], t["mrr"]) == (1, 0, None, None)

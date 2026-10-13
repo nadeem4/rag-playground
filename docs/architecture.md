@@ -83,8 +83,9 @@ and scores it with the same `eval` step; the app's Evaluate page still runs that
 through `POST /api/sweeps` and adds up the scores in the browser.
 `pandion.compare(p, stage, variants, documents, questions)` builds one pipeline per
 variant and evaluates each; the app's Compare page still uses `POST /api/sweeps`, which
-runs `pandion.executor.sweep`. The `mmr` reranker and the `chat` step embed with the index's own model through two
-public names of `pandion.plugins.retrieve`, `read_descriptor` and `embedder_for`.
+runs `pandion.executor.sweep`. The `mmr` reranker and the `chat` step embed with the
+index's own model through two public names of `pandion.plugins.retrieve`,
+`read_descriptor` and `embedder_for`.
 
 The package takes every folder as an argument. A run is handed the sources folder, the
 embedding cache and the model settings in `context_extras`, which are never hashed. The

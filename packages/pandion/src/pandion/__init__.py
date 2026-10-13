@@ -1,8 +1,10 @@
 """Pandion: indexing and retrieval pipelines you can inspect stage by stage.
 
-The engine lives in plain modules (`pandion.graph`, `pandion.executor`,
-`pandion.storage` and the rest). A name that starts with an underscore is
-private; the RAG Playground app may import every other name.
+The public API is what this module exports, the stage namespaces
+(`pandion.parse` to `pandion.answer`), `pandion.evaluation` and
+`pandion.extend`, each with its own `__all__`. Every other module
+(`pandion.graph`, `pandion.executor`, `pandion.storage` and the rest) is
+internal and may change without notice.
 
 `pandion.parse`, `pandion.clean`, `pandion.chunk` and `pandion.rewrite` run one
 stage when called, and hold that stage's step classes. `pandion.retrieve`,
@@ -12,6 +14,7 @@ stage when called, and hold that stage's step classes. `pandion.retrieve`,
 """
 
 from pandion.models import ModelSettings, preload_embedder, preload_reranker
+from pandion.config import ConfigError
 from pandion.pipeline import (
     Answer,
     IndexPipeline,
@@ -29,6 +32,7 @@ from pandion.evaluation import (
     evaluate,
 )
 from pandion.results import StageResult
+from pandion.strategy_catalog import catalog, defaults, explain
 from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
 __version__ = "0.1.0"
@@ -37,6 +41,7 @@ __all__ = [
     "Answer",
     "Comparison",
     "Comparisons",
+    "ConfigError",
     "EvaluationReport",
     "IndexPipeline",
     "ModelSettings",
@@ -47,11 +52,14 @@ __all__ = [
     "RetrievalPipeline",
     "StageResult",
     "answer",
+    "catalog",
     "chunk",
     "clean",
     "compare",
+    "defaults",
     "evaluate",
     "evaluation",
+    "explain",
     "parse",
     "preload_embedder",
     "preload_reranker",

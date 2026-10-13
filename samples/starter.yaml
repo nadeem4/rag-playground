@@ -1,0 +1,25 @@
+# The Starter pipeline of RAG Playground, as a Pandion file.
+# Run it in your own code:
+#   from pandion import Pipeline
+#   p = Pipeline.from_yaml("starter.yaml")
+#   p.index.run("report.pdf")
+#   print(p.ask("What is this report about?").text)
+path: ./pandion-index
+index:
+  parse:
+    use: docling          # reads layout: headings, tables, page headers and footers
+  clean:
+    - use: dedupe_blocks  # removes a block repeated word for word
+  chunk:
+    use: recursive_character
+    chunk_size: 400
+    chunk_overlap: 80
+  embed:
+    use: qwen3-embedding-0.6b
+  store:
+    use: lancedb
+retrieve:
+  search:
+    use: hybrid_rrf       # keyword and meaning search, fused
+answer:
+  use: search             # the pieces as they are; use chat for a written answer

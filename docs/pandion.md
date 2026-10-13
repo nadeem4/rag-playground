@@ -25,6 +25,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Ask a question](#ask-a-question)
 - [Evaluate a pipeline](#evaluate-a-pipeline)
 - [Compare settings](#compare-settings)
+- [Running a pipeline from an app](#running-a-pipeline-from-an-app)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [The cache](#the-cache)
 - [Models](#models)
@@ -584,11 +585,41 @@ is empty when no variant was scored or none found an answer. `results.to_dict()`
 plain JSON with `comparisons`, each comparison's `to_dict()`, and `best`, the places of
 the best ones in the list, such as `[1]`.
 
+## Running a pipeline from an app
+
+An app, such as a web server or a command line tool, can do everything through
+Pandion's public API. This section lists what it needs.
+
+### Settings forms
+
+`pandion.catalog()` lists every strategy, built in or your own, stage by stage, with its
+summary and its settings as a JSON schema with defaults. `pandion.defaults()` names the
+strategy a new pipeline starts with for each required part. `pandion.explain(stage, use,
+settings)` says in plain words what one strategy will do with those settings, and warns
+when they make no sense, without running anything.
+
+```python
+import pandion
+
+schema = pandion.catalog()["chunk"]["recursive_character"]["config_schema"]
+pandion.defaults()["search"]                                     # "hybrid_rrf"
+pandion.explain("chunk", "recursive_character", {"chunk_size": 100, "chunk_overlap": 200})
+# {"settings": "...", "warning": "Overlap must be smaller than the chunk size ...", "blocking": True, ...}
+```
+
+### Results by id
+
+Every `StageResult` has an `artifact_id`. `p.result(id)` reads that result back from the
+store later, for example when a page asks for one card's output: a dict for every result
+but an index, whose result is its folder. An id that is not a result id, or that has no
+stored result, is a `KeyError`.
+
 ## Three ways to write a pipeline
 
 A pipeline can be written as a YAML file, as a dict for each stage, or as classes in
 code. All three give the same pipeline: the same settings give the same artifact ids and
-the same results whichever way they are written, so they share one cache.
+the same results whichever way they are written, so they share one cache. The playground's Starter
+pipeline is [`samples/starter.yaml`](../samples/starter.yaml): a good first file to copy.
 
 As a file, read with `Pipeline.from_yaml`:
 
@@ -669,6 +700,13 @@ as `metric` and `build_fts` for lancedb. `models` takes a dict or
 
 `pandion.parse`, `pandion.clean`, `pandion.chunk` and `pandion.rewrite` still run one
 stage when you call them, as in [Try one stage at a time](#try-one-stage-at-a-time).
+
+An app that keeps pipelines as JSON can use the file's content as a dict, and get it back:
+
+```python
+p = Pipeline.from_dict(data, base="./")   # data is the file's content; relative paths are read from base
+data = p.to_dict()                        # plain data, the file's shape
+```
 
 **Mixing.** The ways can be mixed in one pipeline, for example
 `clean=[DedupeBlocks(), {"use": "drop_matching", "pattern": "Draft"}]`.
@@ -1027,7 +1065,7 @@ step as `answer (chat)`. A pipeline written as dicts or classes gets the same me
 The same checks apply to `pandion.parse`, `pandion.clean`, `pandion.chunk` and
 `pandion.rewrite`, where the message starts with "The chunker", "Clean step 1" or "The
 query step" instead of the place in the file. A
-pipeline file problem is a `pandion.config.ConfigError`.
+pipeline file problem is a `pandion.ConfigError`, a `ValueError`.
 
 A missing extra says which one to install:
 

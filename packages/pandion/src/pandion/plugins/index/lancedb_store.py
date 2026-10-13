@@ -127,6 +127,7 @@ class LanceDbIndexConfig(BaseModel):
 @register
 class LanceDbIndex(Transform[LanceDbIndexConfig]):
     name = "lancedb"
+    extra = "lancedb"
     version = "1"
     stage = Stage.INDEX
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)}

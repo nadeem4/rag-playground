@@ -629,6 +629,8 @@ class TxtLines(Transform[NoSettings]):
                                    for i, t in enumerate(lines) if t.strip()])
 ```
 
+If your strategy or embedder needs a pip extra, set `extra = "<name>"` on the class, and `pandion install` installs it for any pipeline file that uses it.
+
 ### Your own embedder
 
 An embedder is set under `embed:` and not as a step, because the store embeds the pieces

@@ -106,6 +106,7 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
     """`retrieval_result -> retrieval_result`, so it stacks with other rerankers."""
 
     name = "cross_encoder"
+    extra = "local"
     version = "2"
     stage = Stage.RERANK
     inputs = {

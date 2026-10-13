@@ -92,6 +92,7 @@ class PdfiumParse(Transform[PdfiumConfig]):
     """`raw_file -> parsed_doc`."""
 
     name = "pdfium"
+    extra = "pdfium"
     version = "2"
     stage = Stage.PARSE
     inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}

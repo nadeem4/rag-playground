@@ -66,6 +66,7 @@ class MmrRerank(Transform[MmrRerankConfig]):
     """`retrieval_result -> retrieval_result`, so it stacks with other rerankers."""
 
     name = "mmr"
+    extra = "local"
     version = "2"
     stage = Stage.RERANK
     inputs = {

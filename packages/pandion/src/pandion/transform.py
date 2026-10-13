@@ -80,6 +80,10 @@ class Transform(ABC, Generic[C]):
     #: are surfaced in the UI as "cached — may differ on re-run".
     deterministic: bool = True
 
+    #: The pip extra this strategy needs, for `pandion install`, or "" for none.
+    #: A class attribute, not a setting, so it is never part of a result id.
+    extra: str = ""
+
     #: False for transforms whose output should never be reused — chat answers,
     #: chiefly. Otherwise asking the same question twice replays the old answer.
     cacheable: bool = True

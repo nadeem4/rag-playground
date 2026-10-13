@@ -72,3 +72,47 @@ def test_the_retrieve_steps_add_their_extras(tmp_path, retrieve, extras):
     path.write_text(path.read_text(encoding="utf-8") + "retrieve:\n" + retrieve, encoding="utf-8")
 
     assert cli.extras_for(cli.load(path)) == extras
+
+
+@pytest.fixture
+def needs_extra():
+    """A parse strategy and an embedder that name their own extras, removed after."""
+    from pydantic import BaseModel
+
+    from pandion.extend import ArtifactType, PortSpec, Stage, Transform, register
+    from pandion.plugins import discover
+    from pandion.registry import registry
+
+    class NoSettings(BaseModel):
+        pass
+
+    class NeedsExtra(Transform[NoSettings]):
+        name = "test_needs_extra"
+        extra = "my-extra"
+        stage = Stage.PARSE
+        inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
+        output = ArtifactType.PARSED_DOC
+        config_model = NoSettings
+        summary = "Needs an extra."
+
+        def apply(self, inputs, config, ctx):
+            raise NotImplementedError
+
+    discover()
+    register(NeedsExtra)
+    yield NeedsExtra
+    registry._by_stage[Stage.PARSE].pop(NeedsExtra.name, None)
+
+
+def test_a_custom_strategy_names_the_extra_it_needs(tmp_path, needs_extra):
+    path = write(tmp_path, parser="test_needs_extra", embedder="fake-deterministic")
+
+    assert cli.extras_for(cli.load(path)) == ["lancedb", "my-extra"]
+
+
+def test_extra_is_not_part_of_a_result_id():
+    from pandion.embeddings import get_embedder
+    from pandion.plugins.parse.pdfium import PdfiumParse
+
+    assert PdfiumParse().fingerprint() == "none"
+    assert "local" not in get_embedder("qwen3-embedding-0.6b").fingerprint()

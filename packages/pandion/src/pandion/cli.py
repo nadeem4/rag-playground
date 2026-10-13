@@ -14,40 +14,48 @@ import sys
 
 from pandion.config import ConfigError, PipelineConfig, load
 
-#: The extra each strategy or embedder needs. A name that is not here needs
-#: only the base install.
-EXTRAS = {
-    "pdfium": "pdfium",
-    "docling": "docling",
-    "lancedb": "lancedb",
-    "qwen3-embedding-0.6b": "local",
-    "bge-small-en-v1.5": "local",
-    "mmr": "local",
-    "cross_encoder": "local",
-}
-
 #: Steps that call a chat model, by stage; their extra depends on the model's provider.
 CHAT_STEPS = {"llm_rewrite": "query", "llm_rerank": "rerank", "chat": "use_case"}
 
 
 def extras_for(config: PipelineConfig) -> list[str]:
-    """The extras the pipeline's steps need, sorted."""
+    """The extras the pipeline's steps need, sorted.
+
+    Each strategy and embedder names its own extra (`extra = "..."`); one
+    that names none needs only the base install.
+    """
+    from pandion.embeddings import get_embedder
+    from pandion.plugins import discover
+    from pandion.ports import Stage
+    from pandion.registry import registry
+
+    discover()
     index = config.index
-    names = [index.parse[0], *(use for use, _ in index.clean), index.chunk[0]]
-    names.append(index.store_use)
+    steps = [
+        (Stage.SOURCE, index.source[0]),
+        (Stage.PARSE, index.parse[0]),
+        *((Stage.CLEAN, use) for use, _ in index.clean),
+        (Stage.CHUNK, index.chunk[0]),
+        (Stage.INDEX, index.store_use),
+    ]
+    extras = {registry.get(stage, use).extra for stage, use in steps}
     if index.store.get("embedder") is not None:
-        names.append(index.store["embedder"])
-    extras = {EXTRAS[name] for name in names if name in EXTRAS}
+        extras.add(get_embedder(index.store["embedder"]).extra)
     retrieve = config.retrieve
     if retrieve is not None:
-        steps = [*([retrieve.rewrite] if retrieve.rewrite else []), retrieve.search, *retrieve.rerank]
+        later = [
+            *([(Stage.QUERY, retrieve.rewrite)] if retrieve.rewrite else []),
+            (Stage.RETRIEVE, retrieve.search),
+            *((Stage.RERANK, step) for step in retrieve.rerank),
+        ]
         if config.answer is not None:
-            steps.append(config.answer)
-        for use, settings in steps:
+            later.append((Stage.USE_CASE, config.answer))
+        for stage, (use, settings) in later:
             if use in CHAT_STEPS:
                 extras.add(_chat_extra(use, settings))
-            elif use in EXTRAS:
-                extras.add(EXTRAS[use])
+            else:
+                extras.add(registry.get(stage, use).extra)
+    extras.discard("")
     return sorted(extras)
 
 

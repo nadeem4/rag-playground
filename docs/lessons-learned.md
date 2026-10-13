@@ -60,6 +60,20 @@ This is a working document. We keep it up to date as we build RAG Playground. Ea
 
 **What we learned.** A heading path is only as good as the heading levels the parser gives you. This did not fix the resume's "current employer" question (see the retrieval section), so measure before you assume structure will help search.
 
+### Docling cut a sentence in two, but only on the hosted app
+
+2026-10-13, PR #95
+
+**The problem.** On the hosted app, the default pipeline found 9 of the chunking primer's 12 questions. GitHub's Linux machines found 10, with the same lockfile. The extra miss was "Why does structure-aware splitting cut at headings?". Its answer is one sentence that ended a paragraph: "...which is exactly what a good chunk should do."
+
+**Why it was broken.** The sentence's last words, "chunk should do.", sat alone on the paragraph's short last line. On the hosted app's machine, Docling's layout model took the short last lines of three paragraphs on that page and put them together in one block of their own. The words were all still there, so nothing looked lost. But the answer now started in one block and ended in another, glued to the end of two other sentences, so no piece held it whole. We first guessed that Docling had filed the line as a page footer. Running Docling on the hosted app and reading its blocks showed the real cause.
+
+**What fixed it.** We moved the answer sentence to the middle of its paragraph, so it no longer ends on a short last line. A new test, `test_no_answer_to_be_found_ends_on_a_short_last_line`, checks that no sample question meant to be found has its answer end on a line shorter than 45 characters.
+
+**Why the fix worked.** Docling still groups the short lines on that page differently on the hosted app. Now no answer depends on one of them, so the answer stays whole in one block on every machine.
+
+**What we learned.** The same lockfile on a different machine can give a different parse. Test on the machine your users use: here that meant running Docling on the hosted app itself, not only on GitHub's Linux machines. And read the blocks before you name a cause: the guess was a footer, and the real cause was how Docling grouped lines into blocks.
+
 ## Chunking
 
 ### A heading became a piece on its own

@@ -1,5 +1,5 @@
 {
- "recorded_on": "2026-10-10",
+ "recorded_on": "2026-10-13",
  "chunker": {
   "chunker": "recursive_character",
   "chunk_size": 400,
@@ -17,14 +17,14 @@
    "question": "How long did the survey run?",
    "parsers": {
     "pdfium": {
-     "ms": 102,
+     "ms": 121,
      "chars": 11745,
      "hits": 4,
      "ocr": false,
      "excerpt": "Reading order in two-column reports The survey ran for six weeks. Two hundred Errors followed the same pattern. When a readers took part, and each read the same"
     },
     "docling": {
-     "ms": 3928,
+     "ms": 4302,
      "chars": 11719,
      "hits": 10,
      "ocr": false,
@@ -42,7 +42,7 @@
    "question": "How many readers lost their place before and after the reset?",
    "parsers": {
     "pdfium": {
-     "ms": 191,
+     "ms": 58,
      "chars": 7292,
      "hits": 10,
      "ocr": false,
@@ -67,14 +67,14 @@
    "question": "What does a scanner actually do to a page?",
    "parsers": {
     "pdfium": {
-     "ms": 82,
+     "ms": 21,
      "chars": 0,
      "hits": 0,
      "ocr": false,
      "excerpt": null
     },
     "docling": {
-     "ms": 13619,
+     "ms": 13726,
      "chars": 5760,
      "hits": 8,
      "ocr": true,
@@ -86,7 +86,7 @@
  "baseline": {
   "name": "chunking-primer",
   "title": "A primer on chunking",
-  "sha": "94282f52781e91a862fe99e44140167e890aeb2643d0564888bebe3b6da13567",
+  "sha": "2175ca1aa0bc9f87bba6fd80a084d6d13e6c2b05855a776bbe0820dcdaf9ab1a",
   "filename": "chunking-primer.pdf",
   "pages": 6,
   "questions": 12,
@@ -94,14 +94,14 @@
   "parsers": {
    "pdfium": {
     "ms": 115,
-    "chars": 11482,
+    "chars": 11490,
     "hits": 10,
     "ocr": false,
     "excerpt": "Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it a"
    },
    "docling": {
-    "ms": 3916,
-    "chars": 11207,
+    "ms": 3710,
+    "chars": 11214,
     "hits": 10,
     "ocr": false,
     "excerpt": "## Chunking in Retrieval-Augmented Generation Retrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then i"

@@ -1,8 +1,8 @@
 {
- "doc_text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find.\n\n## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match.\n\nA useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem.\n\nChunking is usually done once, when documents are added, and then forgotten. That is a pity, because it is one of the few settings that changes what every later step can do.\n\nThe examples in this primer use English prose, but the same ideas hold for any language. Only the numbers change, because words and tokens have different lengths.\n\n## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply.\n\nThere is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\nSmall chunks have a second cost. A question that needs two facts may find them in two different chunks, and the retriever has to bring back both for the model to answer.\n\nLarge chunks have the opposite problem. A chunk of a thousand tokens may hold the answer in its fifth paragraph, and the model has to find it among everything else.\n\nOverlap does not fix a chunk that is simply too small. It moves a few sentences across a boundary; it cannot give a two-sentence chunk the context of a whole section.\n\nMost splitters let you count size in characters or in tokens. Tokens match what the model sees; characters are simpler to reason about and easier to show on screen.\n\n## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked.\n\nKeep the questions you used. Each time a setting changes, ask them again; a change that helps one question often hurts another, and only a fixed set of questions shows both.\n\nWhen a question fails, look at where its answer sits in the document before changing anything. The fix for an answer split across two chunks is not the fix for an answer the search never found.\n\nA good test set is small and specific. Ten questions with known answers, each tied to one sentence in the document, show more than a hundred vague ones.\n\n## Chunk size in numbers\n\nTake a report of forty pages and about twenty thousand words. Cut into chunks of two hundred tokens, it becomes roughly a hundred and thirty pieces; cut into chunks of eight hundred tokens, about thirty-five.\n\nThe smaller cut gives the retriever more targets, each sharper and each saying less. The larger cut gives fewer targets, and each one carries a paragraph or two of context with it.\n\nThe three things that decide a good chunk size for a collection are how long the passages are that answer a typical question, how many retrieved passages the prompt can hold once the question, the instructions and room for the answer have been set aside, and how much surrounding text a reader needs before a passage makes sense on its own, which for a reference table is very little and for an argued report can be a whole page.\n\nToken counts and character counts are not the same. English averages about four characters per token, so a chunk of four hundred characters holds roughly a hundred tokens, and a sentence of a hundred words needs about a hundred and thirty.\n\nMeasure rather than guess: build the index at two sizes, ask the same ten questions of both, and count how many answers come back in the top five. The difference is usually larger than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons.\n\nThe help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred tokens, because their clauses refer to each other and lose their meaning when cut apart.\n\nThe product questions and answers did best with one entry per piece, whatever its length, because every entry already stood on its own.\n\nThe meeting notes did best at about three hundred tokens, cut wherever a new speaker began, because each turn in the discussion made one point.\n\nThe research papers did best at about five hundred tokens, cut at the ends of paragraphs, because their arguments ran across several sentences.\n\n## What a heading does to a split\n\nA heading is a promise about what follows. A splitter that starts a new chunk at each heading keeps that promise intact, and a chunk that begins with its heading tells the retriever what it is about before the first sentence.\n\nShort sections are the exception. A heading followed by a single sentence makes a chunk too small to answer anything, so splitters usually merge it with the next section until the chunk reaches a useful size.\n\nLong sections are split again inside themselves. Each part keeps the heading of its section, often with the headings above it, so a piece from the middle of a chapter still says which chapter it came from.\n\nHeadings help only when the parser finds them. In a scanned report or a plain text export they look like any other line, and a heading-based splitter falls back to cutting by size.\n\nSome documents have headings that say little, such as Introduction or Results. Adding the document's title to the heading path gives such chunks enough context to be told apart.\n\nHeadings also travel into the embedding. When the heading path is added to the start of a chunk, its embedding moves towards the topic the heading names, which helps short chunks most.\n\nThe cost is length. A heading path of three levels can add twenty or thirty tokens to every chunk, which matters when chunks are small and the context window is tight.\n\nNumbered headings need care. A splitter that treats every numbered line as a heading will cut a numbered list into pieces of one item each.\n\nIn the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long.\n\n## A short glossary\n\nChunk. A piece of a document, cut before indexing, that the retriever scores as a whole.\n\nChunk size. How long each piece may be, counted in characters or in tokens.\n\nOverlap. Text repeated at the start of a chunk from the end of the one before it.\n\nSplitter. The step that decides where one chunk ends and the next begins.\n\nEmbedding. A list of numbers that stands for what a chunk means, used to compare it with a question.\n\nIndex. The store of chunks and their embeddings that a search runs against.\n\nRetriever. The step that scores every chunk against a question and returns the best.\n\nTop k. How many of the best-scoring chunks a search hands on to the next step.\n\nReranker. A second, slower model that reads the question and each returned chunk together.\n\nHybrid search. A search that combines keyword matches with embedding matches.\n\nContext window. The amount of text a language model can read at once.\n\nHeading path. The headings above a chunk, kept with it so it says where it came from.\n\nRecall. The share of the passages that answer a question that the search brought back.\n\nPrecision. The share of what the search brought back that answers the question.\n\nToken. A small unit of text, often part of a word, that models read and count.\n\nSemantic chunking. Cutting where the meaning changes, found by comparing the embeddings of neighbouring sentences.\n\nParent and child. Small chunks searched for precision, each pointing to a larger chunk handed to the model for context.\n\nEvidence. The sentence in a document that answers a question, used to check whether a search found it.\n\nHit rate. The share of test questions whose evidence came back in the pieces checked.",
+ "doc_text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find.\n\n## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match.\n\nA useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem.\n\nChunking is usually done once, when documents are added, and then forgotten. That is a pity, because it is one of the few settings that changes what every later step can do.\n\nThe examples in this primer use English prose, but the same ideas hold for any language. Only the numbers change, because words and tokens have different lengths.\n\n## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply.\n\nThere is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\nSmall chunks have a second cost. A question that needs two facts may find them in two different chunks, and the retriever has to bring back both for the model to answer.\n\nLarge chunks have the opposite problem. A chunk of a thousand tokens may hold the answer in its fifth paragraph, and the model has to find it among everything else.\n\nOverlap does not fix a chunk that is simply too small. It moves a few sentences across a boundary; it cannot give a two-sentence chunk the context of a whole section.\n\nMost splitters let you count size in characters or in tokens. Tokens match what the model sees; characters are simpler to reason about and easier to show on screen.\n\n## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. A section under one heading usually discusses one subject, which is exactly what a good chunk should do. Structureaware splitting uses that shape: headings, paragraphs, list items and tables become the natural places to cut.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked.\n\nKeep the questions you used. Each time a setting changes, ask them again; a change that helps one question often hurts another, and only a fixed set of questions shows both.\n\nWhen a question fails, look at where its answer sits in the document before changing anything. The fix for an answer split across two chunks is not the fix for an answer the search never found.\n\nA good test set is small and specific. Ten questions with known answers, each tied to one sentence in the document, show more than a hundred vague ones.\n\n## Chunk size in numbers\n\nTake a report of forty pages and about twenty thousand words. Cut into chunks of two hundred tokens, it becomes roughly a hundred and thirty pieces; cut into chunks of eight hundred tokens, about thirty-five.\n\nThe smaller cut gives the retriever more targets, each sharper and each saying less. The larger cut gives fewer targets, and each one carries a paragraph or two of context with it.\n\nThe three things that decide a good chunk size for a collection are how long the passages are that answer a typical question, how many retrieved passages the prompt can hold once the question, the instructions and room for the answer have been set aside, and how much surrounding text a reader needs before a passage makes sense on its own, which for a reference table is very little and for an argued report can be a whole page.\n\nToken counts and character counts are not the same. English averages about four characters per token, so a chunk of four hundred characters holds roughly a hundred tokens, and a sentence of a hundred words needs about a hundred and thirty.\n\nMeasure rather than guess: build the index at two sizes, ask the same ten questions of both, and count how many answers come back in the top five. The difference is usually larger than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons.\n\nThe help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred tokens, because their clauses refer to each other and lose their meaning when cut apart.\n\nThe product questions and answers did best with one entry per piece, whatever its length, because every entry already stood on its own.\n\nThe meeting notes did best at about three hundred tokens, cut wherever a new speaker began, because each turn in the discussion made one point.\n\nThe research papers did best at about five hundred tokens, cut at the ends of paragraphs, because their arguments ran across several sentences.\n\n## What a heading does to a split\n\nA heading is a promise about what follows. A splitter that starts a new chunk at each heading keeps that promise intact, and a chunk that begins with its heading tells the retriever what it is about before the first sentence.\n\nShort sections are the exception. A heading followed by a single sentence makes a chunk too small to answer anything, so splitters usually merge it with the next section until the chunk reaches a useful size.\n\nLong sections are split again inside themselves. Each part keeps the heading of its section, often with the headings above it, so a piece from the middle of a chapter still says which chapter it came from.\n\nHeadings help only when the parser finds them. In a scanned report or a plain text export they look like any other line, and a heading-based splitter falls back to cutting by size.\n\nSome documents have headings that say little, such as Introduction or Results. Adding the document's title to the heading path gives such chunks enough context to be told apart.\n\nHeadings also travel into the embedding. When the heading path is added to the start of a chunk, its embedding moves towards the topic the heading names, which helps short chunks most.\n\nThe cost is length. A heading path of three levels can add twenty or thirty tokens to every chunk, which matters when chunks are small and the context window is tight.\n\nNumbered headings need care. A splitter that treats every numbered line as a heading will cut a numbered list into pieces of one item each.\n\nIn the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long.\n\n## A short glossary\n\nChunk. A piece of a document, cut before indexing, that the retriever scores as a whole.\n\nChunk size. How long each piece may be, counted in characters or in tokens.\n\nOverlap. Text repeated at the start of a chunk from the end of the one before it.\n\nSplitter. The step that decides where one chunk ends and the next begins.\n\nEmbedding. A list of numbers that stands for what a chunk means, used to compare it with a question.\n\nIndex. The store of chunks and their embeddings that a search runs against.\n\nRetriever. The step that scores every chunk against a question and returns the best.\n\nTop k. How many of the best-scoring chunks a search hands on to the next step.\n\nReranker. A second, slower model that reads the question and each returned chunk together.\n\nHybrid search. A search that combines keyword matches with embedding matches.\n\nContext window. The amount of text a language model can read at once.\n\nHeading path. The headings above a chunk, kept with it so it says where it came from.\n\nRecall. The share of the passages that answer a question that the search brought back.\n\nPrecision. The share of what the search brought back that answers the question.\n\nToken. A small unit of text, often part of a word, that models read and count.\n\nSemantic chunking. Cutting where the meaning changes, found by comparing the embeddings of neighbouring sentences.\n\nParent and child. Small chunks searched for precision, each pointing to a larger chunk handed to the model for context.\n\nEvidence. The sentence in a document that answers a question, used to check whether a search found it.\n\nHit rate. The share of test questions whose evidence came back in the pieces checked.",
  "passage": {
-  "start": 5925,
-  "end": 6354
+  "start": 5932,
+  "end": 6361
  },
  "questions": [
   {
@@ -140,7 +140,7 @@
    },
    "chunks": [
     {
-     "id": "72d9ffe495fa86eb",
+     "id": "918c3e6bb10fb6bc",
      "ordinal": 0,
      "start": 0,
      "end": 371,
@@ -152,7 +152,7 @@
      "text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find."
     },
     {
-     "id": "9c0a57254bc95124",
+     "id": "852e3ba93e94344d",
      "ordinal": 1,
      "start": 373,
      "end": 683,
@@ -164,7 +164,7 @@
      "text": "## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it."
     },
     {
-     "id": "4719da8bbddfb0fe",
+     "id": "ef1f4c07b5476ae4",
      "ordinal": 2,
      "start": 685,
      "end": 976,
@@ -176,7 +176,7 @@
      "text": "Boundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match."
     },
     {
-     "id": "98995f69b73a89cb",
+     "id": "b255320ea211ee9e",
      "ordinal": 3,
      "start": 978,
      "end": 1192,
@@ -188,7 +188,7 @@
      "text": "A useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it."
     },
     {
-     "id": "b8e09613822ee47c",
+     "id": "b1c2b1e4b2509203",
      "ordinal": 4,
      "start": 1194,
      "end": 1440,
@@ -200,7 +200,7 @@
      "text": "Bad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem."
     },
     {
-     "id": "c2227cc632819549",
+     "id": "155df0936c4ab94c",
      "ordinal": 5,
      "start": 1442,
      "end": 1806,
@@ -212,7 +212,7 @@
      "text": "Chunking is usually done once, when documents are added, and then forgotten. That is a pity, because it is one of the few settings that changes what every later step can do.\n\nThe examples in this primer use English prose, but the same ideas hold for any language. Only the numbers change, because words and tokens have different lengths.\n\n## Chunk size and overlap"
     },
     {
-     "id": "81b0094fc26c3883",
+     "id": "a3cb44cc988bd67a",
      "ordinal": 6,
      "start": 1781,
      "end": 2083,
@@ -224,7 +224,7 @@
      "text": "## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply."
     },
     {
-     "id": "56e4875f60296b25",
+     "id": "1ab2182e8cd8418d",
      "ordinal": 7,
      "start": 2085,
      "end": 2394,
@@ -236,7 +236,7 @@
      "text": "There is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see."
     },
     {
-     "id": "9f91fa0dfdd8154e",
+     "id": "980c04db71846a57",
      "ordinal": 8,
      "start": 2396,
      "end": 2704,
@@ -248,7 +248,7 @@
      "text": "Overlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text."
     },
     {
-     "id": "db7354c1837d55b2",
+     "id": "f4da2d341381b8d4",
      "ordinal": 9,
      "start": 2706,
      "end": 3002,
@@ -260,7 +260,7 @@
      "text": "A common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports."
     },
     {
-     "id": "c947bdeb6cc73bed",
+     "id": "0e8d94b99fdb3a94",
      "ordinal": 10,
      "start": 3004,
      "end": 3337,
@@ -272,7 +272,7 @@
      "text": "Overlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\nSmall chunks have a second cost. A question that needs two facts may find them in two different chunks, and the retriever has to bring back both for the model to answer."
     },
     {
-     "id": "ebd36464e7560d8d",
+     "id": "a4a559aff2c61722",
      "ordinal": 11,
      "start": 3339,
      "end": 3671,
@@ -284,7 +284,7 @@
      "text": "Large chunks have the opposite problem. A chunk of a thousand tokens may hold the answer in its fifth paragraph, and the model has to find it among everything else.\n\nOverlap does not fix a chunk that is simply too small. It moves a few sentences across a boundary; it cannot give a two-sentence chunk the context of a whole section."
     },
     {
-     "id": "4e9847f678c54618",
+     "id": "9046fd363ace07a4",
      "ordinal": 12,
      "start": 3673,
      "end": 3867,
@@ -296,22 +296,22 @@
      "text": "Most splitters let you count size in characters or in tokens. Tokens match what the model sees; characters are simpler to reason about and easier to show on screen.\n\n## Structure-aware splitting"
     },
     {
-     "id": "3dec125f94f2a28b",
+     "id": "95a3b3af6b602310",
      "ordinal": 13,
      "start": 3839,
-     "end": 4141,
+     "end": 4148,
      "page_span": [
       3,
       3
      ],
-     "token_count": 60,
-     "text": "## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do."
+     "token_count": 59,
+     "text": "## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. A section under one heading usually discusses one subject, which is exactly what a good chunk should do. Structureaware splitting uses that shape: headings, paragraphs, list items and tables become the natural places to cut."
     },
     {
-     "id": "965bf25d4b2b4ae7",
+     "id": "66320121f7cc1d82",
      "ordinal": 14,
-     "start": 4143,
-     "end": 4441,
+     "start": 4150,
+     "end": 4448,
      "page_span": [
       3,
       3
@@ -320,10 +320,10 @@
      "text": "This only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks."
     },
     {
-     "id": "f8626b646ca20d20",
+     "id": "2e88e5b39ce7d0aa",
      "ordinal": 15,
-     "start": 4443,
-     "end": 4710,
+     "start": 4450,
+     "end": 4717,
      "page_span": [
       3,
       3
@@ -332,10 +332,10 @@
      "text": "A structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point"
     },
     {
-     "id": "2ab655964cd801e1",
+     "id": "527da4773c17d57a",
      "ordinal": 16,
-     "start": 4682,
-     "end": 4981,
+     "start": 4689,
+     "end": 4988,
      "page_span": [
       3,
       3
@@ -344,10 +344,10 @@
      "text": "## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked."
     },
     {
-     "id": "047f05e592e3047d",
+     "id": "34f999fce45decba",
      "ordinal": 17,
-     "start": 4983,
-     "end": 5351,
+     "start": 4990,
+     "end": 5358,
      "page_span": [
       3,
       3
@@ -356,10 +356,10 @@
      "text": "Keep the questions you used. Each time a setting changes, ask them again; a change that helps one question often hurts another, and only a fixed set of questions shows both.\n\nWhen a question fails, look at where its answer sits in the document before changing anything. The fix for an answer split across two chunks is not the fix for an answer the search never found."
     },
     {
-     "id": "9bca2157a3c6e159",
+     "id": "a12f5fdb2b29b907",
      "ordinal": 18,
-     "start": 5353,
-     "end": 5741,
+     "start": 5360,
+     "end": 5748,
      "page_span": [
       3,
       4
@@ -368,10 +368,10 @@
      "text": "A good test set is small and specific. Ten questions with known answers, each tied to one sentence in the document, show more than a hundred vague ones.\n\n## Chunk size in numbers\n\nTake a report of forty pages and about twenty thousand words. Cut into chunks of two hundred tokens, it becomes roughly a hundred and thirty pieces; cut into chunks of eight hundred tokens, about thirty-five."
     },
     {
-     "id": "6843842dbe160191",
+     "id": "effe83ce81fa6033",
      "ordinal": 19,
-     "start": 5743,
-     "end": 6143,
+     "start": 5750,
+     "end": 6150,
      "page_span": [
       4,
       4
@@ -380,10 +380,10 @@
      "text": "The smaller cut gives the retriever more targets, each sharper and each saying less. The larger cut gives fewer targets, and each one carries a paragraph or two of context with it.\n\nThe three things that decide a good chunk size for a collection are how long the passages are that answer a typical question, how many retrieved passages the prompt can hold once the question, the instructions and room"
     },
     {
-     "id": "06d793173b2284d2",
+     "id": "bfdf22632228930b",
      "ordinal": 20,
-     "start": 6070,
-     "end": 6354,
+     "start": 6077,
+     "end": 6361,
      "page_span": [
       4,
       4
@@ -392,10 +392,10 @@
      "text": "passages the prompt can hold once the question, the instructions and room for the answer have been set aside, and how much surrounding text a reader needs before a passage makes sense on its own, which for a reference table is very little and for an argued report can be a whole page."
     },
     {
-     "id": "826a8fc37cdeb896",
+     "id": "02fd7c9f854c0643",
      "ordinal": 21,
-     "start": 6276,
-     "end": 6595,
+     "start": 6283,
+     "end": 6602,
      "page_span": [
       4,
       4
@@ -404,10 +404,10 @@
      "text": "a reference table is very little and for an argued report can be a whole page.\n\nToken counts and character counts are not the same. English averages about four characters per token, so a chunk of four hundred characters holds roughly a hundred tokens, and a sentence of a hundred words needs about a hundred and thirty."
     },
     {
-     "id": "4a8cef8a5a6f3fd7",
+     "id": "0c051cefd637ce71",
      "ordinal": 22,
-     "start": 6597,
-     "end": 6892,
+     "start": 6604,
+     "end": 6899,
      "page_span": [
       4,
       4
@@ -416,10 +416,10 @@
      "text": "Measure rather than guess: build the index at two sizes, ask the same ten questions of both, and count how many answers come back in the top five. The difference is usually larger than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons."
     },
     {
-     "id": "dde8e15d77556798",
+     "id": "3b69691100f0f2fb",
      "ordinal": 23,
-     "start": 6894,
-     "end": 7194,
+     "start": 6901,
+     "end": 7201,
      "page_span": [
       4,
       4
@@ -428,10 +428,10 @@
      "text": "The help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred tokens, because their clauses refer to each other and lose their meaning when cut apart."
     },
     {
-     "id": "23cdd9c2129a4cd2",
+     "id": "3c9b22b28bcf07bc",
      "ordinal": 24,
-     "start": 7196,
-     "end": 7476,
+     "start": 7203,
+     "end": 7483,
      "page_span": [
       4,
       4
@@ -440,10 +440,10 @@
      "text": "The product questions and answers did best with one entry per piece, whatever its length, because every entry already stood on its own.\n\nThe meeting notes did best at about three hundred tokens, cut wherever a new speaker began, because each turn in the discussion made one point."
     },
     {
-     "id": "0886311f93395dc9",
+     "id": "03cd42a007822938",
      "ordinal": 25,
-     "start": 7478,
-     "end": 7656,
+     "start": 7485,
+     "end": 7663,
      "page_span": [
       4,
       5
@@ -452,10 +452,10 @@
      "text": "The research papers did best at about five hundred tokens, cut at the ends of paragraphs, because their arguments ran across several sentences.\n\n## What a heading does to a split"
     },
     {
-     "id": "1e8a9844c79d6141",
+     "id": "cc5cda9700e5970e",
      "ordinal": 26,
-     "start": 7623,
-     "end": 7883,
+     "start": 7630,
+     "end": 7890,
      "page_span": [
       5,
       5
@@ -464,10 +464,10 @@
      "text": "## What a heading does to a split\n\nA heading is a promise about what follows. A splitter that starts a new chunk at each heading keeps that promise intact, and a chunk that begins with its heading tells the retriever what it is about before the first sentence."
     },
     {
-     "id": "f24ade20fa487636",
+     "id": "f9c2a55a620159e3",
      "ordinal": 27,
-     "start": 7885,
-     "end": 8093,
+     "start": 7892,
+     "end": 8100,
      "page_span": [
       5,
       5
@@ -476,10 +476,10 @@
      "text": "Short sections are the exception. A heading followed by a single sentence makes a chunk too small to answer anything, so splitters usually merge it with the next section until the chunk reaches a useful size."
     },
     {
-     "id": "21c9eedf3983a959",
+     "id": "819f5c9f79074f11",
      "ordinal": 28,
-     "start": 8095,
-     "end": 8482,
+     "start": 8102,
+     "end": 8489,
      "page_span": [
       5,
       5
@@ -488,10 +488,10 @@
      "text": "Long sections are split again inside themselves. Each part keeps the heading of its section, often with the headings above it, so a piece from the middle of a chapter still says which chapter it came from.\n\nHeadings help only when the parser finds them. In a scanned report or a plain text export they look like any other line, and a heading-based splitter falls back to cutting by size."
     },
     {
-     "id": "09d28d939c54e837",
+     "id": "1ac13c86cc340100",
      "ordinal": 29,
-     "start": 8484,
-     "end": 8847,
+     "start": 8491,
+     "end": 8854,
      "page_span": [
       5,
       5
@@ -500,10 +500,10 @@
      "text": "Some documents have headings that say little, such as Introduction or Results. Adding the document's title to the heading path gives such chunks enough context to be told apart.\n\nHeadings also travel into the embedding. When the heading path is added to the start of a chunk, its embedding moves towards the topic the heading names, which helps short chunks most."
     },
     {
-     "id": "37656e876a26b612",
+     "id": "b096501ebb2938dc",
      "ordinal": 30,
-     "start": 8849,
-     "end": 9157,
+     "start": 8856,
+     "end": 9164,
      "page_span": [
       5,
       5
@@ -512,10 +512,10 @@
      "text": "The cost is length. A heading path of three levels can add twenty or thirty tokens to every chunk, which matters when chunks are small and the context window is tight.\n\nNumbered headings need care. A splitter that treats every numbered line as a heading will cut a numbered list into pieces of one item each."
     },
     {
-     "id": "c43c22bce9afb491",
+     "id": "cc3374d8fc464ddd",
      "ordinal": 31,
-     "start": 9159,
-     "end": 9482,
+     "start": 9166,
+     "end": 9489,
      "page_span": [
       5,
       6
@@ -524,10 +524,10 @@
      "text": "In the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long.\n\n## A short glossary\n\nChunk. A piece of a document, cut before indexing, that the retriever scores as a whole.\n\nChunk size. How long each piece may be, counted in characters or in tokens."
     },
     {
-     "id": "f78469b720dba342",
+     "id": "03adea96e8ee24b2",
      "ordinal": 32,
-     "start": 9407,
-     "end": 9742,
+     "start": 9414,
+     "end": 9749,
      "page_span": [
       6,
       6
@@ -536,10 +536,10 @@
      "text": "Chunk size. How long each piece may be, counted in characters or in tokens.\n\nOverlap. Text repeated at the start of a chunk from the end of the one before it.\n\nSplitter. The step that decides where one chunk ends and the next begins.\n\nEmbedding. A list of numbers that stands for what a chunk means, used to compare it with a question."
     },
     {
-     "id": "cf9d4f84237cfb87",
+     "id": "562282076eb69b5d",
      "ordinal": 33,
-     "start": 9744,
-     "end": 10077,
+     "start": 9751,
+     "end": 10084,
      "page_span": [
       6,
       6
@@ -548,10 +548,10 @@
      "text": "Index. The store of chunks and their embeddings that a search runs against.\n\nRetriever. The step that scores every chunk against a question and returns the best.\n\nTop k. How many of the best-scoring chunks a search hands on to the next step.\n\nReranker. A second, slower model that reads the question and each returned chunk together."
     },
     {
-     "id": "437b85aae1c2a408",
+     "id": "bd4b3f08983439ca",
      "ordinal": 34,
-     "start": 10079,
-     "end": 10402,
+     "start": 10086,
+     "end": 10409,
      "page_span": [
       6,
       6
@@ -560,10 +560,10 @@
      "text": "Hybrid search. A search that combines keyword matches with embedding matches.\n\nContext window. The amount of text a language model can read at once.\n\nHeading path. The headings above a chunk, kept with it so it says where it came from.\n\nRecall. The share of the passages that answer a question that the search brought back."
     },
     {
-     "id": "4ffc429f7558b0eb",
+     "id": "2b1259a0ef25801a",
      "ordinal": 35,
-     "start": 10404,
-     "end": 10800,
+     "start": 10411,
+     "end": 10807,
      "page_span": [
       6,
       6
@@ -572,10 +572,10 @@
      "text": "Precision. The share of what the search brought back that answers the question.\n\nToken. A small unit of text, often part of a word, that models read and count.\n\nSemantic chunking. Cutting where the meaning changes, found by comparing the embeddings of neighbouring sentences.\n\nParent and child. Small chunks searched for precision, each pointing to a larger chunk handed to the model for context."
     },
     {
-     "id": "f716b4a7a1b63f21",
+     "id": "6f76b0085475ab7c",
      "ordinal": 36,
-     "start": 10802,
-     "end": 10991,
+     "start": 10809,
+     "end": 10998,
      "page_span": [
       6,
       6
@@ -656,7 +656,7 @@
       "id": "heading-sections",
       "question": "Why does structure-aware splitting cut at headings?",
       "hit": true,
-      "rank": 1,
+      "rank": 2,
       "match": "exact"
      },
      {
@@ -682,7 +682,7 @@
    },
    "chunks": [
     {
-     "id": "8cce8d6c873e3e45",
+     "id": "dc1019c212220af6",
      "ordinal": 0,
      "start": 0,
      "end": 371,
@@ -694,7 +694,7 @@
      "text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find."
     },
     {
-     "id": "ea39a9f04f847bc5",
+     "id": "7425c4e815ca44ab",
      "ordinal": 1,
      "start": 373,
      "end": 1779,
@@ -706,7 +706,7 @@
      "text": "## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match.\n\nA useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem.\n\nChunking is usually done once, when documents are added, and then forgotten. That is a pity, because it is one of the few settings that changes what every later step can do.\n\nThe examples in this primer use English prose, but the same ideas hold for any language. Only the numbers change, because words and tokens have different lengths."
     },
     {
-     "id": "666cf2589e254431",
+     "id": "a95d108585e3d808",
      "ordinal": 2,
      "start": 1781,
      "end": 3837,
@@ -718,22 +718,22 @@
      "text": "## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply.\n\nThere is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\nSmall chunks have a second cost. A question that needs two facts may find them in two different chunks, and the retriever has to bring back both for the model to answer.\n\nLarge chunks have the opposite problem. A chunk of a thousand tokens may hold the answer in its fifth paragraph, and the model has to find it among everything else.\n\nOverlap does not fix a chunk that is simply too small. It moves a few sentences across a boundary; it cannot give a two-sentence chunk the context of a whole section.\n\nMost splitters let you count size in characters or in tokens. Tokens match what the model sees; characters are simpler to reason about and easier to show on screen."
     },
     {
-     "id": "2303956f04d1fa41",
+     "id": "01a87dad404d8471",
      "ordinal": 3,
      "start": 3839,
-     "end": 4680,
+     "end": 4687,
      "page_span": [
       3,
       3
      ],
-     "token_count": 165,
-     "text": "## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from."
+     "token_count": 164,
+     "text": "## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. A section under one heading usually discusses one subject, which is exactly what a good chunk should do. Structureaware splitting uses that shape: headings, paragraphs, list items and tables become the natural places to cut.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from."
     },
     {
-     "id": "2d11643913c780b3",
+     "id": "f63516aac61ae885",
      "ordinal": 4,
-     "start": 4682,
-     "end": 5505,
+     "start": 4689,
+     "end": 5512,
      "page_span": [
       3,
       3
@@ -742,10 +742,10 @@
      "text": "## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked.\n\nKeep the questions you used. Each time a setting changes, ask them again; a change that helps one question often hurts another, and only a fixed set of questions shows both.\n\nWhen a question fails, look at where its answer sits in the document before changing anything. The fix for an answer split across two chunks is not the fix for an answer the search never found.\n\nA good test set is small and specific. Ten questions with known answers, each tied to one sentence in the document, show more than a hundred vague ones."
     },
     {
-     "id": "2ef71fee383392ba",
+     "id": "bdd3ee76a681855f",
      "ordinal": 5,
-     "start": 5507,
-     "end": 7621,
+     "start": 5514,
+     "end": 7628,
      "page_span": [
       4,
       4
@@ -754,10 +754,10 @@
      "text": "## Chunk size in numbers\n\nTake a report of forty pages and about twenty thousand words. Cut into chunks of two hundred tokens, it becomes roughly a hundred and thirty pieces; cut into chunks of eight hundred tokens, about thirty-five.\n\nThe smaller cut gives the retriever more targets, each sharper and each saying less. The larger cut gives fewer targets, and each one carries a paragraph or two of context with it.\n\nThe three things that decide a good chunk size for a collection are how long the passages are that answer a typical question, how many retrieved passages the prompt can hold once the question, the instructions and room for the answer have been set aside, and how much surrounding text a reader needs before a passage makes sense on its own, which for a reference table is very little and for an argued report can be a whole page.\n\nToken counts and character counts are not the same. English averages about four characters per token, so a chunk of four hundred characters holds roughly a hundred tokens, and a sentence of a hundred words needs about a hundred and thirty.\n\nMeasure rather than guess: build the index at two sizes, ask the same ten questions of both, and count how many answers come back in the top five. The difference is usually larger than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons.\n\nThe help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred tokens, because their clauses refer to each other and lose their meaning when cut apart.\n\nThe product questions and answers did best with one entry per piece, whatever its length, because every entry already stood on its own.\n\nThe meeting notes did best at about three hundred tokens, cut wherever a new speaker began, because each turn in the discussion made one point.\n\nThe research papers did best at about five hundred tokens, cut at the ends of paragraphs, because their arguments ran across several sentences."
     },
     {
-     "id": "1c8a21153a2a16a4",
+     "id": "d13874b91000c023",
      "ordinal": 6,
-     "start": 7623,
-     "end": 9294,
+     "start": 7630,
+     "end": 9301,
      "page_span": [
       5,
       5
@@ -766,10 +766,10 @@
      "text": "## What a heading does to a split\n\nA heading is a promise about what follows. A splitter that starts a new chunk at each heading keeps that promise intact, and a chunk that begins with its heading tells the retriever what it is about before the first sentence.\n\nShort sections are the exception. A heading followed by a single sentence makes a chunk too small to answer anything, so splitters usually merge it with the next section until the chunk reaches a useful size.\n\nLong sections are split again inside themselves. Each part keeps the heading of its section, often with the headings above it, so a piece from the middle of a chapter still says which chapter it came from.\n\nHeadings help only when the parser finds them. In a scanned report or a plain text export they look like any other line, and a heading-based splitter falls back to cutting by size.\n\nSome documents have headings that say little, such as Introduction or Results. Adding the document's title to the heading path gives such chunks enough context to be told apart.\n\nHeadings also travel into the embedding. When the heading path is added to the start of a chunk, its embedding moves towards the topic the heading names, which helps short chunks most.\n\nThe cost is length. A heading path of three levels can add twenty or thirty tokens to every chunk, which matters when chunks are small and the context window is tight.\n\nNumbered headings need care. A splitter that treats every numbered line as a heading will cut a numbered list into pieces of one item each.\n\nIn the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long."
     },
     {
-     "id": "e64d2dc5d900bb39",
+     "id": "c98b788e535bf19e",
      "ordinal": 7,
-     "start": 9296,
-     "end": 10991,
+     "start": 9303,
+     "end": 10998,
      "page_span": [
       6,
       6
@@ -877,7 +877,7 @@
    },
    "chunks": [
     {
-     "id": "99c00dfe034b9cea",
+     "id": "6294ca1dacdc3ee6",
      "ordinal": 0,
      "start": 0,
      "end": 2596,
@@ -889,52 +889,52 @@
      "text": "## Chunking in Retrieval-Augmented Generation\n\nRetrieval-augmented generation answers a question in two steps. First it finds passages that look relevant, then it asks a language model to answer from those passages alone. The passages are chunks: pieces of the original documents, cut before anything is indexed. How they are cut decides what the retriever can ever find.\n\n## Why chunk boundaries matter\n\nA retriever scores each chunk as a whole. When a boundary falls in the middle of an explanation, the question lands on one half and the answer on the other, and neither half scores well on its own. The model then receives a passage that mentions the topic but never resolves it.\n\nBoundaries also decide what travels together. A definition separated from the term it defines, or a table separated from its caption, loses the context that made it useful. The embedding of such a chunk describes a fragment, not an idea, so it drifts away from the questions it should match.\n\nA useful rule of thumb: a chunk should answer one question well. If you cannot say in a sentence what a chunk is about, a retriever will struggle to decide when it is relevant, and a reader will struggle to use it.\n\nBad boundaries are hard to see from the final answer. The model is fluent either way, so the symptom is usually an answer that is vague or quietly wrong. Looking at the chunks themselves, before indexing, is the quickest way to catch the problem.\n\nChunking is usually done once, when documents are added, and then forgotten. That is a pity, because it is one of the few settings that changes what every later step can do.\n\nThe examples in this primer use English prose, but the same ideas hold for any language. Only the numbers change, because words and tokens have different lengths.\n\n## Chunk size and overlap\n\nChunk size is a trade between precision and context. Small chunks match a question closely, because every sentence in them is about the same thing. Large chunks carry more surrounding context, but their embedding averages over several topics and matches none of them sharply.\n\nThere is also a budget on the other side. Every retrieved chunk is pasted into the prompt, so the number of chunks you retrieve times their size must fit in the context window, with room left for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in"
     },
     {
-     "id": "3d4445957f7bb9af",
+     "id": "8c2501d5ea0ecf52",
      "ordinal": 1,
      "start": 2277,
-     "end": 4835,
+     "end": 4845,
      "page_span": [
       2,
       3
      ],
      "token_count": 512,
-     "text": "for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\nSmall chunks have a second cost. A question that needs two facts may find them in two different chunks, and the retriever has to bring back both for the model to answer.\n\nLarge chunks have the opposite problem. A chunk of a thousand tokens may hold the answer in its fifth paragraph, and the model has to find it among everything else.\n\nOverlap does not fix a chunk that is simply too small. It moves a few sentences across a boundary; it cannot give a two-sentence chunk the context of a whole section.\n\nMost splitters let you count size in characters or in tokens. Tokens match what the model sees; characters are simpler to reason about and easier to show on screen.\n\n## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. Structure-aware splitting uses it: headings, paragraphs, list items and tables become the natural places to cut. A section under one heading usually discusses one subject, which is exactly what a good chunk should do.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting"
+     "text": "for the question and the answer. Doubling the chunk size roughly halves how many distinct passages the model can see.\n\nOverlap repeats the end of one chunk at the start of the next. It is a cheap insurance policy against a boundary that lands in the wrong place: a sentence cut at the edge of one chunk appears whole in its neighbour. The cost is a larger index and near-duplicate results, since adjacent chunks now share text.\n\nA common starting point is a few hundred tokens per chunk with an overlap of ten to twenty percent. Treat these numbers as a first guess to measure, not a rule. Documents with short, self-contained entries, such as a glossary or an FAQ, often want much smaller chunks than long narrative reports.\n\nOverlap should always be smaller than the chunk itself. When the two are equal, each step moves forward by nothing, and a splitter either loops or refuses to run.\n\nSmall chunks have a second cost. A question that needs two facts may find them in two different chunks, and the retriever has to bring back both for the model to answer.\n\nLarge chunks have the opposite problem. A chunk of a thousand tokens may hold the answer in its fifth paragraph, and the model has to find it among everything else.\n\nOverlap does not fix a chunk that is simply too small. It moves a few sentences across a boundary; it cannot give a two-sentence chunk the context of a whole section.\n\nMost splitters let you count size in characters or in tokens. Tokens match what the model sees; characters are simpler to reason about and easier to show on screen.\n\n## Structure-aware splitting\n\nFixed-size splitting ignores the document's own shape. A section under one heading usually discusses one subject, which is exactly what a good chunk should do. Structureaware splitting uses that shape: headings, paragraphs, list items and tables become the natural places to cut.\n\nThis only works when the parser recovers the structure. A layout-aware parser labels headings, footers and tables, while a plain text extractor returns a flat stream of lines. Cleaning comes next: running headers, footers and page numbers are removed, so they do not end up in the middle of chunks.\n\nA structure-aware splitter still needs a size limit. A long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at"
     },
     {
-     "id": "05fea0f06a55583f",
+     "id": "1d870863e89d7bf9",
      "ordinal": 2,
-     "start": 4498,
-     "end": 7105,
+     "start": 4510,
+     "end": 7119,
      "page_span": [
       3,
       4
      ],
      "token_count": 512,
-     "text": "long section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked.\n\nKeep the questions you used. Each time a setting changes, ask them again; a change that helps one question often hurts another, and only a fixed set of questions shows both.\n\nWhen a question fails, look at where its answer sits in the document before changing anything. The fix for an answer split across two chunks is not the fix for an answer the search never found.\n\nA good test set is small and specific. Ten questions with known answers, each tied to one sentence in the document, show more than a hundred vague ones.\n\n## Chunk size in numbers\n\nTake a report of forty pages and about twenty thousand words. Cut into chunks of two hundred tokens, it becomes roughly a hundred and thirty pieces; cut into chunks of eight hundred tokens, about thirty-five.\n\nThe smaller cut gives the retriever more targets, each sharper and each saying less. The larger cut gives fewer targets, and each one carries a paragraph or two of context with it.\n\nThe three things that decide a good chunk size for a collection are how long the passages are that answer a typical question, how many retrieved passages the prompt can hold once the question, the instructions and room for the answer have been set aside, and how much surrounding text a reader needs before a passage makes sense on its own, which for a reference table is very little and for an argued report can be a whole page.\n\nToken counts and character counts are not the same. English averages about four characters per token, so a chunk of four hundred characters holds roughly a hundred tokens, and a sentence of a hundred words needs about a hundred and thirty.\n\nMeasure rather than guess: build the index at two sizes, ask the same ten questions of both, and count how many answers come back in the top five. The difference is usually larger than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons.\n\nThe help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred"
+     "text": "section is split again inside itself, preferably at paragraph and then sentence boundaries, and each piece keeps its heading path so that the retriever knows where it came from.\n\n## Choosing a starting point\n\nStart simple, look at the chunks, then ask a handful of real questions and check which chunks come back. Change one setting at a time and compare the results side by side. The right configuration is the one that retrieves the passage a careful reader would have picked.\n\nKeep the questions you used. Each time a setting changes, ask them again; a change that helps one question often hurts another, and only a fixed set of questions shows both.\n\nWhen a question fails, look at where its answer sits in the document before changing anything. The fix for an answer split across two chunks is not the fix for an answer the search never found.\n\nA good test set is small and specific. Ten questions with known answers, each tied to one sentence in the document, show more than a hundred vague ones.\n\n## Chunk size in numbers\n\nTake a report of forty pages and about twenty thousand words. Cut into chunks of two hundred tokens, it becomes roughly a hundred and thirty pieces; cut into chunks of eight hundred tokens, about thirty-five.\n\nThe smaller cut gives the retriever more targets, each sharper and each saying less. The larger cut gives fewer targets, and each one carries a paragraph or two of context with it.\n\nThe three things that decide a good chunk size for a collection are how long the passages are that answer a typical question, how many retrieved passages the prompt can hold once the question, the instructions and room for the answer have been set aside, and how much surrounding text a reader needs before a passage makes sense on its own, which for a reference table is very little and for an argued report can be a whole page.\n\nToken counts and character counts are not the same. English averages about four characters per token, so a chunk of four hundred characters holds roughly a hundred tokens, and a sentence of a hundred words needs about a hundred and thirty.\n\nMeasure rather than guess: build the index at two sizes, ask the same ten questions of both, and count how many answers come back in the top five. The difference is usually larger than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons.\n\nThe help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred tokens"
     },
     {
-     "id": "6fa5a2b3e3efe5a9",
+     "id": "c7ce090d4a79eee0",
      "ordinal": 3,
-     "start": 6770,
-     "end": 9372,
+     "start": 6784,
+     "end": 9383,
      "page_span": [
       4,
       6
      ],
      "token_count": 512,
-     "text": "larger than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons.\n\nThe help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred tokens, because their clauses refer to each other and lose their meaning when cut apart.\n\nThe product questions and answers did best with one entry per piece, whatever its length, because every entry already stood on its own.\n\nThe meeting notes did best at about three hundred tokens, cut wherever a new speaker began, because each turn in the discussion made one point.\n\nThe research papers did best at about five hundred tokens, cut at the ends of paragraphs, because their arguments ran across several sentences.\n\n## What a heading does to a split\n\nA heading is a promise about what follows. A splitter that starts a new chunk at each heading keeps that promise intact, and a chunk that begins with its heading tells the retriever what it is about before the first sentence.\n\nShort sections are the exception. A heading followed by a single sentence makes a chunk too small to answer anything, so splitters usually merge it with the next section until the chunk reaches a useful size.\n\nLong sections are split again inside themselves. Each part keeps the heading of its section, often with the headings above it, so a piece from the middle of a chapter still says which chapter it came from.\n\nHeadings help only when the parser finds them. In a scanned report or a plain text export they look like any other line, and a heading-based splitter falls back to cutting by size.\n\nSome documents have headings that say little, such as Introduction or Results. Adding the document's title to the heading path gives such chunks enough context to be told apart.\n\nHeadings also travel into the embedding. When the heading path is added to the start of a chunk, its embedding moves towards the topic the heading names, which helps short chunks most.\n\nThe cost is length. A heading path of three levels can add twenty or thirty tokens to every chunk, which matters when chunks are small and the context window is tight.\n\nNumbered headings need care. A splitter that treats every numbered line as a heading will cut a numbered list into pieces of one item each.\n\nIn the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long.\n\n## A short glossary\n\nChunk. A piece of a document, cut before indexing, that"
+     "text": "than people expect.\n\nIn one test of five collections the best size was different for each, and so were the reasons.\n\nThe help-desk articles did best with pieces of about two hundred tokens, because each article answered a single problem in a few short paragraphs.\n\nThe legal contracts did best with pieces of about eight hundred tokens, because their clauses refer to each other and lose their meaning when cut apart.\n\nThe product questions and answers did best with one entry per piece, whatever its length, because every entry already stood on its own.\n\nThe meeting notes did best at about three hundred tokens, cut wherever a new speaker began, because each turn in the discussion made one point.\n\nThe research papers did best at about five hundred tokens, cut at the ends of paragraphs, because their arguments ran across several sentences.\n\n## What a heading does to a split\n\nA heading is a promise about what follows. A splitter that starts a new chunk at each heading keeps that promise intact, and a chunk that begins with its heading tells the retriever what it is about before the first sentence.\n\nShort sections are the exception. A heading followed by a single sentence makes a chunk too small to answer anything, so splitters usually merge it with the next section until the chunk reaches a useful size.\n\nLong sections are split again inside themselves. Each part keeps the heading of its section, often with the headings above it, so a piece from the middle of a chapter still says which chapter it came from.\n\nHeadings help only when the parser finds them. In a scanned report or a plain text export they look like any other line, and a heading-based splitter falls back to cutting by size.\n\nSome documents have headings that say little, such as Introduction or Results. Adding the document's title to the heading path gives such chunks enough context to be told apart.\n\nHeadings also travel into the embedding. When the heading path is added to the start of a chunk, its embedding moves towards the topic the heading names, which helps short chunks most.\n\nThe cost is length. A heading path of three levels can add twenty or thirty tokens to every chunk, which matters when chunks are small and the context window is tight.\n\nNumbered headings need care. A splitter that treats every numbered line as a heading will cut a numbered list into pieces of one item each.\n\nIn the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long.\n\n## A short glossary\n\nChunk. A piece of a document, cut before indexing, that the"
     },
     {
-     "id": "e4e151311a56c367",
+     "id": "722a0527bcfbf0f0",
      "ordinal": 4,
-     "start": 9090,
-     "end": 10991,
+     "start": 9100,
+     "end": 10998,
      "page_span": [
       5,
       6
      ],
-     "token_count": 391,
-     "text": "as a heading will cut a numbered list into pieces of one item each.\n\nIn the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long.\n\n## A short glossary\n\nChunk. A piece of a document, cut before indexing, that the retriever scores as a whole.\n\nChunk size. How long each piece may be, counted in characters or in tokens.\n\nOverlap. Text repeated at the start of a chunk from the end of the one before it.\n\nSplitter. The step that decides where one chunk ends and the next begins.\n\nEmbedding. A list of numbers that stands for what a chunk means, used to compare it with a question.\n\nIndex. The store of chunks and their embeddings that a search runs against.\n\nRetriever. The step that scores every chunk against a question and returns the best.\n\nTop k. How many of the best-scoring chunks a search hands on to the next step.\n\nReranker. A second, slower model that reads the question and each returned chunk together.\n\nHybrid search. A search that combines keyword matches with embedding matches.\n\nContext window. The amount of text a language model can read at once.\n\nHeading path. The headings above a chunk, kept with it so it says where it came from.\n\nRecall. The share of the passages that answer a question that the search brought back.\n\nPrecision. The share of what the search brought back that answers the question.\n\nToken. A small unit of text, often part of a word, that models read and count.\n\nSemantic chunking. Cutting where the meaning changes, found by comparing the embeddings of neighbouring sentences.\n\nParent and child. Small chunks searched for precision, each pointing to a larger chunk handed to the model for context.\n\nEvidence. The sentence in a document that answers a question, used to check whether a search found it.\n\nHit rate. The share of test questions whose evidence came back in the pieces checked."
+     "token_count": 390,
+     "text": "a heading will cut a numbered list into pieces of one item each.\n\nIn the end, headings are a hint, not a rule. The splitter still checks the size of every chunk and cuts again when a section runs long.\n\n## A short glossary\n\nChunk. A piece of a document, cut before indexing, that the retriever scores as a whole.\n\nChunk size. How long each piece may be, counted in characters or in tokens.\n\nOverlap. Text repeated at the start of a chunk from the end of the one before it.\n\nSplitter. The step that decides where one chunk ends and the next begins.\n\nEmbedding. A list of numbers that stands for what a chunk means, used to compare it with a question.\n\nIndex. The store of chunks and their embeddings that a search runs against.\n\nRetriever. The step that scores every chunk against a question and returns the best.\n\nTop k. How many of the best-scoring chunks a search hands on to the next step.\n\nReranker. A second, slower model that reads the question and each returned chunk together.\n\nHybrid search. A search that combines keyword matches with embedding matches.\n\nContext window. The amount of text a language model can read at once.\n\nHeading path. The headings above a chunk, kept with it so it says where it came from.\n\nRecall. The share of the passages that answer a question that the search brought back.\n\nPrecision. The share of what the search brought back that answers the question.\n\nToken. A small unit of text, often part of a word, that models read and count.\n\nSemantic chunking. Cutting where the meaning changes, found by comparing the embeddings of neighbouring sentences.\n\nParent and child. Small chunks searched for precision, each pointing to a larger chunk handed to the model for context.\n\nEvidence. The sentence in a document that answers a question, used to check whether a search found it.\n\nHit rate. The share of test questions whose evidence came back in the pieces checked."
     }
    ],
    "evaluation": {
@@ -960,7 +960,7 @@
       "id": "lost-context",
       "question": "Why does separating a table from its caption hurt?",
       "hit": true,
-      "rank": 4,
+      "rank": 3,
       "match": "exact"
      },
      {
@@ -1023,7 +1023,7 @@
       "id": "kept-whole",
       "question": "Which set wanted each item kept whole, however long?",
       "hit": true,
-      "rank": 3,
+      "rank": 4,
       "match": "exact"
      }
     ]

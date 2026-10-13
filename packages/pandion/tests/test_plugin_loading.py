@@ -1,5 +1,6 @@
 """Strategies load from a plugins: list in the file, or from installed packages."""
 
+import subprocess
 import sys
 import textwrap
 import warnings
@@ -71,15 +72,40 @@ def test_a_plugin_that_fails_to_import_names_the_module_and_the_error(tmp_path, 
         from_dict({"plugins": ["broken_mod"], **BASE}, base=tmp_path)
 
 
-def test_a_plugin_that_clashes_with_a_built_in_is_blamed(tmp_path, monkeypatch):
-    clash = MODULE.replace("loaded_from_plugins", "pdfium")
-    (tmp_path / "clash_mod.py").write_text(clash, encoding="utf-8")
-    monkeypatch.syspath_prepend(str(tmp_path))
+CLASH_CODE = textwrap.dedent("""
+    import sys
+    sys.path.insert(0, ".")
+    from pandion.config import from_dict, ConfigError
+
+    data = {
+        "plugins": ["clash_mod"],
+        "path": "./index",
+        "index": {
+            "parse": {"use": "pdfium"},
+            "chunk": {"use": "recursive_character"},
+            "embed": {"use": "fake-deterministic"},
+            "store": {"use": "lancedb"},
+        },
+    }
     try:
-        with pytest.raises(ConfigError, match=r"clash_mod.*already registered"):
-            from_dict({"plugins": ["clash_mod"], **BASE}, base=tmp_path)
-    finally:
-        sys.modules.pop("clash_mod", None)
+        from_dict(data, base=__import__("pathlib").Path("."))
+    except ConfigError as exc:
+        print("CONFIGERROR:", exc)
+    else:
+        print("NO ERROR")
+""")
+
+
+def test_a_plugin_that_clashes_with_a_built_in_is_blamed(tmp_path):
+    # A fresh interpreter, so discover() has not run before the plugin loads.
+    (tmp_path / "clash_mod.py").write_text(MODULE.replace("loaded_from_plugins", "pdfium"), encoding="utf-8")
+    run = subprocess.run(
+        [sys.executable, "-c", CLASH_CODE], cwd=tmp_path, capture_output=True, text=True, timeout=120
+    )
+    assert run.returncode == 0, run.stderr
+    assert "CONFIGERROR:" in run.stdout
+    assert "clash_mod" in run.stdout
+    assert "already registered" in run.stdout
 
 
 def test_plugins_must_be_a_list_of_module_names(tmp_path):

@@ -138,7 +138,7 @@ def test_top_k_below_one_is_refused(tmp_path):
 def test_a_pipeline_without_retrieve_is_refused(tmp_path):
     p = Pipeline(path=tmp_path / "i", parse="pdfium", chunk="recursive_character",
                  embed="fake-deterministic", store="lancedb")
-    with pytest.raises(ValueError, match="needs a pipeline with a retrieve section"):
+    with pytest.raises(ValueError, match="Add a retrieve section with at least a search step"):
         pandion.evaluate(p, [FOUND])
 
 
@@ -150,3 +150,23 @@ def test_the_report_as_a_dict_is_plain_json(tmp_path, docs):
     assert data["questions"][1]["trace"]["steps"][0]["stage"] == "parse"
     assert "retrieval" not in data["questions"][0]
     assert data["by_tag"]["fact"]["found"] == 1
+
+
+def test_the_report_prints_one_plain_line_per_question_and_the_totals(tmp_path, docs):
+    report = pandion.evaluate(pipeline(tmp_path), [FOUND, NOT_IN_DOC], documents=docs)
+    assert str(report).splitlines() == [
+        "capital found at rank 1",
+        "spain missed: lost at parse. Lost at Parse. The answer is not in the text pdfium produced.",
+        "Found 1 of 2 (50%). Mean reciprocal rank 0.50.",
+    ]
+
+
+def test_a_failed_question_prints_its_error_and_is_not_counted():
+    failed = pandion.QuestionResult(
+        id="q7", question="Why?", golds=["Because."], tags=[], found=False, rank=None,
+        lost_at=None, trace=None, score={}, error="The search step (dense) failed: no key.",
+    )
+    assert str(pandion.EvaluationReport(top_k=5, questions=[failed])).splitlines() == [
+        "q7 error: The search step (dense) failed: no key.",
+        "Found 0 of 0. 1 question could not be scored.",
+    ]

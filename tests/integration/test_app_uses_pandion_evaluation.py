@@ -18,13 +18,14 @@ from pandion.payloads import Output
 from pandion.ports import Stage
 from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
-QUESTION = "What is the capital of France?"
-GOLD = "The capital of France is Paris."
+FOUND = ("What is the capital of France?", "The capital of France is Paris.")
+MISSED = ("What is the capital of Spain?", "Madrid is the capital of Spain.")
 CHUNK = {"chunk_size": 70, "chunk_overlap": 10}
 SEARCH = {"top_k": 5}
 
 
-def test_the_app_eval_node_and_pandion_evaluate_agree(tmp_path):
+def _both(tmp_path, question: str, gold: str) -> tuple[dict, dict]:
+    """The app's eval payload and pandion.evaluate's score for one question."""
     docs = tmp_path / "docs"
     docs.mkdir()
     pdf = docs / "sample.pdf"
@@ -39,7 +40,7 @@ def test_the_app_eval_node_and_pandion_evaluate_agree(tmp_path):
     graph = Graph(
         nodes=[
             Node("src", Stage.SOURCE, "upload", {"sha": stored.sha, "filename": stored.filename}),
-            Node("q", Stage.QUERY, "text", {"text": QUESTION, "gold_answer": GOLD, "gold_answers": [GOLD]}),
+            Node("q", Stage.QUERY, "text", {"text": question, "gold_answer": gold, "gold_answers": [gold]}),
             Node("parse", Stage.PARSE, "pdfium", {}),
             Node("chunk", Stage.CHUNK, "recursive_character", CHUNK),
             Node("index", Stage.INDEX, "lancedb", {"embedder": "fake-deterministic"}),
@@ -68,7 +69,19 @@ def test_the_app_eval_node_and_pandion_evaluate_agree(tmp_path):
         store="lancedb",
         search={"use": "hybrid_rrf", **SEARCH},
     )
-    report = pandion.evaluate(p, [{"question": QUESTION, "gold_answer": GOLD}], documents=docs)
+    report = pandion.evaluate(p, [{"question": question, "gold_answer": gold}], documents=docs)
+    return app_payload, report.questions[0].score
 
-    assert report.questions[0].score == app_payload
+
+def test_the_app_eval_node_and_pandion_evaluate_agree(tmp_path):
+    app_payload, score = _both(tmp_path, *FOUND)
+    assert score == app_payload
     assert app_payload["hit"] is True and app_payload["rank"] == 1
+
+
+def test_they_agree_on_a_miss_too(tmp_path):
+    app_payload, score = _both(tmp_path, *MISSED)
+    assert score == app_payload
+    assert app_payload["hit"] is False
+    for key in ("found_at", "returned", "match"):
+        assert score[key] == app_payload[key]

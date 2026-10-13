@@ -111,6 +111,20 @@ class EvaluationReport:
         tags = sorted({tag for q in self.questions for tag in q.tags})
         return {tag: _totals([q for q in self.questions if tag in q.tags]) for tag in tags}
 
+    def __str__(self) -> str:
+        """One plain line per question, then the totals."""
+        lines = [_line(q) for q in self.questions]
+        t = self.totals()
+        total = f"Found {t['found']} of {t['scored']}"
+        if t["scored"]:
+            total += f" ({t['hit_rate']:.0%}). Mean reciprocal rank {t['mrr']:.2f}."
+        else:
+            total += "."
+        failed = t["total"] - t["scored"]
+        if failed:
+            total += f" {failed} question{'' if failed == 1 else 's'} could not be scored."
+        return "\n".join([*lines, total])
+
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON: the totals, the totals by tag, and every question."""
         return {
@@ -119,6 +133,16 @@ class EvaluationReport:
             "by_tag": self.by_tag(),
             "questions": [q.to_dict() for q in self.questions],
         }
+
+
+def _line(q: QuestionResult) -> str:
+    """One question's verdict in plain words."""
+    if q.error is not None:
+        return f"{q.id} error: {q.error}"
+    if q.found:
+        return f"{q.id} found at rank {q.rank}"
+    finding = (q.trace or {}).get("finding", "")
+    return f"{q.id} missed: lost at {q.lost_at}. {finding}".rstrip()
 
 
 def _totals(questions: list[QuestionResult]) -> dict[str, Any]:
@@ -176,7 +200,7 @@ def evaluate(
     if p.retrieval is None:
         raise ValueError(
             "evaluate needs a pipeline with a retrieve section, because it searches "
-            "for every question. Add retrieve: with at least a search step."
+            "for every question. Add a retrieve section with at least a search step."
         )
     asked = load_questions(questions)["questions"]
     if documents is not None:

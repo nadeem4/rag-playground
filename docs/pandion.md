@@ -451,12 +451,23 @@ for q in report.questions:
 report.totals()                       # hit_rate, mrr, recall, mean_rank, median_rank
 report.by_tag()                       # the same numbers per tag
 report.to_dict()                      # all of it as plain JSON
+print(report)                         # one line per question, then the totals
 ```
 
 The pipeline needs a retrieve section. With `documents=`, those documents are indexed
 first (every step is a cache hit when they were indexed before) and the search covers
 exactly them. Without it, the search covers what `p.index.run` or `p.index.sync` indexed
 last.
+
+`print(report)` gives one plain line per question and the totals:
+
+```text
+heading-sections found at rank 2
+table-caption missed: lost at chunk. Lost at Chunk. No piece holds the whole answer.
+Found 10 of 12 (83%). Mean reciprocal rank 0.71.
+```
+
+A question whose retrieval failed prints `error:` and its message, and is not counted.
 
 **The question set.** A JSON file in the format the bundled samples use
 (`samples/*/questions.json`), a CSV file with the same columns, or the same list in code:
@@ -489,6 +500,8 @@ or after spacing, line-end hyphens, capital letters, curly quotes and ligatures 
 fi are evened out, or with list markers and stray single letters set aside on both
 sides. `q.score["match"]` says which (`exact`, `normalized`, `reworded`). `top_k`
 (default 5) is how many of the top pieces are checked: an answer below it is a miss.
+It cannot check more pieces than the retrieve section returns, so set the search step's
+`top_k` (or the last reranker's) at least as high.
 With several gold passages, any one counts as found, and `golds_found` out of
 `golds_total` feeds recall.
 

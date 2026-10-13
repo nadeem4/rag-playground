@@ -6,10 +6,12 @@ index can be built from one config file. Each step's result is cached under a ha
 recipe, so the same files with the same settings are never processed twice.
 
 This guide covers what exists today: parse, clean, chunk, the index, keeping an index up
-to date, the rewrite of a question, and searching an index with rerankers.
+to date, the rewrite of a question, searching an index with rerankers, asking a question,
+and three ways to write the same pipeline: a YAML file, a dict per stage, and classes in
+code.
 
-Coming next: ask, which turns the hits into an answer, and three ways to write the same
-pipeline: a YAML file, plain dicts, and typed classes in code.
+Coming next: a check that installs the built package in a fresh project and runs all
+three ways on the samples, before it goes to PyPI.
 
 ## Contents
 
@@ -20,6 +22,8 @@ pipeline: a YAML file, plain dicts, and typed classes in code.
 - [Build an index](#build-an-index)
 - [Keep an index up to date](#keep-an-index-up-to-date)
 - [Search an index](#search-an-index)
+- [Ask a question](#ask-a-question)
+- [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
@@ -43,10 +47,10 @@ The base install is small. Each parser, store and model library is an extra:
 | `docling` | Docling and its OCR engine | the `docling` parser |
 | `local` | sentence-transformers and torch | the `qwen3-embedding-0.6b` and `bge-small-en-v1.5` embedders, and the `mmr` and `cross_encoder` rerankers |
 | `lancedb` | LanceDB and pyarrow | the `lancedb` index and the `dense`, `bm25` and `hybrid_rrf` retrievers |
-| `anthropic` | the Anthropic SDK | `llm_rewrite` and `llm_rerank` with a Claude model |
-| `openai` | the OpenAI SDK | `llm_rewrite` and `llm_rerank` with an OpenAI model, OpenRouter or a custom endpoint |
+| `anthropic` | the Anthropic SDK | `llm_rewrite`, `llm_rerank` and `chat` with a Claude model |
+| `openai` | the OpenAI SDK | `llm_rewrite`, `llm_rerank` and `chat` with an OpenAI model, OpenRouter or a custom endpoint |
 
-The cleaners, the chunkers and the `text` query step need only the base install. The `fake-deterministic`
+The cleaners, the chunkers, the `text` query step and the `search` answer step need only the base install. The `fake-deterministic`
 embedder needs no extra and no download, so it is good for trying things out.
 
 Inside the repo, `uv sync --extra dev` installs the package with the extras the app
@@ -137,8 +141,8 @@ hosted demo does this. `pandion.rewrite` is for trying a step yourself and leave
 
 ## The pipeline file
 
-A pipeline file says how to build an index and how to search it. This is the full
-format, with every field the package reads.
+A pipeline file says how to build an index, how to search it and how to answer. This is
+the full format, with every field the package reads.
 
 ```yaml
 # pipeline.yaml
@@ -180,6 +184,10 @@ retrieve:               # optional; what p.retrieve runs
   rerank:               # optional; none, one step, or a list run in order
     - use: cross_encoder   # also mmr, llm_rerank
       top_k: 5
+
+answer:                 # optional; what p.ask runs after retrieval
+  use: search           # the pieces found, as they are; or chat
+  top_k: 3
 ```
 
 Every key under a step, other than `use`, is a setting of that step. The names are the
@@ -196,7 +204,7 @@ writes them.
 ```python
 from pandion import Pipeline
 
-report = Pipeline.from_file("pipeline.yaml").index.run("docs/")
+report = Pipeline.from_yaml("pipeline.yaml").index.run("docs/")
 ```
 
 `from_file` reads and checks the file; nothing runs yet. `run` takes a file, a folder or
@@ -229,7 +237,7 @@ When files in a folder are added, changed or removed, sync the index with the fo
 ```python
 from pandion import Pipeline
 
-report = Pipeline.from_file("pipeline.yaml").index.sync("docs/")
+report = Pipeline.from_yaml("pipeline.yaml").index.sync("docs/")
 print("added", report.added)
 print("changed", report.changed)
 print("removed", report.removed)
@@ -277,7 +285,7 @@ Once a pipeline has built its index, search it with a question:
 ```python
 from pandion import Pipeline
 
-p = Pipeline.from_file("pipeline.yaml")
+p = Pipeline.from_yaml("pipeline.yaml")
 p.index.run("docs/")
 result = p.retrieve("How big should a chunk be?", k=5)
 for hit in result.hits:
@@ -348,6 +356,179 @@ To load the default cross-encoder before the first search, call
 `pandion.preload_reranker()`. It takes a model name and `pandion.ModelSettings`, like
 `preload_embedder`.
 
+## Ask a question
+
+`ask` runs the retrieval and then the answer step, in one go:
+
+```python
+from pandion import Pipeline
+
+p = Pipeline.from_yaml("pipeline.yaml")
+p.index.run("docs/")
+answer = p.ask("How big should a chunk be?")
+print(answer.text)
+```
+
+The `answer` section of the file names the answer step. There are two:
+
+- `search` shows the pieces that retrieval found, as they are, with their rank, score
+  and pages. It needs no model and no key, so it costs nothing. Its `top_k` is how many
+  pieces it shows.
+- `chat` sends the pieces and the question to a chat model, which answers using only
+  those pieces. Every claim in the answer points at the passage it relied on, and each
+  citation is checked against the parsed document. It needs a key, and it is a new model
+  call every time, so it is never cached.
+
+```yaml
+answer:
+  use: chat
+  model: claude-haiku-4-5   # any model rewrite can use; see Rewrite a question
+  max_chunks: 5             # how many of the top pieces go to the model
+```
+
+A file with an `answer` section needs a `retrieve` section too, because the answer step
+reads what retrieval found. Pass a model's key as `credentials`, with the same names as
+for `retrieve`:
+
+```python
+answer = p.ask(question, credentials={"anthropic_api_key": "sk-ant-..."})
+```
+
+`k` works as for `retrieve`: it sets how many hits the last retrieval step keeps.
+
+`ask` returns an `Answer`:
+
+- `answer.text`, the chat answer as one text, or the pieces found one after another.
+- `answer.output`, the answer step's whole output. Its `kind` is `search` or `chat`, and
+  its `payload` holds the pieces, or the answer with its `citations` and counts.
+- `answer.hits`, what retrieval found, best first.
+- `answer.stages`, with `rewrite`, `search`, `rerank` and `answer`, each a `StageResult`
+  as in [Search an index](#search-an-index).
+- `answer.ok`, which is false if any step failed. A step that fails is reported, not
+  raised, and then `output` is None.
+
+With several documents in the index, `chat` finds its citations in the first document by
+name, the same rule as for a rewrite. A citation from another document is kept, and
+marked as not verified.
+
+## Three ways to write a pipeline
+
+A pipeline can be written as a YAML file, as a dict for each stage, or as classes in
+code. All three give the same pipeline: the same settings give the same artifact ids and
+the same results whichever way they are written, so they share one cache.
+
+As a file, read with `Pipeline.from_yaml`:
+
+```yaml
+path: ./my-index
+index:
+  parse: {use: pdfium}
+  clean: [{use: dedupe_blocks}]
+  chunk: {use: recursive_character, chunk_size: 400, chunk_overlap: 40}
+  embed: {use: qwen3-embedding-0.6b}
+  store: {use: lancedb}
+retrieve:
+  search: {use: hybrid_rrf, top_k: 20}
+  rerank: [{use: mmr, top_k: 5}]
+answer: {use: search, top_k: 3}
+```
+
+As a dict for each stage. Each dict is that stage's block in the file:
+
+```python
+from pandion import Pipeline
+
+p = Pipeline(
+    path="./my-index",
+    parse={"use": "pdfium"},
+    clean=[{"use": "dedupe_blocks"}],
+    chunk={"use": "recursive_character", "chunk_size": 400, "chunk_overlap": 40},
+    embed={"use": "qwen3-embedding-0.6b"},
+    store={"use": "lancedb"},
+    search={"use": "hybrid_rrf", "top_k": 20},
+    rerank=[{"use": "mmr", "top_k": 5}],
+    answer={"use": "search", "top_k": 3},
+)
+```
+
+As classes, with no YAML at all:
+
+```python
+from pandion import Pipeline
+from pandion.answer import Search
+from pandion.chunk import RecursiveCharacter
+from pandion.clean import DedupeBlocks
+from pandion.parse import Pdfium
+from pandion.rerank import Mmr
+from pandion.retrieve import HybridRrf
+
+p = Pipeline(
+    path="./my-index",
+    parse=Pdfium(),
+    clean=[DedupeBlocks()],
+    chunk=RecursiveCharacter(chunk_size=400, chunk_overlap=40),
+    embed="qwen3-embedding-0.6b",
+    store="lancedb",
+    search=HybridRrf(top_k=20),
+    rerank=[Mmr(top_k=5)],
+    answer=Search(top_k=3),
+)
+```
+
+Each class has the same settings, with the same names and checks, as the step's block in
+the file. A plain name such as `"lancedb"` is short for `{"use": "lancedb"}` with the
+default settings. The classes are in:
+
+| Module | Classes |
+|---|---|
+| `pandion.parse` | `Pdfium`, `Docling` |
+| `pandion.clean` | `HeaderFooterStrip`, `DedupeBlocks`, `DropMatching` |
+| `pandion.chunk` | `RecursiveCharacter`, `LayoutBlocks`, `MarkdownHeader`, `TokenBased`, `SentenceWindow` |
+| `pandion.rewrite` | `Text`, `LlmRewrite` |
+| `pandion.retrieve` | `Dense`, `Bm25`, `HybridRrf` |
+| `pandion.rerank` | `Mmr`, `CrossEncoder`, `LlmRerank` |
+| `pandion.answer` | `Search`, `Chat` |
+
+`embed` takes the embedder's name, or a dict with `truncate_dim`. `store` takes
+`"lancedb"`, or a dict with `metric` and `build_fts`. `models` takes a dict or
+`pandion.ModelSettings`.
+
+`pandion.parse`, `pandion.clean`, `pandion.chunk` and `pandion.rewrite` still run one
+stage when you call them, as in [Try one stage at a time](#try-one-stage-at-a-time).
+
+**Mixing.** The ways can be mixed in one pipeline, for example
+`clean=[DedupeBlocks(), {"use": "drop_matching", "pattern": "Draft"}]`.
+
+**One part at a time.** Each part can be built on its own: `IndexPipeline` (parse,
+clean, chunk, embed, store), `RetrievalPipeline` (rewrite, search, rerank) and
+`QueryPipeline` (the answer step). Each takes the part before it:
+
+```python
+from pandion import IndexPipeline, QueryPipeline, RetrievalPipeline
+
+index = IndexPipeline(path="./my-index", parse=Pdfium(), chunk=RecursiveCharacter(),
+                      embed="qwen3-embedding-0.6b", store="lancedb")
+retrieval = RetrievalPipeline(index, search=HybridRrf(top_k=20), rerank=Mmr(top_k=5))
+query = QueryPipeline(retrieval, answer=Search(top_k=3))
+index.run("docs/")
+print(query.ask("How big should a chunk be?").text)
+```
+
+Each part also has `from_yaml`, which reads its sections of a file.
+
+**Back to a file.** `to_yaml()` writes any pipeline, or any part, as a file. Built from
+that file, it is the same pipeline, so code can move to production unchanged:
+
+```python
+p.to_yaml("pipeline.yaml")      # also returns the text
+```
+
+**Mistakes fail early.** An unknown setting fails when the pipeline is built, in every
+way, with a message that names the stage and lists its settings. A class says it as soon
+as it is made: `Docling(do_ocrr=True)` raises
+`index.parse (docling) has no setting 'do_ocrr'. Its settings are: do_ocr, ...`. A
+missing stage, such as `chunk`, is an error that names it.
+
 ## The cache
 
 An artifact's id is a hash of its recipe: the strategy, its settings and its inputs. Run
@@ -411,7 +592,8 @@ index.chunk uses 'fixed', which is not a chunk strategy. The chunk strategies ar
 ```
 
 A step in the `retrieve` section is named the same way, for example
-`retrieve.search (dense)` or `retrieve.rerank step 2 (cross_encoder)`.
+`retrieve.search (dense)` or `retrieve.rerank step 2 (cross_encoder)`, and the answer
+step as `answer (chat)`. A pipeline written as dicts or classes gets the same messages.
 
 The same checks apply to `pandion.parse`, `pandion.clean`, `pandion.chunk` and
 `pandion.rewrite`, where the message starts with "The chunker", "Clean step 1" or "The
@@ -435,4 +617,7 @@ reused. A second script syncs a folder, adds a sample, syncs again, removes it, 
 syncs once more. `rewrite_question.py` prints a question as typed and, with
 `ANTHROPIC_API_KEY` set, as a model rewrites it. `search_samples.py` indexes two samples,
 searches them, prints what each step did and the hits, then searches again to show
-every step was reused. A test runs all four, so they stay correct.
+every step was reused. `ask_samples.py` asks the samples a question and prints the pieces
+found, and with `ANTHROPIC_API_KEY` set, Claude's answer with citations.
+`three_styles.py` builds the same pipeline as a file, as dicts and as classes, and prints
+that the artifact ids match. A test runs all six, so they stay correct.

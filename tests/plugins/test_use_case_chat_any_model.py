@@ -16,9 +16,9 @@ import pytest
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Output, ParsedDoc
 from pandion.ports import RunContext
-from plugins.use_case import chat as chat_module
-from plugins.use_case._grounding import number_sources
-from plugins.use_case.chat import SENTENCE_PROMPT, ChatConfig, ChatUseCase
+from pandion.plugins.answer import chat as chat_module
+from pandion.plugins.answer._grounding import number_sources
+from pandion.plugins.answer.chat import SENTENCE_PROMPT, ChatConfig, ChatUseCase
 from pandion import llm
 from tests.plugins.rerank_fakes import write_index
 from tests.plugins.test_use_case_chat import (  # noqa: F401  (fixtures)
@@ -155,14 +155,14 @@ def test_explain_native_for_claude_on_auto():
 def test_explain_sentence_ids_for_openai_on_auto():
     _, text = explain(model="gpt-6-astra")
     assert "GPT-6 Astra" in text and "sentence id" in text
-    assert "OPENAI_API_KEY" in text
+    assert "OpenAI API key" in text and "OPENAI_API_KEY" not in text
     assert "0.55" in text
 
 
 def test_explain_sentence_ids_chosen_for_claude():
     _, text = explain(citation_method="sentence_ids", support_threshold=0.7)
     assert "sentence id" in text and "0.7" in text
-    assert "ANTHROPIC_API_KEY" in text
+    assert "Anthropic API key" in text and "ANTHROPIC_API_KEY" not in text
 
 
 @pytest.mark.parametrize(

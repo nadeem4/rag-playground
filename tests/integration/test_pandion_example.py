@@ -98,3 +98,66 @@ def test_example_pipeline_file_searches_with_hybrid_then_mmr():
     assert retrieve.rewrite is None
     assert retrieve.search[0] == "hybrid_rrf"
     assert [use for use, _ in retrieve.rerank] == ["mmr"]
+
+
+def test_ask_example_shows_the_pieces_found_then_reuses_every_step(tmp_path, capsys):
+    first, second = _load_script("ask_samples").main(tmp_path, embedder="fake-deterministic")
+
+    assert first.ok and second.ok
+    assert first.output.kind == "search" and len(first.output.payload["results"]) == 3
+    assert first.stages["answer"].transform == "search"
+    assert second.stages["answer"].status == "cached"
+    assert second.output == first.output
+    out = capsys.readouterr().out
+    assert "answer (search): executed" in out and "ANTHROPIC_API_KEY" in out
+
+
+def test_ask_example_with_a_key_answers_with_claude(tmp_path, monkeypatch, capsys):
+    """A fake model: no call leaves the machine."""
+    from types import SimpleNamespace
+
+    from pandion.plugins.answer import chat
+
+    calls: list[dict] = []
+
+    def create(**request):
+        calls.append(request)
+        return SimpleNamespace(
+            model=request["model"],
+            stop_reason="end_turn",
+            usage=SimpleNamespace(input_tokens=10, output_tokens=5),
+            content=[SimpleNamespace(type="text", text="Pieces of a few hundred tokens.", citations=[])],
+        )
+
+    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+    monkeypatch.setattr(chat, "make_client", lambda api_key: client)
+    answer, _ = _load_script("ask_samples").main(tmp_path, api_key="sk-test", embedder="fake-deterministic")
+
+    assert answer.ok and answer.output.kind == "chat"
+    assert answer.text == "Pieces of a few hundred tokens."
+    assert calls[0]["model"] == "claude-haiku-4-5"
+    assert "Pieces of a few hundred tokens." in capsys.readouterr().out
+
+
+def test_three_styles_example_gives_the_same_ids_every_way(tmp_path, capsys):
+    runs = _load_script("three_styles").main(tmp_path, embedder="fake-deterministic")
+
+    ids = {style: answer_ids(answer) for style, answer in runs.items()}
+    assert set(runs) == {"yaml", "dicts", "classes"}
+    assert ids["yaml"] == ids["dicts"] == ids["classes"]
+    assert all(s.status == "cached" for s in all_steps(runs["classes"]))
+    assert "The artifact ids match in all three." in capsys.readouterr().out
+
+
+def all_steps(answer):
+    return [answer.index, answer.stages["rewrite"], answer.stages["search"], *answer.stages["rerank"], answer.stages["answer"]]
+
+
+def answer_ids(answer):
+    return [s.artifact_id for s in all_steps(answer)]
+
+
+def test_example_pipeline_file_answers_with_search():
+    from pandion import Pipeline
+
+    assert Pipeline.from_yaml(EXAMPLE / "pipeline.yaml").config.answer == ("search", {"top_k": 3})

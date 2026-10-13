@@ -81,7 +81,7 @@ def test_explain_is_pure(client, monkeypatch):
     def refuse(*_a, **_k):
         raise AssertionError("explain must not build an API client")
 
-    monkeypatch.setattr("plugins.use_case.chat.make_client", refuse)
+    monkeypatch.setattr("pandion.plugins.answer.chat.make_client", refuse)
     for stage, transform in [("index", "lancedb"), ("use_case", "chat"),
                              ("parse", "docling"), ("rerank", "mmr")]:
         assert explain(client, stage, transform).status_code == 200

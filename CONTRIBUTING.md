@@ -90,7 +90,8 @@ A strategy is one Python module. The web app builds its settings form from the c
 model, so a new strategy needs no frontend change.
 
 1. Create `plugins/<stage>/<name>.py` (or, for a stage that has moved into the engine
-   package, such as parse, clean, chunk, index, query, retrieve and rerank, `packages/pandion/src/pandion/plugins/<stage>/<name>.py`) with a Pydantic config model and a `Transform`
+   package, such as parse, clean, chunk, index, query, retrieve, rerank and the answer steps
+   (`search` and `chat`, in `plugins/answer/`), `packages/pandion/src/pandion/plugins/<stage>/<name>.py`) with a Pydantic config model and a `Transform`
    subclass decorated with `@register`. Give every config field a default. Give the class:
    - a `summary` of how the strategy works, in one or two plain sentences;
    - an `explain(config)` that says what these settings will do. Every number, switch and
@@ -112,7 +113,11 @@ model, so a new strategy needs no frontend change.
 2. Add the module to `PLUGIN_MODULES` in `plugins/__init__.py` (a package strategy goes
    in `pandion/plugins/__init__.py` as well). A test fails if a plugin module exists but
    is not listed. Import a heavy library inside the function that uses it, through
-   `pandion.errors.require`, so discovering the strategy needs no extra.
+   `pandion.errors.require`, so discovering the strategy needs no extra. A package
+   strategy also gets a step class, one line in its stage's module (for example
+   `Docling = step_class(Stage.PARSE, "docling", __name__)` in
+   `packages/pandion/src/pandion/parse.py`), so a pipeline written in code can use it. A
+   test fails if a strategy has no class.
 3. Run `uv run pytest`. It runs the app's tests in `tests/` and the engine's tests in
    `packages/pandion/tests/`. The contract suite (`tests/contract/`) checks every plugin,
    including that the artifact id is deterministic, that the config round-trips through

@@ -1,12 +1,14 @@
 # pandion example
 
-A small pipeline file and four scripts: one indexes two bundled sample PDFs, then
+A small pipeline file and six scripts: one indexes two bundled sample PDFs, then
 indexes them again; one keeps an index in step with a folder; one turns a question
-into the query retrieval searches with; and one searches the index.
+into the query retrieval searches with; one searches the index; one asks it a
+question; and one builds the same pipeline three ways.
 
 - `pipeline.yaml`: the pdfium parser, the `dedupe_blocks` cleaner, the
   `recursive_character` chunker and a lancedb index, then a `retrieve` section that
-  searches with `hybrid_rrf` and reranks with `mmr`.
+  searches with `hybrid_rrf` and reranks with `mmr`, and an `answer` section that shows
+  the top three pieces with `search`.
 - `index_samples.py`: runs the pipeline twice and prints each step's note. The second
   run shows every step was reused.
 - `sync_samples.py`: copies two samples into a folder and syncs the index with it, then
@@ -18,6 +20,13 @@ into the query retrieval searches with; and one searches the index.
 - `search_samples.py`: indexes two samples, asks a question, and prints what each
   retrieval step did and the hits, best first. Then it asks again and shows every step
   was reused.
+- `ask_samples.py`: indexes two samples, asks a question and prints the pieces found,
+  twice, to show every step was reused. With `ANTHROPIC_API_KEY` set it asks Claude Haiku
+  4.5 for an answer that cites the pieces instead, which is one paid call.
+- `three_styles.py`: builds the pipeline in `pipeline.yaml` as the file, as a dict per
+  stage and as classes, in one folder. The first indexes and asks; the other two find every
+  step already stored. It prints that the artifact ids match, then the classes pipeline
+  written back as YAML.
 
 From the root of the repo:
 
@@ -44,6 +53,13 @@ To search, pass the question as the argument. It takes `--embedder` too:
 uv run python examples/pandion/search_samples.py "How big should a chunk be?" --embedder fake-deterministic
 ```
 
+To ask, pass the question as the argument. `three_styles.py` takes `--embedder` too:
+
+```bash
+uv run python examples/pandion/ask_samples.py "How big should a chunk be?" --embedder fake-deterministic
+uv run python examples/pandion/three_styles.py --embedder fake-deterministic
+```
+
 To rewrite a question, pass it as the argument:
 
 ```bash
@@ -51,6 +67,7 @@ uv run python examples/pandion/rewrite_question.py "How long should a piece be?"
 ```
 
 The index is written to `pandion-example/` (or `pandion-sync-example/` for the sync
-script, and `pandion-search-example/` for the search script) in the folder you run from. Use `--work` to
+script, `pandion-search-example/` for the search script, `pandion-ask-example/` for the
+ask script and `pandion-styles-example/` for the three styles) in the folder you run from. Use `--work` to
 choose another folder. The full format of the pipeline file is in
 [docs/pandion.md](../../docs/pandion.md).

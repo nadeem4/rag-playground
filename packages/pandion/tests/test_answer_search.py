@@ -13,7 +13,7 @@ from pandion.artifacts import ArtifactType
 from pandion.payloads import Chunk, Hit, Output, RetrievalResult
 from pandion.ports import Stage
 from pandion.registry import registry
-from plugins.use_case.search import SearchUseCase, SearchUseCaseConfig
+from pandion.plugins.answer.search import SearchUseCase, SearchUseCaseConfig
 
 
 # --------------------------------------------------------------------------

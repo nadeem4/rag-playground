@@ -133,8 +133,8 @@ def test_the_only_store_is_lancedb(tmp_path):
 
 
 def test_an_unknown_top_level_key_lists_the_valid_ones(tmp_path):
-    with pytest.raises(ConfigError, match="'answer'.*path, models, index, retrieve"):
-        load(write(tmp_path, GOOD + "answer:\n  use: chat\n"))
+    with pytest.raises(ConfigError, match="'generate'.*path, models, index, retrieve, answer"):
+        load(write(tmp_path, GOOD + "generate:\n  use: chat\n"))
 
 
 def test_an_unknown_index_key_lists_the_steps(tmp_path):

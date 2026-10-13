@@ -30,6 +30,11 @@ Three rules carry the design:
   key scrubbed and the original chain dropped, so it cannot surface in a
   traceback.
 
+A server that strangers share passes `ctx.extras["public_endpoints_only"]`,
+as for `llm_rewrite` and `llm_rerank`: a custom endpoint must then be a public
+https address (`pandion.endpoints`), and no message suggests setting a key on
+the server.
+
 The SDKs are imported lazily (`pandion.llm`), so registering the plugin
 (every API start, every test run) costs nothing.
 
@@ -55,7 +60,7 @@ from pandion.payloads import Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from plugins.use_case._grounding import (
+from pandion.plugins.answer._grounding import (
     GroundedClaim,
     Sentence,
     ground,
@@ -63,8 +68,8 @@ from plugins.use_case._grounding import (
     parse_answer,
 )
 from pandion import llm
+from pandion.endpoints import PUBLIC_ONLY_EXTRA
 from pandion.llm import CHAT_MODELS, ChatModel
-from plugins import hosted_demo
 
 
 SYSTEM_PROMPT = (
@@ -160,16 +165,17 @@ _CLAUDE_COST: dict[str, str] = {
 
 
 def _key_words(provider: str) -> str:
-    """How this step says it needs a key. The server variable is mentioned only
-    off the demo, where a visitor could set it."""
+    """How this step says it needs a key. It never names the server variable:
+    an explanation has no run to read the demo switch from, so it cannot tell
+    whether strangers share the server. The run's error does name it, off a
+    shared server."""
     if provider == "openai_compatible":
         return (
-            "A key is optional, added with the key button at the top right or "
-            "set as OPENAI_COMPATIBLE_API_KEY on the server, and a local server "
-            "usually needs none. Every run is a new request, never a cached "
-            "answer. Custom endpoints are turned off in the hosted demo."
+            "A key is optional, added with the key button at the top right, and "
+            "a local server usually needs none. Every run is a new request, never "
+            "a cached answer. Custom endpoints are turned off in the hosted demo."
         )
-    return llm.key_sentence(provider, public_only=hosted_demo.enabled()) + " Every run is a new paid request, never a cached answer."
+    return llm.key_sentence(provider, public_only=True) + " Every run is a new paid request, never a cached answer."
 
 
 def make_client(api_key: str) -> Any:
@@ -295,10 +301,13 @@ class ChatUseCase(Transform[ChatConfig]):
         self, inputs: Mapping[str, Any], config: ChatConfig, ctx: RunContext
     ) -> dict[str, Any]:
         creds = ctx.extras.get("credentials") or {}
+        public_only = bool(ctx.extras.get(PUBLIC_ONLY_EXTRA, False))
         if uses_native(config):
-            return _native(inputs, config, creds.get("anthropic_api_key"))
+            return _native(inputs, config, creds.get("anthropic_api_key"), public_only)
         model = CHAT_MODELS[config.model]
-        return _sentence_ids(inputs, config, model, llm.key_for(model, creds), ctx.extras)
+        return _sentence_ids(
+            inputs, config, model, llm.key_for(model, creds), ctx.extras, public_only
+        )
 
 
 # --------------------------------------------------------------------------
@@ -307,10 +316,10 @@ class ChatUseCase(Transform[ChatConfig]):
 
 
 def _native(
-    inputs: Mapping[str, Any], config: ChatConfig, api_key: str | None
+    inputs: Mapping[str, Any], config: ChatConfig, api_key: str | None, public_only: bool
 ) -> dict[str, Any]:
     if not api_key:
-        raise ValueError(llm.no_key_message("anthropic", public_only=hosted_demo.enabled()))
+        raise ValueError(llm.no_key_message("anthropic", public_only=public_only))
 
     hits = RetrievalResult.model_validate(inputs["result"]).hits[: config.max_chunks]
     question = Query.model_validate(inputs["query"]).asked
@@ -428,6 +437,7 @@ def _sentence_ids(
     model: ChatModel,
     api_key: str | None,
     extras: Mapping[str, Any],
+    public_only: bool,
 ) -> dict[str, Any]:
     custom = model.provider == "openai_compatible"
     if custom and not _custom_complete(config):
@@ -437,7 +447,7 @@ def _sentence_ids(
         )
     if not custom and not api_key:
         raise ValueError(
-            llm.no_key_message(model.provider, public_only=hosted_demo.enabled())
+            llm.no_key_message(model.provider, public_only=public_only)
         )
     if inputs.get("index") is None:
         raise ValueError(
@@ -458,7 +468,7 @@ def _sentence_ids(
         base_url=config.custom_base_url.strip() if custom else None,
         model_name=llm.model_name_for(model, config.custom_model, config.openrouter_model),
         max_tokens=MAX_TOKENS,
-        public_only=hosted_demo.enabled(),
+        public_only=public_only,
     )
 
     payload: dict[str, Any] = {

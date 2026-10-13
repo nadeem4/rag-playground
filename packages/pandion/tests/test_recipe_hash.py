@@ -229,3 +229,37 @@ def test_a_rerank_node_keeps_its_id(name, config, expected):
         config=settings.model_dump(mode="json"),
         inputs=inputs,
     ) == expected
+
+
+ANSWER_INPUTS = {
+    "search": {"result": "a" * 64},
+    "chat": {"result": "a" * 64, "query": "b" * 64, "doc": "c" * 64, "index": "d" * 64},
+}
+
+
+@pytest.mark.parametrize(
+    "name,config,expected",
+    [
+        ("search", {}, "5c77c85941c4fd54d1e0f2bc77f2c76c869977549725b312304b743df14fb631"),
+        ("chat", {}, "195d5a4f919e10750d3c3c52d4ad4590fbd4b0452aaea20334b7b466e8dd8756"),
+        (
+            "chat",
+            {"model": "claude-haiku-4-5"},
+            "c236a3463fb1539bc70d622566a1fbc26db91ae766b4580f906ed1a136cc2347",
+        ),
+    ],
+)
+def test_an_answer_node_keeps_its_id(name, config, expected):
+    """Computed on main at a274a19, while search and chat still lived in the app."""
+    discover()
+    cls = registry.get(Stage.USE_CASE, name)
+    settings = cls.config_model(**config)
+    assert cls.__module__ == f"pandion.plugins.answer.{name}"
+    assert compute_artifact_id(
+        transform_name=cls.name,
+        transform_version=cls.version,
+        fingerprint=cls().fingerprint(settings),
+        output_type=cls.output,
+        config=settings.model_dump(mode="json"),
+        inputs=ANSWER_INPUTS[name],
+    ) == expected

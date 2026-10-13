@@ -5,10 +5,9 @@ second line: chat, llm_rerank and llm_rewrite all reach `pandion.llm.complete`,
 which validates the `base_url` before any client is built. The resolver is
 mocked to answer 127.0.0.1, as a DNS name pointed at the host would.
 
-pandion never reads the demo switch. The app's own chat step reads it from
-`plugins.hosted_demo`, and the package's llm_rewrite and llm_rerank get it from
-the run, as `context_extras["public_endpoints_only"]`, which the app sets in
-`Deps.run_extras()`.
+pandion never reads the demo switch. The package's chat, llm_rewrite and
+llm_rerank get it from the run, as `context_extras["public_endpoints_only"]`,
+which the app sets in `Deps.run_extras()` from `plugins.hosted_demo`.
 """
 
 from __future__ import annotations
@@ -51,10 +50,22 @@ def demo(monkeypatch):
     return built
 
 
-def test_chat_refuses_a_private_endpoint(demo, pipeline, index):  # noqa: F811
-    with pytest.raises(EndpointRefused, match="public https address"):
-        ask(pipeline, index=index, ctx=context(), **CUSTOM)
+def test_chat_refuses_a_private_endpoint_with_the_apps_run_extras(
+    demo, pipeline, index, tmp_path  # noqa: F811
+):
+    run_ctx = context()
+    run_ctx.extras.update(build_deps(artifacts_dir=tmp_path / "a").run_extras())
+    with pytest.raises(EndpointRefused) as info:
+        ask(pipeline, index=index, ctx=run_ctx, **CUSTOM)
+    assert str(info.value) == DEMO_ENDPOINT_ERROR
     assert demo == []
+
+
+def test_chat_without_the_extra_reaches_the_client(demo, pipeline, index):  # noqa: F811
+    """pandion never reads the demo switch itself: the run must pass it."""
+    with pytest.raises(AssertionError, match="no client may be built"):
+        ask(pipeline, index=index, ctx=context(), **CUSTOM)
+    assert demo == ["https://rebind.example.com/v1"]
 
 
 def test_llm_rerank_refuses_a_private_endpoint_with_the_apps_run_extras(demo, tmp_path):
@@ -144,4 +155,39 @@ def test_a_demo_run_of_llm_rerank_fails_on_a_private_endpoint(demo, tmp_path):
     assert result.nodes["dense"].status is NodeStatus.EXECUTED
     assert result.nodes["rr"].status is NodeStatus.FAILED
     assert DEMO_ENDPOINT_ERROR in (result.nodes["rr"].error or "")
+    assert demo == []
+
+
+def test_a_demo_run_of_chat_fails_on_a_private_endpoint(demo, tmp_path):
+    """The whole app path for the package's chat step: index a PDF with the
+    fake embedder, retrieve, then chat, run with `Deps.run_extras()`."""
+    from pandion.graph import Edge
+    from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+
+    pdf = tmp_path / "sample.pdf"
+    pdf.write_bytes(build_pdf(SAMPLE_PAGES))
+    deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
+    stored = deps.run_extras()["sources"].add(pdf)
+    graph = Graph(
+        nodes=[
+            Node("src", Stage.SOURCE, "upload", {"sha": stored.sha, "filename": stored.filename}),
+            Node("q", Stage.QUERY, "text", {"text": QUESTION}),
+            Node("parse", Stage.PARSE, "pdfium", {}),
+            Node("chunk", Stage.CHUNK, "recursive_character", {}),
+            Node("index", Stage.INDEX, "lancedb", {"embedder": "fake-deterministic"}),
+            Node("dense", Stage.RETRIEVE, "dense", {}),
+            Node("chat", Stage.USE_CASE, "chat", CUSTOM),
+        ],
+        edges=[
+            Edge("src", "parse", "file"),
+            Edge("parse", "chunk", "doc"),
+            Edge("chunk", "index", "chunks"),
+            Edge("index", "dense", "index"),
+            Edge("dense", "chat", "result"),
+        ],
+    )
+    result = run(graph, deps.registry, deps.store, context_extras=deps.run_extras())
+    assert result.nodes["dense"].status is NodeStatus.EXECUTED
+    assert result.nodes["chat"].status is NodeStatus.FAILED
+    assert DEMO_ENDPOINT_ERROR in (result.nodes["chat"].error or "")
     assert demo == []

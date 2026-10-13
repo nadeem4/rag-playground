@@ -41,7 +41,7 @@ def test_the_app_has_no_query_step_of_its_own():
 
 def test_the_apps_chat_and_rerank_steps_call_the_package_client():
     from pandion.plugins.rerank import llm_rerank
-    from plugins.use_case import chat
+    from pandion.plugins.answer import chat
 
     assert chat.llm is llm and llm_rerank.llm is llm
 

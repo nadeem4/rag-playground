@@ -27,6 +27,7 @@ installs the built package in new environments, with and without extras, and tes
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
+- [Write your own strategy](#write-your-own-strategy)
 - [Errors](#errors)
 - [Run the example](#run-the-example)
 
@@ -576,6 +577,38 @@ in the Python that runs it. With `--print`, it only prints the command:
 
 ```bash
 pandion install pipeline.yaml --print
+```
+
+## Write your own strategy
+
+Every stage takes a strategy, and you can write your own. A strategy is a class that
+subclasses `pandion.extend.Transform`. You say which stage it is for, what it reads, and
+what its settings are, and you write `apply()`. Then `@register` makes its `name` work in
+a pipeline file and in `Pipeline(...)`, the same as a built-in. A full guide with one
+example per stage will be added here.
+
+```python
+from pathlib import Path
+
+from pydantic import BaseModel
+from pandion.extend import ArtifactType, Element, ParsedDoc, PortSpec, Stage, Transform, register
+
+class NoSettings(BaseModel):
+    pass
+
+@register
+class TxtLines(Transform[NoSettings]):
+    name = "txt_lines"
+    stage = Stage.PARSE
+    inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
+    output = ArtifactType.PARSED_DOC
+    config_model = NoSettings
+    summary = "One block per line of a text file."
+
+    def apply(self, inputs, config, ctx):
+        lines = Path(inputs["file"]["path"]).read_text(encoding="utf-8").splitlines()
+        return ParsedDoc(elements=[Element(id=f"l{i}", type="paragraph", text=t, order=i)
+                                   for i, t in enumerate(lines) if t.strip()])
 ```
 
 ## Errors

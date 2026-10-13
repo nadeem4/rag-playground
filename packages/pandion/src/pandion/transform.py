@@ -8,8 +8,8 @@ This is an ABC with a TypeVar rather than a Protocol. A runtime-checkable
 Protocol with non-method members validates attribute *presence* but never types,
 so the registry would hand-validate anyway; an ABC additionally gives inherited
 defaults, import-time validation with a good error message, real `isinstance`,
-and generics that typecheck. Protocol's only advantage — no inheritance required
-— is worth nothing here, because this is an application, not a library.
+and generics that typecheck. Pandion is a library: anyone writes a strategy by
+subclassing this, and `pandion.extend` exports it.
 """
 
 from __future__ import annotations
@@ -60,6 +60,14 @@ class TransformDefinitionError(TypeError):
 
 
 class Transform(ABC, Generic[C]):
+    """One strategy for one stage.
+
+    Ports: parse reads `file`. Clean and chunk read `doc`. Index reads `chunks`
+    (variadic). Retrieve reads `index` and `query`. Rerank and answer read
+    `result`. A rewrite or answer step may also declare `doc` to read the parsed
+    document. An index step may return a function that writes into a folder.
+    """
+
     name: str
     version: str = "1"
     stage: Stage

@@ -170,10 +170,13 @@ class Answer:
 
     @property
     def text(self) -> str:
-        """The chat answer as one text, or the found pieces one after another."""
+        """The answer step's `text` when it gives one, else the chat answer as
+        one text, or the found pieces one after another."""
         if self.output is None:
             return ""
         payload = self.output.payload
+        if isinstance(payload.get("text"), str) and payload["text"]:
+            return payload["text"]
         if self.output.kind == "chat":
             return "".join(segment["text"] for segment in payload["answer"])
         return "\n\n".join(row["snippet"] for row in payload["results"])
@@ -565,7 +568,7 @@ class RetrievalPipeline:
         use, settings = retrieve.rewrite or ("text", {})
         nodes.append(Node("rewrite", Stage.QUERY, use, {**settings, "text": question}))
         roles["rewrite"] = (None, "rewrite")
-        if use != "text":
+        if _reads_doc(Stage.QUERY, use):
             # A rewrite may read the start of a document. With several, the
             # ambient port cannot choose, so it reads the first one by id.
             edges.append(Edge(_first_doc(roles), "rewrite", "doc"))
@@ -668,10 +671,10 @@ class QueryPipeline:
         nodes.append(Node("answer", Stage.USE_CASE, use, settings))
         roles["answer"] = (None, "answer")
         edges.append(Edge(last, "answer", "result"))
-        if use == "chat":
-            # chat finds each citation in the parsed document. With several
-            # documents the ambient port cannot choose, so, as for a rewrite,
-            # it reads the first one by id.
+        if _reads_doc(Stage.USE_CASE, use):
+            # chat, for one, finds each citation in the parsed document. With
+            # several documents the ambient port cannot choose, so, as for a
+            # rewrite, it reads the first one by id.
             edges.append(Edge(_first_doc(roles), "answer", "doc"))
         return Graph(nodes=nodes, edges=edges), roles
 
@@ -692,6 +695,11 @@ class QueryPipeline:
             retrieval=self.retrieval._retrieval(graph, result),
             answer=self.index.stage_result(answer, "answer", result),
         )
+
+
+def _reads_doc(stage: Stage, use: str) -> bool:
+    """True when the strategy declares a doc input, so it is given the parsed document."""
+    return "doc" in registry.get(stage, use).inputs
 
 
 def _first_doc(roles: dict[str, tuple[str | None, str]]) -> str:

@@ -71,8 +71,6 @@ INDEX_KEYS = ("source", "parse", "clean", "chunk", "embed", "store")
 DEFAULT_SOURCE: tuple[str, dict[str, Any]] = ("upload", {})
 #: Settings written under `embed` that the store receives with `embedder`.
 EMBED_KEYS = ("truncate_dim",)
-#: The answer steps. `eval` is a use case too, but it scores, it does not answer.
-ANSWER_STEPS = ("search", "chat")
 
 #: Where each stage's step sits in the file, for messages.
 WHERE = {
@@ -314,11 +312,11 @@ def _load_plugins(plugins: Any) -> list[str]:
 
 
 def _answer(answer: Any) -> tuple[str, dict[str, Any]]:
-    use, settings = _use(answer, "answer")
-    if use not in ANSWER_STEPS:
+    use, _ = _use(answer, "answer")
+    if use == "eval":
         raise ConfigError(
-            f"answer uses '{use}', which is not an answer step. "
-            f"The answer steps are: {', '.join(ANSWER_STEPS)}."
+            "answer uses 'eval', which scores retrieval rather than answering. "
+            "Use pandion.evaluate for scoring."
         )
     discover()
     return _step(Stage.USE_CASE, answer, "answer")

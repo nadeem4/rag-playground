@@ -7,6 +7,7 @@ p = Pipeline.from_yaml("pipeline.yaml")
 report = p.index.run("docs/")
 report.documents["guides/chunking.pdf"].stages["parse"].output   # a ParsedDoc
 report.index.output                                              # the index folder
+report = p.index.run("docs/", through="chunk")   # stop after chunking; report.index is None
 
 report = p.index.sync("docs/")      # later, after files were added, changed or removed
 report.added, report.changed, report.removed, report.unchanged
@@ -37,9 +38,10 @@ keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store),
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -70,6 +72,13 @@ _OUTPUTS = {
 #: Settings a stage may take: a dict (the file's block), a step class, a name.
 Step = Any
 
+#: What index.run, retrieve and ask take as documents: a file, a folder, a
+#: list of both, or (Task 5) a mapping of document id to file.
+Documents = Any
+
+#: The callback a run reports each event to (see IndexPipeline.execute).
+OnEvent = Callable[[dict[str, Any]], None]
+
 #: What a result id looks like: a sha256 in lowercase hex.
 _RESULT_ID = re.compile(r"[0-9a-f]{64}")
 
@@ -83,17 +92,22 @@ class DocumentReport:
 
 @dataclass
 class IndexReport:
-    """One index run: each document's steps, and the index built from them all."""
+    """One index run: each document's steps, and the index built from them all.
+
+    `index` is None when the run stopped before it (`through`). A step stopped
+    by `cancel` is reported with status "skipped".
+    """
 
     documents: dict[str, DocumentReport]
-    index: StageResult
+    index: StageResult | None
 
     @property
     def ok(self) -> bool:
-        return all(
-            s.status != "failed"
-            for s in [self.index, *(s for d in self.documents.values() for s in d.stages.values())]
-        )
+        """Every step that was asked for ran or came from the cache."""
+        steps = [s for d in self.documents.values() for s in d.stages.values()]
+        if self.index is not None:
+            steps.append(self.index)
+        return all(s.status in ("executed", "cached") for s in steps)
 
 
 @dataclass
@@ -363,15 +377,54 @@ class IndexPipeline:
         #: files with the upload source, locations with any other.
         self.documents: dict[str, SourceFile | str] | None = None
 
-    def run(self, paths: str | Path | list[str | Path]) -> IndexReport:
+    def run(
+        self,
+        paths: Documents,
+        *,
+        through: str | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        credentials: dict[str, str] | None = None,
+        force: bool = False,
+    ) -> IndexReport:
         """Index the files at `paths`: files, folders, or a list of both.
 
         A folder gives every file under it except hidden ones, named by its
         path inside the folder with forward slashes (`guides/chunking.pdf`); a
         file is named by its file name. A step that fails is reported, not
         raised, and the steps after it are skipped.
+
+        `through` stops every document after that step: "parse", "clean" (the
+        last cleaner, or parse when there are none), "clean.1", "clean.2" ...,
+        or "chunk"; "index" is the whole run. The report then has no index.
+        `on_event`, `cancel`, `credentials` and `force` work as in `execute`.
         """
-        return self._index(self._documents(paths))
+        stop = self._last_step(through)
+        return self._index(
+            self._documents(paths),
+            stop=stop,
+            on_event=on_event,
+            cancel=cancel,
+            credentials=credentials,
+            force=force,
+        )
+
+    def _last_step(self, through: str | None) -> str | None:
+        """The step each document stops after, or None for the whole run."""
+        if through is None or through == "index":
+            return None
+        cleans = len(self.config.index.clean)
+        if through == "parse" or (through == "clean" and not cleans):
+            return "parse"
+        if through == "clean":
+            return f"clean.{cleans}"
+        if through == "chunk":
+            return "chunk"
+        number = through.removeprefix("clean.")
+        if through.startswith("clean.") and number.isdigit() and 1 <= int(number) <= cleans:
+            return through
+        named = ", ".join(["parse", "clean", *(f"clean.{n}" for n in range(1, cleans + 1)), "chunk", "index"])
+        raise ValueError(f"through names the step to stop after: one of {named}, not '{through}'.")
 
     def sync(self, paths: str | Path | list[str | Path]) -> SyncReport:
         """Bring the index in line with the files at `paths` now.
@@ -437,11 +490,32 @@ class IndexPipeline:
             return {str(item).replace("\\", "/"): str(item) for item in items}
         return {doc_id: self.sources.add(path) for doc_id, path in _files(paths)}
 
-    def _index(self, documents: dict[str, SourceFile | str]) -> IndexReport:
+    def _index(
+        self,
+        documents: dict[str, SourceFile | str],
+        *,
+        stop: str | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        credentials: dict[str, str] | None = None,
+        force: bool = False,
+    ) -> IndexReport:
         graph, roles = self.graph(documents)
-        result = self.execute(graph)
+        targets = {f"{doc_id}::{stop}" for doc_id in documents} if stop else None
+        result = self.execute(
+            graph,
+            credentials,
+            targets=targets,
+            on_event=on_event,
+            cancel=cancel,
+            force=force,
+            roles=roles,
+        )
         reports = {doc_id: DocumentReport() for doc_id in documents}
+        index = None
         for node in graph.nodes:
+            if result.nodes[node.id].status == "pruned":
+                continue
             doc_id, role = roles[node.id]
             stage = self.stage_result(node, role, result)
             if doc_id is None:
@@ -451,11 +525,27 @@ class IndexPipeline:
         self.documents = documents
         return IndexReport(documents=reports, index=index)
 
-    def execute(self, graph: Graph, credentials: dict[str, str] | None = None) -> RunResult:
+    def execute(
+        self,
+        graph: Graph,
+        credentials: dict[str, str] | None = None,
+        *,
+        targets: set[str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        force: bool = False,
+        roles: dict[str, tuple[str | None, str]] | None = None,
+    ) -> RunResult:
         """Run `graph` through the store, with this pipeline's files and models.
 
-        `credentials` (model keys) reach the steps that call a model; the
-        executor never hashes or stores them.
+        `credentials` (model keys) reach the steps that call a model; they are
+        never hashed, stored or logged. `targets` runs only those nodes and the
+        ones above them. `on_event` is called with every event of the run, a
+        plain dict, with the step's `document` and `step` added from `roles`;
+        if it raises, the run stops and the exception goes to the caller.
+        `cancel` stops the run between steps: a step that is running finishes,
+        and the rest are skipped. `force` runs every step again even when its
+        result is stored.
         """
         discover()
         extras: dict[str, Any] = {
@@ -465,7 +555,26 @@ class IndexPipeline:
         }
         if credentials:
             extras["credentials"] = dict(credentials)
-        return run(graph, registry, self.store, context_extras=extras)
+        emit = None
+        if on_event is not None:
+            names = roles or {}
+
+            def emit(e: dict[str, Any]) -> None:
+                if "node_id" in e:
+                    doc_id, step = names.get(e["node_id"], (None, e["node_id"]))
+                    e = {**e, "document": doc_id, "step": step}
+                on_event(e)
+
+        return run(
+            graph,
+            registry,
+            self.store,
+            targets=targets,
+            force=force,
+            on_event=emit,
+            cancelled=cancel.is_set if cancel is not None else None,
+            context_extras=extras,
+        )
 
     def indexed(self) -> dict[str, SourceFile | str]:
         """The documents in the index: the last run's or sync's in this

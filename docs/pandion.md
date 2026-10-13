@@ -596,7 +596,8 @@ Pandion's public API. This section lists what it needs.
 summary and its settings as a JSON schema with defaults. `pandion.defaults()` names the
 strategy a new pipeline starts with for each required part. `pandion.explain(stage, use,
 settings)` says in plain words what one strategy will do with those settings, and warns
-when they make no sense, without running anything.
+when they make no sense, without running anything. `catalog()` returns a copy each time,
+so changing it changes nothing in Pandion.
 
 ```python
 import pandion
@@ -613,6 +614,37 @@ Every `StageResult` has an `artifact_id`. `p.result(id)` reads that result back 
 store later, for example when a page asks for one card's output: a dict for every result
 but an index, whose result is its folder. An id that is not a result id, or that has no
 stored result, is a `KeyError`.
+
+### One step, progress, stop, keys and re-runs
+
+`index.run` takes five optional keywords. Without them it runs exactly as before.
+
+```python
+import threading
+
+stop = threading.Event()               # set it from another thread to stop the run
+report = p.index.run(
+    "report.pdf",
+    through="chunk",                   # stop after this step; report.index is then None
+    on_event=print,                    # every event, with its "document" and "step"
+    cancel=stop,
+    credentials={"openai_api_key": key},   # for this call only; never stored
+    force=True,                        # run every step again, even when it is stored
+)
+```
+
+- `through` names the step to stop after: `parse`, `clean` (the last cleaner, or parse
+  when there are none), `clean.1`, `clean.2` ..., or `chunk`. `index` is the whole run.
+  The steps above it come from the cache when they ran before.
+- `on_event` is called with each event as a plain dict, ready for JSON: `run_started`,
+  `node_started`, `node_finished` (with `cache_hit` and the result's `artifact_id`),
+  `node_failed` (with the error), `run_cancelled` and `run_finished`. Pandion adds
+  `document` (the document id, or None for the index) and `step`. If the callback
+  raises, the run stops and the exception reaches your code.
+- `cancel` is checked between steps: a step that is running finishes, the rest are
+  reported with status `skipped`, and `report.ok` is False.
+- `credentials` are the model keys for this call, as for `p.retrieve`.
+- `force` runs every step that was asked for again, even when its result is stored.
 
 ## Three ways to write a pipeline
 

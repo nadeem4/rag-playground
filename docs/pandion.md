@@ -10,8 +10,8 @@ to date, the rewrite of a question, searching an index with rerankers, asking a 
 and three ways to write the same pipeline: a YAML file, a dict per stage, and classes in
 code.
 
-Coming next: a check that installs the built package in a fresh project and runs all
-three ways on the samples, before it goes to PyPI.
+Before it goes to PyPI, [checks/pandion-install/](../checks/pandion-install) installs
+the built package in new environments, with and without extras, and tests it there.
 
 ## Contents
 

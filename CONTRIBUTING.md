@@ -70,8 +70,9 @@ gh workflow run "Release checks" -f ref=feat/some-branch
 ```
 
 To check the `pandion` wheel the way a user would install it, run
-`uv run python checks/pandion-install/run_check.py`. It installs the built wheel in a new
-environment and tests it there; [checks/pandion-install/README.md](checks/pandion-install/README.md)
+`uv run python checks/pandion-install/run_check.py`. It installs the built wheel in new
+environments, with and without extras, and tests it there. Add `--with-models` to also
+check the first model download. [checks/pandion-install/README.md](checks/pandion-install/README.md)
 says what it checks. The **Pandion install check** workflow runs it on pull requests that
 change `packages/pandion/`, and you can run it by hand with the `with_models` input to
 also test the model download.

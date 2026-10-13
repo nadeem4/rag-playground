@@ -21,7 +21,7 @@ packages/pandion/  the engine as its own Python package, pandion: artifacts, tra
                    graph, the executor, the content-addressed store, the embedding models
                    and their cache, the chat model client, and the pipeline file
 api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode,
-             and the app's own step, eval, in api/steps/
+             and the manifest of the steps it loads, in api/steps/
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
 samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
@@ -42,8 +42,8 @@ with the token counter the chunkers use (`pandion/tokenize.py`), the sentence sp
 (`pandion/text.py`, which the chat grounding also uses), the embedding models
 (`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
 model settings (`pandion/models.py`), the chat model client (`pandion/llm.py`) and the
-custom endpoint check (`pandion/endpoints.py`). The app keeps only one step of its own, the
-`eval` use case (`api/steps/eval.py`), because it belongs to the Evaluate page. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
+custom endpoint check (`pandion/endpoints.py`). The `eval` step, which the Evaluate page runs, moved too
+(`pandion/plugins/answer/eval.py`, under the `use_case` stage but refused as an answer step), so the app has no steps of its own. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
 `pandion[docling]`, `pandion[lancedb]`, `pandion[local]` for the local models, and
 `pandion[openai]` and `pandion[anthropic]` for the chat models), imported only when the
 step runs, and the app installs the extras it uses. The cleaners and the chunkers need only the standard library and Pydantic, so they
@@ -97,10 +97,14 @@ when `RAG_PLAYGROUND_DEMO` is `1`, read by `api.demo.public_endpoints_only()`. T
 refuse a custom endpoint on the demo with a 403 first, and the second line reads the
 switch on its own, so it holds even if the first is lifted. API keys reach a run only as
 `context_extras["credentials"]`, never in a config or a hash.
-The app may import any public name from `pandion` but never a private one
-(a name starting with an underscore), and the package never imports the app. Two tests
-hold both rules: `tests/integration/test_package_boundary.py` and
-`packages/pandion/tests/test_boundaries.py`.
+The app imports Pandion through its public API: `pandion`, the stage namespaces
+(`pandion.parse` to `pandion.answer`) and `pandion.extend`, each a name in the module's
+`__all__`. It never imports a private name (one starting with an underscore), and the
+package never imports the app. The engine names the app still imports from Pandion's
+inner modules (`pandion.graph`, `pandion.executor`, `pandion.storage` and the rest) are
+listed in `ENGINE_IMPORTS` in `tests/integration/test_package_boundary.py`. That list may
+only shrink: a new engine import fails the test, and so does a line the app no longer
+needs. `packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
 
 ## Using the package on its own
 
@@ -157,13 +161,12 @@ several times, for example two cleaners in a row.
 
 ## Plugins
 
-A strategy is one Python module under `packages/pandion/src/pandion/plugins/<stage>/`,
-or, for the app's own `eval` step, under `api/steps/`. It defines a Pydantic config
+A strategy is one Python module under `packages/pandion/src/pandion/plugins/<stage>/`. It defines a Pydantic config
 model and a `Transform` subclass registered with `@register`. The class declares its
 stage, its input ports, its output type, a `summary`, and an `explain(config)` that says
 what these settings will do.
 
-- `api/steps/__init__.py` lists every module the app loads in `PLUGIN_MODULES`. A test fails if a plugin
+- `api/steps/__init__.py` lists every module the app loads in `PLUGIN_MODULES`, all of them in the package. A test fails if a plugin
   module exists but is not listed.
 - `GET /api/registry` exports every transform with its summary, its config's JSON schema,
   and what it requires, provides and prefers. The web app builds every settings form from

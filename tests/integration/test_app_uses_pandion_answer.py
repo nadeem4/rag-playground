@@ -52,9 +52,10 @@ def test_the_root_plugins_folder_is_gone():
     assert importlib.util.find_spec("plugins") is None
 
 
-def test_the_apps_own_step_is_only_eval():
+def test_the_app_has_no_steps_of_its_own():
     files = sorted(p.name for p in (ROOT / "api" / "steps").glob("*.py"))
-    assert files == ["__init__.py", "eval.py"]
+    assert files == ["__init__.py"]
+    assert registry.get(Stage.USE_CASE, "eval").__module__ == "pandion.plugins.answer.eval"
 
 
 CHUNK = {"chunk_size": 70, "chunk_overlap": 10}

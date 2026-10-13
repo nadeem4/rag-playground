@@ -1102,7 +1102,7 @@ wheels = [
 
 [[package]]
 name = "pandion"
-version = "0.0.1"
+version = "0.1.0"
 source = { editable = "packages/pandion" }
 dependencies = [
     { name = "pydantic" },

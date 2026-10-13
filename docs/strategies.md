@@ -349,6 +349,7 @@ API key and no cost: it compares text with text. The Evaluate page runs it over 
 question in a set, and so does `pandion.evaluate` (see [the pandion guide](pandion.md#evaluate-a-pipeline)). It is not an answer step: `answer: {use: eval}` is refused.
 
 - `top_k` (5): how many pieces are checked.
+  `pandion.evaluate(p, questions, top_k=5)` sets it.
 
 ## What each step passes to its library
 

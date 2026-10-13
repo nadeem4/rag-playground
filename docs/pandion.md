@@ -169,6 +169,8 @@ models:
   device: auto          # auto, cpu, cuda or mps
 
 index:
+  # source:             # optional; upload (the files given to index.run) when left out.
+  #   use: my_source    # see Your own source
   parse:                # required
     use: pdfium         # pdfium or docling
   clean:                # optional; a list, run in order
@@ -651,6 +653,44 @@ class LetterCounts(Embedder):
 `kind` is `"document"` for a piece and `"query"` for a question. Return vectors of length 1
 (divide each by its length), because search compares them as if they were. A name that is already
 taken is refused.
+
+### Your own source
+
+By default each document is a local file given to `p.index.run`. To read documents from
+somewhere else, such as a database, a web page or a bucket, write a source step and set it
+under `index.source:`. Its settings must have a `location: str = ""` field: each item you
+pass to `p.index.run([...])` becomes one document, its id is the item as text, and the
+source is run with the item as its `location`. A source without a `location` field is
+refused. The source returns `raw_file(ctx, data, filename)`, which keeps the bytes in the
+`sources/` folder and hands the parser the same file record the built-in `upload` source does.
+
+```python
+from pydantic import BaseModel
+from pandion.extend import ArtifactType, Stage, Transform, raw_file, register
+
+class NoteSettings(BaseModel):
+    location: str = ""
+
+@register
+class Note(Transform[NoteSettings]):
+    name = "note"
+    stage = Stage.SOURCE
+    output = ArtifactType.RAW_FILE
+    config_model = NoteSettings
+    summary = "Treats the location itself as a short text document."
+
+    def apply(self, inputs, config, ctx):
+        return raw_file(ctx, config.location.encode("utf-8"), "note.txt")
+```
+
+```yaml
+index:
+  source: {use: note}
+  parse: {use: txt_lines}
+```
+
+`p.index.sync` works with local files only (the `upload` source); `p.index.run` works with
+any source.
 
 ## Loading your strategies
 

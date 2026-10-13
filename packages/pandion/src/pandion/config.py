@@ -66,7 +66,9 @@ from pandion.stages import _strategy
 
 TOP_KEYS = ("plugins", "path", "models", "index", "retrieve", "answer")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
-INDEX_KEYS = ("parse", "clean", "chunk", "embed", "store")
+INDEX_KEYS = ("source", "parse", "clean", "chunk", "embed", "store")
+#: The source step when the file has none: the files given to index.run.
+DEFAULT_SOURCE: tuple[str, dict[str, Any]] = ("upload", {})
 #: Settings written under `embed` that the store receives with `embedder`.
 EMBED_KEYS = ("truncate_dim",)
 #: The answer steps. `eval` is a use case too, but it scores, it does not answer.
@@ -100,6 +102,9 @@ class IndexConfig:
     clean: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     #: The index strategy that stores the pieces.
     store_use: str = "lancedb"
+    #: Where each document comes from. `upload` reads the files given to
+    #: index.run; another source is told each item as its `location` setting.
+    source: tuple[str, dict[str, Any]] = DEFAULT_SOURCE
 
 
 @dataclass
@@ -223,7 +228,10 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     models = config.models.model_dump(mode="json", exclude_defaults=True)
     if models:
         data["models"] = models
-    data["index"] = {"parse": _out(index.parse)}
+    data["index"] = {}
+    if index.source != DEFAULT_SOURCE:
+        data["index"]["source"] = _out(index.source)
+    data["index"]["parse"] = _out(index.parse)
     if index.clean:
         data["index"]["clean"] = [_out(step) for step in index.clean]
     data["index"]["chunk"] = _out(index.chunk)
@@ -339,7 +347,26 @@ def _index(index: Any) -> IndexConfig:
         chunk=_step(Stage.CHUNK, index["chunk"], "index.chunk"),
         store=store,
         store_use=store_use,
+        source=_source(index["source"]) if "source" in index else DEFAULT_SOURCE,
     )
+
+
+def _source(step: Any) -> tuple[str, dict[str, Any]]:
+    """The source step. Any source but upload is told which document to read."""
+    use, settings = _step(Stage.SOURCE, step, "index.source")
+    if use == "upload":
+        if settings:
+            raise ConfigError(
+                "index.source uses 'upload', which takes no settings in a pipeline "
+                "file: the files are the ones given to index.run."
+            )
+        return DEFAULT_SOURCE
+    if "location" not in registry.get(Stage.SOURCE, use).config_model.model_fields:
+        raise ConfigError(
+            f"index.source uses '{use}', whose settings have no location field, "
+            "so it cannot be told which document to read."
+        )
+    return use, settings
 
 
 def _retrieve(retrieve: Any) -> RetrieveConfig:

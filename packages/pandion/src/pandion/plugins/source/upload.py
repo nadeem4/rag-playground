@@ -11,8 +11,6 @@ so moving the folder moves no artifact id.
 
 from __future__ import annotations
 
-import mimetypes
-from pathlib import Path
 from typing import Any, Mapping
 
 from pydantic import BaseModel
@@ -20,11 +18,8 @@ from pydantic import BaseModel
 from pandion.artifacts import ArtifactType
 from pandion.ports import RunContext, Stage
 from pandion.registry import register
-from pandion.sources import Sources
+from pandion.sources import file_record, run_sources
 from pandion.transform import Explanation, Transform
-
-#: What a file with no recognised extension is called.
-DEFAULT_MIME = "application/octet-stream"
 
 
 class UploadConfig(BaseModel):
@@ -73,22 +68,11 @@ class Upload(Transform[UploadConfig]):
                 "first; the sha is what identifies it."
             )
 
-        sources = ctx.extras.get("sources") if ctx is not None else None
-        if not isinstance(sources, Sources):
-            raise ValueError(
-                "upload: the run did not say where source files are kept. Pass "
-                'context_extras={"sources": Sources(folder)} to the run.'
-            )
+        sources = run_sources(ctx, "upload")
         # The extension is part of the stored name, so the original filename is
         # what tells us which stored file the sha refers to.
         path = sources.path(config.sha, config.filename)
         if not path.is_file():
             raise FileNotFoundError(f"upload: no source at {path}")
 
-        filename = config.filename or path.name
-        return {
-            "sha": config.sha,
-            "filename": filename,
-            "path": str(path),
-            "mime": mimetypes.guess_type(filename)[0] or DEFAULT_MIME,
-        }
+        return file_record(config.sha, config.filename or path.name, path)

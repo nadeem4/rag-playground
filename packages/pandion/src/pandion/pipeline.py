@@ -314,8 +314,9 @@ class IndexPipeline:
         self.sources = Sources(root / "sources")
         self.store = Store(root / "artifacts")
         self.embedding_cache = EmbeddingCache(root / "embeddings")
-        #: The documents the last run or sync in this process indexed.
-        self.documents: dict[str, SourceFile] | None = None
+        #: The documents the last run or sync in this process indexed: stored
+        #: files with the upload source, locations with any other.
+        self.documents: dict[str, SourceFile | str] | None = None
 
     def run(self, paths: str | Path | list[str | Path]) -> IndexReport:
         """Index the files at `paths`: files, folders, or a list of both.
@@ -342,6 +343,10 @@ class IndexPipeline:
         so the pieces of a removed or changed document are gone. After a sync
         with a failed step, both are left as they were.
         """
+        if not self._uploads():
+            raise ValueError(
+                "sync works with local files (the upload source); index.run works with any source."
+            )
         manifest_path = self.config.path / MANIFEST
         before = Manifest.load(manifest_path)
         documents = self._documents(paths)
@@ -375,11 +380,19 @@ class IndexPipeline:
                 self.store.delete(before.index_artifact)
         return sync
 
-    def _documents(self, paths: str | Path | list[str | Path]) -> dict[str, SourceFile]:
-        """Every file at `paths`, kept in `sources/`, by document id."""
+    def _uploads(self) -> bool:
+        """The documents are local files (the upload source)."""
+        return self.config.index.source[0] == "upload"
+
+    def _documents(self, paths: str | Path | list[str | Path]) -> dict[str, SourceFile | str]:
+        """By document id: with upload, every file at `paths`, kept in
+        `sources/`; with another source, each item as its location."""
+        if not self._uploads():
+            items = paths if isinstance(paths, list) else [paths]
+            return {str(item).replace("\\", "/"): str(item) for item in items}
         return {doc_id: self.sources.add(path) for doc_id, path in _files(paths)}
 
-    def _index(self, documents: dict[str, SourceFile]) -> IndexReport:
+    def _index(self, documents: dict[str, SourceFile | str]) -> IndexReport:
         graph, roles = self.graph(documents)
         result = self.execute(graph)
         reports = {doc_id: DocumentReport() for doc_id in documents}
@@ -409,11 +422,15 @@ class IndexPipeline:
             extras["credentials"] = dict(credentials)
         return run(graph, registry, self.store, context_extras=extras)
 
-    def indexed(self) -> dict[str, SourceFile]:
+    def indexed(self) -> dict[str, SourceFile | str]:
         """The documents in the index: the last run's or sync's in this
-        process, or else the last sync's, read from its manifest."""
+        process, or else the last sync's, read from its manifest (upload only)."""
         if self.documents is not None:
             return self.documents
+        if not self._uploads():
+            raise ValueError(
+                "There is no index to search yet: index some documents first, with p.index.run."
+            )
         manifest = Manifest.load(self.config.path / MANIFEST)
         if not manifest.documents:
             raise ValueError(
@@ -425,10 +442,12 @@ class IndexPipeline:
             for doc_id, entry in manifest.documents.items()
         }
 
-    def graph(self, documents: dict[str, SourceFile]) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
+    def graph(self, documents: dict[str, SourceFile | str]) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph for `documents`, and each node's (document id, step name).
 
-        The index takes every document's chunks in document-id order.
+        The index takes every document's chunks in document-id order. With
+        the upload source a document is a stored file; with another source it
+        is the location that source is told to read.
         """
         index = self.config.index
         nodes: list[Node] = []
@@ -443,8 +462,12 @@ class IndexPipeline:
 
         chunk_nodes = []
         for doc_id in sorted(documents):
-            file = documents[doc_id]
-            last = add(doc_id, "source", Stage.SOURCE, "upload", {"sha": file.sha, "filename": file.filename})
+            if self._uploads():
+                file = documents[doc_id]
+                last = add(doc_id, "source", Stage.SOURCE, "upload", {"sha": file.sha, "filename": file.filename})
+            else:
+                use, settings = index.source
+                last = add(doc_id, "source", Stage.SOURCE, use, {**settings, "location": documents[doc_id]})
             parse = add(doc_id, "parse", Stage.PARSE, *index.parse)
             edges.append(Edge(last, parse, "file"))
             last = parse

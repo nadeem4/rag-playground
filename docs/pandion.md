@@ -554,7 +554,9 @@ is all of it as plain JSON. A variant whose index run fails is reported, with
 `r.index.ok` false and no `report`.
 
 `print(results)` gives one plain line per variant and names the best one: the variant
-that found the most answers, then the one with the higher mean reciprocal rank.
+with the highest hit rate (answers found out of the questions scored), then the one with
+the higher mean reciprocal rank. The results are a list, `pandion.Comparisons`; a slice
+of it is a plain list.
 
 ```text
 chunk recursive_character chunk_size=400 chunk_overlap=80: found 9 of 12
@@ -565,7 +567,8 @@ Best: recursive_character chunk_size=800 chunk_overlap=80, found 10 of 12.
 
 A variant without questions prints `indexed, no questions asked`, and one whose index
 run failed prints `the index run failed`. When several variants tie for best, the line
-names the others after `tied with`.
+names the others after `tied with`. When no variant found an answer, the last line
+says `No variant found an answer.` instead.
 
 ## Three ways to write a pipeline
 

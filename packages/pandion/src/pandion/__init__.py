@@ -20,7 +20,14 @@ from pandion.pipeline import (
     Retrieval,
     RetrievalPipeline,
 )
-from pandion.evaluation import Comparison, EvaluationReport, QuestionResult, compare, evaluate
+from pandion.evaluation import (
+    Comparison,
+    Comparisons,
+    EvaluationReport,
+    QuestionResult,
+    compare,
+    evaluate,
+)
 from pandion.results import StageResult
 from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
@@ -29,6 +36,7 @@ __version__ = "0.1.0"
 __all__ = [
     "Answer",
     "Comparison",
+    "Comparisons",
     "EvaluationReport",
     "IndexPipeline",
     "ModelSettings",

@@ -375,17 +375,21 @@ def _short(block: Any) -> str:
     return f"{block.get('use')} {settings}".strip()
 
 
-class Comparisons(list):
+class Comparisons(list[Comparison]):
     """What `compare` returns: a list of `Comparison`, one per variant, that
-    prints one plain line per variant and the best one."""
+    prints one plain line per variant and the best one. The best has the
+    highest hit rate (found out of scored), then the highest mean reciprocal
+    rank. A slice such as `results[:2]` is a plain list."""
 
     def __str__(self) -> str:
         lines = [str(c) for c in self]
         scored = [c for c in self if c.report is not None and c.report.totals()["scored"]]
-        if scored:
-            def key(c: Comparison) -> tuple[int, float]:
+        if scored and not any(c.report.found for c in scored):
+            lines.append("No variant found an answer.")
+        elif scored:
+            def key(c: Comparison) -> tuple[float, float]:
                 t = c.report.totals()
-                return (t["found"], t["mrr"] or 0.0)
+                return (t["hit_rate"], t["mrr"])
 
             top = key(max(scored, key=key))
             best = [c for c in scored if key(c) == top]

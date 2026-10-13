@@ -126,3 +126,93 @@ def test_a_tie_for_best_names_every_tied_variant(tmp_path, docs):
         "Best: recursive_character chunk_size=70 chunk_overlap=10, found 1 of 1, "
         "tied with recursive_character chunk_size=70 chunk_overlap=10."
     )
+
+
+@pytest.fixture
+def broken_chunker():
+    """A chunker that raises when it runs, removed after the test."""
+    from pydantic import BaseModel
+
+    from pandion.extend import ArtifactType, PortSpec, Stage, Transform, register
+    from pandion.registry import registry
+
+    class NoSettings(BaseModel):
+        pass
+
+    @register
+    class Broken(Transform[NoSettings]):
+        name = "test_broken_chunker"
+        stage = Stage.CHUNK
+        inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+        output = ArtifactType.CHUNK_SET
+        config_model = NoSettings
+        summary = "Always fails."
+
+        def apply(self, inputs, config, ctx):
+            raise RuntimeError("this chunker always fails")
+
+    yield "test_broken_chunker"
+    registry._by_stage[Stage.CHUNK].pop("test_broken_chunker", None)
+
+
+def test_a_variant_whose_index_run_fails_is_reported_and_the_rest_still_run(tmp_path, docs, broken_chunker):
+    results = pandion.compare(pipeline(tmp_path), "chunk", [broken_chunker, V70], docs, [FOUND])
+    assert results[0].index.ok is False
+    assert results[0].report is None
+    assert results[0].to_dict()["ok"] is False
+    assert results[1].report.found == 1
+    assert str(results).splitlines() == [
+        "chunk test_broken_chunker: the index run failed",
+        "chunk recursive_character chunk_size=70 chunk_overlap=10: found 1 of 1",
+        "Best: recursive_character chunk_size=70 chunk_overlap=10, found 1 of 1.",
+    ]
+
+
+def test_when_no_variant_found_an_answer_none_is_named_best(tmp_path, docs):
+    results = pandion.compare(pipeline(tmp_path), "chunk", [V30], docs, [FOUND])
+    assert str(results).splitlines() == [
+        "chunk recursive_character chunk_size=30 chunk_overlap=0: found 0 of 1",
+        "No variant found an answer.",
+    ]
+
+
+def _made(variant, *verdicts):
+    """A comparison with a made-up report: each verdict is a rank, None for a
+    miss, or "error" for a question whose retrieval failed."""
+    from types import SimpleNamespace
+
+    questions = [
+        pandion.QuestionResult(
+            id=f"q{n}", question="?", golds=["."], tags=[], found=isinstance(v, int), rank=v if isinstance(v, int) else None,
+            lost_at=None, trace=None, score={}, error="failed" if v == "error" else None,
+        )
+        for n, v in enumerate(verdicts)
+    ]
+    return pandion.Comparison(stage="search", variant=variant, pipeline=None,
+                              index=SimpleNamespace(ok=True), report=pandion.EvaluationReport(top_k=5, questions=questions))
+
+
+def test_the_best_is_the_higher_hit_rate_then_the_higher_mean_reciprocal_rank():
+    same_count = pandion.Comparisons([_made("bm25", 3, None), _made("dense", 1, None)])
+    assert str(same_count).splitlines()[-1] == "Best: dense, found 1 of 2."
+    fewer_scored = pandion.Comparisons([_made("bm25", 1, None), _made("dense", 2, "error")])
+    assert str(fewer_scored).splitlines() == [
+        "search bm25: found 1 of 2",
+        "search dense: found 1 of 1",
+        "Best: dense, found 1 of 1.",
+    ]
+
+
+def test_comparisons_slice_to_a_plain_list(tmp_path, docs):
+    assert "Comparisons" in pandion.__all__
+    results = pandion.Comparisons([_made("bm25", 1)])
+    assert type(results[:1]) is list
+
+
+def test_a_bare_name_for_clean_or_rerank_is_taken_as_a_list_of_one(tmp_path, docs):
+    results = pandion.compare(pipeline(tmp_path), "clean", ["dedupe_blocks"], docs)
+    assert results[0].pipeline.config.index.clean == [("dedupe_blocks", {})]
+    assert results[0].index.ok
+    results = pandion.compare(pipeline(tmp_path), "rerank", ["mmr"], docs, [FOUND])
+    assert results[0].pipeline.config.retrieve.rerank == [("mmr", {})]
+    assert results[0].report.found == 1

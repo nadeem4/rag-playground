@@ -68,6 +68,7 @@ PUBLIC_MODULES = (
     "pandion.rerank",
     "pandion.answer",
     "pandion.extend",
+    "pandion.evaluation",
 )
 
 #: Engine imports the app and its scripts still make, as "module:name". This
@@ -92,8 +93,6 @@ ENGINE_IMPORTS: frozenset[str] = frozenset(
         "pandion.models:ModelSettings",
         "pandion.models:preload_embedder",
         "pandion.models:preload_reranker",
-        "pandion.payloads:ChunkSet",
-        "pandion.payloads:RetrievalResult",
         "pandion.plugins.chunk:DocView",
         "pandion.plugins.chunk:count_tokens",
         "pandion.plugins.parse:docling",
@@ -105,9 +104,6 @@ ENGINE_IMPORTS: frozenset[str] = frozenset(
         "pandion.sources:Sources",
         "pandion.storage:META",
         "pandion.storage:Store",
-        "pandion.textmatch:loosen",
-        "pandion.textmatch:normalise",
-        "pandion.textmatch:normalise_with_offsets",
     }
 )
 

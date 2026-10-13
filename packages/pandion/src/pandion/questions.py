@@ -1,8 +1,11 @@
-"""Your own gold set: the file format (I-30) and the upload check (I-31).
+"""Question sets: the file format, reading one from a file or from code, and the check.
 
 **One parser, two file shapes.** JSON because the app speaks it, CSV because
 people keep question sets in spreadsheets. Both come out as the same validated
 structure, so everything downstream sees one shape.
+
+`load_questions` reads a set from a path (JSON or CSV) or from a list or dict in
+code, through the same parser, so a set behaves the same wherever it comes from.
 
 It is forgiving wherever forgiveness costs nothing: `gold_answer` for
 `gold_answers`, a bare string for a list, whitespace around every value, blank
@@ -29,6 +32,7 @@ import difflib
 import io
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from pandion.textmatch import normalise_with_offsets
@@ -78,6 +82,32 @@ def parse_question_set(data: bytes, filename: str = "") -> dict[str, Any]:
         "document": document,
         "questions": questions,
     }
+
+
+def load_questions(questions: str | Path | list[dict] | dict) -> dict[str, Any]:
+    """A question set from a JSON or CSV file, or from a list or dict in code, checked.
+
+    Returns `{format, version, document, questions}`, as `parse_question_set`
+    does. A problem is a `QuestionSetError` whose message is one sentence that
+    says where the set came from and which question is at fault.
+    """
+    if isinstance(questions, (str, Path)):
+        path = Path(questions)
+        if not path.is_file():
+            raise QuestionSetError(f"There is no question set at {path}.")
+        data, filename, where = path.read_bytes(), path.name, f"at {path}"
+    elif isinstance(questions, (list, dict)):
+        data, filename, where = json.dumps(questions).encode("utf-8"), "", "you gave"
+    else:
+        raise QuestionSetError(
+            "questions must be a path to a JSON or CSV file, a list of questions, "
+            f"or a dict with a questions list, not {type(questions).__name__}."
+        )
+    try:
+        return parse_question_set(data, filename)
+    except QuestionSetError as exc:
+        reason = str(exc).rstrip(".")
+        raise QuestionSetError(f"The question set {where} cannot be used: {reason}.") from None
 
 
 def _decode(data: bytes) -> str:

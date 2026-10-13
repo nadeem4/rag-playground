@@ -43,7 +43,7 @@ with the token counter the chunkers use (`pandion/tokenize.py`), the sentence sp
 (`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
 model settings (`pandion/models.py`), the chat model client (`pandion/llm.py`) and the
 custom endpoint check (`pandion/endpoints.py`). The `eval` step, which the Evaluate page runs, moved too
-(`pandion/plugins/answer/eval.py`, under the `use_case` stage but refused as an answer step), so the app has no steps of its own. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
+(`pandion/plugins/answer/eval.py`, under the `use_case` stage but refused as an answer step), so the app has no steps of its own. Reading and checking question sets (`pandion/questions.py`) and the miss trace (`pandion/trace.py`) moved with it, public as `pandion.evaluation`. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
 `pandion[docling]`, `pandion[lancedb]`, `pandion[local]` for the local models, and
 `pandion[openai]` and `pandion[anthropic]` for the chat models), imported only when the
 step runs, and the app installs the extras it uses. The cleaners and the chunkers need only the standard library and Pydantic, so they
@@ -235,7 +235,7 @@ relative paths, so the same code works in development, where Vite on port 5173 p
 - **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.
 - **Miss trace.** Evaluate posts a question's answer sentences and the artifacts its run
   made to `POST /api/trace`, which says the first step that lost the answer, with the
-  eval step's own matching.
+  eval step's own matching, through `pandion.evaluation.trace`.
 - **Sources.** Uploads, page images and the PDF itself come from `/api/sources`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
 - **Keys.** A key typed in the app is sent as a header on runs, sweeps and key checks.

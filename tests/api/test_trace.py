@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from api.trace import StepInput, trace
+from pandion.evaluation import StepInput, trace
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, ParsedDoc, RetrievalResult
 
 GOLD = "the number of readers who lost their place halfway down a page fell by more than half"

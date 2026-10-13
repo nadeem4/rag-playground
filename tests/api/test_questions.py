@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from api.questions import QuestionSetError, parse_question_set
+from pandion.evaluation import QuestionSetError, parse_question_set
 from tests.api.conftest import make_client
 from tests.steps.conftest import build_pdf
 

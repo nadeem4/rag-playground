@@ -151,6 +151,10 @@ the full format, with every field the package reads.
 ```yaml
 # pipeline.yaml
 
+# Optional. Modules to import before the steps are checked, so strategies
+# you wrote can be used by name. See Loading your strategies.
+plugins: [my_company.rag_steps]
+
 # Required. Pandion keeps three folders here: sources/ (each file once),
 # artifacts/ (the cache) and embeddings/ (the embedding cache), and after a
 # sync, manifest.json (what the index was built from).

@@ -6,6 +6,8 @@ import warnings
 
 import pytest
 
+from pandion.extend import Stage
+
 from pandion.config import ConfigError, from_dict, to_dict
 
 BASE = {
@@ -45,6 +47,9 @@ def plugin_module(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(tmp_path))
     yield "my_plugin_mod"
     sys.modules.pop("my_plugin_mod", None)
+    from pandion.registry import registry
+
+    registry._by_stage[Stage.PARSE].pop("loaded_from_plugins", None)
 
 
 def test_without_plugins_the_name_is_unknown(tmp_path):
@@ -64,6 +69,17 @@ def test_a_plugin_that_fails_to_import_names_the_module_and_the_error(tmp_path, 
     monkeypatch.syspath_prepend(str(tmp_path))
     with pytest.raises(ConfigError, match=r"broken_mod.*not_a_real_dependency_xyz"):
         from_dict({"plugins": ["broken_mod"], **BASE}, base=tmp_path)
+
+
+def test_a_plugin_that_clashes_with_a_built_in_is_blamed(tmp_path, monkeypatch):
+    clash = MODULE.replace("loaded_from_plugins", "pdfium")
+    (tmp_path / "clash_mod.py").write_text(clash, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        with pytest.raises(ConfigError, match=r"clash_mod.*already registered"):
+            from_dict({"plugins": ["clash_mod"], **BASE}, base=tmp_path)
+    finally:
+        sys.modules.pop("clash_mod", None)
 
 
 def test_plugins_must_be_a_list_of_module_names(tmp_path):

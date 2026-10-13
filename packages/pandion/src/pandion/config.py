@@ -283,6 +283,7 @@ def _load_plugins(plugins: Any) -> list[str]:
             "plugins must be a list of Python module names, for example "
             "plugins: [my_company.rag_steps]."
         )
+    discover()  # built-ins first, so a clashing plugin fails at its own import
     for module in plugins:
         try:
             importlib.import_module(module)

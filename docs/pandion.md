@@ -607,11 +607,19 @@ pandion.explain("chunk", "recursive_character", {"chunk_size": 100, "chunk_overl
 # {"settings": "...", "warning": "Overlap must be smaller than the chunk size ...", "blocking": True, ...}
 ```
 
+### Results by id
+
+Every `StageResult` has an `artifact_id`. `p.result(id)` reads that result back from the
+store later, for example when a page asks for one card's output: a dict for every result
+but an index, whose result is its folder. An id that is not a result id, or that has no
+stored result, is a `KeyError`.
+
 ## Three ways to write a pipeline
 
 A pipeline can be written as a YAML file, as a dict for each stage, or as classes in
 code. All three give the same pipeline: the same settings give the same artifact ids and
-the same results whichever way they are written, so they share one cache.
+the same results whichever way they are written, so they share one cache. The playground's Starter
+pipeline is [`samples/starter.yaml`](../samples/starter.yaml): a good first file to copy.
 
 As a file, read with `Pipeline.from_yaml`:
 

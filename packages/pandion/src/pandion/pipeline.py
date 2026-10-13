@@ -36,6 +36,7 @@ keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store),
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -68,6 +69,9 @@ _OUTPUTS = {
 
 #: Settings a stage may take: a dict (the file's block), a step class, a name.
 Step = Any
+
+#: What a result id looks like: a sha256 in lowercase hex.
+_RESULT_ID = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass
@@ -265,6 +269,20 @@ class Pipeline:
         """The pipeline in the file's shape, as plain data: `from_dict` of it
         gives this pipeline again."""
         return to_dict(self.config)
+
+    def result(self, artifact_id: str) -> Any:
+        """A stored result by its id (a `StageResult.artifact_id`), as stored:
+        a dict for every result but an index, whose result is its folder.
+
+        The id is checked before any path is built from it, so an app may pass
+        one it was sent.
+        """
+        if not isinstance(artifact_id, str) or not _RESULT_ID.fullmatch(artifact_id):
+            raise KeyError(f"{artifact_id!r} is not a result id: one is 64 lowercase hex characters.")
+        store = self.index.store
+        if not store.has(artifact_id):
+            raise KeyError(f"No stored result has the id {artifact_id} under {self.config.path}.")
+        return store.load(artifact_id, store.get_meta(artifact_id).type)
 
     def retrieve(
         self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None

@@ -28,6 +28,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
 - [Write your own strategy](#write-your-own-strategy)
+- [Loading your strategies](#loading-your-strategies)
 - [Errors](#errors)
 - [Run the example](#run-the-example)
 
@@ -610,6 +611,35 @@ class TxtLines(Transform[NoSettings]):
         return ParsedDoc(elements=[Element(id=f"l{i}", type="paragraph", text=t, order=i)
                                    for i, t in enumerate(lines) if t.strip()])
 ```
+
+## Loading your strategies
+
+A strategy only works by name once the module that registers it has been imported. There are
+three ways to make that happen.
+
+1. Import it in code, before you build the pipeline: `import my_company.rag_steps`.
+2. List it under `plugins:` in the pipeline file. A YAML file cannot import anything, so the
+   CLI, or a server that reads the file, needs to be told which modules to load.
+
+   ```yaml
+   plugins: [my_company.rag_steps]
+   path: ./my-index
+   index:
+     parse: {use: txt_lines}
+   ```
+
+   A module that cannot be imported is a `ConfigError` that names the module and the error.
+   `build(..., plugins=[...])` takes the same list in code.
+3. Ship it as a package. Add an entry point in the `pandion.strategies` group, and Pandion
+   loads the package the first time it looks up a strategy:
+
+   ```toml
+   [project.entry-points."pandion.strategies"]
+   qdrant = "pandion_qdrant"
+   ```
+
+   A package that fails to load gives a warning that names it, and the other strategies keep
+   working.
 
 ## Errors
 

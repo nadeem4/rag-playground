@@ -670,6 +670,13 @@ as `metric` and `build_fts` for lancedb. `models` takes a dict or
 `pandion.parse`, `pandion.clean`, `pandion.chunk` and `pandion.rewrite` still run one
 stage when you call them, as in [Try one stage at a time](#try-one-stage-at-a-time).
 
+An app that keeps pipelines as JSON can use the file's content as a dict, and get it back:
+
+```python
+p = Pipeline.from_dict(data, base="./")   # data is the file's content; relative paths are read from base
+data = p.to_dict()                        # plain data, the file's shape
+```
+
 **Mixing.** The ways can be mixed in one pipeline, for example
 `clean=[DedupeBlocks(), {"use": "drop_matching", "pattern": "Draft"}]`.
 
@@ -1027,7 +1034,7 @@ step as `answer (chat)`. A pipeline written as dicts or classes gets the same me
 The same checks apply to `pandion.parse`, `pandion.clean`, `pandion.chunk` and
 `pandion.rewrite`, where the message starts with "The chunker", "Clean step 1" or "The
 query step" instead of the place in the file. A
-pipeline file problem is a `pandion.config.ConfigError`.
+pipeline file problem is a `pandion.ConfigError`, a `ValueError`.
 
 A missing extra says which one to install:
 

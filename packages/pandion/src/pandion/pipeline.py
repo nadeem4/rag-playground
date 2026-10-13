@@ -42,7 +42,7 @@ from typing import Any
 
 import yaml
 
-from pandion.config import PipelineConfig, build, load, to_dict
+from pandion.config import PipelineConfig, build, from_dict as _from_dict, load, to_dict
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.graph import Edge, Graph, Node
@@ -253,6 +253,18 @@ class Pipeline:
     def to_yaml(self, file: str | Path | None = None) -> str:
         """The pipeline as a file (see `pandion.config`), also written to `file` if given."""
         return _write(self.config, file)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], *, base: str | Path = ".") -> Pipeline:
+        """The pipeline file's content as a dict, for an app that keeps
+        pipelines as JSON. Checked exactly as a file is; a relative `path` or
+        `models.cache_dir` is read from `base`."""
+        return cls._of(_from_dict(data, base=Path(base)))
+
+    def to_dict(self) -> dict[str, Any]:
+        """The pipeline in the file's shape, as plain data: `from_dict` of it
+        gives this pipeline again."""
+        return to_dict(self.config)
 
     def retrieve(
         self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None

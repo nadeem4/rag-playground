@@ -251,3 +251,63 @@ def test_sync_takes_a_mapping_of_names(p, pdf, tmp_path):
     report = p.index.sync({"report.pdf": kept})
     assert report.ok and report.added == ["report.pdf"]
     assert p.index.sync({"report.pdf": kept}).unchanged == ["report.pdf"]
+
+
+SEARCH = {**CONFIG, "retrieve": {"search": {"use": "hybrid_rrf", "top_k": 3}}, "answer": {"use": "search"}}
+
+
+@pytest.fixture
+def capitals(tmp_path):
+    a, b = tmp_path / "a.pdf", tmp_path / "b.pdf"
+    a.write_bytes(build_pdf([["Paris is the capital of France."]]))
+    b.write_bytes(build_pdf([["Berlin is the capital of Germany."]]))
+    return a, b
+
+
+def test_documents_limits_the_search_to_those_files(tmp_path, capitals):
+    a, b = capitals
+    p = Pipeline.from_dict(SEARCH, base=tmp_path)
+    p.index.run([a, b])
+    hits = p.retrieve("capital", documents=b).hits
+    assert hits and all("Berlin" in h.chunk.text for h in hits)
+    assert any("Paris" in h.chunk.text for h in p.retrieve("capital").hits)
+
+
+def test_documents_do_not_change_what_the_index_holds(tmp_path, capitals):
+    a, b = capitals
+    p = Pipeline.from_dict(SEARCH, base=tmp_path)
+    p.index.run([a, b])
+    p.retrieve("capital", documents=b)
+    assert set(p.index.indexed()) == {"a.pdf", "b.pdf"}
+
+
+def test_documents_not_yet_indexed_are_indexed_first(tmp_path):
+    f = tmp_path / "c.pdf"
+    f.write_bytes(build_pdf([["Rome is the capital of Italy."]]))
+    p = Pipeline.from_dict(SEARCH, base=tmp_path)
+    assert any("Rome" in h.chunk.text for h in p.retrieve("capital", documents=f).hits)
+
+
+def test_retrieve_reports_progress_by_step(tmp_path, pdf):
+    p = Pipeline.from_dict(SEARCH, base=tmp_path)
+    events = []
+    p.retrieve("capital", documents=pdf, on_event=events.append)
+    done = [(e["document"], e["step"]) for e in finished(events)]
+    assert done[-1] == (None, "search")          # the search reads the index and the question, so it is last
+    assert (None, "rewrite") in done and ("report.pdf", "chunk") in done
+
+
+def test_ask_takes_documents_and_reports_the_answer_step(tmp_path, pdf):
+    p = Pipeline.from_dict(SEARCH, base=tmp_path)
+    events = []
+    answer = p.ask("capital", documents=pdf, on_event=events.append)
+    assert answer.ok
+    assert finished(events)[-1]["step"] == "answer"
+
+
+def test_a_cancelled_search_finds_nothing_and_says_so(tmp_path, pdf):
+    stop = threading.Event()
+    stop.set()
+    result = Pipeline.from_dict(SEARCH, base=tmp_path).retrieve("capital", documents=pdf, cancel=stop)
+    assert not result.ok and result.hits == []
+    assert result.stages["search"].status == "skipped"

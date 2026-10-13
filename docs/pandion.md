@@ -659,6 +659,20 @@ so results keep the names people gave their files.
 - `credentials` are the model keys for this call, as for `p.retrieve`.
 - `force` runs every step that was asked for again, even when its result is stored.
 
+### Search the files a question is about
+
+On a server many people share, one store holds everyone's results, so a search must say
+which files it covers. `p.retrieve` and `p.ask` take `documents=`, the same argument
+`index.run` takes, and search the index built from exactly those files. Files not yet
+indexed with these settings are indexed first; files that were are read from the cache.
+It does not change what `p.index` holds. `on_event`, `cancel`, `credentials` and `force`
+work as for `index.run`.
+
+```python
+answer = p.ask("What does chapter 2 say?", documents={"report.pdf": "/uploads/0f3a.pdf"},
+               on_event=send_to_browser, cancel=stop)
+```
+
 ## Three ways to write a pipeline
 
 A pipeline can be written as a YAML file, as a dict for each stage, or as classes in

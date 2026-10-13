@@ -302,7 +302,15 @@ class Pipeline:
         return store.load(artifact_id, store.get_meta(artifact_id).type)
 
     def retrieve(
-        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+        self,
+        question: str,
+        k: int | None = None,
+        *,
+        documents: Documents = None,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        force: bool = False,
     ) -> Retrieval:
         """Search the index for `question`. See `RetrievalPipeline.retrieve`."""
         if self.retrieval is None:
@@ -310,10 +318,21 @@ class Pipeline:
                 "The pipeline has no retrieve section, so there is nothing to "
                 "search with. Add a retrieve section with at least a search step."
             )
-        return self.retrieval.retrieve(question, k, credentials=credentials)
+        return self.retrieval.retrieve(
+            question, k, documents=documents, credentials=credentials,
+            on_event=on_event, cancel=cancel, force=force,
+        )
 
     def ask(
-        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+        self,
+        question: str,
+        k: int | None = None,
+        *,
+        documents: Documents = None,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        force: bool = False,
     ) -> Answer:
         """Answer `question`. See `QueryPipeline.ask`."""
         if self.query is None:
@@ -321,7 +340,10 @@ class Pipeline:
                 "The pipeline has no answer section, so there is nothing to answer "
                 "with. Add answer: with any answer strategy, for example search or chat."
             )
-        return self.query.ask(question, k, credentials=credentials)
+        return self.query.ask(
+            question, k, documents=documents, credentials=credentials,
+            on_event=on_event, cancel=cancel, force=force,
+        )
 
 
 class IndexPipeline:
@@ -716,12 +738,19 @@ class RetrievalPipeline:
         """The index and retrieval parts as a file, also written to `file` if given."""
         return _write(self.config, file)
 
-    def graph(self, question: str, k: int | None = None) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
+    def graph(
+        self,
+        question: str,
+        k: int | None = None,
+        documents: dict[str, SourceFile | str] | None = None,
+    ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph that searches the index for `question`, and each node's
         (document id, step name): the index's nodes, then rewrite, search and
-        rerank.1, rerank.2 ... with no document id."""
+        rerank.1, rerank.2 ... with no document id. `documents` (resolved by
+        `IndexPipeline._documents`) are the ones to search; None means what
+        the index holds."""
         retrieve = self.config.retrieve
-        graph, roles = self.index.graph(self.index.indexed())
+        graph, roles = self.index.graph(documents if documents is not None else self.index.indexed())
         nodes, edges = list(graph.nodes), list(graph.edges)
 
         use, settings = retrieve.rewrite or ("text", {})
@@ -746,7 +775,15 @@ class RetrievalPipeline:
         return Graph(nodes=nodes, edges=edges), roles
 
     def retrieve(
-        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+        self,
+        question: str,
+        k: int | None = None,
+        *,
+        documents: Documents = None,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        force: bool = False,
     ) -> Retrieval:
         """Search the index for `question`, and say what every step did.
 
@@ -756,9 +793,34 @@ class RetrievalPipeline:
         (its `top_k`); otherwise the file's setting holds. A model's key goes
         in `credentials`, for example `{"anthropic_api_key": ...}`, never in
         the file.
+
+        `documents` (what index.run takes) are the ones to search: the index
+        built from exactly them, indexed first through the cache when needed.
+        Without it, the search covers what the index holds. `on_event`,
+        `cancel` and `force` work as in `IndexPipeline.execute`.
         """
-        graph, _ = self.graph(question, k)
-        return self._retrieval(graph, self.index.execute(graph, credentials))
+        resolved = self.index._documents(documents) if documents is not None else None
+        return self._retrieve(
+            question, k, resolved, credentials=credentials,
+            on_event=on_event, cancel=cancel, force=force,
+        )
+
+    def _retrieve(
+        self,
+        question: str,
+        k: int | None,
+        documents: dict[str, SourceFile | str] | None,
+        *,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        force: bool = False,
+    ) -> Retrieval:
+        graph, roles = self.graph(question, k, documents)
+        result = self.index.execute(
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
+        )
+        return self._retrieval(graph, result)
 
     def _retrieval(self, graph: Graph, result: RunResult) -> Retrieval:
         by_id = {node.id: node for node in graph.nodes}
@@ -822,9 +884,14 @@ class QueryPipeline:
         """All three parts as a file, also written to `file` if given."""
         return _write(self.config, file)
 
-    def graph(self, question: str, k: int | None = None) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
+    def graph(
+        self,
+        question: str,
+        k: int | None = None,
+        documents: dict[str, SourceFile | str] | None = None,
+    ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The retrieval's graph for `question` with the answer step at the end."""
-        graph, roles = self.retrieval.graph(question, k)
+        graph, roles = self.retrieval.graph(question, k, documents)
         nodes, edges = list(graph.nodes), list(graph.edges)
         last = graph.nodes[-1].id
         use, settings = self.config.answer
@@ -839,17 +906,29 @@ class QueryPipeline:
         return Graph(nodes=nodes, edges=edges), roles
 
     def ask(
-        self, question: str, k: int | None = None, *, credentials: dict[str, str] | None = None
+        self,
+        question: str,
+        k: int | None = None,
+        *,
+        documents: Documents = None,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+        force: bool = False,
     ) -> Answer:
         """Retrieve for `question`, then run the answer step on what was found.
 
-        `k` and `credentials` work as for `RetrievalPipeline.retrieve`: chat's
-        model key goes in `credentials`, for example `{"anthropic_api_key":
-        ...}`. A search answer is cached like any step; a chat answer is a new
-        model call every time.
+        `k`, `documents`, `credentials`, `on_event`, `cancel` and `force` work
+        as for `RetrievalPipeline.retrieve`: chat's model key goes in
+        `credentials`, for example `{"anthropic_api_key": ...}`. A search
+        answer is cached like any step; a chat answer is a new model call
+        every time.
         """
-        graph, _ = self.graph(question, k)
-        result = self.index.execute(graph, credentials)
+        resolved = self.index._documents(documents) if documents is not None else None
+        graph, roles = self.graph(question, k, resolved)
+        result = self.index.execute(
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
+        )
         answer = next(node for node in graph.nodes if node.id == "answer")
         return Answer(
             retrieval=self.retrieval._retrieval(graph, result),

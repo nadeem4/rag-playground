@@ -23,8 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pandion import ModelSettings
 from pandion.embedding_cache import EmbeddingCache
-from pandion.models import ModelSettings
 from pandion.registry import Registry
 from pandion.registry import registry as global_registry
 from pandion.storage import Store

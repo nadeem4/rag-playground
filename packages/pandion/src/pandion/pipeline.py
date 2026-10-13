@@ -261,7 +261,7 @@ class Pipeline:
         if self.retrieval is None:
             raise ValueError(
                 "The pipeline has no retrieve section, so there is nothing to "
-                "search with. Add retrieve: with at least a search step."
+                "search with. Add a retrieve section with at least a search step."
             )
         return self.retrieval.retrieve(question, k, credentials=credentials)
 

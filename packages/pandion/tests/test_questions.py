@@ -91,3 +91,24 @@ def test_the_check_finds_a_passage_with_curly_quotes():
         "The reader’s eye stops.",
     )
     assert rows[0]["status"] == "found_normalized"
+
+
+MIXED = {
+    "document": "handbook.pdf",
+    "questions": [
+        {"question": "q?", "gold_answers": ["g."]},
+        {"question": "r?", "gold_answers": ["h."], "document": "annex.pdf"},
+    ],
+}
+
+
+def test_a_set_read_in_code_may_name_several_documents():
+    questions = load_questions(MIXED)["questions"]
+    assert [q["document"] for q in questions] == ["handbook.pdf", "annex.pdf"]
+
+
+def test_an_uploaded_set_still_covers_one_document():
+    from pandion.evaluation import parse_question_set
+
+    with pytest.raises(QuestionSetError, match="A set covers one document for now, so put annex.pdf's questions"):
+        parse_question_set(json.dumps(MIXED).encode(), "q.json")

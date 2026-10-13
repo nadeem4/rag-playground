@@ -232,5 +232,5 @@ def test_an_unknown_setting_names_the_stage(tmp_path, retrieve, named):
 def test_a_file_without_a_retrieve_section_cannot_retrieve(tmp_path):
     p = built(tmp_path, "")
 
-    with pytest.raises(ValueError, match="no retrieve section"):
+    with pytest.raises(ValueError, match="no retrieve section.*Add a retrieve section with at least a search step"):
         p.retrieve(QUESTION)

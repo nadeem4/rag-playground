@@ -584,6 +584,7 @@ class IndexPipeline:
             "sources": self.sources,
             "embedding_cache": self.embedding_cache,
             "models": self.config.models,
+            "public_endpoints_only": self.config.models.public_endpoints_only,
         }
         if credentials:
             extras["credentials"] = dict(credentials)

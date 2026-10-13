@@ -11,6 +11,8 @@ ModelSettings(...)}`.
 - `download: auto` downloads a model the first time it is used. `never` only
   loads a model already in the folder, and says which one is missing.
 - `device: auto` picks cuda, then mps, then cpu.
+- `public_endpoints_only: true` is for a server strangers share: a custom model
+  endpoint must then be a public https address.
 """
 
 from __future__ import annotations
@@ -33,6 +35,10 @@ class ModelSettings(BaseModel):
     cache_dir: Path | None = None
     download: Literal["auto", "never"] = "auto"
     device: Literal["auto", "cpu", "cuda", "mps"] = "auto"
+    #: On a server strangers share: a step that calls a custom model endpoint
+    #: accepts only a public https address (see pandion.endpoints). Never part
+    #: of a result id.
+    public_endpoints_only: bool = False
 
 
 def resolve_device(device: str) -> str:

@@ -311,3 +311,26 @@ def test_a_cancelled_search_finds_nothing_and_says_so(tmp_path, pdf):
     result = Pipeline.from_dict(SEARCH, base=tmp_path).retrieve("capital", documents=pdf, cancel=stop)
     assert not result.ok and result.hits == []
     assert result.stages["search"].status == "skipped"
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_the_public_endpoint_switch_reaches_every_step(tmp_path, pdf, monkeypatch, on):
+    seen = {}
+    real = pipeline_module.run
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs["context_extras"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline_module, "run", spy)
+    config = {**CONFIG, "models": {"device": "cpu", "public_endpoints_only": on}}
+    Pipeline.from_dict(config, base=tmp_path).index.run(pdf, through="parse")
+    assert seen["public_endpoints_only"] is on
+
+
+def test_the_switch_is_written_back_only_when_on(tmp_path):
+    config = {**CONFIG, "models": {"device": "cpu", "public_endpoints_only": True}}
+    assert Pipeline.from_dict(config, base=tmp_path).to_dict()["models"] == {
+        "device": "cpu", "public_endpoints_only": True,
+    }
+    assert "public_endpoints_only" not in Pipeline.from_dict(CONFIG, base=tmp_path).to_dict()["models"]

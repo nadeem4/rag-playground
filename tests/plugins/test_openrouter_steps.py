@@ -9,11 +9,11 @@ import pytest
 
 from pandion import llm
 from pandion.plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
-from plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
+from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
 from plugins.use_case.chat import ChatConfig, ChatUseCase
-from tests.plugins.test_rerank_llm import QUESTION, payload
-from tests.plugins.test_rerank_llm import ctx as run_ctx
-from tests.plugins.test_rerank_llm import reply  # noqa: F401  (fixture)
+from tests.plugins.rerank_fakes import QUESTION, payload
+from tests.plugins.rerank_fakes import ctx as run_ctx
+from tests.plugins.rerank_fakes import reply  # noqa: F401  (fixture)
 from tests.plugins.test_use_case_chat import pipeline  # noqa: F401  (fixture)
 from tests.plugins.test_use_case_chat_any_model import (  # noqa: F401
     ask,
@@ -63,8 +63,10 @@ def test_explain_names_the_model_id_and_the_key(cls, config_cls, base):
     exp = cls().explain(config_cls(model="openrouter", openrouter_model=MODEL_ID, **base))
     assert not exp.blocking
     assert MODEL_ID in exp.settings
-    if cls is not LlmRewrite:  # the rewrite does not talk about keys
+    if cls is ChatUseCase:  # only the app's own step names the server variable
         assert "OPENROUTER_API_KEY" in exp.settings
+    elif cls is LlmRerank:
+        assert "OpenRouter API key" in exp.settings
     for text in (exp.settings, exp.tradeoff or ""):
         assert "—" not in text and "–" not in text
 
@@ -162,7 +164,12 @@ def test_on_the_demo_explain_never_asks_for_a_server_variable(
     assert "_API_KEY" not in exp.settings and "key button" in exp.settings
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
     local = cls().explain(config_cls(model=model, openrouter_model=MODEL_ID, **base))
-    assert "Running locally, you can also set" in local.settings
+    # The app's chat step reads the demo switch. The package's llm_rerank has no
+    # run to read it from when it explains, so it never names the variable.
+    if cls is LlmRerank:
+        assert "_API_KEY" not in local.settings
+    else:
+        assert "Running locally, you can also set" in local.settings
 
 
 def test_the_model_field_carries_each_choices_provider():

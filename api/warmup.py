@@ -44,10 +44,11 @@ def _warm_index_models() -> None:
 def _warm_reranker() -> None:
     """Load the default cross-encoder. A failed download is logged, never
     raised: the reranker loads the model again when it first runs."""
-    from plugins.rerank.cross_encoder import CrossEncoderConfig, _load
+    from api.deps import APP_MODELS
+    from pandion.models import preload_reranker
 
     try:
-        _load(CrossEncoderConfig().model)
+        preload_reranker(settings=APP_MODELS)
     except Exception:
         log.exception("cross-encoder warm-up failed")
 

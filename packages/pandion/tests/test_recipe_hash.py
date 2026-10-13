@@ -197,3 +197,35 @@ def test_a_retrieve_node_keeps_its_id(name, config, expected):
         config=settings.model_dump(mode="json"),
         inputs={"index": "e" * 64, "query": "f" * 64},
     ) == expected
+
+
+@pytest.mark.parametrize(
+    "name,config,expected",
+    [
+        ("mmr", {}, "5b0304184926943bef826e88651784bdadce5f85c6ce413e475d5bcb46cd4f81"),
+        ("cross_encoder", {}, "07b165284163911b6d6aaf7f109f41d6b8a9b771f078ce3c4ec2dc7771e85c07"),
+        (
+            "cross_encoder",
+            {"model": "BAAI/bge-reranker-base"},
+            "dd1704aeb8d71b24f36a16309640eb89fd460178dba19271051bd99d3943e215",
+        ),
+        ("llm_rerank", {}, "c129a6bd398b4812eb298a40bd9893b05eacdf4b3785c5e7118baac3850b2578"),
+    ],
+)
+def test_a_rerank_node_keeps_its_id(name, config, expected):
+    """Computed on main at 81e7329, while the rerankers still lived in the app."""
+    discover()
+    cls = registry.get(Stage.RERANK, name)
+    settings = cls.config_model(**config)
+    assert cls.__module__ == f"pandion.plugins.rerank.{name}"
+    inputs = {"result": "a" * 64, "query": "b" * 64}
+    if name == "mmr":
+        inputs["index"] = "c" * 64
+    assert compute_artifact_id(
+        transform_name=cls.name,
+        transform_version=cls.version,
+        fingerprint=cls().fingerprint(settings),
+        output_type=cls.output,
+        config=settings.model_dump(mode="json"),
+        inputs=inputs,
+    ) == expected

@@ -5,8 +5,8 @@ second line: chat, llm_rerank and llm_rewrite all reach `pandion.llm.complete`,
 which validates the `base_url` before any client is built. The resolver is
 mocked to answer 127.0.0.1, as a DNS name pointed at the host would.
 
-pandion never reads the demo switch. The app's own steps (chat, llm_rerank)
-read it from `plugins.hosted_demo`, and the package's llm_rewrite gets it from
+pandion never reads the demo switch. The app's own chat step reads it from
+`plugins.hosted_demo`, and the package's llm_rewrite and llm_rerank get it from
 the run, as `context_extras["public_endpoints_only"]`, which the app sets in
 `Deps.run_extras()`.
 """
@@ -24,9 +24,9 @@ from pandion.graph import Graph, Node
 from pandion.plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
 from pandion.ports import Stage
 from plugins import hosted_demo
-from plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
-from tests.plugins.test_rerank_llm import QUESTION, payload
-from tests.plugins.test_rerank_llm import ctx as rerank_ctx
+from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
+from tests.plugins.rerank_fakes import QUESTION, payload
+from tests.plugins.rerank_fakes import ctx as rerank_ctx
 from tests.plugins.test_use_case_chat import pipeline  # noqa: F401  (fixture)
 from tests.plugins.test_use_case_chat_any_model import ask, context, index  # noqa: F401
 
@@ -57,12 +57,14 @@ def test_chat_refuses_a_private_endpoint(demo, pipeline, index):  # noqa: F811
     assert demo == []
 
 
-def test_llm_rerank_refuses_a_private_endpoint(demo, tmp_path):
+def test_llm_rerank_refuses_a_private_endpoint_with_the_apps_run_extras(demo, tmp_path):
+    run_ctx = rerank_ctx(tmp_path, creds=None)
+    run_ctx.extras.update(build_deps(artifacts_dir=tmp_path / "a").run_extras())
     with pytest.raises(EndpointRefused) as info:
         LlmRerank().apply(
             {"result": payload(["a", "b"]), "query": {"text": QUESTION}},
             LlmRerankConfig(**CUSTOM),
-            rerank_ctx(tmp_path, creds=None),
+            run_ctx,
         )
     assert str(info.value) == DEMO_ENDPOINT_ERROR
     assert demo == []
@@ -108,3 +110,38 @@ def test_a_demo_run_of_llm_rewrite_fails_on_a_private_endpoint(demo, tmp_path):
 
 def test_the_demo_switch_is_the_same_one_the_api_reads():
     assert hosted_demo.ENV_VAR == api_demo.ENV_VAR
+
+
+def test_a_demo_run_of_llm_rerank_fails_on_a_private_endpoint(demo, tmp_path):
+    """The whole app path for the reranker: index a PDF with the fake embedder,
+    retrieve, then llm_rerank, run with `Deps.run_extras()` (behind the 403)."""
+    from pandion.graph import Edge
+    from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+
+    pdf = tmp_path / "sample.pdf"
+    pdf.write_bytes(build_pdf(SAMPLE_PAGES))
+    deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
+    stored = deps.run_extras()["sources"].add(pdf)
+    graph = Graph(
+        nodes=[
+            Node("src", Stage.SOURCE, "upload", {"sha": stored.sha, "filename": stored.filename}),
+            Node("q", Stage.QUERY, "text", {"text": QUESTION}),
+            Node("parse", Stage.PARSE, "pdfium", {}),
+            Node("chunk", Stage.CHUNK, "recursive_character", {}),
+            Node("index", Stage.INDEX, "lancedb", {"embedder": "fake-deterministic"}),
+            Node("dense", Stage.RETRIEVE, "dense", {}),
+            Node("rr", Stage.RERANK, "llm_rerank", CUSTOM),
+        ],
+        edges=[
+            Edge("src", "parse", "file"),
+            Edge("parse", "chunk", "doc"),
+            Edge("chunk", "index", "chunks"),
+            Edge("index", "dense", "index"),
+            Edge("dense", "rr", "result"),
+        ],
+    )
+    result = run(graph, deps.registry, deps.store, context_extras=deps.run_extras())
+    assert result.nodes["dense"].status is NodeStatus.EXECUTED
+    assert result.nodes["rr"].status is NodeStatus.FAILED
+    assert DEMO_ENDPOINT_ERROR in (result.nodes["rr"].error or "")
+    assert demo == []

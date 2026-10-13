@@ -11,9 +11,12 @@ ambient `query`, and every returned hit carries `prior_rank` and `prior_score`
 so the bench can show what moved. Unlike MMR it rescores: `score` becomes the
 cross-encoder's score.
 
-The model loads lazily and once per process, like the embedders in
-`providers/embeddings.py`: importing this module never imports torch or
-sentence-transformers.
+The model loads lazily and once per process per device, like the embedders in
+`pandion.embeddings`: importing this module never imports torch or
+sentence-transformers, which come with the `local` extra. Where the model is
+kept, whether it may download and the device come from the run's
+`context_extras["models"]` (`pandion.models.ModelSettings`), never from the
+config, so they are not part of the recipe hash.
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
+from pandion.errors import require
+from pandion.models import ModelSettings, check_downloaded, resolve_device
 from pandion.payloads import Hit, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -68,21 +73,32 @@ class CrossEncoderConfig(BaseModel):
 
 
 _LOAD_LOCK = threading.Lock()
-_MODELS: dict[str, Any] = {}
+_MODELS: dict[tuple[str, str], Any] = {}
 
 
-def _load(model_id: str) -> Any:
-    """Load a cross-encoder once per process; the import happens here.
+def _load(model_id: str, settings: ModelSettings | None = None) -> Any:
+    """Load a cross-encoder once per process and device; the import happens here.
 
     The lock stops two threads racing a first load from each pulling the model
-    into memory, the same rule as `pandion.embeddings._load_model`.
+    into memory, the same rule as `pandion.embeddings._load_model`. The model
+    has no pinned revision, so `download: never` looks for its main revision.
     """
+    settings = settings or ModelSettings()
     with _LOAD_LOCK:
-        if model_id not in _MODELS:
-            from sentence_transformers import CrossEncoder
-
-            _MODELS[model_id] = CrossEncoder(model_id, device="cpu")
-        return _MODELS[model_id]
+        device = resolve_device(settings.device)
+        key = (model_id, device)
+        if key not in _MODELS:
+            check_downloaded(model_id, "main", settings)
+            st = require(
+                "sentence_transformers", extra="local", step="The cross_encoder reranker"
+            )
+            _MODELS[key] = st.CrossEncoder(
+                model_id,
+                device=device,
+                cache_folder=str(settings.cache_dir) if settings.cache_dir else None,
+                local_files_only=settings.download == "never",
+            )
+        return _MODELS[key]
 
 
 @register
@@ -147,7 +163,8 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
 
         # Load before starting the clock: the note reports scoring time, and a
         # first run's download would otherwise read as a slow reranker.
-        model = _load(config.model)
+        extras = ctx.extras if ctx is not None else {}
+        model = _load(config.model, extras.get("models"))
         started = time.perf_counter()
         scores = [
             float(s)

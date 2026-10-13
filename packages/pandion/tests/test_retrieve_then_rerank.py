@@ -15,7 +15,7 @@ from pandion.plugins.index.lancedb_store import LanceDbIndex, LanceDbIndexConfig
 from pandion.plugins.retrieve.dense import DenseConfig, DenseRetriever
 from pandion.ports import RunContext
 from pandion.storage import Store
-from plugins.rerank.mmr import MmrRerank, MmrRerankConfig
+from pandion.plugins.rerank.mmr import MmrRerank, MmrRerankConfig
 
 QUESTION = "What is the capital of France?"
 

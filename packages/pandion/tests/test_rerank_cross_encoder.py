@@ -6,23 +6,21 @@ the scores are whatever the test says they are and the ordering is exact.
 
 from __future__ import annotations
 
-import logging
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-import plugins.rerank.cross_encoder as ce
-from api import warmup
+import pandion.plugins.rerank.cross_encoder as ce
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
+from pandion.models import ModelSettings, preload_reranker
 from pandion.registry import registry
-from plugins.rerank.cross_encoder import CrossEncoderConfig, CrossEncoderRerank
+from pandion.plugins.rerank.cross_encoder import CrossEncoderConfig, CrossEncoderRerank
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 QUESTION = "What is the capital of France?"
 MINILM = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
@@ -50,7 +48,7 @@ def fake(monkeypatch):
         holder["model"] = FakeModel(scores)
         return holder["model"]
 
-    def fake_load(model_id: str):
+    def fake_load(model_id: str, settings=None):
         loaded.append(model_id)
         return holder["model"]
 
@@ -292,28 +290,85 @@ def test_explain_blocks_a_top_k_below_one():
 # -- lazy loading ------------------------------------------------------------------
 
 
-def test_load_caches_one_model_per_id(monkeypatch):
-    built: list[str] = []
+@pytest.fixture
+def built(monkeypatch):
+    """A fake sentence_transformers whose CrossEncoder records how it was built."""
+    calls: list[dict] = []
 
     class FakeCrossEncoder:
         def __init__(self, model_id, **kwargs):
-            built.append(model_id)
+            calls.append({"model_id": model_id, **kwargs})
 
     module = type(sys)("sentence_transformers")
     module.CrossEncoder = FakeCrossEncoder
     monkeypatch.setitem(sys.modules, "sentence_transformers", module)
     monkeypatch.setattr(ce, "_MODELS", {})
-    first = ce._load("m-1")
-    assert ce._load("m-1") is first
-    ce._load("m-2")
-    assert built == ["m-1", "m-2"]
+    return calls
+
+
+CPU = ModelSettings(device="cpu")
+
+
+def test_load_caches_one_model_per_id(built):
+    first = ce._load("m-1", CPU)
+    assert ce._load("m-1", CPU) is first
+    ce._load("m-2", CPU)
+    assert [call["model_id"] for call in built] == ["m-1", "m-2"]
+
+
+def test_the_model_loads_on_the_device_and_folder_the_settings_name(built, tmp_path):
+    ce._load("m-1", ModelSettings(device="cpu", cache_dir=tmp_path))
+    assert built == [
+        {
+            "model_id": "m-1",
+            "device": "cpu",
+            "cache_folder": str(tmp_path),
+            "local_files_only": False,
+        }
+    ]
+
+
+def test_one_model_on_two_devices_is_two_models(built):
+    ce._load("m-1", CPU)
+    ce._load("m-1", ModelSettings(device="cuda"))
+    assert [call["device"] for call in built] == ["cpu", "cuda"]
+
+
+def test_download_never_loads_only_a_model_already_in_the_folder(built, monkeypatch):
+    checked: list[tuple] = []
+    monkeypatch.setattr(ce, "check_downloaded", lambda *args: checked.append(args))
+    settings = ModelSettings(device="cpu", download="never")
+    ce._load("m-1", settings)
+    assert checked == [("m-1", "main", settings)]
+    assert built[0]["local_files_only"] is True
+
+
+def test_the_run_hands_its_model_settings_to_the_load(tmp_path, monkeypatch):
+    seen: list = []
+
+    def fake_load(model_id, settings=None):
+        seen.append(settings)
+        return FakeModel(REVERSED)
+
+    monkeypatch.setattr(ce, "_load", fake_load)
+    run_ctx = ctx(tmp_path)
+    run_ctx.extras["models"] = CPU
+    rerank(TEXTS, tmp_path, run_ctx=run_ctx)
+    assert seen == [CPU]
+
+
+def test_preload_reranker_loads_the_default_cross_encoder(monkeypatch):
+    seen: list = []
+    monkeypatch.setattr(ce, "_load", lambda model_id, settings=None: seen.append((model_id, settings)))
+    preload_reranker(settings=CPU)
+    assert seen == [(MINILM, CPU)]
 
 
 def test_importing_the_plugin_does_not_import_torch():
     """A subprocess, so nothing an earlier test imported can mask the leak."""
     code = (
         "import sys\n"
-        "import plugins.rerank.cross_encoder\n"
+        "import pandion.plugins.rerank.cross_encoder\n"
         "bad = [m for m in ('torch', 'sentence_transformers', 'transformers') "
         "if m in sys.modules]\n"
         "print(','.join(bad))\n"
@@ -324,47 +379,11 @@ def test_importing_the_plugin_does_not_import_torch():
     assert proc.stdout.strip() == ""
 
 
-# -- warm-up ---------------------------------------------------------------------
-
-
-def test_warm_up_loads_the_default_cross_encoder(monkeypatch):
-    loaded: list[str] = []
-    monkeypatch.setattr(ce, "_load", loaded.append)
-    warmup._warm_reranker()
-    assert loaded == [MINILM]
-
-
-def test_a_failed_cross_encoder_download_is_logged_not_raised(monkeypatch, caplog):
-    def boom(model_id):
-        raise OSError("no network")
-
-    monkeypatch.setattr(ce, "_load", boom)
-    with caplog.at_level(logging.ERROR):
-        warmup._warm_reranker()
-    assert "no network" in caplog.text
-
-
-def test_the_warm_up_loads_the_reranker_after_the_others(monkeypatch):
-    import pandion.plugins.parse.docling as docling_plugin
-    import pandion.embeddings as embeddings
-
-    calls: list[str] = []
-    monkeypatch.setattr(
-        docling_plugin,
-        "_converter",
-        lambda config: SimpleNamespace(initialize_pipeline=lambda fmt: calls.append("docling")),
-    )
-    monkeypatch.setattr(embeddings, "_load_model", lambda *args: calls.append("qwen"))
-    monkeypatch.setattr(warmup, "_warm_reranker", lambda: calls.append("reranker"))
-    warmup._warm()
-    assert calls == ["docling", "qwen", "reranker"]
-
-
 def test_note_times_the_scoring_not_the_model_load(tmp_path, monkeypatch):
     now = [100.0]
     model = FakeModel(REVERSED)
 
-    def slow_load(model_id: str) -> FakeModel:
+    def slow_load(model_id: str, settings=None) -> FakeModel:
         now[0] += 5.0  # a download and load the note must not count
         return model
 
@@ -383,7 +402,7 @@ def test_note_times_the_scoring_not_the_model_load(tmp_path, monkeypatch):
 def test_a_sub_tenth_note_says_under_a_tenth_of_a_second(tmp_path, monkeypatch):
     model = FakeModel(REVERSED)
     clock = iter([10.0, 10.01])
-    monkeypatch.setattr(ce, "_load", lambda model_id: model)
+    monkeypatch.setattr(ce, "_load", lambda model_id, settings=None: model)
     monkeypatch.setattr(ce.time, "perf_counter", lambda: next(clock))
     run_ctx = ctx(tmp_path)
     rerank(TEXTS[:6], tmp_path, run_ctx=run_ctx)
@@ -398,18 +417,3 @@ def test_explain_says_scores_differ_between_models():
         "Scores are on the model's own scale and differ between models, so "
         "compare the order, not the numbers."
     ) in explanation.settings + " " + explanation.tradeoff
-
-
-def test_the_reranker_warms_even_when_the_index_models_fail(monkeypatch, caplog):
-    import pandion.plugins.parse.docling as docling_plugin
-
-    def broken(config):
-        raise RuntimeError("docling broke")
-
-    calls: list[str] = []
-    monkeypatch.setattr(docling_plugin, "_converter", broken)
-    monkeypatch.setattr(warmup, "_warm_reranker", lambda: calls.append("reranker"))
-    with caplog.at_level(logging.ERROR):
-        warmup._warm()
-    assert calls == ["reranker"]
-    assert "docling broke" in caplog.text

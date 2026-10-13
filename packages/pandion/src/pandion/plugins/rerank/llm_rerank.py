@@ -14,6 +14,12 @@ The model gives no score, so `score` stays the retriever's.
 The key comes from `ctx.extras["credentials"]` exactly as the chat step reads
 it, and `pandion.llm.complete` keeps it out of every error message. A model
 call is not a function of its inputs, so the step is never cached.
+
+A server that strangers share passes `ctx.extras["public_endpoints_only"]`,
+as for `llm_rewrite`: a custom endpoint must then be a public https address
+(`pandion.endpoints`), and no message suggests setting a key on the server.
+The explanation has no run to read that from, so it never names the server
+variable; the run's error does, when the server is not shared.
 """
 
 from __future__ import annotations
@@ -30,8 +36,8 @@ from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion import llm
+from pandion.endpoints import PUBLIC_ONLY_EXTRA
 from pandion.llm import CHAT_MODELS
-from plugins import hosted_demo
 
 #: How much of each candidate the model reads.
 TEXT_BUDGET = 600
@@ -50,15 +56,15 @@ _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
 
 def _key_words(provider: str) -> str:
-    """How this step says it needs a key. The server variable is mentioned only
-    off the demo, where a visitor could set it."""
+    """How this step says it needs a key. It never names the server variable:
+    an explanation cannot tell whether strangers share the server."""
     if provider == "openai_compatible":
         return (
             "A key is optional, added with the key button at the top right, and a "
             "local server usually needs none. Custom endpoints are turned off in "
             "the hosted demo."
         )
-    return llm.key_sentence(provider, public_only=hosted_demo.enabled())
+    return llm.key_sentence(provider, public_only=True)
 
 
 class LlmRerankConfig(BaseModel):
@@ -179,6 +185,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
         model = CHAT_MODELS[config.model]
         custom = model.provider == "openai_compatible"
         api_key = llm.key_for(model, ctx.extras.get("credentials"))
+        public_only = bool(ctx.extras.get(PUBLIC_ONLY_EXTRA, False))
         if custom and not _custom_complete(config):
             raise ValueError(
                 "A custom endpoint needs both a base URL and a model name. Set "
@@ -186,7 +193,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
             )
         if not custom and not api_key:
             raise ValueError(
-                llm.no_key_message(model.provider, public_only=hosted_demo.enabled())
+                llm.no_key_message(model.provider, public_only=public_only)
             )
 
         prior_ids = [hit.chunk.id for hit in hits]
@@ -205,7 +212,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
                 model, config.custom_model, config.openrouter_model
             ),
             max_tokens=MAX_TOKENS,
-            public_only=hosted_demo.enabled(),
+            public_only=public_only,
         )
         elapsed = time.perf_counter() - started
 

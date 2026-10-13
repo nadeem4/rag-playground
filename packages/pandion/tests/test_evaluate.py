@@ -156,7 +156,7 @@ def test_the_report_prints_one_plain_line_per_question_and_the_totals(tmp_path, 
     report = pandion.evaluate(pipeline(tmp_path), [FOUND, NOT_IN_DOC], documents=docs)
     assert str(report).splitlines() == [
         "capital found at rank 1",
-        "spain missed: lost at parse. Lost at Parse. The answer is not in the text pdfium produced.",
+        "spain missed. Lost at Parse. The answer is not in the text pdfium produced.",
         "Found 1 of 2 (50%). Mean reciprocal rank 0.50.",
     ]
 

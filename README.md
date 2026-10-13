@@ -132,6 +132,9 @@ The [Pandion guide](docs/pandion.md) covers every step, setting and error, and
 To write your own strategy for any step, start from
 [examples/pandion/own_strategies/](examples/pandion/own_strategies), which replaces the
 strategy at every step and runs with no download.
+Evaluate a pipeline on your own questions, and compare settings at one stage: see
+[Evaluate a pipeline](docs/pandion.md#evaluate-a-pipeline) and
+[Compare settings](docs/pandion.md#compare-settings).
 
 ## What's inside
 

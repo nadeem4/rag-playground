@@ -7,16 +7,19 @@ one gold passage (`gold_answer` or `gold_answers`): the sentence in the
 document that answers it. `id`, `answer`, `tags` and `document` are optional.
 `trace` follows one question's answer down a finished run and says the first step
 that lost it. `evaluate` asks every question in a set and runs `trace` for every miss.
-See docs/pandion.md, "Evaluate a pipeline".
+`compare` runs a pipeline once per variant of one stage and evaluates each.
+See docs/pandion.md, "Evaluate a pipeline" and "Compare settings".
 """
 
 from __future__ import annotations
 
+import copy
 import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pandion.config import ConfigError, _block, from_dict, to_dict
 from pandion.payloads import Query
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
 from pandion.plugins import discover
@@ -30,15 +33,20 @@ from pandion.questions import (
     parse_question_set,
 )
 from pandion.registry import registry
+from pandion.results import StageResult
 from pandion.trace import StepInput, _holds, trace
 
 __all__ = [
+    "COMPARE_STAGES",
+    "Comparison",
+    "Comparisons",
     "EvaluationReport",
     "GOLD_SEPARATOR",
     "QuestionResult",
     "QuestionSetError",
     "StepInput",
     "check_questions",
+    "compare",
     "evaluate",
     "load_questions",
     "parse_question_set",
@@ -141,8 +149,8 @@ def _line(q: QuestionResult) -> str:
         return f"{q.id} error: {q.error}"
     if q.found:
         return f"{q.id} found at rank {q.rank}"
-    finding = (q.trace or {}).get("finding", "")
-    return f"{q.id} missed: lost at {q.lost_at}. {finding}".rstrip()
+    finding = (q.trace or {}).get("finding") or f"Lost at {q.lost_at}."
+    return f"{q.id} missed. {finding}"
 
 
 def _totals(questions: list[QuestionResult]) -> dict[str, Any]:
@@ -283,3 +291,165 @@ def _trace(index: IndexReport, retrieval: Retrieval, question: dict[str, Any], t
         top_k=top_k,
     )
     return {**found, "document": doc_id}
+
+
+#: The stages compare can vary, and the section of the pipeline file each is in.
+COMPARE_STAGES: dict[str, str] = {
+    "parse": "index",
+    "clean": "index",
+    "chunk": "index",
+    "embed": "index",
+    "store": "index",
+    "rewrite": "retrieve",
+    "search": "retrieve",
+    "rerank": "retrieve",
+}
+
+
+@dataclass
+class Comparison:
+    """One variant: the pipeline with that stage changed, its index run, and
+    its evaluation when there were questions."""
+
+    stage: str
+    variant: Any
+    pipeline: Pipeline
+    index: IndexReport
+    report: EvaluationReport | None
+
+    @property
+    def outputs(self) -> dict[str, StageResult]:
+        """The varied step's result: per document for parse, clean (the last
+        cleaner) and chunk; under "index" for embed and store; empty for a
+        retrieval stage, whose results are in `report`."""
+        if self.stage in ("embed", "store"):
+            return {"index": self.index.index}
+        if COMPARE_STAGES[self.stage] != "index":
+            return {}
+        out: dict[str, StageResult] = {}
+        for doc_id, document in self.index.documents.items():
+            keys = [k for k in document.stages if k == self.stage or k.startswith(f"{self.stage}.")]
+            if keys:
+                out[doc_id] = document.stages[max(keys, key=lambda k: int(k.split(".")[1]) if "." in k else 0)]
+        return out
+
+    @property
+    def settings(self) -> str:
+        """The variant in short: each step's name and the settings it was given."""
+        block = _block(self.variant)
+        blocks = block if isinstance(block, list) else [block]
+        return ", ".join(_short(b) for b in blocks) or "none"
+
+    def __str__(self) -> str:
+        """One plain line: the stage, the variant in short, and how it did."""
+        if not self.index.ok:
+            outcome = "the index run failed"
+        elif self.report is None:
+            outcome = "indexed, no questions asked"
+        else:
+            t = self.report.totals()
+            outcome = f"found {t['found']} of {t['scored']}"
+        return f"{self.stage} {self.settings}: {outcome}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Plain JSON: the variant, whether its index run worked, each varied
+        step's result id and status, and the evaluation."""
+        return {
+            "stage": self.stage,
+            "variant": _block(self.variant),
+            "ok": self.index.ok,
+            "outputs": {
+                key: {"artifact_id": s.artifact_id, "status": s.status, "transform": s.transform}
+                for key, s in self.outputs.items()
+            },
+            "report": self.report.to_dict() if self.report is not None else None,
+        }
+
+
+def _short(block: Any) -> str:
+    """One step's block as its name and settings, such as
+    "recursive_character chunk_size=800"."""
+    if not isinstance(block, dict):
+        return str(block)
+    settings = " ".join(f"{key}={value}" for key, value in block.items() if key != "use")
+    return f"{block.get('use')} {settings}".strip()
+
+
+class Comparisons(list):
+    """What `compare` returns: a list of `Comparison`, one per variant, that
+    prints one plain line per variant and the best one."""
+
+    def __str__(self) -> str:
+        lines = [str(c) for c in self]
+        scored = [c for c in self if c.report is not None and c.report.totals()["scored"]]
+        if scored:
+            def key(c: Comparison) -> tuple[int, float]:
+                t = c.report.totals()
+                return (t["found"], t["mrr"] or 0.0)
+
+            top = key(max(scored, key=key))
+            best = [c for c in scored if key(c) == top]
+            t = best[0].report.totals()
+            line = f"Best: {best[0].settings}, found {t['found']} of {t['scored']}"
+            if len(best) > 1:
+                line += ", tied with " + " and ".join(c.settings for c in best[1:])
+            lines.append(line + ".")
+        return "\n".join(lines)
+
+
+def compare(
+    p: Pipeline,
+    stage: str,
+    variants: list[Any],
+    documents: str | Path | list[str | Path],
+    questions: str | Path | list[dict] | dict | None = None,
+    *,
+    top_k: int = 5,
+    credentials: dict[str, str] | None = None,
+) -> Comparisons:
+    """Run `p` once per variant, with only `stage` changed, and evaluate each.
+
+    A variant is what the pipeline file takes for that stage: a block such as
+    {"use": "recursive_character", "chunk_size": 800}, a name, a step class,
+    or for clean and rerank a list of them. Every variant is checked before
+    any runs. Each one indexes `documents` against the same store, so every
+    step above the changed one is a cache hit after the first variant. With
+    `questions`, each variant is evaluated (see `evaluate`); without them,
+    each result holds the changed step's output, and a retrieval stage
+    cannot be compared, because nothing is searched. The best variant is the
+    one that found the most answers, then the one with the higher mean
+    reciprocal rank.
+    """
+    section = COMPARE_STAGES.get(stage)
+    if section is None:
+        raise ValueError(
+            f"compare varies one of {', '.join(COMPARE_STAGES)}; '{stage}' is not one of them."
+        )
+    if not variants:
+        raise ValueError("compare needs at least one variant: the settings to try at that stage.")
+    if section == "retrieve" and questions is None:
+        raise ValueError(
+            f"Comparing {stage} needs questions: without them nothing is searched, "
+            f"so there is no {stage} result to compare."
+        )
+    asked = load_questions(questions)["questions"] if questions is not None else None
+    base = to_dict(p.config)
+    pipelines: list[Pipeline] = []
+    for n, variant in enumerate(variants, start=1):
+        block = _block(copy.deepcopy(variant))
+        if stage in ("clean", "rerank") and isinstance(block, dict):
+            block = [block]
+        data = copy.deepcopy(base)
+        data.setdefault(section, {})[stage] = block
+        try:
+            pipelines.append(Pipeline._of(from_dict(data, base=p.config.path)))
+        except ConfigError as exc:
+            raise ConfigError(f"variant {n}: {exc}") from None
+    results = Comparisons()
+    for variant, pipeline in zip(variants, pipelines):
+        index = pipeline.index.run(documents)
+        report = None
+        if asked is not None and index.ok:
+            report = evaluate(pipeline, asked, top_k, credentials=credentials)
+        results.append(Comparison(stage=stage, variant=variant, pipeline=pipeline, index=index, report=report))
+    return results

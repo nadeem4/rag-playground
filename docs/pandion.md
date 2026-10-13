@@ -7,7 +7,7 @@ recipe, so the same files with the same settings are never processed twice.
 
 This guide covers what exists today: parse, clean, chunk, the index, keeping an index up
 to date, the rewrite of a question, searching an index with rerankers, asking a question,
-evaluating a pipeline on a question set, and three ways to write the same pipeline: a YAML file, a dict per stage, and classes in
+evaluating a pipeline on a question set, comparing settings at one stage, and three ways to write the same pipeline: a YAML file, a dict per stage, and classes in
 code.
 
 Before each release to PyPI, [checks/pandion-install/](../checks/pandion-install)
@@ -24,6 +24,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Search an index](#search-an-index)
 - [Ask a question](#ask-a-question)
 - [Evaluate a pipeline](#evaluate-a-pipeline)
+- [Compare settings](#compare-settings)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [The cache](#the-cache)
 - [Models](#models)
@@ -463,7 +464,7 @@ last.
 
 ```text
 heading-sections found at rank 2
-table-caption missed: lost at chunk. Lost at Chunk. No piece holds the whole answer.
+table-caption missed. Lost at Chunk. No piece holds the whole answer.
 Found 10 of 12 (83%). Mean reciprocal rank 0.71.
 ```
 
@@ -514,6 +515,57 @@ the question names, else the first whose parsed text holds the answer.
 
 A retrieval step that fails is reported, not raised: `q.error` names it, and the
 question is left out of the rates.
+
+## Compare settings
+
+`pandion.compare` runs a pipeline once per variant of one stage, with everything else
+the same, and evaluates each.
+
+```python
+import pandion
+
+results = pandion.compare(
+    p, "chunk",
+    [{"use": "recursive_character", "chunk_size": 400, "chunk_overlap": 80},
+     {"use": "recursive_character", "chunk_size": 800, "chunk_overlap": 80},
+     {"use": "sentence_window"}],
+    documents="docs/", questions="questions.json",
+)
+for r in results:
+    r.variant, r.report.found, r.report.total   # each variant's evaluation
+```
+
+The stage is one of `parse`, `clean`, `chunk`, `embed`, `store`, `rewrite`, `search` and
+`rerank`. A variant is what the pipeline file takes for that stage: a block, a name such
+as `"bm25"`, a step class such as `RecursiveCharacter(chunk_size=800)`, or for `clean` and
+`rerank` a list. Every variant is checked before any runs, and a problem names the
+variant: "variant 2: index.chunk (recursive_character) has no setting 'chunk_sise'."
+
+Every variant indexes `documents` into the same store, so the steps above the changed
+one run once: comparing three chunkers parses each document once and chunks it three
+times. Comparing a retrieval stage builds the index once.
+
+Without `questions`, each result holds the changed step's output, in `r.outputs`: per
+document for parse, clean and chunk (`r.outputs["report.pdf"].output.chunks`), or under
+`"index"` for embed and store. A retrieval stage needs questions, because without them
+nothing is searched. `r.index` is the variant's index run, `r.pipeline` the pipeline
+with that stage changed (`r.pipeline.to_yaml()` writes it as a file), and `r.to_dict()`
+is all of it as plain JSON. A variant whose index run fails is reported, with
+`r.index.ok` false and no `report`.
+
+`print(results)` gives one plain line per variant and names the best one: the variant
+that found the most answers, then the one with the higher mean reciprocal rank.
+
+```text
+chunk recursive_character chunk_size=400 chunk_overlap=80: found 9 of 12
+chunk recursive_character chunk_size=800 chunk_overlap=80: found 10 of 12
+chunk sentence_window: found 8 of 12
+Best: recursive_character chunk_size=800 chunk_overlap=80, found 10 of 12.
+```
+
+A variant without questions prints `indexed, no questions asked`, and one whose index
+run failed prints `the index run failed`. When several variants tie for best, the line
+names the others after `tied with`.
 
 ## Three ways to write a pipeline
 

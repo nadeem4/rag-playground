@@ -5,7 +5,7 @@ from __future__ import annotations
 import struct
 
 from tests.api.conftest import upload_pdf
-from tests.plugins.conftest import SAMPLE_PAGES, build_paragraph_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_paragraph_pdf
 
 W, H = 612.0, 792.0  # the generated fixture's MediaBox
 

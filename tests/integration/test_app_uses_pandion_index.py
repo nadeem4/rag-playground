@@ -23,7 +23,7 @@ from pandion.executor import run
 from pandion.graph import Edge, Graph, Node
 from pandion.ports import Stage
 from pandion.registry import registry
-from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 CHUNK = {"chunk_size": 70, "chunk_overlap": 10}
 

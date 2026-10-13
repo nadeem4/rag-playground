@@ -18,7 +18,7 @@ import pytest
 
 from api.questions import QuestionSetError, parse_question_set
 from tests.api.conftest import make_client
-from tests.plugins.conftest import build_pdf
+from tests.steps.conftest import build_pdf
 
 # The fixture document. Page one carries an apostrophe, which the PDF's own
 # encoding hands back as a curly one: exactly the case a set typed in a plain

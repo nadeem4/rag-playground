@@ -23,10 +23,10 @@ from pandion.graph import Graph, Node
 from pandion.plugins.query.llm_rewrite import LlmRewrite, LlmRewriteConfig
 from pandion.ports import Stage
 from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
-from tests.plugins.rerank_fakes import QUESTION, payload
-from tests.plugins.rerank_fakes import ctx as rerank_ctx
-from tests.plugins.test_use_case_chat import pipeline  # noqa: F401  (fixture)
-from tests.plugins.test_use_case_chat_any_model import ask, context, index  # noqa: F401
+from tests.steps.rerank_fakes import QUESTION, payload
+from tests.steps.rerank_fakes import ctx as rerank_ctx
+from tests.steps.test_use_case_chat import pipeline  # noqa: F401  (fixture)
+from tests.steps.test_use_case_chat_any_model import ask, context, index  # noqa: F401
 
 CUSTOM = {
     "model": "custom",
@@ -123,7 +123,7 @@ def test_a_demo_run_of_llm_rerank_fails_on_a_private_endpoint(demo, tmp_path):
     """The whole app path for the reranker: index a PDF with the fake embedder,
     retrieve, then llm_rerank, run with `Deps.run_extras()` (behind the 403)."""
     from pandion.graph import Edge
-    from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+    from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))
@@ -158,7 +158,7 @@ def test_a_demo_run_of_chat_fails_on_a_private_endpoint(demo, tmp_path):
     """The whole app path for the package's chat step: index a PDF with the
     fake embedder, retrieve, then chat, run with `Deps.run_extras()`."""
     from pandion.graph import Edge
-    from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+    from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))

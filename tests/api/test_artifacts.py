@@ -48,7 +48,7 @@ def chat_graph(sha: str, filename: str) -> dict:
 def test_chat_answer_payload_is_served_after_a_run(client, monkeypatch):
     """Chat is not cacheable, but its answer must still be fetchable by id."""
     from pandion.plugins.answer import chat as chat_module
-    from tests.plugins.test_use_case_chat import FakeClient, response, text_block
+    from tests.steps.test_use_case_chat import FakeClient, response, text_block
 
     monkeypatch.setattr(
         chat_module, "make_client",

@@ -25,7 +25,7 @@ from pandion.graph import Edge, Graph, Node
 from pandion.payloads import Output
 from pandion.ports import Stage
 from pandion.registry import registry
-from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 QUESTION = "What is the capital of France?"
 ROOT = Path(__file__).resolve().parents[2]

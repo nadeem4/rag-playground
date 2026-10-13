@@ -27,7 +27,7 @@ from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.sources import Sources
 from pandion.storage import Store
-from tests.plugins.conftest import SAMPLE_PAGES, build_pdf
+from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 RETRIEVERS = ["dense", "bm25", "hybrid_rrf"]
 QUESTION = "What is the capital of France?"

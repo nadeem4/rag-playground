@@ -32,6 +32,7 @@ from pandion.evaluation import (
     evaluate,
 )
 from pandion.results import StageResult
+from pandion.strategy_catalog import catalog, defaults, explain
 from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
 __version__ = "0.1.0"
@@ -51,11 +52,14 @@ __all__ = [
     "RetrievalPipeline",
     "StageResult",
     "answer",
+    "catalog",
     "chunk",
     "clean",
     "compare",
+    "defaults",
     "evaluate",
     "evaluation",
+    "explain",
     "parse",
     "preload_embedder",
     "preload_reranker",

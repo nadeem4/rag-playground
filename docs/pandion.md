@@ -25,6 +25,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Ask a question](#ask-a-question)
 - [Evaluate a pipeline](#evaluate-a-pipeline)
 - [Compare settings](#compare-settings)
+- [Running a pipeline from an app](#running-a-pipeline-from-an-app)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [The cache](#the-cache)
 - [Models](#models)
@@ -583,6 +584,28 @@ says `No variant found an answer.` instead.
 is empty when no variant was scored or none found an answer. `results.to_dict()` is
 plain JSON with `comparisons`, each comparison's `to_dict()`, and `best`, the places of
 the best ones in the list, such as `[1]`.
+
+## Running a pipeline from an app
+
+An app, such as a web server or a command line tool, can do everything through
+Pandion's public API. This section lists what it needs.
+
+### Settings forms
+
+`pandion.catalog()` lists every strategy, built in or your own, stage by stage, with its
+summary and its settings as a JSON schema with defaults. `pandion.defaults()` names the
+strategy a new pipeline starts with for each required part. `pandion.explain(stage, use,
+settings)` says in plain words what one strategy will do with those settings, and warns
+when they make no sense, without running anything.
+
+```python
+import pandion
+
+schema = pandion.catalog()["chunk"]["recursive_character"]["config_schema"]
+pandion.defaults()["search"]                                     # "hybrid_rrf"
+pandion.explain("chunk", "recursive_character", {"chunk_size": 100, "chunk_overlap": 200})
+# {"settings": "...", "warning": "Overlap must be smaller than the chunk size ...", "blocking": True, ...}
+```
 
 ## Three ways to write a pipeline
 

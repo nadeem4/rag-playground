@@ -1,17 +1,13 @@
 """Discovery is complete.
 
-A plugin module that nobody wired into `api.steps.discover()` must fail, not
-vanish: otherwise it would also vanish from the contract suite, which
-parametrizes over the registry and would report it as covered by saying nothing
-about it. That the engine never imports the app is checked in the package's own
-`test_boundaries.py`.
+The app has no step of its own, so its manifest holds only Pandion's modules and
+every one of them registers. That the engine never imports the app is checked in
+the package's own `test_boundaries.py`.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 from pandion.ports import STAGE_OUTPUT
 from pandion.registry import registry
@@ -19,15 +15,6 @@ from pandion.plugins import PLUGIN_MODULES as PANDION_MODULES
 from api.steps import PLUGIN_MODULES, discover
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def plugin_module_names() -> list[str]:
-    """Every `api/steps/<name>.py`: the app's own steps, each meant to register something."""
-    return [
-        f"api.steps.{path.stem}"
-        for path in sorted((ROOT / "api" / "steps").glob("*.py"))
-        if path.name != "__init__.py"
-    ]
 
 
 def registered_modules() -> set[str]:
@@ -39,20 +26,11 @@ def registered_modules() -> set[str]:
     }
 
 
-def test_manifest_lists_every_plugin_module():
+def test_the_app_has_no_step_of_its_own():
+    """The app has no step of its own left: every module in the manifest is Pandion's."""
     own = [m for m in PLUGIN_MODULES if not m.startswith("pandion.")]
-    assert sorted(own) == sorted(plugin_module_names()), (
-        "api/steps/__init__.py's PLUGIN_MODULES is out of sync with the files on "
-        "disk — a plugin that is not discovered is also not contract-tested"
-    )
-
-
-@pytest.mark.parametrize("module", plugin_module_names())
-def test_every_plugin_module_registers_a_transform(module):
-    assert module in registered_modules(), (
-        f"{module} defines no registered transform, or is missing from "
-        "api.steps.PLUGIN_MODULES"
-    )
+    assert own == []
+    assert not [p for p in (ROOT / "api" / "steps").glob("*.py") if p.name != "__init__.py"]
 
 
 def test_discover_is_idempotent():

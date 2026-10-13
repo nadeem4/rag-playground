@@ -43,7 +43,7 @@ with the token counter the chunkers use (`pandion/tokenize.py`), the sentence sp
 (`pandion/embeddings.py`), the embedding cache (`pandion/embedding_cache.py`) and the
 model settings (`pandion/models.py`), the chat model client (`pandion/llm.py`) and the
 custom endpoint check (`pandion/endpoints.py`). The `eval` step, which the Evaluate page runs, moved too
-(`pandion/plugins/answer/eval.py`, under the `use_case` stage but refused as an answer step), so the app has no steps of its own. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
+(`pandion/plugins/answer/eval.py`, under the `use_case` stage but refused as an answer step), so the app has no steps of its own. Reading and checking question sets moved with it (`pandion/questions.py`), public as `pandion.evaluation`. A moved strategy's library is an extra of the package (`pandion[pdfium]`,
 `pandion[docling]`, `pandion[lancedb]`, `pandion[local]` for the local models, and
 `pandion[openai]` and `pandion[anthropic]` for the chat models), imported only when the
 step runs, and the app installs the extras it uses. The cleaners and the chunkers need only the standard library and Pydantic, so they

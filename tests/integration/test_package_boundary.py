@@ -68,6 +68,7 @@ PUBLIC_MODULES = (
     "pandion.rerank",
     "pandion.answer",
     "pandion.extend",
+    "pandion.evaluation",
 )
 
 #: Engine imports the app and its scripts still make, as "module:name". This
@@ -107,7 +108,6 @@ ENGINE_IMPORTS: frozenset[str] = frozenset(
         "pandion.storage:Store",
         "pandion.textmatch:loosen",
         "pandion.textmatch:normalise",
-        "pandion.textmatch:normalise_with_offsets",
     }
 )
 

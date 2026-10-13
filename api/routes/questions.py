@@ -24,7 +24,7 @@ import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile
 
 from api import demo
-from api.questions import (
+from pandion.evaluation import (
     GOLD_SEPARATOR,
     QuestionSetError,
     check_questions,

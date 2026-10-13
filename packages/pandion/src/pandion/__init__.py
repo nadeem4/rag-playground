@@ -7,6 +7,8 @@ private; the RAG Playground app may import every other name.
 `pandion.parse`, `pandion.clean`, `pandion.chunk` and `pandion.rewrite` run one
 stage when called, and hold that stage's step classes. `pandion.retrieve`,
 `pandion.rerank` and `pandion.answer` hold the step classes of the rest.
+`pandion.evaluation` holds question sets and, from the next tasks, the miss
+trace, `evaluate` and `compare`.
 """
 
 from pandion.models import ModelSettings, preload_embedder, preload_reranker
@@ -19,7 +21,7 @@ from pandion.pipeline import (
     RetrievalPipeline,
 )
 from pandion.results import StageResult
-from pandion import answer, chunk, clean, parse, rerank, retrieve, rewrite
+from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
 __version__ = "0.1.0"
 
@@ -35,6 +37,7 @@ __all__ = [
     "answer",
     "chunk",
     "clean",
+    "evaluation",
     "parse",
     "preload_embedder",
     "preload_reranker",

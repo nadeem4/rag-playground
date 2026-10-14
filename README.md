@@ -131,8 +131,8 @@ The [Pandion guide](docs/pandion.md) covers every step, setting and error, and
 [examples/pandion/](examples/pandion) has scripts that index, sync, search and ask.
 To write your own strategy for any step, start from
 [examples/pandion/own_strategies/](examples/pandion/own_strategies): it writes one for
-every stage (source, parse, clean, chunk, embed, store, rewrite, search, rerank and
-answer) and runs with no download. See
+every stage (source, parse, clean, chunk, store, rewrite, search, rerank and
+answer), plus an embedder, and runs with no download. See
 [Write your own strategy](docs/pandion.md#write-your-own-strategy).
 Evaluate a pipeline on your own questions, and compare settings at one stage: see
 [Evaluate a pipeline](docs/pandion.md#evaluate-a-pipeline) and

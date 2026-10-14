@@ -23,7 +23,19 @@ class Policy:
         """How many runs may work at once; the rest wait their turn. None: no limit."""
         return None
 
-    def run_owner(self, request: Request | None) -> str | None:
+    def strategies(self, catalog: dict[str, Any], request: Request) -> dict[str, Any]:
+        """The catalog a client is shown (a copy: change it freely)."""
+        return catalog
+
+    def check_run(self, config: dict[str, Any], request: Request) -> None:
+        """Refuse a pipeline before it runs (raise HTTPException). `config` is
+        the pipeline file's shape, with the server's path and models in it."""
+
+    def public_endpoints_only(self, request: Request) -> bool:
+        """A step that calls a custom model endpoint accepts only a public https address."""
+        return False
+
+    def run_owner(self, request: Request) -> str | None:
         """Who a run started by `request` belongs to, for example a visitor's
         cookie. A run with an owner is for that owner only. None: anyone may
         follow or cancel it."""

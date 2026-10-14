@@ -51,6 +51,9 @@ in `sources/.meta/` and its question set in `sources/questions/`.
 | Method and path | Does |
 |---|---|
 | `GET /health` | `{"status": "ok", "pandion": <version>, "pandion_api": <version>}` |
+| `GET /strategies` | `{"stages": ..., "defaults": ...}`: every strategy by stage with its settings as a JSON schema (`pandion.catalog()`, as the Policy shows it), and the strategy a new pipeline starts with per part (`pandion.defaults()`) |
+| `POST /explain` | `{"stage", "use", "settings"}` gives what that strategy will do with those settings, in plain words (`pandion.explain`). Nothing runs. |
+| `POST /pipelines/validate` | `{"config": <pipeline>}` gives `{"ok": true, "problems": [], "config": <the pipeline in the file's shape>}` or `{"ok": false, "problems": [<sentence>]}` |
 
 ## Site rules: the Policy
 
@@ -61,10 +64,43 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 |---|---|---|
 | `dependencies()` | `[]` | FastAPI dependencies run on every route |
 | `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
+| `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
+| `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
+| `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
 | `run_owner(request)` | None (anyone) | not yet called: the run routes will start a run for whoever it names, and only they may follow or cancel it |
-| `scrub(text)` | the text as it is | not yet called: the run routes will pass error text through it before it leaves the server |
+| `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`); the run routes will use it too |
 | `on_startup(app)`, `on_shutdown(app)` | nothing | once each, around serving |
 
 ## What a request cannot set
 
+A pipeline in a request runs with the server's folder and models, whatever it says:
+`path` is `ApiSettings.data_dir`, `models` is `ApiSettings.models`, and
+`models.public_endpoints_only` is what the Policy says. A request that lists `plugins` is
+refused, because importing a module a request names would run code the request chose.
+The refusal comes before Pandion reads the pipeline, so nothing is imported. The server
+loads its strategies itself: from its own code, or from installed packages through the
+`pandion.strategies` entry point. A source strategy installed that way with a `location`
+setting can name any location, a server folder or an address, so a site that installs
+one must refuse the locations it does not allow in `Policy.check_run`.
+
+`pandion_api.checks` reads a pipeline dict for a site's rules: `steps(config)` lists every
+step as `(where, stage, use, settings)`, `custom_endpoint_steps(config)` names the steps
+set to call a model at an address the request chose, and
+`changed_read_only_settings(config)` names every setting marked read-only (the prompts,
+the cross-encoder's revision) that is not at its default.
+
+The default Policy allows every setting. RAG Playground's Policy refuses with a 403 a
+custom model endpoint on its hosted demo, a changed prompt or model revision in every
+mode, `max_tokens` above 16,000 on a step that calls a model, and a text budget (a
+setting named `..._budget_chars`) above four times its default.
+
 ## Errors
+
+- A pipeline Pandion refuses is a 422 whose detail is `{"problems": [<sentence>]}`, the
+  `ConfigError`'s one-line message. `POST /pipelines/validate` gives the same problems in
+  a 200. A pipeline that is not a mapping, lists `plugins` or has a `models` that is not a
+  mapping is refused the same way, before Pandion reads it.
+- A site rule's refusal is the status and sentence the Policy raised, usually 403.
+- An unknown stage or strategy in `POST /explain` is a 404 naming the ones there are.
+- Every problem and 404 sentence passes through `Policy.scrub` before it leaves the
+  server. A `ConfigError` names settings and strategies, never a server folder.

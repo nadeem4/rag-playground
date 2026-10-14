@@ -138,8 +138,12 @@ flowchart TB
 
 `packages/pandion-api` serves Pandion over HTTP. It imports only Pandion's public API,
 which `packages/pandion-api/tests/test_api_boundary.py` checks with no allow-list, and it
-takes a pipeline as the pipeline file's shape. A site's rules are one `Policy` object. See
-[pandion-api](pandion-api.md).
+takes a pipeline as the pipeline file's shape. A site's rules are one `Policy` object. A
+request's pipeline always runs with the server's folder and models, and a request cannot
+name plugins to import (`pandion_api.pipelines.prepare`). The playground's Policy refuses
+on `/api/v2` what its old routes refuse: a custom model endpoint on the demo and a changed
+prompt or model revision everywhere. It also caps a model step's output at 16,000 tokens
+and each text budget at four times its default. See [pandion-api](pandion-api.md).
 
 ## The pipeline graph and its stages
 

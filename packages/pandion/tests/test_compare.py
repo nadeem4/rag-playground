@@ -1,6 +1,7 @@
 """pandion.compare: one stage, several settings, every upstream step shared."""
 
 import json
+import threading
 
 import pytest
 
@@ -321,13 +322,12 @@ def test_a_question_whose_retrieval_fails_carries_the_error_and_is_left_out_of_t
     assert (t["total"], t["scored"], t["hit_rate"], t["mrr"]) == (1, 0, None, None)
 
 
-import threading
-
 
 def test_compare_reports_progress_by_variant(tmp_path, docs):
     events = []
     pandion.compare(pipeline(tmp_path), "chunk", [V70, V30], docs, [FOUND], on_event=events.append)
     assert {e["variant"] for e in events} == {1, 2}
+    assert {e["total"] for e in events} == {2}
     assert [e["question"] for e in events if e["event"] == "question_finished"] == ["capital", "capital"]
 
 
@@ -341,3 +341,35 @@ def test_a_cancel_starts_no_further_variant(tmp_path, docs):
     results = pandion.compare(pipeline(tmp_path), "chunk", [V70, V30], docs, on_event=on_event, cancel=stop)
     assert len(results) == 1 and results.cancelled
     assert results.to_dict()["cancelled"] is True
+
+
+def test_a_cancel_during_an_index_run_says_the_variant_stopped(tmp_path, docs):
+    stop = threading.Event()
+
+    def on_event(e):
+        if e["event"] == "node_finished" and e.get("step") == "parse":
+            stop.set()
+
+    results = pandion.compare(pipeline(tmp_path), "chunk", [V70, V30], docs, [FOUND],
+                              on_event=on_event, cancel=stop)
+    assert len(results) == 1 and results[0].cancelled
+    assert str(results[0]).endswith(": stopped")
+    assert results[0].to_dict()["cancelled"] is True
+    assert str(results).splitlines()[-1] == "Stopped before every variant had finished."
+
+
+def test_a_variant_stopped_during_its_evaluation_is_not_best(tmp_path, docs):
+    stop = threading.Event()
+
+    def on_event(e):
+        if e["event"] == "question_finished":
+            stop.set()
+
+    again = {**FOUND, "id": "again"}
+    results = pandion.compare(pipeline(tmp_path), "chunk", [V70, V30], docs, [FOUND, again],
+                              on_event=on_event, cancel=stop)
+    assert len(results) == 1 and results.cancelled
+    assert str(results[0]).endswith("found 1 of 1 (stopped early)")
+    assert results.best == [] and results.to_dict()["best"] == []
+    assert "Best" not in str(results)
+    assert str(results).splitlines()[-1] == "Stopped before every variant had finished."

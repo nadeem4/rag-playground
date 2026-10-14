@@ -29,8 +29,8 @@ from api import demo
 from api.credentials import redact, resolve_all
 from api.runs import RunState
 from pandion.executor import run, sweep
-from pandion.graph import Edge, Graph, GraphValidationError, Node
 from pandion.extend import Stage
+from pandion.graph import Edge, Graph, GraphValidationError, Node
 from pandion.registry import Registry, UnknownTransformError
 
 router = APIRouter()

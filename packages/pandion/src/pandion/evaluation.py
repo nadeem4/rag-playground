@@ -390,15 +390,33 @@ class Comparison:
         blocks = block if isinstance(block, list) else [block]
         return ", ".join(_short(b) for b in blocks) or "none"
 
+    @property
+    def index_stopped(self) -> bool:
+        """A cancel stopped the index run: a step was skipped and none failed."""
+        steps = [s for d in self.index.documents.values() for s in d.stages.values()]
+        if self.index.index is not None:
+            steps.append(self.index.index)
+        statuses = {s.status for s in steps}
+        return "skipped" in statuses and "failed" not in statuses
+
+    @property
+    def cancelled(self) -> bool:
+        """A cancel stopped this variant, in its index run or its evaluation."""
+        if self.report is not None and self.report.cancelled:
+            return True
+        return not self.index.ok and self.index_stopped
+
     def __str__(self) -> str:
         """One plain line: the stage, the variant in short, and how it did."""
         if not self.index.ok:
-            outcome = "the index run failed"
+            outcome = "stopped" if self.index_stopped else "the index run failed"
         elif self.report is None:
             outcome = "indexed, no questions asked"
         else:
             t = self.report.totals()
             outcome = f"found {t['found']} of {t['scored']}"
+            if self.report.cancelled:
+                outcome += " (stopped early)"
         return f"{self.stage} {self.settings}: {outcome}"
 
     def to_dict(self) -> dict[str, Any]:
@@ -408,6 +426,7 @@ class Comparison:
             "stage": self.stage,
             "variant": _block(self.variant),
             "ok": self.index.ok,
+            "cancelled": self.cancelled,
             "outputs": {
                 key: {"artifact_id": s.artifact_id, "status": s.status, "transform": s.transform}
                 for key, s in self.outputs.items()
@@ -429,18 +448,22 @@ class Comparisons(list[Comparison]):
     """What `compare` returns: a list of `Comparison`, one per variant, that
     prints one plain line per variant and the best one. The best has the
     highest hit rate (found out of scored), then the highest mean reciprocal
-    rank. A slice such as `results[:2]` is a plain list."""
+    rank. A variant a cancel stopped is never the best. A slice such as
+    `results[:2]` is a plain list."""
 
     #: A cancel stopped compare before every variant ran.
     cancelled: bool = False
 
     def _scored(self) -> list[Comparison]:
-        return [c for c in self if c.report is not None and c.report.totals()["scored"]]
+        return [
+            c for c in self
+            if c.report is not None and not c.cancelled and c.report.totals()["scored"]
+        ]
 
     @property
     def best(self) -> list[Comparison]:
         """The best comparisons, every one tied for first, in order; empty when
-        no variant was scored or none found an answer."""
+        no variant finished and was scored, or none found an answer."""
         scored = self._scored()
         if not any(c.report.found for c in scored):
             return []
@@ -473,6 +496,8 @@ class Comparisons(list[Comparison]):
             lines.append(line + ".")
         elif self._scored():
             lines.append("No variant found an answer.")
+        if self.cancelled or any(c.cancelled for c in self):
+            lines.append("Stopped before every variant had finished.")
         return "\n".join(lines)
 
 
@@ -502,7 +527,7 @@ def compare(
     then the highest mean reciprocal rank; see `Comparisons.best`.
 
     `on_event` gets every event, with the variant's number (from 1) under
-    "variant"; `cancel` starts no further variant, and the result says it was
+    "variant" and the number of variants under "total"; `cancel` starts no further variant, and the result says it was
     cancelled.
     """
     section = COMPARE_STAGES.get(stage)
@@ -538,7 +563,7 @@ def compare(
         emit = None
         if on_event is not None:
             def emit(e: dict[str, Any], n: int = n) -> None:
-                on_event({**e, "variant": n})
+                on_event({**e, "variant": n, "total": len(variants)})
         index = pipeline.index.run(documents, on_event=emit, cancel=cancel, credentials=credentials)
         report = None
         if asked is not None and index.ok:

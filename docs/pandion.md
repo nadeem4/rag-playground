@@ -593,8 +593,13 @@ is empty when no variant was scored or none found an answer. `results.to_dict()`
 plain JSON with `comparisons`, each comparison's `to_dict()`, and `best`, the places of
 the best ones in the list, such as `[1]`.
 
-`on_event` gets every event with the variant's number under `variant`, and `cancel`
-starts no further variant (`results.cancelled`).
+`on_event` gets every event with the variant's number under `variant` and the number of
+variants under `total`, and `cancel` starts no further variant (`results.cancelled`). A
+variant whose index run a cancel stopped prints `stopped`, and one whose evaluation was
+stopped partway prints its count followed by `(stopped early)`. Neither can be the best:
+when no variant finished, there is no `Best:` line. The last line is then
+`Stopped before every variant had finished.`, and `r.cancelled`, also in `r.to_dict()`,
+says which variants a cancel stopped.
 
 ## Running a pipeline from an app
 

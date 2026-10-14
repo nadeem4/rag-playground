@@ -10,7 +10,8 @@
  * - Every frame arrives through `onmessage` (the server sends no `event:`
  *   field) and is switched on `payload.event` by the reducer.
  * - The stream is closed on `stream_end` only. See runState.ts. Then the
- *   snapshot is read once more for the run's `result`.
+ *   snapshot is read once more for the run's `result`. A failed read is tried
+ *   once more, and a second failure sets `resultFailed`.
  * - On a dropped connection: fetch the snapshot (`GET /api/v2/runs/{id}`),
  *   rebuild state from its event log, then reopen with
  *   `?last_event_id=<snapshot.last_event_id>`. EventSource cannot set a
@@ -80,12 +81,7 @@ function connect(c: Connection, dispatch: (a: RunAction) => void) {
     if (event.event === "stream_end") {
       es.close()
       c.es = null
-      void v2.run(c.runId).then(
-        (snapshot) => {
-          if (!c.dead) dispatch({ type: "result", result: snapshot.result ?? null })
-        },
-        () => undefined,
-      )
+      readResult(c, dispatch, 1)
     }
   }
 
@@ -95,6 +91,27 @@ function connect(c: Connection, dispatch: (a: RunAction) => void) {
     c.es = null
     void resync(c, dispatch)
   }
+}
+
+/** How long to wait before reading the result a second time. */
+const RESULT_RETRY_MS = 300
+
+/**
+ * Read the run's result from its snapshot. A failed read is tried once more;
+ * when that fails too, the state says so (`resultFailed`), so a page never
+ * shows an empty result as if it were the real one.
+ */
+function readResult(c: Connection, dispatch: (a: RunAction) => void, triesLeft: number) {
+  void v2.run(c.runId).then(
+    (snapshot) => {
+      if (!c.dead) dispatch({ type: "result", result: snapshot.result ?? null })
+    },
+    () => {
+      if (c.dead) return
+      if (triesLeft > 0) c.retryTimer = setTimeout(() => readResult(c, dispatch, triesLeft - 1), RESULT_RETRY_MS)
+      else dispatch({ type: "result_failed" })
+    },
+  )
 }
 
 async function resync(c: Connection, dispatch: (a: RunAction) => void) {

@@ -167,6 +167,47 @@ describe("useRun", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/v2/runs/r5", undefined)
   })
 
+  it("tries the result read once more when it fails", async () => {
+    const snapshot: RunSnapshot = {
+      run_id: "r6",
+      kind: "evaluation",
+      status: "finished",
+      ok: true,
+      cancel_requested: false,
+      last_event_id: 0,
+      events: [],
+      result: { hit_rate: 1 },
+    }
+    let calls = 0
+    const fetchMock = vi.fn(async () => (++calls === 1 ? new Response("down", { status: 500 }) : new Response(JSON.stringify(snapshot), { status: 200 })))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { result } = renderHook(() => useRun("r6"))
+    FakeEventSource.instances[0].emit(0, { event: "stream_end", status: "finished", ok: true })
+
+    await waitFor(() => expect(result.current.result).toEqual({ hit_rate: 1 }))
+    // Only this run's reads: an earlier test's run may still be retrying its own.
+    const reads = (id: string) => fetchMock.mock.calls.filter((c) => (c as unknown[])[0] === `/api/v2/runs/${id}`).length
+    expect(reads("r6")).toBe(2)
+    expect(result.current.resultFailed).toBe(false)
+  })
+
+  it("says the result could not be read when the second read fails too, and reads no more", async () => {
+    const fetchMock = vi.fn(async () => new Response("down", { status: 500 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { result } = renderHook(() => useRun("r7"))
+    expect(result.current.resultFailed).toBe(false)
+    FakeEventSource.instances[0].emit(0, { event: "stream_end", status: "finished", ok: true })
+
+    await waitFor(() => expect(result.current.resultFailed).toBe(true))
+    expect(result.current.result).toBeNull()
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400))
+    })
+    expect(fetchMock.mock.calls.filter((c) => (c as unknown[])[0] === "/api/v2/runs/r7")).toHaveLength(2)
+  })
+
   it("closes the stream on unmount", async () => {
     const { unmount } = renderHook(() => useRun("r4"))
     unmount()

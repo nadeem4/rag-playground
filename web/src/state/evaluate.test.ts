@@ -1,41 +1,33 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { Registry, Trace, TraceStep } from "@/api/types"
+import type { EvaluationResult, Registry, Totals, Trace, TraceStep } from "@/api/types"
 
 import {
   changeFor,
   changeText,
-  evalGraph,
   hasRetriever,
-  metrics,
-  metricsByTag,
   percent,
   piecesWarning,
   pipelineLine,
   pipelineSteps,
-  questionVariants,
   readPreviousEvaluation,
   reasonText,
   rerankEffect,
   rerankLine,
   scoreFinding,
   storePreviousEvaluation,
-  summarize,
   fixHref,
-  traceRequest,
   type EvalPayload,
-  SWEEP_LIMIT,
-  batches,
 } from "./evaluate"
-import type { Question } from "./goldSet"
 import { e2eSampleGraph, removeNode, sampleGraph } from "./graph"
-import { TEST_REGISTRY } from "./testRegistry"
+import { graphToConfig } from "./config"
+import { evaluationRequest, rowsFromResult } from "./evaluate"
+import { TEST_REGISTRY as R } from "./testRegistry"
 
 const LIVE = liveRegistry as unknown as Registry
 const SRC = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
 
-const edgeSet = (g: { edges: { src: string; dst: string; port: string }[] }) => g.edges.map((e) => `${e.src}->${e.dst}:${e.port}`).sort()
 
 function payload(over: Partial<EvalPayload> = {}): EvalPayload {
   return {
@@ -53,28 +45,20 @@ function payload(over: Partial<EvalPayload> = {}): EvalPayload {
 
 const miss = (over: Partial<EvalPayload> = {}) => payload({ hit: false, rank: null, matched_chunk_id: "", match: "none", ...over })
 
+/** Totals as the server sends them: this file's fixture, never the page's arithmetic. */
+const T = (found: number, total: number): Totals => ({
+  total,
+  scored: total,
+  found,
+  hit_rate: total ? found / total : null,
+  mrr: null,
+  recall: null,
+  mean_rank: null,
+  median_rank: null,
+})
+const totalsOf = (ps: readonly EvalPayload[]): Totals => T(ps.filter((p) => p.hit).length, ps.length)
+
 describe("the graph an evaluation runs", () => {
-  it("swaps the use case for eval and sets its top_k, leaving every other step alone", () => {
-    const g = sampleGraph(LIVE, SRC)
-    const ev = evalGraph(g, LIVE, 3)!
-    const use = ev.nodes.find((n) => n.stage === "use_case")!
-    expect(use.transform).toBe("eval")
-    expect(use.config).toEqual({ top_k: 3 })
-    // Everything above the use case is untouched, so its results stay cached.
-    for (const stage of ["source", "parse", "clean", "chunk", "index", "query", "retrieve"]) {
-      expect(ev.nodes.find((n) => n.stage === stage)).toEqual(g.nodes.find((n) => n.stage === stage))
-    }
-  })
-
-  it("keeps the edge that feeds the use case, on the port eval declares", () => {
-    const ev = evalGraph(e2eSampleGraph(LIVE, SRC), LIVE, 5)!
-    expect(edgeSet(ev)).toContain("rerank_1->use_case:result")
-  })
-
-  it("is nothing when the registry has no eval step", () => {
-    expect(evalGraph(sampleGraph(TEST_REGISTRY, SRC), TEST_REGISTRY, 5)).toBeNull()
-  })
-
   it("knows a graph with no retriever", () => {
     const g = sampleGraph(LIVE, SRC)
     expect(hasRetriever(g)).toBe(true)
@@ -102,110 +86,11 @@ describe("the graph an evaluation runs", () => {
   })
 })
 
-describe("one sweep variant per question", () => {
-  const questions: Question[] = [
-    { id: "a", question: "What are the two steps?", gold_answers: ["It answers in two steps."], tags: [], answer: "" },
-    { id: "b", question: "How big is a chunk?", gold_answers: ["One well.", "Or the other."], tags: ["size"], answer: "" },
-  ]
-
-  it("sets the question and its gold passages together, and keeps the rest of the config", () => {
-    const query = { id: "query", stage: "query" as const, transform: "text", config: { text: "old", gold_answer: "", extra: 1 } }
-    expect(questionVariants(query, questions)).toEqual([
-      {
-        transform: "text",
-        config: { text: "What are the two steps?", gold_answer: "It answers in two steps.", gold_answers: ["It answers in two steps."], extra: 1 },
-      },
-      {
-        transform: "text",
-        config: { text: "How big is a chunk?", gold_answer: "One well.", gold_answers: ["One well.", "Or the other."], extra: 1 },
-      },
-    ])
-  })
-
-  it("sends the single gold answer as well, so a server that has only that field still scores the run", () => {
-    const query = { id: "query", stage: "query" as const, transform: "text", config: {} }
-    const [first] = questionVariants(query, [{ id: "a", question: "Q", gold_answers: [], tags: [], answer: "" }])
-    expect(first.config).toEqual({ text: "Q", gold_answer: "", gold_answers: [] })
-  })
-})
-
-describe("the metrics", () => {
-  it("is empty before anything has been scored", () => {
-    expect(metrics([undefined, undefined])).toMatchObject({ total: 2, scored: 0, hits: 0, hitRate: null, mrr: null, spread: [] })
-  })
-
-  it("has hit rate at k as the headline, over the questions that have finished", () => {
-    const m = metrics([payload({ rank: 1 }), payload({ rank: 2 }), miss(), undefined])
-    expect(m.total).toBe(4)
-    expect(m.scored).toBe(3)
-    expect(m.hits).toBe(2)
-    expect(m.hitRate).toBeCloseTo(2 / 3)
-  })
-
-  it("averages the reciprocal rank, so finding it first beats finding it fifth, and a miss scores nothing", () => {
-    expect(metrics([payload({ rank: 1 }), payload({ rank: 5 }), miss()]).mrr).toBeCloseTo((1 + 0.2 + 0) / 3)
-    expect(metrics([payload({ rank: 1 }), payload({ rank: 1 })]).mrr).toBe(1)
-  })
-
-  it("reports recall at k only when some question has more than one gold passage", () => {
-    const single = metrics([payload({ golds_total: 1, golds_found: 1 }), miss({ golds_total: 1, golds_found: 0 })])
-    expect(single).toMatchObject({ multiGold: false, recall: null })
-    const several = metrics([payload({ golds_total: 3, golds_found: 2 }), payload({ golds_total: 1, golds_found: 1 })])
-    expect(several.multiGold).toBe(true)
-    expect(several.recall).toBeCloseTo(3 / 4)
-  })
-
-  it("reports no recall at all when the server sent no gold counts", () => {
-    expect(metrics([payload(), payload()])).toMatchObject({ multiGold: false, recall: null })
-  })
-
-  it("gives the rank of the first hit, its middle and its spread, counting only the questions that hit", () => {
-    const m = metrics([payload({ rank: 1 }), payload({ rank: 1 }), payload({ rank: 4 }), miss()])
-    expect(m.meanRank).toBe(2)
-    expect(m.medianRank).toBe(1)
-    expect(m.spread).toEqual([
-      { rank: 1, count: 2 },
-      { rank: 4, count: 1 },
-    ])
-  })
-
-  it("takes the middle of two middle ranks", () => {
-    expect(metrics([payload({ rank: 2 }), payload({ rank: 5 })]).medianRank).toBe(3.5)
-  })
-
-  it("has no rank at all when nothing was found", () => {
-    expect(metrics([miss(), miss()])).toMatchObject({ meanRank: null, medianRank: null, spread: [] })
-  })
-
+describe("a rate", () => {
   it("reads a rate as a whole percentage, and says nothing when there is no rate", () => {
     expect(percent(0.9)).toBe("90%")
     expect(percent(2 / 3)).toBe("67%")
     expect(percent(null)).toBeNull()
-  })
-})
-
-describe("the metrics per tag", () => {
-  const tagged = (tags: string[], p?: EvalPayload) => ({ tags, payload: p })
-
-  it("is empty when no question carries a tag, so the page shows nothing", () => {
-    expect(metricsByTag([tagged([], payload()), tagged([], miss())])).toEqual([])
-  })
-
-  it("scores each tag over its own questions, and counts a question under every tag it carries", () => {
-    const rows = [
-      tagged(["policy"], payload({ rank: 1 })),
-      tagged(["policy", "refunds"], miss()),
-      tagged(["refunds"], payload({ rank: 2 })),
-    ]
-    const byTag = metricsByTag(rows)
-    expect(byTag.map((t) => t.tag)).toEqual(["policy", "refunds"])
-    expect(byTag[0].metrics).toMatchObject({ total: 2, hits: 1, hitRate: 0.5 })
-    expect(byTag[1].metrics).toMatchObject({ total: 2, hits: 1, hitRate: 0.5 })
-  })
-
-  it("names the tags in the same order every run", () => {
-    const rows = [tagged(["zeta"], payload()), tagged(["alpha"], payload()), tagged(["mid"], miss())]
-    expect(metricsByTag(rows).map((t) => t.tag)).toEqual(["alpha", "mid", "zeta"])
   })
 })
 
@@ -285,28 +170,12 @@ describe("the reason for a row", () => {
   })
 })
 
-describe("the summary", () => {
-  it("counts the questions that found the answer and averages the rank they found it at", () => {
-    const s = summarize([payload({ rank: 1 }), payload({ rank: 4 }), miss()])
-    expect(s).toEqual({ hits: 2, total: 3, averageRank: 2.5 })
-  })
-
-  it("has no average rank when nothing was found", () => {
-    expect(summarize([miss(), miss()])).toEqual({ hits: 0, total: 2, averageRank: null })
-  })
-
-  it("counts a question that has not finished in the total but not in the hits", () => {
-    expect(summarize([payload(), undefined, undefined])).toEqual({ hits: 1, total: 3, averageRank: 1 })
-  })
-
-})
-
 describe("the score as a finding", () => {
   const prev = (over: Record<string, unknown> = {}) => ({
     sourceSha: "s",
     pipelineKey: "working",
     byId: {},
-    summary: { hits: 5, total: 5, averageRank: 1 },
+    totals: T(5, 5),
     steps: steps("docling", "Docling"),
     ...over,
   })
@@ -315,7 +184,7 @@ describe("the score as a finding", () => {
     const now = [pay(true, 1), pay(true, 1), pay(false, null), pay(false, null), pay(true, 1)]
     const before = prev()
     // Every question was found 1st last time, so both misses are losses.
-    const f = scoreFinding(summarize(now), before, now.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5)
+    const f = scoreFinding(totalsOf(now), before, now.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5)
     expect(f.finding).toBe("3 of 5 questions found the answer. The last run found 5 of 5.")
     expect(f.sub).toBe("Hit rate at 5 pieces: 60%. Both misses are new since Parse changed to Fast text.")
     // The note is the sub line without the hit rate, which the numbers row already shows.
@@ -324,7 +193,7 @@ describe("the score as a finding", () => {
 
   it("says every answer came back first on a clean first run", () => {
     const now = [pay(true, 1), pay(true, 1)]
-    const f = scoreFinding(summarize(now), null, now.map((p) => ({ now: p })), steps("docling", "Docling"), 5)
+    const f = scoreFinding(totalsOf(now), null, now.map((p) => ({ now: p })), steps("docling", "Docling"), 5)
     expect(f.finding).toBe("2 of 2 questions found the answer.")
     expect(f.sub).toBe("Hit rate at 5 pieces: 100%. Every answer came back as the top piece.")
     expect(f.note).toBe("Every answer came back as the top piece.")
@@ -332,15 +201,15 @@ describe("the score as a finding", () => {
 
   it("counts the new misses, and says since the last run when no single step changed", () => {
     const one = [pay(true, 1), pay(false, null)]
-    expect(scoreFinding(summarize(one), prev({ steps: undefined }), one.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5).sub).toBe(
+    expect(scoreFinding(totalsOf(one), prev({ steps: undefined }), one.map((p) => ({ now: p, before: pay(true, 1) })), steps("pdfium", "Fast text"), 5).sub).toBe(
       "Hit rate at 5 pieces: 50%. The miss is new since the last run.",
     )
     const three = [pay(false, null), pay(false, null), pay(false, null)]
-    expect(scoreFinding(summarize(three), prev(), three.map((p) => ({ now: p, before: pay(true, 2) })), steps("docling", "Docling"), 5).sub).toBe(
+    expect(scoreFinding(totalsOf(three), prev(), three.map((p) => ({ now: p, before: pay(true, 2) })), steps("docling", "Docling"), 5).sub).toBe(
       "Hit rate at 5 pieces: 0%. All 3 misses are new since the last run.",
     )
     const some = three.map((p, i) => ({ now: p, before: i === 2 ? pay(false, null) : pay(true, 1) }))
-    expect(scoreFinding(summarize(three), prev(), some, steps("pdfium", "Fast text"), 5).sub).toBe(
+    expect(scoreFinding(totalsOf(three), prev(), some, steps("pdfium", "Fast text"), 5).sub).toBe(
       "Hit rate at 5 pieces: 0%. 2 of the 3 misses are new since Parse changed to Fast text.",
     )
   })
@@ -351,13 +220,13 @@ describe("the score as a finding", () => {
       { label: "Parse", transform: "pdfium", name: "Fast text" },
       { label: "Chunk", transform: "token_based", name: "Fixed token count" },
     ]
-    expect(scoreFinding(summarize(now), prev(), [{ now: now[0], before: pay(true, 1) }], two, 5).sub).toBe(
+    expect(scoreFinding(totalsOf(now), prev(), [{ now: now[0], before: pay(true, 1) }], two, 5).sub).toBe(
       "Hit rate at 5 pieces: 0%. The miss is new since the last run.",
     )
   })
 
   it("says piece, not pieces, when one is checked", () => {
-    expect(scoreFinding(summarize([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 1).sub).toBe("Hit rate at 1 piece: 100%.")
+    expect(scoreFinding(totalsOf([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 1).sub).toBe("Hit rate at 1 piece: 100%.")
   })
 
   it("names a step only when its settings are the one change, and the pieces checked did not change", () => {
@@ -368,27 +237,27 @@ describe("the score as a finding", () => {
       { label: "Chunk", transform: "recursive_character", name: "Recursive (natural breaks)", config: JSON.stringify({ chunk_size: size }) },
     ]
     const before = prev({ steps: withConfig("docling", "Docling", 400), k: 5 })
-    expect(scoreFinding(summarize(now), before, rows, withConfig("pdfium", "Fast text", 400), 5).sub).toBe(
+    expect(scoreFinding(totalsOf(now), before, rows, withConfig("pdfium", "Fast text", 400), 5).sub).toBe(
       "Hit rate at 5 pieces: 0%. The miss is new since Parse changed to Fast text.",
     )
     // The chunk size changed in the same trip to Build, so Parse alone is not the cause.
-    expect(scoreFinding(summarize(now), before, rows, withConfig("pdfium", "Fast text", 200), 5).sub).toBe(
+    expect(scoreFinding(totalsOf(now), before, rows, withConfig("pdfium", "Fast text", 200), 5).sub).toBe(
       "Hit rate at 5 pieces: 0%. The miss is new since the last run.",
     )
     // Only a setting changed, so the step is named without a new name.
-    expect(scoreFinding(summarize(now), before, rows, withConfig("docling", "Docling", 200), 5).sub).toBe(
+    expect(scoreFinding(totalsOf(now), before, rows, withConfig("docling", "Docling", 200), 5).sub).toBe(
       "Hit rate at 5 pieces: 0%. The miss is new since Chunk's settings changed.",
     )
     // Pieces checked changed between the runs.
-    expect(scoreFinding(summarize(now), before, rows, withConfig("pdfium", "Fast text", 400), 3).sub).toBe(
+    expect(scoreFinding(totalsOf(now), before, rows, withConfig("pdfium", "Fast text", 400), 3).sub).toBe(
       "Hit rate at 3 pieces: 0%. The miss is new since the last run.",
     )
   })
 
   it("says nothing more when the misses are old, or the hits are not all first", () => {
     const now = [pay(true, 2), pay(false, null)]
-    expect(scoreFinding(summarize(now), prev(), now.map((p) => ({ now: p, before: p })), steps("docling", "Docling"), 5).sub).toBe("Hit rate at 5 pieces: 50%.")
-    expect(scoreFinding(summarize([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 3)).toEqual({
+    expect(scoreFinding(totalsOf(now), prev(), now.map((p) => ({ now: p, before: p })), steps("docling", "Docling"), 5).sub).toBe("Hit rate at 5 pieces: 50%.")
+    expect(scoreFinding(totalsOf([pay(true, 2)]), null, [{ now: pay(true, 2) }], steps("docling", "Docling"), 3)).toEqual({
       finding: "1 of 1 question found the answer.",
       sub: "Hit rate at 3 pieces: 100%.",
       note: "",
@@ -427,15 +296,25 @@ describe("the previous evaluation of the session", () => {
     window.sessionStorage.setItem(
       "rag-playground:evaluation:previous",
       JSON.stringify({
-        "s|working": { sourceSha: "s", pipelineKey: "working", byId: {}, summary: { hits: 1, total: 2, averageRank: 1 } },
+        "s|working": { sourceSha: "s", pipelineKey: "working", byId: {}, totals: T(1, 2) },
       }),
     )
-    expect(readPreviousEvaluation("s", "working")?.summary.hits).toBe(1)
+    expect(readPreviousEvaluation("s", "working")?.totals.found).toBe(1)
     expect(readPreviousEvaluation("s", "working")?.steps).toBeUndefined()
   })
 
+  it("reads an entry an older page stored, with its own summary and no totals, as none", () => {
+    window.sessionStorage.setItem(
+      "rag-playground:evaluation:previous",
+      JSON.stringify({
+        "s|working": { sourceSha: "s", pipelineKey: "working", byId: {}, summary: { hits: 1, total: 2, averageRank: 1 } },
+      }),
+    )
+    expect(readPreviousEvaluation("s", "working")).toBeNull()
+  })
+
   it("keeps the recipe it was scored with", () => {
-    storePreviousEvaluation({ sourceSha: "s", pipelineKey: "working", byId: {}, summary: { hits: 1, total: 2, averageRank: 1 }, steps: steps("docling", "Docling") })
+    storePreviousEvaluation({ sourceSha: "s", pipelineKey: "working", byId: {}, totals: T(1, 2), steps: steps("docling", "Docling") })
     expect(readPreviousEvaluation("s", "working")?.steps).toEqual(steps("docling", "Docling"))
   })
 
@@ -449,7 +328,7 @@ describe("the previous evaluation of the session", () => {
   })
 
   it("comes back as it went in, so a trip to Build and back keeps it, for the same document and pipeline", () => {
-    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, totals: totalsOf([payload(), miss()]) }
     storePreviousEvaluation(before)
     expect(readPreviousEvaluation(SHA, "working")).toEqual(before)
   })
@@ -457,7 +336,7 @@ describe("the previous evaluation of the session", () => {
   it("is ignored when it was recorded against a different document (F5)", () => {
     // Score the primer, load Scanned notes, evaluate: the primer's "10 of 10"
     // must not be compared against Scanned notes' own run.
-    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, totals: totalsOf([payload(), miss()]) }
     storePreviousEvaluation(before)
     expect(readPreviousEvaluation(OTHER_SHA, "working")).toBeNull()
   })
@@ -465,19 +344,19 @@ describe("the previous evaluation of the session", () => {
   it("is ignored when it was recorded against a different pipeline", () => {
     // Stored for the saved pipeline "working" carries a run scored with a
     // different pipeline: the score under "abc" must not borrow it.
-    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload(), miss()]) }
+    const before = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, totals: totalsOf([payload(), miss()]) }
     storePreviousEvaluation(before)
     expect(readPreviousEvaluation(SHA, "abc")).toBeNull()
   })
 
   it("treats a stored result with no pipelineKey (old shape) as none", () => {
-    window.sessionStorage.setItem("rag-playground:evaluation:previous", JSON.stringify({ sourceSha: SHA, byId: {}, summary: summarize([]) }))
+    window.sessionStorage.setItem("rag-playground:evaluation:previous", JSON.stringify({ sourceSha: SHA, byId: {}, totals: totalsOf([]) }))
     expect(readPreviousEvaluation(SHA, "working")).toBeNull()
   })
 
   it("keeps one previous score per pipeline, so scoring A, then B, then A again still finds A's (I2)", () => {
-    const a = { sourceSha: SHA, pipelineKey: "A", byId: { a: payload({ rank: 1 }) }, summary: summarize([payload()]) }
-    const b = { sourceSha: SHA, pipelineKey: "B", byId: { a: payload({ rank: 4 }) }, summary: summarize([miss()]) }
+    const a = { sourceSha: SHA, pipelineKey: "A", byId: { a: payload({ rank: 1 }) }, totals: totalsOf([payload()]) }
+    const b = { sourceSha: SHA, pipelineKey: "B", byId: { a: payload({ rank: 4 }) }, totals: totalsOf([miss()]) }
     storePreviousEvaluation(a)
     storePreviousEvaluation(b)
     expect(readPreviousEvaluation(SHA, "A")).toEqual(a)
@@ -485,13 +364,13 @@ describe("the previous evaluation of the session", () => {
   })
 
   it("treats the old single-slot shape as none, even for its own document and pipeline", () => {
-    const old = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, summary: summarize([payload()]) }
+    const old = { sourceSha: SHA, pipelineKey: "working", byId: { a: payload({ rank: 3 }) }, totals: totalsOf([payload()]) }
     window.sessionStorage.setItem("rag-playground:evaluation:previous", JSON.stringify(old))
     expect(readPreviousEvaluation(SHA, "working")).toBeNull()
   })
 
   it("keeps at most 40 scores, dropping the oldest", () => {
-    const one = (k: string) => ({ sourceSha: SHA, pipelineKey: k, byId: {}, summary: summarize([]) })
+    const one = (k: string) => ({ sourceSha: SHA, pipelineKey: k, byId: {}, totals: totalsOf([]) })
     for (let i = 0; i < 41; i++) storePreviousEvaluation(one(`p${i}`))
     expect(readPreviousEvaluation(SHA, "p0")).toBeNull()
     expect(readPreviousEvaluation(SHA, "p1")).not.toBeNull()
@@ -532,31 +411,9 @@ describe("what the reranker did", () => {
   })
 })
 
-describe("traceRequest", () => {
+describe("fixHref", () => {
   const g = e2eSampleGraph(LIVE, SRC)
   const idOf = (stage: string) => g.nodes.find((n) => n.stage === stage)!.id
-  const artifacts: Record<string, string> = Object.fromEntries(g.nodes.map((n) => [n.id, `a-${n.stage}`]))
-
-  it("sends each step's artifact and plain name, with the reranker's result as the one scored", () => {
-    const req = traceRequest(g, (id) => artifacts[id], ["The survey ran for six weeks."], 5)
-    expect(req).toEqual({
-      gold_answers: ["The survey ran for six weeks."],
-      parse: { id: "a-parse", name: "Docling" },
-      cleans: [{ id: "a-clean", name: "Remove duplicate blocks" }],
-      chunk: "a-chunk",
-      retrieve: "a-retrieve",
-      final: "a-rerank",
-      rerank_name: "MMR (variety)",
-      top_k: 5,
-    })
-  })
-
-  it("scores the retrieve result itself when there is no reranker", () => {
-    const req = traceRequest(removeNode(g, idOf("rerank")), (id) => artifacts[id], ["x"], 3)
-    expect(req?.final).toBe("a-retrieve")
-    expect(req?.rerank_name).toBeNull()
-  })
-
   it("links a lost step to its card on Build, and the second cleaner to the second Clean card", () => {
     const steps = (stages: string[], lost: number) =>
       stages.map((stage, i) => ({ stage, name: stage, status: i === lost ? "lost" : "pass", sentence: "", evidence: null })) as TraceStep[]
@@ -573,25 +430,45 @@ describe("traceRequest", () => {
     }
     expect(fixHref(twoCleans, trace(["parse", "clean", "clean", "chunk"], 2))).toBe("/build?step=clean_2")
   })
+})
 
-  it("is null until every step it needs has finished, or when there is nothing to look for", () => {
-    expect(traceRequest(g, (id) => (id === idOf("chunk") ? undefined : artifacts[id]), ["x"], 5)).toBeNull()
-    expect(traceRequest(g, (id) => artifacts[id], [], 5)).toBeNull()
+const DOC = { sha: "2".repeat(64), filename: "e.pdf" }
+const QUESTIONS = [
+  { id: "q1", question: "What is a chunk?", gold_answers: ["A chunk is a piece."], tags: ["easy"] },
+  { id: "q2", question: "Why overlap?", gold_answers: ["Overlap keeps context."], tags: [] },
+]
+const TOTALS = { total: 2, scored: 2, found: 1, hit_rate: 0.5, mrr: 0.5, recall: null, mean_rank: 1, median_rank: 1 }
+
+describe("one evaluation request", () => {
+  it("sends the whole question set, the pipeline and its documents at once", () => {
+    const c = graphToConfig(sampleGraph(R, DOC))
+    if (!c.ok) throw new Error(c.problem)
+    expect(evaluationRequest(c.pipeline, QUESTIONS, 5)).toEqual({
+      config: c.pipeline.config,
+      documents: [DOC.sha],
+      questions: QUESTIONS.map(({ id, question, gold_answers, tags }) => ({ id, question, gold_answers, tags })),
+      top_k: 5,
+    })
+  })
+
+  it("reads each question's verdict from the server's result", () => {
+    const result = { ...TOTALS, top_k: 5, cancelled: false, by_tag: {}, questions: [
+      { id: "q1", question: "", golds: [], tags: [], found: true, rank: 1, lost_at: null, trace: null, score: { hit: true, rank: 1 }, error: null, result_id: "r1" },
+    ] } as unknown as EvaluationResult
+    expect(rowsFromResult(result).q1.result_id).toBe("r1")
+    expect(rowsFromResult(null)).toEqual({})
+  })
+
+  it("words the score from the server's totals", () => {
+    const f = scoreFinding(TOTALS, null, [], [], 5)
+    expect(f.finding).toBe("1 of 2 questions found the answer.")
+    expect(f.sub).toBe("Hit rate at 5 pieces: 50%.")
   })
 })
 
-describe("batches", () => {
-  it("splits questions into runs of at most the sweep limit, keeping their order and offsets", () => {
-    expect(SWEEP_LIMIT).toBe(10)
-    const items = Array.from({ length: 23 }, (_, i) => i)
-    const out = batches(items, SWEEP_LIMIT)
-    expect(out.map((b) => b.offset)).toEqual([0, 10, 20])
-    expect(out.map((b) => b.items.length)).toEqual([10, 10, 3])
-    expect(out.flatMap((b) => b.items)).toEqual(items)
-  })
-
-  it("keeps a short set in one run, and an empty one in none", () => {
-    expect(batches([1, 2], 10)).toEqual([{ offset: 0, items: [1, 2] }])
-    expect(batches([], 10)).toEqual([])
-  })
+it("the browser no longer adds up scores", async () => {
+  const mod = await import("./evaluate")
+  for (const name of ["metrics", "summarize", "metricsByTag", "batches", "questionVariants", "evalGraph", "traceRequest"]) {
+    expect(mod).not.toHaveProperty(name)
+  }
 })

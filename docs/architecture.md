@@ -84,8 +84,8 @@ app runs the same strategies through its pipeline graph, and
 `tests/integration/test_app_uses_pandion_evaluation.py` check both give the same pieces,
 the same index, the same query, the same hits, before and after a reranker, the same
 answer, and the same eval verdict. `pandion.evaluate(p, questions)` asks every question
-and scores it with the same `eval` step; the app's Evaluate page still runs that step
-through `POST /api/sweeps` and adds up the scores in the browser.
+and scores it with the same `eval` step; the app's Evaluate page runs it through
+`POST /api/v2/evaluations` and shows the totals it returns.
 `pandion.compare(p, stage, variants, documents, questions)` builds one pipeline per
 variant and evaluates each; the app's Compare page still uses `POST /api/sweeps`, which
 runs `pandion.executor.sweep`. The `mmr` reranker and the `chat` step embed with the
@@ -309,16 +309,21 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
 - **Runs.** A card's Run sends the pipeline as a config with `through` set to the card's
   step, to `POST /api/v2/runs`; Build the index is the Index card's Run. Ask sends the
   config, its documents and the question to `POST /api/v2/ask`, with `answer: false` when
-  it stops after the search. The app opens an `EventSource` on
-  `/api/v2/runs/{id}/events`, one per run; Stop posts to `/api/v2/runs/{id}/cancel`. The
-  `/api/v2` client is `web/src/api/v2.ts`; it sends keys in the same headers as `/api`.
+  it stops after the search. Evaluate sends the config, its documents and the whole
+  question set in one request to `POST /api/v2/evaluations`; Pandion scores every question
+  and the page shows the run's result (its totals, `by_tag` and each question's verdict),
+  so the browser adds up no score. The app opens an `EventSource` on
+  `/api/v2/runs/{id}/events`, one per run, and reads the run's result from
+  `GET /api/v2/runs/{id}` once the stream ends, trying a failed read once more; Stop posts
+  to `/api/v2/runs/{id}/cancel`. The `/api/v2` client is `web/src/api/v2.ts`; it sends keys
+  in the same headers as `/api`.
 - **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.
-- **Miss trace.** Evaluate posts a question's answer sentences and the artifacts its run
-  made to `POST /api/trace`, which says the first step that lost the answer, with the
-  eval step's own matching, through `pandion.evaluation.trace`.
+- **Miss trace.** Each missed question in an evaluation's result carries its trace, the
+  first step that lost the answer, worked out by `pandion.evaluate` with the eval step's own
+  matching. Evaluate shows it as it comes; the web no longer calls `POST /api/trace`.
 - **Sources.** Uploads, page images and the PDF itself come from `/api/sources`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
-- **Keys.** A key typed in the app is sent as a header on runs, sweeps and key checks.
+- **Keys.** A key typed in the app is sent as a header on runs, evaluations, sweeps and key checks.
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
   storage; see [privacy.md](privacy.md).
 - **Pipelines and documents.** A saved pipeline is a name, a config (a pipeline file's

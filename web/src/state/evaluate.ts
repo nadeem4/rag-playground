@@ -1,85 +1,57 @@
 import type {
-  EvalOutput,
   EvalPayload,
-  GraphNode,
-  Registry,
+  EvalQuestionResult,
+  EvaluationRequest,
+  EvaluationResult,
   SampleQuestion,
   Stage,
+  Totals,
   Trace,
-  TraceRequest,
   TraceStage,
-  Variant,
 } from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { ordinal, type HitRowData } from "@/components/inspectors/hits"
 import { strategyLabel } from "@/learn/challenges"
 
-import { columnOrder, setConfig, setTransform, titleFor, type PipelineGraph } from "./graph"
+import type { WorkingPipeline } from "./config"
+import { columnOrder, titleFor, type PipelineGraph } from "./graph"
 import type { Question } from "./goldSet"
 
 /**
- * The arithmetic behind the Evaluate screen, kept pure so it is testable
+ * What the Evaluate screen says about a run, kept pure so it is testable
  * without a browser.
  *
- * An evaluation is the pipeline you already built, with its use case swapped
- * for `eval`, swept over the question set. One variant per question, each
- * setting the question and the sentence that answers it together, because the
- * eval step fails a question that carries no gold answer.
+ * An evaluation is one request (`POST /api/v2/evaluations`) with the pipeline,
+ * its documents and the whole question set. Pandion scores every question and
+ * adds up the totals; the browser adds up no score. What stays here reads one
+ * question's own row: its reason, its change since the last run, the reranker's
+ * effect on it, and where a miss can be fixed on Build.
  */
 
-export type { EvalOutput, EvalPayload, SampleQuestion }
-
-export function isEvalOutput(data: unknown): data is EvalOutput {
-  const out = data as EvalOutput | null
-  return typeof out === "object" && out !== null && out.kind === "eval" && typeof out.payload === "object" && out.payload !== null
-}
-
-export const EVAL_TRANSFORM = "eval"
-
-/**
- * The most recipes one sweep takes. The server refuses more (it bounds what a
- * single request can ask of the hosted demo), so an evaluation with more
- * questions runs as several sweeps, one after another.
- */
-export const SWEEP_LIMIT = 10
-
-/** `items` cut into runs of at most `size`, each with the index of its first item. */
-export function batches<T>(items: readonly T[], size: number): { offset: number; items: T[] }[] {
-  const out: { offset: number; items: T[] }[] = []
-  for (let offset = 0; offset < items.length; offset += size) out.push({ offset, items: items.slice(offset, offset + size) })
-  return out
-}
+export type { EvalPayload, SampleQuestion }
 
 /** A graph can be evaluated only when something retrieves. */
 export function hasRetriever(g: PipelineGraph): boolean {
   return g.nodes.some((n) => n.stage === "retrieve")
 }
 
-/**
- * The stored pipeline with its use case swapped for `eval` at this `top_k`.
- * Every step above the use case keeps its transform and its config, so a
- * second evaluation after one setting change comes from the cache. Null when
- * the graph has no use case, or the server has no eval step.
- */
-export function evalGraph(g: PipelineGraph, registry: Registry, topK: number): PipelineGraph | null {
-  const use = g.nodes.find((n) => n.stage === "use_case")
-  if (!use || !registry.use_case?.[EVAL_TRANSFORM]) return null
-  const swapped = setTransform(g, use.id, EVAL_TRANSFORM, registry)
-  const node = swapped.nodes.find((n) => n.id === use.id)!
-  return setConfig(swapped, use.id, { ...node.config, top_k: topK })
+/** What Evaluate sends: every question at once. The server scores them (pandion.evaluate). */
+export function evaluationRequest(
+  p: WorkingPipeline,
+  questions: readonly Pick<Question, "id" | "question" | "gold_answers" | "tags">[],
+  topK: number,
+): EvaluationRequest {
+  return {
+    config: p.config,
+    documents: p.documents.map((d) => d.sha),
+    questions: questions.map((q) => ({ id: q.id, question: q.question, gold_answers: [...q.gold_answers], tags: [...q.tags] })),
+    top_k: topK,
+  }
 }
 
-/**
- * One variant per question, each setting the question and its gold passages.
- * Both fields go out: `gold_answers` is the list a question may have several of
- * (plan I-32), and `gold_answer` still carries the first, so a server that has
- * only the older field still scores the run.
- */
-export function questionVariants(query: Pick<GraphNode, "transform" | "config">, questions: readonly Question[]): Variant[] {
-  return questions.map((q) => ({
-    transform: query.transform,
-    config: { ...query.config, text: q.question, gold_answer: q.gold_answers[0] ?? "", gold_answers: q.gold_answers },
-  }))
+/** Each question's verdict by its id. Empty until the run has a result. */
+export function rowsFromResult(result: EvaluationResult | null): Record<string, EvalQuestionResult> {
+  return Object.fromEntries((result?.questions ?? []).map((q) => [q.id, q]))
 }
 
 /** The steps an evaluation is a verdict on, top to bottom. */
@@ -104,39 +76,6 @@ export function pipelineSteps(g: PipelineGraph): RecipeStep[] {
       name: (n.stage === "retrieve" ? RETRIEVAL_LABEL[n.transform] : undefined) ?? strategyLabel(n.transform),
       config: JSON.stringify(n.config),
     }))
-}
-
-/**
- * What `POST /api/trace` needs to follow one question's answer down its run:
- * each step's artifact and plain name, in column order. The result the eval
- * step scored is the reranker's when there is one. Null until every step it
- * reads has finished for this question, or when there is no answer to look for.
- */
-export function traceRequest(
-  g: PipelineGraph,
-  artifact: (nodeId: string) => string | undefined,
-  golds: readonly string[],
-  topK: number,
-): TraceRequest | null {
-  const order = columnOrder(g)
-  const one = (stage: Stage) => order.find((n) => n.stage === stage)
-  const parse = one("parse")
-  const chunk = one("chunk")
-  const retrieve = one("retrieve")
-  const rerank = one("rerank")
-  const cleans = order.filter((n) => n.stage === "clean")
-  const ids = [parse, chunk, retrieve, rerank, ...cleans].filter((n) => n !== undefined).map((n) => artifact(n.id))
-  if (!parse || !chunk || !retrieve || !golds.length || ids.some((id) => id === undefined)) return null
-  return {
-    gold_answers: [...golds],
-    parse: { id: artifact(parse.id)!, name: strategyLabel(parse.transform) },
-    cleans: cleans.map((n) => ({ id: artifact(n.id)!, name: strategyLabel(n.transform) })),
-    chunk: artifact(chunk.id)!,
-    retrieve: artifact(retrieve.id)!,
-    final: artifact((rerank ?? retrieve).id)!,
-    rerank_name: rerank ? strategyLabel(rerank.transform) : null,
-    top_k: topK,
-  }
 }
 
 /** The Build card a lost trace step belongs to. Top k has none: it is set on Evaluate. */
@@ -218,26 +157,7 @@ export function reasonText(p: EvalPayload, topK: number): string {
   return `${p.considered} of ${p.total_candidates} checked`
 }
 
-// ------------------------------------------------------------- the summary --
-
-export interface EvalSummary {
-  /** Questions whose answer was in the top k. */
-  hits: number
-  /** Questions asked, finished or not. */
-  total: number
-  /** Mean rank of the first containing hit, over the questions that hit. */
-  averageRank: number | null
-}
-
-export function summarize(payloads: readonly (EvalPayload | undefined)[]): EvalSummary {
-  const hits = payloads.filter((p): p is EvalPayload => p !== undefined && p.hit)
-  const ranks = hits.map((p) => p.rank).filter((r): r is number => typeof r === "number")
-  return {
-    hits: hits.length,
-    total: payloads.length,
-    averageRank: ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length : null,
-  }
-}
+// --------------------------------------------------------------- the score --
 
 /** The score as a finding sentence, and the line under it. */
 export interface ScoreFinding {
@@ -276,16 +196,16 @@ const COUNT_WORDS: Record<number, string> = { 2: "Both" }
  * has no recipe, so it reads "since the last run".
  */
 export function scoreFinding(
-  summary: EvalSummary,
+  totals: Totals,
   previous: PreviousEvaluation | null,
   rows: readonly { now?: EvalPayload; before?: EvalPayload }[],
   steps: readonly RecipeStep[],
   k: number,
 ): ScoreFinding {
-  const noun = summary.total === 1 ? "question" : "questions"
-  const head = `${summary.hits} of ${summary.total} ${noun} found the answer.`
-  const finding = previous ? `${head} The last run found ${previous.summary.hits} of ${previous.summary.total}.` : head
-  const rate = percent(summary.total ? summary.hits / summary.total : null) ?? "not yet"
+  const noun = totals.total === 1 ? "question" : "questions"
+  const head = `${totals.found} of ${totals.total} ${noun} found the answer.`
+  const finding = previous ? `${head} The last run found ${previous.totals.found} of ${previous.totals.total}.` : head
+  const rate = percent(totals.hit_rate) ?? "not yet"
   const base = `Hit rate at ${k} ${k === 1 ? "piece" : "pieces"}: ${rate}.`
 
   const scored = rows.filter((r): r is { now: EvalPayload; before?: EvalPayload } => r.now !== undefined)
@@ -306,104 +226,6 @@ export function scoreFinding(
   return { finding, sub: `${base} ${count} ${since}`, note: `${count} ${since}` }
 }
 
-// ------------------------------------------------------------- the metrics --
-
-/** How many questions found the answer at each rank. */
-export interface Spread {
-  rank: number
-  count: number
-}
-
-/**
- * Everything the page can say about a run, computed from the per-question
- * payloads. `hitRate` is the headline; the rest is there for whoever wants it.
- * Every rate is over the questions that have finished, so a half-done run reads
- * as what it has, not as a pile of misses.
- */
-export interface EvalMetrics {
-  /** Questions asked, finished or not. */
-  total: number
-  /** Questions that have a payload. */
-  scored: number
-  hits: number
-  /** Hit rate at k: hits over scored. Null before anything finishes. */
-  hitRate: number | null
-  /** Mean reciprocal rank over the scored questions. A miss contributes zero. */
-  mrr: number | null
-  /** Gold passages the questions have, over the payloads that count them. */
-  goldsTotal: number
-  goldsFound: number
-  /** Some question has more than one gold passage, so recall says something. */
-  multiGold: boolean
-  /** Recall at k, or null when every question has one gold passage. */
-  recall: number | null
-  meanRank: number | null
-  medianRank: number | null
-  spread: Spread[]
-}
-
-function median(sorted: readonly number[]): number | null {
-  if (sorted.length === 0) return null
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
-}
-
-export function metrics(payloads: readonly (EvalPayload | undefined)[]): EvalMetrics {
-  const scored = payloads.filter((p): p is EvalPayload => p !== undefined)
-  const ranks = scored.filter((p) => p.hit).map((p) => p.rank).filter((r): r is number => typeof r === "number")
-  const sorted = [...ranks].sort((a, b) => a - b)
-
-  let goldsTotal = 0
-  let goldsFound = 0
-  let multiGold = false
-  for (const p of scored) {
-    if (typeof p.golds_total !== "number") continue
-    goldsTotal += p.golds_total
-    goldsFound += p.golds_found ?? 0
-    if (p.golds_total > 1) multiGold = true
-  }
-
-  const spread: Spread[] = []
-  for (const r of sorted) {
-    const last = spread[spread.length - 1]
-    if (last && last.rank === r) last.count += 1
-    else spread.push({ rank: r, count: 1 })
-  }
-
-  return {
-    total: payloads.length,
-    scored: scored.length,
-    hits: scored.filter((p) => p.hit).length,
-    hitRate: scored.length ? scored.filter((p) => p.hit).length / scored.length : null,
-    mrr: scored.length ? scored.reduce((sum, p) => sum + (p.hit && p.rank ? 1 / p.rank : 0), 0) / scored.length : null,
-    goldsTotal,
-    goldsFound,
-    multiGold,
-    recall: multiGold && goldsTotal > 0 ? goldsFound / goldsTotal : null,
-    meanRank: ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length : null,
-    medianRank: median(sorted),
-    spread,
-  }
-}
-
-export interface TagMetrics {
-  tag: string
-  metrics: EvalMetrics
-}
-
-/** The same numbers per tag. Empty when no question carries one. */
-export function metricsByTag(items: readonly { tags: readonly string[]; payload?: EvalPayload }[]): TagMetrics[] {
-  const byTag = new Map<string, (EvalPayload | undefined)[]>()
-  for (const item of items) {
-    for (const tag of item.tags) {
-      const list = byTag.get(tag) ?? []
-      list.push(item.payload)
-      byTag.set(tag, list)
-    }
-  }
-  return [...byTag.keys()].sort().map((tag) => ({ tag, metrics: metrics(byTag.get(tag)!) }))
-}
-
 /** A rate as a whole percentage. Null stays null, so the page can leave it out. */
 export function percent(x: number | null): string | null {
   return x === null ? null : `${Math.round(x * 100)}%`
@@ -416,7 +238,8 @@ export interface PreviousEvaluation {
   /** The pipeline it was scored with: a saved pipeline's id, or "working" for the pipeline on Build. */
   pipelineKey: string
   byId: Record<string, EvalPayload>
-  summary: EvalSummary
+  /** The server's totals for that run. */
+  totals: Totals
   /** The recipe it was scored with, so the next run can name the one step that changed. Absent on older entries. */
   steps?: RecipeStep[]
   /** The pieces checked it was scored at. Absent on older entries. */
@@ -447,7 +270,7 @@ const isPrevious = (p: unknown): p is PreviousEvaluation => {
     typeof e?.byId === "object" &&
     e.byId !== null &&
     !Array.isArray(e.byId) &&
-    typeof e?.summary?.total === "number" &&
+    typeof e?.totals?.total === "number" &&
     (e.steps === undefined || (Array.isArray(e.steps) && e.steps.every((x) => typeof x?.label === "string" && typeof x?.transform === "string" && typeof x?.name === "string" && (x.config === undefined || typeof x.config === "string")))) &&
     (e.k === undefined || typeof e.k === "number")
   )
@@ -457,7 +280,8 @@ const isPrevious = (p: unknown): p is PreviousEvaluation => {
  * Every stored score, keyed by `${sourceSha}|${pipelineKey}` (I2), so scoring
  * A, then B, then A again still compares A against A. Anything that is not an
  * entry of that shape is dropped, which is how the old single-slot value (one
- * evaluation, not a map) reads as none.
+ * evaluation, not a map) reads as none, and so does an entry an older page
+ * stored with its own `summary` in place of the server's `totals`.
  */
 function readPreviousMap(): Record<string, PreviousEvaluation> {
   try {

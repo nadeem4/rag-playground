@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { GoldQuestion, QuestionSetUpload, Registry, SampleQuestion } from "@/api/types"
-import type { EvalSummary } from "@/state/evaluate"
+import type { EvalPayload, EvalQuestionResult, EvaluationRequest, EvaluationResult, GoldQuestion, QuestionSetUpload, Registry, SampleQuestion, Totals } from "@/api/types"
+import { stepOfCardIn } from "@/state/config"
 import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
 import { chooseDocument, resetDocumentForTests, withDocument } from "@/state/document"
-import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph, type PipelineGraph } from "@/state/graph"
+import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID } from "@/state/pipelines"
 import { ON_BUILD } from "@/state/pipelineChoice"
 import { choose, openPicker, optionNames, optionOf } from "@/components/ui/pickerTesting"
@@ -22,6 +22,18 @@ const QUESTIONS: SampleQuestion[] = [
   { id: "a", question: "What are the two steps?", gold_answer: "It answers in two steps." },
   { id: "b", question: "How big is a chunk?", gold_answer: "A chunk should answer one question well.", tags: ["designed to miss: long sentence"] },
 ]
+
+/** Totals as the server sends them. A fixture: the page shows them and adds nothing up. */
+const totalsOf = (found: number, total: number): Totals => ({
+  total,
+  scored: total,
+  found,
+  hit_rate: total ? found / total : null,
+  mrr: total ? found / total : null,
+  recall: null,
+  mean_rank: found ? 1 : null,
+  median_rank: found ? 1 : null,
+})
 
 const question = (over: Partial<GoldQuestion>): GoldQuestion => ({
   id: "",
@@ -86,15 +98,7 @@ class SilentEventSource {
  * describes the loaded document. `null` means the sample list cannot be read.
  * `stored` is what `GET /api/sources/{sha}/questions` has, null for no set.
  */
-/** One `POST /api/sweeps` body, as the test needs to inspect it. */
-interface RecordedSweep {
-  graph: PipelineGraph
-  node_id: string
-  variants: unknown[]
-  through: string
-}
-
-/** Every POST /api/trace body, and what it answers. */
+/** Every POST /api/trace body: there should be none, since the trace comes with the result. */
 const traced: unknown[] = []
 const TRACE = {
   finding: "Lost at Parse. Fast text put other text in the middle of the answer sentence, so no later step can find it.",
@@ -120,6 +124,8 @@ function serve({
   upload,
   demo = false,
   artifacts = {},
+  result = null,
+  resultFails = 0,
 }: {
   reg?: unknown
   sampleSha?: string | null
@@ -128,16 +134,36 @@ function serve({
   demo?: boolean
   /** Artifact payloads by id, served at `/api/artifacts/{id}/payload`. */
   artifacts?: Record<string, unknown>
-} = {}): { sweeps: RecordedSweep[] } {
-  const sweeps: RecordedSweep[] = []
+  /** What `GET /api/v2/runs/{id}` answers as the run's result: the server's report. */
+  result?: EvaluationResult | null
+  /** How many reads of the run fail before one succeeds. */
+  resultFails?: number
+} = {}): Served {
+  const served: Served = { evaluations: [], cancelled: [], reads: 0, urls: [] }
+  let fails = resultFails
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
   const missing = () => new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "/api/sweeps" && init?.method === "POST") {
-        sweeps.push(JSON.parse(String(init.body)) as RecordedSweep)
-        return ok({ run_id: `r${sweeps.length}` })
+      served.urls.push(url)
+      if (url === "/api/v2/evaluations" && init?.method === "POST") {
+        served.evaluations.push(JSON.parse(String(init.body)) as EvaluationRequest)
+        return ok({ run_id: `e${served.evaluations.length}` })
+      }
+      const cancel = /^\/api\/v2\/runs\/([^/]+)\/cancel$/.exec(url)
+      if (cancel && init?.method === "POST") {
+        served.cancelled.push(cancel[1])
+        return ok({ run_id: cancel[1], cancel_requested: true })
+      }
+      const snapshot = /^\/api\/v2\/runs\/([^/]+)$/.exec(url)
+      if (snapshot) {
+        served.reads += 1
+        if (fails > 0) {
+          fails -= 1
+          return new Response("Bad gateway", { status: 502 })
+        }
+        return ok({ run_id: snapshot[1], kind: "evaluation", status: "finished", ok: true, cancel_requested: false, last_event_id: 0, events: [], result })
       }
       if (url === "/api/trace" && init?.method === "POST") {
         traced.push(JSON.parse(String(init.body)))
@@ -176,15 +202,23 @@ function serve({
       return missing()
     }),
   )
-  return { sweeps }
+  return served
+}
+
+/** What the stub server saw: each evaluation's body, each cancel, the reads of a run, every url. */
+interface Served {
+  evaluations: EvaluationRequest[]
+  cancelled: string[]
+  reads: number
+  urls: string[]
 }
 
 /** Serves the default registry, stores the sample graph for `SOURCE`, and renders Evaluate. */
-function setup(): { sweeps: RecordedSweep[] } {
-  const { sweeps } = serve()
+function setup(): Served {
+  const served = serve()
   storeGraph(sampleGraph(registry, SOURCE))
   render(<Evaluate />)
-  return { sweeps }
+  return served
 }
 
 /** Opens the Use your own questions fold, where the upload, the templates and the notes live. */
@@ -555,7 +589,7 @@ describe("Evaluate is pipeline first", () => {
   }
 
   it("opens on the Starter with its document and question set when nothing is chosen, so one press scores it", async () => {
-    const { sweeps } = serve()
+    const { evaluations, urls } = serve()
     render(<Evaluate />)
     await waitFor(() => expect(picked()).toBe(STARTER_ID))
     expect(screen.queryByText("No pipeline to evaluate")).toBeNull()
@@ -565,10 +599,15 @@ describe("Evaluate is pipeline first", () => {
     expect(screen.getByTestId("documents-hint").textContent).toBe("The Starter comes with the default sample. Change it to try another.")
     await waitFor(() => expect(evaluateButton().disabled).toBe(false))
     fireEvent.click(evaluateButton())
-    await waitFor(() => expect(sweeps).toHaveLength(1))
-    const g = sweeps[0].graph
-    expect(g.nodes.find((n) => n.stage === "source")!.config.sha).toBe(SOURCE.sha)
-    expect(g.nodes.find((n) => n.stage === "chunk")!.config).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
+    await waitFor(() => expect(evaluations).toHaveLength(1))
+    // One request with the pipeline as a Pandion config, its document and every question.
+    const sent = evaluations[0]
+    expect(sent.documents).toEqual([SOURCE.sha])
+    expect(sent.config.index.chunk).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
+    expect(sent.questions.map((q) => q.id)).toEqual(["a", "b"])
+    expect(sent.questions[1]).toEqual({ id: "b", question: "How big is a chunk?", gold_answers: ["A chunk should answer one question well."], tags: ["designed to miss: long sentence"] })
+    expect(sent.top_k).toBe(5)
+    expect(urls.some((u) => u.startsWith("/api/sweeps"))).toBe(false)
   })
 
   it("lists Ready to use, Your pipelines, On Build and Build your own, in that order", async () => {
@@ -740,7 +779,7 @@ describe("Evaluate is pipeline first", () => {
 
   it("compares an edited pipeline on Build against its own last score", async () => {
     const saved = savePipeline("Token chunks", tokens())!.saved
-    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: saved.id, byId: {}, summary: { total: 2, hits: 1, averageRank: null } as EvalSummary })
+    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: saved.id, byId: {}, totals: totalsOf(1, 2) })
     storeGraph(sampleGraph(registry, SOURCE))
     render(<Evaluate />)
     await waitFor(() => expect(picked()).toBe(ON_BUILD))
@@ -782,40 +821,66 @@ class DrivenEventSource {
   }
 }
 
+/** The eval step's payload for one question, as the server puts it under `score`. */
+const score = (over: Partial<EvalPayload> = {}): EvalPayload => ({
+  question: "q",
+  gold_answer: "g",
+  hit: true,
+  rank: 1,
+  matched_chunk_id: "c1",
+  match: "exact",
+  considered: 3,
+  total_candidates: 3,
+  golds_total: 1,
+  golds_found: 1,
+  found_at: null,
+  ...over,
+})
+
+/** One question's verdict in the server's report. */
+const verdict = (id: string, over: Partial<EvalQuestionResult> = {}): EvalQuestionResult => {
+  const s = over.score ?? score()
+  return { id, question: "", golds: [], tags: [], found: s.hit, rank: s.rank, lost_at: null, trace: null, score: s, error: null, result_id: null, ...over }
+}
+
+/**
+ * The server's report for these verdicts (pandion.evaluation's `to_dict`).
+ * The totals are this test's fixture: the page shows them and adds nothing up.
+ */
+const report = (questions: EvalQuestionResult[], over: Partial<EvaluationResult> = {}): EvaluationResult => ({
+  top_k: 5,
+  cancelled: false,
+  ...totalsOf(questions.filter((q) => q.found).length, questions.length),
+  by_tag: {},
+  questions,
+  ...over,
+})
+
 describe("while and after scoring", () => {
   const graph = sampleGraph(registry, SOURCE)
   const idOf = (stage: string) => graph.nodes.find((n) => n.stage === stage)!.id
-  const evalOut = (over: Record<string, unknown>) => ({
-    kind: "eval",
-    payload: {
-      question: "q",
-      gold_answer: "g",
-      hit: true,
-      rank: 1,
-      matched_chunk_id: "c1",
-      match: "exact",
-      considered: 3,
-      total_candidates: 3,
-      golds_total: 1,
-      golds_found: 1,
-      found_at: null,
-      ...over,
-    },
-  })
+  /** One step's event in a question's run, named as Pandion names it (`search`, `clean.1`). */
+  const step = (question: string, card: string, event: string, extra: Record<string, unknown> = {}) => {
+    const name = stepOfCardIn(graph, card)
+    return { event, node_id: name, step: name, document: null, question, ...extra }
+  }
+  const finished = (question: string, card: string, artifact: string, cached = false) =>
+    step(question, card, "node_finished", { artifact_id: artifact, cache_hit: cached, duration_ms: 1 })
+  const done = (question: string, number: number, found: boolean, error: string | null = null) => ({ event: "question_finished", question, number, total: 2, found, error })
 
   beforeEach(() => {
     DrivenEventSource.instances = []
     vi.stubGlobal("EventSource", DrivenEventSource)
   })
 
-  async function start(artifacts: Record<string, unknown>) {
-    serve({ artifacts })
+  async function start(opts: Parameters<typeof serve>[0] = {}) {
+    const served = serve(opts)
     storeGraph(graph)
     render(<Evaluate />)
     await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
-    return DrivenEventSource.instances[0]
+    return { es: DrivenEventSource.instances[0], served }
   }
 
   it("gives every state an icon, the same in the row and in its mark, with the word beside it in the row", async () => {
@@ -836,16 +901,15 @@ describe("while and after scoring", () => {
     const marks = () => within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
     await waitFor(() => expect(marks().map(icon)).toEqual(["waiting", "waiting"]))
     expect(rows().map((r) => icon(r.querySelector("[data-verdict]")!))).toEqual(["waiting", "waiting"])
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    // The first question's run builds the index first. The question step has no inputs, so it
-    // runs at once; the question waits until Retrieve starts, which needs the finished index.
-    es.emit(2, { event: "node_started", node_id: idOf("query"), transform: "x", artifact_id: "q0" })
-    es.emit(3, { event: "node_started", node_id: idOf("chunk"), transform: "x", artifact_id: "c0" })
+    // The first question's run builds the index first. The rewrite step has no inputs, so it
+    // runs at once; the question waits until the search starts, which needs the finished index.
+    es.emit(2, step("a", "query", "node_started", { transform: "x", artifact_id: "q0" }))
+    es.emit(3, step("a", "chunk", "node_started", { transform: "x", artifact_id: "c0" }))
     await new Promise((r) => setTimeout(r, 20))
     expect(marks().map(icon)).toEqual(["waiting", "waiting"])
     expect(rows()[0].querySelector("[data-verdict]")!.textContent).toBe("Waiting")
     expect(screen.getByTestId("progress-line").textContent).toBe("Building the index first. Questions are scored once it is ready.")
-    es.emit(4, { event: "node_started", node_id: idOf("retrieve"), transform: "x", artifact_id: "r0" })
+    es.emit(4, step("a", idOf("retrieve"), "node_started", { transform: "x", artifact_id: "r0" }))
     await waitFor(() => expect(marks().map(icon)).toEqual(["running", "waiting"]))
     expect(marks()[0].getAttribute("aria-label")).toBe("Question 1, running")
     expect(screen.getByTestId("progress-line").textContent).toBe("Searching and scoring question 1 of 2.")
@@ -853,13 +917,24 @@ describe("while and after scoring", () => {
     expect(spinner.getAttribute("aria-hidden")).toBe("true")
     expect(spinner.getAttribute("class")).toContain("icon-spin")
     expect(rows()[0].querySelector("[data-verdict]")!.textContent).toBe("Running")
-    es.emit(5, { event: "node_failed", node_id: idOf("use_case"), error: "Traceback\nValueError: boom" })
+    es.emit(5, done("a", 1, false, "The search step failed: ValueError: boom"))
     await waitFor(() => expect(marks().map(icon)[0]).toBe("failed"))
     expect(icon(rows()[0].querySelector("[data-verdict]")!)).toBe("failed")
+    expect(rows()[0].querySelector("[data-reason]")!.textContent).toBe("The search step failed: ValueError: boom")
+  })
+
+  it("fills each row in as its question finishes, before the scores arrive", async () => {
+    const { es } = await start()
+    es.emit(1, finished("a", idOf("retrieve"), "r0"))
+    es.emit(2, done("a", 1, true))
+    const marks = () => within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    await waitFor(() => expect(marks()[0].getAttribute("aria-label")).toBe("Question 1, found"))
+    expect(screen.getByTestId("progress-line").textContent).toBe("Searching and scoring question 2 of 2.")
+    expect(screen.getByRole("progressbar", { name: "Questions scored" }).getAttribute("aria-valuenow")).toBe("1")
   })
 
   it("while the busy demo makes the run wait, says so instead of a question count", async () => {
-    const es = await start({ o0: evalOut({}), o1: evalOut({}) })
+    const { es } = await start()
     es.emit(0, { event: "queued", ahead: 0 })
     await waitFor(() => expect(document.body.textContent).toContain("The demo is busy with other learners. Your run starts in a moment."))
     expect(document.body.textContent).not.toContain("scoring question")
@@ -867,10 +942,13 @@ describe("while and after scoring", () => {
     await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Building the index first. Questions are scored once it is ready."))
   })
 
-  it("says which question it is scoring while busy, and shows the summary once done", async () => {
-    const es = await start({
-      o0: evalOut({}),
-      o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }),
+  it("says which question it is scoring while busy, and shows the server's numbers once done", async () => {
+    const { es, served } = await start({
+      result: report([verdict("a"), verdict("b", { score: score({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }) })], {
+        // The server's numbers, which the page shows as they are.
+        hit_rate: 0.5,
+        mrr: 0.5,
+      }),
     })
     await waitFor(() => expect(screen.getByTestId("progress-line").textContent).toBe("Building the index first. Questions are scored once it is ready."))
     expect(screen.getByTestId("index-line").textContent).toBe("Waiting to start")
@@ -881,18 +959,17 @@ describe("while and after scoring", () => {
     expect(screen.queryByTestId("summary")).toBeNull()
     expect(screen.queryByTestId("numbers")).toBeNull()
 
-    const useCase = idOf("use_case")
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: "o0", cache_hit: false, duration_ms: 1 })
-    es.emit(3, { event: "variant_started", index: 1, variant: {} })
-    es.emit(4, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
-    es.emit(5, { event: "stream_end", status: "finished", ok: true })
+    es.emit(1, done("a", 1, true))
+    es.emit(2, done("b", 2, false))
+    expect(served.reads).toBe(0)
+    es.emit(3, { event: "stream_end", status: "finished", ok: true })
 
     const summary = await screen.findByTestId("summary")
     expect(summary.textContent).toBe("1 of 2 questions found the answer.")
     expect(summary.className).toContain("text-[1.375rem]")
     expect(summary.className).toContain("max-w-[52ch]")
     expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)50%")
+    expect(screen.getByTestId("numbers").textContent).toContain("Mean reciprocal rank (MRR)0.50")
     expect(screen.queryByTestId("score-note")).toBeNull()
     expect(summary.className).not.toContain("font-mono")
     expect(summary.querySelector("span.font-mono")).not.toBeNull()
@@ -900,10 +977,10 @@ describe("while and after scoring", () => {
     expect(document.body.textContent).toContain("Found 7th, below the 5 pieces checked.")
     // The verdict and the reason in sans; mono only on the digits.
     for (const row of document.querySelectorAll<HTMLElement>("li[data-question]")) {
-      const verdict = row.querySelector<HTMLElement>("[data-verdict]")!
-      expect(verdict.className).toContain("font-sans")
-      expect(verdict.className).toContain("font-semibold")
-      expect(verdict.querySelector(".font-mono")).toBeNull()
+      const v = row.querySelector<HTMLElement>("[data-verdict]")!
+      expect(v.className).toContain("font-sans")
+      expect(v.className).toContain("font-semibold")
+      expect(v.querySelector(".font-mono")).toBeNull()
       const reason = row.querySelector<HTMLElement>("[data-reason]")!
       expect(reason.className).not.toContain("font-mono")
       expect([...reason.querySelectorAll(".font-mono")].every((m) => /^[\d,.]+$/.test(m.textContent ?? ""))).toBe(true)
@@ -911,20 +988,54 @@ describe("while and after scoring", () => {
     }
   })
 
+  it("shows the server's numbers, not its own sums, and the server's count per tag", async () => {
+    const { es } = await start({
+      result: report([verdict("a"), verdict("b")], {
+        // Numbers the page could never work out from the rows: they must come through as sent.
+        hit_rate: 0.37,
+        mrr: 0.123,
+        by_tag: { "designed to miss: long sentence": totalsOf(0, 1) },
+      }),
+    })
+    es.emit(1, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+    expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)37%")
+    expect(screen.getByTestId("numbers").textContent).toContain("Mean reciprocal rank (MRR)0.12")
+    expect(screen.getByTestId("by-tag").textContent).toContain("By tag: designed to miss: long sentence 0 of 1 found.")
+  })
+
+  it("reads the scores a second time when the first read fails", async () => {
+    const { es, served } = await start({ result: report([verdict("a"), verdict("b")]), resultFails: 1 })
+    es.emit(1, { event: "stream_end", status: "finished", ok: true })
+    expect((await screen.findByTestId("summary")).textContent).toBe("2 of 2 questions found the answer.")
+    expect(served.reads).toBe(2)
+    expect(screen.queryByTestId("scores-unread")).toBeNull()
+  })
+
+  it("says the scores could not be read, and shows no numbers, when both reads fail", async () => {
+    const { es } = await start({ result: report([verdict("a"), verdict("b")]), resultFails: 2 })
+    es.emit(1, done("a", 1, true))
+    es.emit(2, done("b", 2, true))
+    es.emit(3, { event: "stream_end", status: "finished", ok: true })
+    const unread = await screen.findByTestId("scores-unread")
+    expect(unread.textContent).toBe("The scores could not be read. Run it again.")
+    expect(screen.queryByTestId("summary")).toBeNull()
+    expect(screen.queryByTestId("numbers")).toBeNull()
+    expect(screen.getByRole("button", { name: "Evaluate again" })).toBeTruthy()
+  })
+
   it("shows Build's run strip while the index builds, and keeps a summary of what came from the cache after the run", async () => {
-    const es = await start({ o0: evalOut({}), o1: evalOut({}) })
+    const { es } = await start({ result: report([verdict("a"), verdict("b")]) })
     const index = graph.nodes.filter((n) => ["parse", "clean", "chunk", "index"].includes(n.stage))
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_started", node_id: index[0].id, ts: 1 })
+    es.emit(1, step("a", index[0].id, "node_started", { ts: 1 }))
     await waitFor(() => expect(screen.getByTestId("run-line").textContent).toMatch(/^Running /))
     expect(screen.getByRole("list", { name: "Index steps" })).toBeTruthy()
-    let n = 3
-    for (const node of index) es.emit(n++, { event: "node_finished", node_id: node.id, artifact_id: `a-${node.id}`, cache_hit: true, duration_ms: 1 })
-    es.emit(n++, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r0", cache_hit: true, duration_ms: 1 })
-    es.emit(n++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: "o0", cache_hit: false, duration_ms: 1 })
-    es.emit(n++, { event: "variant_started", index: 1, variant: {} })
-    es.emit(n++, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r1", cache_hit: true, duration_ms: 1 })
-    es.emit(n++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: "o1", cache_hit: false, duration_ms: 1 })
+    let n = 2
+    for (const node of index) es.emit(n++, finished("a", node.id, `a-${node.id}`, true))
+    es.emit(n++, finished("a", idOf("retrieve"), "r0", true))
+    es.emit(n++, done("a", 1, true))
+    es.emit(n++, finished("b", idOf("retrieve"), "r1", true))
+    es.emit(n++, done("b", 2, true))
     es.emit(n++, { event: "stream_end", status: "finished", ok: true })
     const summary = await screen.findByTestId("run-summary")
     expect(within(summary).getByTestId("run-line").textContent).toBe("From the cache, nothing ran again")
@@ -934,18 +1045,12 @@ describe("while and after scoring", () => {
 
   it("keeps saying the k that was scored when Pieces checked changes after the run", async () => {
     const pieces = Array.from({ length: 7 }, (_, i) => ({ id: `p${i}` }))
-    const es = await start({
-      c7: { chunks: pieces },
-      o0: evalOut({}),
-      o1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }),
+    const { es } = await start({
+      artifacts: { c7: { chunks: pieces } },
+      result: report([verdict("a"), verdict("b", { score: score({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 7, total_candidates: 12 }) })]),
     })
-    const useCase = idOf("use_case")
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: idOf("chunk"), artifact_id: "c7", cache_hit: false, duration_ms: 1 })
-    es.emit(3, { event: "node_finished", node_id: useCase, artifact_id: "o0", cache_hit: false, duration_ms: 1 })
-    es.emit(4, { event: "variant_started", index: 1, variant: {} })
-    es.emit(5, { event: "node_finished", node_id: useCase, artifact_id: "o1", cache_hit: false, duration_ms: 1 })
-    es.emit(6, { event: "stream_end", status: "finished", ok: true })
+    es.emit(1, finished("a", idOf("chunk"), "c7"))
+    es.emit(2, { event: "stream_end", status: "finished", ok: true })
     await screen.findByTestId("summary")
     await waitFor(() => expect(document.body.textContent).toContain("Found 7th, below the 5 pieces checked."))
     await screen.findByTestId("pieces-warning")
@@ -964,20 +1069,16 @@ describe("while and after scoring", () => {
     expect(screen.getByTestId("pieces-warning").className).toContain("bg-warn")
   })
 
-  let finished = 0
-
   /** Runs the two questions to the end: a found one and a missed one. */
-  async function finishTwo(missed: Record<string, unknown> = {}) {
-    // Payloads are cached by artifact id, so each run gets ids of its own.
-    const [a0, a1] = [`f${++finished}a`, `f${finished}b`]
-    const es = await start({ [a0]: evalOut({}), [a1]: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", returned: 3, ...missed }) })
-    const useCase = idOf("use_case")
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: a0, cache_hit: false, duration_ms: 1 })
-    es.emit(3, { event: "variant_started", index: 1, variant: {} })
-    es.emit(4, { event: "node_finished", node_id: useCase, artifact_id: a1, cache_hit: false, duration_ms: 1 })
-    es.emit(5, { event: "stream_end", status: "finished", ok: true })
+  async function finishTwo(missed: Partial<EvalPayload> = {}, over: Partial<EvalQuestionResult> = {}) {
+    const { es, served } = await start({
+      result: report([verdict("a"), verdict("b", { score: score({ hit: false, rank: null, matched_chunk_id: "", match: "none", returned: 3, ...missed }), ...over })]),
+    })
+    es.emit(1, done("a", 1, true))
+    es.emit(2, done("b", 2, false))
+    es.emit(3, { event: "stream_end", status: "finished", ok: true })
     await screen.findByTestId("summary")
+    return served
   }
 
   it("opens a fresh evaluation when the document changes", async () => {
@@ -995,7 +1096,7 @@ describe("while and after scoring", () => {
     await finishTwo()
     const marks = within(await screen.findByRole("list", { name: "One mark per question" })).getAllByRole("button")
     expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(["Question 1, found", "Question 2, missed"])
-    expect(marks.map((m) => m.textContent)).toEqual(["\u2713", "\u2715"])
+    expect(marks.map((m) => m.textContent)).toEqual(["✓", "✕"])
     expect(marks[0].className).toContain("bg-kept")
     expect(marks[1].className).toContain("bg-removed")
     expect(marks[1].className).toContain("--removed-mark")
@@ -1016,7 +1117,7 @@ describe("while and after scoring", () => {
   it("says the verdict in a word and the reason in a sentence, with no hash id", async () => {
     await finishTwo()
     const row = document.querySelector<HTMLElement>('[data-question="b"]')!
-    expect(row.textContent).toContain("\u2715 Missed")
+    expect(row.textContent).toContain("✕ Missed")
     expect(row.querySelector("[data-verdict]")!.className).toContain("text-removed-mark")
     expect(row.textContent).toContain("Not in any of the 3 pieces that came back")
     expect(row.textContent).not.toMatch(/[0-9a-f]{8}/)
@@ -1024,7 +1125,7 @@ describe("while and after scoring", () => {
     expect(row.querySelector(".font-mono")!.textContent).toBe("b")
     expect(row.textContent).not.toMatch(/checked$/)
     expect(row.querySelector("[data-question-text]")!.className).toContain("text-base")
-    expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("\u2713 Found")
+    expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("✓ Found")
     expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("Found in the 1st piece, word for word.")
     // After a run the evidence folds away on a phone, since Details shows it.
     expect(document.querySelector<HTMLElement>('[data-question="a"] [data-evidence]')!.className).toContain("hidden md:grid")
@@ -1033,12 +1134,7 @@ describe("while and after scoring", () => {
   })
 
   it("says how a row changed since the last run, a loss on the removed hue", async () => {
-    storePreviousEvaluation({
-      sourceSha: SOURCE.sha,
-      pipelineKey: "working",
-      byId: { a: evalOut({}).payload as never, b: evalOut({}).payload as never },
-      summary: { hits: 2, total: 2, averageRank: 1 },
-    })
+    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: "working", byId: { a: score(), b: score() }, totals: totalsOf(2, 2) })
     await finishTwo()
     const change = document.querySelector<HTMLElement>('[data-question="b"] [data-row-change]')!
     expect(change.textContent).toBe("Was found 1st")
@@ -1066,18 +1162,12 @@ describe("while and after scoring", () => {
       total_candidates: 4,
       timings_ms: { search: 3 },
     }
-    const es = await start({
-      s0: evalOut({}),
-      s1: evalOut({ rank: 2, matched_chunk_id: "h2", returned: 4 }),
-      r1,
+    const { es } = await start({
+      artifacts: { r1 },
+      // The retrieval result the eval step scored comes by its id in the report.
+      result: report([verdict("a"), verdict("b", { score: score({ rank: 2, matched_chunk_id: "h2", returned: 4 }), result_id: "r1" })]),
     })
-    const useCase = idOf("use_case")
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: useCase, artifact_id: "s0", cache_hit: false, duration_ms: 1 })
-    es.emit(3, { event: "variant_started", index: 1, variant: {} })
-    es.emit(4, { event: "node_finished", node_id: idOf("retrieve"), artifact_id: "r1", cache_hit: false, duration_ms: 1 })
-    es.emit(5, { event: "node_finished", node_id: useCase, artifact_id: "s1", cache_hit: false, duration_ms: 1 })
-    es.emit(6, { event: "stream_end", status: "finished", ok: true })
+    es.emit(1, { event: "stream_end", status: "finished", ok: true })
     await screen.findByTestId("summary")
 
     fireEvent.click(within(document.querySelector<HTMLElement>('[data-question="b"]')!).getByRole("button", { name: "Details" }))
@@ -1101,44 +1191,25 @@ describe("while and after scoring", () => {
     expect(screen.queryByRole("dialog")).toBeNull()
   })
 
-  it("invites a missed row to say why, and traces it in the side sheet once asked", async () => {
+  it("invites a missed row to say why, and shows the trace the server sent, with no request of its own", async () => {
     traced.length = 0
-    const es = await start({
-      // Ids of their own: payloads are cached by id across tests.
-      why0: evalOut({}),
-      why1: evalOut({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: null, returned: 4 }),
-    })
-    const steps = graph.nodes.filter((n) => ["parse", "clean", "chunk", "retrieve", "rerank"].includes(n.stage))
-    let id = 1
-    for (const index of [0, 1]) {
-      es.emit(id++, { event: "variant_started", index, variant: {} })
-      for (const n of steps) es.emit(id++, { event: "node_finished", node_id: n.id, artifact_id: `${n.stage}-${index}`, cache_hit: false, duration_ms: 1 })
-      es.emit(id++, { event: "node_finished", node_id: idOf("use_case"), artifact_id: `why${index}`, cache_hit: false, duration_ms: 1 })
-    }
-    es.emit(id++, { event: "stream_end", status: "finished", ok: true })
-    await screen.findByTestId("summary")
+    const served = await finishTwo({ found_at: null, returned: 4 }, { lost_at: "parse", trace: TRACE as never })
 
     const row = document.querySelector<HTMLElement>('[data-question="b"]')!
     expect(row.querySelector("[data-why]")!.textContent).toBe("Why did this miss?")
     expect(document.querySelector('[data-question="a"] [data-why]')).toBeNull()
-    expect(traced).toHaveLength(0)
 
     fireEvent.click(row.querySelector("[data-why]")!)
     const sheet = screen.getByRole("dialog", { name: "How big is a chunk?" })
-    await waitFor(() => expect(within(sheet).getByText(/^Lost at Parse\./)).toBeTruthy())
-    expect(traced).toHaveLength(1)
-    expect(traced[0]).toMatchObject({ parse: { id: "parse-1" }, chunk: "chunk-1", retrieve: "retrieve-1", top_k: 5 })
+    expect(within(sheet).getByText(/^Lost at Parse\./)).toBeTruthy()
     expect(sheet.querySelector("del[data-part='other']")!.textContent).toBe("column two")
     expect(within(sheet).getByRole("link", { name: "Change Parse on Build" }).getAttribute("href")).toBe(`/build?step=${idOf("parse")}`)
+    expect(traced).toHaveLength(0)
+    expect(served.urls.some((u) => u.endsWith("/trace"))).toBe(false)
   })
 
-  it("says the last run beside the score, and stores this run with its recipe", async () => {
-    storePreviousEvaluation({
-      sourceSha: SOURCE.sha,
-      pipelineKey: "working",
-      byId: { a: evalOut({}).payload as never, b: evalOut({}).payload as never },
-      summary: { hits: 2, total: 2, averageRank: 1 },
-    })
+  it("says the last run beside the score, and stores this run with its recipe and the server's totals", async () => {
+    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: "working", byId: { a: score(), b: score() }, totals: totalsOf(2, 2) })
     await finishTwo()
     expect(screen.getByTestId("summary").textContent).toBe("1 of 2 questions found the answer. The last run found 2 of 2.")
     // An older stored run has no recipe, so the miss is new since the last run.
@@ -1148,25 +1219,19 @@ describe("while and after scoring", () => {
     await waitFor(() => expect(readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0]).toMatchObject({ label: "Parse", transform: "docling", name: "Docling" }))
     expect(typeof readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0].config).toBe("string")
     expect(readPreviousEvaluation(SOURCE.sha, "working")?.k).toBe(5)
+    expect(readPreviousEvaluation(SOURCE.sha, "working")?.totals).toMatchObject({ total: 2, found: 1, hit_rate: 0.5 })
   })
 
   it("compares the numbers only with a last run scored at the same Pieces checked", async () => {
-    storePreviousEvaluation({
-      sourceSha: SOURCE.sha,
-      pipelineKey: "working",
-      byId: { a: evalOut({}).payload as never, b: evalOut({}).payload as never },
-      summary: { hits: 2, total: 2, averageRank: 1 },
-      k: 1,
-    })
+    storePreviousEvaluation({ sourceSha: SOURCE.sha, pipelineKey: "working", byId: { a: score(), b: score() }, totals: totalsOf(2, 2), k: 1 })
     await finishTwo()
     expect(screen.getByTestId("numbers").textContent).toContain("Hit rate (Hit@5)50%")
     expect(screen.getByTestId("numbers").textContent).not.toContain("was")
   })
 
   it("warns that the score says nothing when the pipeline makes fewer pieces than the top k", async () => {
-    const es = await start({ c0: { chunks: [{ id: "a" }, { id: "b" }, { id: "c" }] } })
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: idOf("chunk"), artifact_id: "c0", cache_hit: false, duration_ms: 1 })
+    const { es } = await start({ artifacts: { c0: { chunks: [{ id: "a" }, { id: "b" }, { id: "c" }] } } })
+    es.emit(1, finished("a", idOf("chunk"), "c0"))
     const warning = await screen.findByTestId("pieces-warning")
     expect(warning.textContent).toBe("This pipeline makes only 3 pieces, so every question finds its answer. The score says nothing here.")
     expect(warning.getAttribute("role")).toBe("status")
@@ -1205,9 +1270,12 @@ describe("the pipeline's document", () => {
   })
 })
 
-describe("more questions than one run takes", () => {
+describe("a large question set", () => {
   const graph = sampleGraph(registry, SOURCE)
-  const useCase = graph.nodes.find((n) => n.stage === "use_case")!.id
+  const step = (question: string, card: string, event: string, extra: Record<string, unknown> = {}) => {
+    const name = stepOfCardIn(graph, card)
+    return { event, node_id: name, step: name, document: null, question, ...extra }
+  }
   const twelve = Array.from({ length: 12 }, (_, i) =>
     question({ id: `q${i}`, question: `Question number ${i}?`, gold_answers: [`Answer number ${i}.`] }),
   )
@@ -1222,61 +1290,66 @@ describe("more questions than one run takes", () => {
       golds: [{ gold: q.gold_answers[0], status: "found", document_text: "", closest: "" }],
     })),
   })
-  const hit = { kind: "eval", payload: { question: "q", gold_answer: "g", hit: true, rank: 1, matched_chunk_id: "c", match: "exact", considered: 5, total_candidates: 5, golds_total: 1, golds_found: 1, found_at: null, returned: 5 } }
 
   beforeEach(() => {
     DrivenEventSource.instances = []
     vi.stubGlobal("EventSource", DrivenEventSource)
   })
 
-  function finishBatch(es: DrivenEventSource, offset: number, count: number) {
-    let seq = 0
-    for (let i = 0; i < count; i++) {
-      es.emit(++seq, { event: "variant_started", index: i, variant: {} })
-      es.emit(++seq, { event: "node_finished", node_id: useCase, artifact_id: `batch${offset + i}`, cache_hit: false, duration_ms: 1 })
-    }
-    es.emit(++seq, { event: "stream_end", status: "finished", ok: true })
+  async function start(result: EvaluationResult) {
+    const served = serve({ stored, result })
+    storeGraph(graph)
+    render(<Evaluate />)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    return { es: DrivenEventSource.instances[0], served }
   }
 
-  it("runs them in batches of ten and scores them as one evaluation", async () => {
-    const artifacts = Object.fromEntries(twelve.map((_, i) => [`batch${i}`, hit]))
-    const { sweeps } = serve({ stored, artifacts })
-    storeGraph(graph)
-    render(<Evaluate />)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
-
-    await waitFor(() => expect(sweeps.length).toBe(1))
-    expect(sweeps[0].variants.length).toBe(10)
-    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
-    finishBatch(DrivenEventSource.instances[0], 0, 10)
-
-    // Still one evaluation: busy, no summary, and the second batch starts by itself.
-    await waitFor(() => expect(sweeps.length).toBe(2))
-    expect(sweeps[1].variants.length).toBe(2)
-    expect(screen.queryByTestId("summary")).toBeNull()
-    expect(screen.getByRole("button", { name: "Evaluating" })).toBeTruthy()
-    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(2))
-    finishBatch(DrivenEventSource.instances[1], 10, 2)
+  it("sends every question in one request, and scores them as one evaluation", async () => {
+    const { es, served } = await start(report(twelve.map((q) => verdict(q.id))))
+    expect(served.evaluations).toHaveLength(1)
+    expect(served.evaluations[0].questions.map((q) => q.id)).toEqual(twelve.map((q) => q.id))
+    twelve.forEach((q, i) => es.emit(i + 1, { event: "question_finished", question: q.id, number: i + 1, total: 12, found: true, error: null }))
+    es.emit(13, { event: "stream_end", status: "finished", ok: true })
 
     const summary = await screen.findByTestId("summary")
-    await waitFor(() => expect(within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button").map((m) => m.getAttribute("aria-label"))).toEqual(twelve.map((_, i) => `Question ${i + 1}, found`)))
     expect(summary.textContent).toBe("12 of 12 questions found the answer.")
     const marks = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
-    expect(marks).toHaveLength(12)
     expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(twelve.map((_, i) => `Question ${i + 1}, found`))
+    expect(served.evaluations).toHaveLength(1)
   })
 
-  it("stops after the batch it is in when cancelled", async () => {
-    const { sweeps } = serve({ stored, artifacts: {} })
-    storeGraph(graph)
-    render(<Evaluate />)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
-    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+  it("stops the run on Cancel, and says how far it got", async () => {
+    const { es, served } = await start(report([verdict("q0")], { cancelled: true }))
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
-    DrivenEventSource.instances[0].emit(1, { event: "stream_end", status: "cancelled", ok: false })
+    await waitFor(() => expect(served.cancelled).toEqual(["e1"]))
+    es.emit(1, step("q0", "retrieve", "node_finished", { artifact_id: "r0", cache_hit: false, duration_ms: 1 }))
+    es.emit(2, { event: "question_finished", question: "q0", number: 1, total: 12, found: true, error: null })
+    // The second question had started its search when the cancel landed.
+    es.emit(3, step("q1", "retrieve", "node_started", { transform: "x", artifact_id: "r1" }))
+    es.emit(4, { event: "stream_end", status: "cancelled", ok: false })
     await waitFor(() => expect(screen.getByRole("button", { name: "Evaluate again" })).toBeTruthy())
-    expect(sweeps.length).toBe(1)
+    expect((await screen.findByTestId("stopped")).textContent).toBe("Stopped after 1 of 12 questions.")
+    expect(screen.getByTestId("summary").textContent).toBe("1 of 1 question found the answer.")
+    // The questions it never scored read Not run, not running or waiting.
+    const marks = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
+    expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(["Question 1, found", ...twelve.slice(1).map((_, i) => `Question ${i + 2}, not run`)])
+    // One search ran before the stop.
+    expect(screen.getByTestId("run-summary").textContent).toContain("1 search, ran now.")
+    expect(served.evaluations).toHaveLength(1)
+    // A stopped run is not kept as the last run to compare against.
+    expect(readPreviousEvaluation(SOURCE.sha, "working")).toBeNull()
+  })
+
+  it("says it stopped before any question was scored, with no score and no numbers", async () => {
+    const { es } = await start(report([], { cancelled: true }))
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    es.emit(1, { event: "stream_end", status: "cancelled", ok: false })
+    expect((await screen.findByTestId("stopped")).textContent).toBe("Stopped before any question was scored.")
+    expect(screen.queryByTestId("summary")).toBeNull()
+    expect(screen.queryByTestId("numbers")).toBeNull()
+    expect(document.body.textContent).not.toContain("0 of 0")
+    expect(document.body.textContent).not.toContain("0 searches")
   })
 })

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
-import { columnOf, graphToConfig, knownSteps, sameConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
+import { columnOf, graphToConfig, isConfigShape, otherSource, sameConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
 
@@ -112,8 +112,8 @@ export function asSaved(raw: unknown): SavedPipeline | null {
   if (raw.config === null && isRecord(raw.kept) && typeof raw.kept.problem === "string") {
     return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: null, documents: documents ?? [], question: q, kept: { graph: raw.kept.graph, problem: raw.kept.problem } }
   }
-  if (!isRecord(raw.config) || !isRecord(raw.config.index) || !documents) return null
-  return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: raw.config as unknown as PipelineConfig, documents, question: q }
+  if (!isConfigShape(raw.config) || !documents) return null
+  return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: raw.config, documents, question: q }
 }
 
 /**
@@ -233,8 +233,16 @@ export const droppedText = (dropped: SavedPipeline) =>
  * strategies (M7) is listed but never opened, and so is a kept item.
  */
 export function usableGraph(p: Pick<SavedPipeline, "config" | "documents" | "question">, registry: Registry): PipelineGraph | null {
-  if (!p.config || !knownSteps(p.config, registry)) return null
+  if (!p.config || notHere(p.config, registry)) return null
   return columnOf({ config: p.config, documents: p.documents, question: p.question }, registry)
+}
+
+/** Why a config cannot open on this server: documents that are not uploads, or a strategy it lacks. Null when it can. */
+function notHere(config: PipelineConfig, registry: Registry): string | null {
+  const source = config.index.source?.use
+  if (source !== undefined && source !== "upload") return otherSource(source)
+  const missing = unknownStrategy(config, registry)
+  return missing === null ? null : `It uses a step this server does not have: ${missing}.`
 }
 
 export function updatePipeline(id: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): boolean {
@@ -299,12 +307,13 @@ export function mergeById<T extends { id: string; savedAt: string }>(
 }
 
 /** Library import: add saved pipelines from a file (I3 cap, I4 fresh read). Null when storage refused the write. */
-export function importPipelines(incoming: readonly unknown[]): ImportResult<SavedPipeline> | null {
+export function importPipelines(incoming: readonly unknown[]): (ImportResult<SavedPipeline> & { kept: number }) | null {
   const current = freshPipelines()
   const valid = incoming.map((raw, place) => asIncoming(raw, place)).filter((p): p is SavedPipeline => p !== null)
   const { add, result } = mergeById(new Set(current.map((p) => p.id)), current.length, valid, MAX_PIPELINES)
   const next = [...current, ...add].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
-  return persist(next) ? result : null
+  // How many of the added ones are kept, so the import can say they cannot be opened.
+  return persist(next) ? { ...result, kept: add.filter((p) => p.kept).length } : null
 }
 
 /**
@@ -402,8 +411,6 @@ export function encodePipeline(name: string, graph: PipelineGraph, documents: Do
 
 export type Decoded = { ok: true; name: string; graph: PipelineGraph; documents: DocRef[] } | { ok: false; problem: string }
 
-/** Why a link from a server with other strategies cannot open here, naming the first one missing. */
-const otherServer = (missing: string | null) => `It uses a step this server does not have${missing ? `: ${missing}` : ""}.`
 
 /** Null when the code is not a pipeline link; otherwise the pipeline, or why it cannot open here. */
 export function decodePipeline(code: string, registry: Registry): Decoded | null {
@@ -414,15 +421,24 @@ export function decodePipeline(code: string, registry: Registry): Decoded | null
     return null
   }
   if (!isRecord(parsed) || typeof parsed.name !== "string" || ![1, 2, 3].includes(parsed.v as number)) return null
-  const p =
-    parsed.v === 3
-      ? asSaved({ id: "link", name: parsed.name, savedAt: "", config: parsed.config, documents: parsed.documents, question: parsed.question })
-      : fromOld({ id: "link", name: parsed.name, savedAt: "", graph: parsed.graph, documents: parsed.v === 2 ? parsed.documents : undefined }, 0)
-  if (!p) return null
-  if (p.kept) return { ok: false, problem: p.kept.problem }
-  const graph = usableGraph(p, registry)
-  if (!graph) return { ok: false, problem: otherServer(p.config && unknownStrategy(p.config, registry)) }
-  return { ok: true, name: parsed.name, graph, documents: p.documents }
+  // A version 3 link is a config, never a kept item: it cannot carry a problem sentence of its own.
+  if (parsed.v === 3 && (!isRecord(parsed.config) || "kept" in parsed)) return null
+  try {
+    const p =
+      parsed.v === 3
+        ? asSaved({ id: "link", name: parsed.name, savedAt: "", config: parsed.config, documents: parsed.documents, question: parsed.question })
+        : fromOld({ id: "link", name: parsed.name, savedAt: "", graph: parsed.graph, documents: parsed.v === 2 ? parsed.documents : undefined }, 0)
+    if (!p) return null
+    if (p.kept) return { ok: false, problem: p.kept.problem }
+    const why = p.config && notHere(p.config, registry)
+    if (why) return { ok: false, problem: why }
+    const graph = usableGraph(p, registry)
+    if (!graph) return null
+    return { ok: true, name: parsed.name, graph, documents: p.documents }
+  } catch {
+    // A backstop: whatever a crafted link holds, it is not a link, never a crash.
+    return null
+  }
 }
 
 /** The same steps and settings, whatever document they run on and whatever question is typed. */

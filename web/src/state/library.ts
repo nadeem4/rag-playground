@@ -239,6 +239,8 @@ export interface ImportOutcome {
   /** Incoming names each kind's cap left out. Nothing saved is ever removed. */
   leftOutPipelines: string[]
   leftOutExperiments: string[]
+  /** Imported pipelines an older version made that cannot be opened here. */
+  kept?: number
   /** Items in the file that are not a pipeline or an experiment this copy can read. */
   unreadable: number
   /** Documents uploaded back to the server. */
@@ -262,6 +264,7 @@ export function importResultLine(o: ImportOutcome): string {
   const parts: string[] = []
   if (added.length) {
     parts.push(`Imported ${listWords(added)} from ${o.fileName}.`)
+    if (o.kept) parts.push(`${o.kept} ${o.kept === 1 ? "was" : "were"} made by an older version and cannot be opened here; the Library shows why.`)
     if (o.already) parts.push(o.already === 1 ? "1 item was already here." : `${o.already} items were already here.`)
   } else if (o.already) {
     parts.push(`Nothing new in ${o.fileName}. You already have ${o.already === 1 ? "the 1 item" : `all ${o.already} items`} in it.`)

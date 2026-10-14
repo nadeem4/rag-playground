@@ -278,8 +278,30 @@ describe("export and import with configs", () => {
     expect(r.pipelines[0]).toMatchObject({ id: "cccccccc", name: "Empty", config: null, kept: { problem: expect.any(String) } })
   })
 
-  it("never writes a model key into the file", () => {
+  it("never writes a model key into the file: a pipeline is its settings, documents and question, nothing else", () => {
     const file = buildExport(libraryItems([fromOld({ id: "aaaaaaaa", name: "Good", graph: sampleGraph(R, DOC), savedAt: "2026-10-01T00:00:00Z" }, 0)], []), [], NOW)
     expect(JSON.stringify(file)).not.toMatch(/api_key|apiKey|"keys"/)
+    const [item] = file.items as unknown as Record<string, Record<string, unknown>>[]
+    expect(Object.keys(item).sort()).toEqual(["config", "documents", "id", "kind", "name", "question", "savedAt"])
+    expect(Object.keys(item.config).every((k) => ["index", "retrieve", "answer"].includes(k))).toBe(true)
+  })
+
+  it("does not take in a pipeline with a crafted config", () => {
+    const r = parseImport(JSON.stringify({ format: "rag-playground-library", version: 2, items: [
+      { kind: "pipeline", id: "cccccccc", name: "Crafted", savedAt: "2026-10-01T00:00:00Z", config: { index: { clean: "a" } }, documents: [], question: { text: "", gold_answers: [] } },
+    ] }))
+    if (!r.ok) throw new Error(r.error)
+    expect(r.pipelines).toEqual([])
+    expect(r.skipped).toBe(1)
+  })
+
+  it("says how many imported pipelines were kept and cannot be opened", () => {
+    const base = { fileName: "f.json", pipelines: 2, experiments: 0, already: 0, leftOutPipelines: [], leftOutExperiments: [], unreadable: 0, restored: [], refused: [], damaged: [], mismatched: [] }
+    expect(importResultLine({ ...base, kept: 1 })).toBe(
+      "Imported 2 pipelines from f.json. 1 was made by an older version and cannot be opened here; the Library shows why.",
+    )
+    expect(importResultLine({ ...base, kept: 2 })).toBe(
+      "Imported 2 pipelines from f.json. 2 were made by an older version and cannot be opened here; the Library shows why.",
+    )
   })
 })

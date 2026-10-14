@@ -252,6 +252,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
           fileName: file.name,
           pipelines: p.added,
           experiments: e.added,
+          kept: p.kept,
           already: p.skipped + e.skipped,
           leftOutPipelines: p.leftOut.map((x) => x.name),
           leftOutExperiments: e.leftOut.map((x) => x.name),

@@ -1239,8 +1239,18 @@ describe("saved pipelines on Build", () => {
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
     window.history.replaceState(null, "", `/build?pipeline=${code}`)
     setup()
-    expect(await screen.findByText(/cannot be opened here/)).toBeTruthy()
+    expect(await screen.findByText(/cannot be opened here: .* Build still shows the pipeline you had before\.$/)).toBeTruthy()
     expect(window.location.search).toBe(`?pipeline=${code}`)
+    expect(readPipelines()).toHaveLength(0)
+  })
+
+  it("a crafted link does not crash the page and saves nothing", async () => {
+    const code = btoa(JSON.stringify({ v: 3, name: "x", config: { index: { clean: "a" } }, documents: [] }))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+    window.history.replaceState(null, "", `/build?pipeline=${code}`)
+    setup()
+    expect(await screen.findByText("This pipeline link could not be read.")).toBeTruthy()
+    expect(screen.getByRole("group", { name: "Pipeline" })).toBeTruthy()
     expect(readPipelines()).toHaveLength(0)
   })
 

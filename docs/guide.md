@@ -167,7 +167,9 @@ Once a pipeline is saved, **Copy link** puts the whole configuration and its doc
 URL. A link carries the pipeline's settings, its documents and its question. Whoever opens it
 gets the pipeline on their Build page. Links made by older versions still open. One that
 cannot be opened here, because it has a step this version has no place for or a strategy
-this server does not have, stays in the address bar and Build says why. If it was built on a bundled
+this server does not have, or documents that are not uploaded files, stays in the address
+bar. Build says why and keeps the pipeline you had before. A link that is not a pipeline at
+all is refused and nothing is saved. If it was built on a bundled
 sample, Build the index and Ask work at once. Your own uploads do not travel with the link:
 the Document card tags the file Removed from the server, and picking a sample keeps every
 shared setting.
@@ -418,8 +420,9 @@ read as a pipeline with its one document.
 
 Export writes version 2 files: each pipeline as its settings, documents and question.
 Files from older versions still import. A pipeline in one that cannot be opened here is
-imported as a kept item with the reason, never skipped, and a kept item exported again comes
-back the same.
+imported as a kept item with the reason, never skipped, and the import line says how many
+were kept. A kept item exported again comes back the same. A pipeline whose settings are not
+a pipeline file's shape is skipped and counted.
 
 - **Open** sends a pipeline to Build as the working pipeline, or an experiment to Compare.
 - An item an older version saved that cannot be opened here is listed with the reason.

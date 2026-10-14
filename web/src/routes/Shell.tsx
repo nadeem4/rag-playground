@@ -294,7 +294,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     } else if (!decoded.ok) {
       // Kept, never deleted: the link stays in the address bar as it came.
       setBarNotice(
-        `This link was made by an older version, or on another server, and cannot be opened here: ${decoded.problem} The link is left as it is in the address bar.`,
+        `This link was made by an older version, or on another server, and cannot be opened here: ${decoded.problem} The link is left as it is in the address bar. Build still shows the pipeline you had before.`,
       )
       return
     } else {

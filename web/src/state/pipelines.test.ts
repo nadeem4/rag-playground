@@ -1,11 +1,13 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { graphToConfig } from "./config"
 import { withDocument } from "./document"
 import { initialGraph, sampleGraph, setConfig, setTransform } from "./graph"
 import {
   LIST_KEY,
   MAX_PIPELINES,
+  asSaved,
   OLD_LIST_KEY,
   fromOld,
   FULL_OF_KEPT,
@@ -447,5 +449,38 @@ describe("share links", () => {
   it("something that is not a link at all is null", () => {
     expect(decodePipeline("%%%", R)).toBeNull()
     expect(decodePipeline(b64({ v: 9, name: "x" }), R)).toBeNull()
+  })
+})
+
+describe("crafted share links", () => {
+  const config = () => {
+    const c = graphToConfig(sampleGraph(R, DOC))
+    if (!c.ok) throw new Error(c.problem)
+    return c.pipeline.config as unknown as Record<string, any>
+  }
+  const link = (body: Record<string, unknown>) => b64({ v: 3, name: "x", documents: [DOC], question: { text: "", gold_answers: [] }, ...body })
+
+  it.each([
+    ["clean is a string", () => ({ config: { index: { clean: "a" } }, documents: [] })],
+    ["clean holds a number", () => ({ config: { ...config(), index: { ...config().index, clean: [5] } } })],
+    ["parse is a string", () => ({ config: { ...config(), index: { ...config().index, parse: "x" } } })],
+    ["the documents are broken", () => ({ config: config(), documents: [{ sha: 1 }] })],
+    ["the documents are missing", () => ({ config: config(), documents: undefined })],
+    ["the config is null", () => ({ config: null })],
+    ["it carries a kept problem", () => ({ config: null, kept: { graph: {}, problem: "Click here to win." } })],
+    ["it carries a kept field beside a config", () => ({ config: config(), kept: { graph: {}, problem: "x" } })],
+  ])("a version 3 link where %s is not a link, and nothing throws", (_why, body) => {
+    expect(() => decodePipeline(link(body()), R)).not.toThrow()
+    expect(decodePipeline(link(body()), R)).toBeNull()
+  })
+
+  it("a link whose documents do not come from uploads says so plainly", () => {
+    const c = config()
+    const d = decodePipeline(link({ config: { ...c, index: { ...c.index, source: { use: "web" } } } }), R)
+    expect(d).toEqual({ ok: false, problem: "Its documents come from web, and this version reads uploaded files only." })
+  })
+
+  it("a saved item with a crafted config is not a saved pipeline", () => {
+    expect(asSaved({ id: "a", name: "a", savedAt: "", config: { index: { clean: "a" } }, documents: [] })).toBeNull()
   })
 })

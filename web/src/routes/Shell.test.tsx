@@ -8,7 +8,7 @@ import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/state/document"
-import { addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
+import { addCleaner, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
@@ -211,7 +211,7 @@ describe("Ask with a chat card and no API key", () => {
     fireEvent.click(button)
     await waitFor(() => expect(posts).toHaveLength(2))
     expect(posts[1].path).toBe("/api/v2/ask")
-    return posts[1].body as { answer?: boolean; question: string; targets?: string[] }
+    return posts[1].body as { answer?: boolean; question: string }
   }
 
   it("a keyless Ask stops before Chat, and the notice shows in the panel (Review Focus 3)", async () => {
@@ -237,7 +237,6 @@ describe("Ask with a chat card and no API key", () => {
   it("a UI key runs all the way", async () => {
     const body = await ask(true)
     expect(body.answer).toBe(true)
-    expect(body.targets).toBeUndefined()
     expect(screen.queryByTestId("key-notice")).toBeNull()
   })
 
@@ -538,6 +537,30 @@ describe("the run strip", () => {
     emit({ event: "node_started", node_id: "chunk", ts }, "3")
     expect(state("chunk")).toBe("running")
     expect(state("index")).toBe("todo")
+  })
+
+  it("after a cleaner is removed and another added, each Clean card runs and reports as its place in the column", async () => {
+    const cleanCards = () => [...document.querySelectorAll("[data-node-id]")].filter((el) => el.getAttribute("data-node-id")!.startsWith("clean_"))
+    storeGraph(setConfig(addCleaner(addCleaner(initialGraph(TEST_REGISTRY), TEST_REGISTRY), TEST_REGISTRY), "source", { sha: SOURCE.sha, filename: SOURCE.filename }))
+    render(<Shell />)
+    await waitFor(() => expect(card("clean_2")).toBeTruthy())
+    fireEvent.click(within(card("clean_1")).getByRole("button", { name: /^Remove Clean/ }))
+    await waitFor(() => expect(cleanCards()).toHaveLength(1))
+    fireEvent.click(screen.getByRole("button", { name: /Add cleaner/ }))
+    await waitFor(() => expect(cleanCards()).toHaveLength(2))
+    const cleans = () => cleanCards().map((el) => el.getAttribute("data-node-id"))
+    const [first, second] = cleans()
+    fireEvent.click(within(card(second!)).getByRole("button", { name: "Run" }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect((posts[0].body as { through: string }).through).toBe("clean.2")
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    emit({ event: "node_finished", node_id: `${SOURCE.sha}::clean.1`, document: SOURCE.sha, step: "clean.1", artifact_id: "c1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "node_finished", node_id: `${SOURCE.sha}::clean.2`, document: SOURCE.sha, step: "clean.2", artifact_id: "c2", cache_hit: false, duration_ms: 1 }, "2")
+    emit({ event: "stream_end", status: "finished", ok: true }, "3")
+    const state = (id: string) => (document.querySelector(`[data-testid=run-strip] [data-segment="${id}"]`) as HTMLElement).dataset.state
+    await waitFor(() => expect(state(second!)).toBe("done"))
+    expect(state(first!)).toBe("done")
+    expect(cleans()).toEqual([first, second])
   })
 
   it("a card's own Run says Running and that step", async () => {

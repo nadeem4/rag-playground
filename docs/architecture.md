@@ -350,8 +350,11 @@ The browser holds a pipeline as the pipeline file's shape (`PipelineConfig` in
 `web/src/state/config.ts`), with the documents it runs on and the question Ask asks beside
 it, never `path`, `models` or `plugins`. Pipelines saved by older versions held a graph of
 steps; `graphToConfig` converts each one once, and one it cannot convert is kept with the
-reason and never deleted. Build draws its column from the config (`columnOf`); each card's
-id maps to the step name runs report (`clean_2` is `clean.2`, `retrieve` is `search`).
+reason and never deleted. Build draws its column from the config (`columnOf`); each card
+maps to the step name runs report (`retrieve` is `search`). A Clean or Rerank card maps by
+its place in the column, not its id: the second Clean card is `clean.2` in `through`, in
+run events and in problem sentences, even when a cleaner removed and another added left
+its id as `clean_1` (`stepOfCardIn`, `cardOfStepIn`).
 
 Build's working pipeline is kept this way (`web/src/state/working.ts`), in localStorage
 under `rag-playground:pipeline:v2`, so Build, Compare and Evaluate share it. `graph.ts`

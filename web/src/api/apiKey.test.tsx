@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AppHeader } from "@/components/AppHeader"
@@ -421,6 +421,47 @@ describe("the API key panel", () => {
       expect(window.location.href).not.toContain(k)
       expect(document.cookie).not.toContain(k)
       expect(sent.every((s) => !s.url.includes(k))).toBe(true)
+    }
+  })
+
+  it("an Ask sends each key in its header to /api/v2/ask, and its body and config hold none", async () => {
+    const streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[] = []
+    vi.stubGlobal(
+      "EventSource",
+      class {
+        onmessage = null
+        onerror = null
+        onopen = null
+        constructor() {
+          streams.push(this)
+        }
+        close() {}
+      },
+    )
+    const emit = (event: Record<string, unknown>, id: string) =>
+      act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data: JSON.stringify(event), lastEventId: id })))
+    await page()
+    for (const p of PROVIDERS) enterKey(p, FAKE[p])
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" })
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    const panel = within(screen.getByRole("region", { name: "Ask panel" }))
+    fireEvent.change(panel.getByLabelText("Question"), { target: { value: "What is a chunk?" } })
+    const ask = panel.getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    await waitFor(() => expect(ask.disabled).toBe(false))
+    fireEvent.click(ask)
+    await waitFor(() => expect(sent.filter((s) => s.url === "/api/v2/ask" && s.method === "POST")).toHaveLength(1))
+    const post = sent.find((s) => s.url === "/api/v2/ask")!
+    expect(JSON.parse(post.body).question).toBe("What is a chunk?")
+    for (const p of PROVIDERS) {
+      const k = FAKE[p]
+      expect(post.headers[H(p)]).toBe(k)
+      expect(post.body).not.toContain(k)
+      expect(JSON.stringify(JSON.parse(post.body).config)).not.toContain(k)
+      expect(storageText(window.localStorage)).not.toContain(k)
+      expect(storageText(window.sessionStorage)).not.toContain(k)
     }
   })
 

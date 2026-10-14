@@ -55,7 +55,7 @@ import {
 import { documentOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
 import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
-import { graphToConfig } from "@/state/config"
+import { cardOfStepIn, graphToConfig } from "@/state/config"
 import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   decodePipeline,
@@ -186,7 +186,10 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   }
   const [errors, setErrors] = useState<Record<string, NodeErrors>>({})
   const [columnError, setColumnError] = useState<string | null>(null)
-  const run = useRun(runId)
+  // Where each step's events land: the column the run was started from, by place.
+  const [runColumn, setRunColumn] = useState<PipelineGraph | null>(null)
+  const cardOf = useMemo(() => (runColumn ? (step: string) => cardOfStepIn(runColumn, step) : undefined), [runColumn])
+  const run = useRun(runId, cardOf)
   // The last run the Ask button started, and the questions asked in this tab.
   // Taken as Ask is pressed (question, pipeline, reranker, settings), with the run id once it starts.
   const [asked, setAsked] = useState<AskSnapshot | null>(() => session?.asked ?? null)
@@ -354,13 +357,14 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       const stage = target === undefined ? undefined : graph.nodes.find((n) => n.id === target)?.stage
       const { run_id } =
         stage !== undefined && INDEX_STAGES.includes(stage)
-          ? await v2.createRun(cardRun(c.pipeline, target!, force), { keys })
+          ? await v2.createRun(cardRun(c.pipeline, target!, force, graph), { keys })
           : await v2.ask(askRun(c.pipeline, { answer: stage === undefined || stage === "use_case", force }), { keys })
       setKeyNotice(notice)
       setKeyNoticeProvider(noticeProvider)
       setRunSteps({ ids: new Set(covered), runId: run_id })
       setSigs((s) => ({ ...s, ...Object.fromEntries(covered.map((id) => [id, signature(graph, id, registry)])) }))
       if (select) selectCard(target ?? order[order.length - 1]?.id ?? null)
+      setRunColumn(graph)
       setRunId(run_id)
       return run_id
     } catch (err) {

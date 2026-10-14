@@ -63,20 +63,53 @@ export function stepOfCard(id: string): string {
   return ({ query: "rewrite", retrieve: "search", use_case: "answer" } as Record<string, string>)[id] ?? id
 }
 
+/**
+ * A stacked card's step by its place, not its id: the Nth Clean card in the
+ * column runs as `clean.N`. Ids drift once a cleaner is removed and another
+ * added (`[clean_2, clean_1]`, or a lone `clean_2`), and the config lists the
+ * cleaners in column order, so the place is what Pandion numbers.
+ */
+export function stepOfCardIn(graph: PipelineGraph, id: string): string {
+  const node = graph.nodes.find((n) => n.id === id)
+  if (node && (node.stage === "clean" || node.stage === "rerank")) {
+    const place = columnOrder(graph).filter((n) => n.stage === node.stage).findIndex((n) => n.id === id)
+    return `${node.stage}.${place + 1}`
+  }
+  return stepOfCard(id)
+}
+
+/** The card a step is drawn as in this column: `clean.2` is the second Clean card. Null when the column has no such card. */
+export function cardOfStepIn(graph: PipelineGraph, step: string): string | null {
+  const m = /^(clean|rerank)(?:\.(\d+))?$/.exec(step)
+  if (!m) return cardOfStep(step)
+  return columnOrder(graph).filter((n) => n.stage === m[1])[Number(m[2] ?? "1") - 1]?.id ?? null
+}
+
 /** A stacked step is numbered as `index.clean.2` in run events and as `index.clean step 2` in Pandion's problem sentences. */
 const WHERE = /\b(?:index\.(parse|clean|chunk|embed|store|source)(?:(?:\.| step )(\d+))?|retrieve\.(rewrite|search|rerank)(?:(?:\.| step )(\d+))?)\b/
 /** `answer` names the step only where a sentence or a clause starts, so "to answer the question" is not it. */
 const ANSWER = /(?:^|[.:;]\s+)answer\b/
 
-/** The card a Pandion problem sentence is about, from the place it names (`index.chunk`, `index.clean step 2`). */
-export function cardNamedIn(sentence: string): string | null {
+/** The step a Pandion problem sentence is about (`clean.2`, `chunk`, `index`), from the place it names. */
+function stepNamedIn(sentence: string): string | null {
   const m = WHERE.exec(sentence)
-  if (!m) return ANSWER.test(sentence) ? "use_case" : null
+  if (!m) return ANSWER.test(sentence) ? "answer" : null
   const name = m[1] ?? m[3]
   const n = m[2] ?? m[4]
   if (name === "embed" || name === "store") return "index"
-  if (name === "clean" || name === "rerank") return `${name}_${n ?? "1"}`
-  return cardOfStep(name)
+  if (name === "clean" || name === "rerank") return `${name}.${n ?? "1"}`
+  return name
+}
+
+/**
+ * The card a Pandion problem sentence is about, from the place it names
+ * (`index.chunk`, `index.clean step 2`). Given the column, a stacked step is
+ * the card at that place, or null when the column has none there.
+ */
+export function cardNamedIn(sentence: string, graph?: PipelineGraph): string | null {
+  const step = stepNamedIn(sentence)
+  if (step === null) return null
+  return graph ? cardOfStepIn(graph, step) : cardOfStep(step)
 }
 
 /**

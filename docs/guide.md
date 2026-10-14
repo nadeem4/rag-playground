@@ -213,9 +213,11 @@ The panel holds the question and three blocks of settings, summed up in one reci
 
 **Ask** runs the question against the index and shows the ranked pieces right under the
 question. Ask sends the pipeline, its documents and your question to `POST /api/v2/ask`;
-the documents are indexed first when they are not yet. When the answer arrives, the panel scrolls to it. The sample's questions and the
-settings come after the answer, so you can change a setting and ask again to see the pieces
-move. Picking one of the sample's questions takes you back up to the question box.
+the documents are indexed first when they are not indexed yet. A question can be up to
+2,000 characters long. When the answer arrives, the panel scrolls to it. The sample's
+questions and the settings come after the answer, so you can change a setting and ask
+again to see the pieces move. Picking one of the sample's questions takes you back up to
+the question box.
 
 - Under a fresh answer, a line reads "Try another search or a reranker, and ask again."
   Its **Change settings** button opens the settings and scrolls to them.

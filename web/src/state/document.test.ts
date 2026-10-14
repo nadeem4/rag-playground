@@ -50,9 +50,9 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
-      if (url === "/api/registry") {
+      if (url === "/api/v2/strategies") {
         if (registryFails) throw new Error("down")
-        return ok(liveRegistry)
+        return ok({ stages: liveRegistry })
       }
       if (url === "/api/sources/sample" && init?.method === "POST") {
         posts.push({ url, body: JSON.parse(String(init.body)) })

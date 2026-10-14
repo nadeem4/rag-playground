@@ -75,7 +75,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/settings/app") return ok(demo ? { demo: true, limits: { max_bytes: 1, max_pages: 20, max_files: 3, max_total_bytes: 1, ttl_hours: 24 } } : { demo: false })
     if (url === "/api/samples") return ok([sampleCard])
-    if (url === "/api/registry") return ok(registry)
+    if (url === "/api/v2/strategies") return ok({ stages: registry })
     if (url === "/api/v2/documents" && init?.method === "POST") {
       const file = (init.body as FormData).get("file") as File
       if (file.name === "big.pdf") return new Response(JSON.stringify({ detail: "The demo is full right now." }), { status: 503 })
@@ -221,12 +221,12 @@ describe("Library", () => {
   it("opens a pipeline with the registry the page already holds, without asking the server again", async () => {
     seed()
     const go = await ready()
-    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/registry")).toBe(true))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/v2/strategies")).toBe(true))
     await within(row("Resume, sections whole")).findByText(/Docling|PDFium|Recursive/)
-    const asked = fetchMock.mock.calls.filter(([url]) => url === "/api/registry").length
+    const asked = fetchMock.mock.calls.filter(([url]) => url === "/api/v2/strategies").length
     fireEvent.click(within(row("Resume, sections whole")).getByRole("button", { name: "Open in Build" }))
     await waitFor(() => expect(go).toHaveBeenCalledWith("/build"))
-    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/registry").length).toBe(asked)
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/v2/strategies").length).toBe(asked)
   })
 
   it("opens an experiment on Compare through sessionStorage", async () => {

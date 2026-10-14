@@ -1,9 +1,9 @@
 import { useRef, useState, type DragEvent } from "react"
 
-import { api, ApiError } from "@/api/client"
+import { ApiError } from "@/api/client"
 import { v2 } from "@/api/v2"
 import { useAppSettings } from "@/api/useDemo"
-import { useRegistry } from "@/api/useRegistry"
+import { loadRegistry, useRegistry } from "@/api/useRegistry"
 import { DocumentItem } from "@/components/DocumentItem"
 import { SiteFooter } from "@/components/SiteFooter"
 import { Button } from "@/components/ui/button"
@@ -186,7 +186,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
     }
     try {
       // The registry the page holds; asked for only if it has not arrived yet.
-      const graph = usableGraph(item.pipeline, registry ?? (await api.registry()))
+      const graph = usableGraph(item.pipeline, registry ?? (await loadRegistry()))
       if (!graph) {
         setNotice(`${item.name} uses steps this server does not have, so it cannot open here.`)
         return

@@ -6,27 +6,13 @@
 
 import type {
   AppSettings,
-  ArtifactMeta,
-  CacheCleared,
-  CancelResponse,
-  ExplainRequest,
-  Explanation,
   LearnChunking,
   LearnDocument,
-  LlmCheck,
   LlmProvider,
-  LlmSettings,
-  Registry,
-  RunCreated,
-  RunRequest,
-  RunSnapshot,
   SampleCard,
   SampleQuestion,
   Source,
   StageInfo,
-  SweepRequest,
-  Trace,
-  TraceRequest,
 } from "./types"
 
 export const API_BASE = "/api"
@@ -70,7 +56,6 @@ export const jsonInit = (body: unknown, headers: Record<string, string> = {}): R
   headers: { "Content-Type": "application/json", ...headers },
   body: JSON.stringify(body),
 })
-const json = jsonInit
 
 /** The header that carries each provider's key typed in the UI (plan I-8, I-18). */
 export const KEY_HEADERS: Record<LlmProvider, string> = {
@@ -103,15 +88,12 @@ export interface KeyOpts {
 }
 
 export const api = {
-  registry: () => request<Registry>("/registry"),
   /** Plan I-12: one plain paragraph per stage. */
   stages: () => request<StageInfo>("/stages"),
   /** Plan I-22: the sample question, its answer sentence and the chunking challenges. */
   learnChunking: () => request<LearnChunking>("/learn/chunking"),
   /** The sample document the lessons work on: its name, its pages and its parsed text. */
   learnDocument: () => request<LearnDocument>("/learn/document"),
-  /** Plan I-12: pure, no model loads. 422 `{detail: {errors}}` on a bad config, 404 on an unknown transform. */
-  explain: (body: ExplainRequest, signal?: AbortSignal) => request<Explanation>("/explain", { ...json(body), signal }),
 
   /** The bundled sample cards offered on the first-visit card and in the Document menu, default first. */
   samples: () => request<SampleCard[]>("/samples"),
@@ -127,34 +109,6 @@ export const api = {
   /** Plan I-31: a filled-in example set to start from. */
   questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,
 
-  /** 400 on an invalid graph; 422 `{detail: {node_id, errors}}` on a bad config. */
-  createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.keys))),
-  createSweep: (body: SweepRequest, opts: KeyOpts = {}) =>
-    request<RunCreated>("/sweeps", json(body, keyHeaders(opts.keys))),
-  run: (runId: string) => request<RunSnapshot>(`/runs/${encodeURIComponent(runId)}`),
-  /** 409 when the run has already finished. */
-  cancelRun: (runId: string) =>
-    request<CancelResponse>(`/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
-  /** `after`: resume after that event id, like a `Last-Event-ID` header. */
-  eventsUrl: (runId: string, after?: number) =>
-    `${API_BASE}/runs/${encodeURIComponent(runId)}/events` +
-    (after !== undefined && after >= 0 ? `?last_event_id=${after}` : ""),
-
-  /** Why did this miss? Follows one question's answer down a finished run's artifacts. 404 for an unknown id. */
-  trace: (body: TraceRequest, signal?: AbortSignal) => request<Trace>("/trace", { ...json(body), signal }),
-
-  artifact: (id: string) => request<ArtifactMeta>(`/artifacts/${encodeURIComponent(id)}`),
-  artifactPayload: <T = unknown>(id: string) =>
-    request<T>(`/artifacts/${encodeURIComponent(id)}/payload`),
-
   /** `demo`: hosted demo mode, uploads private to the browser and bounded, key from the UI only. */
   appSettings: () => request<AppSettings>("/settings/app"),
-  /** Which key source the SERVER can supply. Never a value. */
-  llmSettings: () => request<LlmSettings>("/settings/llm"),
-  /** Lists models with the resolved key: costs no tokens. */
-  checkLlm: (provider: LlmProvider, opts: KeyOpts = {}) =>
-    request<LlmCheck>("/settings/llm/check", json({ provider }, keyHeaders({ [provider]: opts.keys?.[provider] }))),
-
-  /** 409 while a run is live. */
-  clearCache: () => request<CacheCleared>("/cache", { method: "DELETE" }),
 }

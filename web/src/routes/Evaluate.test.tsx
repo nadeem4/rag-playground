@@ -132,7 +132,7 @@ function serve({
   stored?: QuestionSetUpload | null
   upload?: QuestionSetUpload | { status: number }
   demo?: boolean
-  /** Artifact payloads by id, served at `/api/artifacts/{id}/payload`. */
+  /** Artifact payloads by id, served at `/api/v2/results/{id}/payload`. */
   artifacts?: Record<string, unknown>
   /** What `GET /api/v2/runs/{id}` answers as the run's result: the server's report. */
   result?: EvaluationResult | null
@@ -169,9 +169,9 @@ function serve({
         traced.push(JSON.parse(String(init.body)))
         return ok(TRACE)
       }
-      const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      const artifact = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
-      if (url === "/api/registry") return ok(reg)
+      if (url === "/api/v2/strategies") return ok({ stages: reg })
       if (url === "/api/settings/app") return ok({ demo })
       if (url === "/api/samples")
         return sampleSha
@@ -398,7 +398,7 @@ describe("Evaluate", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
-        if (url === "/api/registry") return ok(liveRegistry)
+        if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
         if (url === "/api/settings/app") return ok({ demo: false })
         if (url === "/api/samples") return new Response(JSON.stringify({ detail: "down" }), { status: 500 })
         return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })

@@ -2,10 +2,11 @@ import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { GraphNode } from "./types"
-import { EXPLAIN_DEBOUNCE_MS, invalidMessage, useExplanations } from "./useExplain"
+import { EXPLAIN_DEBOUNCE_MS, useExplanations } from "./useExplain"
 
 interface Call {
-  body: { stage: string; transform: string; config: Record<string, unknown> }
+  url: string
+  body: { stage: string; use: string; settings: Record<string, unknown> }
   signal?: AbortSignal
   resolve: (r: Response) => void
 }
@@ -17,8 +18,8 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(
-      (_url: string, init?: RequestInit) =>
-        new Promise<Response>((resolve) => calls.push({ body: JSON.parse(String(init?.body)), signal: init?.signal ?? undefined, resolve })),
+      (url: string, init?: RequestInit) =>
+        new Promise<Response>((resolve) => calls.push({ url, body: JSON.parse(String(init?.body)), signal: init?.signal ?? undefined, resolve })),
     ),
   )
 })
@@ -44,6 +45,8 @@ describe("useExplanations", () => {
     const { result, rerender } = renderHook(({ nodes }) => useExplanations(nodes), { initialProps: { nodes: [chunk({ chunk_size: 1000 })] } })
     act(() => vi.advanceTimersByTime(0))
     expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe("/api/v2/explain")
+    expect(calls[0].body).toEqual({ stage: "chunk", use: "recursive_character", settings: { chunk_size: 1000 } })
     calls[0].resolve(reply("Pieces of 1000"))
     await flush()
     expect(result.current.chunk.data?.settings).toBe("Pieces of 1000")
@@ -55,7 +58,7 @@ describe("useExplanations", () => {
     expect(calls).toHaveLength(1)
     act(() => vi.advanceTimersByTime(1))
     expect(calls).toHaveLength(2)
-    expect(calls[1].body.config).toEqual({ chunk_size: 1200 })
+    expect(calls[1].body.settings).toEqual({ chunk_size: 1200 })
     // The old text stays up while the new one loads: no empty flash.
     expect(result.current.chunk.data?.settings).toBe("Pieces of 1000")
   })
@@ -73,20 +76,12 @@ describe("useExplanations", () => {
     expect(result.current.chunk.data?.settings).toBe("Pieces of 500")
   })
 
-  it("a 422 becomes a readable validation message", async () => {
+  it("a 422's problems become the card's blocking warning, in Pandion's words", async () => {
     const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 0 })]))
     act(() => vi.advanceTimersByTime(0))
-    calls[0].resolve(
-      new Response(JSON.stringify({ detail: { errors: [{ loc: ["chunk_size"], msg: "Input should be greater than or equal to 1", type: "x" }] } }), {
-        status: 422,
-      }),
-    )
+    const problems = ["chunk_size must be at least 1.", "Change it on the chunk step."]
+    calls[0].resolve(new Response(JSON.stringify({ detail: { problems } }), { status: 422 }))
     await flush()
-    expect(result.current.chunk.invalid).toBe("chunk_size: Input should be greater than or equal to 1")
-  })
-
-  it("invalidMessage tolerates odd shapes", () => {
-    expect(invalidMessage("bad")).toBe("bad")
-    expect(invalidMessage({})).toBe("These settings are not valid.")
+    expect(result.current.chunk.data).toEqual({ settings: "", tradeoff: null, warning: problems.join(" "), blocking: true })
   })
 })

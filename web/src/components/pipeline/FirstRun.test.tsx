@@ -60,7 +60,7 @@ beforeEach(() => {
         appCalls += 1
         return ok(demo ? { demo, limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, ttl_hours: 24 } } : { demo })
       }
-      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/v2/documents" && init?.method === "POST") return new Response(JSON.stringify({ detail: uploadRefusal }), { status: 413 })
       if (url === "/api/v2/documents") return ok([SAMPLE])
       if (url === "/api/samples") return ok(SAMPLES)

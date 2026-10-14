@@ -45,7 +45,7 @@ function serve({ settings = { demo: false } as AppSettings, sources = [] as Sour
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/samples") return ok([FIRST, SECOND])
       if (url === "/api/v2/documents" && init?.method === "POST") {
         const file = (init.body as FormData).get("file") as File

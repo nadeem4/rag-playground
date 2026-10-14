@@ -28,18 +28,18 @@ class SilentEventSource {
   close() {}
 }
 
-/** Artifact payloads by id, served at `/api/artifacts/{id}/payload`; `extra` answers other URLs (a Response as it is). */
+/** Artifact payloads by id, served at `/api/v2/results/{id}/payload`; `extra` answers other URLs (a Response as it is). */
 function serve(artifacts: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
   const missing = () => new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url in extra) return extra[url] instanceof Response ? extra[url] : ok(extra[url])
       if (url === "/api/v2/comparisons") return ok({ run_id: "r1" })
       if (url === "/api/v2/runs/r1") return ok(snapshot(EMPTY_RESULT))
-      const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      const artifact = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
       return missing()
     }),

@@ -36,9 +36,9 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/stages") return ok(STAGES)
-      const payload = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      const payload = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (payload) return ok(payloads[payload[1]])
-      const meta = /^\/api\/artifacts\/([^/]+)$/.exec(url)
+      const meta = /^\/api\/v2\/results\/([^/]+)$/.exec(url)
       if (meta) return ok({ id: meta[1], type: "chunk_set", meta: metas[meta[1]] ?? {} })
       return ok([])
     }),
@@ -167,14 +167,15 @@ describe("the explanation pop-over", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
   })
 
-  it("follows the explanation as it updates, and shows a 422's message", async () => {
+  it("follows the explanation as it updates, and shows a 422's problems as the warning", async () => {
     const { props, view } = setup()
     fireEvent.click(info("Chunk"))
     const dialog = await screen.findByRole("dialog")
     view.rerender(<PipelineColumn {...props} explanations={{ chunk: explained("Each piece holds up to 400 characters.") }} />)
     expect(within(dialog).getByText("Each piece holds up to 400 characters.")).toBeTruthy()
-    view.rerender(<PipelineColumn {...props} explanations={{ chunk: { invalid: "chunk_size: Input should be greater than or equal to 1" } }} />)
-    expect(within(dialog).getByText(/Input should be greater than or equal to 1/)).toBeTruthy()
+    const problem = "chunk_size must be at least 1."
+    view.rerender(<PipelineColumn {...props} explanations={{ chunk: { data: { settings: "", tradeoff: null, warning: problem, blocking: true } } }} />)
+    expect(within(dialog).getByText(problem)).toBeTruthy()
   })
 })
 

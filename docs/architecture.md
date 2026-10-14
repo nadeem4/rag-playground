@@ -309,7 +309,15 @@ and the recording scripts `scripts/record_*.py`. Runs also do not hold the pdfiu
 today: a run's pdfium parse step can meet a page request on another thread. What part 5
 must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
 
-- **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
+The web calls only pandion-api's routes under `/api/v2` and the playground's teaching
+routes: `/api/samples`, `/api/sources/sample`, `/api/learn/...`, `/api/stages`,
+`/api/settings/app`, `/api/questions/template`, `/api/health`. A test,
+`web/src/api/oldRoutes.test.ts`, fails if the web's code names an old route again.
+
+- **Strategies.** The app reads `stages` from `GET /api/v2/strategies` to build the step
+  cards and their forms. Each card's sentence about its settings comes from
+  `POST /api/v2/explain`; a 422's problems become the card's warning and Run waits until
+  they are fixed.
 - **Runs.** A card's Run sends the pipeline as a config with `through` set to the card's
   step, to `POST /api/v2/runs`; Build the index is the Index card's Run. Ask sends the
   config, its documents and the question to `POST /api/v2/ask`, with `answer: false` when
@@ -321,7 +329,8 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
   `GET /api/v2/runs/{id}` once the stream ends, trying a failed read once more; Stop posts
   to `/api/v2/runs/{id}/cancel`. The `/api/v2` client is `web/src/api/v2.ts`; it sends keys
   in the same headers as `/api`.
-- **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.
+- **Results.** The inspectors read results with `GET /api/v2/results/{id}/payload`, and
+  Build checks that a kept result is still there with `GET /api/v2/results/{id}`.
 - **Miss trace.** Each missed question in an evaluation's result carries its trace, the
   first step that lost the answer, worked out by `pandion.evaluate` with the eval step's own
   matching. Evaluate shows it with each step's code name swapped for Build's name
@@ -329,7 +338,8 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
 - **Documents.** Uploads, page images, the PDF itself and a document's question set come
   from `/api/v2/documents`. Loading a bundled sample is still `POST /api/sources/sample`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
-- **Keys.** A key typed in the app is sent as a header on runs, evaluations, comparisons and key checks.
+- **Keys.** A key typed in the app is sent as a header on runs, evaluations, comparisons and key checks
+  (`POST /api/v2/settings/models/check`).
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
   storage; see [privacy.md](privacy.md).
 - **Pipelines and documents.** A saved pipeline is a name, a config (a pipeline file's

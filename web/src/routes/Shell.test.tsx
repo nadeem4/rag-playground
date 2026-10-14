@@ -24,7 +24,7 @@ class SilentEventSource {
 
 const SOURCE = { sha: "ab".repeat(32), filename: "report.pdf", size: 2048, content_type: "application/pdf" }
 /** The routes a run starts on: a card's Run, Build the index and Ask. */
-const RUN_ROUTES = ["/api/runs", "/api/v2/runs", "/api/v2/ask"]
+const RUN_ROUTES = ["/api/v2/runs", "/api/v2/ask"]
 /** A bad chunk size, refused as /api/v2 refuses a config: one sentence naming its place. */
 const CHUNK_PROBLEM = "index.chunk: chunk_size must be at least 1."
 const REWRITE_PROBLEM = "retrieve.rewrite: expansion_terms must be at least 1."
@@ -45,7 +45,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
-      if (url === "/api/registry") return ok(TEST_REGISTRY)
+      if (url === "/api/v2/strategies") return ok({ stages: TEST_REGISTRY })
       if (url === "/api/v2/documents") return ok([SOURCE])
       if (RUN_ROUTES.includes(url) && init?.method === "POST") {
         const body = JSON.parse(String(init.body))
@@ -105,9 +105,9 @@ describe("Build page", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/explain") {
+        if (url === "/api/v2/explain") {
           const body = JSON.parse(String(init?.body))
-          const noFile = body.stage === "source" && !body.config.sha
+          const noFile = body.stage === "source" && !body.settings.sha
           return new Response(JSON.stringify({ settings: "s", tradeoff: null, warning: noFile ? "Choose a file." : null, blocking: noFile }), {
             status: 200,
           })
@@ -170,9 +170,9 @@ describe("Ask with a chat card and no API key", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/v2/strategies") return new Response(JSON.stringify({ stages: liveRegistry }), { status: 200 })
         if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
-        if (url === "/api/settings/llm") return new Response(JSON.stringify(settings), { status: 200 })
+        if (url === "/api/v2/settings/models") return new Response(JSON.stringify(settings), { status: 200 })
         if (RUN_ROUTES.includes(url) && init?.method === "POST") {
           posts.push({ path: url, body: JSON.parse(String(init.body)) })
           return new Response(JSON.stringify({ run_id: `r${posts.length}` }), { status: 202 })
@@ -590,7 +590,7 @@ describe("Build the index is blocked only by its own steps", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/explain") {
+        if (url === "/api/v2/explain") {
           const body = JSON.parse(String(init?.body))
           const bad = body.stage === stage
           return new Response(JSON.stringify({ settings: "s", tradeoff: null, warning: bad ? "No." : null, blocking: bad }), { status: 200 })
@@ -624,9 +624,9 @@ describe("Build page explanations", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/explain") {
+        if (url === "/api/v2/explain") {
           const body = JSON.parse(String(init?.body))
-          const bad = body.stage === "chunk" && body.config.chunk_overlap >= body.config.chunk_size
+          const bad = body.stage === "chunk" && body.settings.chunk_overlap >= body.settings.chunk_size
           return new Response(
             JSON.stringify({
               settings: "s",
@@ -681,12 +681,12 @@ describe("First run (plan I-15)", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/v2/strategies") return new Response(JSON.stringify({ stages: liveRegistry }), { status: 200 })
         if (url === "/api/v2/documents") return new Response(JSON.stringify(sampleCalls ? [SAMPLE] : []), { status: 200 })
         if (url === "/api/samples") return new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })
-        if (url === "/api/explain") {
+        if (url === "/api/v2/explain") {
           const body = JSON.parse(String(init?.body))
-          const noFile = body.stage === "source" && !body.config.sha
+          const noFile = body.stage === "source" && !body.settings.sha
           if (noFile) sourceExplains += 1
           return new Response(JSON.stringify({ settings: "s", tradeoff: null, warning: noFile ? "Choose a file." : null, blocking: noFile }), { status: 200 })
         }
@@ -729,7 +729,7 @@ describe("First run (plan I-15)", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
-        new Response(JSON.stringify(url === "/api/registry" ? liveRegistry : url === "/api/v2/documents" ? [SOURCE] : url === "/api/samples" ? [] : {}), {
+        new Response(JSON.stringify(url === "/api/v2/strategies" ? { stages: liveRegistry } : url === "/api/v2/documents" ? [SOURCE] : url === "/api/samples" ? [] : {}), {
           status: 200,
         }),
       ),
@@ -1462,7 +1462,7 @@ describe("lock states behind a Clean step", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/v2/strategies") return new Response(JSON.stringify({ stages: liveRegistry }), { status: 200 })
         if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
         return base(url, init)
       }),
@@ -1481,7 +1481,7 @@ describe("lock states behind a Clean step", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/v2/strategies") return new Response(JSON.stringify({ stages: liveRegistry }), { status: 200 })
         if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
         return base(url, init)
       }),
@@ -1504,7 +1504,7 @@ describe("lock states behind a Clean step", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
+        if (url === "/api/v2/strategies") return new Response(JSON.stringify({ stages: liveRegistry }), { status: 200 })
         if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
         return base(url, init)
       }),
@@ -1551,12 +1551,12 @@ describe("the Ask panel results on Build", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
-        if (url === "/api/registry") return ok(liveRegistry)
+        if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
         if (url === "/api/samples") return ok([])
-        if (url === "/api/settings/llm") return ok({ anthropic: "dotenv", openai: "none", custom: "none" })
-        if (url === "/api/artifacts/ret1/payload") return ok(hybridResult)
-        if (url === "/api/artifacts/out1/payload") return ok(searchOutput)
-        if (url === "/api/artifacts/rr1/payload") return ok(reranked())
+        if (url === "/api/v2/settings/models") return ok({ anthropic: "dotenv", openai: "none", custom: "none" })
+        if (url === "/api/v2/results/ret1/payload") return ok(hybridResult)
+        if (url === "/api/v2/results/out1/payload") return ok(searchOutput)
+        if (url === "/api/v2/results/rr1/payload") return ok(reranked())
         if (RUN_ROUTES.includes(url) && init?.method === "POST") {
           posts.push({ path: url, body: JSON.parse(String(init.body)) })
           if (reply422) return ok(reply422, 422)
@@ -1794,7 +1794,7 @@ describe("the Ask panel results on Build", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string, init?: RequestInit) =>
-        url === "/api/artifacts/idx1" ? Promise.resolve(new Response(JSON.stringify({ id: "idx1" }), { status: 200 })) : base(url, init),
+        url === "/api/v2/results/idx1" ? Promise.resolve(new Response(JSON.stringify({ id: "idx1" }), { status: 200 })) : base(url, init),
       ),
     )
     cleanup()
@@ -1979,7 +1979,7 @@ describe("the document comes with the pipeline", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string, init?: RequestInit) =>
-        url === "/api/registry" ? Promise.resolve(new Response(JSON.stringify(liveRegistry), { status: 200 })) : base(url, init),
+        url === "/api/v2/strategies" ? Promise.resolve(new Response(JSON.stringify({ stages: liveRegistry }), { status: 200 })) : base(url, init),
       ),
     )
     setup()

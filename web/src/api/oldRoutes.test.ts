@@ -22,7 +22,9 @@ function sources(dir: string): string[] {
  */
 export const MOVED: RegExp[] = [
   /["'`]\/sources(?!\/sample)/,
-  /api\.(sources|uploadSource|deleteSource|sourceFileUrl|pages|pageImageUrl|findOnPage|questionSet|uploadQuestionSet|deleteQuestionSet)\b/,
+  /["'`]\/(registry|explain|runs|sweeps|artifacts|cache|trace)\b/,
+  /["'`]\/settings\/llm/,
+  /\bapi\.(sources|uploadSource|deleteSource|sourceFileUrl|pages|pageImageUrl|findOnPage|questionSet|uploadQuestionSet|deleteQuestionSet|registry|explain|createRun|createSweep|run|cancelRun|eventsUrl|trace|artifact|artifactPayload|llmSettings|checkLlm|clearCache)\b/,
 ]
 
 describe("the web calls pandion-api's routes", () => {

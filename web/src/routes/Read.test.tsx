@@ -30,7 +30,7 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (url === "/api/registry") return ok(registry)
+      if (url === "/api/v2/strategies") return ok({ stages: registry })
       if (url === "/api/samples") return ok([sample("chunking-primer", PRIMER_SHA, "Why do chunk boundaries matter?"), sample("two-column-report", COLUMNS_SHA, "What does the report recommend?")])
       return new Response("not found", { status: 404 })
     }),

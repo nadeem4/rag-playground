@@ -41,7 +41,7 @@ function serve({ sources, samples, app = { demo: false } }: { sources: unknown; 
       requests.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined })
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/settings/app") return ok(app)
-      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/sources/sample" && method === "POST") return ok({ ...UP, sha: SAMPLE_SHA, filename: "chunking-primer.pdf" })
       if (url === "/api/v2/documents" && method === "POST") {
         const answer = () => ok({ ...UP, sha: "34".repeat(32), filename: "fresh.pdf" })

@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react"
 
 import { api } from "@/api/client"
+import { loadRegistry } from "@/api/useRegistry"
 import { v2 } from "@/api/v2"
 import { sampleQuestionTexts } from "@/api/samples"
 import type { SampleCard, Source } from "@/api/types"
@@ -266,7 +267,7 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
     const text = question ?? ((typeof hit === "boolean" ? hit : await hit) ? "" : undefined)
     storeWorking({ ...current, documents: [doc], question: text === undefined ? current.question : { ...current.question, text } })
   } else {
-    const registry = await api.registry()
+    const registry = await loadRegistry()
     const isSample = question !== undefined || (state.samples?.some((s) => s.sha === doc.sha) ?? false)
     storeGraph(isSample ? sampleGraph(registry, doc, question) : withDocument(readStoredGraph(registry) ?? initialGraph(registry), doc))
     // A sample with no pipeline yet gets the default recipe: that is the Starter, on this sample.

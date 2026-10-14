@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 
-import { errorsFromPydantic, type PydanticError } from "@/components/fields/schema"
-
 import { api, ApiError } from "./client"
 import type { Explanation, GraphNode, StageInfo } from "./types"
+import { v2 } from "./v2"
 
 /**
  * Plan I-11 / I-12 in the browser: what each stage is for (fetched once per
@@ -51,8 +50,6 @@ export function useStages(): StageInfo {
 export interface ExplainState {
   /** The last explanation received. Kept while a newer one loads: no empty flash. */
   data?: Explanation
-  /** A 422: the config failed validation. The messages, one per line. */
-  invalid?: string
 }
 
 export const EXPLAIN_DEBOUNCE_MS = 200
@@ -63,13 +60,10 @@ function isExplanation(x: unknown): x is Explanation {
   return typeof x === "object" && x !== null && typeof (x as Explanation).settings === "string"
 }
 
-/** A 422's `{errors}` as readable lines: `chunk_size: Input should be ...`. */
-export function invalidMessage(detail: unknown): string {
-  const errors = (detail as { errors?: unknown })?.errors
-  if (!Array.isArray(errors)) return typeof detail === "string" ? detail : "These settings are not valid."
-  return Object.entries(errorsFromPydantic(errors as PydanticError[]))
-    .flatMap(([field, msgs]) => msgs.map((m) => (field ? `${field}: ${m}` : m)))
-    .join("\n")
+/** A 422's `{problems}`, Pandion's sentences, or null for any other shape. */
+function problemsOf(detail: unknown): string[] | null {
+  const problems = (detail as { problems?: unknown } | null)?.problems
+  return Array.isArray(problems) && problems.every((p) => typeof p === "string") ? problems : null
 }
 
 interface Pending {
@@ -109,16 +103,18 @@ export function useExplanations(nodes: readonly GraphNode[]): Record<string, Exp
       const ctrl = new AbortController()
       const current = () => map.get(node.id)?.ctrl === ctrl && !ctrl.signal.aborted
       const send = () => {
-        api.explain({ stage: node.stage, transform: node.transform, config: node.config }, ctrl.signal).then(
+        v2.explain({ stage: node.stage, use: node.transform, settings: node.config }, ctrl.signal).then(
           (res) => {
             if (!current() || !isExplanation(res)) return
             setState((s) => ({ ...s, [node.id]: { data: res } }))
           },
           (err: unknown) => {
             if (!current()) return
-            if (err instanceof ApiError && err.status === 422) {
-              const invalid = invalidMessage(err.detail)
-              setState((s) => ({ ...s, [node.id]: { data: s[node.id]?.data, invalid } }))
+            const problems = err instanceof ApiError && err.status === 422 ? problemsOf(err.detail) : null
+            if (problems) {
+              // Run stays disabled until the settings are fixed; the sentence names the setting.
+              const data: Explanation = { settings: "", tradeoff: null, warning: problems.join(" "), blocking: true }
+              setState((s) => ({ ...s, [node.id]: { data } }))
             }
             // Anything else (a 404 on an older server, the network): keep what is shown.
           },

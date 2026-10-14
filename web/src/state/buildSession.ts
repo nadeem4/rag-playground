@@ -5,7 +5,8 @@
  * when it closes. Each result keeps the signature it was run with, so one whose
  * settings changed meanwhile comes back marked out of date, not shown as fresh.
  */
-import { api, ApiError } from "@/api/client"
+import { ApiError } from "@/api/client"
+import { v2 } from "@/api/v2"
 import type { AskSnapshot, TranscriptEntry } from "@/components/ask/Transcript"
 
 import type { Tracked } from "./pipeline"
@@ -69,7 +70,7 @@ export function writeBuildSession(session: BuildSession): void {
  * run rather than as done with nothing behind them. A network failure proves
  * nothing, so it keeps the step.
  */
-export async function goneResults(results: Tracked["results"], check: (id: string) => Promise<unknown> = api.artifact): Promise<string[]> {
+export async function goneResults(results: Tracked["results"], check: (id: string) => Promise<unknown> = v2.result): Promise<string[]> {
   const withResult = Object.values(results).filter((s) => typeof s.artifact_id === "string")
   const gone = await Promise.all(
     withResult.map((s) =>

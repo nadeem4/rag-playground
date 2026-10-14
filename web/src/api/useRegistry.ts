@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { api } from "./client"
 import type { Registry } from "./types"
+import { v2 } from "./v2"
 
-/** `GET /api/registry`, once per page, with a retry for the error screen. */
+/** The strategy catalog: `stages` from `GET /api/v2/strategies`. */
+export const loadRegistry = (): Promise<Registry> => v2.strategies().then((s) => s.stages)
+
+/** `loadRegistry`, once per page, with a retry for the error screen. */
 export type RegistryState =
   | { kind: "loading" }
   | { kind: "error"; message: string; retry: () => void }
@@ -19,7 +22,7 @@ export function useRegistry(): RegistryState {
 
   useEffect(() => {
     let live = true
-    api.registry().then(
+    loadRegistry().then(
       (registry) => live && setState({ attempt, value: { kind: "ready", registry } }),
       (err: unknown) => live && setState({ attempt, value: { kind: "error", message: err instanceof Error ? err.message : String(err) } }),
     )

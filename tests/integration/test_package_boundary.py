@@ -158,3 +158,9 @@ def test_the_allow_list_has_no_line_the_app_no_longer_needs():
     assert not stale, (
         "delete these from ENGINE_IMPORTS, the app no longer imports them: " + ", ".join(stale)
     )
+
+
+def test_the_cli_imports_only_public_pandion_names():
+    cli = ROOT / "packages" / "pandion" / "src" / "pandion" / "cli.py"
+    private = [entry for entry in pandion_imports(cli.read_text(encoding="utf-8")) if not is_public(entry)]
+    assert not private, "the CLI imports names that are not public: " + ", ".join(private)

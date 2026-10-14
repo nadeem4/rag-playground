@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from pandion import cli
+from pandion.config import ConfigError, load
+from pandion.pipeline import extras_for
 
 CONFIG = """\
 path: ./index
@@ -71,7 +73,7 @@ def test_the_retrieve_steps_add_their_extras(tmp_path, retrieve, extras):
     path = write(tmp_path, parser="pdfium", embedder="fake-deterministic")
     path.write_text(path.read_text(encoding="utf-8") + "retrieve:\n" + retrieve, encoding="utf-8")
 
-    assert cli.extras_for(cli.load(path)) == extras
+    assert extras_for(load(path)) == extras
 
 
 @pytest.fixture
@@ -107,7 +109,7 @@ def needs_extra():
 def test_a_custom_strategy_names_the_extra_it_needs(tmp_path, needs_extra):
     path = write(tmp_path, parser="test_needs_extra", embedder="fake-deterministic")
 
-    assert cli.extras_for(cli.load(path)) == ["lancedb", "my-extra"]
+    assert extras_for(load(path)) == ["lancedb", "my-extra"]
 
 
 def test_extra_is_not_part_of_a_result_id():
@@ -129,11 +131,11 @@ def test_extra_is_not_part_of_a_result_id():
 def test_an_unknown_strategy_name_is_a_plain_sentence(tmp_path, key, change):
     path = write(tmp_path, parser="pdfium", embedder="fake-deterministic")
     path.write_text(path.read_text(encoding="utf-8") + "retrieve:\n  search: {use: dense}\n", encoding="utf-8")
-    config = cli.load(path)
+    config = load(path)
     change(config)
 
-    with pytest.raises(cli.ConfigError) as caught:
-        cli.extras_for(config)
+    with pytest.raises(ConfigError) as caught:
+        extras_for(config)
     assert str(caught.value) == f"{key} uses 'nope', which is not registered, so its extra is unknown."
 
 
@@ -171,4 +173,4 @@ def test_a_custom_source_names_its_extra(tmp_path, source_needs_extra):
         "index:\n", "index:\n  source:\n    use: test_src_needs_extra\n", 1)
     path.write_text(text, encoding="utf-8")
 
-    assert "src-extra" in cli.extras_for(cli.load(path))
+    assert "src-extra" in extras_for(load(path))

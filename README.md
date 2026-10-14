@@ -136,6 +136,11 @@ Evaluate a pipeline on your own questions, and compare settings at one stage: se
 [Evaluate a pipeline](docs/pandion.md#evaluate-a-pipeline) and
 [Compare settings](docs/pandion.md#compare-settings).
 
+### Use Pandion from the command line
+
+`pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`:
+the same pipeline, from the command line. See [the pandion command](docs/pandion.md#the-pandion-command).
+
 ## What's inside
 
 Each step offers these strategies. The plain name is what the app shows; the code name is

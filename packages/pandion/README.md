@@ -68,6 +68,12 @@ same file finds every step already stored and reuses it.
 - **Ask**: `p.ask(question)` returns the pieces found, or an answer from a chat model
   that cites them.
 
+## Use Pandion from the command line
+
+`pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`:
+the same pipeline, from the command line. See
+[the pandion command](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#the-pandion-command).
+
 ## Learn more
 
 - [The guide](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md): every

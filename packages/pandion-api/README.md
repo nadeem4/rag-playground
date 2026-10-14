@@ -30,6 +30,10 @@ uvicorn serve:app
 `models` (a `pandion.ModelSettings`), `prefix` (where the routes are mounted) and `title`.
 Pass a `Policy` as the second argument to `create_app` to set your site's rules.
 
+[examples/pandion-api/](../../examples/pandion-api) has a server script, a Python client
+that validates, uploads, indexes, asks and evaluates, the same steps as curl commands,
+and a small Policy.
+
 ## The routes
 
 Each path is under `prefix`.

@@ -41,6 +41,10 @@ uvicorn serve:app
 `pandion.ModelSettings`: the model folder, `download` and the device), `prefix` (where the
 routes are mounted, for example `/api/v2`) and `title`.
 
+[examples/pandion-api/](../examples/pandion-api) runs a server like this one and a client
+that validates a pipeline, uploads a document, indexes it, asks a question and evaluates,
+in Python and as curl commands.
+
 ## Where it keeps files
 
 Every pipeline a request sends runs with `data_dir` as its `path`, so Pandion keeps

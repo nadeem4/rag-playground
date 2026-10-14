@@ -1157,7 +1157,7 @@ version = "0.1.0"
 source = { editable = "packages/pandion-api" }
 dependencies = [
     { name = "fastapi" },
-    { name = "pandion", extra = ["pdfium"] },
+    { name = "pandion", extra = ["anthropic", "openai", "pdfium"] },
     { name = "pillow" },
     { name = "python-multipart" },
 ]
@@ -1165,7 +1165,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
-    { name = "pandion", extras = ["pdfium"], editable = "packages/pandion" },
+    { name = "pandion", extras = ["pdfium", "anthropic", "openai"], editable = "packages/pandion" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "python-multipart", specifier = ">=0.0.32" },
 ]

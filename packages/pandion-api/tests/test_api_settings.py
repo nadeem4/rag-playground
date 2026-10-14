@@ -89,3 +89,14 @@ def test_the_policy_can_refuse_a_provider_and_require_public_addresses(tmp_path,
 
 def test_an_unknown_provider_is_422(client):
     assert client.post("/settings/models/check", json={"provider": "gemini"}).status_code == 422
+
+
+def test_the_package_declares_the_sdks_the_key_check_imports():
+    """keycheck.py imports anthropic and openai, so installing pandion-api installs them."""
+    import tomllib
+    from pathlib import Path
+
+    project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+    pandion = next(d for d in project["project"]["dependencies"] if d.startswith("pandion["))
+    extras = set(pandion[len("pandion[") : pandion.index("]")].split(","))
+    assert {"anthropic", "openai"} <= extras

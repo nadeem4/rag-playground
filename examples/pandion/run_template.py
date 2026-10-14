@@ -1,6 +1,6 @@
 """Run a document template and a question template together with Pandion.
 
-The templates are in playground/templates: a document template sets how a
+The templates ship with Pandion (`pandion.list_templates`): a document template sets how a
 document is read and indexed, a question template how it is searched and
 answered. This script joins one of each into a pipeline, indexes a PDF with
 it and asks one question.
@@ -18,8 +18,8 @@ import argparse
 import os
 from pathlib import Path
 
+import pandion
 from pandion import Pipeline
-from playground import templates
 
 DEFAULT_QUESTION = "What is this document about?"
 
@@ -34,13 +34,15 @@ def main(
     embedder: str | None = None,
 ):
     """Index `pdf` with the two templates, ask `question_text` and print the hits."""
-    config = templates.compose(document, question, path=str(work))
+    config = pandion.compose_template(document, question, path=str(work))
     if embedder:
         config["index"]["embed"]["use"] = embedder
-    document_name = templates.load("documents")[document]["template"]["name"]
-    question_name = templates.load("questions")[question]["template"]["name"]
+    listed = pandion.list_templates()
+    document_name = next(t["name"] for t in listed["documents"] if t["id"] == document)
+    asked = next(t for t in listed["questions"] if t["id"] == question)
+    question_name = asked["name"]
     credentials = None
-    if templates.needs_key(question):
+    if asked["needs_key"]:
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             raise SystemExit(f"{question_name} needs an API key. Set ANTHROPIC_API_KEY.")
@@ -61,9 +63,10 @@ def main(
 
 
 if __name__ == "__main__":
+    listed = pandion.list_templates()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("document", choices=sorted(templates.load("documents")), help="the document template")
-    parser.add_argument("question", choices=sorted(templates.load("questions")), help="the question template")
+    parser.add_argument("document", choices=[t["id"] for t in listed["documents"]], help="the document template")
+    parser.add_argument("question", choices=[t["id"] for t in listed["questions"]], help="the question template")
     parser.add_argument("pdf", type=Path, help="the PDF to index")
     parser.add_argument("question_text", nargs="?", default=DEFAULT_QUESTION, help="the question to ask")
     parser.add_argument("--work", type=Path, default=Path("pandion-template-example"), help="where the index goes")

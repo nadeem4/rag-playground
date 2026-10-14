@@ -42,7 +42,6 @@ COPY packages/ packages/
 # The server only: stage 1 built the frontend.
 COPY playground/__init__.py playground/__init__.py
 COPY playground/backend/ playground/backend/
-COPY playground/templates/ playground/templates/
 COPY samples/ samples/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev

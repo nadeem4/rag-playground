@@ -9,7 +9,7 @@ the pipeline on the sample's question set.
     uv run python examples/pandion-api/run_pipeline.py --template tables precision
 
 With --template it runs a document template and a question template from
-playground/templates instead, on the sample that suits the document template,
+Pandion's pipeline templates instead, on the sample that suits the document template,
 and asks that sample's first question. The first run downloads the models the
 templates use. A template that needs an API key is refused: this client sends none.
 """
@@ -23,7 +23,7 @@ from pathlib import Path
 import httpx
 import yaml
 
-from playground import templates
+import pandion
 
 ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = ROOT / "examples" / "pandion" / "cli.yaml"
@@ -58,12 +58,13 @@ def choose(template: tuple[str, str]) -> tuple[dict, Path, Path, str]:
     """The pipeline made of a (document, question) template pair, the PDF and
     question set of the sample that suits it, and that set's first question."""
     document, question = template
-    if templates.needs_key(question):
-        name = templates.load("questions")[question]["template"]["name"]
-        raise SystemExit(f"{name} needs an API key, and this example sends none. Pick a template that needs no key.")
-    config = templates.compose(document, question)
+    config = pandion.compose_template(document, question)
     config.pop("path")  # the server decides where its files go
-    sample = ROOT / "samples" / templates.load("documents")[document]["template"]["sample"]
+    listed = pandion.list_templates()
+    asked = next(t for t in listed["questions"] if t["id"] == question)
+    if asked["needs_key"]:
+        raise SystemExit(f"{asked['name']} needs an API key, and this example sends none. Pick a template that needs no key.")
+    sample = ROOT / "samples" / next(t["sample"] for t in listed["documents"] if t["id"] == document)
     questions = sample / "questions.json"
     first = json.loads(questions.read_text(encoding="utf-8"))[0]["question"]
     return config, sample / f"{sample.name}.pdf", questions, first
@@ -113,7 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument(
         "--template", nargs=2, metavar=("DOCUMENT", "QUESTION"),
-        help="a document template and a question template from playground/templates",
+        help="a document template and a question template from pandion.list_templates()",
     )
     args = parser.parse_args()
     with httpx.Client(base_url=args.url, timeout=300) as client:

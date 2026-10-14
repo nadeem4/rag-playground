@@ -43,11 +43,11 @@ def test_run_pipeline_validates_uploads_indexes_asks_and_evaluates(tmp_path, cap
 
 
 def test_a_template_pair_brings_its_pipeline_and_its_sample():
-    from playground import templates
+    import pandion
 
     config, pdf, questions, question = _load("run_pipeline").choose(("tables", "precision"))
 
-    assert config == {k: v for k, v in templates.compose("tables", "precision").items() if k != "path"}
+    assert config == {k: v for k, v in pandion.compose_template("tables", "precision").items() if k != "path"}
     assert pdf.name == "table-of-figures.pdf" and questions.parent == pdf.parent
     assert question == "How many readers lost their place before and after the reset?"
 

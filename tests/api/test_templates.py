@@ -3,39 +3,38 @@
 from __future__ import annotations
 
 from itertools import product
+from pathlib import Path
 
 import pytest
 
-from pandion import Pipeline
-from playground import templates
+import pandion
 from playground.backend.policy import PlaygroundPolicy
 
+ROOT = Path(__file__).resolve().parents[2]
+LISTED = pandion.list_templates()
 
-def test_templates_lists_both_families_with_their_metadata_and_pipeline_parts(client):
+
+def test_templates_serves_pandions_templates(client):
     r = client.get("/api/templates")
 
     assert r.status_code == 200
-    body = r.json()
-    assert set(body) == {"documents", "questions"}
-    for family, listed in body.items():
-        files = templates.load(family)
-        assert [t["id"] for t in listed] == list(files)
-        for t in listed:
-            about = files[t["id"]]["template"]
-            parts = {k: v for k, v in files[t["id"]].items() if k != "template"}
-            assert {k: t[k] for k in about} == about
-            assert t["pipeline"] == parts
-    tables = next(t for t in body["documents"] if t["id"] == "tables")
+    assert r.json() == LISTED
+    tables = next(t for t in r.json()["documents"] if t["id"] == "tables")
     assert tables["name"] == "Reports with tables" and tables["sample"] == "table-of-figures"
 
 
-PAIRS = list(product(templates.load("documents"), templates.load("questions")))
+def test_every_document_template_names_a_bundled_sample():
+    for t in LISTED["documents"]:
+        assert (ROOT / "samples" / t["sample"] / "sample.json").is_file(), t["id"]
+
+
+PAIRS = list(product([t["id"] for t in LISTED["documents"]], [t["id"] for t in LISTED["questions"]]))
 
 
 @pytest.mark.parametrize(("document", "question"), PAIRS)
 def test_every_pair_passes_the_demos_run_check(document, question, tmp_path, monkeypatch):
     """No custom endpoint, no changed prompt or revision, no setting over a cap."""
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    config = Pipeline.from_dict(templates.compose(document, question, path=str(tmp_path))).to_dict()
+    config = pandion.Pipeline.from_dict(pandion.compose_template(document, question, path=str(tmp_path))).to_dict()
 
     PlaygroundPolicy().check_run(config, request=None)

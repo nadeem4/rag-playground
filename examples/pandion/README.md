@@ -31,7 +31,7 @@ templates.
   step already stored. It prints that the artifact ids match, then the classes pipeline
   written back as YAML.
 - `run_template.py`: joins a document template and a question template from
-  [`playground/templates`](../../playground/templates/README.md) into one pipeline,
+  [Pandion's templates](../../docs/pandion.md#templates) into one pipeline,
   indexes a PDF with it, asks one question and prints the hits. The Vague questions and
   Chat answer templates need `ANTHROPIC_API_KEY`.
 - [`own_strategies/`](own_strategies): writes your own strategy for every stage, from

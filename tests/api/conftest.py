@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from api.deps import build_deps
-from api.main import create_app
+from playground.backend.deps import build_deps
+from playground.backend.main import create_app
 from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 
@@ -27,7 +27,7 @@ def no_server_key(tmp_path: Path, monkeypatch) -> None:
     real key in either would otherwise flow into test runs. A test that wants a
     server-side key sets one explicitly.
     """
-    from api import credentials
+    from playground.backend import credentials
 
     for provider in credentials.PROVIDERS.values():
         monkeypatch.delenv(provider.env_var, raising=False)
@@ -38,7 +38,7 @@ def no_server_key(tmp_path: Path, monkeypatch) -> None:
 @pytest.fixture(autouse=True)
 def no_model_warm_up(monkeypatch) -> None:
     """Never load a real model from an API test; start each test un-warmed."""
-    from api import warmup
+    from playground.backend import warmup
 
     monkeypatch.setattr(warmup, "_warm", lambda: None)
     monkeypatch.setattr(warmup, "_thread", None)

@@ -602,7 +602,7 @@ def test_docling_provides_headings():
 
 
 def test_preload_builds_the_converter_and_its_pdf_pipeline(monkeypatch):
-    """`api/warmup.py` calls this so the first run does not wait for the models."""
+    """`playground/backend/warmup.py` calls this so the first run does not wait for the models."""
     calls: list[object] = []
     monkeypatch.setattr(
         docling_plugin,

@@ -42,5 +42,5 @@ def test_the_root_plugins_folder_is_gone():
 
 
 def test_the_app_has_no_steps_of_its_own():
-    assert not (ROOT / "api" / "steps").exists()
+    assert not (ROOT / "playground" / "backend" / "steps").exists()
     assert registry.get(Stage.USE_CASE, "eval").__module__ == "pandion.plugins.answer.eval"

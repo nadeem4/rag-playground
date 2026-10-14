@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from api import warmup
-from api.deps import APP_MODELS
+from playground.backend import warmup
+from playground.backend.deps import APP_MODELS
 from pandion.ports import Stage
 from pandion.registry import registry
 

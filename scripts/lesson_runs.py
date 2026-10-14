@@ -15,7 +15,7 @@ from typing import Any
 import pandion
 from pandion import Pipeline, ResultStore
 
-#: How the app loads local models (`api.deps.APP_MODELS`).
+#: How the app loads local models (`playground.backend.deps.APP_MODELS`).
 MODELS = {"device": "cpu"}
 
 

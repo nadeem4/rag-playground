@@ -6,8 +6,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from api import demo, expiry
-from api.routes.sources import META_DIR, _store
+from playground.backend import demo, expiry
+from playground.backend.routes.sources import META_DIR, _store
 
 NOW = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 
@@ -87,7 +87,7 @@ def test_an_invalid_sha_deletes_no_files_but_the_sidecar_is_removed(tmp_path):
 
 
 def test_uploading_a_samples_bytes_never_makes_the_sample_expire(tmp_path, monkeypatch):
-    from api import sample_set
+    from playground.backend import sample_set
     from tests.api.conftest import make_client
 
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
@@ -104,7 +104,7 @@ def test_uploading_a_samples_bytes_never_makes_the_sample_expire(tmp_path, monke
 
 
 def test_the_sweep_skips_a_sample_even_when_its_sidecar_has_visitors(tmp_path):
-    from api import sample_set
+    from playground.backend import sample_set
 
     sample = sample_set.default_sample()
     body = _store(tmp_path, sample.pdf.name, sample.pdf.read_bytes(), "application/pdf")

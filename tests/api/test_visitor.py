@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-from api import visitor
-from api.routes.sources import META_DIR, owners
+from playground.backend import visitor
+from playground.backend.routes.sources import META_DIR, owners
 from tests.api.conftest import build_pdf, make_client, read_sse, upload_pdf
 from tests.api.test_v2_strategies import PIPELINE
 from tests.steps.conftest import SAMPLE_PAGES

@@ -59,7 +59,7 @@ def base():
         "RAG_PLAYGROUND_DEMO": "1",
     }
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", str(port)],
+        [sys.executable, "-m", "uvicorn", "playground.backend.main:app", "--host", "127.0.0.1", "--port", str(port)],
         cwd=ROOT,
         env=env,
         stdout=subprocess.DEVNULL,

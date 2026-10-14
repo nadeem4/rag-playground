@@ -13,7 +13,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-SAMPLES_DIR = Path(__file__).resolve().parents[1] / "samples"
+SAMPLES_DIR = Path(__file__).resolve().parents[2] / "samples"
 FIELDS = ("name", "title", "blurb", "shows", "stresses", "pages", "default")
 
 

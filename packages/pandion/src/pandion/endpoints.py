@@ -32,7 +32,7 @@ request to a private one.
 What this does not stop: the SDK resolves the name again when it connects, so a
 name whose DNS answer changes between the check and the request (DNS
 rebinding) can still slip past. The playground refuses custom endpoints on its
-demo outright (`api.policy.PlaygroundPolicy`); this check is the second line
+demo outright (`playground.backend.policy.PlaygroundPolicy`); this check is the second line
 behind that.
 """
 

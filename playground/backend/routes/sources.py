@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from pandion_api.documents import META_DIR, SHA, SIDECAR_LOCK, DocumentStore  # noqa: F401 (expiry reads them here)
 from pandion_api.documents import read_sidecar as _read_sidecar
 
-from api import demo, sample_set, warmup
+from playground.backend import demo, sample_set, warmup
 
 router = APIRouter()
 

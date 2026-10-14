@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from api import sample_set
+from playground.backend import sample_set
 from tests.api.conftest import make_client, upload_pdf
 
 SAMPLE_SHA = sample_set.default_sample().sha

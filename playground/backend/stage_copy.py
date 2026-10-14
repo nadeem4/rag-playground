@@ -1,7 +1,7 @@
 """The app's own words for each stage: what it is for, and its Learn lesson.
 
 They are the playground's teaching copy, not part of the engine, so they live
-here rather than in `pandion.ports`. `api/routes/registry.py` serves them with
+here rather than in `pandion.ports`. `playground/backend/routes/registry.py` serves them with
 the registry schema.
 """
 

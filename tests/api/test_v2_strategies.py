@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.policy import DEMO_NO_CUSTOM, PROMPTS_FIXED
+from playground.backend.policy import DEMO_NO_CUSTOM, PROMPTS_FIXED
 
 PIPELINE = {
     "index": {

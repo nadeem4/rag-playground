@@ -61,7 +61,7 @@ def test_distinct_bytes_distinct_sha(client):
 
 import threading  # noqa: E402
 
-from api import sample_set, warmup  # noqa: E402
+from playground.backend import sample_set, warmup  # noqa: E402
 
 
 def test_sample_registers_like_an_upload(client, dirs):
@@ -142,7 +142,7 @@ def test_a_name_ending_in_part_is_refused(client, dirs):
 
 
 def test_a_samples_bytes_under_new_names_store_no_new_file(client, dirs, monkeypatch):
-    from api import sample_set
+    from playground.backend import sample_set
 
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     client.get("/api/settings/app")

@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter
 
 import pandion
-from api import sample_set
+from playground.backend import sample_set
 from pandion.evaluation import document_text
 
 router = APIRouter()

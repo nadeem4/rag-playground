@@ -2,6 +2,7 @@
 name = "pandion-api"
 version = "0.1.0"
 description = "Pandion's public API over HTTP, with one Policy object for a site's rules"
+readme = "README.md"
 authors = [{ name = "Nadeem Khan" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [

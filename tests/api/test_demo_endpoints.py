@@ -12,8 +12,8 @@ from __future__ import annotations
 from pandion import llm
 from pandion.endpoints import DEMO_ENDPOINT_ERROR
 
-from api import demo as api_demo
-from api.policy import PlaygroundPolicy
+from playground.backend import demo as api_demo
+from playground.backend.policy import PlaygroundPolicy
 from tests.api.conftest import read_sse
 from tests.api.test_v2_strategies import CUSTOM_CONFIGS
 
@@ -27,7 +27,7 @@ def test_on_the_demo_every_run_asks_for_public_endpoints_only(monkeypatch):
 
 
 def test_the_run_switch_holds_even_if_the_policy_ban_is_lifted(monkeypatch):
-    """The 403 reads `api.demo.enabled()`; the second line reads `public_endpoints_only()`."""
+    """The 403 reads `playground.backend.demo.enabled()`; the second line reads `public_endpoints_only()`."""
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr(api_demo, "enabled", lambda: False)
     assert PlaygroundPolicy().public_endpoints_only(None) is True

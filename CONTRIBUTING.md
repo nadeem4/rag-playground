@@ -171,8 +171,8 @@ An endpoint any site would want goes in pandion-api
 `packages/pandion-api/tests/`; it may use only Pandion's public API, which
 `packages/pandion-api/tests/test_api_boundary.py` checks. A rule only some sites want is a
 `Policy` method with a default that allows everything, and the playground's version goes in
-`api/policy.py`, tested on `/api/v2` in `tests/api/`. An endpoint only the playground wants
-(a lesson, a sample) goes in `api/routes/`, and in the `TEACHING` list of
+`playground/backend/policy.py`, tested on `/api/v2` in `tests/api/`. An endpoint only the playground wants
+(a lesson, a sample) goes in `playground/backend/routes/`, and in the `TEACHING` list of
 `tests/api/test_routes.py`, which fails on a route under `/api` it does not list. Describe
 a new endpoint or Policy method in [docs/pandion-api.md](docs/pandion-api.md).
 
@@ -181,7 +181,7 @@ A new test of a site rule goes in `tests/api/` (`test_demo.py`, `test_delete_sou
 
 ## The package boundary
 
-The app (`api/`, `scripts/` and `web/scripts/`) imports only Pandion's public API and
+The app (`playground/`, `scripts/` and `web/scripts/`) imports only Pandion's public API and
 pandion-api: `pandion`, a stage namespace (`pandion.parse` to `pandion.answer`),
 `pandion.extend` and `pandion.evaluation`, each a name in its `__all__`.
 `tests/integration/test_package_boundary.py` fails on any other Pandion import, and there

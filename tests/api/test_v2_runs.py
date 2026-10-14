@@ -9,9 +9,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from api import credentials
-from api.policy import DEMO_NO_CUSTOM, NOT_AVAILABLE, PlaygroundPolicy
-from api.visitor import COOKIE
+from playground.backend import credentials
+from playground.backend.policy import DEMO_NO_CUSTOM, NOT_AVAILABLE, PlaygroundPolicy
+from playground.backend.visitor import COOKIE
 from pandion import IndexPipeline, StageResult
 from tests.api.conftest import make_client, read_sse, upload_pdf
 from tests.api.test_credentials import DOTENV_KEY, ENV_KEY, FAKE_KEY, HEADER, write_dotenv
@@ -176,7 +176,7 @@ def test_the_playgrounds_scrub_takes_out_server_paths_but_not_web_addresses():
 
 
 def test_the_data_folder_is_scrubbed_only_where_it_ends_a_path_part():
-    from api.policy import SERVER_PATH, scrub_paths
+    from playground.backend.policy import SERVER_PATH, scrub_paths
 
     data = Path("/data").resolve()
     folder = data.as_posix()
@@ -233,7 +233,7 @@ def test_on_the_demo_an_evaluation_or_a_comparison_with_a_custom_endpoint_is_ref
 
 
 def test_on_the_demo_a_comparison_takes_as_many_variants_as_a_sweep(client, monkeypatch):
-    from api.policy import MAX_VARIANTS
+    from playground.backend.policy import MAX_VARIANTS
 
     demo_on(monkeypatch)
     sample = client.post("/api/sources/sample").json()
@@ -262,7 +262,7 @@ def test_on_the_demo_an_evaluation_is_its_visitors_own(client, monkeypatch):
 
 
 def test_on_the_demo_an_evaluation_asks_at_most_50_questions(client, monkeypatch):
-    from api.policy import too_many_questions
+    from playground.backend.policy import too_many_questions
 
     demo_on(monkeypatch)
     sample = client.post("/api/sources/sample").json()
@@ -280,7 +280,7 @@ def test_on_the_demo_an_evaluation_asks_at_most_50_questions(client, monkeypatch
 
 
 def test_on_the_demo_a_comparison_asks_at_most_120_recipe_questions(client, monkeypatch):
-    from api.policy import too_many_questions
+    from playground.backend.policy import too_many_questions
 
     demo_on(monkeypatch)
     sample = client.post("/api/sources/sample").json()

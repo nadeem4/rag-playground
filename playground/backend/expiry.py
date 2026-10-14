@@ -15,8 +15,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from api import demo, sample_set
-from api.routes.sources import META_DIR, SHA, SIDECAR_LOCK, _read_sidecar
+from playground.backend import demo, sample_set
+from playground.backend.routes.sources import META_DIR, SHA, SIDECAR_LOCK, _read_sidecar
 
 log = logging.getLogger(__name__)
 

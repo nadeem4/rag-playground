@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from api.routes.learn import PARSE
+from playground.backend.routes.learn import PARSE
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
 from pandion.plugins.chunk import DocView
@@ -141,7 +141,7 @@ def test_per_name_questions_and_the_default_alias(client):
 @pytest.mark.models
 def test_scanned_notes_gold_answers_survive_ocr(tmp_path):
     """The set only works with OCR on: every gold passage must come back from it."""
-    from api.routes.learn import PARSE  # noqa: F401  (kept for symmetry with sample_text)
+    from playground.backend.routes.learn import PARSE  # noqa: F401  (kept for symmetry with sample_text)
 
     folder = ROOT / "samples" / "scanned-notes"
     questions = json.loads((folder / "questions.json").read_text(encoding="utf-8"))

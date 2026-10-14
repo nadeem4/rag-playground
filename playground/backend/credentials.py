@@ -18,7 +18,7 @@ Resolution, per provider, first match wins, once per run request (spec §9):
 3. `<repo>/.env`, read with `dotenv_values`. It is **never** loaded into
    `os.environ`, so a key kept there is not inherited by child processes.
 
-In demo mode (`api.demo`) only the header counts, for every provider: the
+In demo mode (`playground.backend.demo`) only the header counts, for every provider: the
 server has no key of its own, so a public host's key can never be spent by its
 visitors.
 
@@ -36,9 +36,9 @@ from pathlib import Path
 from dotenv import dotenv_values
 from pandion_api.credentials import PROVIDERS, REDACTED, ProviderKey, redact  # noqa: F401 (re-exported)
 
-from api import demo
+from playground.backend import demo
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: The Anthropic header and variable, kept under their original names.
 HEADER = PROVIDERS["anthropic"].header

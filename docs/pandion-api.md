@@ -236,7 +236,7 @@ pydantic will, so `"999999"` and `999999.0` are refused like `999999`.
 ## The playground on pandion-api
 
 RAG Playground's server is `pandion_api.create_app(settings, PlaygroundPolicy())`
-(`api/main.py`), with its routes under `/api/v2`, plus what is the playground's own: the
+(`playground/backend/main.py`), with its routes under `/api/v2`, plus what is the playground's own: the
 model warm-up, the web build, and its teaching routes under `/api`. The old `/api` routes
 for runs, sweeps, the catalog, explanations, documents, results, the miss trace and keys
 are gone; the web calls their `/api/v2` twins. The playground's own routes are
@@ -246,7 +246,7 @@ are gone; the web calls their `/api/v2` twins. The playground's own routes are
 limits and the visitor cookie) and `GET /api/questions/template`.
 `tests/api/test_routes.py` pins that list.
 
-`PlaygroundPolicy` (`api/policy.py`) is the hosted demo's rules:
+`PlaygroundPolicy` (`playground/backend/policy.py`) is the hosted demo's rules:
 
 | Rule | On the demo | Locally |
 |---|---|---|

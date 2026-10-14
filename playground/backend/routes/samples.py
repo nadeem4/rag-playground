@@ -6,7 +6,7 @@ they are about. Each gold answer is a sentence copied word for word out of that
 document, and `tests/api/test_samples.py` checks every one of them against the
 real parse, so the set cannot quietly rot when a sample changes.
 
-Read once per process via `api.sample_set`: the folders are committed, and a
+Read once per process via `playground.backend.sample_set`: the folders are committed, and a
 running server never sees them change.
 """
 
@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from api import sample_set
+from playground.backend import sample_set
 
 router = APIRouter()
 

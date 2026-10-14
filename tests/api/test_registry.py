@@ -1,10 +1,10 @@
 """GET /api/stages, and the catalog as the playground serves it on
 GET /api/v2/strategies, through `PlaygroundPolicy.strategies` and
-`api.routes.registry.served_catalog`."""
+`playground.backend.routes.registry.served_catalog`."""
 
 from __future__ import annotations
 
-from api.stage_copy import STAGE_LESSON, STAGE_WHAT
+from playground.backend.stage_copy import STAGE_LESSON, STAGE_WHAT
 from pandion.extend import Stage
 from pandion.plugins import PLUGIN_MODULES
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from api import credentials, sample_set
+from playground.backend import credentials, sample_set
 from tests.api.conftest import build_pdf, make_client, upload_pdf
 from tests.api.test_credentials import (
     DOTENV_KEY,
@@ -209,7 +209,7 @@ def test_demo_upload_tolerates_a_corrupt_sidecar(dirs, monkeypatch):
 
 
 def test_the_sweeper_runs_only_in_demo_mode(dirs, monkeypatch):
-    from api import expiry
+    from playground.backend import expiry
     started: list = []
     monkeypatch.setattr(expiry, "run_forever", lambda sources, interval_s=3600: started.append(sources) or _never())
     with make_client(dirs):
@@ -250,7 +250,7 @@ def test_demo_never_reads_more_than_the_cap_plus_one_byte(client, dirs, monkeypa
 
 
 def test_the_demo_refuses_uploads_past_its_total_budget(dirs, monkeypatch):
-    from api import demo
+    from playground.backend import demo
 
     demo_on(monkeypatch)
     first, second = _pdf_with_pages(1), _pdf_with_pages(2)

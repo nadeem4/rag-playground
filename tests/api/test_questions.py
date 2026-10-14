@@ -346,7 +346,7 @@ def test_an_unreadable_file_is_a_400_naming_the_row(client):
 def test_demo_mode_checks_a_set_but_keeps_nothing(client, dirs, monkeypatch):
     """A visitor can try their own questions; the server just does not keep them."""
     client.post("/api/sources/sample")
-    from api import sample_set
+    from playground.backend import sample_set
 
     sha = sample_set.default_sample().sha
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")

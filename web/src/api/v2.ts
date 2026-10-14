@@ -8,7 +8,6 @@ import type { PipelineConfig } from "@/state/config"
 
 import { jsonInit, keyHeaders, requestFrom, type KeyOpts } from "./client"
 import type {
-  CacheClearedV2,
   CancelResponse,
   ComparisonRequest,
   EvaluationRequest,
@@ -25,8 +24,6 @@ import type {
   Source,
   StoredQuestionSet,
   Strategies,
-  Trace,
-  TraceRequest,
   V2AskRequest,
   V2RunRequest,
   Validated,
@@ -77,9 +74,6 @@ export const v2 = {
 
   result: (resultId: string) => request<ResultInfo>(`/results/${id(resultId)}`),
   resultPayload: <T = unknown>(resultId: string) => request<T>(`/results/${id(resultId)}/payload`),
-  /** 409 while a run is live; 403 on the demo. */
-  clearCache: () => request<CacheClearedV2>("/cache", { method: "DELETE" }),
-  trace: (body: TraceRequest, signal?: AbortSignal) => request<Trace>("/trace", { ...jsonInit(body), signal }),
 
   /** Where the server's own key for each provider comes from. Never a key. */
   modelSources: () => request<LlmSettings>("/settings/models"),

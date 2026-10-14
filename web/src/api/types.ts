@@ -357,16 +357,6 @@ export interface RunFinishedEvent extends EventBase {
   ok: boolean
   cancelled?: boolean
 }
-export interface VariantStartedEvent extends EventBase {
-  event: "variant_started"
-  index: number
-  variant: Variant
-}
-export interface VariantFinishedEvent extends EventBase {
-  event: "variant_finished"
-  index: number
-  ok: boolean
-}
 export interface RunErrorEvent extends EventBase {
   event: "run_error"
   error: string
@@ -406,8 +396,6 @@ export type RunEvent =
   | NodeSkippedEvent
   | RunCancelledEvent
   | RunFinishedEvent
-  | VariantStartedEvent
-  | VariantFinishedEvent
   | RunErrorEvent
   | QueuedEvent
   | UnqueuedEvent
@@ -711,25 +699,6 @@ export interface Explanation {
 
 // ------------------------------------------------------------ miss trace --
 
-/** A step's output by its artifact id, with the step's plain name. */
-export interface NamedArtifact {
-  id: string
-  name: string
-}
-
-/** `POST /api/v2/trace`: the artifacts one question's run made, and what to look for. */
-export interface TraceRequest {
-  gold_answers: string[]
-  parse: NamedArtifact
-  cleans: NamedArtifact[]
-  chunk: string
-  retrieve: string
-  /** The result the eval step scored: the reranker's when there is one. */
-  final: string
-  rerank_name: string | null
-  top_k: number
-}
-
 export type TraceStage = "parse" | "clean" | "chunk" | "search" | "rerank" | "top_k"
 
 export interface TracePart {
@@ -806,11 +775,6 @@ export interface ResultInfo {
   id: string
   type: string
   meta: Record<string, unknown>
-}
-export interface CacheClearedV2 {
-  results: number
-  bytes: number
-  complete: boolean
 }
 /** pandion.evaluation's totals: the server's arithmetic, never the browser's. */
 export interface Totals {

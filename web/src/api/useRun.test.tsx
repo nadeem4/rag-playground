@@ -70,21 +70,19 @@ describe("useRun", () => {
     expect(live()).toHaveLength(1)
   })
 
-  it("keeps a sweep stream open past run_finished and closes it on stream_end", () => {
+  it("keeps a comparison stream open past run_finished and closes it on stream_end", () => {
     const { result } = renderHook(() => useRun("s1"), { wrapper: strict })
     const es = FakeEventSource.instances[0]
 
-    es.emit(0, { event: "variant_started", index: 0, variant: { transform: "token_based", config: {} } })
-    es.emit(1, { event: "run_started", nodes: ["chunk"], selected: ["chunk"] })
-    es.emit(2, { event: "node_finished", node_id: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 2 })
-    es.emit(3, { event: "run_finished", ok: true, cancelled: false })
+    es.emit(1, { variant: 1, event: "run_started", nodes: ["chunk"], selected: ["chunk"] })
+    es.emit(2, { variant: 1, event: "node_finished", node_id: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 2 })
+    es.emit(3, { variant: 1, event: "run_finished", ok: true, cancelled: false })
     expect(es.close).not.toHaveBeenCalled()
     expect(result.current.status).toBe("running")
 
-    es.emit(4, { event: "variant_started", index: 1, variant: { transform: "markdown_header", config: {} } })
-    es.emit(5, { event: "run_started", nodes: ["chunk"], selected: ["chunk"] })
-    es.emit(6, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: true, duration_ms: 1 })
-    es.emit(7, { event: "run_finished", ok: true, cancelled: false })
+    es.emit(5, { variant: 2, event: "run_started", nodes: ["chunk"], selected: ["chunk"] })
+    es.emit(6, { variant: 2, event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: true, duration_ms: 1 })
+    es.emit(7, { variant: 2, event: "run_finished", ok: true, cancelled: false })
     expect(es.close).not.toHaveBeenCalled()
 
     es.emit(8, { event: "stream_end", status: "finished", ok: true })

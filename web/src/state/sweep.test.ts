@@ -8,23 +8,22 @@ import { TEST_REGISTRY as R } from "./testRegistry"
 
 const NODES = ["source", "parse", "chunk"]
 
-/** One sweep variant's block, as `pandion.executor.sweep` emits it. */
+/** An event of a comparison's variant: /api/v2 tags each one with `variant`, from 1. */
+const tag = (index: number, e: RunEvent): RunEvent => ({ ...e, variant: index + 1 }) as RunEvent
+
+/** One comparison variant's block, as /api/v2/comparisons streams it. */
 function variantBlock(index: number, transform: string, hits: Record<string, boolean>): RunEvent[] {
-  const out: RunEvent[] = [
-    { event: "variant_started", ts: 0, index, variant: { transform, config: {} } },
-    { event: "run_started", ts: 0, nodes: NODES, selected: NODES },
-  ]
+  const out: RunEvent[] = [{ event: "run_started", ts: 0, nodes: NODES, selected: NODES }]
   for (const id of NODES) {
     out.push({ event: "node_started", ts: 0, node_id: id, transform: id === "chunk" ? transform : id, artifact_id: `${id}-${index}` })
     out.push({ event: "node_finished", ts: 0, node_id: id, artifact_id: `${id}-${index}`, cache_hit: hits[id], duration_ms: 1 })
   }
   out.push({ event: "run_finished", ts: 0, ok: true })
-  out.push({ event: "variant_finished", ts: 0, index, ok: true })
-  return out
+  return out.map((e) => tag(index, e))
 }
 
 describe("sweep grouping", () => {
-  it("groups node events by the latest variant_started, although node ids repeat", () => {
+  it("groups node events by the variant they carry, although node ids repeat", () => {
     const events = [
       ...variantBlock(0, "recursive_character", { source: false, parse: false, chunk: false }),
       ...variantBlock(1, "markdown_header", { source: true, parse: true, chunk: false }),
@@ -32,7 +31,7 @@ describe("sweep grouping", () => {
     ]
     const state = reduceEvents(events)
     expect(state.variants.map((v) => v.index)).toEqual([0, 1])
-    expect(state.variants.map((v) => v.variant?.transform)).toEqual(["recursive_character", "markdown_header"])
+    expect(state.variants.map((v) => v.nodes.chunk.transform)).toEqual(["recursive_character", "markdown_header"])
     expect(state.variants.map((v) => v.nodes.chunk.artifact_id)).toEqual(["chunk-0", "chunk-1"])
     expect(state.variants.map((v) => v.nodes.parse.status)).toEqual(["done", "cached"])
   })
@@ -76,11 +75,10 @@ describe("tallySweep", () => {
     const nodes = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
     const events: RunEvent[] = []
     for (let i = 0; i < 5; i++) {
-      events.push({ event: "variant_started", ts: 0, index: i, variant: { transform: "lancedb", config: { truncate_dim: 1024 >> i } } })
       for (const id of nodes) {
         const fresh = i === 0 || ["index", "retrieve", "use_case"].includes(id)
-        events.push({ event: "node_started", ts: 0, node_id: id, transform: id, artifact_id: `${id}-${i}` })
-        events.push({ event: "node_finished", ts: 0, node_id: id, artifact_id: `${id}-${i}`, cache_hit: !fresh, duration_ms: 1 })
+        events.push(tag(i, { event: "node_started", ts: 0, node_id: id, transform: id, artifact_id: `${id}-${i}` }))
+        events.push(tag(i, { event: "node_finished", ts: 0, node_id: id, artifact_id: `${id}-${i}`, cache_hit: !fresh, duration_ms: 1 }))
       }
     }
     const column = nodes.map((id) => ({ id, title: { source: "Upload", parse: "Parse", chunk: "Chunk", index: "Index", query: "Ask", retrieve: "Retrieve", use_case: "Search" }[id]! }))
@@ -97,7 +95,7 @@ describe("tallySweep", () => {
   })
 
   it("does not count a node that is still running", () => {
-    const events = variantBlock(0, "recursive_character", { source: false, parse: false, chunk: false }).slice(0, 5)
+    const events = variantBlock(0, "recursive_character", { source: false, parse: false, chunk: false }).slice(0, 4)
     expect(tallySweep(reduceEvents(events).variants).executed.parse).toBeUndefined()
   })
 })
@@ -167,9 +165,8 @@ describe("the tally's time and failures", () => {
   it("says how many recipes failed, and never that nothing ran when one failed", () => {
     const events: RunEvent[] = [
       ...variantBlock(0, "recursive_character", { source: true, parse: true, chunk: true }),
-      { event: "variant_started", ts: 0, index: 1, variant: { transform: "token_based", config: {} } },
-      { event: "node_started", ts: 0, node_id: "chunk", transform: "token_based", artifact_id: "chunk-1" },
-      { event: "node_failed", ts: 0, node_id: "chunk", error: "ValueError: no" } as RunEvent,
+      tag(1, { event: "node_started", ts: 0, node_id: "chunk", transform: "token_based", artifact_id: "chunk-1" }),
+      tag(1, { event: "node_failed", ts: 0, node_id: "chunk", error: "ValueError: no" } as RunEvent),
     ]
     const t = tallySweep(reduceEvents(events).variants)
     expect(t.failed).toBe(1)

@@ -4,11 +4,11 @@
  * Kept free of React and EventSource so the stream semantics are testable on
  * their own. Two rules the server imposes:
  *
- * - `stream_end` is the only terminal event. A sweep emits one
+ * - `stream_end` is the only terminal event. A comparison emits one
  *   `run_started ... run_finished` block per variant, so `run_finished` means
  *   "one variant done", never "stream done".
- * - Node ids repeat across sweep variants, so node state is grouped under the
- *   most recent `variant_started`. A plain run is a single variant with
+ * - Node ids repeat across a comparison's variants, so node state is grouped
+ *   by the `variant` each event carries. A plain run is a single group with
  *   `index: null`.
  * - A /api/v2 event names Pandion's step, and `cardEvent` turns it into the
  *   card's id first. A page that knows its column passes `cardOf`, so a
@@ -19,7 +19,7 @@
 
 import { cardOfStep } from "@/state/config"
 
-import type { RunEvent, RunSnapshot, RunStatus, Variant } from "./types"
+import type { RunEvent, RunSnapshot, RunStatus } from "./types"
 
 export type NodeStatus =
   | "pending" // selected, not started
@@ -43,9 +43,8 @@ export interface NodeState {
 }
 
 export interface VariantState {
-  /** Sweep variant index; `null` for a plain run. */
+  /** The comparison variant's index, from 0; `null` for a plain run. */
   index: number | null
-  variant?: Variant
   /** The evaluation question this group's steps answered (/api/v2 only). */
   question?: string
   /** Topological order from `run_started`. */
@@ -163,20 +162,12 @@ function applyEvent(prev: RunState, e: RunEvent): RunState {
   const state: RunState = prev.status === "idle" ? { ...prev, status: "running" } : prev
 
   switch (e.event) {
-    case "variant_started":
-      return {
-        ...state,
-        variants: [...state.variants, { index: e.index, variant: e.variant, order: [], nodes: {} }],
-      }
-    case "variant_finished":
-      return withCurrent(state, (v) => ({ ...v, ok: e.ok }))
     case "run_started": {
       const selected = new Set(e.selected ?? e.nodes)
-      // A plain run on an old route has no `variant_started`; a second
-      // `run_started` without one (should never happen) still gets its own
-      // group rather than overwriting the first. A /api/v2 run may start twice
-      // in one group: Pandion's ask runs the index, then the search, so its
-      // second `run_started` merges into the group.
+      // A second `run_started` with no group of its own (should never happen)
+      // still gets its own group rather than overwriting the first. A /api/v2
+      // run may start twice in one group: Pandion's ask runs the index, then
+      // the search, so its second `run_started` merges into the group.
       const fromV2 = Array.isArray((e as { steps?: unknown }).steps)
       const last = state.variants[state.variants.length - 1]
       const needsGroup = state.variants.length === 0 || (!fromV2 && last.order.length > 0 && last.index === null)

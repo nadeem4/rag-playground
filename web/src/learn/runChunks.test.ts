@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { TEST_REGISTRY } from "@/state/testRegistry"
 
 import { runChunks } from "./runChunks"
 
 const SHA = "cd".repeat(32)
-const R = TEST_REGISTRY
 const PAYLOAD = { chunks: [], doc_id: "d", source_text: "", chunker_meta: {} }
 
 let posts: unknown[] = []
@@ -43,7 +41,6 @@ afterEach(() => vi.unstubAllGlobals())
 describe("runChunks", () => {
   it("runs the real chunker on sample, parse and chunk, and returns the chunk set", async () => {
     const set = await runChunks({
-      registry: TEST_REGISTRY,
       sha: SHA,
       parse: { transform: "pdfium", config: {} },
       strategy: "token_based",
@@ -61,7 +58,7 @@ describe("runChunks", () => {
   it("throws the last line of the error when the chunker fails", async () => {
     finish = "fail"
     await expect(
-      runChunks({ registry: TEST_REGISTRY, sha: SHA, parse: { transform: "pdfium", config: {} }, strategy: "token_based", config: {}, pollMs: 1 }),
+      runChunks({ sha: SHA, parse: { transform: "pdfium", config: {} }, strategy: "token_based", config: {}, pollMs: 1 }),
     ).rejects.toThrow("ValueError: overlap must be smaller")
   })
 
@@ -75,7 +72,7 @@ describe("runChunks", () => {
           events: [{ event: "node_finished", ts: 1, node_id: "d::chunk", step: "chunk", document: "d", artifact_id: "c1", cache_hit: false, duration_ms: 1 }] }))
       return new Response(JSON.stringify({ chunks: [] }))
     }))
-    await runChunks({ registry: R, sha: "s".repeat(64), parse: { transform: "pdfium", config: {} }, strategy: "recursive_character", config: { chunk_size: 400 }, pollMs: 0 })
+    await runChunks({ sha: "s".repeat(64), parse: { transform: "pdfium", config: {} }, strategy: "recursive_character", config: { chunk_size: 400 }, pollMs: 0 })
     expect(calls[0]).toMatchObject({ url: "/api/v2/runs", body: { documents: ["s".repeat(64)], through: "chunk", config: { index: { parse: { use: "pdfium" }, chunk: { use: "recursive_character", chunk_size: 400 } } } } })
     expect(calls.at(-1)?.url).toBe("/api/v2/results/c1/payload")
   })

@@ -149,7 +149,7 @@ function Lab({
     let on = true
     const t = window.setTimeout(() => {
       setRun((r) => ({ key, kind: "loading", last: r?.kind === "ready" ? r : r?.kind === "loading" ? r.last : undefined }))
-      runChunksOnce({ registry, sha, parse: data.parse, strategy: settings.strategy, config: settings.config, pollMs }).then(
+      runChunksOnce({ sha, parse: data.parse, strategy: settings.strategy, config: settings.config, pollMs }).then(
         (set) => on && setRun({ key, kind: "ready", settings: current, set, analysis: analyzeChunks(set, data.answer_sentence) }),
         (e: unknown) => on && setRun({ key, kind: "error", message: e instanceof Error ? e.message : String(e) }),
       )

@@ -98,7 +98,7 @@ class SilentEventSource {
  * describes the loaded document. `null` means the sample list cannot be read.
  * `stored` is what `GET /api/v2/documents/{sha}/questions` has, null for no set.
  */
-/** Every POST /api/trace body: there should be none, since the trace comes with the result. */
+/** Every POST /api/v2/trace body: there should be none, since the trace comes with the result. */
 const traced: unknown[] = []
 const TRACE = {
   finding: "Lost at Parse. Fast text put other text in the middle of the answer sentence, so no later step can find it.",
@@ -165,7 +165,7 @@ function serve({
         }
         return ok({ run_id: snapshot[1], kind: "evaluation", status: "finished", ok: true, cancel_requested: false, last_event_id: 0, events: [], result })
       }
-      if (url === "/api/trace" && init?.method === "POST") {
+      if (url === "/api/v2/trace" && init?.method === "POST") {
         traced.push(JSON.parse(String(init.body)))
         return ok(TRACE)
       }
@@ -607,7 +607,7 @@ describe("Evaluate is pipeline first", () => {
     expect(sent.questions.map((q) => q.id)).toEqual(["a", "b"])
     expect(sent.questions[1]).toEqual({ id: "b", question: "How big is a chunk?", gold_answers: ["A chunk should answer one question well."], tags: ["designed to miss: long sentence"] })
     expect(sent.top_k).toBe(5)
-    expect(urls.some((u) => u.startsWith("/api/sweeps"))).toBe(false)
+    expect(urls.some((u) => u.startsWith("/api/v2/comparisons"))).toBe(false)
   })
 
   it("lists Ready to use, Your pipelines, On Build and Build your own, in that order", async () => {

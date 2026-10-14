@@ -27,7 +27,7 @@ from api.routes import sources
 from api.routes.artifacts import NO_CLEARING
 from api.routes.questions import NO_STORING
 from api.routes.registry import served_catalog
-from api.routes.runs import DEMO_NO_CUSTOM, NOT_AVAILABLE, PROMPTS_FIXED
+from api.routes.runs import DEMO_NO_CUSTOM, MAX_VARIANTS, NOT_AVAILABLE, PROMPTS_FIXED
 
 #: The most a model step may write, in tokens (`max_tokens` on a step that calls a model).
 MAX_OUTPUT_TOKENS = 16000
@@ -223,6 +223,11 @@ class PlaygroundPolicy(Policy):
 
     def public_endpoints_only(self, request: Request) -> bool:
         return demo.public_endpoints_only()
+
+    def max_variants(self, request: Request) -> int:
+        """As many as one old sweep takes, in every mode, so the demo's bound on
+        one request's work is the same on both stacks."""
+        return MAX_VARIANTS
 
     def run_owner(self, request: Request) -> str | None:
         """On the demo a run is its visitor's own: to anyone else it is a 404.

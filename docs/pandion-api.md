@@ -74,6 +74,8 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
 | `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
+| `POST /evaluations` | `{"config", "documents", "questions"?, "top_k"?}`: search for every question and say whether its answer came back, and for a miss the step that lost it (`pandion.evaluate`). Without `questions`, the sets kept against the documents. A run; its result is the report's `to_dict()`. |
+| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each (`pandion.compare`). Without `questions`, the sets kept against the documents, if any. A run; its result names the best. |
 | `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
 | `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
 | `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
@@ -103,6 +105,17 @@ A question's `result` gives the index it read, each retrieval step (`rewrite`, `
 not yet. Its kind is `ask`, or `retrieve` when `answer` is false. A pipeline with no
 `retrieve` section, or with no `answer` section when `answer` is true, is a 422 before
 anything runs.
+
+An evaluation's events carry the question's id under `question`, with a `question_finished`
+event after each. A comparison's carry the variant's number under `variant`. Every variant
+is checked like a pipeline before anything runs, so a variant the Policy refuses is
+refused at once. A question set in the request is held to the caps of an uploaded one
+(over 1 MB is 413; more than 500 questions, or more than 20 gold passages in one, is 400
+with its sentence). Without one, the questions are those of the sets kept against the
+documents, in the order the documents are listed; an evaluation with no questions at all
+is a 400, and so is a comparison of a `rewrite`, `search` or `rerank` step. A pipeline
+with no `retrieve` section cannot be evaluated (422), and a stage that cannot be compared
+is a 400.
 
 A document in a run is named by the filename it was uploaded under, so the same bytes
 under the same name give the same result ids however often they are uploaded. Two
@@ -142,6 +155,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
 | `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
 | `check_clear_cache(request)` | allows | `DELETE /cache` |
+| `max_variants(request)` | 10 | `POST /comparisons`: more variants than this is a 422 |
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
 | `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`), and on every error a run shows |
 | `not_readable` (attribute) | "This document is not available." | the 403 a run gets for a document `can_read` refuses |
@@ -165,7 +179,8 @@ privately, a sample's publicly. The old `/api/sources` routes call the same Poli
 On the demo a run is its visitor's own, on `/api/v2` and on the old `/api/runs/{id}` routes,
 which share the run manager. In every mode its errors keep only the last part of any
 server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it refuses
-`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. It checks a
+`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. A comparison
+on `/api/v2` takes at most ten variants, as many as an old sweep takes recipes. It checks a
 question set and hands the report back, but keeps no set, so one visitor's questions
 never reach another's browser; the old `/api/sources/{id}/questions` routes ask the same
 Policy.

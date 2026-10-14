@@ -82,6 +82,11 @@ class Policy:
         """A step that calls a custom model endpoint accepts only a public https address."""
         return False
 
+    def max_variants(self, request: Request) -> int:
+        """How many variants one comparison may run, which bounds the work one
+        request can ask for."""
+        return 10
+
     def run_owner(self, request: Request) -> str | None:
         """Who a run started by `request` belongs to, for example a visitor's
         cookie. A run with an owner is for that owner only. None: anyone may

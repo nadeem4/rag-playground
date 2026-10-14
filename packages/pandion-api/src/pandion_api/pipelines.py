@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from pandion import ConfigError, Pipeline
+from pandion.evaluation import COMPARE_STAGES
 
 NOT_A_MAPPING = "The pipeline must be a mapping of settings, in the pipeline file's shape."
 PLUGINS_REFUSED = (
@@ -58,3 +59,10 @@ def public(p: Pipeline) -> dict[str, Any]:
     data.pop("path", None)
     data.pop("models", None)
     return data
+
+
+def variant_config(config: dict[str, Any], stage: str, variant: Any) -> dict[str, Any]:
+    """`config` with one stage replaced by `variant`, as compare runs it."""
+    section = COMPARE_STAGES[stage]
+    current = config.get(section)
+    return {**config, section: {**(current if isinstance(current, dict) else {}), stage: variant}}

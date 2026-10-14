@@ -53,12 +53,25 @@ def scrub_errors(value: Any, scrub: Callable[[str], str]) -> Any:
     return value
 
 
+def too_many_runs(most: int) -> str:
+    """The 429 for an owner who already has `most` runs going."""
+    runs = "run" if most == 1 else "runs"
+    return f"You already have {most} {runs} going. Wait for one to finish, or stop one."
+
+
 def start(request: Request, kind: str, work: Work) -> dict[str, str]:
     """Start `work` on the app's run manager with this request's keys, as this
     request's owner (`Policy.run_owner`). Every event and the result are
     scrubbed of the keys, and their error text goes through `Policy.scrub`; a
-    `run_cancelled` event marks the run cancelled."""
+    `run_cancelled` event marks the run cancelled. An owner who already has
+    `Policy.max_runs_per_owner` runs working or waiting is refused with a 429."""
     policy = request.app.state.policy
+    owner = policy.run_owner(request)
+    most = policy.max_runs_per_owner(request)
+    if owner is not None and most is not None:
+        going = sum(1 for s in request.app.state.runs.active() if s.owner == owner)
+        if going >= most:
+            raise HTTPException(status_code=429, detail=too_many_runs(most))
     credentials = policy.credentials(request)
     keys = list(credentials.values())
 
@@ -77,6 +90,6 @@ def start(request: Request, kind: str, work: Work) -> dict[str, str]:
         return ok, cancelled or bool(seen), clean(result)
 
     state = request.app.state.runs.start(
-        kind, job, owner=policy.run_owner(request), scrub=lambda text: policy.scrub(redact(text, keys))
+        kind, job, owner=owner, scrub=lambda text: policy.scrub(redact(text, keys))
     )
     return {"run_id": state.run_id}

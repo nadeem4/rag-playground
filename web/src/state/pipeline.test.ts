@@ -74,6 +74,19 @@ describe("routeRunError on /api/v2", () => {
     expect(routeRunError(new ApiError(422, { problems: same }, "/runs"), g)).toEqual({ kind: "node", nodeId: "chunk", message: same.join(" ") })
   })
 
+  it("says the demo's capacity refusals in their own sentence, above the column", () => {
+    const sentences: [number, string][] = [
+      [429, "You already have 2 runs going. Wait for one to finish, or stop one."],
+      [413, "The demo scores at most 50 questions in one run, and this set has 51. Use fewer questions, or run the playground locally for more."],
+      [413, "The demo scores at most 100 recipe-questions in one comparison (recipes times questions), and this one asks for 102. Use fewer recipes or questions, or run the playground locally for more."],
+    ]
+    for (const [status, message] of sentences) {
+      for (const path of ["/runs", "/ask", "/evaluations", "/comparisons"]) {
+        expect(routeRunError(new ApiError(status, message, path), g)).toEqual({ kind: "column", message })
+      }
+    }
+  })
+
   it("says a request the server refused field by field in plain words, not as JSON", () => {
     const detail = [{ type: "string_too_long", loc: ["body", "question"], msg: "String should have at most 2000 characters", input: "x" }]
     expect(routeRunError(new ApiError(422, detail, "/ask"), g)).toEqual({ kind: "column", message: "question: String should have at most 2000 characters." })

@@ -26,6 +26,13 @@ MAX_PAGE_POINTS = 3000
 #: Runs that do heavy work at the same time on the demo; the rest wait their turn.
 #: Two cores and 16 GB serve every visitor, and several big parses at once run out of memory.
 MAX_ACTIVE_RUNS = 2
+#: Runs one visitor may have working or waiting at once on the demo, so one
+#: visitor cannot fill the line in front of everyone else.
+MAX_RUNS_PER_VISITOR = 2
+#: The most questions one evaluation scores on the demo.
+MAX_EVALUATION_QUESTIONS = 50
+#: The most recipe-questions (recipes times questions) one comparison scores on the demo.
+MAX_COMPARISON_QUESTIONS = 100
 #: All live uploads together, so a client that keeps getting new visitor ids
 #: still cannot fill the shared disk.
 MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024

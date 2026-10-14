@@ -121,6 +121,7 @@ async def create_evaluation(body: EvaluationIn, request: Request) -> dict[str, s
         questions = await run_in_threadpool(_kept, body.documents, list(documents), request)
     if not questions:
         raise HTTPException(status_code=400, detail=NO_QUESTIONS)
+    request.app.state.policy.check_question_count("evaluation", len(questions), request)
 
     def work(on_event, cancel, credentials):
         report = evaluate(
@@ -171,7 +172,8 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
     """Run the pipeline once per variant of one stage, against the same store, so
     every step above the changed one is a cache hit after the first; evaluate
     each when there are questions. The Policy caps the number of variants
-    (`Policy.max_variants`), which bounds the work one request can ask for."""
+    (`Policy.max_variants`) and the variants times the questions
+    (`Policy.check_question_count`), which bounds the work one request can ask for."""
     if body.stage not in COMPARE_STAGES:
         raise HTTPException(
             status_code=400,
@@ -205,6 +207,8 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
         raise problems(NO_ANSWER)
     documents = documents_of(body.documents, request)
     questions = await run_in_threadpool(_checked, body.questions) if body.questions is not None else None
+    if questions is not None:
+        request.app.state.policy.check_question_count("comparison", len(body.variants) * len(questions), request)
     if body.question is not None:
         return start(request, "comparison", _compare_on_one_question(body, prepared, documents))
     if body.through is not None:

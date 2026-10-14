@@ -148,6 +148,26 @@ def test_a_run_is_given_each_document_by_its_name_and_stored_file(client, monkey
     assert seen == [{"my report.pdf": str(store.file(sha))}]
 
 
+def test_a_name_with_an_unsafe_suffix_is_given_to_pandion_without_it(client):
+    """Pandion keeps its own copy as <sha><the name's suffix>; a suffix the
+    store would not keep (a space, a stream colon, too long) must not reach it."""
+    for name, named in (("my report.p df", "my report_p df"), ("a.pdf.p df", "a_pdf_p df")):
+        data = build_pdf([[name]])
+        sha = upload(client, name, data)["sha"]
+        state, _ = finish(client, client.post("/runs", json={"config": PIPELINE, "documents": [sha]}))
+        assert list(state["result"]["documents"]) == [named]
+        folder = client.app.state.settings.data_dir / "sources"
+        assert sorted(p.name for p in folder.iterdir() if p.is_file() and p.name.startswith(sha)) == [sha]
+
+
+def test_a_plain_name_reaches_pandion_unchanged_so_its_result_ids_do_not_change(client):
+    sha = upload(client, "report.pdf")["sha"]
+    state, _ = finish(client, client.post("/runs", json={"config": PIPELINE, "documents": [sha]}))
+    assert list(state["result"]["documents"]) == ["report.pdf"]
+    folder = client.app.state.settings.data_dir / "sources"
+    assert sorted(p.name for p in folder.iterdir() if p.is_file()) == [f"{sha}.pdf"]
+
+
 # --- whose run it is, and what its errors may say ------------------------------------
 
 

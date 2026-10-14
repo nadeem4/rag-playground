@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from api import demo
 from fastapi import APIRouter, HTTPException, Request
 
 from pandion.extend import ArtifactType
@@ -24,6 +23,12 @@ _ID = re.compile(r"^[0-9a-f]{64}$")
 #: delete a directory while anything (a LanceDB mmap) still holds a handle.
 RETRIES = 5
 RETRY_DELAY_S = 0.2
+
+#: The demo's 403 for DELETE /cache, here and on /api/v2 (`PlaygroundPolicy.check_clear_cache`).
+NO_CLEARING = (
+    "The hosted demo keeps one cache for every visitor, so it cannot be cleared here. "
+    "Run the playground locally to clear it."
+)
 
 #: Inside an index artifact's directory, written by `pandion.plugins.index.lancedb_store`.
 DESCRIPTOR = "descriptor.json"
@@ -66,13 +71,8 @@ def _usage(root: Path) -> tuple[int, int]:
 
 @router.delete("/cache")
 def clear_cache(request: Request) -> dict[str, Any]:
-    if demo.enabled():
-        # One cache serves every visitor: clearing it would wipe everyone's results.
-        raise HTTPException(
-            status_code=403,
-            detail="The hosted demo keeps one cache for every visitor, so it cannot be cleared here. "
-            "Run the playground locally to clear it.",
-        )
+    # The site's rule, the same one DELETE /api/v2/cache asks: on the demo, 403.
+    request.app.state.policy.check_clear_cache(request)
     if request.app.state.runs.active():
         raise HTTPException(status_code=409, detail="a run is in progress")
     store: Store = request.app.state.deps.store

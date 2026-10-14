@@ -21,7 +21,7 @@ from typing import Any
 
 #: A document id is a sha256 in lowercase hex. Checked before an id reaches a
 #: path, so a crafted one such as `../../x` never leaves the folder.
-SHA = re.compile(r"[0-9a-f]{64}\Z")
+SHA = re.compile(r"^[0-9a-f]{64}\Z")
 #: The 404 for a document that is not there, or not for this caller. It never
 #: repeats the id the request sent.
 NO_SUCH_DOCUMENT = "There is no document with that fingerprint."
@@ -47,6 +47,16 @@ def suffix(filename: str) -> str:
     """The suffix a file is stored with: its name's, when it is a plain one, else none."""
     found = Path(filename).suffix
     return found if SAFE_SUFFIX.match(found) else ""
+
+
+def safe_name(filename: str) -> str:
+    """`filename` as a run names its document. Pandion keeps its own copy of a
+    document as `<sha><the name's suffix>`, so the name's suffix must be the
+    one the store kept (`suffix`). When the store dropped it (a space, a `:`
+    that names a Windows stream, too long), every dot becomes `_`, leaving the
+    name no suffix at all. A plain name such as `report.pdf` is unchanged, so
+    its result ids are the old routes' ones."""
+    return filename if Path(filename).suffix == suffix(filename) else filename.replace(".", "_")
 
 
 def is_part(filename: str) -> bool:

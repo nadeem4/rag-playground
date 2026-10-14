@@ -20,6 +20,8 @@ from pandion_api.documents import Document
 class Policy:
     #: The 403 a run gets for a document can_read refuses.
     not_readable = "This document is not available."
+    #: What a question-set report says when the set was checked but not kept.
+    not_keeping_note = "This server checked your questions but did not keep them."
 
     def dependencies(self) -> list[Any]:
         """FastAPI dependencies (`fastapi.Depends(...)`) run on every route,
@@ -58,6 +60,10 @@ class Policy:
         """Is this document one caller's own? Its page images are then cached privately."""
         return False
 
+    def keeps_question_sets(self, request: Request) -> bool:
+        """Keep a checked question set on the server? False: check it, keep nothing."""
+        return True
+
     # --- runs -------------------------------------------------------------------
 
     def max_active_runs(self) -> int | None:
@@ -81,6 +87,11 @@ class Policy:
         cookie. A run with an owner is for that owner only. None: anyone may
         follow or cancel it."""
         return None
+
+    # --- the cache -----------------------------------------------------------------
+
+    def check_clear_cache(self, request: Request) -> None:
+        """Refuse DELETE /cache (raise HTTPException), for example where many share one cache."""
 
     # --- keys ---------------------------------------------------------------------
 

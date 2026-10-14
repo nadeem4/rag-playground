@@ -58,8 +58,18 @@ class QuestionSetError(ValueError):
 # ---------------------------------------------------------------------------
 
 
-def parse_question_set(data: bytes, filename: str = "", *, one_document: bool = True) -> dict[str, Any]:
+def parse_question_set(
+    data: bytes,
+    filename: str = "",
+    *,
+    one_document: bool = True,
+    max_questions: int | None = None,
+    max_golds: int | None = None,
+) -> dict[str, Any]:
     """Read JSON or CSV into `{format, version, document, questions}`.
+
+    `max_questions` and `max_golds` (per question) cap the set, for a server
+    that checks sets people upload; None, the default, is no cap.
 
     Every question has the same keys, present even when empty, so a caller
     never has to ask whether an optional field is there. With `one_document`
@@ -73,7 +83,11 @@ def parse_question_set(data: bytes, filename: str = "", *, one_document: bool = 
     else:
         fmt, version, document, records = "csv", *_csv_records(text)
 
-    questions = [_question(label, record, fmt) for label, record in records]
+    if max_questions is not None and len(records) > max_questions:
+        raise QuestionSetError(
+            f"the set has {len(records)} questions; at most {max_questions} fit in one set, so split it"
+        )
+    questions = [_question(label, record, fmt, max_golds) for label, record in records]
     if not questions:
         raise QuestionSetError(
             "the file has no questions in it; the template shows what one looks like"
@@ -129,6 +143,8 @@ def _json_records(text: str) -> tuple[int, str, list[tuple[str, dict]]]:
         raise QuestionSetError(
             f"the file is not valid JSON: {exc.msg}, at line {exc.lineno}"
         ) from exc
+    except RecursionError:
+        raise QuestionSetError("the JSON is nested too deeply to read; a question set is one or two levels deep") from None
 
     version, document = 1, ""
     if isinstance(body, dict):
@@ -159,6 +175,13 @@ def _json_records(text: str) -> tuple[int, str, list[tuple[str, dict]]]:
 
 
 def _csv_records(text: str) -> tuple[int, str, list[tuple[str, dict]]]:
+    try:
+        return _csv_rows(text)
+    except csv.Error as exc:
+        raise QuestionSetError(f"the CSV cannot be read: {exc}") from None
+
+
+def _csv_rows(text: str) -> tuple[int, str, list[tuple[str, dict]]]:
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
         raise QuestionSetError("the file is empty")
@@ -178,7 +201,7 @@ def _csv_records(text: str) -> tuple[int, str, list[tuple[str, dict]]]:
     return 1, "", records
 
 
-def _question(label: str, record: dict, fmt: str) -> dict[str, Any]:
+def _question(label: str, record: dict, fmt: str, max_golds: int | None = None) -> dict[str, Any]:
     question = _one(record.get("question"))
     if not question:
         raise QuestionSetError(f"{label}: no question text")
@@ -189,6 +212,8 @@ def _question(label: str, record: dict, fmt: str) -> dict[str, Any]:
             f"{label}: no gold passage. Copy the sentence that answers the "
             "question out of the document into gold_answers"
         )
+    if max_golds is not None and len(golds) > max_golds:
+        raise QuestionSetError(f"{label}: {len(golds)} gold passages; at most {max_golds} fit in one question")
     return {
         "id": _one(record.get("id")),
         "question": question,

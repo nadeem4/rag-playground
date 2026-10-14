@@ -26,9 +26,9 @@ NO_ANSWER = (
 class AskIn(BaseModel):
     config: Any
     documents: list[str] = Field(min_length=1)
-    question: str = Field(min_length=1)
+    question: str = Field(min_length=1, max_length=2000)
     #: How many hits the last retrieval step keeps; the pipeline's own top_k when left out.
-    k: int | None = Field(default=None, ge=1)
+    k: int | None = Field(default=None, ge=1, le=100)
     #: False: search only, no answer step.
     answer: bool = True
     force: bool = False

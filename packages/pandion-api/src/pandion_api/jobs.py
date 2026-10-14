@@ -8,7 +8,7 @@ from typing import Any, Callable
 from fastapi import HTTPException, Request
 
 from pandion_api.credentials import guarded, redact
-from pandion_api.documents import NO_SUCH_DOCUMENT, SHA
+from pandion_api.documents import NO_SUCH_DOCUMENT, SHA, safe_name
 
 #: What a run's work does on the worker thread: given the event callback, the
 #: cancel event and the keys (None when there are none), it returns
@@ -31,7 +31,7 @@ def documents_of(shas: list[str], request: Request) -> dict[str, str]:
         if path is None:
             raise HTTPException(status_code=404, detail=NO_SUCH_DOCUMENT)
         document = store.get(sha)
-        name = document.filename if document is not None else path.name
+        name = safe_name(document.filename) if document is not None else path.name
         if name in out:
             raise HTTPException(
                 status_code=400,

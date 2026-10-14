@@ -6,6 +6,7 @@ error it shows names no server folder and no key."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from api import credentials
@@ -177,6 +178,22 @@ def test_the_playgrounds_scrub_takes_out_server_paths_but_not_web_addresses():
         assert gone not in out
     for kept in ("x.py", "y.py", "abc.pdf", "z.txt", "https://api.example.com/v1/messages", "line 1"):
         assert kept in out
+
+
+def test_the_data_folder_is_scrubbed_only_where_it_ends_a_path_part():
+    from api.policy import SERVER_PATH, scrub_paths
+
+    data = Path("/data").resolve()
+    folder = data.as_posix()
+    text = f"see https://huggingface.co/datasets/x and {folder}base, not {folder}/sources/a.pdf or '{folder}'"
+    out = scrub_paths(text, data)
+    assert "https://huggingface.co/datasets/x" in out
+    assert "database" in out and f"{SERVER_PATH}base" not in out
+    assert f"{folder}/sources" not in out and f"'{SERVER_PATH}'" in out
+    assert scrub_paths(f"ends in {folder}", data).endswith(SERVER_PATH)
+    for around in ("({})", "in {}.", "{}, then"):
+        assert scrub_paths(around.format(folder), data) == around.format(SERVER_PATH)
+    assert scrub_paths(f"{folder}-old and {folder}_2", data).count(SERVER_PATH + "-old") == 0
 
 
 

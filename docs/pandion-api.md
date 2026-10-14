@@ -66,15 +66,23 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /documents/{id}/pages` | each page's size in PDF points: `[{"n", "width", "height"}]` |
 | `GET /documents/{id}/pages/{n}?scale=1` | the page as PNG, `scale` above 0 and at most 8, lowered so the image stays within 25 million pixels |
 | `GET /documents/{id}/pages/{n}/find?text=` | where the text (1 to 2,000 characters) is on the page: `{"rects": [[left, bottom, right, top], ...], "matched": "exact" or "normalized" or "none"}` |
+| `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document as pdfium reads it, keeps the set if the Policy keeps sets, and reports per question whether each passage was found. A set over 1 MB is 413; a set that cannot be used (more than 500 questions, more than 20 gold passages in one, a file that cannot be read) is 400 with its sentence; a document that is not a PDF is 415. |
+| `GET /documents/{id}/questions` | the set kept for the document, or `null` |
+| `DELETE /documents/{id}/questions` | remove it: 204 |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. |
 | `GET /runs/{run_id}` | the run's status, its whole event log, and once it ended its `result` |
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
-| `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question, and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
+| `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
+| `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
+| `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
+| `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
+| `POST /trace` | why one question missed, followed step by step down a finished run's results (`pandion.evaluation.trace`) |
 
 A document this caller may not read is answered exactly like one that does not exist: 404,
-with the same fixed sentence, which never repeats the id the request sent. A page number past the last page is 404, and a `scale` or `text`
-outside its range is 422. pdfium is not thread-safe, so every page request holds
+with the same fixed sentence, which never repeats the id the request sent. A page
+number past the last page is 404, and a `scale` or `text` outside its range is 422.
+pdfium is not thread-safe, so every page request and every question-set check holds
 `pandion_api.pages.PDFIUM_LOCK`; anything else in the same process that uses pdfium on
 request threads should hold it too.
 
@@ -98,7 +106,10 @@ anything runs.
 
 A document in a run is named by the filename it was uploaded under, so the same bytes
 under the same name give the same result ids however often they are uploaded. Two
-documents in one run cannot share a name.
+documents in one run cannot share a name. The same bytes uploaded by two callers are one
+record, so its name is the latest uploader's file name. When the store did not keep the
+name's suffix (see Documents), the name's dots become `_`, so Pandion never keeps a copy
+under that suffix.
 
 A model's key comes from the request's header for its provider (`X-Anthropic-Api-Key`,
 `X-OpenAI-Api-Key`, `X-Custom-Api-Key`, `X-OpenRouter-Api-Key`), else from the server's
@@ -125,13 +136,16 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `on_delete(sha, document, request)` | 404 without a record, else `True` | with the lock held: `True` deletes the file, `False` keeps it |
 | `describe(document, request)` | `{}` | keys added to each document in the list |
 | `private(sha, request)` | `False` | a page image's Cache-Control: private when True |
+| `keeps_question_sets(request)` | `True` | `POST /documents/{id}/questions`: False checks the set and keeps nothing |
 | `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
 | `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
 | `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
 | `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
+| `check_clear_cache(request)` | allows | `DELETE /cache` |
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
 | `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`), and on every error a run shows |
 | `not_readable` (attribute) | "This document is not available." | the 403 a run gets for a document `can_read` refuses |
+| `not_keeping_note` (attribute) | "This server checked your questions but did not keep them." | the report's note when a set was not kept |
 | `server_key(provider)` | the environment variable, else `(None, "none")` | a run's keys, and `GET /settings/models` |
 | `key(provider, request)` | the header, else `server_key` | a run's keys, and the key check |
 | `credentials(request)` | every provider whose `key` resolves | every run |
@@ -146,10 +160,15 @@ RAG Playground's Policy gives every `/api/v2` request a visitor cookie, and on i
 demo holds uploads to the demo's limits (a PDF of at most 10 MB and 20 pages, no page over
 41 inches a side, three live uploads a visitor, a cap on the whole disk), shows a visitor
 the samples and only their own uploads, and deletes only their own upload, keeping a
-file another visitor also uploaded. On the demo an upload's page images are cached privately, a sample's publicly. The old `/api/sources` routes call the same Policy.
+file another visitor also uploaded. On the demo an upload's page images are cached
+privately, a sample's publicly. The old `/api/sources` routes call the same Policy.
 On the demo a run is its visitor's own, on `/api/v2` and on the old `/api/runs/{id}` routes,
 which share the run manager. In every mode its errors keep only the last part of any
-server path (`[server]/x.py`).
+server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it refuses
+`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. It checks a
+question set and hands the report back, but keeps no set, so one visitor's questions
+never reach another's browser; the old `/api/sources/{id}/questions` routes ask the same
+Policy.
 
 ## What a request cannot set
 

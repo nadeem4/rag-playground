@@ -20,12 +20,15 @@ from api.deps import build_deps
 from api.main import create_app
 from tests.api import (
     conftest,
+    test_artifacts,
     test_delete_source,
     test_demo,
     test_pages,
+    test_questions,
     test_runs,
     test_source_file,
     test_sources,
+    test_trace,
 )
 
 #: (pattern, replacement): the first that matches wins; None keeps the path.
@@ -76,7 +79,18 @@ def make_v2_client(dirs, registry=None) -> TestClient:
 
 
 #: The modules whose tests run here: each looks up `make_client` at call time.
-MODULES = (conftest, test_delete_source, test_demo, test_pages, test_runs, test_source_file, test_sources)
+MODULES = (
+    conftest,
+    test_artifacts,
+    test_delete_source,
+    test_demo,
+    test_pages,
+    test_questions,
+    test_runs,
+    test_source_file,
+    test_sources,
+    test_trace,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -281,3 +295,54 @@ def test_a_run_is_read_on_v2(client):
     run_id = start(client, conftest.ingest_graph(src["sha"], src["filename"]))
     r = client.get(f"/api/runs/{run_id}")
     assert r.request.url.path == f"/api/v2/runs/{run_id}" and "result" in r.json()
+
+
+# --- results, cache and trace (Task 11) -------------------------------------------
+# The old routes' runs write into the same store, so a result an old run made is
+# read here through /api/v2/results. Clearing on /api/v2 answers "results", not
+# "artifacts", empties embeddings/ too, and uses pandion.ResultStore, not the
+# app's store object: test_delete_cache_* stay with the old route, and
+# packages/pandion-api/tests/test_api_results.py covers clearing on /api/v2.
+
+from tests.api.test_artifacts import (  # noqa: E402
+    test_artifact_meta,
+    test_artifact_payload,
+    test_index_payload_is_its_descriptor,
+    test_index_without_descriptor_is_404,
+    test_malformed_artifact_id_is_404,
+    test_unknown_artifact_is_404,
+)
+from tests.api.test_demo import test_demo_refuses_to_clear_the_shared_cache  # noqa: E402
+from tests.api.test_trace import (  # noqa: E402
+    test_the_route_refuses_an_unknown_artifact,
+    test_the_route_traces_a_real_run,
+)
+
+
+# --- question sets (Task 12) ------------------------------------------------------
+
+from tests.api.test_questions import (  # noqa: E402
+    test_a_gold_passage_copied_from_the_document_is_found,
+    test_a_passage_broken_across_a_line_is_found_normalized,
+    test_a_passage_from_another_document_has_no_close_match,
+    test_a_csv_field_past_the_csv_limit_is_400,
+    test_a_passage_retyped_with_other_quotes_is_found_normalized,
+    test_a_question_with_too_many_gold_passages_is_400,
+    test_a_question_is_only_found_when_all_of_its_golds_are,
+    test_a_second_upload_replaces_the_first,
+    test_a_set_can_be_removed,
+    test_a_set_cannot_be_stored_against_an_unknown_document,
+    test_a_set_is_stored_against_the_document_and_read_back,
+    test_a_set_over_one_megabyte_is_413,
+    test_a_set_with_too_many_questions_is_400,
+    test_a_set_with_a_missing_passage_is_still_stored,
+    test_a_source_that_is_not_a_pdf_says_so,
+    test_a_typo_is_not_found_and_the_closest_passage_shows_why,
+    test_an_unreadable_file_is_a_400_naming_the_row,
+    test_deeply_nested_json_is_400,
+    test_demo_mode_checks_a_set_but_keeps_nothing,
+    test_demo_mode_serves_no_set_for_another_document,
+    test_no_set_yet_is_an_empty_answer_not_an_error,
+    test_the_report_carries_the_question_and_its_id,
+    test_the_report_says_which_parser_read_the_document,
+)

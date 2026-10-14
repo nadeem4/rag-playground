@@ -6,6 +6,7 @@ capital sentence is whole in one piece; at 30 it is cut across two.
 """
 
 import json
+import threading
 
 import pytest
 
@@ -222,3 +223,51 @@ def test_a_question_as_a_dict_carries_the_id_of_its_final_result(tmp_path, docs)
         lost_at=None, trace=None, score={}, error="failed",
     )
     assert failed.to_dict()["result_id"] is None
+
+
+def test_documents_are_searched_without_reindexing_the_pipeline(tmp_path, docs):
+    bees = tmp_path / "bees.pdf"
+    bees.write_bytes(build_pdf(OTHER_DOC))
+    p = pipeline(tmp_path)
+    p.index.run(docs)
+    report = pandion.evaluate(p, [BEES], documents=[bees])
+    assert report.found == 1
+    assert set(p.index.indexed()) == {"sample.pdf"}
+
+
+def test_progress_names_each_question(tmp_path, docs):
+    events = []
+    pandion.evaluate(pipeline(tmp_path), [FOUND, NOT_IN_DOC], documents=docs, on_event=events.append)
+    done = [e for e in events if e["event"] == "question_finished"]
+    assert [(e["question"], e["number"], e["total"], e["found"]) for e in done] == [
+        ("capital", 1, 2, True), ("spain", 2, 2, False),
+    ]
+    assert {e["question"] for e in events if e["event"] == "node_finished"} == {"capital", "spain"}
+    assert json.loads(json.dumps(events)) == events
+
+
+def test_a_cancel_stops_before_the_next_question(tmp_path, docs):
+    stop = threading.Event()
+
+    def on_event(e):
+        if e["event"] == "question_finished":
+            stop.set()
+
+    report = pandion.evaluate(pipeline(tmp_path), [FOUND, NOT_IN_DOC], documents=docs,
+                              on_event=on_event, cancel=stop)
+    assert [q.id for q in report.questions] == ["capital"]
+    assert report.cancelled and report.to_dict()["cancelled"] is True
+    assert str(report).splitlines()[-1] == "Stopped before every question was asked."
+
+
+def test_a_cancel_during_a_search_leaves_that_question_out(tmp_path, docs):
+    stop = threading.Event()
+
+    def on_event(e):
+        if e["event"] == "node_started" and e.get("step") == "rewrite":
+            stop.set()
+
+    report = pandion.evaluate(pipeline(tmp_path), [FOUND, NOT_IN_DOC], documents=docs,
+                              on_event=on_event, cancel=stop)
+    assert report.questions == [] and report.cancelled
+    assert str(report).splitlines()[-1] == "Stopped before every question was asked."

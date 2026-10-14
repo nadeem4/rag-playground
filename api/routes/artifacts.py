@@ -12,7 +12,7 @@ from typing import Any
 from api import demo
 from fastapi import APIRouter, HTTPException, Request
 
-from pandion.artifacts import ArtifactType
+from pandion.extend import ArtifactType
 from pandion.storage import META, Store
 
 router = APIRouter()

@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import copy
 import statistics
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pandion.config import ConfigError, _block, from_dict, to_dict
+from pandion.events import event
 from pandion.payloads import ChunkSet, Query
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
 from pandion.plugins import discover
@@ -112,6 +114,8 @@ class EvaluationReport:
 
     top_k: int
     questions: list[QuestionResult]
+    #: A cancel stopped the run before every question was asked.
+    cancelled: bool = False
 
     @property
     def total(self) -> int:
@@ -142,12 +146,16 @@ class EvaluationReport:
         failed = t["total"] - t["scored"]
         if failed:
             total += f" {failed} question{'' if failed == 1 else 's'} could not be scored."
-        return "\n".join([*lines, total])
+        out = [*lines, total]
+        if self.cancelled:
+            out.append("Stopped before every question was asked.")
+        return "\n".join(out)
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON: the totals, the totals by tag, and every question."""
         return {
             "top_k": self.top_k,
+            "cancelled": self.cancelled,
             **self.totals(),
             "by_tag": self.by_tag(),
             "questions": [q.to_dict() for q in self.questions],
@@ -195,9 +203,11 @@ def evaluate(
     p: Pipeline,
     questions: str | Path | list[dict] | dict,
     top_k: int = 5,
-    documents: str | Path | list[str | Path] | None = None,
+    documents: Any = None,
     *,
     credentials: dict[str, str] | None = None,
+    on_event: Callable[[dict[str, Any]], None] | None = None,
+    cancel: threading.Event | None = None,
 ) -> EvaluationReport:
     """Search for every question in `questions` and say whether the answer came back.
 
@@ -205,12 +215,16 @@ def evaluate(
     the bundled samples use, or the same list (or dict) in code. It is checked
     before anything runs. `top_k` is how many of the top pieces count, which
     is what a reader would look at. With `documents` (what `index.run`
-    takes), those documents are indexed first, every step a cache hit when
-    they were indexed before, and the search covers exactly them; without
-    it, the search covers what `p.index` indexed last. Each question is
-    scored by the `eval` step, the one the playground's Evaluate page runs,
-    and a miss is traced down the steps to the first one that lost it.
-    A model's key goes in `credentials`, as for `p.retrieve`.
+    takes), each question searches exactly those documents, indexed first
+    through the cache when needed; without it, the search covers what `p.index`
+    indexed last. Each question is scored by the `eval` step, the one the
+    playground's Evaluate page runs, and a miss is traced down the steps to
+    the first one that lost it. A model's key goes in `credentials`, as for
+    `p.retrieve`.
+
+    `on_event` gets every event of every search, with the question's id under
+    "question", and a "question_finished" event after each question. `cancel`
+    stops before the next question; the report then says it was cancelled.
     """
     if top_k < 1:
         raise ValueError(
@@ -222,39 +236,58 @@ def evaluate(
             "for every question. Add a retrieve section with at least a search step."
         )
     asked = load_questions(questions)["questions"]
-    if documents is not None:
-        p.index.run(documents)
+    resolved = p.index._documents(documents) if documents is not None else None
     discover()
     step = registry.get(Stage.USE_CASE, "eval")
     settings = step.config_model(top_k=top_k)
     index: IndexReport | None = None
     results: list[QuestionResult] = []
+    cancelled = False
     for n, q in enumerate(asked, start=1):
-        retrieval = p.retrieve(q["question"], credentials=credentials)
-        common = {"id": q["id"] or f"question {n}", "question": q["question"], "golds": q["gold_answers"], "tags": q["tags"]}
+        if cancel is not None and cancel.is_set():
+            cancelled = True
+            break
+        qid = q["id"] or f"question {n}"
+        emit = None
+        if on_event is not None:
+            def emit(e: dict[str, Any], qid: str = qid) -> None:
+                on_event({**e, "question": qid})
+        retrieval = p.retrieval._retrieve(
+            q["question"], None, resolved, credentials=credentials, on_event=emit, cancel=cancel
+        )
+        if not retrieval.ok and cancel is not None and cancel.is_set():
+            cancelled = True
+            break
+        common = {"id": qid, "question": q["question"], "golds": q["gold_answers"], "tags": q["tags"]}
         if not retrieval.ok:
-            results.append(QuestionResult(
+            result = QuestionResult(
                 **common, found=False, rank=None, lost_at=None, trace=None, score={},
                 error=_failure(retrieval), retrieval=retrieval,
+            )
+        else:
+            query = Query(text=q["question"], gold_answers=q["gold_answers"])
+            score = step().apply(
+                {"result": retrieval.result.model_dump(mode="json"), "query": query.model_dump(mode="json")},
+                settings,
+                None,
+            )["payload"]
+            miss = None
+            if not score["hit"]:
+                if index is None:
+                    index = p.index._index(resolved if resolved is not None else p.index.indexed())
+                miss = _trace(index, retrieval, q, top_k)
+            result = QuestionResult(
+                **common, found=score["hit"], rank=score["rank"],
+                lost_at=miss["lost_at"] if miss else None, trace=miss, score=score,
+                retrieval=retrieval,
+            )
+        results.append(result)
+        if on_event is not None:
+            on_event(event(
+                "question_finished", question=qid, number=n, total=len(asked),
+                found=result.found, error=result.error,
             ))
-            continue
-        query = Query(text=q["question"], gold_answers=q["gold_answers"])
-        score = step().apply(
-            {"result": retrieval.result.model_dump(mode="json"), "query": query.model_dump(mode="json")},
-            settings,
-            None,
-        )["payload"]
-        miss = None
-        if not score["hit"]:
-            if index is None:
-                index = p.index._index(p.index.indexed())
-            miss = _trace(index, retrieval, q, top_k)
-        results.append(QuestionResult(
-            **common, found=score["hit"], rank=score["rank"],
-            lost_at=miss["lost_at"] if miss else None, trace=miss, score=score,
-            retrieval=retrieval,
-        ))
-    return EvaluationReport(top_k=top_k, questions=results)
+    return EvaluationReport(top_k=top_k, questions=results, cancelled=cancelled)
 
 
 def _failure(retrieval: Retrieval) -> str:
@@ -357,15 +390,33 @@ class Comparison:
         blocks = block if isinstance(block, list) else [block]
         return ", ".join(_short(b) for b in blocks) or "none"
 
+    @property
+    def index_stopped(self) -> bool:
+        """A cancel stopped the index run: a step was skipped and none failed."""
+        steps = [s for d in self.index.documents.values() for s in d.stages.values()]
+        if self.index.index is not None:
+            steps.append(self.index.index)
+        statuses = {s.status for s in steps}
+        return "skipped" in statuses and "failed" not in statuses
+
+    @property
+    def cancelled(self) -> bool:
+        """A cancel stopped this variant, in its index run or its evaluation."""
+        if self.report is not None and self.report.cancelled:
+            return True
+        return not self.index.ok and self.index_stopped
+
     def __str__(self) -> str:
         """One plain line: the stage, the variant in short, and how it did."""
         if not self.index.ok:
-            outcome = "the index run failed"
+            outcome = "stopped" if self.index_stopped else "the index run failed"
         elif self.report is None:
             outcome = "indexed, no questions asked"
         else:
             t = self.report.totals()
             outcome = f"found {t['found']} of {t['scored']}"
+            if self.report.cancelled:
+                outcome += " (stopped early)"
         return f"{self.stage} {self.settings}: {outcome}"
 
     def to_dict(self) -> dict[str, Any]:
@@ -375,6 +426,7 @@ class Comparison:
             "stage": self.stage,
             "variant": _block(self.variant),
             "ok": self.index.ok,
+            "cancelled": self.cancelled,
             "outputs": {
                 key: {"artifact_id": s.artifact_id, "status": s.status, "transform": s.transform}
                 for key, s in self.outputs.items()
@@ -396,15 +448,22 @@ class Comparisons(list[Comparison]):
     """What `compare` returns: a list of `Comparison`, one per variant, that
     prints one plain line per variant and the best one. The best has the
     highest hit rate (found out of scored), then the highest mean reciprocal
-    rank. A slice such as `results[:2]` is a plain list."""
+    rank. A variant a cancel stopped is never the best. A slice such as
+    `results[:2]` is a plain list."""
+
+    #: A cancel stopped compare before every variant ran.
+    cancelled: bool = False
 
     def _scored(self) -> list[Comparison]:
-        return [c for c in self if c.report is not None and c.report.totals()["scored"]]
+        return [
+            c for c in self
+            if c.report is not None and not c.cancelled and c.report.totals()["scored"]
+        ]
 
     @property
     def best(self) -> list[Comparison]:
         """The best comparisons, every one tied for first, in order; empty when
-        no variant was scored or none found an answer."""
+        no variant finished and was scored, or none found an answer."""
         scored = self._scored()
         if not any(c.report.found for c in scored):
             return []
@@ -423,6 +482,7 @@ class Comparisons(list[Comparison]):
         return {
             "comparisons": [c.to_dict() for c in self],
             "best": [n for n, c in enumerate(self) if any(c is b for b in best)],
+            "cancelled": self.cancelled,
         }
 
     def __str__(self) -> str:
@@ -436,6 +496,8 @@ class Comparisons(list[Comparison]):
             lines.append(line + ".")
         elif self._scored():
             lines.append("No variant found an answer.")
+        if self.cancelled or any(c.cancelled for c in self):
+            lines.append("Stopped before every variant had finished.")
         return "\n".join(lines)
 
 
@@ -448,6 +510,8 @@ def compare(
     *,
     top_k: int = 5,
     credentials: dict[str, str] | None = None,
+    on_event: Callable[[dict[str, Any]], None] | None = None,
+    cancel: threading.Event | None = None,
 ) -> Comparisons:
     """Run `p` once per variant, with only `stage` changed, and evaluate each.
 
@@ -461,6 +525,10 @@ def compare(
     cannot be compared, because nothing is searched. The best variant is the
     one with the highest hit rate (answers found out of questions scored),
     then the highest mean reciprocal rank; see `Comparisons.best`.
+
+    `on_event` gets every event, with the variant's number (from 1) under
+    "variant" and the number of variants under "variants"; `cancel` starts no
+    further variant, and the result says it was cancelled.
     """
     section = COMPARE_STAGES.get(stage)
     if section is None:
@@ -488,10 +556,23 @@ def compare(
         except ConfigError as exc:
             raise ConfigError(f"variant {n}: {exc}") from None
     results = Comparisons()
-    for variant, pipeline in zip(variants, pipelines):
-        index = pipeline.index.run(documents)
+    for n, (variant, pipeline) in enumerate(zip(variants, pipelines), start=1):
+        if cancel is not None and cancel.is_set():
+            results.cancelled = True
+            break
+        emit = None
+        if on_event is not None:
+            def emit(e: dict[str, Any], n: int = n) -> None:
+                on_event({**e, "variant": n, "variants": len(variants)})
+        index = pipeline.index.run(documents, on_event=emit, cancel=cancel, credentials=credentials)
         report = None
         if asked is not None and index.ok:
-            report = evaluate(pipeline, asked, top_k, credentials=credentials)
+            report = evaluate(
+                pipeline, asked, top_k, credentials=credentials, on_event=emit, cancel=cancel
+            )
+            results.cancelled = results.cancelled or report.cancelled
         results.append(Comparison(stage=stage, variant=variant, pipeline=pipeline, index=index, report=report))
+        if cancel is not None and cancel.is_set():
+            results.cancelled = True
+            break
     return results

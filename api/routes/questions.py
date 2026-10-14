@@ -31,8 +31,8 @@ from pandion.evaluation import (
     check_questions,
     parse_question_set,
 )
+from pandion.extend import RunContext, Stage
 from pandion.plugins.chunk import DocView
-from pandion.ports import RunContext, Stage
 from pandion.registry import registry
 
 router = APIRouter()

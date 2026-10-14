@@ -298,8 +298,11 @@ def test_register_decorator_writes_to_the_module_registry():
         def apply(self, inputs, config, ctx):
             return {}
 
-    assert DecoratorProbe.name == "decorator_probe"
-    assert module_registry.get(Stage.CHUNK, "decorator_probe") is DecoratorProbe
+    try:
+        assert DecoratorProbe.name == "decorator_probe"
+        assert module_registry.get(Stage.CHUNK, "decorator_probe") is DecoratorProbe
+    finally:
+        module_registry._by_stage[Stage.CHUNK].pop("decorator_probe", None)
 
 
 def test_export_schema_carries_prefers_and_fallback(reg):

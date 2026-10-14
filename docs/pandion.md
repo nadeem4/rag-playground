@@ -461,10 +461,13 @@ report.to_dict()                      # all of it as plain JSON
 print(report)                         # one line per question, then the totals
 ```
 
-The pipeline needs a retrieve section. With `documents=`, those documents are indexed
-first (every step is a cache hit when they were indexed before) and the search covers
-exactly them. Without it, the search covers what `p.index.run` or `p.index.sync` indexed
-last.
+The pipeline needs a retrieve section. With `documents`, each question searches exactly
+those documents (indexed first through the cache when needed), and `p.index` is left as
+it was. Without it, the search covers what `p.index.run` or `p.index.sync` indexed last.
+
+`on_event` and `cancel` work as for `p.retrieve`: each event carries the question's id
+under `question`, a `question_finished` event follows each question, and a cancel stops
+before the next one (`report.cancelled`).
 
 `print(report)` gives one plain line per question and the totals:
 
@@ -590,10 +593,23 @@ is empty when no variant was scored or none found an answer. `results.to_dict()`
 plain JSON with `comparisons`, each comparison's `to_dict()`, and `best`, the places of
 the best ones in the list, such as `[1]`.
 
+`on_event` gets every event with the variant's number under `variant` and the number of
+variants under `variants`. An evaluation's own fields, such as `total` (the number of
+questions) on `question_finished`, are left as they are. `cancel` starts no further
+variant. A variant whose index run a cancel stopped prints `stopped`, and one whose
+evaluation was stopped partway prints its count followed by `(stopped early)`. Neither
+can be the best: when no variant finished, there is no `Best:` line. The last line is
+then `Stopped before every variant had finished.` `results.cancelled`, also in
+`results.to_dict()`, is one flag for the whole comparison: a cancel stopped it. Each
+comparison has its own `r.cancelled`, also in `r.to_dict()`, which says whether a cancel
+stopped that variant.
+
 ## Running a pipeline from an app
 
 An app, such as a web server or a command line tool, can do everything through
-Pandion's public API. This section lists what it needs.
+Pandion's public API. This section lists what it needs. `pandion.evaluate` and
+`pandion.compare` take `on_event` and `cancel` too, so a long evaluation can show
+progress and be stopped.
 
 ### Settings forms
 
@@ -667,7 +683,8 @@ which files it covers. `p.retrieve` and `p.ask` take `documents=`, the same argu
 `index.run` takes, and search the index built from exactly those files. Files not yet
 indexed with these settings are indexed first; files that were are read from the cache.
 It does not change what `p.index` holds. `on_event`, `cancel`, `credentials` and `force`
-work as for `index.run`.
+work as for `index.run`. On a server many people share, always pass `documents=`;
+without it the search covers whatever was last indexed in the process.
 
 ```python
 answer = p.ask("What does chapter 2 say?", documents={"report.pdf": "/uploads/0f3a.pdf"},

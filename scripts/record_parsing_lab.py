@@ -31,9 +31,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pandion.artifacts import ArtifactType  # noqa: E402
+from pandion.extend import ArtifactType, Stage  # noqa: E402
 from pandion.graph import Edge, Graph, Node  # noqa: E402
-from pandion.ports import Stage  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "learn" / "parsing-lab.json"
 CASES = ["two-column-report", "table-of-figures", "scanned-notes"]

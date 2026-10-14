@@ -30,7 +30,7 @@ def files_for(sources, sha: str) -> list[str]:
 def test_the_list_gives_each_upload_its_upload_time(client):
     before = datetime.now(timezone.utc).replace(microsecond=0)
     body = upload_pdf(client)
-    [listed] = client.get("/api/sources").json()
+    [listed] = client.get("/api/v2/documents").json()
     assert {k: v for k, v in listed.items() if k != "uploaded_at"} == body
     stamp = datetime.fromisoformat(listed["uploaded_at"])
     assert before <= stamp <= datetime.now(timezone.utc)
@@ -38,13 +38,13 @@ def test_the_list_gives_each_upload_its_upload_time(client):
 
 def test_a_sample_in_the_list_has_no_upload_time(client):
     client.post("/api/sources/sample")
-    [listed] = client.get("/api/sources").json()
+    [listed] = client.get("/api/v2/documents").json()
     assert "uploaded_at" not in listed
 
 
 def test_the_list_never_shows_the_visitor_ids(client):
     upload_pdf(client)
-    [listed] = client.get("/api/sources").json()
+    [listed] = client.get("/api/v2/documents").json()
     assert "visitors" not in listed
 
 
@@ -55,12 +55,12 @@ def test_demo_deletes_your_own_upload_and_its_record(client, dirs, monkeypatch):
     demo_on(monkeypatch)
     client.get("/api/settings/app")
     sha = upload_pdf(client)["sha"]
-    r = client.delete(f"/api/sources/{sha}")
+    r = client.delete(f"/api/v2/documents/{sha}")
     assert r.status_code == 200
     assert r.json() == {"sha": sha, "deleted": True}
     assert files_for(dirs["sources"], sha) == []
     assert not (dirs["sources"] / ".meta" / f"{sha}.json").exists()
-    assert client.get("/api/sources").json() == []
+    assert client.get("/api/v2/documents").json() == []
 
 
 def test_demo_refuses_another_visitors_upload(dirs, monkeypatch):
@@ -70,7 +70,7 @@ def test_demo_refuses_another_visitors_upload(dirs, monkeypatch):
         sha = upload_pdf(owner)["sha"]
     with make_client(dirs) as stranger:
         stranger.get("/api/settings/app")
-        assert stranger.delete(f"/api/sources/{sha}").status_code == 404
+        assert stranger.delete(f"/api/v2/documents/{sha}").status_code == 404
     assert files_for(dirs["sources"], sha) != []
 
 
@@ -80,7 +80,7 @@ def test_demo_refuses_without_a_visitor_id(dirs, monkeypatch):
         owner.get("/api/settings/app")
         sha = upload_pdf(owner)["sha"]
     with make_client(dirs) as anon:
-        assert anon.delete(f"/api/sources/{sha}").status_code == 400
+        assert anon.delete(f"/api/v2/documents/{sha}").status_code == 400
     assert files_for(dirs["sources"], sha) != []
 
 
@@ -91,10 +91,10 @@ def test_a_file_two_visitors_uploaded_stays_for_the_other(dirs, monkeypatch):
         b.get("/api/settings/app")
         sha = upload_pdf(a)["sha"]
         upload_pdf(b)
-        r = a.delete(f"/api/sources/{sha}")
+        r = a.delete(f"/api/v2/documents/{sha}")
         assert r.status_code == 200 and r.json() == {"sha": sha, "deleted": False}
-        assert a.get("/api/sources").json() == []
-        assert [s["sha"] for s in b.get("/api/sources").json()] == [sha]
+        assert a.get("/api/v2/documents").json() == []
+        assert [s["sha"] for s in b.get("/api/v2/documents").json()] == [sha]
     assert files_for(dirs["sources"], sha) != []
 
 
@@ -102,7 +102,7 @@ def test_demo_refuses_to_delete_a_sample(client, dirs, monkeypatch):
     demo_on(monkeypatch)
     client.get("/api/settings/app")
     client.post("/api/sources/sample")
-    r = client.delete(f"/api/sources/{SAMPLE_SHA}")
+    r = client.delete(f"/api/v2/documents/{SAMPLE_SHA}")
     assert r.status_code == 403
     assert files_for(dirs["sources"], SAMPLE_SHA) != []
 
@@ -110,8 +110,8 @@ def test_demo_refuses_to_delete_a_sample(client, dirs, monkeypatch):
 def test_a_malformed_sha_is_404(client, monkeypatch):
     demo_on(monkeypatch)
     client.get("/api/settings/app")
-    assert client.delete("/api/sources/not-a-sha").status_code == 404
-    assert client.delete("/api/sources/" + "0" * 64).status_code == 404
+    assert client.delete("/api/v2/documents/not-a-sha").status_code == 404
+    assert client.delete("/api/v2/documents/" + "0" * 64).status_code == 404
 
 
 # --- DELETE running locally ------------------------------------------------------
@@ -121,14 +121,14 @@ def test_locally_any_upload_can_be_deleted(dirs):
     with make_client(dirs) as uploader:
         sha = upload_pdf(uploader)["sha"]
     with make_client(dirs) as other_browser:
-        r = other_browser.delete(f"/api/sources/{sha}")
+        r = other_browser.delete(f"/api/v2/documents/{sha}")
         assert r.status_code == 200 and r.json() == {"sha": sha, "deleted": True}
     assert files_for(dirs["sources"], sha) == []
 
 
 def test_locally_a_sample_is_refused(client, dirs):
     client.post("/api/sources/sample")
-    assert client.delete(f"/api/sources/{SAMPLE_SHA}").status_code == 403
+    assert client.delete(f"/api/v2/documents/{SAMPLE_SHA}").status_code == 403
     assert files_for(dirs["sources"], SAMPLE_SHA) != []
 
 
@@ -137,10 +137,10 @@ def test_locally_a_delete_also_removes_the_question_set_beside_it(client, dirs):
     questions = dirs["sources"] / "questions"
     questions.mkdir(parents=True)
     (questions / f"{sha}.json").write_text("{}", encoding="utf-8")
-    assert client.delete(f"/api/sources/{sha}").status_code == 200
+    assert client.delete(f"/api/v2/documents/{sha}").status_code == 200
     assert not (questions / f"{sha}.json").exists()
 
 
 def test_the_sources_list_is_never_cached(client):
     upload_pdf(client)
-    assert client.get("/api/sources").headers["cache-control"] == "private, no-store"
+    assert client.get("/api/v2/documents").headers["cache-control"] == "private, no-store"

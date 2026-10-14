@@ -17,22 +17,22 @@ def demo_on(monkeypatch) -> None:
 
 def test_the_file_comes_back_byte_for_byte(client):
     sha = upload_pdf(client, "notes.pdf")["sha"]
-    r = client.get(f"/api/sources/{sha}/file")
+    r = client.get(f"/api/v2/documents/{sha}/file")
     assert r.status_code == 200
     assert r.content == build_pdf(SAMPLE_PAGES)
     assert r.headers["content-type"] == "application/pdf"
 
 
 def test_an_unknown_or_malformed_sha_is_404(client):
-    assert client.get("/api/sources/" + "0" * 64 + "/file").status_code == 404
-    assert client.get("/api/sources/nope/file").status_code == 404
+    assert client.get("/api/v2/documents/" + "0" * 64 + "/file").status_code == 404
+    assert client.get("/api/v2/documents/nope/file").status_code == 404
 
 
 def test_demo_serves_your_own_upload_privately(client, monkeypatch):
     demo_on(monkeypatch)
     client.get("/api/settings/app")
     sha = upload_pdf(client)["sha"]
-    r = client.get(f"/api/sources/{sha}/file")
+    r = client.get(f"/api/v2/documents/{sha}/file")
     assert r.status_code == 200
     assert r.headers["cache-control"] == "private, no-store"
 
@@ -43,14 +43,14 @@ def test_demo_never_serves_another_visitors_upload(dirs, monkeypatch):
     demo_on(monkeypatch)
     with make_client(dirs) as stranger:
         stranger.get("/api/settings/app")
-        assert stranger.get(f"/api/sources/{sha}/file").status_code == 404
+        assert stranger.get(f"/api/v2/documents/{sha}/file").status_code == 404
 
 
 def test_demo_serves_a_sample(client, monkeypatch):
     demo_on(monkeypatch)
     sha = client.post("/api/sources/sample").json()["sha"]
     assert sha == sample_set.default_sample().sha
-    r = client.get(f"/api/sources/{sha}/file")
+    r = client.get(f"/api/v2/documents/{sha}/file")
     assert r.status_code == 200
     assert r.content == sample_set.default_sample().pdf.read_bytes()
 
@@ -64,6 +64,6 @@ def test_every_sample_is_readable_straight_after_startup(dirs, monkeypatch, demo
         demo_on(monkeypatch)
     with make_client(dirs) as fresh:
         for s in sample_set.all_samples():
-            r = fresh.get(f"/api/sources/{s.sha}/file")
+            r = fresh.get(f"/api/v2/documents/{s.sha}/file")
             assert r.status_code == 200, s.name
             assert r.content == s.pdf.read_bytes()

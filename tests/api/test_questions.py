@@ -42,7 +42,7 @@ RECALL = "Recall at ten is the headline metric."
 
 def upload_doc(client, name: str = "primer.pdf") -> dict:
     r = client.post(
-        "/api/sources", files={"file": (name, build_pdf(PAGES), "application/pdf")}
+        "/api/v2/documents", files={"file": (name, build_pdf(PAGES), "application/pdf")}
     )
     assert r.status_code == 200, r.text
     return r.json()
@@ -51,7 +51,7 @@ def upload_doc(client, name: str = "primer.pdf") -> dict:
 def post_set(client, sha: str, content: str | bytes, filename: str = "q.json"):
     blob = content.encode("utf-8") if isinstance(content, str) else content
     return client.post(
-        f"/api/sources/{sha}/questions",
+        f"/api/v2/documents/{sha}/questions",
         files={"file": (filename, blob, "application/octet-stream")},
     )
 
@@ -292,7 +292,7 @@ def test_a_set_is_stored_against_the_document_and_read_back(client, dirs):
     assert r.json()["stored"] is True
     assert (dirs["sources"] / "questions" / f"{sha}.json").is_file()
 
-    got = client.get(f"/api/sources/{sha}/questions")
+    got = client.get(f"/api/v2/documents/{sha}/questions")
     assert got.status_code == 200
     assert got.json() == {
         "sha": sha,
@@ -306,7 +306,7 @@ def test_a_set_is_stored_against_the_document_and_read_back(client, dirs):
 def test_no_set_yet_is_an_empty_answer_not_an_error(client):
     # Evaluate asks on every visit; "none yet" is normal, so it is no 404 in the console.
     sha = upload_doc(client)["sha"]
-    r = client.get(f"/api/sources/{sha}/questions")
+    r = client.get(f"/api/v2/documents/{sha}/questions")
     assert r.status_code == 200
     assert r.json() is None
 
@@ -314,18 +314,18 @@ def test_no_set_yet_is_an_empty_answer_not_an_error(client):
 def test_a_set_can_be_removed(client, dirs):
     sha = upload_doc(client)["sha"]
     post_set(client, sha, one_json(BOUNDARY))
-    assert client.delete(f"/api/sources/{sha}/questions").status_code == 204
-    assert client.get(f"/api/sources/{sha}/questions").json() is None
+    assert client.delete(f"/api/v2/documents/{sha}/questions").status_code == 204
+    assert client.get(f"/api/v2/documents/{sha}/questions").json() is None
     assert not (dirs["sources"] / "questions" / f"{sha}.json").exists()
     # removing what is not there is not an error
-    assert client.delete(f"/api/sources/{sha}/questions").status_code == 204
+    assert client.delete(f"/api/v2/documents/{sha}/questions").status_code == 204
 
 
 def test_a_second_upload_replaces_the_first(client):
     sha = upload_doc(client)["sha"]
     post_set(client, sha, one_json(BOUNDARY), "old.json")
     post_set(client, sha, one_json(RULE), "new.json")
-    got = client.get(f"/api/sources/{sha}/questions").json()
+    got = client.get(f"/api/v2/documents/{sha}/questions").json()
     assert got["filename"] == "new.json"
     assert got["set"]["questions"][0]["gold_answers"] == [RULE]
 
@@ -340,7 +340,7 @@ def test_an_unreadable_file_is_a_400_naming_the_row(client):
     r = post_set(client, sha, "question,gold_answers\nq1?,g1.\n,g2.\n", "q.csv")
     assert r.status_code == 400
     assert "row 3" in r.json()["detail"]
-    assert client.get(f"/api/sources/{sha}/questions").json() is None
+    assert client.get(f"/api/v2/documents/{sha}/questions").json() is None
 
 
 def test_demo_mode_checks_a_set_but_keeps_nothing(client, dirs, monkeypatch):
@@ -361,7 +361,7 @@ def test_demo_mode_checks_a_set_but_keeps_nothing(client, dirs, monkeypatch):
     assert body["questions"][0]["status"] == "not_found"
     assert not (dirs["sources"] / "questions").exists()
     # And nothing is served back afterwards.
-    assert client.get(f"/api/sources/{sha}/questions").json() is None
+    assert client.get(f"/api/v2/documents/{sha}/questions").json() is None
 
 
 def test_demo_mode_serves_no_set_for_another_document(dirs, monkeypatch):
@@ -372,7 +372,7 @@ def test_demo_mode_serves_no_set_for_another_document(dirs, monkeypatch):
         post_set(owner, sha, one_json(BOUNDARY))
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     with make_client(dirs) as someone_else:
-        assert someone_else.get(f"/api/sources/{sha}/questions").status_code == 404
+        assert someone_else.get(f"/api/v2/documents/{sha}/questions").status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +449,7 @@ def test_a_set_with_a_missing_passage_is_still_stored(client):
     assert r.status_code == 200
     assert r.json()["stored"] is True
     assert [q["status"] for q in r.json()["questions"]] == ["found", "not_found"]
-    assert client.get(f"/api/sources/{sha}/questions").json()["count"] == 2
+    assert client.get(f"/api/v2/documents/{sha}/questions").json()["count"] == 2
 
 
 def test_a_question_is_only_found_when_all_of_its_golds_are(client):
@@ -476,7 +476,7 @@ def test_the_report_carries_the_question_and_its_id(client):
 
 def test_a_source_that_is_not_a_pdf_says_so(client):
     r = client.post(
-        "/api/sources", files={"file": ("notes.txt", b"hello there", "text/plain")}
+        "/api/v2/documents", files={"file": ("notes.txt", b"hello there", "text/plain")}
     )
     got = post_set(client, r.json()["sha"], one_json("hello there"), "q.json")
     assert got.status_code == 415

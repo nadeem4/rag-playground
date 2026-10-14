@@ -1,10 +1,11 @@
-"""The FastAPI app: pandion-api with the playground's Policy, the old /api routes
-and the teaching routes, and the web build. `create_app(deps)` for tests;
-`api.main:app` for uvicorn.
+"""The FastAPI app: pandion-api with the playground's Policy, the teaching
+routes, and the web build. `create_app(deps)` for tests; `api.main:app` for
+uvicorn.
 
-pandion-api's routes sit under /api/v2. The old routes stay under /api with
-their shapes until part 5 moves the web onto /api/v2. Both share one run
-manager, so the demo's limit on runs at once holds across them.
+pandion-api's routes sit under /api/v2: every run, document, result and key
+check goes through them. The playground's own routes under /api are only the
+teaching routes: health, the samples, the lessons, the stage explanations, the
+app settings and the question template.
 
 `app` is built lazily on first access, so importing this module (as the tests
 do) does not build the default dependencies and their folders.
@@ -21,22 +22,10 @@ from pandion_api import create_app as create_api
 
 from api.deps import APP_MODELS, Deps, build_deps
 from api.policy import PlaygroundPolicy
-from api.routes import (
-    artifacts,
-    health,
-    learn,
-    pages,
-    questions,
-    registry,
-    runs,
-    samples,
-    settings,
-    sources,
-    trace,
-)
+from api.routes import health, learn, questions, registry, samples, settings, sources
 from api.static import mount_spa
 
-#: Where pandion-api's routes sit, beside the old /api routes.
+#: Where pandion-api's routes sit, beside the teaching routes under /api.
 API_PREFIX = "/api/v2"
 
 
@@ -66,14 +55,10 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         health.router,
         registry.router,
         sources.router,
-        pages.router,
-        runs.router,
-        artifacts.router,
         settings.router,
         learn.router,
         samples.router,
         questions.router,
-        trace.router,
     ):
         app.include_router(r, prefix="/api")
     mount_spa(app, deps.web_dist)  # last: the catch-all route

@@ -1,14 +1,8 @@
-"""Bring your own gold set: the template, and a set stored against a document.
+"""Bring your own gold set: the template to fill in.
 
-A set belongs to one document, keyed by that document's fingerprint
-(`<sources dir>/questions/<sha>.json`), so a set written for the handbook can
-never be applied to the invoice by accident.
-
-Every upload is checked against the document as `pdfium` reads it, and the
-report says so: a different parser can put the text together differently, and a
-passage that matches here could still miss there. A set with passages that were
-not found is stored anyway. A partly good set is still useful, and refusing it
-would leave the reader with nothing to fix.
+A filled-in set is checked and stored against its document by pandion-api
+(`/api/v2/documents/{sha}/questions`). On a hosted demo it is checked but not
+kept: `PlaygroundPolicy.keeps_question_sets` says no, and `NO_STORING` says why.
 """
 
 from __future__ import annotations
@@ -16,32 +10,13 @@ from __future__ import annotations
 import csv
 import io
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any
 
-import pypdfium2 as pdfium
-from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile
-from fastapi.concurrency import run_in_threadpool
-from pandion_api.pages import PDFIUM_LOCK
-from pandion_api.routes.questions import read_set
+from fastapi import APIRouter, Query, Response
 
-from api.routes.pages import source_path
-from pandion.evaluation import GOLD_SEPARATOR, check_questions
-from pandion.extend import RunContext, Stage
-from pandion.plugins.chunk import DocView
-from pandion.registry import registry
+from pandion.evaluation import GOLD_SEPARATOR
 
 router = APIRouter()
-
-#: The parser the check reads the document with. Fast, and no model.
-PARSER = "pdfium"
-
-PARSER_NOTE = (
-    "The gold passages were looked for in the document as the pdfium parser "
-    "reads it. Another parser can put the same text together differently, so a "
-    "passage found here can still miss there, and the other way round."
-)
 
 #: A hosted demo checks a set and hands the result back, but keeps nothing, so
 #: one visitor's questions never reach another's browser.
@@ -49,9 +24,6 @@ NO_STORING = (
     "this hosted demo checked your questions but did not keep them, so they "
     "live in this browser tab only; run the playground locally to keep a set"
 )
-
-#: Where a set lives, under the configured sources directory.
-QUESTIONS_DIR = "questions"
 
 #: Two real questions about the bundled sample, with every optional field
 #: filled in, so nobody has to read a spec. The gold passages are copied out of
@@ -124,90 +96,3 @@ def get_template(format: str = Query("json", pattern="^(json|csv)$")) -> Respons
             "Content-Disposition": f'attachment; filename="questions-template.{format}"'
         },
     )
-
-
-@router.post("/sources/{sha}/questions")
-async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict[str, Any]:
-    """Check every gold passage, and store the set if the Policy keeps sets (not on a hosted demo)."""
-    path = source_path(request, sha)
-    parsed = await read_set(file)  # the same limits as /api/v2
-    text = await run_in_threadpool(_document_text, path)
-    rows = await run_in_threadpool(check_questions, parsed["questions"], text)
-    record = {
-        "sha": sha,
-        "filename": Path(file.filename or "questions.json").name,
-        "format": parsed["format"],
-        "count": len(parsed["questions"]),
-        "set": {
-            "version": parsed["version"],
-            "document": parsed["document"],
-            "questions": parsed["questions"],
-        },
-    }
-    # The site's rule, the same one POST /api/v2/documents/{id}/questions asks.
-    policy = request.app.state.policy
-    keep = policy.keeps_question_sets(request)
-    if keep:
-        stored = _store(request, sha)
-        stored.parent.mkdir(parents=True, exist_ok=True)
-        stored.write_text(json.dumps(record), encoding="utf-8")
-
-    return {
-        **record,
-        "stored": keep,
-        "note": "" if keep else policy.not_keeping_note,
-        "parser": PARSER,
-        "parser_note": PARSER_NOTE,
-        "summary": {
-            "questions": len(rows),
-            "found": sum(r["status"] == "found" for r in rows),
-            "found_normalized": sum(r["status"] == "found_normalized" for r in rows),
-            "not_found": sum(r["status"] == "not_found" for r in rows),
-        },
-        "questions": rows,
-    }
-
-
-@router.get("/sources/{sha}/questions")
-def get_questions(sha: str, request: Request) -> dict[str, Any] | None:
-    """The set stored for this document, or null when there is none yet: that is
-    the usual answer, so it is not an error."""
-    source_path(request, sha)  # 404 for a document this request may not read
-    stored = _store(request, sha)
-    if not stored.is_file():
-        return None
-    return json.loads(stored.read_text(encoding="utf-8"))
-
-
-@router.delete("/sources/{sha}/questions", status_code=204)
-def delete_questions(sha: str, request: Request) -> Response:
-    """Remove it. Removing what is not there is not an error."""
-    source_path(request, sha)
-    _store(request, sha).unlink(missing_ok=True)
-    return Response(status_code=204)
-
-
-def _store(request: Request, sha: str) -> Path:
-    """Where this document's set lives. Its directory is made on the way in."""
-    sources: Path = request.app.state.deps.sources_dir
-    return sources / QUESTIONS_DIR / f"{sha}.json"
-
-
-def _document_text(path: Path) -> str:
-    """The document as `pdfium` reads it: the same text the chunkers cut."""
-    cls = registry.get(Stage.PARSE, PARSER)
-    try:
-        # pdfium is not thread-safe: hold the lock the page routes hold.
-        with PDFIUM_LOCK, TemporaryDirectory() as tmp:
-            ctx = RunContext(output_dir=Path(tmp), emit=lambda event: None, tmp=Path(tmp))
-            doc = cls().apply(
-                {"file": {"path": str(path), "sha": "", "filename": path.name}},
-                cls.config_model(),
-                ctx,
-            )
-    except pdfium.PdfiumError as exc:
-        raise HTTPException(
-            status_code=415,
-            detail="this source is not a PDF, so its text cannot be checked",
-        ) from exc
-    return DocView.of(doc).text

@@ -156,7 +156,7 @@ Secrets, each optional and used only with demo mode off:
 Locally, put them in the environment or in `.env`; see
 [models-and-keys.md](models-and-keys.md#adding-a-key). On a Space, add them as secrets.
 
-`sources/`, `artifacts/` and `.env` are gitignored. `DELETE /api/cache` clears the cached
+`sources/`, `artifacts/` and `.env` are gitignored. `DELETE /api/v2/cache` clears the cached
 run results.
 
 ## Your own Hugging Face Space

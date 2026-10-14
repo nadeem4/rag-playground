@@ -69,7 +69,7 @@ def client(dirs):
         yield c
 
 
-def read_sse(client: TestClient, run_id: str, headers=None, params=None, prefix: str = "/api") -> list[dict]:
+def read_sse(client: TestClient, run_id: str, headers=None, params=None, prefix: str = "/api/v2") -> list[dict]:
     """Consume a run's stream to its end; return parsed events with their ids."""
     out: list[dict] = []
     current: dict = {}
@@ -94,25 +94,10 @@ def read_sse(client: TestClient, run_id: str, headers=None, params=None, prefix:
 def upload_pdf(client: TestClient, name: str = "sample.pdf") -> dict:
     data = build_pdf(SAMPLE_PAGES)
     r = client.post(
-        "/api/sources", files={"file": (name, data, "application/pdf")}
+        "/api/v2/documents", files={"file": (name, data, "application/pdf")}
     )
     assert r.status_code == 200, r.text
     assert r.json()["sha"] == hashlib.sha256(data).hexdigest()
     return r.json()
 
 
-def ingest_graph(sha: str, filename: str, chunker: str = "recursive_character",
-                 chunk_cfg: dict | None = None) -> dict:
-    return {
-        "nodes": [
-            {"id": "src", "stage": "source", "transform": "upload",
-             "config": {"sha": sha, "filename": filename}},
-            {"id": "parse", "stage": "parse", "transform": "pdfium", "config": {}},
-            {"id": "chunk", "stage": "chunk", "transform": chunker,
-             "config": chunk_cfg or {}},
-        ],
-        "edges": [
-            {"src": "src", "dst": "parse", "port": "file"},
-            {"src": "parse", "dst": "chunk", "port": "doc"},
-        ],
-    }

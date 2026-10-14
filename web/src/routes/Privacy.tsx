@@ -34,7 +34,7 @@ import "@/components/learn/learn.css"
  *   for none, and the Dockerfile writes them under /data inside the
  *   container, so a restart starts them over. Turning on persistent storage
  *   for the Space would make that line false (see the note in publish_space.py).
- * - Page images: api/routes/pages.py sends an upload's renders as private
+ * - Page images: pandion-api (routes/documents.py) sends an upload's renders as private
  *   and immutable, so the browser may keep them after the upload is deleted.
  */
 

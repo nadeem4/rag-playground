@@ -26,7 +26,7 @@ def test_upload_is_idempotent(client, dirs):
 
 
 def test_empty_upload_is_400(client):
-    r = client.post("/api/sources", files={"file": ("e.pdf", b"", "application/pdf")})
+    r = client.post("/api/v2/documents", files={"file": ("e.pdf", b"", "application/pdf")})
     assert r.status_code == 400
 
 
@@ -44,16 +44,16 @@ def test_uploaded_file_is_findable_by_the_upload_transform(client, dirs):
 
 
 def test_list_sources(client):
-    assert client.get("/api/sources").json() == []
+    assert client.get("/api/v2/documents").json() == []
     body = upload_pdf(client)
-    [listed] = client.get("/api/sources").json()
+    [listed] = client.get("/api/v2/documents").json()
     # the list adds when it was uploaded (tests/api/test_delete_source.py)
     assert {k: v for k, v in listed.items() if k != "uploaded_at"} == body
 
 
 def test_distinct_bytes_distinct_sha(client):
-    a = client.post("/api/sources", files={"file": ("a.txt", b"one", "text/plain")})
-    b = client.post("/api/sources", files={"file": ("b.txt", b"two", "text/plain")})
+    a = client.post("/api/v2/documents", files={"file": ("a.txt", b"one", "text/plain")})
+    b = client.post("/api/v2/documents", files={"file": ("b.txt", b"two", "text/plain")})
     assert a.json()["sha"] == hashlib.sha256(b"one").hexdigest()
     assert a.json()["sha"] != b.json()["sha"]
 
@@ -76,7 +76,7 @@ def test_sample_registers_like_an_upload(client, dirs):
         "content_type": "application/pdf",
     }
     assert (dirs["sources"] / f"{body['sha']}.pdf").read_bytes() == data
-    assert client.get("/api/sources").json() == [body]
+    assert client.get("/api/v2/documents").json() == [body]
 
 
 def test_sample_is_idempotent(client, dirs):
@@ -131,21 +131,37 @@ def test_a_failing_warm_up_is_logged_not_raised(client, monkeypatch, caplog):
 # --- file names (part 4, PR D fixes) -----------------------------------------
 
 
-def test_an_unusual_suffix_is_stored_as_the_upload_step_looks_for_it(client, dirs):
-    body = upload_pdf(client, "report.v1 final")
-    cls = upload.Upload
-    ctx = RunContext(
-        output_dir=dirs["artifacts"], emit=lambda e: None, tmp=dirs["artifacts"],
-        extras={"sources": Sources(dirs["sources"])},
-    )
-    out = cls().apply({}, cls.config_model(sha=body["sha"], filename=body["filename"]), ctx)
-    assert out["path"] == str(dirs["sources"] / f"{body['sha']}.v1 final")
-
-
 def test_a_name_ending_in_part_is_refused(client, dirs):
     from tests.api.conftest import build_pdf, SAMPLE_PAGES
 
-    r = client.post("/api/sources", files={"file": ("r.part", build_pdf(SAMPLE_PAGES), "application/pdf")})
+    r = client.post("/api/v2/documents", files={"file": ("r.part", build_pdf(SAMPLE_PAGES), "application/pdf")})
     assert r.status_code == 400
     assert r.json()["detail"] == "A file name ending in .part cannot be uploaded; rename it and try again."
     assert not list(dirs["sources"].glob("*.part"))
+
+
+# --- the same bytes are stored once, whatever their name ------------------------------
+
+
+def test_a_samples_bytes_under_new_names_store_no_new_file(client, dirs, monkeypatch):
+    from api import sample_set
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    client.get("/api/settings/app")
+    sample = sample_set.default_sample()
+    before = sorted(p.name for p in dirs["sources"].iterdir() if p.is_file())
+    for name in ("s.a", "s.b", "s.c"):
+        r = client.post("/api/v2/documents", files={"file": (name, sample.pdf.read_bytes(), "application/pdf")})
+        assert r.status_code == 200 and r.json()["sha"] == sample.sha
+    assert sorted(p.name for p in dirs["sources"].iterdir() if p.is_file()) == before
+
+
+def test_your_own_reupload_under_another_name_stores_no_second_copy(client, dirs, monkeypatch):
+    from tests.api.test_demo import _pdf_with_pages
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    client.get("/api/settings/app")
+    data = _pdf_with_pages(1)
+    sha = client.post("/api/v2/documents", files={"file": ("mine.pdf", data, "application/pdf")}).json()["sha"]
+    assert client.post("/api/v2/documents", files={"file": ("mine-again.bin", data, "application/pdf")}).status_code == 200
+    assert [p.name for p in dirs["sources"].glob(f"{sha}*") if p.is_file()] == [f"{sha}.pdf"]

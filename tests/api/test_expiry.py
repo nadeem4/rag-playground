@@ -97,10 +97,10 @@ def test_uploading_a_samples_bytes_never_makes_the_sample_expire(tmp_path, monke
     with make_client(dirs) as a, make_client(dirs) as b:
         sha = a.post("/api/sources/sample").json()["sha"]
         b.get("/api/settings/app")
-        r = b.post("/api/sources", files={"file": (sample.pdf.name, sample.pdf.read_bytes(), "application/pdf")})
+        r = b.post("/api/v2/documents", files={"file": (sample.pdf.name, sample.pdf.read_bytes(), "application/pdf")})
         assert r.status_code == 200 and r.json()["sha"] == sha
         assert expiry.sweep(dirs["sources"], datetime.now(timezone.utc) + timedelta(days=2)) == 0
-        assert a.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
+        assert a.get(f"/api/v2/documents/{sha}/pages/1").status_code == 200
 
 
 def test_the_sweep_skips_a_sample_even_when_its_sidecar_has_visitors(tmp_path):

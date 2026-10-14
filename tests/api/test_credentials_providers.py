@@ -10,16 +10,7 @@ from __future__ import annotations
 import pytest
 
 from api import credentials
-from tests.api.conftest import make_client
-from tests.api.test_credentials import (
-    FAKE_KEY,
-    SEEN,
-    all_file_bytes,
-    events_of,
-    keyed_graph,
-    keyed_registry,
-    raw_stream,
-)
+from tests.api.test_credentials import FAKE_KEY
 
 OPENAI_KEY = "sk-openai-test-DO-NOT-LEAK-0123456789"
 CUSTOM_KEY = "custom-test-DO-NOT-LEAK-0123456789"
@@ -93,16 +84,16 @@ def test_redact_scrubs_several_keys():
     assert credentials.redact(value, []) == value
 
 
-# --- GET /api/settings/llm ----------------------------------------------------
+# --- GET /api/v2/settings/models -----------------------------------------------
 
 
 def test_settings_report_one_source_per_provider(client, monkeypatch):
-    assert client.get("/api/settings/llm").json() == {
+    assert client.get("/api/v2/settings/models").json() == {
         "anthropic": "none", "openai": "none", "custom": "none", "openrouter": "none",
     }
     write_dotenv(OPENAI_COMPATIBLE_API_KEY=DOTENV_OPENAI)
     monkeypatch.setenv("OPENAI_API_KEY", ENV_OPENAI)
-    r = client.get("/api/settings/llm", headers=ALL_HEADERS)
+    r = client.get("/api/v2/settings/models", headers=ALL_HEADERS)
     assert r.json() == {
         "anthropic": "none", "openai": "env", "custom": "dotenv", "openrouter": "none",
     }
@@ -114,12 +105,12 @@ def test_demo_settings_report_none_for_every_provider(client, monkeypatch):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setenv("OPENAI_API_KEY", ENV_OPENAI)
     write_dotenv(OPENAI_COMPATIBLE_API_KEY=DOTENV_OPENAI)
-    assert client.get("/api/settings/llm").json() == {
+    assert client.get("/api/v2/settings/models").json() == {
         "anthropic": "none", "openai": "none", "custom": "none", "openrouter": "none",
     }
 
 
-# --- POST /api/settings/llm/check ---------------------------------------------
+# --- POST /api/v2/settings/models/check ----------------------------------------
 
 
 class FakeModels:
@@ -157,7 +148,7 @@ def fake_openai(monkeypatch, exc=None) -> list[dict]:
 def test_check_openai_with_header(client, monkeypatch):
     calls = fake_openai(monkeypatch)
     r = client.post(
-        "/api/settings/llm/check", json={"provider": "openai"}, headers=ALL_HEADERS
+        "/api/v2/settings/models/check", json={"provider": "openai"}, headers=ALL_HEADERS
     )
     assert r.json() == {"ok": True, "source": "header", "error": None}
     [call] = calls
@@ -167,7 +158,7 @@ def test_check_openai_with_header(client, monkeypatch):
 
 def test_check_openai_with_no_key_makes_no_call(client, monkeypatch):
     calls = fake_openai(monkeypatch)
-    body = client.post("/api/settings/llm/check", json={"provider": "openai"}).json()
+    body = client.post("/api/v2/settings/models/check", json={"provider": "openai"}).json()
     assert body["ok"] is False and body["source"] == "none"
     assert "OPENAI_API_KEY" in body["error"]
     assert calls == []
@@ -185,7 +176,7 @@ def test_check_openai_rejected_key_is_readable_and_redacted(client, monkeypatch)
         ),
     )
     r = client.post(
-        "/api/settings/llm/check", json={"provider": "openai"}, headers=ALL_HEADERS
+        "/api/v2/settings/models/check", json={"provider": "openai"}, headers=ALL_HEADERS
     )
     assert r.json()["ok"] is False and "rejected" in r.json()["error"]
     assert OPENAI_KEY not in r.text
@@ -194,7 +185,7 @@ def test_check_openai_rejected_key_is_readable_and_redacted(client, monkeypatch)
 def test_check_openai_other_failure_is_redacted(client, monkeypatch):
     fake_openai(monkeypatch, RuntimeError(f"boom {OPENAI_KEY}"))
     r = client.post(
-        "/api/settings/llm/check", json={"provider": "openai"}, headers=ALL_HEADERS
+        "/api/v2/settings/models/check", json={"provider": "openai"}, headers=ALL_HEADERS
     )
     assert "[redacted]" in r.json()["error"] and OPENAI_KEY not in r.text
 
@@ -202,7 +193,7 @@ def test_check_openai_other_failure_is_redacted(client, monkeypatch):
 def test_check_custom_uses_the_base_url_and_needs_no_key(client, monkeypatch):
     calls = fake_openai(monkeypatch)
     r = client.post(
-        "/api/settings/llm/check",
+        "/api/v2/settings/models/check",
         json={"provider": "custom", "base_url": "http://localhost:11434/v1"},
     )
     assert r.json() == {"ok": True, "source": "none", "error": None}
@@ -213,7 +204,7 @@ def test_check_custom_uses_the_base_url_and_needs_no_key(client, monkeypatch):
 
 def test_check_custom_without_a_base_url_makes_no_call(client, monkeypatch):
     calls = fake_openai(monkeypatch)
-    body = client.post("/api/settings/llm/check", json={"provider": "custom"}).json()
+    body = client.post("/api/v2/settings/models/check", json={"provider": "custom"}).json()
     assert body["ok"] is False and "base URL" in body["error"]
     assert calls == []
 
@@ -222,7 +213,7 @@ def test_check_custom_is_refused_in_demo_mode(client, monkeypatch):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     calls = fake_openai(monkeypatch)
     r = client.post(
-        "/api/settings/llm/check",
+        "/api/v2/settings/models/check",
         json={"provider": "custom", "base_url": "http://169.254.169.254/latest"},
         headers=ALL_HEADERS,
     )
@@ -236,7 +227,7 @@ def test_check_openrouter_asks_openrouter_about_the_key(client, monkeypatch):
     GETS.clear()
     calls = fake_openai(monkeypatch)
     r = client.post(
-        "/api/settings/llm/check", json={"provider": "openrouter"}, headers=ALL_HEADERS
+        "/api/v2/settings/models/check", json={"provider": "openrouter"}, headers=ALL_HEADERS
     )
     assert r.json() == {"ok": True, "source": "header", "error": None}
     [call] = calls
@@ -250,7 +241,7 @@ def test_check_openrouter_asks_openrouter_about_the_key(client, monkeypatch):
 
 def test_check_openrouter_with_no_key_makes_no_call(client, monkeypatch):
     calls = fake_openai(monkeypatch)
-    body = client.post("/api/settings/llm/check", json={"provider": "openrouter"}).json()
+    body = client.post("/api/v2/settings/models/check", json={"provider": "openrouter"}).json()
     assert body["ok"] is False and "OPENROUTER_API_KEY" in body["error"]
     assert calls == []
 
@@ -267,14 +258,14 @@ def test_check_openrouter_rejected_key_is_readable_and_redacted(client, monkeypa
         ),
     )
     r = client.post(
-        "/api/settings/llm/check", json={"provider": "openrouter"}, headers=ALL_HEADERS
+        "/api/v2/settings/models/check", json={"provider": "openrouter"}, headers=ALL_HEADERS
     )
     assert r.json()["ok"] is False and "rejected" in r.json()["error"]
     assert OPENROUTER_KEY not in r.text
 
 
 def test_check_unknown_provider_is_a_422(client):
-    r = client.post("/api/settings/llm/check", json={"provider": "gemini"})
+    r = client.post("/api/v2/settings/models/check", json={"provider": "gemini"})
     assert r.status_code == 422
 
 
@@ -288,7 +279,7 @@ def test_check_custom_validates_the_endpoint_behind_the_demo_ban(client, monkeyp
     monkeypatch.setattr("pandion.endpoints._resolve", lambda host: ["169.254.169.254"])
     calls = fake_openai(monkeypatch)
     body = client.post(
-        "/api/settings/llm/check",
+        "/api/v2/settings/models/check",
         json={"provider": "custom", "base_url": "https://meta.example.com/v1"},
     ).json()
     assert body["ok"] is False
@@ -304,7 +295,7 @@ def test_check_custom_in_demo_mode_does_not_follow_redirects(client, monkeypatch
     monkeypatch.setattr("pandion.endpoints._resolve", lambda host: ["104.18.2.115"])
     calls = fake_openai(monkeypatch)
     client.post(
-        "/api/settings/llm/check",
+        "/api/v2/settings/models/check",
         json={"provider": "custom", "base_url": "https://api.example.com/v1"},
     )
     [call] = calls
@@ -315,60 +306,71 @@ def test_check_custom_in_demo_mode_does_not_follow_redirects(client, monkeypatch
 # --- the keys reach a run, and never leak -------------------------------------
 
 
-@pytest.fixture
-def kclient(dirs):
-    with make_client(dirs, keyed_registry()) as c:
-        yield c
+def spy_runs(monkeypatch, fail: bool = False) -> list:
+    """Each run's credentials, in order. With `fail`, the run raises an error that names them."""
+    from types import SimpleNamespace
+
+    from pandion import IndexPipeline
+
+    seen: list = []
+
+    def spy_run(self, documents, *, credentials=None, **kwargs):
+        seen.append(credentials)
+        if fail:
+            raise RuntimeError(f"crashed with {credentials}")
+        return SimpleNamespace(ok=True, documents={}, index=None)
+
+    monkeypatch.setattr(IndexPipeline, "run", spy_run)
+    return seen
 
 
-def test_every_provider_key_reaches_the_transform(kclient):
-    r = kclient.post("/api/runs", json={"graph": keyed_graph()}, headers=ALL_HEADERS)
-    raw_stream(kclient, r.json()["run_id"])
-    assert SEEN and all(
-        s["credentials"] == {
-            "anthropic_api_key": FAKE_KEY,
-            "openai_api_key": OPENAI_KEY,
-            "custom_api_key": CUSTOM_KEY,
-            "openrouter_api_key": OPENROUTER_KEY,
-        }
-        for s in SEEN
-    )
+def start_run(client, headers=None) -> tuple[str, str]:
+    """Start a run on the bundled sample; return its id and its whole event stream."""
+    from tests.api.test_v2_strategies import PIPELINE
+
+    sha = client.post("/api/sources/sample").json()["sha"]
+    r = client.post("/api/v2/runs", json={"config": PIPELINE, "documents": [sha]}, headers=headers or {})
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+    with client.stream("GET", f"/api/v2/runs/{run_id}/events") as s:
+        return run_id, "".join(s.iter_text())
 
 
-def test_env_openai_key_reaches_a_sweep(kclient, monkeypatch):
+def test_every_provider_key_reaches_a_run(client, monkeypatch):
+    seen = spy_runs(monkeypatch)
+    start_run(client, ALL_HEADERS)
+    assert seen == [{
+        "anthropic_api_key": FAKE_KEY,
+        "openai_api_key": OPENAI_KEY,
+        "custom_api_key": CUSTOM_KEY,
+        "openrouter_api_key": OPENROUTER_KEY,
+    }]
+
+
+def test_env_openai_key_reaches_a_run(client, monkeypatch):
+    seen = spy_runs(monkeypatch)
     monkeypatch.setenv("OPENAI_API_KEY", ENV_OPENAI)
-    r = kclient.post(
-        "/api/sweeps",
-        json={"graph": keyed_graph(), "node_id": "x",
-              "variants": [{"transform": "p", "config": {"tag": "1"}}]},
-    )
-    raw_stream(kclient, r.json()["run_id"])
-    assert SEEN and all(s["credentials"] == {"openai_api_key": ENV_OPENAI} for s in SEEN)
+    start_run(client)
+    assert seen == [{"openai_api_key": ENV_OPENAI}]
 
 
-def test_demo_host_keys_never_reach_a_run(kclient, monkeypatch):
+def test_demo_host_keys_never_reach_a_run(client, monkeypatch):
+    seen = spy_runs(monkeypatch)
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setenv("OPENAI_API_KEY", ENV_OPENAI)
     monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", ENV_OPENAI)
     monkeypatch.setenv("OPENROUTER_API_KEY", ENV_OPENAI)
-    r = kclient.post("/api/runs", json={"graph": keyed_graph()})
-    raw_stream(kclient, r.json()["run_id"])
-    assert SEEN and all("credentials" not in s for s in SEEN)
+    start_run(client)
+    assert seen == [None]
 
 
-def test_every_key_is_redacted_from_a_failing_run(kclient, tmp_path, monkeypatch):
-    def crash(*args, context_extras=None, **kwargs):
-        raise RuntimeError(f"crashed with {context_extras['credentials']}")
-
-    monkeypatch.setattr("api.routes.runs.run", crash)
-    r = kclient.post("/api/runs", json={"graph": keyed_graph()}, headers=ALL_HEADERS)
-    run_id = r.json()["run_id"]
-    stream = raw_stream(kclient, run_id)
-    err = next(e for e in events_of(stream) if e["event"] == "run_error")
-    assert "[redacted]" in err["error"]
-    snapshot = kclient.get(f"/api/runs/{run_id}").text
-    files = all_file_bytes(tmp_path)
-    state = repr(vars(kclient.app.state.runs.get(run_id)))
+def test_every_key_is_redacted_from_a_failing_run(client, dirs, monkeypatch):
+    spy_runs(monkeypatch, fail=True)
+    run_id, stream = start_run(client, ALL_HEADERS)
+    assert "[redacted]" in stream
+    snapshot = client.get(f"/api/v2/runs/{run_id}").text
+    files = b"".join(p.read_bytes() for p in dirs["sources"].parent.rglob("*") if p.is_file())
+    state = repr(vars(client.app.state.runs.get(run_id)))
     for secret in (FAKE_KEY, OPENAI_KEY, CUSTOM_KEY, OPENROUTER_KEY):
         assert secret not in stream and secret not in snapshot and secret not in state
         assert secret.encode() not in files
@@ -379,11 +381,11 @@ def test_on_the_demo_a_missing_key_never_points_at_a_server_variable(
     client, monkeypatch, provider
 ):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    body = client.post("/api/settings/llm/check", json={"provider": provider}).json()
+    body = client.post("/api/v2/settings/models/check", json={"provider": provider}).json()
     assert body["ok"] is False
     assert "_API_KEY" not in body["error"] and ".env" not in body["error"]
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
-    local = client.post("/api/settings/llm/check", json={"provider": provider}).json()
+    local = client.post("/api/v2/settings/models/check", json={"provider": provider}).json()
     assert credentials.PROVIDERS[provider].env_var in local["error"]
 
 
@@ -392,26 +394,26 @@ def test_on_the_demo_a_missing_key_never_points_at_a_server_variable(
 MODEL_STEPS = [("use_case", "chat"), ("rerank", "llm_rerank"), ("query", "llm_rewrite")]
 
 
-def model_field(registry: dict, stage: str, name: str) -> dict:
-    return registry[stage][name]["config_schema"]["properties"]["model"]
+def model_field(catalog: dict, stage: str, name: str) -> dict:
+    return catalog[stage][name]["config_schema"]["properties"]["model"]
 
 
-def test_on_the_demo_the_registry_offers_no_custom_model(client, monkeypatch):
+def test_on_the_demo_the_catalog_offers_no_custom_model(client, monkeypatch):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    registry = client.get("/api/registry").json()
+    catalog = client.get("/api/v2/strategies").json()["stages"]
     for stage, name in MODEL_STEPS:
-        field = model_field(registry, stage, name)
+        field = model_field(catalog, stage, name)
         assert "custom" not in field["enum"]
         assert "custom" not in field["x-labels"] and "custom" not in field["x-providers"]
         assert "openrouter" in field["enum"]
     # The plugin's own schema is untouched: only the served copy changes.
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
-    local = client.get("/api/registry").json()
+    local = client.get("/api/v2/strategies").json()["stages"]
     for stage, name in MODEL_STEPS:
         assert "custom" in model_field(local, stage, name)["enum"]
 
 
-def test_the_old_check_asks_the_sites_policy_about_the_provider(client, monkeypatch):
+def test_the_check_asks_the_sites_policy_about_the_provider(client, monkeypatch):
     from fastapi import HTTPException
 
     from api.policy import PlaygroundPolicy
@@ -420,5 +422,5 @@ def test_the_old_check_asks_the_sites_policy_about_the_provider(client, monkeypa
         raise HTTPException(403, f"No {provider} here.")
 
     monkeypatch.setattr(PlaygroundPolicy, "check_provider", refuse)
-    r = client.post("/api/settings/llm/check", json={"provider": "openai"})
+    r = client.post("/api/v2/settings/models/check", json={"provider": "openai"})
     assert r.status_code == 403 and r.json()["detail"] == "No openai here."

@@ -78,20 +78,12 @@ PUBLIC_MODULES = (
 ENGINE_IMPORTS: frozenset[str] = frozenset(
     {
         "pandion.embedding_cache:EmbeddingCache",
-        "pandion.executor:run",
-        "pandion.executor:sweep",
-        "pandion.graph:Edge",
-        "pandion.graph:Graph",
-        "pandion.graph:GraphValidationError",
-        "pandion.graph:Node",
         "pandion.plugins.chunk:DocView",
         "pandion.plugins.chunk:count_tokens",
         "pandion.plugins.parse:docling",
         "pandion.registry:Registry",
-        "pandion.registry:UnknownTransformError",
         "pandion.registry:registry",
         "pandion.sources:Sources",
-        "pandion.storage:META",
         "pandion.storage:Store",
     }
 )

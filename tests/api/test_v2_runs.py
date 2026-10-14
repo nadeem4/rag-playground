@@ -1,4 +1,4 @@
-"""Runs on /api/v2 keep today's rules (tests/api/test_demo.py, test_credentials.py):
+"""Runs on /api/v2 keep the playground's rules (see also test_demo.py and test_credentials.py):
 only documents this browser may read, no custom endpoint on the demo, and on the
 demo only the visitor's own key. A run on the demo is its visitor's own, and an
 error it shows names no server folder and no key."""
@@ -10,11 +10,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from api import credentials
-from api.policy import PlaygroundPolicy
-from api.routes.runs import DEMO_NO_CUSTOM, NOT_AVAILABLE
+from api.policy import DEMO_NO_CUSTOM, NOT_AVAILABLE, PlaygroundPolicy
 from api.visitor import COOKIE
 from pandion import IndexPipeline, StageResult
-from tests.api.conftest import ingest_graph, make_client, read_sse, upload_pdf
+from tests.api.conftest import make_client, read_sse, upload_pdf
 from tests.api.test_credentials import DOTENV_KEY, ENV_KEY, FAKE_KEY, HEADER, write_dotenv
 from tests.api.test_v2_strategies import CUSTOM_CONFIGS, PIPELINE
 
@@ -78,20 +77,19 @@ def test_locally_a_run_gets_the_servers_key(client, monkeypatch):
     assert seen == [{"anthropic_api_key": ENV_KEY}]
 
 
-# --- the same result ids as the old routes ------------------------------------------
+def test_locally_a_run_gets_the_key_in_dotenv_when_there_is_no_other(client, monkeypatch):
+    seen: list = []
 
+    def spy_run(self, documents, *, credentials=None, **kwargs):
+        seen.append(credentials)
+        return SimpleNamespace(ok=True, documents={}, index=None)
 
-def test_a_document_gets_the_same_result_ids_on_both_stacks(client):
-    src = upload_pdf(client, "report.pdf")
-    old = client.post("/api/runs", json={"graph": ingest_graph(src["sha"], src["filename"])}).json()["run_id"]
-    old_ids = {
-        e["node_id"]: e["artifact_id"] for e in read_sse(client, old) if e["event"] == "node_finished"
-    }
-    r = client.post("/api/v2/runs", json={"config": PIPELINE, "documents": [src["sha"]], "through": "chunk"})
-    read_sse(client, r.json()["run_id"], prefix="/api/v2")
-    steps = client.get(f"/api/v2/runs/{r.json()['run_id']}").json()["result"]["documents"]["report.pdf"]
-    assert {"src": steps["source"]["result_id"], "parse": steps["parse"]["result_id"],
-            "chunk": steps["chunk"]["result_id"]} == old_ids
+    monkeypatch.setattr(IndexPipeline, "run", spy_run)
+    write_dotenv(credentials.DOTENV_PATH, DOTENV_KEY)
+    sha = upload_pdf(client)["sha"]
+    run_id = client.post("/api/v2/runs", json={"config": PIPELINE, "documents": [sha]}).json()["run_id"]
+    read_sse(client, run_id, prefix="/api/v2")
+    assert seen == [{"anthropic_api_key": DOTENV_KEY}]
 
 
 # --- a run on the demo is its visitor's own ----------------------------------------
@@ -119,9 +117,6 @@ def test_on_the_demo_another_visitor_cannot_see_follow_or_cancel_a_run(client, m
         client.get(f"/api/v2/runs/{run_id}"),
         client.get(f"/api/v2/runs/{run_id}/events"),
         client.post(f"/api/v2/runs/{run_id}/cancel"),
-        client.get(f"/api/runs/{run_id}"),
-        client.get(f"/api/runs/{run_id}/events"),
-        client.post(f"/api/runs/{run_id}/cancel"),
     ):
         assert r.status_code == 404 and r.json()["detail"] == f"unknown run {run_id}"
     as_visitor(client, ann)
@@ -196,7 +191,6 @@ def test_the_data_folder_is_scrubbed_only_where_it_ends_a_path_part():
     assert scrub_paths(f"{folder}-old and {folder}_2", data).count(SERVER_PATH + "-old") == 0
 
 
-
 # --- questions (Task 10) --------------------------------------------------------------
 
 
@@ -239,7 +233,7 @@ def test_on_the_demo_an_evaluation_or_a_comparison_with_a_custom_endpoint_is_ref
 
 
 def test_on_the_demo_a_comparison_takes_as_many_variants_as_a_sweep(client, monkeypatch):
-    from api.routes.runs import MAX_VARIANTS
+    from api.policy import MAX_VARIANTS
 
     demo_on(monkeypatch)
     sample = client.post("/api/sources/sample").json()
@@ -262,18 +256,3 @@ def test_on_the_demo_an_evaluation_is_its_visitors_own(client, monkeypatch):
     assert client.get(f"/api/v2/runs/{run_id}").status_code == 404
 
 
-def test_a_run_the_old_route_starts_is_followed_and_stopped_on_v2(client):
-    sample = client.post("/api/sources/sample").json()
-    graph = {
-        "nodes": [
-            {"id": "source", "stage": "source", "transform": "upload", "config": {"sha": sample["sha"], "filename": sample["filename"]}},
-            {"id": "parse", "stage": "parse", "transform": "pdfium", "config": {}},
-        ],
-        "edges": [{"src": "source", "dst": "parse", "port": "file"}],
-    }
-    run_id = client.post("/api/runs", json={"graph": graph}).json()["run_id"]
-    events = read_sse(client, run_id, prefix="/api/v2")
-    assert events[-1]["event"] == "stream_end"
-    snapshot = client.get(f"/api/v2/runs/{run_id}").json()
-    assert snapshot["run_id"] == run_id and snapshot["status"] in ("finished", "error")
-    assert client.post(f"/api/v2/runs/{run_id}/cancel").status_code == 409

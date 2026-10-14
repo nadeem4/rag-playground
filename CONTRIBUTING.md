@@ -55,6 +55,13 @@ cd web && npm test            # Vitest
 
 `uv run pytest packages/pandion-api/tests` runs pandion-api's own tests. pandion-api may import only Pandion's public API, which `test_api_boundary.py` checks with no allow-list. A test file there is named `test_api_*.py`, so it never shares a name with one of the engine's.
 
+The playground's own tests are in `tests/api/`. The demo's rule tests (`test_demo.py`,
+`test_delete_source.py`, `test_source_file.py` and the rest) call `/api/v2` directly: the
+old `/api` routes are gone, and so is the module that ran each rule test a second time
+against `/api/v2`. `tests/api/test_routes.py` lists the routes the playground serves
+under `/api` besides `/api/v2`, and checks that every path the web's clients name is
+served.
+
 The smoke test drives the real app in a real browser. It starts its own demo server on a
 free port, builds the index, asks a question, runs Compare and Evaluate, then opens every
 page at 1440 and 390 px in light and dark. A page that scrolls sideways or logs an error
@@ -159,13 +166,12 @@ An endpoint any site would want goes in pandion-api
 `packages/pandion-api/tests/test_api_boundary.py` checks. A rule only some sites want is a
 `Policy` method with a default that allows everything, and the playground's version goes in
 `api/policy.py`, tested on `/api/v2` in `tests/api/`. An endpoint only the playground wants
-(a lesson, a sample) goes in `api/routes/`. Describe a new endpoint or Policy method in
-[docs/pandion-api.md](docs/pandion-api.md).
+(a lesson, a sample) goes in `api/routes/`, and in the `TEACHING` list of
+`tests/api/test_routes.py`, which fails on a route under `/api` it does not list. Describe
+a new endpoint or Policy method in [docs/pandion-api.md](docs/pandion-api.md).
 
-A new test of a site rule in `tests/api/test_demo.py`, `test_delete_source.py` or
-`test_source_file.py` must also run on `/api/v2`: import it into
-`tests/api/test_v2_parity.py`, or add it to `EXCLUDED` there with the reason. A test
-fails until you do one or the other.
+A new test of a site rule goes in `tests/api/` (`test_demo.py`, `test_delete_source.py`,
+`test_source_file.py` and the rest) and calls the `/api/v2` route the web calls.
 
 ## The samples
 

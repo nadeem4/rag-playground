@@ -26,9 +26,9 @@ The frontend talks to the server only over HTTP, with relative paths.
   `/api/v2`: documents, runs, questions, evaluations, comparisons and key checks. The
   client is `src/api/v2.ts`.
 - A few routes belong to the playground itself and sit under `/api`: the samples
-  (`/api/samples`), the lessons (`/api/learn`), the app settings (`/api/settings/app`)
-  and the health check (`/api/health`). The client is
-  `src/api/client.ts`.
+  (`/api/samples`), the lessons (`/api/learn`), the question template and the app
+  settings (`/api/settings/app`, which `src/api/useDemo.ts` reads once per page). They
+  go through `src/api/client.ts`, except the samples, which have `src/api/samples.ts`.
 
 A test guards this split. `src/api/oldRoutes.test.ts` fails if any source file names an
 old `/api` route that has moved to `/api/v2`.

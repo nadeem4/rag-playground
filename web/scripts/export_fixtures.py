@@ -255,9 +255,20 @@ def dump(name: str, data: object) -> None:
     print(f"wrote {path.relative_to(ROOT)}")
 
 
+def write_starter_config(out: Path) -> None:
+    """The Starter pipeline file as the browser holds it: without path and models."""
+    from pandion import Pipeline
+
+    data = Pipeline.from_yaml(ROOT / "samples" / "starter.yaml").to_dict()
+    data.pop("path")
+    data.pop("models", None)
+    (out / "starter.config.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
 def main() -> None:
     api.steps.discover()
     OUT.mkdir(parents=True, exist_ok=True)
+    write_starter_config(OUT)
     dump("registry.json", registry.export_schema())
 
     pdf = build_paragraph_pdf(

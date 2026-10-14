@@ -1,0 +1,31 @@
+{
+  "index": {
+    "parse": {
+      "use": "docling"
+    },
+    "clean": [
+      {
+        "use": "dedupe_blocks"
+      }
+    ],
+    "chunk": {
+      "use": "recursive_character",
+      "chunk_size": 400,
+      "chunk_overlap": 80
+    },
+    "embed": {
+      "use": "qwen3-embedding-0.6b"
+    },
+    "store": {
+      "use": "lancedb"
+    }
+  },
+  "retrieve": {
+    "search": {
+      "use": "hybrid_rrf"
+    }
+  },
+  "answer": {
+    "use": "search"
+  }
+}

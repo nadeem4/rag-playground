@@ -335,3 +335,8 @@ it, never `path`, `models` or `plugins`. Pipelines saved by older versions held 
 steps; `graphToConfig` converts each one once, and one it cannot convert is kept with the
 reason and never deleted. Build draws its column from the config (`columnOf`); each card's
 id maps to the step name runs report (`clean_2` is `clean.2`, `retrieve` is `search`).
+
+These functions are tested, and no page uses them yet. The fixture
+`web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the browser holds
+it, and two tests pin that converting the app's Starter gives that file, so a visitor's
+Starter keeps its result ids.

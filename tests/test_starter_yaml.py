@@ -1,6 +1,7 @@
 """samples/starter.yaml is the app's Starter pipeline, step for step, so it
 gives the same result ids as the Starter built on Build."""
 
+import json
 from pathlib import Path
 
 from pandion import Pipeline
@@ -37,3 +38,11 @@ def test_the_starter_file_has_the_apps_starter_settings():
         _validated(Stage.USE_CASE, *c.answer),
     ]
     assert got == [_validated(*step) for step in APP_STARTER]
+
+
+def test_the_web_fixture_is_the_starter_file():
+    data = Pipeline.from_yaml(ROOT / "samples" / "starter.yaml").to_dict()
+    data.pop("path")
+    data.pop("models", None)
+    fixture = json.loads((ROOT / "web" / "src" / "api" / "fixtures" / "starter.config.json").read_text(encoding="utf-8"))
+    assert fixture == data

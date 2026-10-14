@@ -7,6 +7,8 @@ An evaluation's question set comes from the request, held to the same caps as
 an uploaded one, or, when the request sends none, from the sets kept against
 its documents (POST /documents/{id}/questions). A comparison asks only the
 questions the request sends; without them it is index only, as `pandion.compare` is.
+With one question and no gold passage (`question`), each variant searches (or
+answers) it and the results come back unscored.
 """
 
 from __future__ import annotations
@@ -21,9 +23,10 @@ from pydantic import BaseModel, Field
 
 from pandion import compare, evaluate
 from pandion.evaluation import COMPARE_STAGES, QuestionSetError, parse_question_set
+from pandion_api import reports
 from pandion_api.jobs import documents_of, start
 from pandion_api.pipelines import NOT_A_MAPPING, prepare, problems, variant_config
-from pandion_api.routes.ask import NO_SEARCH
+from pandion_api.routes.ask import NO_ANSWER, NO_SEARCH
 from pandion_api.routes.questions import MAX_GOLDS, MAX_QUESTIONS, MAX_SET_BYTES, TOO_BIG
 
 router = APIRouter()
@@ -34,6 +37,19 @@ QuestionSet = list[dict[str, Any]] | dict[str, Any]
 NO_QUESTIONS = (
     "There are no questions to ask: send a question set in questions, or keep one "
     "against the document first (POST /documents/{id}/questions)."
+)
+
+ONE_OR_THE_OTHER = (
+    "Send questions (a question set, to score each variant) or question (one "
+    "question, to see each variant's results), not both."
+)
+NO_THROUGH_WITH_QUESTION = (
+    "through stops an index-only comparison after a step; a comparison on one "
+    "question searches, so send question or through, not both."
+)
+ANSWER_NEEDS_QUESTION = (
+    "answer goes on to the answer step for one question, so it needs question; "
+    "a comparison with questions scores the search and has no answer step."
 )
 
 
@@ -144,6 +160,10 @@ class ComparisonIn(BaseModel):
     top_k: int = Field(default=5, ge=1, le=50)
     #: Without questions, the step each variant's index run stops after, as for POST /runs.
     through: str | None = None
+    #: One question with no gold passage: each variant's results, unscored.
+    question: str | None = Field(default=None, min_length=1, max_length=2000)
+    #: With question: go on to the answer step, not only the search.
+    answer: bool = False
 
 
 @router.post("/comparisons", status_code=202)
@@ -160,6 +180,12 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
     most = request.app.state.policy.max_variants(request)
     if len(body.variants) > most:
         raise problems(f"A comparison runs at most {most} variants; this one has {len(body.variants)}.")
+    if body.question is not None and body.questions is not None:
+        raise HTTPException(status_code=400, detail=ONE_OR_THE_OTHER)
+    if body.question is not None and body.through is not None:
+        raise HTTPException(status_code=400, detail=NO_THROUGH_WITH_QUESTION)
+    if body.answer and body.question is None:
+        raise HTTPException(status_code=400, detail=ANSWER_NEEDS_QUESTION)
     if not isinstance(body.config, dict):
         raise problems(NOT_A_MAPPING)
     # Reading and checking every variant's pipeline is Pandion's work: off the loop.
@@ -167,15 +193,20 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
         lambda: [prepare(body.config, request)]
         + [prepare(variant_config(body.config, body.stage, v), request) for v in body.variants]
     )
-    if COMPARE_STAGES[body.stage] == "retrieve" and body.questions is None:
+    if COMPARE_STAGES[body.stage] == "retrieve" and body.questions is None and body.question is None:
         raise HTTPException(
             status_code=400,
             detail=f"A {body.stage} step can only be compared with questions: without them nothing is searched.",
         )
-    if body.questions is not None and any(v.retrieval is None for v in [p, *prepared]):
+    asks = body.questions is not None or body.question is not None
+    if asks and any(v.retrieval is None for v in [p, *prepared]):
         raise problems(NO_SEARCH)
+    if body.question is not None and body.answer and any(v.query is None for v in prepared):
+        raise problems(NO_ANSWER)
     documents = documents_of(body.documents, request)
     questions = await run_in_threadpool(_checked, body.questions) if body.questions is not None else None
+    if body.question is not None:
+        return start(request, "comparison", _compare_on_one_question(body, prepared, documents))
     if body.through is not None:
         await run_in_threadpool(_check_through, p, body, documents, questions)
 
@@ -188,3 +219,33 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
         return not stopped and all(c.index.ok for c in results), stopped, results.to_dict()
 
     return start(request, "comparison", work)
+
+
+def _compare_on_one_question(body: ComparisonIn, pipelines: list, documents: dict):
+    """Each variant's retrieve (or ask) on one question, in order. Nothing is
+    scored, because there is no gold passage to look for."""
+
+    def work(on_event, cancel, credentials):
+        out: list[dict[str, Any]] = []
+        stopped = False
+        for n, (variant, p) in enumerate(zip(body.variants, pipelines), start=1):
+            if cancel.is_set():
+                stopped = True
+                break
+
+            def emit(e: dict[str, Any], n: int = n) -> None:
+                on_event({**e, "variant": n, "variants": len(body.variants)})
+
+            kwargs = dict(documents=documents, credentials=credentials, on_event=emit, cancel=cancel)
+            if body.answer:
+                a = p.ask(body.question, **kwargs)
+                item, ok = {"answer": reports.answer(a)}, a.ok
+            else:
+                r = p.retrieve(body.question, **kwargs)
+                item, ok = {"retrieval": reports.retrieval(r)}, r.ok
+            out.append({"stage": body.stage, "variant": variant, "ok": ok, "cancelled": cancel.is_set(), **item})
+        stopped = stopped or cancel.is_set()
+        ok = not stopped and all(c["ok"] for c in out)
+        return ok, stopped, {"comparisons": out, "best": [], "cancelled": stopped}
+
+    return work

@@ -63,6 +63,7 @@ def test_a_changed_prompt_or_revision_is_refused_in_every_mode(client, monkeypat
         demo_on(monkeypatch)
     r = validate(client, FIXED_CONFIGS[name])
     assert r.status_code == 403 and r.json()["detail"] == PROMPTS_FIXED
+    assert "yaml" not in r.json()
 
 
 def test_on_the_demo_the_custom_endpoint_is_refused_before_a_fixed_prompt(client, monkeypatch):

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 import pandion
 from pandion import ConfigError
 from pandion_api.deps import get_policy
-from pandion_api.pipelines import prepare, problems, public
+from pandion_api.pipelines import as_yaml, prepare, problems, public
 from pandion_api.policy import Policy
 
 router = APIRouter()
@@ -56,4 +56,5 @@ def validate(body: ValidateIn, request: Request) -> dict[str, Any]:
         if exc.status_code == 422 and isinstance(exc.detail, dict) and "problems" in exc.detail:
             return {"ok": False, "problems": exc.detail["problems"]}
         raise
-    return {"ok": True, "problems": [], "config": public(p)}
+    config = public(p)
+    return {"ok": True, "problems": [], "config": config, "yaml": as_yaml(config)}

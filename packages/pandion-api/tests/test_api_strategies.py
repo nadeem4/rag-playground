@@ -1,10 +1,12 @@
 """GET /strategies, POST /explain and POST /pipelines/validate."""
 
 import pytest
+import yaml
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import pandion
+from pandion import Pipeline
 from apihelpers import PIPELINE, make_client, settings
 from pandion_api import Policy, create_app
 from pandion_api.pipelines import PLUGINS_REFUSED
@@ -161,3 +163,41 @@ def test_a_policys_own_422_keeps_its_detail_not_a_500(tmp_path):
     with make_client(tmp_path, Picky()) as c:
         r = c.post("/pipelines/validate", json={"config": PIPELINE})
     assert r.status_code == 422 and r.json()["detail"] == {"why": "not today"}
+
+
+def test_a_valid_pipeline_comes_back_as_a_file_pandion_reads(client, tmp_path):
+    r = client.post("/pipelines/validate", json={"config": PIPELINE})
+    body = r.json()
+    assert r.status_code == 200 and body["ok"] is True
+    text = body["yaml"]
+    assert text.startswith("path: ./pandion-index\n")
+    data = yaml.safe_load(text)
+    assert data["index"]["chunk"] == PIPELINE["index"]["chunk"]
+    assert "models" not in data and "plugins" not in data
+    Pipeline.from_dict(data, base=tmp_path)
+
+
+def test_an_invalid_pipeline_has_no_yaml(client):
+    body = client.post("/pipelines/validate", json={"config": {"index": {}}}).json()
+    assert body["ok"] is False and "yaml" not in body
+
+
+def test_the_pipeline_file_keeps_a_changed_prompt_and_revision(client, tmp_path):
+    """The default Policy allows them, so the copied file must hold the pipeline as it ran."""
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    config = {
+        **PIPELINE,
+        "retrieve": {
+            "search": {"use": "dense", "top_k": 3},
+            "rerank": [{"use": "cross_encoder", "revision": revision}],
+        },
+        "answer": {"use": "chat", "model": "claude-haiku-4-5", "prompt": "Be brief."},
+    }
+    body = client.post("/pipelines/validate", json={"config": config}).json()
+    assert body["ok"] is True, body
+    data = yaml.safe_load(body["yaml"])
+    assert data["retrieve"]["rerank"][0]["revision"] == revision
+    assert data["answer"]["prompt"] == "Be brief."
+    again = Pipeline.from_dict(data, base=tmp_path).to_dict()
+    assert again["retrieve"]["rerank"][0]["revision"] == revision
+    assert again["answer"]["prompt"] == "Be brief."

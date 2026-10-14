@@ -6,6 +6,8 @@ from fastapi import HTTPException
 
 from apihelpers import PIPELINE, finish, make_client, upload
 from pandion_api import Policy
+from pandion_api.routes.ask import NO_ANSWER
+from pandion_api.routes.evaluations import ANSWER_NEEDS_QUESTION, NO_THROUGH_WITH_QUESTION, ONE_OR_THE_OTHER
 
 QUESTIONS = [
     {"id": "capital", "question": "What is the capital of France?", "gold_answers": ["The capital of France is Paris."]}
@@ -228,3 +230,77 @@ def test_a_comparison_prepares_its_variants_and_checks_through_off_the_event_loo
     assert [name for name, _ in seen].count("prepare") == 3
     assert "compare" in [name for name, _ in seen]
     assert not any(on_loop for _, on_loop in seen), seen
+
+
+def test_one_question_without_a_gold_passage_compares_searches(client):
+    sha = upload(client)["sha"]
+    body = {
+        "config": PIPELINE,
+        "stage": "search",
+        "variants": [{"use": "dense", "top_k": 2}, {"use": "bm25", "top_k": 2}],
+        "documents": [sha],
+        "question": "What is the capital of France?",
+    }
+    state, events = finish(client, client.post("/comparisons", json=body))
+    result = state["result"]
+    assert state["kind"] == "comparison" and state["ok"] is True
+    assert [c["variant"]["use"] for c in result["comparisons"]] == ["dense", "bm25"]
+    assert all(c["retrieval"]["hits"] for c in result["comparisons"])
+    assert result["best"] == []
+    step_events = [e for e in events if "step" in e]
+    assert {e.get("variant") for e in step_events} == {1, 2}
+    assert {e.get("variants") for e in step_events} == {2}
+
+
+def test_one_question_can_go_through_the_answer(client):
+    sha = upload(client)["sha"]
+    body = {
+        "config": PIPELINE,
+        "stage": "chunk",
+        "variants": VARIANTS,
+        "documents": [sha],
+        "question": "What is the capital of France?",
+        "answer": True,
+    }
+    state, _ = finish(client, client.post("/comparisons", json=body))
+    assert all("answer" in c and c["answer"]["text"] for c in state["result"]["comparisons"])
+
+
+def test_question_and_questions_together_are_refused(client):
+    sha = upload(client)["sha"]
+    body = {
+        "config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha],
+        "question": "Paris?", "questions": QUESTIONS,
+    }
+    r = client.post("/comparisons", json=body)
+    assert r.status_code == 400 and r.json()["detail"] == ONE_OR_THE_OTHER
+
+
+def test_one_question_keeps_the_ask_routes_limits(client):
+    sha = upload(client)["sha"]
+    base = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha]}
+    assert client.post("/comparisons", json={**base, "question": "x" * 2001}).status_code == 422
+    no_answer = {k: v for k, v in PIPELINE.items() if k != "answer"}
+    r = client.post("/comparisons", json={**base, "config": no_answer, "question": "Paris?", "answer": True})
+    assert r.status_code == 422 and r.json()["detail"]["problems"] == [NO_ANSWER]
+
+
+def test_through_with_one_question_is_refused(client):
+    sha = upload(client)["sha"]
+    body = {
+        "config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha],
+        "question": "Paris?", "through": "chunk",
+    }
+    r = client.post("/comparisons", json=body)
+    assert r.status_code == 400 and r.json()["detail"] == NO_THROUGH_WITH_QUESTION
+
+
+def test_answer_without_one_question_is_refused(client):
+    sha = upload(client)["sha"]
+    for extra in ({}, {"questions": QUESTIONS}):
+        body = {
+            "config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha],
+            "answer": True, **extra,
+        }
+        r = client.post("/comparisons", json=body)
+        assert r.status_code == 400 and r.json()["detail"] == ANSWER_NEEDS_QUESTION

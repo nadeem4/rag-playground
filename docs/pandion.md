@@ -209,6 +209,7 @@ ones in the app's settings forms, so the same pipeline built in the app and writ
 file gives the same artifact ids and shares a cache. [Strategies](strategies.md) lists
 every step and setting. The chunkers are `recursive_character`, `markdown_header`,
 `token_based`, `layout_blocks` and `sentence_window`.
+`pandion.chunk.count_tokens(text)` counts tokens the way `token_based` does.
 
 `store` takes any registered index strategy, built in or your own. `embed` and `store` are
 one step when it runs, because the index embeds the pieces as it writes them. The rule for
@@ -616,6 +617,10 @@ An app, such as a web server or a command line tool, can do everything through
 Pandion's public API. This section lists what it needs. `pandion.evaluate` and
 `pandion.compare` take `on_event` and `cancel` too, so a long evaluation can show
 progress and be stopped.
+
+`p.extras()` names the extras a pipeline needs (what `pandion install` installs).
+`pandion.preload_parser('docling')` loads a parser's models before the first run, as
+`preload_embedder` and `preload_reranker` do for theirs.
 
 ### Settings forms
 

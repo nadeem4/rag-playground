@@ -56,7 +56,7 @@ import { documentOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
 import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
 import { graphToConfig } from "@/state/config"
-import { cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
+import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   decodePipeline,
   droppedText,
@@ -348,11 +348,14 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     try {
       const c = graphToConfig(graph)
       if (!c.ok) throw new Error(c.problem)
-      // An index card runs the pipeline through its own step; Ask stays on the old route for now.
-      const indexCard = target !== undefined && INDEX_STAGES.includes(graph.nodes.find((n) => n.id === target)?.stage ?? "query")
-      const { run_id } = indexCard
-        ? await v2.createRun(cardRun(c.pipeline, target!, force), { keys })
-        : await api.createRun({ graph, force, ...(target ? { targets: [target] } : {}) }, { keys })
+      // An index card runs the pipeline through its own step. Anything else asks: all the way
+      // to the answer from Ask (no target) or the answer card, and only the search when the
+      // target is a step before it (a card's Run, or the keyless Ask above).
+      const stage = target === undefined ? undefined : graph.nodes.find((n) => n.id === target)?.stage
+      const { run_id } =
+        stage !== undefined && INDEX_STAGES.includes(stage)
+          ? await v2.createRun(cardRun(c.pipeline, target!, force), { keys })
+          : await v2.ask(askRun(c.pipeline, { answer: stage === undefined || stage === "use_case", force }), { keys })
       setKeyNotice(notice)
       setKeyNoticeProvider(noticeProvider)
       setRunSteps({ ids: new Set(covered), runId: run_id })

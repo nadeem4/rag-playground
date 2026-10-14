@@ -5,7 +5,7 @@ import type { NodeState } from "@/api/runState"
 
 import { graphToConfig, type WorkingPipeline } from "./config"
 import { addCleaner, columnOrder, initialGraph, sampleGraph } from "./graph"
-import { cardRun, foldRun, mergeResults, routeRunError, type Tracked } from "./pipeline"
+import { askRun, cardRun, foldRun, mergeResults, routeRunError, type Tracked } from "./pipeline"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const DOC = { sha: "c".repeat(64), filename: "a.pdf" }
@@ -42,6 +42,17 @@ describe("routeRunError on /api/v2", () => {
   it("puts a problem that names no card on the column", () => {
     const err = new ApiError(422, { problems: ["The pipeline must be a mapping of settings."] }, "/runs")
     expect(routeRunError(err, g)).toEqual({ kind: "column", message: "The pipeline must be a mapping of settings." })
+  })
+})
+
+describe("askRun", () => {
+  it("asks the pipeline's question on its documents", () => {
+    const p = { ...working(), question: { text: "What is a chunk?", gold_answers: [] } }
+    expect(askRun(p, { answer: true, force: false })).toEqual({ config: p.config, documents: [DOC.sha], question: "What is a chunk?", answer: true })
+  })
+
+  it("stops before the answer when told to", () => {
+    expect(askRun(working(), { answer: false, force: true })).toMatchObject({ answer: false, force: true })
   })
 })
 

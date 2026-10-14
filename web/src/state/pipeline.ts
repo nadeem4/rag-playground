@@ -1,6 +1,6 @@
 import { ApiError } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { V2RunRequest } from "@/api/types"
+import type { V2AskRequest, V2RunRequest } from "@/api/types"
 import { errorsFromPydantic, type FieldErrors, type PydanticError } from "@/components/fields/schema"
 
 import { cardNamedIn, stepOfCard, type WorkingPipeline } from "./config"
@@ -20,6 +20,17 @@ import type { PipelineGraph } from "./graph"
 export function cardRun(p: WorkingPipeline, card: string, force: boolean): V2RunRequest {
   const through = card === "source" ? "parse" : stepOfCard(card)
   return { config: p.config, documents: p.documents.map((d) => d.sha), through, ...(force ? { force: true } : {}) }
+}
+
+/** What Ask sends: the question on the pipeline's documents, through the answer or only the search. */
+export function askRun(p: WorkingPipeline, opts: { answer: boolean; force: boolean }): V2AskRequest {
+  return {
+    config: p.config,
+    documents: p.documents.map((d) => d.sha),
+    question: p.question.text,
+    answer: opts.answer,
+    ...(opts.force ? { force: true } : {}),
+  }
 }
 
 export type RoutedError =

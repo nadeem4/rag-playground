@@ -212,7 +212,8 @@ The panel holds the question and three blocks of settings, summed up in one reci
 ### Results
 
 **Ask** runs the question against the index and shows the ranked pieces right under the
-question. When the answer arrives, the panel scrolls to it. The sample's questions and the
+question. Ask sends the pipeline, its documents and your question to `POST /api/v2/ask`;
+the documents are indexed first when they are not yet. When the answer arrives, the panel scrolls to it. The sample's questions and the
 settings come after the answer, so you can change a setting and ask again to see the pieces
 move. Picking one of the sample's questions takes you back up to the question box.
 

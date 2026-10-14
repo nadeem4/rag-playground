@@ -79,6 +79,9 @@ A missing key fails the step with a message that names the provider, for example
 Anthropic API key. Add one with the key button at the top right." A custom endpoint runs
 without a key.
 
+When there is no key for the chat answer, Ask on Build does not fail. Ask stops after the
+search (`answer: false` in `POST /api/v2/ask`) and says which key a written answer needs.
+
 ## Adding a key
 
 The server looks for each provider's key in three places and uses the first it finds:

@@ -27,6 +27,7 @@ const SOURCE = { sha: "ab".repeat(32), filename: "report.pdf", size: 2048, conte
 const RUN_ROUTES = ["/api/runs", "/api/v2/runs", "/api/v2/ask"]
 /** A bad chunk size, refused as /api/v2 refuses a config: one sentence naming its place. */
 const CHUNK_PROBLEM = "index.chunk: chunk_size must be at least 1."
+const REWRITE_PROBLEM = "retrieve.rewrite: expansion_terms must be at least 1."
 
 let posts: { path: string; body: unknown }[] = []
 
@@ -182,12 +183,6 @@ describe("Ask with a chat card and no API key", () => {
     storeGraph(chatSampleGraph(liveRegistry as never, SOURCE))
   })
 
-  const chatUpstream = () => {
-    const g = chatSampleGraph(liveRegistry as never, SOURCE)
-    const chat = g.nodes.find((n) => n.stage === "use_case")!
-    return g.edges.find((e) => e.dst === chat.id)!.src
-  }
-
   function WithKey() {
     const { setKey } = useApiKey()
     useEffect(() => setKey("anthropic", "sk-ant-FAKE-test-key-0000"), [setKey])
@@ -215,12 +210,13 @@ describe("Ask with a chat card and no API key", () => {
     await waitFor(() => expect(button.disabled).toBe(false))
     fireEvent.click(button)
     await waitFor(() => expect(posts).toHaveLength(2))
-    return posts[1].body as { targets?: string[] }
+    expect(posts[1].path).toBe("/api/v2/ask")
+    return posts[1].body as { answer?: boolean; question: string; targets?: string[] }
   }
 
   it("a keyless Ask stops before Chat, and the notice shows in the panel (Review Focus 3)", async () => {
     const body = await ask()
-    expect(body.targets).toEqual([chatUpstream()])
+    expect(body.answer).toBe(false)
     await waitFor(() => expect(streams).toHaveLength(2))
     await endRun()
     const notice = await waitFor(() => panel().getByTestId("key-notice"))
@@ -240,6 +236,7 @@ describe("Ask with a chat card and no API key", () => {
 
   it("a UI key runs all the way", async () => {
     const body = await ask(true)
+    expect(body.answer).toBe(true)
     expect(body.targets).toBeUndefined()
     expect(screen.queryByTestId("key-notice")).toBeNull()
   })
@@ -254,7 +251,7 @@ describe("Ask with a chat card and no API key", () => {
   it("a chat set to OpenRouter needs the OpenRouter key: an Anthropic key alone stops before Chat, and the note names it", async () => {
     chatModel({ model: "openrouter", openrouter_model: "openai/gpt-4o-mini" })
     const body = await ask(true)
-    expect(body.targets).toEqual([chatUpstream()])
+    expect(body.answer).toBe(false)
     await waitFor(() => expect(streams).toHaveLength(2))
     await endRun()
     const notice = await waitFor(() => panel().getByTestId("key-notice"))
@@ -266,7 +263,7 @@ describe("Ask with a chat card and no API key", () => {
     settings = { ...NO_SERVER_KEYS, openrouter: "env" }
     chatModel({})
     const body = await ask()
-    expect(body.targets).toEqual([chatUpstream()])
+    expect(body.answer).toBe(false)
     await waitFor(() => expect(streams).toHaveLength(2))
     await endRun()
     expect((await waitFor(() => panel().getByTestId("key-notice"))).textContent).toContain("Add an Anthropic key")
@@ -275,20 +272,20 @@ describe("Ask with a chat card and no API key", () => {
   it("an unknown model id needs some key: with none set anywhere it stops before Chat", async () => {
     chatModel({ model: "mystery-model" })
     const body = await ask()
-    expect(body.targets).toEqual([chatUpstream()])
+    expect(body.answer).toBe(false)
   })
 
   it("a chat set to OpenRouter runs all the way with a server OpenRouter key", async () => {
     settings = { ...NO_SERVER_KEYS, openrouter: "env" }
     chatModel({ model: "openrouter", openrouter_model: "openai/gpt-4o-mini" })
     const body = await ask()
-    expect(body.targets).toBeUndefined()
+    expect(body.answer).toBe(true)
   })
 
   it("a server .env key runs all the way", async () => {
     settings = { ...NO_SERVER_KEYS, anthropic: "dotenv" }
     const body = await ask()
-    expect(body.targets).toBeUndefined()
+    expect(body.answer).toBe(true)
     expect(screen.queryByTestId("key-notice")).toBeNull()
   })
 })
@@ -845,13 +842,13 @@ describe("picking a sample in the Document menu", () => {
     expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?")
   })
 
-  it("a field error on the question shows in the panel and clears as the question is typed", async () => {
+  it("a problem with the rewrite step shows in the panel and clears as the question is typed", async () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (RUN_ROUTES.includes(url) && init?.method === "POST") {
-          return new Response(JSON.stringify({ detail: { node_id: "query", errors: [{ loc: ["text"], msg: "Text is required" }] } }), { status: 422 })
+          return new Response(JSON.stringify({ detail: { problems: [REWRITE_PROBLEM] } }), { status: 422 })
         }
         return base(url, init)
       }),
@@ -860,10 +857,10 @@ describe("picking a sample in the Document menu", () => {
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
     fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))
-    await waitFor(() => expect(panel().getAllByText("Text is required").length).toBeGreaterThan(0))
+    await waitFor(() => expect(panel().getAllByText(REWRITE_PROBLEM).length).toBeGreaterThan(0))
     fireEvent.change(panel().getByLabelText("Question"), { target: { value: "What is a chunk?" } })
     await waitFor(() => expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("What is a chunk?"))
-    expect(panel().queryByText("Text is required")).toBeNull()
+    expect(panel().queryByText(REWRITE_PROBLEM)).toBeNull()
   })
 })
 
@@ -1600,6 +1597,17 @@ describe("the Ask panel results on Build", () => {
     return askButton
   }
 
+  it("Ask sends the typed question on the pipeline's document to /api/v2/ask, through the answer", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
+    const ask = await built()
+    fireEvent.change(panel().getByLabelText("Question"), { target: { value: "How big is a chunk?" } })
+    fireEvent.click(ask)
+    await waitFor(() => expect(posts).toHaveLength(2))
+    expect(posts[1].path).toBe("/api/v2/ask")
+    expect(posts[1].body).toMatchObject({ question: "How big is a chunk?", documents: [SOURCE.sha], answer: true })
+    expect((posts[1].body as { config: { retrieve?: unknown } }).config.retrieve).toBeTruthy()
+  })
+
   it("a reranker changed while an Ask runs leaves no mislabelled transcript entry", async () => {
     storeGraph(setReranker(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), liveRegistry as never, "cross_encoder"))
     fireEvent.click(await built())
@@ -1781,17 +1789,17 @@ describe("the Ask panel results on Build", () => {
     expect(header.className).toContain("whitespace-nowrap")
   })
 
-  it("switching Answer to Search clears a field error on the chat model", async () => {
+  it("switching Answer to Search clears a problem with the chat model", async () => {
     storeGraph(chatSampleGraph(liveRegistry as never, SOURCE))
-    reply422 = { detail: { node_id: "use_case", errors: [{ loc: ["model"], msg: "This model is not available" }] } }
+    reply422 = { detail: { problems: ["answer: This model is not available"] } }
     render(<Shell />)
     const build = await screen.findByRole("button", { name: "Build the index" })
     await act(async () => {})
     await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(build)
-    await waitFor(() => expect(panel().getAllByText("This model is not available").length).toBeGreaterThan(0))
+    await waitFor(() => expect(panel().getAllByText("answer: This model is not available").length).toBeGreaterThan(0))
     fireEvent.click(within(panel().getByRole("group", { name: "Answer with" })).getByRole("button", { name: "Search" }))
-    await waitFor(() => expect(panel().queryByText("This model is not available")).toBeNull())
+    await waitFor(() => expect(panel().queryByText("answer: This model is not available")).toBeNull())
   })
 })
 

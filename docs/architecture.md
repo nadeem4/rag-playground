@@ -251,6 +251,10 @@ A run is two requests:
    `run_cancelled`, then `stream_end`. A client that reconnects passes the last event id
    and gets the rest from there.
 
+Build no longer uses this route: a card's Run starts with `POST /api/v2/runs` and Ask with
+`POST /api/v2/ask`, which take the pipeline as a config and answer 202 with a run id in the
+same way. The events stream from `GET /api/v2/runs/{run_id}/events`.
+
 Compare uses `POST /api/sweeps` in the same way: one node, up to ten variants, with
 `variant_started` and `variant_finished` events. `POST /api/runs/{run_id}/cancel` stops a
 run.
@@ -303,8 +307,9 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
 
 - **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
 - **Runs.** A card's Run sends the pipeline as a config with `through` set to the card's
-  step, to `POST /api/v2/runs`; Build the index is the Index card's Run. Ask still posts
-  the pipeline graph to `/api/runs`. The app opens an `EventSource` on
+  step, to `POST /api/v2/runs`; Build the index is the Index card's Run. Ask sends the
+  config, its documents and the question to `POST /api/v2/ask`, with `answer: false` when
+  it stops after the search. The app opens an `EventSource` on
   `/api/v2/runs/{id}/events`, one per run; Stop posts to `/api/v2/runs/{id}/cancel`. The
   `/api/v2` client is `web/src/api/v2.ts`; it sends keys in the same headers as `/api`.
 - **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.

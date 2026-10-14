@@ -63,9 +63,10 @@ export function stepOfCard(id: string): string {
   return ({ query: "rewrite", retrieve: "search", use_case: "answer" } as Record<string, string>)[id] ?? id
 }
 
-const WHERE = /\b(?:index\.(parse|clean|chunk|embed|store|source)(?:\.(\d+))?|retrieve\.(rewrite|search|rerank)(?:\.(\d+))?|(answer))\b/
+/** A stacked step is numbered as `index.clean.2` in run events and as `index.clean step 2` in Pandion's problem sentences. */
+const WHERE = /\b(?:index\.(parse|clean|chunk|embed|store|source)(?:(?:\.| step )(\d+))?|retrieve\.(rewrite|search|rerank)(?:(?:\.| step )(\d+))?|(answer))\b/
 
-/** The card a Pandion problem sentence is about, from the place it names (`index.chunk`). */
+/** The card a Pandion problem sentence is about, from the place it names (`index.chunk`, `index.clean step 2`). */
 export function cardNamedIn(sentence: string): string | null {
   const m = WHERE.exec(sentence)
   if (!m) return null

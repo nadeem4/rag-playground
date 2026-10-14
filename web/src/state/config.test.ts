@@ -125,6 +125,9 @@ describe("card ids and step names", () => {
     ["index.embed: unknown embedder", "index"],
     ["answer uses 'x'", "use_case"],
     ["The pipeline must be a mapping.", null],
+    // Pandion's own wording (pandion/config.py) names a stacked step as "step N".
+    ["index.clean step 2 uses 'nope', which is not registered.", "clean_2"],
+    ["retrieve.rerank step 3: top_n must be at least 1.", "rerank_3"],
   ])("finds the card in %s", (sentence, card) => {
     expect(cardNamedIn(sentence)).toBe(card)
   })

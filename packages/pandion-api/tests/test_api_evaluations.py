@@ -374,3 +374,43 @@ def test_a_comparison_on_one_question_gets_the_key_for_each_variant(tmp_path, mo
     assert state["ok"] is True
     assert seen == [{"anthropic_api_key": KEY}] * len(VARIANTS)
     _no_key_on_disk(tmp_path)
+
+
+# --- how many questions one run may ask -------------------------------------------
+
+
+class AtMostTwo(Policy):
+    """Two questions an evaluation, and three variant-questions a comparison."""
+
+    def __init__(self):
+        self.asked = []
+
+    def check_question_count(self, kind, count, request):
+        self.asked.append((kind, count))
+        if count > {"evaluation": 2, "comparison": 3}[kind]:
+            raise HTTPException(413, f"At most so many, not {count}.")
+
+
+def test_the_policy_refuses_an_evaluation_that_asks_too_many_questions(tmp_path):
+    policy = AtMostTwo()
+    with make_client(tmp_path, policy) as c:
+        sha = upload(c)["sha"]
+        r = c.post("/evaluations", json={"config": PIPELINE, "documents": [sha], "questions": QUESTIONS * 3})
+        assert r.status_code == 413 and r.json()["detail"] == "At most so many, not 3."
+        # A kept set is counted the same way.
+        keep(c, sha, [{**q, "id": f"q{n}"} for n, q in enumerate(QUESTIONS * 3)])
+        r = c.post("/evaluations", json={"config": PIPELINE, "documents": [sha]})
+        assert r.status_code == 413
+        finish(c, c.post("/evaluations", json={"config": PIPELINE, "documents": [sha], "questions": QUESTIONS * 2}))
+    assert policy.asked == [("evaluation", 3), ("evaluation", 3), ("evaluation", 2)]
+
+
+def test_the_policy_refuses_a_comparison_by_its_variants_times_its_questions(tmp_path):
+    policy = AtMostTwo()
+    with make_client(tmp_path, policy) as c:
+        sha = upload(c)["sha"]
+        body = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha]}
+        r = c.post("/comparisons", json={**body, "questions": QUESTIONS * 2})
+        assert r.status_code == 413 and r.json()["detail"] == "At most so many, not 4."
+        finish(c, c.post("/comparisons", json={**body, "variants": VARIANTS[:1], "questions": QUESTIONS * 2}))
+    assert policy.asked == [("comparison", 4), ("comparison", 2)]

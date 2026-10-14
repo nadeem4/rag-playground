@@ -91,6 +91,19 @@ class Policy:
         request can ask for."""
         return 10
 
+    def check_question_count(self, kind: str, count: int, request: Request) -> None:
+        """Refuse a run that asks too many questions (raise HTTPException), which
+        bounds the work one request can ask for. `kind` is "evaluation", where
+        `count` is its questions, or "comparison", where `count` is its variants
+        times its questions. Called before the run starts, after the route's own
+        cap of 500 questions a set."""
+
+    def max_runs_per_owner(self, request: Request) -> int | None:
+        """How many runs one owner (`run_owner`) may have working or waiting at
+        once. A run past it is refused with a 429. None: no limit. A run with no
+        owner is never counted."""
+        return None
+
     def run_owner(self, request: Request) -> str | None:
         """Who a run started by `request` belongs to, for example a visitor's
         cookie. A run with an owner is for that owner only. None: anyone may

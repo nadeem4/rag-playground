@@ -270,3 +270,57 @@ def test_a_run_dropped_after_an_hour_is_404_like_one_that_never_was(client):
     manager._clock = lambda: later
     for r in (client.get(f"/runs/{run_id}"), client.post(f"/runs/{run_id}/cancel"), client.get(f"/runs/{run_id}/events")):
         assert r.status_code == 404 and r.json()["detail"] == f"unknown run {run_id}"
+
+
+# --- how many runs one owner may have going ---------------------------------------
+
+
+class TwoEach(ByHeader):
+    """Two runs going at once for each owner the X-Who header names."""
+
+    def max_runs_per_owner(self, request):
+        return 2
+
+
+def test_an_owner_past_their_runs_is_refused_with_429_until_one_ends(tmp_path, monkeypatch):
+    gate = threading.Event()
+
+    def held_run(self, documents, **kwargs):
+        gate.wait(5)
+        return SimpleNamespace(ok=True, documents={}, index=None)
+
+    monkeypatch.setattr(IndexPipeline, "run", held_run)
+    with make_client(tmp_path, TwoEach()) as c:
+        sha = upload(c)["sha"]
+        body = {"config": PIPELINE, "documents": [sha]}
+        ann, bob = {"X-Who": "ann"}, {"X-Who": "bob"}
+        first = c.post("/runs", json=body, headers=ann)
+        second = c.post("/runs", json=body, headers=ann)
+        assert first.status_code == 202 and second.status_code == 202
+        third = c.post("/runs", json=body, headers=ann)
+        assert third.status_code == 429
+        assert third.json()["detail"] == "You already have 2 runs going. Wait for one to finish, or stop one."
+        # Every route that starts a run is held to it.
+        asked = c.post("/ask", json={"config": PIPELINE, "question": "Why?", "documents": [sha]}, headers=ann)
+        assert asked.status_code == 429
+        # Another owner is not.
+        theirs = c.post("/runs", json=body, headers=bob)
+        assert theirs.status_code == 202
+        gate.set()
+        for r, who in ((first, ann), (second, ann), (theirs, bob)):
+            with c.stream("GET", f"/runs/{r.json()['run_id']}/events", headers=who) as s:
+                list(s.iter_lines())
+        assert c.post("/runs", json=body, headers=ann).status_code == 202
+
+
+def test_by_default_an_owner_may_have_any_number_of_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(IndexPipeline, "run", lambda self, documents, **kw: SimpleNamespace(ok=True, documents={}, index=None))
+    with make_client(tmp_path, ByHeader()) as c:
+        sha = upload(c)["sha"]
+        ids = [
+            c.post("/runs", json={"config": PIPELINE, "documents": [sha]}, headers={"X-Who": "ann"}).json()["run_id"]
+            for _ in range(4)
+        ]
+        for run_id in ids:
+            with c.stream("GET", f"/runs/{run_id}/events", headers={"X-Who": "ann"}) as s:
+                list(s.iter_lines())

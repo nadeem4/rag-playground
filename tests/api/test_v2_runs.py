@@ -256,3 +256,79 @@ def test_on_the_demo_an_evaluation_is_its_visitors_own(client, monkeypatch):
     assert client.get(f"/api/v2/runs/{run_id}").status_code == 404
 
 
+
+
+# --- the demo's capacity: questions in one run, and runs going at once --------------
+
+
+def test_on_the_demo_an_evaluation_asks_at_most_50_questions(client, monkeypatch):
+    from api.policy import too_many_questions
+
+    demo_on(monkeypatch)
+    sample = client.post("/api/sources/sample").json()
+    body = {"config": PIPELINE, "documents": [sample["sha"]], "questions": QUESTIONS * 51}
+    r = client.post("/api/v2/evaluations", json=body)
+    assert r.status_code == 413 and r.json()["detail"] == too_many_questions("evaluation", 51)
+    assert r.json()["detail"] == (
+        "The demo scores at most 50 questions in one run, and this set has 51. "
+        "Use fewer questions, or run the playground locally for more."
+    )
+    policy = PlaygroundPolicy()
+    policy.check_question_count("evaluation", 50, None)
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    policy.check_question_count("evaluation", 500, None)
+
+
+def test_on_the_demo_a_comparison_asks_at_most_120_recipe_questions(client, monkeypatch):
+    from api.policy import too_many_questions
+
+    demo_on(monkeypatch)
+    sample = client.post("/api/sources/sample").json()
+    variants = [{"use": "recursive_character", "chunk_size": 100 + n} for n in range(3)]
+    body = {"config": PIPELINE, "stage": "chunk", "variants": variants, "documents": [sample["sha"]], "questions": QUESTIONS * 41}
+    r = client.post("/api/v2/comparisons", json=body)
+    assert r.status_code == 413 and r.json()["detail"] == too_many_questions("comparison", 123)
+    assert r.json()["detail"] == (
+        "The demo scores at most 120 recipe-questions in one comparison (recipes times questions), "
+        "and this one asks for 123. Use fewer recipes or questions, or run the playground locally for more."
+    )
+    policy = PlaygroundPolicy()
+    # Ten recipes on a bundled sample (12 questions) still fit.
+    policy.check_question_count("comparison", 120, None)
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    policy.check_question_count("comparison", 5000, None)
+
+
+def test_on_the_demo_a_visitor_has_at_most_two_runs_going(client, monkeypatch):
+    import threading
+
+    gate = threading.Event()
+
+    def held_run(self, documents, **kwargs):
+        gate.wait(5)
+        return SimpleNamespace(ok=True, documents={}, index=None)
+
+    monkeypatch.setattr(IndexPipeline, "run", held_run)
+    demo_on(monkeypatch)
+    ann, bob = "ann-" + "a" * 20, "bob-" + "b" * 20
+    as_visitor(client, ann)
+    sample = client.post("/api/sources/sample").json()
+    body = {"config": PIPELINE, "documents": [sample["sha"]]}
+    ids = [client.post("/api/v2/runs", json=body).json()["run_id"] for _ in range(2)]
+    r = client.post("/api/v2/runs", json=body)
+    assert r.status_code == 429
+    assert r.json()["detail"] == "You already have 2 runs going. Wait for one to finish, or stop one."
+    as_visitor(client, bob)
+    theirs = client.post("/api/v2/runs", json=body).json()["run_id"]
+    gate.set()
+    read_sse(client, theirs, prefix="/api/v2")
+    as_visitor(client, ann)
+    for run_id in ids:
+        read_sse(client, run_id, prefix="/api/v2")
+
+
+def test_locally_a_visitor_may_have_any_number_of_runs(monkeypatch):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    assert PlaygroundPolicy().max_runs_per_owner(None) == 2
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    assert PlaygroundPolicy().max_runs_per_owner(None) is None

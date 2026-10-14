@@ -97,6 +97,12 @@ turns off what is unsafe to share.
   turn in arrival order, and the page says: The demo is busy with other learners. Your
   run starts in a moment. A Compare is one run, however many recipes it has. Cancel works
   while a run waits. A local run has no limit.
+- One visitor may have at most two runs working or waiting at once. A third is refused
+  with: You already have 2 runs going. Wait for one to finish, or stop one.
+- An evaluation scores at most 50 questions in one run. A comparison scores at most 120
+  recipe-questions, which is its recipes times its questions: 10 recipes and a sample's 12
+  questions just fit. A run over either is refused with a sentence that names
+  the cap and says to use fewer, or to run the playground locally for more.
 - Results are cached for everyone, filed by a fingerprint of the document, the step and
   its settings, so two visitors never overwrite each other's. The cache cannot be cleared
   on the demo: the request is refused, because it would wipe every visitor's results.

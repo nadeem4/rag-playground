@@ -51,6 +51,22 @@ NO_CLEARING = (
     "Run the playground locally to clear it."
 )
 
+
+def too_many_questions(kind: str, count: int) -> str:
+    """The demo's 413 for an evaluation or a comparison that asks too many questions
+    (`PlaygroundPolicy.check_question_count`)."""
+    if kind == "evaluation":
+        return (
+            f"The demo scores at most {demo.MAX_EVALUATION_QUESTIONS} questions in one run, "
+            f"and this set has {count}. Use fewer questions, or run the playground locally for more."
+        )
+    return (
+        f"The demo scores at most {demo.MAX_COMPARISON_QUESTIONS} recipe-questions in one comparison "
+        f"(recipes times questions), and this one asks for {count}. Use fewer recipes or questions, "
+        "or run the playground locally for more."
+    )
+
+
 #: The most recipes one comparison runs (`PlaygroundPolicy.max_variants`).
 MAX_VARIANTS = 10
 
@@ -267,6 +283,21 @@ class PlaygroundPolicy(Policy):
         """At most ten recipes in every mode, which bounds the work one request
         can ask of the hosted demo."""
         return MAX_VARIANTS
+
+    def check_question_count(self, kind: str, count: int, request: Request) -> None:
+        """On the demo, at most 50 questions an evaluation and 120 recipe-questions
+        a comparison, so one run cannot hold a shared slot for long. Locally,
+        only pandion-api's own cap of 500 questions a set."""
+        if not demo.enabled():
+            return
+        most = demo.MAX_EVALUATION_QUESTIONS if kind == "evaluation" else demo.MAX_COMPARISON_QUESTIONS
+        if count > most:
+            raise HTTPException(status_code=413, detail=too_many_questions(kind, count))
+
+    def max_runs_per_owner(self, request: Request) -> int | None:
+        """On the demo, two runs working or waiting a visitor, so one visitor
+        cannot queue many and block everyone else. No limit locally."""
+        return demo.MAX_RUNS_PER_VISITOR if demo.enabled() else None
 
     def run_owner(self, request: Request) -> str | None:
         """On the demo a run is its visitor's own: to anyone else it is a 404.

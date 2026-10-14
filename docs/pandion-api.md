@@ -116,7 +116,13 @@ is checked like a pipeline before anything runs, so a variant the Policy refuses
 refused at once. A variant is taken as `pandion.compare` takes it: a bare name is
 `{"use": name}`, and one block for `clean` or `rerank` is a list of one. A question set
 in the request is held to the caps of an uploaded one (over 1 MB is 413; more than 500
-questions, or more than 20 gold passages in one, is 400 with its sentence).
+questions, or more than 20 gold passages in one, is 400 with its sentence). The Policy's
+`check_question_count` may refuse fewer: an evaluation by its questions, a comparison with
+questions by its variants times its questions.
+
+A Policy can cap the runs one owner has working or waiting (`max_runs_per_owner`). A run
+past it, on any route that starts a run, is a 429: "You already have 2 runs going. Wait
+for one to finish, or stop one."
 
 An evaluation sent without questions asks those of the sets kept against its documents,
 in the order the documents are listed. An id that two documents' sets both use is
@@ -174,6 +180,8 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
 | `check_clear_cache(request)` | allows | `DELETE /cache` |
 | `max_variants(request)` | 10 | `POST /comparisons`: more variants than this is a 422 |
+| `check_question_count(kind, count, request)` | allows | before an evaluation (`kind` "evaluation", `count` its questions) or a comparison with questions (`kind` "comparison", `count` its variants times its questions) starts: raise to refuse |
+| `max_runs_per_owner(request)` | None (no limit) | when a run starts: an owner (`run_owner`) who already has this many runs working or waiting gets a 429 |
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
 | `scrub(text)` | the text as it is | on a `ConfigError`'s problem sentence, on the problem and 404 sentences of `POST /explain`, and on every error a run shows (see [Errors](#errors)) |
 | `not_readable` (attribute) | "This document is not available." | the 403 a run gets for a document `can_read` refuses |
@@ -254,6 +262,8 @@ limits and the visitor cookie) and `GET /api/questions/template`.
 | `public_endpoints_only` | yes | no |
 | `max_active_runs` | 2 | no limit |
 | `max_variants` | 10 | 10 |
+| `check_question_count` | at most 50 questions an evaluation, and 120 recipe-questions (recipes times questions) a comparison: a 413 naming the cap | only the 500 a set |
+| `max_runs_per_owner` | 2 a visitor | no limit |
 | `run_owner` | the visitor: to anyone else the run is a 404 | no one |
 | `scrub` | a server path keeps only its last part (`[server]/x.py`) | the same |
 | `credentials` | only the key in the request | the request, then the environment, then `.env` |
@@ -279,8 +289,6 @@ variant stops after the card it shows. These are still open:
 - **A body-size limit before the route.** A multipart upload is spooled to disk before a
   route's own cap reads it. A limit at the app, or at the proxy in front of it, would
   refuse a huge body before it is written.
-- **A per-visitor queue cap.** The demo lets two runs work at once; the rest wait. One
-  visitor can still queue many runs.
 - **Results readable by id.** `GET /results/{id}` and `POST /trace` answer any visitor
   who has a result's id. An id is a content hash that needs the upload's bytes to
   compute. A per-visitor check would be a new Policy hook.

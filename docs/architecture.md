@@ -22,8 +22,10 @@ packages/pandion/  the engine as its own Python package, pandion: artifacts, tra
                    graph, the executor, the content-addressed store, the embedding models
                    and their cache, the chat model client, and the pipeline file
 packages/pandion-api/  pandion-api: Pandion's public API over HTTP, with a Policy for a site's rules
-api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode,
-             and the manifest of the steps it loads, in api/steps/
+api/         the playground's server: pandion-api with the playground's Policy (api/policy.py),
+             the old /api routes until part 5, the teaching routes (samples, lessons, stage
+             copy), demo mode, and the web build; the manifest of the steps it loads is in
+             api/steps/
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
 samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
@@ -247,6 +249,11 @@ A run is two requests:
 Compare uses `POST /api/sweeps` in the same way: one node, up to ten variants, with
 `variant_started` and `variant_finished` events. `POST /api/runs/{run_id}/cancel` stops a
 run.
+
+The run manager is `pandion_api.runs.RunManager`, one per app. The playground's old routes
+and pandion-api's routes use the same one, so the demo's limit on runs at once holds
+across both. A run is stopped through its `cancel`, a `threading.Event` that Pandion takes
+as it is.
 
 The keys live only in the run's worker for its duration, and every event passes through a
 filter that replaces a key with `[redacted]`.

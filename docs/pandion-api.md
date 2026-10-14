@@ -60,6 +60,9 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | Method | Default | Called |
 |---|---|---|
 | `dependencies()` | `[]` | FastAPI dependencies run on every route |
+| `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
+| `run_owner(request)` | None (anyone) | not yet called: the run routes will start a run for whoever it names, and only they may follow or cancel it |
+| `scrub(text)` | the text as it is | not yet called: the run routes will pass error text through it before it leaves the server |
 | `on_startup(app)`, `on_shutdown(app)` | nothing | once each, around serving |
 
 ## What a request cannot set

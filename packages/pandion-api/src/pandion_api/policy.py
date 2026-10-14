@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 
 class Policy:
@@ -18,6 +18,21 @@ class Policy:
         """FastAPI dependencies (`fastapi.Depends(...)`) run on every route,
         for example one that sets a visitor cookie."""
         return []
+
+    def max_active_runs(self) -> int | None:
+        """How many runs may work at once; the rest wait their turn. None: no limit."""
+        return None
+
+    def run_owner(self, request: Request | None) -> str | None:
+        """Who a run started by `request` belongs to, for example a visitor's
+        cookie. A run with an owner is for that owner only. None: anyone may
+        follow or cancel it."""
+        return None
+
+    def scrub(self, text: str) -> str:
+        """An error message as it may leave the server, for example with the
+        server's file paths taken out. The default leaves it as it is."""
+        return text
 
     async def on_startup(self, app: FastAPI) -> None:
         """Called once before the server takes requests."""

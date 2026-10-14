@@ -61,3 +61,22 @@ def test_the_settings_name_the_sources_folder(tmp_path):
 
 def test_the_public_names():
     assert set(pandion_api.__all__) >= {"ApiSettings", "Policy", "create_app", "__version__"}
+
+
+def test_every_app_has_one_run_manager_with_the_policys_limit(tmp_path):
+    from pandion_api.runs import RunManager
+
+    class Two(Policy):
+        def max_active_runs(self):
+            return 2
+
+    app = create_app(settings(tmp_path), Two())
+    assert isinstance(app.state.runs, RunManager)
+    assert app.state.runs._limit() == 2
+
+
+def test_the_default_policy_allows_everything():
+    policy = Policy()
+    assert policy.max_active_runs() is None
+    assert policy.run_owner(None) is None
+    assert policy.scrub("failed reading /srv/data/sources/ab.pdf") == "failed reading /srv/data/sources/ab.pdf"

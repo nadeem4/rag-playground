@@ -269,9 +269,12 @@ refused. A question set is held to 1 MB, 500 questions and 20 gold passages a qu
 The demo's rule tests (`tests/api/test_demo.py`, `test_delete_source.py`,
 `test_source_file.py` and the rest) call `/api/v2` directly.
 
-### What part 5 must decide
+### Open items
 
-Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left for it:
+Part 5 moved the web onto `/api/v2` and deleted the old routes. It also merged the two
+embedding caches into `embeddings/`, removed the allow-list from
+`tests/integration/test_package_boundary.py`, and made Compare send `through`, so each
+variant stops after the card it shows. These are still open:
 
 - **A body-size limit before the route.** A multipart upload is spooled to disk before a
   route's own cap reads it. A limit at the app, or at the proxy in front of it, would
@@ -279,25 +282,14 @@ Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left 
 - **A per-visitor queue cap.** The demo lets two runs work at once; the rest wait. One
   visitor can still queue many runs.
 - **Results readable by id.** `GET /results/{id}` and `POST /trace` answer any visitor
-  who has a result's id, as the old `/api` routes did. An id is a
-  content hash that needs the upload's bytes to compute. A per-visitor check would be
-  a new Policy hook.
+  who has a result's id. An id is a content hash that needs the upload's bytes to
+  compute. A per-visitor check would be a new Policy hook.
 - **Time spent checking a question set.** Gold passages are matched in a worker thread
   with no time cap. The caps on size and count bound it, but not by the clock.
-- **Two embedding caches.** The old routes cached embeddings in `artifacts/.embcache` (or
-  `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Done: the variable is gone,
-  and only `embeddings/` is used.
-- **The allow-list.** Done: the lessons, the warm-up, `api/deps.py`, the samples and the
-  scripts use only Pandion's public API, and `ENGINE_IMPORTS` is deleted from
-  `tests/integration/test_package_boundary.py`.
 - **Runs do not hold the pdfium lock.** A page request and a question-set check hold
   `pandion_api.pages.PDFIUM_LOCK`, but a run's pdfium parse step does not. pdfium is not
   thread-safe, so a run that parses with pdfium can still meet a page request on another
-  thread. Part 5 decides whether Pandion's pdfium step takes a lock of its own.
-- **Compare's per-card `through`.** `POST /comparisons` takes `through`, so Compare stops
-  each variant after the card it shows without embedding every variant, as the old
-  sweeps route did. The web's Compare page sends it for every comparison through an index
-  step.
+  thread.
 
 ## Errors
 

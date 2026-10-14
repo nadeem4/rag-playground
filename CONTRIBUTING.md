@@ -124,7 +124,7 @@ model, so a new strategy needs no frontend change.
    - if it needs something from the step above it, `requires`, keyed by input port, for
      example `{"index": {"backends": ["fts"]}}`, and `provides` on the producer, for
      example `{"backends": ["dense", "fts"]}`. An unmet requirement is a hard lock: the
-     graph is rejected, and the app greys the option out and blocks Run. A step whose
+     pipeline is refused when it is read, and the app greys the option out and blocks Run. A step whose
      input and output are the same kind of artifact, such as a Clean step, passes on what
      the step above it provides;
    - if it runs without something but degrades, `prefers`, in the same shape, with a
@@ -149,6 +149,11 @@ model, so a new strategy needs no frontend change.
    README.
 
 `packages/pandion/src/pandion/plugins/clean/drop_matching.py` is a small, complete example.
+
+This is for a strategy that ships with Pandion. A strategy of your own does not need to be
+in Pandion at all: [examples/pandion/own_strategies/](examples/pandion/own_strategies)
+writes one for every stage and loads them with `plugins:` or `--plugins`. If you change
+how strategies are written, update that example too; CI runs it.
 
 **Adding a setting to a built-in step.** A result id hashes a step's settings, so a new
 field would move every id of that step and rebuild every cache. Give the settings model

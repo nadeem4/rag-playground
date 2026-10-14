@@ -101,6 +101,27 @@ index goes in `work/` next to the scripts: for `run_yaml.py` that is the file's 
 `run_mixed.py` takes `--work <folder>` to put it somewhere else.
 `run_mixed.py` needs the pdfium extra: `pip install "pandion[pdfium]"`.
 
+## From the command line
+
+The `pandion` command runs the same file. From this folder, name the notes each time,
+because this source cannot sync:
+
+```bash
+uv run pandion index pipeline.yaml notes/bees.md notes/bread.md notes/tides.md
+uv run pandion ask pipeline.yaml "What causes the tides?" --documents notes/bees.md notes/bread.md notes/tides.md
+```
+
+`pipeline.yaml` lists `plugins: [my_strategies]`. For a file that does not, `--plugins
+my_strategies` imports the package from the current folder before the file is read:
+
+```bash
+uv run pandion strategies --plugins my_strategies --stage chunk   # per_block is in the list
+uv run pandion index copy.yaml notes/bees.md notes/bread.md notes/tides.md --plugins my_strategies
+```
+
+Here `copy.yaml` is `pipeline.yaml` without its `plugins:` line. Without `--plugins`, it is
+refused, because `per_block` and the others are not registered.
+
 ## Ship it as a package
 
 To use the strategies without `plugins:` or an import, put `my_strategies` in a package of

@@ -178,7 +178,16 @@ Opened from Evaluate's **Open on Build to watch each step**, Build shows **Back 
 Evaluate**, and saving there goes back to Evaluate with the new pipeline selected.
 
 Pipelines live in your browser, up to 20. Saving a 21st removes the oldest, and the page
-says which.
+says which. One saved by an older version that cannot be opened here is never removed
+this way.
+
+**How your browser holds a pipeline.** Build keeps one working pipeline: the copy you
+edit, which Compare and Evaluate use too. Your saved pipelines are separate, named
+copies. **Save** copies the working pipeline into your list, and opening a saved pipeline
+copies it back onto Build. Editing on Build never changes a saved pipeline until you save
+again. A link and an exported file carry the same settings. Pipelines saved by an older
+version are converted once, and one that cannot be is kept with the reason.
+[Architecture](architecture.md#how-the-web-app-holds-a-pipeline) has the details.
 
 ## The Ask panel
 
@@ -484,7 +493,9 @@ Choose the file, or drop it on the Library page, in any browser.
 ## Take your pipeline with you
 
 **Copy as YAML** on Build puts your pipeline on the clipboard as a Pandion pipeline file.
-Save it as `pipeline.yaml` and run it with the `pandion` command or `Pipeline.from_yaml`.
+Save it as `pipeline.yaml` and run it with the `pandion` command, such as
+`pandion index pipeline.yaml report.pdf`, or with `Pipeline.from_yaml` (see
+[the pandion command](pandion.md#the-pandion-command)).
 The prompts and the reranker revision are Pandion's own, as in the playground. If the
 pipeline has a problem, the page says what it is and copies nothing. If the browser refuses
 the clipboard, the page says so.

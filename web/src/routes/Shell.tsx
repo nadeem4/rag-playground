@@ -55,7 +55,8 @@ import {
 import { documentOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
 import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
-import { buildRunRequest, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
+import { graphToConfig } from "@/state/config"
+import { cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   decodePipeline,
   droppedText,
@@ -345,7 +346,13 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     setRunSteps({ ids: new Set(covered), runId: null })
     setSubmitting(true)
     try {
-      const { run_id } = await api.createRun(buildRunRequest(graph, { target, force }), { keys })
+      const c = graphToConfig(graph)
+      if (!c.ok) throw new Error(c.problem)
+      // An index card runs the pipeline through its own step; Ask stays on the old route for now.
+      const indexCard = target !== undefined && INDEX_STAGES.includes(graph.nodes.find((n) => n.id === target)?.stage ?? "query")
+      const { run_id } = indexCard
+        ? await v2.createRun(cardRun(c.pipeline, target!, force), { keys })
+        : await api.createRun({ graph, force, ...(target ? { targets: [target] } : {}) }, { keys })
       setKeyNotice(notice)
       setKeyNoticeProvider(noticeProvider)
       setRunSteps({ ids: new Set(covered), runId: run_id })

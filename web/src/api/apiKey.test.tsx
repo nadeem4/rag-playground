@@ -87,7 +87,7 @@ beforeEach(() => {
         const has = headersOf(init)[H(p)]
         return ok(has ? { ok: false, source: "header", error: "invalid key" } : { ok: true, source: "dotenv", error: null })
       }
-      if ((url === "/api/runs" || url === "/api/sweeps") && init?.method === "POST") return ok({ run_id: "r1" }, 202)
+      if (["/api/runs", "/api/sweeps", "/api/v2/runs", "/api/v2/ask"].includes(url) && init?.method === "POST") return ok({ run_id: "r1" }, 202)
       if (url.endsWith("/pages")) return ok([{ n: 1, width: 612, height: 792 }])
       return ok({ detail: "not found" }, 404)
     }),
@@ -139,7 +139,7 @@ function enterKey(p: LlmProvider, key: string) {
   return r
 }
 
-const runPosts = () => sent.filter((s) => s.url === "/api/runs" && s.method === "POST")
+const runPosts = () => sent.filter((s) => ["/api/runs", "/api/v2/runs", "/api/v2/ask"].includes(s.url) && s.method === "POST")
 
 describe("keyHeaders", () => {
   it("names one header per provider", () => {
@@ -415,9 +415,7 @@ describe("the API key panel", () => {
       expect(post.headers[H(p)]).toBe(k)
       expect(graph).not.toContain(k)
       expect(post.body).not.toContain(k)
-      for (const n of JSON.parse(post.body).graph.nodes as { config: Record<string, unknown> }[]) {
-        expect(JSON.stringify(n.config)).not.toContain(k)
-      }
+      expect(JSON.stringify(JSON.parse(post.body).config)).not.toContain(k)
       expect(storageText(window.localStorage)).not.toContain(k)
       expect(storageText(window.sessionStorage)).not.toContain(k)
       expect(window.location.href).not.toContain(k)

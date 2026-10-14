@@ -302,7 +302,9 @@ today: a run's pdfium parse step can meet a page request on another thread. What
 must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
 
 - **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
-- **Runs.** It posts the pipeline graph to `/api/runs` and opens an `EventSource` on
+- **Runs.** A card's Run sends the pipeline as a config with `through` set to the card's
+  step, to `POST /api/v2/runs`; Build the index is the Index card's Run. Ask still posts
+  the pipeline graph to `/api/runs`. The app opens an `EventSource` on
   `/api/v2/runs/{id}/events`, one per run; Stop posts to `/api/v2/runs/{id}/cancel`. The
   `/api/v2` client is `web/src/api/v2.ts`; it sends keys in the same headers as `/api`.
 - **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.

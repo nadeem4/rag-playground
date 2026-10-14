@@ -1,8 +1,9 @@
 import { ApiError } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { RunRequest } from "@/api/types"
+import type { V2RunRequest } from "@/api/types"
 import { errorsFromPydantic, type FieldErrors, type PydanticError } from "@/components/fields/schema"
 
+import { cardNamedIn, stepOfCard, type WorkingPipeline } from "./config"
 import type { PipelineGraph } from "./graph"
 
 /**
@@ -11,11 +12,14 @@ import type { PipelineGraph } from "./graph"
  * results of partial runs accumulate.
  */
 
-/** `target` present: that card's Run (the server adds its ancestors). No target: the whole graph (Ask). */
-export function buildRunRequest(graph: PipelineGraph, opts: { target?: string; force?: boolean }): RunRequest {
-  const req: RunRequest = { graph, force: Boolean(opts.force) }
-  if (opts.target) req.targets = [opts.target]
-  return req
+/**
+ * The run a card's Run button sends: the pipeline through that card's step,
+ * on the pipeline's documents. The Document card has no step of its own; it
+ * runs through Parse, which reads it.
+ */
+export function cardRun(p: WorkingPipeline, card: string, force: boolean): V2RunRequest {
+  const through = card === "source" ? "parse" : stepOfCard(card)
+  return { config: p.config, documents: p.documents.map((d) => d.sha), through, ...(force ? { force: true } : {}) }
 }
 
 export type RoutedError =
@@ -34,6 +38,10 @@ function isConfigError(d: unknown): d is ConfigErrorDetail {
   )
 }
 
+/** A /api/v2 refusal: `{problems: [...]}`, one sentence per problem. */
+const isProblems = (d: unknown): d is { problems: string[] } =>
+  typeof d === "object" && d !== null && Array.isArray((d as { problems?: unknown }).problems)
+
 /** The node a graph-validation message is about, if it names exactly one. */
 function nodeNamedIn(message: string, graph: PipelineGraph): string | null {
   const ids = new Set(graph.nodes.map((n) => n.id))
@@ -44,9 +52,14 @@ function nodeNamedIn(message: string, graph: PipelineGraph): string | null {
   return named.size === 1 ? [...named][0] : null
 }
 
-/** Where on the page a failed `POST /api/runs` (or `/sweeps`) is shown. */
+/** Where on the page a failed run request (`/api/v2/runs`, `/api/v2/ask`, or an old route) is shown. */
 export function routeRunError(err: unknown, graph: PipelineGraph): RoutedError {
   if (err instanceof ApiError) {
+    if (isProblems(err.detail)) {
+      const message = err.detail.problems.join(" ")
+      const card = cardNamedIn(message)
+      return card && graph.nodes.some((n) => n.id === card) ? { kind: "node", nodeId: card, message } : { kind: "column", message }
+    }
     if (err.status === 422 && isConfigError(err.detail)) {
       return { kind: "fields", nodeId: err.detail.node_id, errors: errorsFromPydantic(err.detail.errors) }
     }

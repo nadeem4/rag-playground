@@ -111,8 +111,9 @@ function patchNode(state: RunState, id: string, patch: Partial<NodeState>): RunS
 
 type Named = { step?: unknown; steps?: unknown; selected_steps?: unknown; skipped_steps?: unknown }
 
+/** Each card once: a run over several documents names `parse` once per document. */
 const cards = (xs: unknown): string[] | undefined =>
-  Array.isArray(xs) ? xs.map((s) => cardOfStep(String((s as { step?: unknown } | null)?.step ?? ""))) : undefined
+  Array.isArray(xs) ? [...new Set(xs.map((s) => cardOfStep(String((s as { step?: unknown } | null)?.step ?? ""))))] : undefined
 
 /**
  * A /api/v2 event names Pandion's step (`clean.1`, `search`); the column names

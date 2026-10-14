@@ -3,20 +3,45 @@ import { describe, expect, it } from "vitest"
 import { ApiError } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 
-import { addCleaner, columnOrder, initialGraph } from "./graph"
-import { buildRunRequest, foldRun, mergeResults, routeRunError, type Tracked } from "./pipeline"
+import { graphToConfig, type WorkingPipeline } from "./config"
+import { addCleaner, columnOrder, initialGraph, sampleGraph } from "./graph"
+import { cardRun, foldRun, mergeResults, routeRunError, type Tracked } from "./pipeline"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
-describe("buildRunRequest", () => {
-  it("a card's Run targets that node only; the server runs its ancestors", () => {
-    const g = initialGraph(R)
-    expect(buildRunRequest(g, { target: "parse" })).toEqual({ graph: g, targets: ["parse"], force: false })
+const DOC = { sha: "c".repeat(64), filename: "a.pdf" }
+const working = (): WorkingPipeline => {
+  const c = graphToConfig(sampleGraph(R, DOC))
+  if (!c.ok) throw new Error(c.problem)
+  return c.pipeline
+}
+
+describe("cardRun", () => {
+  it.each([
+    ["source", "parse"],
+    ["parse", "parse"],
+    ["clean_1", "clean.1"],
+    ["chunk", "chunk"],
+    ["index", "index"],
+  ])("runs the %s card through %s, on the pipeline's documents", (card, through) => {
+    const p = working()
+    expect(cardRun(p, card, false)).toEqual({ config: p.config, documents: [DOC.sha], through })
   })
 
-  it("no target sends the whole graph (Ask), and Rerun sends force", () => {
-    const g = initialGraph(R)
-    expect(buildRunRequest(g, {})).toEqual({ graph: g, force: false })
-    expect(buildRunRequest(g, { target: "chunk", force: true })).toEqual({ graph: g, targets: ["chunk"], force: true })
+  it("asks for every step again only when forced", () => {
+    expect(cardRun(working(), "chunk", true).force).toBe(true)
+  })
+})
+
+describe("routeRunError on /api/v2", () => {
+  const g = sampleGraph(R, DOC)
+  it("puts a problem on the card it names", () => {
+    const err = new ApiError(422, { problems: ["index.chunk: chunk_overlap must be smaller than chunk_size."] }, "/runs")
+    expect(routeRunError(err, g)).toEqual({ kind: "node", nodeId: "chunk", message: "index.chunk: chunk_overlap must be smaller than chunk_size." })
+  })
+
+  it("puts a problem that names no card on the column", () => {
+    const err = new ApiError(422, { problems: ["The pipeline must be a mapping of settings."] }, "/runs")
+    expect(routeRunError(err, g)).toEqual({ kind: "column", message: "The pipeline must be a mapping of settings." })
   })
 })
 

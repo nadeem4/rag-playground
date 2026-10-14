@@ -23,6 +23,10 @@ class SilentEventSource {
 }
 
 const SOURCE = { sha: "ab".repeat(32), filename: "report.pdf", size: 2048, content_type: "application/pdf" }
+/** The routes a run starts on: a card's Run, Build the index and Ask. */
+const RUN_ROUTES = ["/api/runs", "/api/v2/runs", "/api/v2/ask"]
+/** A bad chunk size, refused as /api/v2 refuses a config: one sentence naming its place. */
+const CHUNK_PROBLEM = "index.chunk: chunk_size must be at least 1."
 
 let posts: { path: string; body: unknown }[] = []
 
@@ -42,12 +46,10 @@ beforeEach(() => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
       if (url === "/api/registry") return ok(TEST_REGISTRY)
       if (url === "/api/sources") return ok([SOURCE])
-      if (url === "/api/runs" && init?.method === "POST") {
+      if (RUN_ROUTES.includes(url) && init?.method === "POST") {
         const body = JSON.parse(String(init.body))
         posts.push({ path: url, body })
-        if (body.graph.nodes.find((n: { id: string }) => n.id === "chunk").config.chunk_size === 0) {
-          return ok({ detail: { node_id: "chunk", errors: [{ loc: ["chunk_size"], msg: "Input should be greater than or equal to 1" }] } }, 422)
-        }
+        if (body.config?.index.chunk.chunk_size === 0) return ok({ detail: { problems: [CHUNK_PROBLEM] } }, 422)
         return ok({ run_id: "r1" }, 202)
       }
       return ok({ detail: "not found" }, 404)
@@ -76,22 +78,25 @@ function setup() {
 }
 
 describe("Build page", () => {
-  it("Run on a card sends targets for that node and the whole graph", async () => {
+  it("Run on a card sends the pipeline through that card's step, on its document, to /api/v2/runs", async () => {
     await ready()
     fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))
     await waitFor(() => expect(posts).toHaveLength(1))
-    const body = posts[0].body as { targets: string[]; force: boolean; graph: { nodes: { id: string; config: unknown }[] } }
-    expect(body.targets).toEqual(["parse"])
-    expect(body.force).toBe(false)
-    expect(body.graph.nodes.find((n) => n.id === "source")!.config).toEqual({ sha: SOURCE.sha, filename: SOURCE.filename })
+    expect(posts[0].path).toBe("/api/v2/runs")
+    const body = posts[0].body as { through: string; documents: string[]; force?: boolean; config: { index: { parse: { use: string } } } }
+    expect(body.through).toBe("parse")
+    expect(body.documents).toEqual([SOURCE.sha])
+    expect(body.force).toBeUndefined()
+    expect(body.config.index.parse.use).toBe("pdfium")
   })
 
-  it("a 422 from the server lands under the field of the card it names", async () => {
+  it("a 422 from the server lands on the card it names", async () => {
     await ready()
     fireEvent.change(within(card("chunk")).getByLabelText("Chunk Size"), { target: { value: "0" } })
     fireEvent.click(within(card("chunk")).getByRole("button", { name: "Run" }))
-    await waitFor(() => expect(within(card("chunk")).getAllByText("Input should be greater than or equal to 1").length).toBeGreaterThan(0))
-    expect(within(card("parse")).queryByText(/greater than or equal/)).toBeNull()
+    await waitFor(() => expect(within(card("chunk")).getAllByText(CHUNK_PROBLEM).length).toBeGreaterThan(0))
+    expect((posts[0].body as { through: string }).through).toBe("chunk")
+    expect(within(card("parse")).queryByText(CHUNK_PROBLEM)).toBeNull()
   })
 
   it("Build the index without a document says it needs one, with no red note", async () => {
@@ -167,7 +172,7 @@ describe("Ask with a chat card and no API key", () => {
         if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
         if (url === "/api/samples") return new Response(JSON.stringify([]), { status: 200 })
         if (url === "/api/settings/llm") return new Response(JSON.stringify(settings), { status: 200 })
-        if (url === "/api/runs" && init?.method === "POST") {
+        if (RUN_ROUTES.includes(url) && init?.method === "POST") {
           posts.push({ path: url, body: JSON.parse(String(init.body)) })
           return new Response(JSON.stringify({ run_id: `r${posts.length}` }), { status: 202 })
         }
@@ -403,13 +408,14 @@ describe("Build the index", () => {
     expect(build.getAttribute("title")).toBe("Runs Document, Parse, Clean, Chunk and Index with their current settings. A step whose settings have not changed is reused.")
   })
 
-  it("sends the Index node as the only target", async () => {
+  it("runs the pipeline through the index on /api/v2/runs", async () => {
     await ready()
     const button = await screen.findByRole("button", { name: "Build the index" })
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(button)
     await waitFor(() => expect(posts).toHaveLength(1))
-    expect((posts[0].body as { targets: string[] }).targets).toEqual(["index"])
+    expect(posts[0].path).toBe("/api/v2/runs")
+    expect((posts[0].body as { through: string }).through).toBe("index")
     expect(screen.getByRole("heading", { name: "Index pipeline" })).toBeTruthy()
     expect(screen.getByText("These five steps build the index. Retrieval, reranking and answering live in the Ask panel.")).toBeTruthy()
   })
@@ -499,7 +505,7 @@ describe("the run strip", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/runs" && init?.method === "POST") {
+        if (RUN_ROUTES.includes(url) && init?.method === "POST") {
           await base(url, init)
           n += 1
           return new Response(JSON.stringify({ run_id: `run${n}` }), { status: 202 })
@@ -844,7 +850,7 @@ describe("picking a sample in the Document menu", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/api/runs" && init?.method === "POST") {
+        if (RUN_ROUTES.includes(url) && init?.method === "POST") {
           return new Response(JSON.stringify({ detail: { node_id: "query", errors: [{ loc: ["text"], msg: "Text is required" }] } }), { status: 422 })
         }
         return base(url, init)
@@ -1370,7 +1376,7 @@ describe("saved pipelines on Build", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn((url: string, init?: RequestInit) => {
-          if (url === "/api/runs" && init?.method === "POST" && refuse) {
+          if (RUN_ROUTES.includes(url) && init?.method === "POST" && refuse) {
             return Promise.resolve(new Response(JSON.stringify({ detail: "The document is not on this server." }), { status: 400 }))
           }
           return base(url, init)
@@ -1496,7 +1502,7 @@ describe("the Ask panel results on Build", () => {
         if (url === "/api/artifacts/ret1/payload") return ok(hybridResult)
         if (url === "/api/artifacts/out1/payload") return ok(searchOutput)
         if (url === "/api/artifacts/rr1/payload") return ok(reranked())
-        if (url === "/api/runs" && init?.method === "POST") {
+        if (RUN_ROUTES.includes(url) && init?.method === "POST") {
           posts.push({ path: url, body: JSON.parse(String(init.body)) })
           if (reply422) return ok(reply422, 422)
           if (failAsk && posts.length > 1) return ok({ detail: "The server is out of disk space." }, 500)

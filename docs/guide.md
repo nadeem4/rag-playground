@@ -125,7 +125,9 @@ documents, each with **Preview**, and its **Add or change** link picks another. 
 visit with no document, the first-visit card offers the samples, **Upload a PDF**, and
 **Pick a document** for your earlier uploads.
 
-- **Build the index** runs the steps. Each card also has its own **Run**.
+- **Build the index** runs the steps. Each card also has its own **Run**. Each card runs
+  the pipeline only as far as itself (`through` in `POST /api/v2/runs`); what is already
+  stored comes from the cache.
 - The **gear** on a card opens its settings. Once the index is built, the line above the
   cards invites you to change a step, such as the chunk size, and build again, and points
   to Compare for several settings side by side.

@@ -247,7 +247,8 @@ are gone; the web calls their `/api/v2` twins. The playground's own routes are
 `GET /api/health`, `GET /api/samples`, `GET /api/samples/questions`,
 `GET /api/samples/{name}/questions`, `POST /api/sources/sample`, `GET /api/learn/chunking`,
 `GET /api/learn/document`, `GET /api/stages`, `GET /api/settings/app` (demo mode, its
-limits and the visitor cookie) and `GET /api/questions/template`.
+limits and the visitor cookie), `GET /api/questions/template` and `GET /api/templates`
+(the pipeline templates).
 `tests/api/test_routes.py` pins that list.
 
 `PlaygroundPolicy` (`playground/backend/policy.py`) is the hosted demo's rules:

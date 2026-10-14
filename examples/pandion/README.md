@@ -1,9 +1,10 @@
 # pandion example
 
-A small pipeline file and six scripts: one indexes two bundled sample PDFs, then
+A small pipeline file and seven scripts: one indexes two bundled sample PDFs, then
 indexes them again; one keeps an index in step with a folder; one turns a question
 into the query retrieval searches with; one searches the index; one asks it a
-question; and one builds the same pipeline three ways.
+question; one builds the same pipeline three ways; and one runs a pair of pipeline
+templates.
 
 - `pipeline.yaml`: the pdfium parser, the `dedupe_blocks` cleaner, the
   `recursive_character` chunker and a lancedb index, then a `retrieve` section that
@@ -29,6 +30,10 @@ question; and one builds the same pipeline three ways.
   stage and as classes, in one folder. The first indexes and asks; the other two find every
   step already stored. It prints that the artifact ids match, then the classes pipeline
   written back as YAML.
+- `run_template.py`: joins a document template and a question template from
+  [`playground/templates`](../../playground/templates/README.md) into one pipeline,
+  indexes a PDF with it, asks one question and prints the hits. The Vague questions and
+  Chat answer templates need `ANTHROPIC_API_KEY`.
 - [`own_strategies/`](own_strategies): writes your own strategy for every stage, from
   the source to the answer, and runs them from a pipeline file (`run_yaml.py`) and mixed
   with built-in steps in code (`run_mixed.py`). Nothing is downloaded. Its README walks
@@ -69,6 +74,13 @@ uv run python examples/pandion/ask_samples.py "How big should a chunk be?" --emb
 uv run python examples/pandion/three_styles.py --embedder fake-deterministic
 ```
 
+To run a template pair, name the document template, the question template, the PDF and,
+if you like, the question. The first run downloads the models the templates use:
+
+```bash
+uv run python examples/pandion/run_template.py text precision samples/chunking-primer/chunking-primer.pdf "How big should a chunk be?"
+```
+
 To rewrite a question, pass it as the argument:
 
 ```bash
@@ -77,7 +89,8 @@ uv run python examples/pandion/rewrite_question.py "How long should a piece be?"
 
 The index is written to `pandion-example/` (or `pandion-sync-example/` for the sync
 script, `pandion-search-example/` for the search script, `pandion-ask-example/` for the
-ask script and `pandion-styles-example/` for the three styles) in the folder you run from. Use `--work` to
+ask script, `pandion-styles-example/` for the three styles and `pandion-template-example/`
+for the template script) in the folder you run from. Use `--work` to
 choose another folder. The full format of the pipeline file is in
 [docs/pandion.md](../../docs/pandion.md).
 

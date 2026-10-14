@@ -11,6 +11,11 @@ The app has two halves:
   [frontend/](frontend/README.md).
 - **The backend** is the Python server in [backend/](backend/README.md).
 
+Beside them, [templates/](templates/README.md) holds the pipeline templates: document
+templates that set how a kind of document is indexed, and question templates that set how
+a kind of question is searched and answered. The backend serves them at
+`GET /api/templates`.
+
 ## How the two halves fit
 
 The frontend talks to the backend only over HTTP. Almost everything it does goes through

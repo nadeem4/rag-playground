@@ -40,3 +40,20 @@ def test_run_pipeline_validates_uploads_indexes_asks_and_evaluates(tmp_path, cap
     assert "  1 of 12 two-steps:" in out, out
     evaluating = out[out.index("Evaluating"):]
     assert "search ran" not in evaluating, evaluating
+
+
+def test_a_template_pair_brings_its_pipeline_and_its_sample():
+    from playground import templates
+
+    config, pdf, questions, question = _load("run_pipeline").choose(("tables", "precision"))
+
+    assert config == {k: v for k, v in templates.compose("tables", "precision").items() if k != "path"}
+    assert pdf.name == "table-of-figures.pdf" and questions.parent == pdf.parent
+    assert question == "How many readers lost their place before and after the reset?"
+
+
+def test_a_template_that_needs_a_key_is_refused():
+    import pytest
+
+    with pytest.raises(SystemExit, match="Chat answer needs an API key"):
+        _load("run_pipeline").choose(("text", "chat"))

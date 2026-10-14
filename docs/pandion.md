@@ -737,6 +737,10 @@ A pipeline can be written as a YAML file, as a dict for each stage, or as classe
 code. All three give the same pipeline: the same settings give the same artifact ids and
 the same results whichever way they are written, so they share one cache. The playground's Starter
 pipeline is [`samples/starter.yaml`](../samples/starter.yaml): a good first file to copy.
+For a pipeline chosen for your documents and your questions, start from the
+[pipeline templates](../playground/templates/README.md): pick a document template, such as
+Reports with tables, and a question template, such as Best precision, and
+`templates.compose` joins them into one pipeline dict for `Pipeline.from_dict`.
 
 As a file, read with `Pipeline.from_yaml`:
 

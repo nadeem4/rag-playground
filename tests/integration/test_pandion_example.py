@@ -161,3 +161,24 @@ def test_example_pipeline_file_answers_with_search():
     from pandion import Pipeline
 
     assert Pipeline.from_yaml(EXAMPLE / "pipeline.yaml").config.answer == ("search", {"top_k": 3})
+
+
+PRIMER = EXAMPLE.parents[1] / "samples" / "chunking-primer" / "chunking-primer.pdf"
+
+
+def test_run_template_composes_two_templates_and_answers(tmp_path, capsys):
+    answer = _load_script("run_template").main(
+        "text", "balanced", PRIMER, "How big should a chunk be?", work=tmp_path, embedder="fake-deterministic"
+    )
+
+    assert answer.ok and answer.hits
+    out = capsys.readouterr().out
+    assert "Text documents with Balanced" in out and "Hit 1" in out, out
+
+
+def test_run_template_without_a_key_says_which_template_needs_one(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(SystemExit, match="Chat answer needs an API key.*ANTHROPIC_API_KEY"):
+        _load_script("run_template").main("text", "chat", PRIMER, work=tmp_path, embedder="fake-deterministic")

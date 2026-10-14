@@ -34,6 +34,16 @@ Then run the client in another:
 uv run python examples/pandion-api/run_pipeline.py --url http://127.0.0.1:8000
 ```
 
+To run a pair of [pipeline templates](../../playground/templates/README.md) instead, pass
+a document template and a question template. The client then uploads the sample that suits
+the document template, asks that sample's first question and evaluates on its question
+set. The server downloads the models the templates use on the first run. A template that
+needs an API key is refused, because this client sends none:
+
+```bash
+uv run python examples/pandion-api/run_pipeline.py --url http://127.0.0.1:8000 --template tables precision
+```
+
 `run_pipeline.py` needs `httpx`. In this repo it is already installed. Elsewhere, run
 `pip install httpx`. Stop the server with Ctrl+C.
 

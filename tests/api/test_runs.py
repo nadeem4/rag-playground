@@ -383,7 +383,7 @@ def test_two_concurrent_runs_do_not_interleave(dirs, gates):
 def test_idle_stream_sends_heartbeat(dirs, gates, monkeypatch):
     # TestClient buffers a streamed body, so the gate is released by a timer
     # rather than by the reader: pings accumulate while the node is blocked.
-    monkeypatch.setattr("api.routes.runs.HEARTBEAT_S", 0.05)
+    monkeypatch.setattr("pandion_api.runs.HEARTBEAT_S", 0.05)
     gate, entered = gates
     with make_client(dirs, gated_registry(gate, entered)) as client:
         run_id = start(client, gated_graph("", "a"))

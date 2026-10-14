@@ -16,19 +16,17 @@ would make the server send a request to a URL a visitor chose.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import traceback
-from typing import Any, AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from api import demo
 from api.credentials import redact, resolve_all
 from api.routes.registry import read_only_settings
-from api.runs import RunState
+from pandion_api.runs import RunState, cancel_response, events_response, start_at
 from pandion.executor import run, sweep
 from pandion.extend import Stage
 from pandion.graph import Edge, Graph, GraphValidationError, Node
@@ -42,16 +40,6 @@ DEMO_NO_CUSTOM = (
     "custom endpoints are disabled in this hosted demo: the server would send "
     "a request to a URL a visitor chose. Run the playground locally to use one."
 )
-
-#: Seconds between SSE comment heartbeats on an idle stream.
-HEARTBEAT_S = 15.0
-
-SSE_HEADERS = {
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-}
-
 
 class NodeIn(BaseModel):
     id: str
@@ -212,7 +200,7 @@ async def create_run(
         x_anthropic_api_key, x_openai_api_key, x_custom_api_key, x_openrouter_api_key
     )
 
-    def job(emit, cancelled):
+    def job(emit, cancel):
         seen: list[bool] = []
 
         def on_event(e):
@@ -230,7 +218,7 @@ async def create_run(
                 targets=set(body.targets) if body.targets else None,
                 force=body.force,
                 on_event=on_event,
-                cancelled=cancelled,
+                cancelled=cancel.is_set,
                 context_extras={**deps.run_extras(), **(extras or {})},
             ),
         )
@@ -291,7 +279,7 @@ async def create_sweep(
         x_anthropic_api_key, x_openai_api_key, x_custom_api_key, x_openrouter_api_key
     )
 
-    def job(emit, cancelled):
+    def job(emit, cancel):
         seen: list[bool] = []
 
         def on_event(e):
@@ -310,7 +298,7 @@ async def create_sweep(
                 through=body.through,
                 force=body.force,
                 on_event=on_event,
-                cancelled=cancelled,
+                cancelled=cancel.is_set,
                 context_extras={**deps.run_extras(), **(extras or {})},
             ),
         )
@@ -335,26 +323,7 @@ def get_run(run_id: str, request: Request) -> dict[str, Any]:
 
 @router.post("/runs/{run_id}/cancel", status_code=202)
 def cancel_run(run_id: str, request: Request):
-    state = _state(request, run_id)
-    if state.done:
-        return JSONResponse(
-            status_code=409,
-            content={"detail": f"run already {state.status}", "status": state.status},
-        )
-    request.app.state.runs.cancel(state)
-    return {
-        "run_id": run_id,
-        "cancel_requested": True,
-        "detail": (
-            "Cancellation is checked between nodes: the node currently running "
-            "will finish, and no further nodes will start."
-        ),
-    }
-
-
-def _frame(seq: int, e: dict[str, Any]) -> str:
-    # json.dumps escapes newlines, so one event is always one `data:` line.
-    return f"id: {seq}\ndata: {json.dumps(e)}\n\n"
+    return cancel_response(request.app.state.runs, _state(request, run_id))
 
 
 @router.get("/runs/{run_id}/events")
@@ -371,38 +340,4 @@ async def run_events(
     own reconnect passes the query parameter instead. The header wins when both
     are sent: it comes from the browser's own, more recent, auto-reconnect.
     """
-    state = _state(request, run_id)
-    resume = last_event_id if last_event_id is not None else resume_after
-    try:
-        start = int(resume) + 1 if resume is not None else 0
-    except ValueError:
-        start = 0
-    start = max(start, 0)
-
-    async def stream() -> AsyncIterator[str]:
-        # Snapshot the backlog and subscribe with no await in between: the log
-        # is only mutated on this loop, so no event can fall into a gap.
-        backlog = list(enumerate(state.events))[start:]
-        q: asyncio.Queue = asyncio.Queue()
-        if not state.done:
-            state.subscribers.add(q)
-        try:
-            for seq, e in backlog:
-                yield _frame(seq, e)
-            if state.done:
-                return
-            while True:
-                try:
-                    seq, e = await asyncio.wait_for(q.get(), HEARTBEAT_S)
-                except TimeoutError:
-                    yield ": ping\n\n"
-                    continue
-                yield _frame(seq, e)
-                if e["event"] == "stream_end":
-                    return
-        finally:
-            state.subscribers.discard(q)
-
-    return StreamingResponse(
-        stream(), media_type="text/event-stream", headers=SSE_HEADERS
-    )
+    return events_response(_state(request, run_id), start_at(last_event_id, resume_after))

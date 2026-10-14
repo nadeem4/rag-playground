@@ -1,0 +1,24 @@
+[project]
+name = "pandion-api"
+version = "0.1.0"
+description = "Pandion's public API over HTTP, with one Policy object for a site's rules"
+authors = [{ name = "Nadeem Khan" }]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pandion[pdfium]",
+    "fastapi>=0.141.1",
+    "pillow>=12.3.0",
+    "python-multipart>=0.0.32",
+]
+# Not published yet (spec section 8): PyPI refuses this classifier.
+classifiers = ["Private :: Do Not Upload"]
+
+[tool.uv.sources]
+pandion = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pandion_api"]

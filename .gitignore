@@ -17,6 +17,7 @@ sources/
 runs/
 graphs/
 qa_sets/
+embeddings/
 
 # Secrets
 .env

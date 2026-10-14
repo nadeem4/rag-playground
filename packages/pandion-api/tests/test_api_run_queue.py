@@ -1,15 +1,15 @@
-"""The demo's run queue: at most a few runs do heavy work at once; the rest wait their turn."""
+"""The run queue: past a policy's limit, runs wait their turn; cancel is a threading.Event."""
 
 from __future__ import annotations
 
 import asyncio
 import threading
 
-from api.runs import RunManager
+from pandion_api.runs import RunManager, RunState, events_response, start_at
 
 
 def _blocking_job(gate: threading.Event, started: list[str], name: str):
-    def job(emit, cancelled):
+    def job(emit, cancel):
         started.append(name)
         gate.wait(5)
         return True, False
@@ -80,16 +80,6 @@ def test_no_limit_runs_everything_at_once():
     asyncio.run(scenario())
 
 
-def test_the_demo_allows_two_runs_at_once_and_a_local_run_has_no_limit(monkeypatch):
-    from api import demo
-    from api.runs import demo_run_limit
-
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    assert demo_run_limit() == demo.MAX_ACTIVE_RUNS == 2
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
-    assert demo_run_limit() is None
-
-
 def test_a_run_cancelled_just_as_its_turn_comes_passes_the_slot_on():
     async def scenario():
         manager = RunManager(limit=lambda: 1)
@@ -108,5 +98,68 @@ def test_a_run_cancelled_just_as_its_turn_comes_passes_the_slot_on():
         assert started == ["a", "c"]
         gates[2].set()
         await asyncio.wait_for(c.task, 2)
+
+    asyncio.run(scenario())
+
+
+def test_cancel_is_a_threading_event_a_pipeline_can_take():
+    async def scenario():
+        manager = RunManager(limit=lambda: None)
+        seen: list[bool] = []
+
+        def job(emit, cancel):
+            seen.append(cancel.wait(2))
+            return True, cancel.is_set(), {"stopped": cancel.is_set()}
+
+        state = manager.start("run", job)
+        await asyncio.sleep(0.1)
+        manager.cancel(state)
+        await asyncio.wait_for(state.task, 3)
+        assert seen == [True]
+        assert state.cancel_requested is True and state.status == "cancelled"
+        assert state.result == {"stopped": True}
+
+    asyncio.run(scenario())
+
+
+def test_a_job_without_a_result_leaves_none():
+    async def scenario():
+        manager = RunManager(limit=lambda: None)
+        state = manager.start("run", lambda emit, cancel: (True, False))
+        await asyncio.wait_for(state.task, 2)
+        assert state.status == "finished" and state.result is None
+
+    asyncio.run(scenario())
+
+
+def test_the_stream_starts_after_the_last_event_id():
+    assert start_at(None, None) == 0
+    assert start_at("4", None) == 5
+    assert start_at(None, "2") == 3
+    assert start_at("4", "2") == 5  # the header wins
+    assert start_at("x", None) == 0 and start_at("-9", None) == 0
+
+
+def test_a_finished_runs_stream_replays_its_log_from_the_start_asked():
+    async def scenario():
+        state = RunState(run_id="r", kind="run", status="finished")
+        state.events = [{"event": "a"}, {"event": "stream_end"}]
+        response = events_response(state, 1)
+        chunks = [chunk async for chunk in response.body_iterator]
+        assert chunks == ['id: 1\ndata: {"event": "stream_end"}\n\n']
+
+    asyncio.run(scenario())
+
+
+def test_a_run_remembers_who_started_it():
+    """The owner a site's Policy names (`Policy.run_owner`), so a later route can
+    keep one visitor from reading or cancelling another's run."""
+
+    async def scenario():
+        manager = RunManager(limit=lambda: None)
+        mine = manager.start("run", lambda emit, cancel: (True, False), owner="visitor-a")
+        anyones = manager.start("run", lambda emit, cancel: (True, False))
+        await asyncio.gather(mine.task, anyones.task)
+        assert mine.owner == "visitor-a" and anyones.owner is None
 
     asyncio.run(scenario())

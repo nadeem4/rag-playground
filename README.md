@@ -166,6 +166,7 @@ the strategy's id in the API and in exported files.
 - [Deploy](docs/deploy.md): Docker, demo mode, variables, and running your own Space.
 - [Pandion](docs/pandion.md): the package. Run a step on its own, or build a pipeline in a
   file or in code, then index, search and ask.
+- [pandion-api](docs/pandion-api.md): Pandion over HTTP, with one Policy object for a site's rules. The playground's server is built on it.
 - [Architecture](docs/architecture.md): the pipeline graph, plugins, the cache and the
   run stream.
 - [Lessons learned](docs/lessons-learned.md): real problems we hit building the pipeline,

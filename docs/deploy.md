@@ -139,6 +139,11 @@ on localhost work, question sets are kept beside their document, and the Dev men
 | `HF_HOME` | `~/.cache/huggingface` | Hugging Face's own variable: where models are downloaded. `/data/hf` in Docker. |
 | `RAG_PLAYGROUND_PORT` | `8000` | Docker Compose only: the port published on your machine. |
 
+The sources and artifacts folders must sit side by side in one folder, named `sources`
+and `artifacts` (the Docker image uses `/data/sources` and `/data/artifacts`); the server
+refuses to start otherwise. Runs through `/api/v2` keep their embedding cache in
+`embeddings/` beside them.
+
 Secrets, each optional and used only with demo mode off:
 
 | Secret | Provider |

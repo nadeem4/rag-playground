@@ -1,5 +1,6 @@
 import pytest
 
+from fakes import _make
 from pandion.graph import Edge, Graph, GraphValidationError, Node
 from pandion.ports import Stage
 
@@ -440,7 +441,6 @@ def _heading_reg(reg):
     """Add a parser that finds headings and a chunker that needs them."""
     from pandion.artifacts import ArtifactType
     from pandion.ports import PortSpec
-    from conftest import _make
 
     reg.register(
         _make(
@@ -497,7 +497,6 @@ def test_effective_provides_own_provides_win_on_a_key(reg):
     from pandion.artifacts import ArtifactType
     from pandion.graph import _effective_provides
     from pandion.ports import PortSpec
-    from conftest import _make
 
     _heading_reg(reg)
     reg.register(

@@ -11,6 +11,7 @@ resolution-markers = [
 [manifest]
 members = [
     "pandion",
+    "pandion-api",
     "rag-playground",
 ]
 
@@ -1151,6 +1152,25 @@ requires-dist = [
 provides-extras = ["pdfium", "docling", "local", "lancedb", "openai", "anthropic"]
 
 [[package]]
+name = "pandion-api"
+version = "0.1.0"
+source = { editable = "packages/pandion-api" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pandion", extra = ["pdfium"] },
+    { name = "pillow" },
+    { name = "python-multipart" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.141.1" },
+    { name = "pandion", extras = ["pdfium"], editable = "packages/pandion" },
+    { name = "pillow", specifier = ">=12.3.0" },
+    { name = "python-multipart", specifier = ">=0.0.32" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1499,6 +1519,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "openai" },
     { name = "pandion", extra = ["anthropic", "docling", "lancedb", "local", "openai", "pdfium"] },
+    { name = "pandion-api" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -1526,6 +1547,7 @@ requires-dist = [
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.13.0" },
     { name = "openai", specifier = ">=3.17.0" },
     { name = "pandion", extras = ["anthropic", "docling", "lancedb", "local", "openai", "pdfium"], editable = "packages/pandion" },
+    { name = "pandion-api", editable = "packages/pandion-api" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },

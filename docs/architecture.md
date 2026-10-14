@@ -8,6 +8,7 @@ that talks to the API.
 
 - [The layout of the repo](#the-layout-of-the-repo)
 - [Using the package on its own](#using-the-package-on-its-own)
+- [The REST layer: pandion-api](#the-rest-layer-pandion-api)
 - [The pipeline graph and its stages](#the-pipeline-graph-and-its-stages)
 - [Plugins](#plugins)
 - [Artifacts and the cache](#artifacts-and-the-cache)
@@ -20,6 +21,7 @@ that talks to the API.
 packages/pandion/  the engine as its own Python package, pandion: artifacts, transforms, the
                    graph, the executor, the content-addressed store, the embedding models
                    and their cache, the chat model client, and the pipeline file
+packages/pandion-api/  pandion-api: Pandion's public API over HTTP, with a Policy for a site's rules
 api/         the FastAPI server: registry, sources, runs and sweeps, artifacts, settings, demo mode,
              and the manifest of the steps it loads, in api/steps/
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
@@ -121,6 +123,21 @@ needs. `packages/pandion/tests/test_boundaries.py` checks the package never impo
 ## Using the package on its own
 
 See the [pandion guide](pandion.md).
+
+## The REST layer: pandion-api
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
+flowchart TB
+    WEB["Web app"] --> APP["api/: the playground's server"]
+    APP --> API["pandion-api: create_app(settings, policy)"]
+    API --> CORE["Pandion: its public API only"]
+```
+
+`packages/pandion-api` serves Pandion over HTTP. It imports only Pandion's public API,
+which `packages/pandion-api/tests/test_api_boundary.py` checks with no allow-list, and it
+takes a pipeline as the pipeline file's shape. A site's rules are one `Policy` object. See
+[pandion-api](pandion-api.md).
 
 ## The pipeline graph and its stages
 

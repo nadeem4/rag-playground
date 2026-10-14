@@ -28,6 +28,8 @@ uv sync --extra dev
 cd web && npm install && cd ..
 ```
 
+The repository is a uv workspace with two packages besides the app: `packages/pandion` (the engine, published as `pandion`) and `packages/pandion-api` (the REST layer, not published). `uv sync` installs both from their folders, so an edit in either is live at once.
+
 To work on the web app, run the server in one terminal and Vite in another:
 
 ```bash
@@ -48,6 +50,8 @@ uv run pytest                 # the fast suite, no model downloads
 uv run pytest -m models       # the slow tests that load Docling, Qwen3 and bge
 cd web && npm test            # Vitest
 ```
+
+`uv run pytest packages/pandion-api/tests` runs pandion-api's own tests. pandion-api may import only Pandion's public API, which `test_api_boundary.py` checks with no allow-list. A test file there is named `test_api_*.py`, so it never shares a name with one of the engine's.
 
 The smoke test drives the real app in a real browser. It starts its own demo server on a
 free port, builds the index, asks a question, runs Compare and Evaluate, then opens every

@@ -29,10 +29,12 @@ WORKDIR /app
 
 # Dependencies first, so a code change does not reinstall torch.
 # uv.lock pins CPU-only torch on Linux.
-# The engine is a workspace member (packages/pandion): its pyproject.toml is
-# needed to resolve the workspace, its code is not.
+# The engine and its REST layer are workspace members (packages/pandion,
+# packages/pandion-api): their pyproject.toml files are needed to resolve the
+# workspace, their code is not.
 COPY pyproject.toml uv.lock ./
 COPY packages/pandion/pyproject.toml packages/pandion/pyproject.toml
+COPY packages/pandion-api/pyproject.toml packages/pandion-api/pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --no-install-workspace
 

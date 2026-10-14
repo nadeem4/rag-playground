@@ -10,6 +10,8 @@ dependencies = [
     # The engine: packages/pandion, installed from this workspace, with the
     # extras for the strategies that have moved into it.
     "pandion[anthropic,docling,lancedb,local,openai,pdfium]",
+    # The REST layer over the engine: packages/pandion-api.
+    "pandion-api",
     "pillow>=12.3.0",
     "pydantic>=2.9",
     "python-dotenv>=1.2.3",
@@ -21,12 +23,13 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["packages/pandion"]
+members = ["packages/pandion", "packages/pandion-api"]
 
 # On Linux (the Docker image) take CPU-only torch, not the multi-GB CUDA build.
 # Windows and macOS wheels on PyPI are already CPU-only.
 [tool.uv.sources]
 pandion = { workspace = true }
+pandion-api = { workspace = true }
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
@@ -48,7 +51,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/pandion/tests"]
+testpaths = ["tests", "packages/pandion/tests", "packages/pandion-api/tests"]
+pythonpath = ["packages/pandion/tests"]
 markers = [
     "models: requires downloaded ML models (deselected by default)",
     "smoke: real-browser smoke test against a local demo server (deselected by default)",

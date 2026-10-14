@@ -53,6 +53,7 @@ beforeEach(() => {
         if (body.config?.index.chunk.chunk_size === 0) return ok({ detail: { problems: [CHUNK_PROBLEM] } }, 422)
         return ok({ run_id: "r1" }, 202)
       }
+      if (url === "/api/v2/explain") return ok({ settings: "s", tradeoff: null, warning: null, blocking: false })
       return ok({ detail: "not found" }, 404)
     }),
   )

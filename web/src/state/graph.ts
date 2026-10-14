@@ -7,8 +7,9 @@ import { columnOf, graphToConfig, unknownStrategy } from "./config"
 import { keepUndrawn, parseWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
 
 /**
- * The pipeline as a graph: nodes and port-typed edges, exactly what
- * `POST /api/runs` executes. This is the source of truth for the Build page.
+ * The pipeline as a graph: nodes and port-typed edges, drawn from the
+ * pipeline's config by `columnOf`; a run sends the config to `POST /api/v2/runs`.
+ * This is the source of truth for the Build page.
  * The column is one rendering of it (a topological walk); a future canvas can
  * render the same state without translating from a list of form values.
  *

@@ -22,7 +22,6 @@ import {
   runningFinding,
   serverBest,
   serverRanks,
-  settingProblems,
   sharedTop,
   shownCard,
   sortRecipes,
@@ -543,37 +542,3 @@ describe("what a comparison runs and shows", () => {
   })
 })
 
-describe("settingProblems", () => {
-  it("reads the strategy, the setting and the sentence from a Pandion problem", () => {
-    expect(settingProblems("index.chunk (sentence_window): overlap_sentences: Overlap must be smaller than the number of sentences per chunk.")).toEqual({
-      transform: "sentence_window",
-      settings: [{ field: "overlap_sentences", message: "Overlap must be smaller than the number of sentences per chunk." }],
-    })
-    expect(settingProblems("index.clean step 2 (dedupe_blocks): similarity: Input should be less than or equal to 1.")).toMatchObject({
-      transform: "dedupe_blocks",
-      settings: [{ field: "similarity" }],
-    })
-    expect(settingProblems("The index has no embed step.")).toBeNull()
-  })
-
-  it("gives each setting its own sentence when Pandion names several", () => {
-    expect(settingProblems("index.chunk (recursive_character): chunk_size: Input should be greater than or equal to 1; chunk_overlap: Input should be greater than or equal to 0.")).toEqual({
-      transform: "recursive_character",
-      settings: [
-        { field: "chunk_size", message: "Input should be greater than or equal to 1." },
-        { field: "chunk_overlap", message: "Input should be greater than or equal to 0." },
-      ],
-    })
-  })
-
-  it("never doubles the full stop when a setting's sentence already has one", () => {
-    expect(settingProblems("index.chunk (recursive_character): chunk_size: Too small.; chunk_overlap: Too big.")?.settings).toEqual([
-      { field: "chunk_size", message: "Too small." },
-      { field: "chunk_overlap", message: "Too big." },
-    ])
-  })
-
-  it("reads a problem with the whole step as no one setting's", () => {
-    expect(settingProblems("index.chunk (sentence_window): settings: Value error, overlap must be smaller.")).toBeNull()
-  })
-})

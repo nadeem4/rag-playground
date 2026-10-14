@@ -90,6 +90,7 @@ beforeEach(() => {
       }
       if (["/api/v2/runs", "/api/v2/ask", "/api/v2/comparisons"].includes(url) && init?.method === "POST") return ok({ run_id: "r1" }, 202)
       if (url.endsWith("/pages")) return ok([{ n: 1, width: 612, height: 792 }])
+      if (url === "/api/v2/explain") return ok({ settings: "s", tradeoff: null, warning: null, blocking: false })
       return ok({ detail: "not found" }, 404)
     }),
   )

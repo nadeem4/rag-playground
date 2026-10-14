@@ -717,7 +717,7 @@ export interface NamedArtifact {
   name: string
 }
 
-/** POST /api/trace: the artifacts one question's run made, and what to look for. */
+/** `POST /api/v2/trace`: the artifacts one question's run made, and what to look for. */
 export interface TraceRequest {
   gold_answers: string[]
   parse: NamedArtifact

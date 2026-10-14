@@ -84,4 +84,73 @@ describe("useExplanations", () => {
     await flush()
     expect(result.current.chunk.data).toEqual({ settings: "", tradeoff: null, warning: problems.join(" "), blocking: true })
   })
+
+  it("a problem Pandion words about one setting goes under that setting, with a short warning", async () => {
+    const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 0 })]))
+    act(() => vi.advanceTimersByTime(0))
+    const problems = ["chunk (recursive_character): chunk_size: Input should be greater than or equal to 1."]
+    calls[0].resolve(new Response(JSON.stringify({ detail: { problems } }), { status: 422 }))
+    await flush()
+    expect(result.current.chunk.data).toEqual({ settings: "", tradeoff: null, warning: "Fix the setting marked below.", blocking: true })
+    expect(result.current.chunk.fields).toEqual({ chunk_size: ["Input should be greater than or equal to 1."] })
+  })
+
+  it("a stale setting an old pipeline still carries is named in the card's warning", async () => {
+    const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 400, old_key: 1 })]))
+    act(() => vi.advanceTimersByTime(0))
+    const problems = ["chunk (recursive_character) has no setting 'old_key'. Its settings are: chunk_size, chunk_overlap, heading_context."]
+    calls[0].resolve(new Response(JSON.stringify({ detail: { problems } }), { status: 422 }))
+    await flush()
+    expect(result.current.chunk.data).toEqual({ settings: "", tradeoff: null, warning: problems[0], blocking: true })
+    expect(result.current.chunk.fields).toBeUndefined()
+  })
+
+  it("a problem about another strategy keeps the whole sentence and marks no setting", async () => {
+    const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 0 })]))
+    act(() => vi.advanceTimersByTime(0))
+    const problems = ["chunk (token_based): max_tokens: Too small."]
+    calls[0].resolve(new Response(JSON.stringify({ detail: { problems } }), { status: 422 }))
+    await flush()
+    expect(result.current.chunk.data?.warning).toBe(problems[0])
+    expect(result.current.chunk.fields).toBeUndefined()
+  })
+
+  it("a 422 of any other shape still warns and blocks Run", async () => {
+    const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 400 })]))
+    act(() => vi.advanceTimersByTime(0))
+    const detail = [{ loc: ["body", "settings"], msg: "Input should be a valid dictionary", type: "dict_type" }]
+    calls[0].resolve(new Response(JSON.stringify({ detail }), { status: 422 }))
+    await flush()
+    expect(result.current.chunk.data).toEqual({
+      settings: "",
+      tradeoff: null,
+      warning: "This server refused these settings. settings: Input should be a valid dictionary.",
+      blocking: true,
+    })
+  })
+
+  it("a 404 says in plain words that this server does not have the strategy", async () => {
+    const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 400 })]))
+    act(() => vi.advanceTimersByTime(0))
+    calls[0].resolve(new Response(JSON.stringify({ detail: "x" }), { status: 404 }))
+    await flush()
+    expect(result.current.chunk.data).toEqual({
+      settings: "",
+      tradeoff: null,
+      warning: "This server does not have recursive_character. Pick another.",
+      blocking: true,
+    })
+  })
+
+  it("a server error or a dropped connection keeps what is shown", async () => {
+    const { result, rerender } = renderHook(({ nodes }) => useExplanations(nodes), { initialProps: { nodes: [chunk({ chunk_size: 400 })] } })
+    act(() => vi.advanceTimersByTime(0))
+    calls[0].resolve(reply("Pieces of 400"))
+    await flush()
+    rerender({ nodes: [chunk({ chunk_size: 500 })] })
+    act(() => vi.advanceTimersByTime(EXPLAIN_DEBOUNCE_MS))
+    calls[1].resolve(new Response("boom", { status: 500 }))
+    await flush()
+    expect(result.current.chunk.data?.settings).toBe("Pieces of 400")
+  })
 })

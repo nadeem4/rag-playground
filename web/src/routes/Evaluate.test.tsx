@@ -191,7 +191,7 @@ function serve({
             ])
           : missing()
       if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)
-      if (url.endsWith("/questions")) {
+      if (/^\/api\/v2\/documents\/[^/]+\/questions$/.test(url)) {
         if (init?.method === "POST") {
           if (!upload) return missing()
           return "status" in upload ? new Response(JSON.stringify({ detail: "demo" }), { status: upload.status }) : ok(upload)

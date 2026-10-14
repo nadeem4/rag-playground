@@ -312,12 +312,18 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
 The web calls only pandion-api's routes under `/api/v2` and the playground's teaching
 routes: `/api/samples`, `/api/sources/sample`, `/api/learn/...`, `/api/stages`,
 `/api/settings/app`, `/api/questions/template`, `/api/health`. A test,
-`web/src/api/oldRoutes.test.ts`, fails if the web's code names an old route again.
+`web/src/api/oldRoutes.test.ts`, reads every non-test file under `web/src` (but the
+`/api/v2` client) and fails if one names an old route in a string, written relative to the
+old client (`"/runs"`), in full (`"/api/runs"`) or after `${API_BASE}`, or calls a deleted
+function on the old client (`api.createRun`). It cannot see a path built up from pieces.
 
 - **Strategies.** The app reads `stages` from `GET /api/v2/strategies` to build the step
   cards and their forms. Each card's sentence about its settings comes from
-  `POST /api/v2/explain`; a 422's problems become the card's warning and Run waits until
-  they are fixed.
+  `POST /api/v2/explain`. When the server refuses a card's settings, Run waits until they
+  are fixed: a problem Pandion words about one setting is shown under that setting, with a
+  short warning on the card; any other refusal is shown on the card as it was said; a 404
+  says this server does not have that strategy. A server error or a dropped connection
+  leaves the card as it was.
 - **Runs.** A card's Run sends the pipeline as a config with `through` set to the card's
   step, to `POST /api/v2/runs`; Build the index is the Index card's Run. Ask sends the
   config, its documents and the question to `POST /api/v2/ask`, with `answer: false` when

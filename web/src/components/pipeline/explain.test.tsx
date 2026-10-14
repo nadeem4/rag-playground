@@ -194,6 +194,21 @@ describe("the inline warning", () => {
     expect((within(card("parse")).getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it("a refused setting shows its message under that setting, and Run waits", () => {
+    const message = "Input should be greater than or equal to 1."
+    setup({
+      explanations: {
+        chunk: { data: { settings: "", tradeoff: null, warning: "Fix the setting marked below.", blocking: true }, fields: { chunk_size: [message] } },
+      },
+    })
+    const c = card("chunk")
+    expect(within(c).getByTestId("explain-warning").textContent).toBe("Fix the setting marked below.")
+    // Under the setting it is about: inside that field's own block, not the card's warning.
+    const said = within(c).getByText(message)
+    expect(said.closest("[data-field-kind]")?.textContent).toMatch(/chunk size/i)
+    expect((within(c).getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it("a missing file asks calmly for a sample, not for an Upload settings fix", () => {
     setup({ explanations: { source: explained("x", { warning: "Choose a file.", blocking: true }) } })
     const note = within(card("chunk")).getByTestId("run-note")

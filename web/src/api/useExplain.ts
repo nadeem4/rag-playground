@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 
+import type { FieldErrors } from "@/components/fields/schema"
+import { detailSentences, settingProblems } from "@/state/pipeline"
+
 import { api, ApiError } from "./client"
 import type { Explanation, GraphNode, StageInfo } from "./types"
 import { v2 } from "./v2"
@@ -50,6 +53,8 @@ export function useStages(): StageInfo {
 export interface ExplainState {
   /** The last explanation received. Kept while a newer one loads: no empty flash. */
   data?: Explanation
+  /** A refused setting's message, under that setting, when Pandion's sentence names one. */
+  fields?: FieldErrors
 }
 
 export const EXPLAIN_DEBOUNCE_MS = 200
@@ -64,6 +69,32 @@ function isExplanation(x: unknown): x is Explanation {
 function problemsOf(detail: unknown): string[] | null {
   const problems = (detail as { problems?: unknown } | null)?.problems
   return Array.isArray(problems) && problems.every((p) => typeof p === "string") ? problems : null
+}
+
+const refused = (warning: string): Explanation => ({ settings: "", tradeoff: null, warning, blocking: true })
+
+/**
+ * What a card shows when the server refuses to explain it, or null to keep
+ * what is shown (a server error or the network proves nothing about the
+ * settings). Run stays disabled for every refusal: the run would be refused too.
+ */
+export function refusal(err: unknown, node: GraphNode): ExplainState | null {
+  if (!(err instanceof ApiError)) return null
+  if (err.status === 404) return { data: refused(`This server does not have ${node.transform}. Pick another.`) }
+  if (err.status !== 422) return null
+  const problems = problemsOf(err.detail)
+  if (!problems) {
+    const said = detailSentences(err.detail)
+    return { data: refused(said ? `This server refused these settings. ${said}` : "This server refused these settings.") }
+  }
+  const parsed = problems.map(settingProblems)
+  if (parsed.every((p) => p !== null && p.transform === node.transform)) {
+    const fields: FieldErrors = {}
+    for (const p of parsed) for (const { field, message } of p!.settings) (fields[field] ??= []).push(message)
+    const one = Object.keys(fields).length === 1
+    return { data: refused(one ? "Fix the setting marked below." : "Fix the settings marked below."), fields }
+  }
+  return { data: refused(problems.join(" ")) }
 }
 
 interface Pending {
@@ -110,13 +141,8 @@ export function useExplanations(nodes: readonly GraphNode[]): Record<string, Exp
           },
           (err: unknown) => {
             if (!current()) return
-            const problems = err instanceof ApiError && err.status === 422 ? problemsOf(err.detail) : null
-            if (problems) {
-              // Run stays disabled until the settings are fixed; the sentence names the setting.
-              const data: Explanation = { settings: "", tradeoff: null, warning: problems.join(" "), blocking: true }
-              setState((s) => ({ ...s, [node.id]: { data } }))
-            }
-            // Anything else (a 404 on an older server, the network): keep what is shown.
+            const shown = refusal(err, node)
+            if (shown) setState((s) => ({ ...s, [node.id]: shown }))
           },
         )
       }

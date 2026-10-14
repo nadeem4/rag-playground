@@ -96,7 +96,7 @@ class SilentEventSource {
  * `sampleSha` is the sha the one bundled sample (`chunking-primer`) is served
  * with, which is how the page knows whether that sample's question set
  * describes the loaded document. `null` means the sample list cannot be read.
- * `stored` is what `GET /api/sources/{sha}/questions` has, null for no set.
+ * `stored` is what `GET /api/v2/documents/{sha}/questions` has, null for no set.
  */
 /** Every POST /api/trace body: there should be none, since the trace comes with the result. */
 const traced: unknown[] = []
@@ -584,7 +584,7 @@ describe("Evaluate is pipeline first", () => {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
-      vi.fn((url: string, init?: RequestInit) => (url === "/api/sources" ? Promise.resolve(new Response(JSON.stringify([UP]), { status: 200 })) : base(url, init))),
+      vi.fn((url: string, init?: RequestInit) => (url === "/api/v2/documents" ? Promise.resolve(new Response(JSON.stringify([UP]), { status: 200 })) : base(url, init))),
     )
   }
 
@@ -1254,12 +1254,12 @@ describe("while and after scoring", () => {
 })
 
 describe("the pipeline's document", () => {
-  /** Answers `GET /api/sources` with no uploads, so a file nobody has reads as missing. */
+  /** Answers `GET /api/v2/documents` with no uploads, so a file nobody has reads as missing. */
   function noUploads() {
     const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
     vi.stubGlobal(
       "fetch",
-      vi.fn((url: string, init?: RequestInit) => (url === "/api/sources" ? Promise.resolve(new Response("[]", { status: 200 })) : base(url, init))),
+      vi.fn((url: string, init?: RequestInit) => (url === "/api/v2/documents" ? Promise.resolve(new Response("[]", { status: 200 })) : base(url, init))),
     )
   }
 

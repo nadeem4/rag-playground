@@ -285,7 +285,7 @@ export interface Source {
   filename: string
   size: number
   content_type: string
-  /** `GET /api/sources` only: when this browser uploaded it (the demo's hours count from it). Absent for a sample. */
+  /** `GET /api/v2/documents` only: when this browser uploaded it (the demo's hours count from it). Absent for a sample. */
   uploaded_at?: string
 }
 
@@ -481,14 +481,14 @@ export interface LlmCheck {
 
 export type PdfRect = [number, number, number, number]
 
-/** One entry of `GET /api/sources/{sha}/pages`. `n` is 1-based; sizes in points. */
+/** One entry of `GET /api/v2/documents/{sha}/pages`. `n` is 1-based; sizes in points. */
 export interface PdfPageSize {
   n: number
   width: number
   height: number
 }
 
-/** `GET /api/sources/{sha}/pages/{n}/find?text=...` */
+/** `GET /api/v2/documents/{sha}/pages/{n}/find?text=...` */
 export interface FindResult {
   rects: PdfRect[]
   matched: "exact" | "normalized" | "none"
@@ -702,7 +702,7 @@ export interface GoldQuestionCheck {
   golds: GoldCheck[]
 }
 
-/** `GET /api/sources/{sha}/questions`: the record the server keeps. */
+/** `GET /api/v2/documents/{sha}/questions`: the record the server keeps. */
 export interface StoredQuestionSet {
   /** The document fingerprint this set is stored against. */
   sha: string
@@ -714,7 +714,7 @@ export interface StoredQuestionSet {
   set: { version: number; document: string; questions: GoldQuestion[] }
 }
 
-/** `POST /api/sources/{sha}/questions`: the record, plus the check it ran. */
+/** `POST /api/v2/documents/{sha}/questions`: the record, plus the check it ran. */
 export interface QuestionSetUpload extends StoredQuestionSet {
   /** False when the server would not keep it, as a hosted demo will not. */
   stored: boolean

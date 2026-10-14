@@ -11,16 +11,12 @@ import type {
   CancelResponse,
   ExplainRequest,
   Explanation,
-  FindResult,
   LearnChunking,
   LearnDocument,
   LlmCheck,
   LlmProvider,
   LlmSettings,
-  PdfPageSize,
-  QuestionSetUpload,
   Registry,
-  StoredQuestionSet,
   RunCreated,
   RunRequest,
   RunSnapshot,
@@ -106,8 +102,6 @@ export interface KeyOpts {
   keys?: UiKeys | null
 }
 
-const sha = (s: string) => encodeURIComponent(s)
-
 export const api = {
   registry: () => request<Registry>("/registry"),
   /** Plan I-12: one plain paragraph per stage. */
@@ -119,16 +113,6 @@ export const api = {
   /** Plan I-12: pure, no model loads. 422 `{detail: {errors}}` on a bad config, 404 on an unknown transform. */
   explain: (body: ExplainRequest, signal?: AbortSignal) => request<Explanation>("/explain", { ...json(body), signal }),
 
-  sources: () => request<Source[]>("/sources"),
-  uploadSource: (file: File) => {
-    const form = new FormData()
-    form.append("file", file)
-    return request<Source>("/sources", { method: "POST", body: form })
-  },
-  /** Delete this browser's own upload now (on the demo), or any upload (locally). 403 for a sample. */
-  deleteSource: (source: string) => request<{ sha: string; deleted: boolean }>(`/sources/${sha(source)}`, { method: "DELETE" }),
-  /** A source's own bytes, for exporting a saved item with its document. */
-  sourceFileUrl: (source: string) => `${API_BASE}/sources/${sha(source)}/file`,
   /** The bundled sample cards offered on the first-visit card and in the Document menu, default first. */
   samples: () => request<SampleCard[]>("/samples"),
   /** Plan I-14: registers a bundled sample PDF like an upload. Idempotent. Omit `name` for the default sample. */
@@ -142,15 +126,6 @@ export const api = {
 
   /** Plan I-31: a filled-in example set to start from. */
   questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,
-  /** Plan I-31: the set stored against this document. 404 when there is none. */
-  questionSet: (source: string) => request<StoredQuestionSet | null>(`/sources/${sha(source)}/questions`),
-  /** Plan I-31: store a set against this document, and check every gold passage against its text. 403 in demo mode. */
-  uploadQuestionSet: (source: string, file: File) => {
-    const form = new FormData()
-    form.append("file", file)
-    return request<QuestionSetUpload>(`/sources/${sha(source)}/questions`, { method: "POST", body: form })
-  },
-  deleteQuestionSet: (source: string) => request<unknown>(`/sources/${sha(source)}/questions`, { method: "DELETE" }),
 
   /** 400 on an invalid graph; 422 `{detail: {node_id, errors}}` on a bad config. */
   createRun: (body: RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", json(body, keyHeaders(opts.keys))),
@@ -179,12 +154,6 @@ export const api = {
   /** Lists models with the resolved key: costs no tokens. */
   checkLlm: (provider: LlmProvider, opts: KeyOpts = {}) =>
     request<LlmCheck>("/settings/llm/check", json({ provider }, keyHeaders({ [provider]: opts.keys?.[provider] }))),
-
-  /** Page sizes in PDF points, 1-based `n`. */
-  pages: (source: string) => request<PdfPageSize[]>(`/sources/${sha(source)}/pages`),
-  pageImageUrl: (source: string, n: number, scale = 2) => `${API_BASE}/sources/${sha(source)}/pages/${n}.png?scale=${scale}`,
-  findOnPage: (source: string, n: number, text: string) =>
-    request<FindResult>(`/sources/${sha(source)}/pages/${n}/find?text=${encodeURIComponent(text)}`),
 
   /** 409 while a run is live. */
   clearCache: () => request<CacheCleared>("/cache", { method: "DELETE" }),

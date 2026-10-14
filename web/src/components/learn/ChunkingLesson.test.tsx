@@ -81,8 +81,8 @@ beforeEach(() => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
       if (url === "/api/learn/chunking") return ok(DATA)
       if (url === "/api/learn/document") return ok({ filename: "chunking-primer.pdf", page_count: 3, text: DOC })
-      if (url === `/api/sources/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
-      if (url.startsWith(`/api/sources/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
+      if (url === `/api/v2/documents/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
+      if (url.startsWith(`/api/v2/documents/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
       if (url === "/api/stages") return ok({ chunk: { what: "x", lesson: ["Before a search can find anything, the document has to be cut."] } })
       if (url === "/api/runs" && init?.method === "POST") {
         posts.push(JSON.parse(String(init.body)))

@@ -45,7 +45,7 @@ beforeEach(() => {
   resetPipelinesForTests()
   registryFails = false
   posts = []
-  answers = { "/api/sources": [UP], "/api/samples": [SAMPLE] }
+  answers = { "/api/v2/documents": [UP], "/api/samples": [SAMPLE] }
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -128,7 +128,7 @@ describe("chooseDocument", () => {
 
   it("tells every reader, and never flags the chosen file before the list catches up", async () => {
     storeGraph(sampleGraph(registry, ref(SAMPLE_SHA, "chunking-primer.pdf")))
-    answers["/api/sources"] = []
+    answers["/api/v2/documents"] = []
     const { result } = renderHook(() => useDocument())
     await waitFor(() => expect(result.current.status).toBe("ready"))
     await act(() => chooseDocument(ref(UP.sha, UP.filename)))
@@ -165,14 +165,14 @@ describe("chooseDocument", () => {
   })
 
   it("lists as Your uploads only the files that are not a sample", async () => {
-    answers["/api/sources"] = [UP, { sha: SAMPLE_SHA, filename: "chunking-primer.pdf", size: 1, content_type: "application/pdf" }]
+    answers["/api/v2/documents"] = [UP, { sha: SAMPLE_SHA, filename: "chunking-primer.pdf", size: 1, content_type: "application/pdf" }]
     const { result } = renderHook(() => useDocument())
     await waitFor(() => expect(result.current.uploads?.map((u) => u.sha)).toEqual([UP.sha]))
   })
 
   it("reads a list that is not an array as failed: never a crash, and never amber without the uploads", async () => {
     storeGraph(sampleGraph(registry, ref("ef".repeat(32), "NK_Resume.pdf")))
-    answers["/api/sources"] = { source: "none" }
+    answers["/api/v2/documents"] = { source: "none" }
     answers["/api/samples"] = { source: "none" }
     const { result } = renderHook(() => useDocument())
     await waitFor(() => expect(result.current.listError).toBe(true))
@@ -235,7 +235,7 @@ describe("a sample saved with an old fingerprint", () => {
 
   it("leaves an upload missing, even when an upload in this browser has a sample's filename", async () => {
     const twin = { ...UP, sha: "77".repeat(32), filename: "chunking-primer.pdf" }
-    answers["/api/sources"] = [twin]
+    answers["/api/v2/documents"] = [twin]
     storeGraph(sampleGraph(registry, ref(OLD, "chunking-primer.pdf")))
     const { result } = renderHook(() => useDocument())
     await waitFor(() => expect(result.current.status).toBe("missing"))

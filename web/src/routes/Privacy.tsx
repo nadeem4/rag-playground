@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from "react"
 
-import { api, ApiError } from "@/api/client"
+import { ApiError } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { useAppSettings } from "@/api/useDemo"
 import { SiteFooter } from "@/components/SiteFooter"
 import { Button } from "@/components/ui/button"
@@ -172,7 +173,7 @@ export function Privacy() {
     const failed: string[] = []
     for (const u of mine ?? []) {
       try {
-        await api.deleteSource(u.sha)
+        await v2.deleteDocument(u.sha)
         gone.push(u.filename)
       } catch (err) {
         const why = err instanceof ApiError && typeof err.detail === "string" ? err.detail : "the server did not answer."

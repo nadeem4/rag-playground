@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react"
 
 import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { sampleQuestionTexts } from "@/api/samples"
 import type { SampleCard, Source } from "@/api/types"
 
@@ -75,7 +76,7 @@ export function docStatus(
 }
 
 interface State {
-  /** Every file `GET /api/sources` lists: uploads plus any sample loaded. Null until it answers, and if it fails. */
+  /** Every file `GET /api/v2/documents` lists: uploads plus any sample loaded. Null until it answers, and if it fails. */
   sources: Source[] | null
   sourcesFailed: boolean
   samples: SampleCard[] | null
@@ -118,7 +119,7 @@ function set(patch: Partial<State>) {
 
 function fetchSources() {
   const gen = generation
-  api.sources().then(
+  v2.documents().then(
     (s) => {
       if (gen !== generation) return
       set(Array.isArray(s) ? { sources: s, sourcesFailed: false } : { sources: null, sourcesFailed: true })

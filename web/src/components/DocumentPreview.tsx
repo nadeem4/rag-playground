@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
-import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { usePageSizes } from "@/api/usePdf"
 import { cn } from "@/lib/utils"
 import type { DocRef } from "@/state/document"
@@ -94,7 +94,7 @@ export function DocumentPreview({ doc, facts, onClose }: { doc: DocRef; facts: D
             className="m-0 flex scroll-mt-4 flex-col items-center gap-1"
           >
             <img
-              src={api.pageImageUrl(doc.sha, p.n, 1.5)}
+              src={v2.pageImageUrl(doc.sha, p.n, 1.5)}
               alt={`Page ${p.n} of ${facts.title}`}
               loading="lazy"
               style={{ aspectRatio: `${p.width} / ${p.height}` }}

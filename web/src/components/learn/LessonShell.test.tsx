@@ -21,8 +21,8 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/learn/document") return ok(DOC)
-      if (url === `/api/sources/${SHA}/pages`) return ok([1, 2, 3].map((n) => ({ n, width: 612, height: 792 })))
-      if (url.startsWith(`/api/sources/${SHA}/pages/1/find`)) return ok({ rects: [[72, 600, 540, 612]], matched: "exact" })
+      if (url === `/api/v2/documents/${SHA}/pages`) return ok([1, 2, 3].map((n) => ({ n, width: 612, height: 792 })))
+      if (url.startsWith(`/api/v2/documents/${SHA}/pages/1/find`)) return ok({ rects: [[72, 600, 540, 612]], matched: "exact" })
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )

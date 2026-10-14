@@ -13,6 +13,7 @@ import { resetAppSettingsForTests } from "@/api/useDemo"
 import { ApiKeyProvider, checkMessage, hasAnyKey, hasKeyFor, keyMissing, keyNeedFor, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
 import { api, KEY_HEADERS, keyHeaders } from "./client"
 import type { LlmProvider } from "./types"
+import { v2 } from "./v2"
 
 // Obviously fake keys. Never a real one in a test.
 const FAKE: Record<LlmProvider, string> = {
@@ -79,7 +80,7 @@ beforeEach(() => {
       sent.push({ url, method: init?.method ?? "GET", headers: headersOf(init), body: String(init?.body ?? "") })
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
       if (url === "/api/registry") return ok(TEST_REGISTRY)
-      if (url === "/api/sources") return ok([SOURCE])
+      if (url === "/api/v2/documents") return ok([SOURCE])
       if (url === "/api/settings/llm") return ok(servers)
       if (url === "/api/settings/app") return ok({ demo })
       if (url === "/api/settings/llm/check") {
@@ -187,7 +188,7 @@ describe("keyHeaders", () => {
   it("other requests never carry a key", async () => {
     await api.registry()
     await api.llmSettings()
-    await api.pages("ab")
+    await v2.pages("ab")
     for (const p of PROVIDERS) expect(sent.every((s) => !(H(p) in s.headers))).toBe(true)
   })
 })

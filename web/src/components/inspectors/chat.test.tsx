@@ -31,7 +31,7 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       urls.push(url)
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
-      if (url === `/api/sources/${SHA}/pages`) return ok([1, 2, 3].map((n) => ({ n, width: 612, height: 792 })))
+      if (url === `/api/v2/documents/${SHA}/pages`) return ok([1, 2, 3].map((n) => ({ n, width: 612, height: 792 })))
       const m = /\/pages\/(\d+)\/find\?text=(.*)$/.exec(url)
       if (m) {
         const text = decodeURIComponent(m[2])
@@ -177,7 +177,7 @@ describe("ChatInspector", () => {
     expect(rects()).toHaveLength(2)
     expect(rects().every((r) => !r.hasAttribute("data-approximate"))).toBe(true)
     expect(within(view()).getByTestId("pdf-notice").textContent).toMatch(/found on the page as quoted/)
-    expect(urls.some((u) => u.startsWith(`/api/sources/${SHA}/pages/1/find?text=`))).toBe(true)
+    expect(urls.some((u) => u.startsWith(`/api/v2/documents/${SHA}/pages/1/find?text=`))).toBe(true)
   })
 
   it("says when the match needed normalising", async () => {

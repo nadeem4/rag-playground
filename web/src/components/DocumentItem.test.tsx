@@ -29,9 +29,9 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/samples") return ok([SAMPLE])
-      if (url === "/api/sources") return ok([UP])
-      if (url === `/api/sources/${UP.sha}/pages`) return ok([1, 2, 3, 4, 5, 6].map((n) => ({ n, width: 612, height: 792 })))
-      if (url === `/api/sources/${SAMPLE.sha}/pages`) return ok([1, 2, 3].map((n) => ({ n, width: 612, height: 792 })))
+      if (url === "/api/v2/documents") return ok([UP])
+      if (url === `/api/v2/documents/${UP.sha}/pages`) return ok([1, 2, 3, 4, 5, 6].map((n) => ({ n, width: 612, height: 792 })))
+      if (url === `/api/v2/documents/${SAMPLE.sha}/pages`) return ok([1, 2, 3].map((n) => ({ n, width: 612, height: 792 })))
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )
@@ -50,7 +50,7 @@ describe("DocumentItem", () => {
     const item = screen.getByTestId("document-item")
     await waitFor(() => expect(within(item).getByText("A primer on chunking")).toBeTruthy())
     const thumb = item.querySelector("img")!
-    expect(thumb.getAttribute("src")).toBe(`/api/sources/${SAMPLE.sha}/pages/1.png?scale=0.25`)
+    expect(thumb.getAttribute("src")).toBe(`/api/v2/documents/${SAMPLE.sha}/pages/1?scale=0.25`)
     const facts = within(item).getByTestId("document-facts")
     expect(within(facts).getByText("chunking-primer.pdf").className).toContain("font-mono")
     expect(facts.textContent).toBe("chunking-primer.pdf3 pagesSample")
@@ -104,7 +104,7 @@ describe("the Preview sheet", () => {
     expect(within(jump).getByRole("button", { name: "Page 1" }).getAttribute("aria-current")).toBe("true")
     const pages = within(sheet).getAllByRole("img")
     expect(pages.map((p) => p.getAttribute("alt"))).toEqual([1, 2, 3, 4, 5, 6].map((n) => `Page ${n} of My chunking notes`))
-    expect(pages[2].getAttribute("src")).toBe(`/api/sources/${UP.sha}/pages/3.png?scale=1.5`)
+    expect(pages[2].getAttribute("src")).toBe(`/api/v2/documents/${UP.sha}/pages/3?scale=1.5`)
     expect(within(sheet).getByText("Page 3 of 6")).toBeTruthy()
   })
 

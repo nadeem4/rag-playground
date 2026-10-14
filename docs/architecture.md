@@ -326,7 +326,8 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
   first step that lost the answer, worked out by `pandion.evaluate` with the eval step's own
   matching. Evaluate shows it with each step's code name swapped for Build's name
   (`plainTrace`); the web no longer calls `POST /api/trace`.
-- **Sources.** Uploads, page images and the PDF itself come from `/api/sources`.
+- **Documents.** Uploads, page images, the PDF itself and a document's question set come
+  from `/api/v2/documents`. Loading a bundled sample is still `POST /api/sources/sample`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
 - **Keys.** A key typed in the app is sent as a header on runs, evaluations, comparisons and key checks.
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
@@ -350,8 +351,8 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
   name, the page count and Sample or Your upload, or compact, with the picture and the
   title. Its Preview (`DocumentPreview.tsx`) opens the shared side sheet
   (`web/src/components/SideSheet.tsx`) on every page, from the same page sizes and page
-  images the PDF viewer uses (`GET /api/sources/{sha}/pages` and
-  `/api/sources/{sha}/pages/{n}.png`). The Document control (`DocumentControl.tsx`) is the
+  images the PDF viewer uses (`GET /api/v2/documents/{sha}/pages` and
+  `/api/v2/documents/{sha}/pages/{n}`). The Document control (`DocumentControl.tsx`) is the
   link beside it that changes the document: in Build's Document step, under Evaluate's
   Documents and on Compare's Document line. The header has none.
 

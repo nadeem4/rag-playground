@@ -76,13 +76,13 @@ beforeEach(() => {
     if (url === "/api/settings/app") return ok(demo ? { demo: true, limits: { max_bytes: 1, max_pages: 20, max_files: 3, max_total_bytes: 1, ttl_hours: 24 } } : { demo: false })
     if (url === "/api/samples") return ok([sampleCard])
     if (url === "/api/registry") return ok(registry)
-    if (url === "/api/sources" && init?.method === "POST") {
+    if (url === "/api/v2/documents" && init?.method === "POST") {
       const file = (init.body as FormData).get("file") as File
       if (file.name === "big.pdf") return new Response(JSON.stringify({ detail: "The demo is full right now." }), { status: 503 })
       return ok({ sha: GONE, filename: file.name, size: file.size, content_type: "application/pdf" })
     }
-    if (url === "/api/sources") return ok(uploads.map((u) => ({ size: 1_200_000, content_type: "application/pdf", ...u })))
-    if (url === `/api/sources/${UP}/file`) return new Response(PDF, { status: 200 })
+    if (url === "/api/v2/documents") return ok(uploads.map((u) => ({ size: 1_200_000, content_type: "application/pdf", ...u })))
+    if (url === `/api/v2/documents/${UP}/file`) return new Response(PDF, { status: 200 })
     return new Response("not found", { status: 404 })
   })
   vi.stubGlobal("fetch", fetchMock)
@@ -304,7 +304,7 @@ describe("Library", () => {
     )
     expect(readPipelines().map((p) => p.id).sort()).toEqual(["p1", "p3", "p9"])
     // The damaged one never reaches the server.
-    expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/sources" && i?.method === "POST")).toHaveLength(3)
+    expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/v2/documents" && i?.method === "POST")).toHaveLength(3)
   })
 
   it("states a small document's size in KB", async () => {

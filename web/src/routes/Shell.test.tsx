@@ -46,7 +46,7 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
       if (url === "/api/registry") return ok(TEST_REGISTRY)
-      if (url === "/api/sources") return ok([SOURCE])
+      if (url === "/api/v2/documents") return ok([SOURCE])
       if (RUN_ROUTES.includes(url) && init?.method === "POST") {
         const body = JSON.parse(String(init.body))
         posts.push({ path: url, body })
@@ -682,7 +682,7 @@ describe("First run (plan I-15)", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (url === "/api/registry") return new Response(JSON.stringify(liveRegistry), { status: 200 })
-        if (url === "/api/sources") return new Response(JSON.stringify(sampleCalls ? [SAMPLE] : []), { status: 200 })
+        if (url === "/api/v2/documents") return new Response(JSON.stringify(sampleCalls ? [SAMPLE] : []), { status: 200 })
         if (url === "/api/samples") return new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })
         if (url === "/api/explain") {
           const body = JSON.parse(String(init?.body))
@@ -729,7 +729,7 @@ describe("First run (plan I-15)", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
-        new Response(JSON.stringify(url === "/api/registry" ? liveRegistry : url === "/api/sources" ? [SOURCE] : url === "/api/samples" ? [] : {}), {
+        new Response(JSON.stringify(url === "/api/registry" ? liveRegistry : url === "/api/v2/documents" ? [SOURCE] : url === "/api/samples" ? [] : {}), {
           status: 200,
         }),
       ),
@@ -910,7 +910,7 @@ describe("Build is pipeline first", () => {
       "fetch",
       vi.fn((url: string, init?: RequestInit) => {
         if (url === "/api/samples") return Promise.resolve(new Response(JSON.stringify(CARDS), { status: 200 }))
-        if (url === "/api/sources") return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+        if (url === "/api/v2/documents") return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
         return base(url, init)
       }),
     )
@@ -1408,7 +1408,7 @@ describe("saved pipelines on Build", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string, init?: RequestInit) =>
-        url === "/api/sources" && init?.method === "POST" ? Promise.resolve(new Response(JSON.stringify(fresh), { status: 201 })) : base(url, init),
+        url === "/api/v2/documents" && init?.method === "POST" ? Promise.resolve(new Response(JSON.stringify(fresh), { status: 201 })) : base(url, init),
       ),
     )
     setup()

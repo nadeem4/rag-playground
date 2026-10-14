@@ -1181,7 +1181,7 @@ describe("the document on the page", () => {
 
   it("names the document once above the recipes, compact, with Preview and Change", async () => {
     storeGraph(sampleGraph(registry, SOURCE))
-    serve({}, { "/api/sources": [], "/api/samples": [CARD] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [CARD] })
     render(<Compare />)
     const line = await screen.findByTestId("document-line")
     await waitFor(() => expect(within(line).getByTestId("document-item").textContent).toContain("A primer on chunking"))
@@ -1196,7 +1196,7 @@ describe("the document on the page", () => {
 
   it("says the document is missing and disables the run", async () => {
     storeGraph(sampleGraph(registry, { sha: "ef".repeat(32), filename: "NK_Resume.pdf" }))
-    serve({}, { "/api/sources": [], "/api/samples": [] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [] })
     render(<Compare />)
     const note = await screen.findByTestId("document-note")
     expect(note.textContent).toContain("Pick a document above to run these recipes.")
@@ -1207,7 +1207,7 @@ describe("the document on the page", () => {
   it("asks for a document when the pipeline has none, instead of No pipeline to compare", async () => {
     const g = sampleGraph(registry, SOURCE)
     storeGraph(setConfig(g, "source", {}))
-    serve({}, { "/api/sources": [], "/api/samples": [] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [] })
     render(<Compare />)
     const note = await screen.findByTestId("document-note")
     expect(note.textContent).toContain("Pick a document above to run these recipes.")
@@ -1236,7 +1236,7 @@ describe("the document on the page", () => {
       sha: "cd".repeat(32),
       question: "Why do chunk boundaries matter?",
     }
-    serve({}, { "/api/sources": [], "/api/samples": [card] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [card] })
     render(<Compare />)
     await waitFor(() => expect(screen.getAllByRole("article").length).toBeGreaterThan(0))
     expect(screen.queryByText("No pipeline to compare")).toBeNull()

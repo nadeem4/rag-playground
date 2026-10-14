@@ -1,4 +1,5 @@
-import { api, ApiError } from "@/api/client"
+import { ApiError } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { useAppSettings } from "@/api/useDemo"
 import { chooseDocument, documentBusy, refreshUploads, setUploadState, useDocument, type DocRef } from "@/state/document"
 
@@ -21,7 +22,7 @@ export interface Upload {
 }
 
 /**
- * Upload a PDF (`POST /api/sources`), shared by the Document control's menu
+ * Upload a PDF (`POST /api/v2/documents`), shared by the Document control's menu
  * and Build's first-visit card. Three checks, in the words the upload card
  * always used: PDF only, the demo's size limit, and the server's own sentence
  * when it refuses. The busy file and the error live in the document store, so
@@ -48,7 +49,7 @@ export function useUpload(): Upload {
     }
     setUploadState({ uploading: file.name, uploadError: null })
     try {
-      const src = await api.uploadSource(file)
+      const src = await v2.uploadDocument(file)
       refreshUploads()
       await use({ sha: src.sha, filename: src.filename })
       return true

@@ -66,7 +66,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /documents/{id}/pages` | each page's size in PDF points: `[{"n", "width", "height"}]` |
 | `GET /documents/{id}/pages/{n}?scale=1` | the page as PNG, `scale` above 0 and at most 8, lowered so the image stays within 25 million pixels |
 | `GET /documents/{id}/pages/{n}/find?text=` | where the text (1 to 2,000 characters) is on the page: `{"rects": [[left, bottom, right, top], ...], "matched": "exact" or "normalized" or "none"}` |
-| `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document as pdfium reads it, keeps the set if the Policy keeps sets, and reports per question whether each passage was found |
+| `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document as pdfium reads it, keeps the set if the Policy keeps sets, and reports per question whether each passage was found. A set over 1 MB is 413; a set that cannot be used (more than 500 questions, more than 20 gold passages in one, a file that cannot be read) is 400 with its sentence; a document that is not a PDF is 415. |
 | `GET /documents/{id}/questions` | the set kept for the document, or `null` |
 | `DELETE /documents/{id}/questions` | remove it: 204 |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. |
@@ -81,7 +81,8 @@ with a 400, because a stored file with that suffix would look half-written.
 
 A document this caller may not read is answered exactly like one that does not exist: 404,
 with the same fixed sentence, which never repeats the id the request sent. A page
-number past the last page is 404, and a `scale` or `text` outside its range is 422. pdfium is not thread-safe, so every page request holds
+number past the last page is 404, and a `scale` or `text` outside its range is 422.
+pdfium is not thread-safe, so every page request and every question-set check holds
 `pandion_api.pages.PDFIUM_LOCK`; anything else in the same process that uses pdfium on
 request threads should hold it too.
 
@@ -106,8 +107,9 @@ anything runs.
 A document in a run is named by the filename it was uploaded under, so the same bytes
 under the same name give the same result ids however often they are uploaded. Two
 documents in one run cannot share a name. The same bytes uploaded by two callers are one
-record, so its name is the latest uploader's file name. A suffix the store would not keep
-(see Documents) is left off the name, so Pandion never keeps a copy under it.
+record, so its name is the latest uploader's file name. When the store did not keep the
+name's suffix (see Documents), the name's dots become `_`, so Pandion never keeps a copy
+under that suffix.
 
 A model's key comes from the request's header for its provider (`X-Anthropic-Api-Key`,
 `X-OpenAI-Api-Key`, `X-Custom-Api-Key`, `X-OpenRouter-Api-Key`), else from the server's

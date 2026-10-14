@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import threading
-from pathlib import PurePosixPath
 from typing import Any, Callable
 
 from fastapi import HTTPException, Request
 
 from pandion_api.credentials import guarded, redact
-from pandion_api.documents import NO_SUCH_DOCUMENT, SHA, suffix
+from pandion_api.documents import NO_SUCH_DOCUMENT, SHA, safe_name
 
 #: What a run's work does on the worker thread: given the event callback, the
 #: cancel event and the keys (None when there are none), it returns
@@ -40,18 +39,6 @@ def documents_of(shas: list[str], request: Request) -> dict[str, str]:
             )
         out[name] = str(path)
     return out
-
-
-def safe_name(filename: str) -> str:
-    """`filename` as a run names its document. Pandion keeps its own copy of a
-    document as `<sha><the name's suffix>`, so a suffix the store would not keep
-    (`documents.suffix`: a space, a `:` that names a Windows stream, too long) is
-    dropped; the stored file has none either. A plain name such as `report.pdf`
-    is unchanged, so its result ids are the old routes' ones."""
-    found = PurePosixPath(filename).suffix
-    if found and suffix(filename) != found:
-        return filename[: -len(found)]
-    return filename
 
 
 def scrub_errors(value: Any, scrub: Callable[[str], str]) -> Any:

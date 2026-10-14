@@ -94,3 +94,17 @@ def test_trace_refuses_an_unknown_result_and_a_question_without_a_sentence(clien
     body = {"gold_answers": ["x"], "parse": {"id": "0" * 64, "name": "p"}, "chunk": "0" * 64, "retrieve": "0" * 64, "final": "0" * 64}
     assert client.post("/trace", json=body).status_code == 404
     assert client.post("/trace", json={**body, "gold_answers": [" "]}).status_code == 422
+
+
+def test_trace_caps_its_lists_and_top_k_and_refuses_a_result_of_the_wrong_kind(client):
+    result = indexed(client)
+    steps = result["documents"]["report.pdf"]
+    parse, chunk = steps["parse"]["result_id"], steps["chunk"]["result_id"]
+    body = {"gold_answers": ["x"], "parse": {"id": parse, "name": "pdfium"}, "chunk": chunk, "retrieve": chunk, "final": chunk}
+    assert client.post("/trace", json={**body, "gold_answers": ["x"] * 51}).status_code == 422
+    assert client.post("/trace", json={**body, "cleans": [{"id": parse, "name": "c"}] * 51}).status_code == 422
+    assert client.post("/trace", json={**body, "top_k": 101}).status_code == 422
+    r = client.post("/trace", json=body)
+    assert r.status_code == 422 and "retrieve" in r.json()["detail"]
+    r = client.post("/trace", json={**body, "chunk": result["index"]["result_id"]})
+    assert r.status_code == 422 and "chunk" in r.json()["detail"]

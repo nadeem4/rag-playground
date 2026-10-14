@@ -22,14 +22,12 @@ from typing import Any
 
 import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from pandion_api.pages import PDFIUM_LOCK
+from pandion_api.routes.questions import read_set
 
 from api.routes.pages import source_path
-from pandion.evaluation import (
-    GOLD_SEPARATOR,
-    QuestionSetError,
-    check_questions,
-    parse_question_set,
-)
+from pandion.evaluation import GOLD_SEPARATOR, check_questions
 from pandion.extend import RunContext, Stage
 from pandion.plugins.chunk import DocView
 from pandion.registry import registry
@@ -132,12 +130,9 @@ def get_template(format: str = Query("json", pattern="^(json|csv)$")) -> Respons
 async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict[str, Any]:
     """Check every gold passage, and store the set if the Policy keeps sets (not on a hosted demo)."""
     path = source_path(request, sha)
-    try:
-        parsed = parse_question_set(await file.read(), file.filename or "")
-    except QuestionSetError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    rows = check_questions(parsed["questions"], _document_text(path))
+    parsed = await read_set(file)  # the same limits as /api/v2
+    text = await run_in_threadpool(_document_text, path)
+    rows = await run_in_threadpool(check_questions, parsed["questions"], text)
     record = {
         "sha": sha,
         "filename": Path(file.filename or "questions.json").name,
@@ -202,7 +197,8 @@ def _document_text(path: Path) -> str:
     """The document as `pdfium` reads it: the same text the chunkers cut."""
     cls = registry.get(Stage.PARSE, PARSER)
     try:
-        with TemporaryDirectory() as tmp:
+        # pdfium is not thread-safe: hold the lock the page routes hold.
+        with PDFIUM_LOCK, TemporaryDirectory() as tmp:
             ctx = RunContext(output_dir=Path(tmp), emit=lambda event: None, tmp=Path(tmp))
             doc = cls().apply(
                 {"file": {"path": str(path), "sha": "", "filename": path.name}},

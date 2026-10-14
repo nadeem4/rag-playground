@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pandion import ResultStore
 from pandion.evaluation import StepInput, trace
@@ -68,15 +68,15 @@ class NamedResult(BaseModel):
 
 
 class TraceIn(BaseModel):
-    gold_answers: list[str]
+    gold_answers: list[str] = Field(max_length=50)
     parse: NamedResult
-    cleans: list[NamedResult] = []
+    cleans: list[NamedResult] = Field(default=[], max_length=50)
     chunk: str
     retrieve: str
     #: The result the answer was checked in: the last reranker's when there is one.
     final: str
     rerank_name: str | None = None
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1, le=100)
 
 
 @router.post("/trace")
@@ -84,8 +84,10 @@ def post_trace(body: TraceIn, settings: ApiSettings = Depends(get_settings)) -> 
     """Why did this miss? One question's answer followed down a finished run's results."""
     store = _results(settings)
 
-    def load(result_id: str) -> Any:
-        _info(store, result_id)
+    def load(result_id: str, role: str, kind: str) -> Any:
+        found = _info(store, result_id)["type"]
+        if found != kind:
+            raise HTTPException(status_code=422, detail=f"The {role} result is a {found}, not a {kind}.")
         return store.get(result_id)
 
     if not any(g.strip() for g in body.gold_answers):
@@ -93,11 +95,11 @@ def post_trace(body: TraceIn, settings: ApiSettings = Depends(get_settings)) -> 
     reranked = body.rerank_name is not None and body.final != body.retrieve
     return trace(
         golds=body.gold_answers,
-        parse=StepInput(body.parse.name, load(body.parse.id)),
-        cleans=[StepInput(c.name, load(c.id)) for c in body.cleans],
-        chunks=load(body.chunk),
-        retrieve=load(body.retrieve),
-        final=load(body.final) if reranked else None,
+        parse=StepInput(body.parse.name, load(body.parse.id, "parse", "parsed_doc")),
+        cleans=[StepInput(c.name, load(c.id, "clean", "parsed_doc")) for c in body.cleans],
+        chunks=load(body.chunk, "chunk", "chunk_set"),
+        retrieve=load(body.retrieve, "retrieve", "retrieval_result"),
+        final=load(body.final, "final", "retrieval_result") if reranked else None,
         rerank_name=body.rerank_name if reranked else None,
         top_k=body.top_k,
     )

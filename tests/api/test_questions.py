@@ -524,3 +524,38 @@ def test_a_set_covers_one_document_for_now_and_names_the_question_that_does_not(
         "question 2: its evidence is in annex.pdf, but this set is for handbook.pdf. "
         "A set covers one document for now, so put annex.pdf's questions in a set of their own"
     )
+
+
+# --- limits: one crafted set must not hold the server -------------------------------
+
+
+def test_a_set_over_one_megabyte_is_413(client):
+    sha = upload_doc(client)["sha"]
+    r = post_set(client, sha, b" " * (1024 * 1024 + 1))
+    assert r.status_code == 413 and "1 MB" in r.json()["detail"]
+
+
+def test_a_set_with_too_many_questions_is_400(client):
+    sha = upload_doc(client)["sha"]
+    many = json.dumps([{"question": f"Q{n}?", "gold_answers": [RULE]} for n in range(501)])
+    r = post_set(client, sha, many)
+    assert r.status_code == 400 and "at most 500" in r.json()["detail"]
+
+
+def test_a_question_with_too_many_gold_passages_is_400(client):
+    sha = upload_doc(client)["sha"]
+    r = post_set(client, sha, json.dumps([{"question": "Q?", "gold_answers": [f"g{n}" for n in range(21)]}]))
+    assert r.status_code == 400 and "at most 20" in r.json()["detail"]
+
+
+def test_a_csv_field_past_the_csv_limit_is_400(client):
+    sha = upload_doc(client)["sha"]
+    huge = 'question,gold_answers\nQ?,"' + "x" * (csv.field_size_limit() + 1) + '"\n'
+    r = post_set(client, sha, huge, "q.csv")
+    assert r.status_code == 400 and "CSV" in r.json()["detail"]
+
+
+def test_deeply_nested_json_is_400(client):
+    sha = upload_doc(client)["sha"]
+    r = post_set(client, sha, "[" * 100_000 + "]" * 100_000)
+    assert r.status_code == 400 and "nested" in r.json()["detail"]

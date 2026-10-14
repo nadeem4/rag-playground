@@ -112,3 +112,36 @@ def test_an_uploaded_set_still_covers_one_document():
 
     with pytest.raises(QuestionSetError, match="A set covers one document for now, so put annex.pdf's questions"):
         parse_question_set(json.dumps(MIXED).encode(), "q.json")
+
+
+# --- limits, and files that would crash a parser ---------------------------------
+
+
+def test_a_set_can_be_capped_in_questions_and_gold_passages():
+    from pandion.evaluation import parse_question_set
+
+    many = json.dumps([{"question": f"Q{n}?", "gold_answers": ["g"]} for n in range(3)]).encode()
+    parse_question_set(many, max_questions=3)
+    with pytest.raises(QuestionSetError, match="3 questions; at most 2"):
+        parse_question_set(many, max_questions=2)
+    golds = json.dumps([{"question": "Q?", "gold_answers": ["a", "b", "c"]}]).encode()
+    parse_question_set(golds, max_golds=3)
+    with pytest.raises(QuestionSetError, match="question 1: 3 gold passages; at most 2"):
+        parse_question_set(golds, max_golds=2)
+
+
+def test_a_csv_field_past_the_csv_limit_is_a_plain_error():
+    import csv
+
+    from pandion.evaluation import parse_question_set
+
+    huge = "question,gold_answers\nQ?," + '"' + "x" * (csv.field_size_limit() + 1) + '"\n'
+    with pytest.raises(QuestionSetError, match="CSV"):
+        parse_question_set(huge.encode(), "q.csv")
+
+
+def test_deeply_nested_json_is_a_plain_error():
+    from pandion.evaluation import parse_question_set
+
+    with pytest.raises(QuestionSetError, match="nested"):
+        parse_question_set(b"[" * 100_000 + b"]" * 100_000)

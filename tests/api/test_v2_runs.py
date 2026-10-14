@@ -191,6 +191,9 @@ def test_the_data_folder_is_scrubbed_only_where_it_ends_a_path_part():
     assert "database" in out and f"{SERVER_PATH}base" not in out
     assert f"{folder}/sources" not in out and f"'{SERVER_PATH}'" in out
     assert scrub_paths(f"ends in {folder}", data).endswith(SERVER_PATH)
+    for around in ("({})", "in {}.", "{}, then"):
+        assert scrub_paths(around.format(folder), data) == around.format(SERVER_PATH)
+    assert scrub_paths(f"{folder}-old and {folder}_2", data).count(SERVER_PATH + "-old") == 0
 
 
 

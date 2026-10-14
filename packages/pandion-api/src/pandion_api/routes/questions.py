@@ -35,6 +35,29 @@ PARSER_NOTE = (
     "passage found here can still miss there, and the other way round."
 )
 
+#: The most a question set may be, read, hold or check. The old
+#: /api/sources/{sha}/questions route reads a set through `read_set` too.
+MAX_SET_BYTES = 1024 * 1024
+MAX_QUESTIONS = 500
+MAX_GOLDS = 20
+TOO_BIG = "The question set is larger than 1 MB. Split it into smaller sets and upload each."
+
+
+async def read_set(file: UploadFile) -> dict[str, Any]:
+    """The upload read as a question set: 413 past MAX_SET_BYTES (never more
+    than one byte past it is read), 400 with the set's own sentence when it
+    cannot be used. Parsing runs on a worker thread, so a large set never
+    holds the event loop."""
+    data = await file.read(MAX_SET_BYTES + 1)
+    if len(data) > MAX_SET_BYTES:
+        raise HTTPException(status_code=413, detail=TOO_BIG)
+    try:
+        return await run_in_threadpool(
+            parse_question_set, data, file.filename or "", max_questions=MAX_QUESTIONS, max_golds=MAX_GOLDS
+        )
+    except QuestionSetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 
 def _text(path: Path) -> str:
     """The document as pdfium reads it. pdfium is not thread-safe, so the parse
@@ -56,11 +79,9 @@ async def upload_questions(
 ) -> dict[str, Any]:
     """Check every gold passage, and keep the set if the Policy keeps sets."""
     path = document_file(request, sha)
-    try:
-        parsed = parse_question_set(await file.read(), file.filename or "")
-    except QuestionSetError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    rows = check_questions(parsed["questions"], await run_in_threadpool(_text, path))
+    parsed = await read_set(file)
+    text = await run_in_threadpool(_text, path)
+    rows = await run_in_threadpool(check_questions, parsed["questions"], text)
     record = {
         "sha": sha,
         "filename": Path(file.filename or "questions.json").name,

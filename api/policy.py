@@ -101,9 +101,10 @@ def scrub_paths(text: str, data_dir: Path | None = None) -> str:
         # First, whole: the folder's name may hold a space, where a bare match stops.
         folder = Path(data_dir).resolve()
         # Only where it ends a path part: `/data` is not the start of `/database`
-        # or of `https://huggingface.co/datasets/x`.
+        # or of `https://huggingface.co/datasets/x`, but `(/data)`, `in /data.`
+        # and `/data, then` are scrubbed.
         for form in sorted({str(folder), folder.as_posix()}, key=len, reverse=True):
-            text = re.sub(re.escape(form) + r"""(?=[\\/"'\s]|\Z)""", lambda _: SERVER_PATH, text)
+            text = re.sub(re.escape(form) + r"(?![\w-]|\.\w)", lambda _: SERVER_PATH, text)
 
     def short(match: re.Match[str]) -> str:
         path = match.group("quoted") or match.group("bare")

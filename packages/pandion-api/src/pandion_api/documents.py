@@ -49,6 +49,16 @@ def suffix(filename: str) -> str:
     return found if SAFE_SUFFIX.match(found) else ""
 
 
+def safe_name(filename: str) -> str:
+    """`filename` as a run names its document. Pandion keeps its own copy of a
+    document as `<sha><the name's suffix>`, so the name's suffix must be the
+    one the store kept (`suffix`). When the store dropped it (a space, a `:`
+    that names a Windows stream, too long), every dot becomes `_`, leaving the
+    name no suffix at all. A plain name such as `report.pdf` is unchanged, so
+    its result ids are the old routes' ones."""
+    return filename if Path(filename).suffix == suffix(filename) else filename.replace(".", "_")
+
+
 def is_part(filename: str) -> bool:
     """Whether the name ends in `.part`, in any case (see PART_REFUSED)."""
     return filename.lower().endswith(".part")

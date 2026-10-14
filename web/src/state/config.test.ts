@@ -78,7 +78,18 @@ describe("graphToConfig", () => {
     ["a stage the column has no place for", (g: PipelineGraph) => ({ ...g, nodes: [...g.nodes, { id: "e", stage: "enrich", transform: "x", config: {} } as unknown as GraphNode] }), "enrich step"],
     ["a step not fed by the one above it", (g: PipelineGraph) => ({ ...g, edges: g.edges.filter((e) => e.dst !== "chunk") }), "Chunk step is not fed"],
     ["another source than uploads", (g: PipelineGraph) => ({ ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, transform: "web" } : n)) }), "uploaded files only"],
-  ])("refuses %s with one sentence", (_, change, words) => {
+    ["a null connection", (g: PipelineGraph) => ({ ...g, edges: [...g.edges, null] }), "one of its connections is broken"],
+    ["a connection without a source", (g: PipelineGraph) => ({ ...g, edges: [...g.edges, { dst: "chunk", port: "doc" }] }), "one of its connections is broken"],
+    ["settings that are not a mapping", (g: PipelineGraph) => ({ ...g, nodes: g.nodes.map((n) => (n.stage === "chunk" ? { ...n, config: "big" } : n)) }), "one of its steps has broken settings"],
+    [
+      "a rewrite without a search step",
+      (g: PipelineGraph) => {
+        const asked = g.nodes.filter((n) => !["retrieve", "use_case"].includes(n.stage)).map((n) => (n.stage === "query" ? { ...n, transform: "llm_rewrite" } : n))
+        return { nodes: asked, edges: g.edges.filter((e) => asked.some((n) => n.id === e.src) && asked.some((n) => n.id === e.dst)) }
+      },
+      "without a search step",
+    ],
+  ])("refuses %s and says why", (_, change, words) => {
     const c = graphToConfig(change(sampleGraph(R, DOC)))
     expect(c.ok).toBe(false)
     if (!c.ok) expect(c.problem).toContain(words)
@@ -125,6 +136,9 @@ describe("card ids and step names", () => {
     ["index.embed: unknown embedder", "index"],
     ["answer uses 'x'", "use_case"],
     ["The pipeline must be a mapping.", null],
+    ["Settings: answer: max_snippet_chars must be at least 1.", "use_case"],
+    ["A search step is needed to answer the question.", null],
+    ["It needs an answer step.", null],
     // Pandion's own wording (pandion/config.py) names a stacked step as "step N".
     ["index.clean step 2 uses 'nope', which is not registered.", "clean_2"],
     ["retrieve.rerank step 3: top_n must be at least 1.", "rerank_3"],

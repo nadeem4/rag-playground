@@ -64,13 +64,14 @@ export function stepOfCard(id: string): string {
 }
 
 /** A stacked step is numbered as `index.clean.2` in run events and as `index.clean step 2` in Pandion's problem sentences. */
-const WHERE = /\b(?:index\.(parse|clean|chunk|embed|store|source)(?:(?:\.| step )(\d+))?|retrieve\.(rewrite|search|rerank)(?:(?:\.| step )(\d+))?|(answer))\b/
+const WHERE = /\b(?:index\.(parse|clean|chunk|embed|store|source)(?:(?:\.| step )(\d+))?|retrieve\.(rewrite|search|rerank)(?:(?:\.| step )(\d+))?)\b/
+/** `answer` names the step only where a sentence or a clause starts, so "to answer the question" is not it. */
+const ANSWER = /(?:^|[.:;]\s+)answer\b/
 
 /** The card a Pandion problem sentence is about, from the place it names (`index.chunk`, `index.clean step 2`). */
 export function cardNamedIn(sentence: string): string | null {
   const m = WHERE.exec(sentence)
-  if (!m) return null
-  if (m[5]) return "use_case"
+  if (!m) return ANSWER.test(sentence) ? "use_case" : null
   const name = m[1] ?? m[3]
   const n = m[2] ?? m[4]
   if (name === "embed" || name === "store") return "index"
@@ -89,6 +90,10 @@ export function graphToConfig(graph: unknown): Converted {
   const g = graph as unknown as PipelineGraph
   if (!g.nodes.every((n) => isRecord(n) && typeof n.id === "string" && typeof n.stage === "string" && typeof n.transform === "string")) {
     return no("It is not a pipeline: one of its steps has no name.")
+  }
+  if (!g.nodes.every((n) => n.config === undefined || isRecord(n.config))) return no("It is not a pipeline: one of its steps has broken settings.")
+  if (!g.edges.every((e) => isRecord(e) && typeof e.src === "string" && typeof e.dst === "string")) {
+    return no("It is not a pipeline: one of its connections is broken.")
   }
   const order = columnOrder(g)
   const odd = order.find((n) => !COLUMN_STAGES.includes(n.stage))
@@ -109,7 +114,8 @@ export function graphToConfig(graph: unknown): Converted {
   const reranks = of("rerank")
   if (!parse || !chunk || !index) return no("It has no Parse, Chunk or Index step, so it cannot build an index.")
   if (source && source.transform !== "upload") return no(`Its documents come from ${source.transform}, and this version reads uploaded files only.`)
-  if (!retrieve && (reranks.length || useCase)) return no("It answers without a search step.")
+  const rewrites = query !== undefined && query.transform !== "text"
+  if (!retrieve && (rewrites || reranks.length || useCase)) return no("It rewrites, reranks or answers without a search step.")
   const fed = (a: GraphNode, b: GraphNode) => g.edges.some((e) => e.src === a.id && e.dst === b.id)
   const chains = [
     [source, parse, ...cleans, chunk, index].filter((n): n is GraphNode => n !== undefined),

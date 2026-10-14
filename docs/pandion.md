@@ -922,7 +922,7 @@ pandion install pipeline.yaml --print
 
 **`pandion validate FILE`** reads the file and checks every step, with no run. It prints
 `pipeline.yaml is a valid pipeline.`, or the reason it is not, such as
-`pandion: The file has no index section ...`.
+`pandion: The pipeline file has no index section.`
 
 **`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
 its summary. `--stage chunk` shows one stage. `--json` prints only the names, as JSON.

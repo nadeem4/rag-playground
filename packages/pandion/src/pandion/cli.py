@@ -29,7 +29,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.evaluation import COMPARE_STAGES, QuestionSetError
+from pandion.evaluation import COMPARE_STAGES
 
 #: Pandion's name for each key, and the environment variable it is read from.
 ENV_KEYS = {
@@ -111,7 +111,9 @@ def cmd_strategies(args: argparse.Namespace) -> int:
     load_plugins(args.plugins)
     catalog = pandion.catalog()
     if args.stage:
-        catalog = {args.stage: catalog.get(args.stage, {})}
+        if args.stage not in catalog:
+            raise ValueError(f"--stage names a stage: one of {', '.join(catalog)}; not '{args.stage}'.")
+        catalog = {args.stage: catalog[args.stage]}
     if args.json:
         print(json.dumps({stage: sorted(strategies) for stage, strategies in catalog.items()}, indent=2))
         return 0
@@ -140,27 +142,40 @@ def _documents(args: argparse.Namespace) -> list[str] | None:
     return args.documents or None
 
 
-#: Said when a search names no documents and no sync has run: only a sync is
-#: remembered from one command to the next.
-NO_INDEX = (
-    "From the command line, name the documents with --documents, or index them "
-    "with pandion index FILE DOC... --sync first: a sync is remembered, a plain index run is not."
-)
+def _can_sync(p: Pipeline) -> bool:
+    """The documents are local files (the upload source, the default), so sync works."""
+    source = p.to_dict()["index"].get("source")
+    return source is None or source.get("use") == "upload"
 
 
-def _searched(fn: Any, args: argparse.Namespace) -> Any:
-    """Run a search or an answer, adding NO_INDEX when there is no index to search."""
+def _no_index(p: Pipeline) -> str:
+    """What to do when a search names no documents and nothing remembers an index:
+    only a sync is remembered from one command to the next."""
+    if _can_sync(p):
+        return (
+            "There is no index to search yet. Name the documents with --documents, or index "
+            "them with pandion index FILE DOC... --sync first: a sync is remembered, a plain "
+            "index run is not."
+        )
+    return (
+        "There is no index to search yet. Name the documents with --documents: this "
+        "pipeline's source cannot sync, so nothing is remembered from one command to the next."
+    )
+
+
+def _searched(fn: Any, p: Pipeline, args: argparse.Namespace) -> Any:
+    """Run a search or an answer, saying what to do when there is no index to search."""
     try:
         return fn(args.question, documents=_documents(args), credentials=credentials_from_env())
     except ValueError as exc:
         if args.documents or "no index to search yet" not in str(exc):
             raise
-        raise ValueError(f"{exc} {NO_INDEX}") from None
+        raise ValueError(_no_index(p)) from None
 
 
 def cmd_retrieve(args: argparse.Namespace) -> int:
     p = _load(args)
-    r = _searched(lambda q, **kw: p.retrieve(q, args.k, **kw), args)
+    r = _searched(lambda q, **kw: p.retrieve(q, args.k, **kw), p, args)
     if not r.ok:
         error = _first_error({"index": r.index, **r.stages}) or "a step was skipped"
         print(f"pandion: the search failed: {error}", file=sys.stderr)
@@ -173,7 +188,7 @@ def cmd_retrieve(args: argparse.Namespace) -> int:
 
 def cmd_ask(args: argparse.Namespace) -> int:
     p = _load(args)
-    a = _searched(p.ask, args)
+    a = _searched(p.ask, p, args)
     if not a.ok:
         error = _first_error({"index": a.index, **a.stages}) or "a step before the answer failed"
         print(f"pandion: no answer: {error}", file=sys.stderr)
@@ -216,7 +231,12 @@ def parse_vary(text: str, config: dict[str, Any]) -> tuple[str, list[Any]]:
 
     variants: list[Any] = []
     for raw in values.split(","):
-        value = yaml.safe_load(raw.strip())
+        if not raw.strip():
+            raise ValueError(f"{VARY_FORM}; '{text}' has an empty value.")
+        try:
+            value = yaml.safe_load(raw.strip())
+        except yaml.YAMLError:
+            raise ValueError(f"{VARY_FORM}; '{raw.strip()}' is not a value.") from None
         if listed:
             new = [dict(s) if isinstance(s, dict) else {"use": s} for s in current]
             new[n - 1] = changed(new[n - 1], value)
@@ -228,10 +248,7 @@ def parse_vary(text: str, config: dict[str, Any]) -> tuple[str, list[Any]]:
 
 def cmd_eval(args: argparse.Namespace) -> int:
     p = _load(args)
-    try:
-        report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
-    except QuestionSetError as exc:
-        raise ValueError(str(exc)) from None
+    report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
     print(json.dumps(report.to_dict(), indent=2) if args.json else report)
     return 0 if all(q.error is None for q in report.questions) else 1
 
@@ -239,13 +256,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
 def cmd_compare(args: argparse.Namespace) -> int:
     p = _load(args)
     stage, variants = parse_vary(args.vary, p.to_dict())
-    try:
-        results = pandion.compare(
-            p, stage, variants, args.documents, args.questions,
-            top_k=args.top_k, credentials=credentials_from_env(),
-        )
-    except QuestionSetError as exc:
-        raise ValueError(str(exc)) from None
+    results = pandion.compare(
+        p, stage, variants, args.documents, args.questions,
+        top_k=args.top_k, credentials=credentials_from_env(),
+    )
     print(json.dumps(results.to_dict(), indent=2) if args.json else results)
     return 0 if all(c.index.ok for c in results) else 1
 
@@ -311,12 +325,23 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+def _yaml_problem(file: str, exc: yaml.YAMLError) -> str:
+    """A YAML error in the pipeline file as one sentence: the file, the line and the problem."""
+    mark = getattr(exc, "problem_mark", None)
+    where = f" at line {mark.line + 1}" if mark is not None else ""
+    problem = getattr(exc, "problem", None) or str(exc).splitlines()[0]
+    return f"{file} is not valid YAML{where}: {problem}."
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         return args.fn(args)
     except (ConfigError, OSError, ValueError) as exc:
         print(f"pandion: {exc}", file=sys.stderr)
+        return 2
+    except yaml.YAMLError as exc:
+        print(f"pandion: {_yaml_problem(getattr(args, 'config', 'the file'), exc)}", file=sys.stderr)
         return 2
 
 

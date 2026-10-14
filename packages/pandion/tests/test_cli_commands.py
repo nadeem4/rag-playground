@@ -163,3 +163,37 @@ def test_a_wrong_vary_says_how_to_write_it(spec):
     config = {**PIPELINE, "index": {**PIPELINE["index"], "clean": [{"use": "dedupe_blocks"}]}}
     with pytest.raises(ValueError):
         parse_vary(spec, config)
+
+
+@pytest.mark.parametrize("spec", ["chunk.chunk_size=[1", "chunk.chunk_size=200,,400"])
+def test_a_bad_vary_value_is_named(spec):
+    with pytest.raises(ValueError) as caught:
+        parse_vary(spec, PIPELINE)
+    assert "chunk.chunk_size=200,400,800" in str(caught.value)
+
+
+def test_a_bad_vary_value_exits_2_without_a_traceback(folder):
+    out = pandion("compare", "pipeline.yaml", "--vary", "chunk.chunk_size=[1", "report.pdf", cwd=folder)
+    assert out.returncode == 2 and out.stderr.startswith("pandion: ") and "[1" in out.stderr
+    assert "Traceback" not in out.stderr
+
+
+@pytest.mark.parametrize("args", [["validate", "broken.yaml"], ["install", "broken.yaml", "--print"], ["index", "broken.yaml", "report.pdf"]])
+def test_a_broken_yaml_file_names_the_file_and_line(folder, args):
+    (folder / "broken.yaml").write_text("path: ./x\nindex: [\n", encoding="utf-8")
+    out = pandion(*args, cwd=folder)
+    assert out.returncode == 2 and "Traceback" not in out.stderr
+    assert out.stderr.startswith("pandion: broken.yaml is not valid YAML") and "line " in out.stderr
+
+
+def test_strategies_of_an_unknown_stage_lists_the_stages(folder):
+    out = pandion("strategies", "--stage", "nope", cwd=folder)
+    assert out.returncode == 2 and "nope" in out.stderr and "chunk" in out.stderr and "rerank" in out.stderr
+
+
+def test_the_no_index_hint_offers_sync_only_when_the_pipeline_can_sync(tmp_path):
+    data = yaml.safe_load((EXAMPLE / "pipeline.yaml").read_text(encoding="utf-8"))
+    data["path"] = str(tmp_path / "index")
+    (tmp_path / "pipeline.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    out = pandion("retrieve", str(tmp_path / "pipeline.yaml"), "tides", cwd=EXAMPLE)
+    assert out.returncode == 2 and "--documents" in out.stderr and "--sync" not in out.stderr

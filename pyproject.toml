@@ -58,6 +58,10 @@ markers = [
     "smoke: real-browser smoke test against a local demo server (deselected by default)",
 ]
 addopts = "-m 'not models and not smoke'"
+filterwarnings = [
+    # starlette's TestClient names anyio's old BlockingPortal alias; not ours to fix.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
 
 [build-system]
 requires = ["hatchling"]

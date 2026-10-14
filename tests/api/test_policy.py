@@ -27,7 +27,15 @@ def test_the_app_is_pandion_api_with_the_playground_policy(client):
 def test_the_old_routes_and_pandion_api_share_one_run_manager(client, monkeypatch):
     from pandion_api.runs import RunManager
 
+    from tests.api.conftest import ingest_graph, upload_pdf
+
     assert isinstance(client.app.state.runs, RunManager)
+    src = upload_pdf(client)
+    r = client.post("/api/runs", json={"graph": ingest_graph(src["sha"], src["filename"])})
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+    assert client.app.state.runs.get(run_id) is not None
+    assert client.app.state.runs.get(run_id).kind == "run"
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     assert client.app.state.runs._limit() == 2
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")

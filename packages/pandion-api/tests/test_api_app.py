@@ -78,5 +78,5 @@ def test_every_app_has_one_run_manager_with_the_policys_limit(tmp_path):
 def test_the_default_policy_allows_everything():
     policy = Policy()
     assert policy.max_active_runs() is None
-    assert policy.run_owner(None) is None
+    assert policy.run_owner(Request({"type": "http", "headers": []})) is None
     assert policy.scrub("failed reading /srv/data/sources/ab.pdf") == "failed reading /srv/data/sources/ab.pdf"

@@ -7,12 +7,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from pandion_api.policy import Policy
-from pandion_api.routes import health
+from pandion_api.routes import health, strategies
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
 
 #: Every router, in the order docs/pandion-api.md lists them.
-ROUTERS = (health.router,)
+ROUTERS = (health.router, strategies.router)
 
 
 def create_app(settings: ApiSettings, policy: Policy | None = None) -> FastAPI:

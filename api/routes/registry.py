@@ -23,8 +23,16 @@ def get_registry(request: Request) -> dict[str, Any]:
     model choice, with its two fields: a run that picks it is refused with 403
     anyway. The test-only embedder is left out too. Read-only settings (the
     prompts) are left out everywhere until the forms can show them read-only."""
-    schema = _without_read_only(request.app.state.deps.registry.export_schema())
-    return _without_test_options(_without_custom_models(schema)) if demo.enabled() else schema
+    return served_catalog(request.app.state.deps.registry.export_schema())
+
+
+def served_catalog(schema: dict[str, Any]) -> dict[str, Any]:
+    """The catalog as the playground serves it: read-only settings left out
+    everywhere; on the demo, the custom endpoint and the test-only embedder too.
+    `schema` is not changed. The old /api/registry and PlaygroundPolicy both
+    serve through this function."""
+    served = _without_read_only(schema)
+    return _without_test_options(_without_custom_models(served)) if demo.enabled() else served
 
 
 #: Choices that exist for the test suite, not for a learner.

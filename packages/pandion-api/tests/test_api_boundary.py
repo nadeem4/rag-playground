@@ -30,11 +30,22 @@ PUBLIC_MODULES = (
 
 def pandion_uses(source: str) -> list[str]:
     """Every pandion import in `source` as "module:name" ("module:*" for `import
-    module`), and every `pandion.<name>` attribute as "pandion:<name>"."""
+    module`), and every attribute read off a name an import bound to a pandion
+    module (`import pandion`, `import pandion as p`, `import pandion.extend as x`)
+    as "module:<attribute>"."""
+    tree = ast.parse(source)
+    bound: dict[str, str] = {}
     found: list[str] = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            found += [f"{a.name}:*" for a in node.names if a.name.split(".")[0] == "pandion"]
+            for a in node.names:
+                if a.name.split(".")[0] != "pandion":
+                    continue
+                found.append(f"{a.name}:*")
+                if a.asname:
+                    bound[a.asname] = a.name
+                else:
+                    bound["pandion"] = "pandion"
         elif (
             isinstance(node, ast.ImportFrom)
             and node.level == 0
@@ -42,8 +53,9 @@ def pandion_uses(source: str) -> list[str]:
             and node.module.split(".")[0] == "pandion"
         ):
             found += [f"{node.module}:{a.name}" for a in node.names]
-        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "pandion":
-            found.append(f"pandion:{node.attr}")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in bound:
+            found.append(f"{bound[node.value.id]}:{node.attr}")
     return found
 
 
@@ -52,7 +64,9 @@ def is_public(entry: str) -> bool:
     if module not in PUBLIC_MODULES:
         return False
     if name == "*":
-        return module == "pandion"
+        return True
+    if module == "pandion" and f"pandion.{name}" in PUBLIC_MODULES:
+        return True
     return name in importlib.import_module(module).__all__
 
 
@@ -66,7 +80,26 @@ def test_the_check_tells_an_engine_name_from_a_public_one():
     assert is_public("pandion.extend:Stage") and is_public("pandion.evaluation:trace")
 
 
+def test_an_alias_does_not_hide_an_engine_name():
+    assert pandion_uses("import pandion as p\np.graph") == ["pandion:*", "pandion:graph"]
+    assert not is_public("pandion:graph")
+    assert pandion_uses("import pandion.extend as x\nx.Stage\nx.registry") == [
+        "pandion.extend:*",
+        "pandion.extend:Stage",
+        "pandion.extend:registry",
+    ]
+    assert is_public("pandion.extend:Stage") and not is_public("pandion.extend:registry")
+    assert pandion_uses("import os as pandion_like\npandion_like.path") == []
+
+
+def test_a_public_module_may_be_imported_whole():
+    assert pandion_uses("import pandion.extend\npandion.extend.Stage") == ["pandion.extend:*", "pandion:extend"]
+    assert is_public("pandion.extend:*") and is_public("pandion:extend")
+    assert not is_public("pandion.graph:*")
+
+
 def test_pandion_api_uses_only_public_pandion_names():
+    assert list(SRC.rglob("*.py")), f"no Python files under {SRC}: the check would pass on nothing"
     offenders = [
         f"{path.relative_to(SRC)}: {entry}"
         for path in sorted(SRC.rglob("*.py"))

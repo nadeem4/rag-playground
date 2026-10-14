@@ -182,20 +182,22 @@ def test_an_invalid_pipeline_has_no_yaml(client):
     assert body["ok"] is False and "yaml" not in body
 
 
-def test_the_pipeline_file_leaves_out_the_read_only_settings(client):
+def test_the_pipeline_file_keeps_a_changed_prompt_and_revision(client, tmp_path):
+    """The default Policy allows them, so the copied file must hold the pipeline as it ran."""
+    revision = "0123456789abcdef0123456789abcdef01234567"
     config = {
         **PIPELINE,
         "retrieve": {
             "search": {"use": "dense", "top_k": 3},
-            "rerank": [{"use": "cross_encoder", "revision": "0123456789abcdef0123456789abcdef01234567"}],
+            "rerank": [{"use": "cross_encoder", "revision": revision}],
         },
-        "answer": {"use": "chat", "model": "claude-haiku-4-5", "prompt": "Be brief.", "sentence_prompt": "Cite."},
+        "answer": {"use": "chat", "model": "claude-haiku-4-5", "prompt": "Be brief."},
     }
     body = client.post("/pipelines/validate", json={"config": config}).json()
     assert body["ok"] is True, body
     data = yaml.safe_load(body["yaml"])
-    assert data["retrieve"]["rerank"][0]["use"] == "cross_encoder"
-    assert "revision" not in data["retrieve"]["rerank"][0]
-    assert data["answer"]["model"] == "claude-haiku-4-5"
-    assert "prompt" not in data["answer"] and "sentence_prompt" not in data["answer"]
-    assert "Be brief." not in body["yaml"] and "0123456789abcdef0123456789abcdef01234567" not in body["yaml"]
+    assert data["retrieve"]["rerank"][0]["revision"] == revision
+    assert data["answer"]["prompt"] == "Be brief."
+    again = Pipeline.from_dict(data, base=tmp_path).to_dict()
+    assert again["retrieve"]["rerank"][0]["revision"] == revision
+    assert again["answer"]["prompt"] == "Be brief."

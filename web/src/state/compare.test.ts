@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { Registry } from "@/api/types"
+import type { ComparisonResult, Registry } from "@/api/types"
 
 import type { NodeState, VariantState } from "@/api/runState"
 
@@ -9,6 +9,9 @@ import {
   chunkFinding,
   chunkManyFinding,
   columnDelta,
+  comparePipeline,
+  compareRequest,
+  compareStage,
   MAX_RECIPES,
   planSentence,
   recipeNames,
@@ -17,11 +20,19 @@ import {
   failureSentence,
   retrieveManyFinding,
   runningFinding,
+  serverBest,
+  serverRanks,
+  settingProblems,
   sharedTop,
+  shownCard,
   sortRecipes,
   statusText,
+  throughOf,
+  variantBlock,
 } from "./compare"
-import { defaultConfig } from "./graph"
+import { graphToConfig, type WorkingPipeline } from "./config"
+import { addCleaner, addReranker, defaultConfig, sampleGraph } from "./graph"
+import { TEST_REGISTRY as R } from "./testRegistry"
 
 const registry = liveRegistry as unknown as Registry
 
@@ -402,5 +413,167 @@ describe("review wording", () => {
     expect(s).toEqual({ kind: "stopped", midway: true })
     expect(statusText(s, 3)).toBe("Stopped before it finished.")
     expect(statusText(recipeStatus(undefined, 2, ids), null)).toBe("Not run. The run was stopped first.")
+  })
+})
+
+const DOC = { sha: "3".repeat(64), filename: "c.pdf" }
+const graph = addCleaner(sampleGraph(R, DOC, "What is a chunk?"), R)
+const working = (golds: string[] = []): WorkingPipeline => {
+  const c = graphToConfig(graph)
+  if (!c.ok) throw new Error(c.problem)
+  return { ...c.pipeline, question: { text: "What is a chunk?", gold_answers: golds } }
+}
+const node = (id: string) => graph.nodes.find((n) => n.id === id)!
+
+describe("comparisons on /api/v2", () => {
+  it("compares chunkers through the chunk step, with no question", () => {
+    const variants = [{ transform: "recursive_character", config: { chunk_size: 200, chunk_overlap: 0 } }, { transform: "token_based", config: { max_tokens: 64, overlap: 8 } }]
+    expect(compareRequest(working(), node("chunk"), variants, "step")).toEqual({
+      config: working().config,
+      stage: "chunk",
+      variants: [{ use: "recursive_character", chunk_size: 200, chunk_overlap: 0 }, { use: "token_based", max_tokens: 64, overlap: 8 }],
+      documents: [DOC.sha],
+    })
+  })
+
+  it("changes one cleaner in the stack and keeps the others", () => {
+    const p = working()
+    const block = variantBlock(node("clean_2"), { transform: "dedupe_blocks", config: { similarity: 0.5 } }, p, "clean")
+    expect(block).toEqual([p.config.index.clean![0], { use: "dedupe_blocks", similarity: 0.5 }])
+  })
+
+  it("scores searches when the question's gold passages are known", () => {
+    const req = compareRequest(working(["A chunk is a piece."]), node("retrieve"), [{ transform: "dense", config: { top_k: 5 } }, { transform: "bm25", config: { top_k: 5 } }], "retrieval")
+    expect(req).toMatchObject({ stage: "search", questions: [{ id: "question", question: "What is a chunk?", gold_answers: ["A chunk is a piece."], tags: [] }], top_k: 5 })
+    expect(req).not.toHaveProperty("question")
+  })
+
+  it("shows searches on one question, unscored, when no gold passage is known", () => {
+    const req = compareRequest(working(), node("retrieve"), [{ transform: "dense", config: {} }, { transform: "bm25", config: {} }], "retrieval")
+    expect(req).toMatchObject({ stage: "search", question: "What is a chunk?", answer: false })
+    expect(req).not.toHaveProperty("questions")
+  })
+
+  it("compares embedders as embed, and index settings as store", () => {
+    const p = working()
+    const index = node("index")
+    const widths = [null, 256].map((d) => ({ transform: "lancedb", config: { ...index.config, truncate_dim: d } }))
+    expect(compareStage(index, widths, p)).toBe("embed")
+    expect(variantBlock(index, widths[1], p, "embed")).toEqual({ use: "qwen3-embedding-0.6b", truncate_dim: 256 })
+  })
+
+  it("says the run stops at the step, at the search or at the answer", () => {
+    expect(throughOf(graph, node("chunk"), "chunk")).toBe("step")
+    expect(throughOf(graph, node("chunk"), "use_case")).toBe("retrieval")
+  })
+
+  it("reads each recipe's answer rank and the best from the server", () => {
+    const result = {
+      best: [1],
+      cancelled: false,
+      comparisons: [
+        { stage: "search", variant: { use: "dense" }, ok: true, cancelled: false, report: { questions: [{ rank: null, score: { found_at: 7 } }] } },
+        { stage: "search", variant: { use: "bm25" }, ok: true, cancelled: false, report: { questions: [{ rank: 1, score: {} }] } },
+        { stage: "search", variant: { use: "hybrid_rrf" }, ok: true, cancelled: false, retrieval: { hits: [] } },
+      ],
+    } as unknown as ComparisonResult
+    expect(serverRanks(result, 3)).toEqual([7, 1, null])
+    expect(serverBest(result)).toEqual([1])
+    expect(serverBest(null)).toEqual([])
+  })
+})
+
+describe("what a comparison runs and shows", () => {
+  it("stops an index-only comparison after the step the page shows", () => {
+    const variants = [{ transform: "recursive_character", config: {} }]
+    expect(compareRequest(working(), node("chunk"), variants, "step", 5, "chunk")).toMatchObject({ through: "chunk" })
+    expect(compareRequest(working(), node("clean_1"), [{ transform: "dedupe_blocks", config: {} }], "step", 5, "clean.2")).toMatchObject({ stage: "clean", through: "clean.2" })
+  })
+
+  it("never sends through with a question", () => {
+    const req = compareRequest(working(), node("retrieve"), [{ transform: "dense", config: {} }], "retrieval", 5, "search")
+    expect(req).not.toHaveProperty("through")
+  })
+
+  it("goes on to the answer for a chat step, unscored even when the gold is known", () => {
+    const req = compareRequest(working(["A chunk is a piece."]), node("retrieve"), [{ transform: "dense", config: {} }], "answer")
+    expect(req).toMatchObject({ question: "What is a chunk?", answer: true })
+    expect(req).not.toHaveProperty("questions")
+  })
+
+  it("says why the index's embedder and its own settings cannot change together", () => {
+    const index = node("index")
+    const both = [{ transform: "lancedb", config: { ...index.config, truncate_dim: 256, metric: "dot" } }]
+    expect(compareStage(index, both, working())).toEqual({ problem: "Compare the embedder or the index's own settings, one at a time." })
+  })
+
+  it("names no best when every scored recipe ties for it, and keeps a partial tie", () => {
+    const report = { questions: [{ rank: 1, score: {} }] }
+    const comparisons = [0, 1, 2].map(() => ({ stage: "search", variant: { use: "x" }, ok: true, cancelled: false, report }))
+    expect(serverBest({ best: [0, 1, 2], cancelled: false, comparisons } as unknown as ComparisonResult)).toEqual([])
+    expect(serverBest({ best: [0, 2], cancelled: false, comparisons } as unknown as ComparisonResult)).toEqual([0, 2])
+  })
+
+  it("leaves a stack as it is when the card is not in the column", () => {
+    const p = working()
+    const stray = { ...node("clean_2"), id: "clean_9" }
+    expect(variantBlock(stray, { transform: "dedupe_blocks", config: {} }, p, "clean", graph)).toEqual(p.config.index.clean)
+  })
+
+  it("names no best for a stopped comparison", () => {
+    const result = { best: [0], cancelled: true, comparisons: [] } as unknown as ComparisonResult
+    expect(serverBest(result)).toEqual([])
+  })
+
+  it("leaves the rerankers out when the run stops at the search", () => {
+    const g = addReranker(graph, R)
+    const c = graphToConfig(g)
+    if (!c.ok) throw new Error(c.problem)
+    expect(comparePipeline(c.pipeline, g, "retrieve").config.retrieve?.rerank).toBeUndefined()
+    expect(comparePipeline(c.pipeline, g, "use_case").config.retrieve?.rerank).toHaveLength(1)
+  })
+
+  it("shows a search step's found pieces on the last search card, and a chat answer on its own card", () => {
+    const g = addReranker(graph, R)
+    expect(shownCard(g, "use_case")).toBe("rerank_1")
+    expect(shownCard(graph, "use_case")).toBe("retrieve")
+    expect(shownCard(graph, "chunk")).toBe("chunk")
+    const chat = { ...graph, nodes: graph.nodes.map((n) => (n.id === "use_case" ? { ...n, transform: "chat" } : n)) }
+    expect(shownCard(chat, "use_case")).toBe("use_case")
+  })
+})
+
+describe("settingProblems", () => {
+  it("reads the strategy, the setting and the sentence from a Pandion problem", () => {
+    expect(settingProblems("index.chunk (sentence_window): overlap_sentences: Overlap must be smaller than the number of sentences per chunk.")).toEqual({
+      transform: "sentence_window",
+      settings: [{ field: "overlap_sentences", message: "Overlap must be smaller than the number of sentences per chunk." }],
+    })
+    expect(settingProblems("index.clean step 2 (dedupe_blocks): similarity: Input should be less than or equal to 1.")).toMatchObject({
+      transform: "dedupe_blocks",
+      settings: [{ field: "similarity" }],
+    })
+    expect(settingProblems("The index has no embed step.")).toBeNull()
+  })
+
+  it("gives each setting its own sentence when Pandion names several", () => {
+    expect(settingProblems("index.chunk (recursive_character): chunk_size: Input should be greater than or equal to 1; chunk_overlap: Input should be greater than or equal to 0.")).toEqual({
+      transform: "recursive_character",
+      settings: [
+        { field: "chunk_size", message: "Input should be greater than or equal to 1." },
+        { field: "chunk_overlap", message: "Input should be greater than or equal to 0." },
+      ],
+    })
+  })
+
+  it("never doubles the full stop when a setting's sentence already has one", () => {
+    expect(settingProblems("index.chunk (recursive_character): chunk_size: Too small.; chunk_overlap: Too big.")?.settings).toEqual([
+      { field: "chunk_size", message: "Too small." },
+      { field: "chunk_overlap", message: "Too big." },
+    ])
+  })
+
+  it("reads a problem with the whole step as no one setting's", () => {
+    expect(settingProblems("index.chunk (sentence_window): settings: Value error, overlap must be smaller.")).toBeNull()
   })
 })

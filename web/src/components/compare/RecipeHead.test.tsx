@@ -34,4 +34,12 @@ describe("RecipeHead", () => {
     render(<RecipeHead {...props} own />)
     expect(screen.getByText("Your pipeline")).toBeTruthy()
   })
+
+  it("marks the recipe the server names best, and no other", () => {
+    const { rerender } = render(<RecipeHead {...props} best />)
+    expect(screen.getByText("Best")).toBeTruthy()
+    expect(screen.getByRole("heading").textContent).toBe(`${props.name} Best`)
+    rerender(<RecipeHead {...props} />)
+    expect(screen.queryByText("Best")).toBeNull()
+  })
 })

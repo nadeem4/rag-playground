@@ -832,6 +832,8 @@ export interface ComparisonRequest {
   question?: string
   answer?: boolean
   top_k?: number
+  /** Without a question: the step each recipe's index run stops after. */
+  through?: string
 }
 export interface ResultInfo {
   id: string

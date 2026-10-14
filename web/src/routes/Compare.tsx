@@ -1,16 +1,15 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import { useApiKey } from "@/api/apiKey"
-import { api } from "@/api/client"
+import { ApiError } from "@/api/client"
 import { v2 } from "@/api/v2"
 import { useSampleQuestions, useSamples } from "@/api/samples"
 import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
-import type { ChunkSet, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
+import type { ChunkSet, ComparisonResult, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
 import { usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
-import { goldRank } from "@/components/ask/Transcript"
 import { ChunkEvidence } from "@/components/compare/ChunkEvidence"
 import { AddRecipeCard } from "@/components/compare/AddRecipeCard"
 import { ExperimentMenu } from "@/components/compare/ExperimentMenu"
@@ -69,6 +68,8 @@ import {
   chunkFinding,
   chunkManyFinding,
   columnDelta,
+  comparePipeline,
+  compareRequest,
   failureSentence,
   MAX_RECIPES,
   planSentence,
@@ -80,9 +81,14 @@ import {
   runningFinding,
   retrieveFinding,
   retrieveManyFinding,
+  serverBest,
+  serverRanks,
+  settingProblems,
   sharedTop,
+  shownCard,
   sortRecipes,
   strategyName,
+  throughOf,
   type Finding,
   type ManyFinding,
   type RecipeStatus as Status,
@@ -92,6 +98,7 @@ import {
 import { firstSentence } from "@/lib/sentence"
 import { compatibility } from "@/state/compat"
 import { recipeSentence } from "@/state/recipeSentence"
+import { cardNamedIn, cardOfStepIn, goldsOf, graphToConfig, stepOfCardIn } from "@/state/config"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
@@ -474,12 +481,20 @@ function Sweep({
   const [cardErrors, setCardErrors] = useState<Record<number, string>>({})
   // What the last run ran: its recipes, where it stopped, and on which document.
   // `base` is the recipe that was the node's own when the run started: the columns read against it until the next run.
-  const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string; sha: string; base: number }>({ variants: [], through, sha: "", base: -1 })
+  // `scored`: the run asked the question with its gold passages, so the server ranks the answer and names the best.
+  const [submitted, setSubmitted] = useState<{ variants: Variant[]; through: string; sha: string; base: number; scored: boolean }>({
+    variants: [],
+    through,
+    sha: "",
+    base: -1,
+    scored: false,
+  })
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { keys } = useApiKey()
-  const run = useRun(runId)
+  // A comparison's events name Pandion's steps; each lands on the card at that place in this column.
+  const run = useRun(runId, (step) => cardOfStepIn(graph, step))
   const busy = submitting || (runId !== null && !run.closed)
   const scroller = useRef<HTMLDivElement>(null)
   const addRef = useRef<HTMLDivElement>(null)
@@ -507,7 +522,7 @@ function Sweep({
     cards.current.get(want.key)?.querySelector<HTMLElement>(`[data-value="${want.field}"]`)?.focus({ preventScroll: true })
   })
 
-  const shownThrough = graph.nodes.find((n) => n.id === submitted.through) ?? target
+  const shownThrough = graph.nodes.find((n) => n.id === shownCard(graph, submitted.through)) ?? target
   const tally = runId ? tallySweep(run.variants) : null
   const labels = variantLabels(submitted.variants, registry, target.stage)
   const upstream = order.filter((n) => n.stage !== "source" && ancestors(graph, target.id, registry).has(n.id) && n.stage !== "query")
@@ -539,16 +554,31 @@ function Sweep({
   const query = graph.nodes.find((n) => n.stage === "query")
   const question = query && ancestors(graph, through, registry).has(query.id) ? String(query.config.text ?? "") : ""
 
-  // The gold answers, when the question is one of the loaded sample's own: only then does the page say "the answer".
+  // The gold passages the comparison sends, when the question is one of the loaded sample's own.
   const sha = String(graph.nodes.find((n) => n.stage === "source")?.config.sha ?? "")
   const sample = useSamples().samples?.find((x) => x.sha === sha)
   const asked = useSampleQuestions(sample?.name).find((q) => question && q.question.trim() === question.trim())
-  const golds = asked ? [asked.gold_answer, ...(asked.gold_answers ?? [])] : null
-  const answerRank = (rows: HitRowData[] | null) => (golds && rows ? goldRank(rows, golds) : null)
+  const sampleGolds = asked ? goldsOf([asked.gold_answer, ...(asked.gold_answers ?? [])]) : []
+  // The question's own gold passages, else the sample's when the question is one of its own.
+  const configGolds = useMemo(() => {
+    const c = graphToConfig(graph)
+    return c.ok ? c.pipeline.question.gold_answers : []
+  }, [graph])
+  const golds = configGolds.length ? configGolds : sampleGolds
+  // A run that stops at the search, with the answer known, is scored: the page says so before Run.
+  const willScore = question !== "" && golds.length > 0 && throughOf(graph, target, through) === "retrieval"
+  // Each recipe's rank of the answer and the best, as the server scored them: only a scored run says "the answer".
+  const result = (run.result as ComparisonResult | null) ?? null
+  const ranks = serverRanks(result, submitted.variants.length)
+  const best = new Set(serverBest(result))
+  // Only scores that arrived say where the answer is: with none, no recipe is said to miss it.
+  const goldKnown = submitted.scored && result !== null
+  // A scored run's sentences wait for its result, so no rank reads as a miss before the scores arrive.
+  const scoresReady = !submitted.scored || result !== null || run.resultFailed
   const submittedNames = recipeNames(submitted.variants, target.stage, registry)
-  const answerId = (rows: HitRowData[] | null) => {
-    const rank = answerRank(rows)
-    return rank === null ? null : (rows?.find((r) => r.rank === rank)?.chunk_id ?? null)
+  const answerId = (i: number, rows: HitRowData[] | null) => {
+    const rank = ranks[i]
+    return rank === null || rank === undefined ? null : (rows?.find((r) => r.rank === rank)?.chunk_id ?? null)
   }
   // Each recipe's place in the run, from its own events; seconds counted by this browser.
   const clock = useRunClock(run.variants, busy, runId)
@@ -582,12 +612,12 @@ function Sweep({
     return retrieveFinding(
       order.map((i) => hitLists[i]!),
       order.map((i) => submittedNames[i].short),
-      order.map((i) => answerRank(hitRowLists[i])),
+      order.map((i) => ranks[i] ?? null),
       searched,
       order.map((i) => submitted.variants[i].transform),
       {
         topKs: order.map((i) => (typeof submitted.variants[i].config.top_k === "number" ? (submitted.variants[i].config.top_k as number) : null)),
-        goldKnown: golds !== null,
+        goldKnown,
       },
     )
   }
@@ -598,16 +628,13 @@ function Sweep({
     setEditing(null)
     setSubmitting(true)
     try {
-      const { run_id } = await api.createSweep(
-        {
-          graph,
-          node_id: target.id,
-          variants,
-          ...(through !== target.id ? { through } : {}),
-        },
-        { keys },
-      )
-      setSubmitted({ variants, through, sha, base: variants.findIndex(own) })
+      const c = graphToConfig(graph)
+      if (!c.ok) throw new Error(c.problem)
+      const p = comparePipeline({ ...c.pipeline, question: { ...c.pipeline.question, gold_answers: golds } }, graph, through)
+      const req = compareRequest(p, target, variants, throughOf(graph, target, through), 5, stepOfCardIn(graph, through), graph)
+      if ("problem" in req) throw new Error(req.problem)
+      const { run_id } = await v2.createComparison(req, { keys })
+      setSubmitted({ variants, through, sha, base: variants.findIndex(own), scored: req.questions !== undefined })
       setRunId(run_id)
       setChosen(0)
       setSort({ key: "order", dir: 1 })
@@ -617,24 +644,25 @@ function Sweep({
     } catch (err) {
       // The run never started: back on the cards, the message goes under the recipe it belongs to, with that editor open.
       setPhase("setup")
-      const routed = routeRunError(err, graph)
-      if (routed.kind === "fields") {
-        const fields = Object.keys(routed.errors)
-        const at = routed.nodeId === target.id ? rejectedRecipe(variants, submitted.variants, fields, target.stage, registry) : null
-        const node = graph.nodes.find((x) => x.id === routed.nodeId)
-        const schema = at === null ? undefined : infoFor(registry, { stage: target.stage, transform: variants[at].transform })?.config_schema
-        const title = (k: string) => RECIPE_TITLES[k] ?? schema?.properties?.[k]?.title ?? k
-        if (at === null) {
-          const where = node ? titleFor(node) : routed.nodeId
-          setError(Object.entries(routed.errors).map(([k, m]) => (k ? `${where}, ${title(k)}: ${m.join(" ")}` : `${where}: ${m.join(" ")}`)).join(" "))
-        } else {
-          const key = items[at].key
-          const field = fields[0]?.split(".")[0]
-          setCardErrors({ [key]: Object.entries(routed.errors).map(([k, m]) => (k ? `${title(k)}: ${m.join(" ")}` : m.join(" "))).join(" ") })
-          setEditing({ key, field: field && schema?.properties?.[field] ? field : "transform" })
+      // Problems with settings of this step, as Pandion words them ("index.chunk (sentence_window): overlap_sentences: ...").
+      const sentences = err instanceof ApiError && Array.isArray((err.detail as { problems?: unknown } | null)?.problems) ? (err.detail as { problems: string[] }).problems : []
+      const problem = sentences.length === 1 && cardNamedIn(sentences[0], graph) === target.id ? settingProblems(sentences[0]) : null
+      if (problem) {
+        const fields = problem.settings.map((x) => x.field.split(".")[0])
+        const at = rejectedRecipe(variants, submitted.variants, fields, target.stage, registry, problem.transform)
+        const schema = infoFor(registry, { stage: target.stage, transform: problem.transform })?.config_schema
+        const title = (field: string) => RECIPE_TITLES[field] ?? schema?.properties?.[field]?.title ?? field
+        // Each setting's sentence under its own setting's title.
+        const said = problem.settings.map((x, k) => `${title(fields[k])}: ${x.message}`)
+        if (at === null) setError(said.map((t) => `${titleFor(target)}, ${t}`).join(" "))
+        else {
+          setCardErrors({ [items[at].key]: said.join(" ") })
+          setEditing({ key: items[at].key, field: schema?.properties?.[fields[0]] ? fields[0] : "transform" })
         }
       } else {
-        setError(routed.message)
+        // Anything else is said above the cards, in the server's own words.
+        const routed = routeRunError(err, graph)
+        setError(("message" in routed ? routed.message : Object.values(routed.errors).flat().join(" ")) || "The comparison could not start. Try again.")
       }
     } finally {
       setSubmitting(false)
@@ -714,7 +742,7 @@ function Sweep({
     opened.reset()
     setPhase("setup")
     setRunId(null)
-    setSubmitted({ variants: [], through, sha: "", base: -1 })
+    setSubmitted({ variants: [], through, sha: "", base: -1, scored: false })
   }
   /** From a failed column: stop what is left of the run, and open that recipe's card on its strategy. */
   const changeThis = (i: number) => {
@@ -746,20 +774,21 @@ function Sweep({
     const stats = target.stage === "chunk" && typeof set?.source_text === "string" && Array.isArray(set.chunks) ? chunkStats(set) : null
     const hits = hitRowLists[i]
     const searchedSet = (payload(ids[i]?.chunks).data as ChunkSet | undefined)?.chunks
-    const answer = answerId(hits)
+    const answer = answerId(i, hits)
     const ready = st.kind === "done" && (target.stage !== "chunk" || stats !== null) && (target.stage !== "retrieve" || hits !== null)
     return {
       i,
       name: submittedNames[i].name,
       code: v.transform,
       own: i === submittedOwn,
+      best: best.has(i),
       status: st,
       seconds: clock(i),
       done: ready,
       values:
         target.stage === "chunk"
           ? { pieces: stats?.pieces ?? null, tokens: stats?.tokens ?? null, median: stats?.median ?? null, p95: stats?.p95 ?? null, uncovered: stats?.uncovered ?? null }
-          : { rank: answerRank(hits), shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? []), returned: hits?.length ?? null },
+          : { rank: ranks[i] ?? null, shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? []), returned: hits?.length ?? null },
       set,
       pieces: hits?.slice(0, 5).flatMap((h) => {
         const at = h.ordinal ?? searchedSet?.findIndex((c) => c.id === h.chunk_id) ?? -1
@@ -831,7 +860,7 @@ function Sweep({
     if (!r?.done || !b?.done) return null
     if (target.stage === "chunk") return columnDelta({ kind: "chunk", stats: chunkStats(r.set as ChunkSet), base: chunkStats(b.set as ChunkSet), baseName: runBase })
     if (target.stage === "retrieve")
-      return columnDelta({ kind: "retrieve", shared: r.values.shared ?? 0, top, rank: r.values.rank ?? null, goldKnown: golds !== null, returned: r.values.returned ?? 0, topK: topKOf(i), baseName: runBase })
+      return columnDelta({ kind: "retrieve", shared: r.values.shared ?? 0, top, rank: r.values.rank ?? null, goldKnown, returned: r.values.returned ?? 0, topK: topKOf(i), baseName: runBase })
     return null
   }
   const manyFinding = (): (Finding & Partial<ManyFinding>) | null => {
@@ -854,14 +883,14 @@ function Sweep({
           transform: submitted.variants[r.i].transform,
           topK: typeof submitted.variants[r.i].config.top_k === "number" ? (submitted.variants[r.i].config.top_k as number) : null,
         })),
-        golds !== null,
+        goldKnown,
         side.fit,
         runBase,
       )
     }
     return findingFor()
   }
-  const done: (Finding & Partial<ManyFinding>) | null = run.closed ? (overview ? manyFinding() : findingFor()) : null
+  const done: (Finding & Partial<ManyFinding>) | null = run.closed && scoresReady ? (overview ? manyFinding() : findingFor()) : null
   const link = overview && done?.link && done.extremes ? { label: done.link, ids: done.extremes } : null
   const finding: Finding | null = !runId
     ? null
@@ -903,6 +932,7 @@ function Sweep({
           own={i === submitted.base}
           onUse={statuses[i].kind === "done" && i !== submitted.base ? () => putOnBuild(i) : undefined}
           used={i !== submitted.base && own(submitted.variants[i])}
+          best={best.has(i)}
         />
       {delta && target.stage !== "retrieve" && statuses[i].kind === "done" ? <p className="m-0 text-sm font-medium text-fg">{delta}</p> : null}
         {statuses[i].kind !== "done" ? (
@@ -934,7 +964,7 @@ function Sweep({
           }
           embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
           hits={hitRowLists[i]}
-          answer={answerId(hitRowLists[i])}
+          answer={answerId(i, hitRowLists[i])}
         />
         )}
       </section>
@@ -972,6 +1002,10 @@ function Sweep({
                 <a href="/build" className="text-fg underline pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center">
                   Change the question on Build
                 </a>
+                .
+                {willScore ? (
+                  <span data-testid="scored-note"> This question's answer is known, so Pandion scores each recipe.</span>
+                ) : null}
               </>
             ) : null}
           </p>
@@ -1183,6 +1217,7 @@ function Sweep({
                           : " Starting."}
                   </p>
                   {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
+                  {submitted.scored && run.resultFailed ? <p className="m-0 text-sm text-danger">The scores could not be read. Run it again.</p> : null}
                 </>
               ) : null}
             </div>
@@ -1205,7 +1240,7 @@ function Sweep({
                 baseName={runBase}
                 note={
                   target.stage === "retrieve" && searched !== null
-                    ? `The colours are piece numbers, the same in every column, because every recipe searches the same ${searched} ${searched === 1 ? "piece" : "pieces"}.${golds !== null ? " The ringed piece holds the answer." : ""}`
+                    ? `The colours are piece numbers, the same in every column, because every recipe searches the same ${searched} ${searched === 1 ? "piece" : "pieces"}.${goldKnown ? " The ringed piece holds the answer." : ""}`
                     : null
                 }
               >
@@ -1229,7 +1264,7 @@ function Sweep({
                 onChange={changeThis}
                 fit={side.fit}
                 narrow={side.narrow}
-                goldKnown={golds !== null}
+                goldKnown={goldKnown}
                 top={top}
                 baseAt={baseAt}
                 baseName={runBase}

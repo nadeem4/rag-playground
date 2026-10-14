@@ -87,8 +87,8 @@ answer, and the same eval verdict. `pandion.evaluate(p, questions)` asks every q
 and scores it with the same `eval` step; the app's Evaluate page runs it through
 `POST /api/v2/evaluations` and shows the totals it returns.
 `pandion.compare(p, stage, variants, documents, questions)` builds one pipeline per
-variant and evaluates each; the app's Compare page still uses `POST /api/sweeps`, which
-runs `pandion.executor.sweep`. The `mmr` reranker and the `chat` step embed with the
+variant and evaluates each; the app's Compare page runs it through
+`POST /api/v2/comparisons` and shows the best it names. The `mmr` reranker and the `chat` step embed with the
 index's own model through two public names of `pandion.plugins.retrieve`,
 `read_descriptor` and `embedder_for`.
 
@@ -255,9 +255,13 @@ Build no longer uses this route: a card's Run starts with `POST /api/v2/runs` an
 `POST /api/v2/ask`, which take the pipeline as a config and answer 202 with a run id in the
 same way. The events stream from `GET /api/v2/runs/{run_id}/events`.
 
-Compare uses `POST /api/sweeps` in the same way: one node, up to ten variants, with
-`variant_started` and `variant_finished` events. `POST /api/runs/{run_id}/cancel` stops a
-run.
+Compare uses `POST /api/v2/comparisons`: one stage, up to ten variants, each the block the
+pipeline file takes for that stage. It sends one of three shapes. Through an index step,
+it sends no question and `through` names the step each run stops after. Through the search
+with the question's gold passages known, it sends them as a set of one question, so
+Pandion ranks the answer for each variant and names the best. Otherwise it sends the one
+`question`, with `answer` for a chat step, and each variant's results come back unscored.
+`POST /api/v2/runs/{run_id}/cancel` stops a run.
 
 The run manager is `pandion_api.runs.RunManager`, one per app. The playground's old routes
 and pandion-api's routes use the same one, so the demo's limit on runs at once holds
@@ -324,7 +328,7 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
   (`plainTrace`); the web no longer calls `POST /api/trace`.
 - **Sources.** Uploads, page images and the PDF itself come from `/api/sources`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
-- **Keys.** A key typed in the app is sent as a header on runs, evaluations, sweeps and key checks.
+- **Keys.** A key typed in the app is sent as a header on runs, evaluations, comparisons and key checks.
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
   storage; see [privacy.md](privacy.md).
 - **Pipelines and documents.** A saved pipeline is a name, a config (a pipeline file's

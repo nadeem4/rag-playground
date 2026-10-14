@@ -1,11 +1,12 @@
 import type { VariantState } from "@/api/runState"
-import type { Registry, Stage, Variant } from "@/api/types"
+import type { CompareStage, ComparisonRequest, ComparisonResult, GraphNode, Registry, Stage, Variant } from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { compareLists, ordinal, type ListChange } from "@/components/inspectors/hits"
 import type { ChunkStats } from "@/components/inspectors/spans"
 import { strategyLabel } from "@/learn/challenges"
 
-import { defaultConfig, strategyIn } from "./graph"
+import type { Step, WorkingPipeline } from "./config"
+import { columnOrder, defaultConfig, INDEX_STAGES, strategyIn, type PipelineGraph } from "./graph"
 import { errorHeadline } from "./pipeline"
 import { variantLabels } from "./sweep"
 
@@ -160,11 +161,13 @@ export function recipeNames(variants: Variant[], stage: Stage, registry: Registr
 /**
  * Which recipe a rejected run's field errors belong to: the one recipe whose
  * strategy has every named field, narrowed to the recipes changed since the
- * last run when more than one has them. Null when it cannot be told, so the
- * page opens every recipe rather than guess.
+ * last run when more than one has them. Given `transform` (the strategy a
+ * Pandion problem names), only recipes with that strategy count. Null when it
+ * cannot be told, so the page says the problem above the cards rather than guess.
  */
-export function rejectedRecipe(variants: Variant[], previous: Variant[], fields: string[], stage: Stage, registry: Registry): number | null {
+export function rejectedRecipe(variants: Variant[], previous: Variant[], fields: string[], stage: Stage, registry: Registry, transform?: string): number | null {
   const has = (v: Variant) => {
+    if (transform !== undefined && v.transform !== transform) return false
     const props = strategyIn(registry, stage, v.transform)?.config_schema.properties ?? {}
     return fields.length > 0 && fields.every((f) => f.split(".")[0] in props)
   }
@@ -174,6 +177,21 @@ export function rejectedRecipe(variants: Variant[], previous: Variant[], fields:
     if (changed.length) found = changed
   }
   return found.length === 1 ? found[0] : null
+}
+
+/**
+ * The settings a Pandion problem sentence is about, as `pandion.stages` words it:
+ * "index.chunk (sentence_window): overlap_sentences: Overlap must be ...", with
+ * several settings joined by "; ". Each comes back with its own sentence. Null
+ * for a sentence about anything else, or about the whole step ("settings: ..."),
+ * which no one setting owns.
+ */
+export function settingProblems(sentence: string): { transform: string; settings: { field: string; message: string }[] } | null {
+  const m = /^[\w.]+(?: step \d+)? \(([\w-]+)\): (.+?)\.?$/.exec(sentence)
+  if (!m) return null
+  const settings = m[2].split("; ").map((part) => /^([\w.]+): (.+?)\.?$/.exec(part))
+  if (settings.some((x) => !x || x[1] === "settings")) return null
+  return { transform: m[1], settings: settings.map((x) => ({ field: x![1], message: `${x![2]}.` })) }
 }
 
 // ------------------------------------------------------------------- plan --
@@ -628,4 +646,144 @@ export function failureSentence(phrases: string[], overview: boolean): string | 
   if (phrases.length === 1) return `${first} failed, and its ${where} says why.`
   const who = phrases.length === 2 ? `${first} and ${phrases[1]}` : `${first} and ${word(phrases.length - 1)} others`
   return `${who} failed, and their ${where}s say why.`
+}
+
+/** Where a Compare run stops: after an index step, at the search (or Search's found pieces), or at a chat answer. */
+export type CompareThrough = "step" | "retrieval" | "answer"
+
+/** Where a Compare run stops, as the comparison runs it (Decision 7). */
+export function throughOf(graph: PipelineGraph, target: GraphNode, throughId: string): CompareThrough {
+  const through = graph.nodes.find((n) => n.id === throughId) ?? target
+  if (INDEX_STAGES.includes(through.stage)) return "step"
+  return through.stage === "use_case" && through.transform === "chat" ? "answer" : "retrieval"
+}
+
+/**
+ * The card whose result a column shows. A Search step's answer is the found
+ * pieces as they are, and no answer step runs for it, so its column shows the
+ * last search card's pieces. Every other card shows its own result.
+ */
+export function shownCard(graph: PipelineGraph, throughId: string): string {
+  const through = graph.nodes.find((n) => n.id === throughId)
+  if (through?.stage !== "use_case" || through.transform === "chat") return throughId
+  const searches = columnOrder(graph).filter((n) => n.stage === "retrieve" || n.stage === "rerank")
+  return searches[searches.length - 1]?.id ?? throughId
+}
+
+/** The pipeline a comparison runs: one that stops at the search leaves its rerankers out, so the rank is the search's own. */
+export function comparePipeline(p: WorkingPipeline, graph: PipelineGraph, throughId: string): WorkingPipeline {
+  const through = graph.nodes.find((n) => n.id === throughId)
+  const retrieve = p.config.retrieve
+  if (!retrieve?.rerank || (through?.stage !== "retrieve" && through?.stage !== "query")) return p
+  const { rerank: _, ...kept } = retrieve
+  return { ...p, config: { ...p.config, retrieve: kept } }
+}
+
+const EMBED_KEYS = ["embedder", "truncate_dim"]
+const QUESTION_KEYS = ["text", "gold_answer", "gold_answers"]
+const strip = (o: Record<string, unknown>, keys: string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)))
+/** Equal settings, whatever order their keys were written in. */
+const sameSettings = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+  JSON.stringify(Object.entries(a).sort(([x], [y]) => x.localeCompare(y))) === JSON.stringify(Object.entries(b).sort(([x], [y]) => x.localeCompare(y)))
+const stackPlace = (graph: PipelineGraph | undefined, target: GraphNode) => {
+  if (graph) return columnOrder(graph).filter((n) => n.stage === target.stage).findIndex((n) => n.id === target.id)
+  return Number(/_(\d+)$/.exec(target.id)?.[1] ?? "1") - 1
+}
+
+/** The stage a comparison varies for this card, or why these recipes cannot be compared in one run. */
+export function compareStage(target: GraphNode, variants: Variant[], p: WorkingPipeline): CompareStage | { problem: string } {
+  switch (target.stage) {
+    case "parse":
+    case "clean":
+    case "chunk":
+    case "rerank":
+      return target.stage
+    case "query":
+      return "rewrite"
+    case "retrieve":
+      return "search"
+    case "index": {
+      const store = { use: p.config.index.store.use, ...strip(p.config.index.store, ["use"]) }
+      if (variants.every((v) => sameSettings({ use: v.transform, ...strip(v.config, EMBED_KEYS) }, store))) return "embed"
+      const embed = p.config.index.embed
+      const own = { use: embed?.use, truncate_dim: embed?.truncate_dim ?? null }
+      if (variants.every((v) => sameSettings({ use: v.config.embedder, truncate_dim: v.config.truncate_dim ?? null }, own))) return "store"
+      return { problem: "Compare the embedder or the index's own settings, one at a time." }
+    }
+    default:
+      return { problem: `The ${target.stage} step cannot be compared.` }
+  }
+}
+
+/**
+ * The block the pipeline file takes for `stage`, with this recipe in this
+ * card's place: a whole list for Clean and Rerank, with the card's place
+ * (its place in the column, given the graph) changed.
+ */
+export function variantBlock(target: GraphNode, v: Variant, p: WorkingPipeline, stage: CompareStage, graph?: PipelineGraph): Step | Step[] {
+  if (stage === "embed") return { use: String(v.config.embedder), truncate_dim: v.config.truncate_dim ?? null }
+  if (stage === "store") return { use: v.transform, ...strip(v.config, EMBED_KEYS) }
+  const own: Step = { use: v.transform, ...strip(v.config, stage === "rewrite" ? QUESTION_KEYS : []) }
+  if (stage === "clean" || stage === "rerank") {
+    const list = [...((stage === "clean" ? p.config.index.clean : p.config.retrieve?.rerank) ?? [])]
+    const place = stackPlace(graph, target)
+    // A card the column does not have changes no place in the stack.
+    if (place >= 0) list[place] = own
+    return list
+  }
+  return own
+}
+
+/**
+ * The comparison Compare sends (Decision 7), or why it cannot. Through an
+ * index step: no question, and `stopAfter` (the step's name) stops each run
+ * there. Through the search with the question's gold passages known: the
+ * question as a set of one, so Pandion scores each recipe and names the best.
+ * Otherwise the one question, unscored, going on to the answer for a chat step.
+ */
+export function compareRequest(
+  p: WorkingPipeline,
+  target: GraphNode,
+  variants: Variant[],
+  through: CompareThrough,
+  topK = 5,
+  stopAfter?: string,
+  graph?: PipelineGraph,
+): ComparisonRequest | { problem: string } {
+  const stage = compareStage(target, variants, p)
+  if (typeof stage !== "string") return stage
+  const base: ComparisonRequest = {
+    config: p.config,
+    stage,
+    variants: variants.map((v) => variantBlock(target, v, p, stage, graph)),
+    documents: p.documents.map((d) => d.sha),
+  }
+  const retrievalStage = stage === "rewrite" || stage === "search" || stage === "rerank"
+  if (through === "step" && !retrievalStage) return stopAfter && stopAfter !== "index" ? { ...base, through: stopAfter } : base
+  const golds = p.question.gold_answers
+  if (through !== "answer" && golds.length) {
+    return { ...base, questions: [{ id: "question", question: p.question.text, gold_answers: [...golds], tags: [] }], top_k: topK }
+  }
+  return { ...base, question: p.question.text, answer: through === "answer" }
+}
+
+/** Each recipe's rank of the answer, as the server scored it; null when unknown. */
+export function serverRanks(result: ComparisonResult | null, n: number): (number | null)[] {
+  return Array.from({ length: n }, (_, i) => {
+    const q = result?.comparisons[i]?.report?.questions[0]
+    if (!q) return null
+    return q.rank ?? (typeof q.score?.found_at === "number" ? q.score.found_at : null)
+  })
+}
+
+/**
+ * The recipes the server names best (pandion's Comparisons.best), by place. None
+ * for a stopped run, which is compared with nothing, and none when every scored
+ * recipe is best.
+ */
+export function serverBest(result: ComparisonResult | null): number[] {
+  if (!result || result.cancelled) return []
+  // When every scored recipe ties for best, the mark tells nothing the finding does not.
+  const scored = result.comparisons.filter((c) => c.report).length
+  return result.best.length < scored ? result.best : []
 }

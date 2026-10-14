@@ -12,7 +12,7 @@ import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Registry } from "@/api/types"
 import { chooseDocument, resetDocumentForTests } from "@/state/document"
 import { requestOpenExperiment, resetExperimentsForTests, saveExperiment } from "@/state/experiments"
-import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, terminalNode, transformsFor } from "@/state/graph"
+import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, transformsFor } from "@/state/graph"
 import { readCurrentId, resetPipelinesForTests, STARTER_ID } from "@/state/pipelines"
 
 import { Compare, seedVariants, VariantResult } from "./Compare"
@@ -37,13 +37,46 @@ function serve(artifacts: Record<string, unknown> = {}, extra: Record<string, un
     vi.fn(async (url: string) => {
       if (url === "/api/registry") return ok(liveRegistry)
       if (url in extra) return extra[url] instanceof Response ? extra[url] : ok(extra[url])
-      if (url === "/api/sweeps") return ok({ run_id: "r1" })
+      if (url === "/api/v2/comparisons") return ok({ run_id: "r1" })
+      if (url === "/api/v2/runs/r1") return ok(snapshot(EMPTY_RESULT))
       const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
       return missing()
     }),
   )
 }
+
+/** A comparison that scored nothing: what the server returns for a run with no question set. */
+const EMPTY_RESULT = { comparisons: [], best: [], cancelled: false }
+
+/** The finished run's snapshot, as `GET /api/v2/runs/{id}` returns it, carrying `result`. */
+const snapshot = (result: unknown) => ({ run_id: "r1", kind: "comparison", status: "finished", ok: true, cancel_requested: false, last_event_id: 0, events: [], result })
+
+/** Pandion's step for each card a test finishes: Retrieve runs as `search`. */
+const STEP: Record<string, string> = { parse: "parse", chunk: "chunk", index: "index", retrieve: "search" }
+
+/** A scored comparison: each recipe's rank of the answer, and the places the server names best. */
+const scored = (ranks: (number | null)[], best: number[]) => ({
+  comparisons: ranks.map((rank) => ({ stage: "search", variant: { use: "x" }, ok: true, cancelled: false, report: { questions: [{ rank, score: {} }] } })),
+  best,
+  cancelled: false,
+})
+
+/** Wait until the page says the question's answer is known, so Run sends its gold passages. */
+async function questionsRead() {
+  const note = await screen.findByTestId("scored-note")
+  expect(note.parentElement?.textContent).toContain("Change the question on Build. This question's answer is known, so Pandion scores each recipe.")
+}
+
+/** The body of the comparison the page sent. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const posted = (): any => {
+  const call = vi.mocked(fetch).mock.calls.find(([u]) => u === "/api/v2/comparisons")
+  return JSON.parse(String((call?.[1] as RequestInit | undefined)?.body))
+}
+
+/** A /api/v2 comparison's events carry the recipe's place, from 1, and Pandion's step. */
+const begin = (i: number) => ({ event: "run_started", variant: i + 1, steps: [] })
 
 /** The page reads the node to compare from the query string, as Build's Sweep buttons set it. */
 function openAt(query: string) {
@@ -94,8 +127,6 @@ const statusOf = (i: number) => within(column(i)).getByTestId("recipe-status").t
  * one is left running), served from the three fixtures.
  */
 async function runFive(stage: "chunk" | "retrieve", finish = 5, before?: () => void) {
-  const graph = sampleGraph(registry, SOURCE)
-  const through = terminalNode(graph)!.id
   if (stage === "retrieve") {
     serve({ c: recursiveJson, i: indexJson, h0: hybridJson, h1: denseJson, h2: bm25Json, h3: hybridJson, h4: denseJson })
     openAt("?node=retrieve")
@@ -111,16 +142,16 @@ async function runFive(stage: "chunk" | "retrieve", finish = 5, before?: () => v
   const es = await driven()
   let seq = 1
   for (let i = 0; i < Math.min(finish + 1, 5); i++) {
-    es.emit(seq++, { event: "variant_started", index: i, variant: {} })
+    es.emit(seq++, begin(i))
     if (i >= finish) {
-      es.emit(seq++, { event: "node_started", node_id: stage === "chunk" ? "chunk" : through, transform: "x", artifact_id: "x" })
+      es.emit(seq++, { event: "node_started", node_id: stage === "chunk" ? "chunk" : "retrieve", step: stage === "chunk" ? "chunk" : "search", transform: "x", artifact_id: "x" })
       break
     }
-    if (stage === "chunk") es.emit(seq++, { event: "node_finished", node_id: "chunk", artifact_id: `a${i}`, cache_hit: false, duration_ms: 1 })
+    if (stage === "chunk") es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: `a${i}`, cache_hit: false, duration_ms: 1 })
     else {
-      es.emit(seq++, { event: "node_finished", node_id: "chunk", artifact_id: "c", cache_hit: false, duration_ms: 1 })
-      es.emit(seq++, { event: "node_finished", node_id: "index", artifact_id: "i", cache_hit: false, duration_ms: 1 })
-      es.emit(seq++, { event: "node_finished", node_id: through, artifact_id: `h${i}`, cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "c", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "index", step: "index", artifact_id: "i", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "retrieve", step: "search", artifact_id: `h${i}`, cache_hit: false, duration_ms: 1 })
     }
   }
   if (finish >= 5) es.emit(seq, { event: "stream_end", status: "finished", ok: true })
@@ -449,8 +480,8 @@ describe("after a run", () => {
     const es = DrivenEventSource.instances[0]
     let seq = 1
     for (let i = 0; i < 3; i++) {
-      es.emit(seq++, { event: "variant_started", index: i, variant: {} })
-      for (const [node, ids] of Object.entries(nodes)) es.emit(seq++, { event: "node_finished", node_id: node, artifact_id: ids[i], cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, begin(i))
+      for (const [node, ids] of Object.entries(nodes)) es.emit(seq++, { event: "node_finished", node_id: node, step: STEP[node] ?? node, artifact_id: ids[i], cache_hit: false, duration_ms: 1 })
     }
     es.emit(seq, { event: "stream_end", status: "finished", ok: true })
   }
@@ -485,13 +516,11 @@ describe("after a run", () => {
   })
 
   it("opens a Retrieve run with what each search did, and never says the answer for a question the sample does not have", async () => {
-    const graph = sampleGraph(registry, SOURCE)
-    const through = terminalNode(graph)!.id
     serve({ c: recursiveJson, i: indexJson, h: hybridJson, d: denseJson, b: bm25Json })
     openAt("?node=retrieve")
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
-    await runWith({ chunk: ["c", "c", "c"], index: ["i", "i", "i"], [through]: ["h", "d", "b"] })
+    await runWith({ chunk: ["c", "c", "c"], index: ["i", "i", "i"], retrieve: ["h", "d", "b"] })
     const finding = await screen.findByTestId("compare-finding")
     expect(finding.textContent).not.toMatch(/answer/)
     expect(finding.textContent).toMatch(/Dense|BM25/)
@@ -511,13 +540,13 @@ describe("after a run", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
     await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
     const es = DrivenEventSource.instances[0]
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
-    es.emit(3, { event: "variant_started", index: 1, variant: {} })
-    es.emit(4, { event: "node_started", node_id: "chunk", transform: "recursive_character", artifact_id: "x" })
-    es.emit(5, { event: "node_failed", node_id: "chunk", error: "Traceback (most recent call last):\nValueError: chunk_size too small" })
-    es.emit(6, { event: "variant_started", index: 2, variant: {} })
-    es.emit(7, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
+    es.emit(1, begin(0))
+    es.emit(2, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, begin(1))
+    es.emit(4, { event: "node_started", node_id: "chunk", step: "chunk", transform: "recursive_character", artifact_id: "x" })
+    es.emit(5, { event: "node_failed", node_id: "chunk", step: "chunk", error: "Traceback (most recent call last):\nValueError: chunk_size too small" })
+    es.emit(6, begin(2))
+    es.emit(7, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
     es.emit(8, { event: "stream_end", status: "finished", ok: false })
     await waitFor(() => expect(statusOf(1)).toMatch(/^Failed at Chunk\. ValueError: chunk_size too small/))
     expect(within(column(1)).getByText("Traceback")).toBeTruthy()
@@ -538,13 +567,13 @@ describe("during a run", () => {
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const es = await driven()
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_started", node_id: "parse", transform: "docling", artifact_id: "p" })
+    es.emit(1, begin(0))
+    es.emit(2, { event: "node_started", node_id: "parse", step: "parse", transform: "docling", artifact_id: "p" })
     await waitFor(() => expect(statusOf(0)).toBe("Running the shared steps, then this recipe, 0 s"))
     expect(statusOf(1)).toBe("Waiting. It starts when the recipe before it finishes.")
     act(() => vi.advanceTimersByTime(3000))
     expect(statusOf(0)).toBe("Running the shared steps, then this recipe, 3 s")
-    es.emit(3, { event: "node_finished", node_id: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
     await waitFor(() => expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(1))
     expect(screen.getByTestId("compare-finding").textContent).toBe("Running three recipes. One has finished.")
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1")
@@ -556,13 +585,13 @@ describe("during a run", () => {
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const es = await driven()
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
-    es.emit(3, { event: "variant_started", index: 1, variant: {} })
-    es.emit(4, { event: "node_started", node_id: "chunk", transform: "recursive_character", artifact_id: "x" })
-    es.emit(5, { event: "node_failed", node_id: "chunk", error: "Traceback (most recent call last):\nValueError: chunk_size too small" })
-    es.emit(6, { event: "variant_started", index: 2, variant: {} })
-    es.emit(7, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
+    es.emit(1, begin(0))
+    es.emit(2, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a0", cache_hit: false, duration_ms: 1 })
+    es.emit(3, begin(1))
+    es.emit(4, { event: "node_started", node_id: "chunk", step: "chunk", transform: "recursive_character", artifact_id: "x" })
+    es.emit(5, { event: "node_failed", node_id: "chunk", step: "chunk", error: "Traceback (most recent call last):\nValueError: chunk_size too small" })
+    es.emit(6, begin(2))
+    es.emit(7, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
     es.emit(8, { event: "stream_end", status: "finished", ok: false })
     const failed = within(column(1)).getByTestId("recipe-status")
     expect(failed.textContent).toMatch(/^Failed at Chunk\. ValueError: chunk_size too small/)
@@ -576,7 +605,7 @@ describe("during a run", () => {
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const es = await driven()
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
+    es.emit(1, begin(0))
     expect(screen.queryByRole("button", { name: "Change recipes" })).toBeNull()
     const busy = screen.getByRole("button", { name: "Running" })
     expect(busy.getAttribute("aria-busy")).toBe("true")
@@ -593,14 +622,14 @@ describe("during a run", () => {
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const es = await driven()
-    es.emit(1, { event: "variant_started", index: 0, variant: {} })
-    es.emit(2, { event: "node_finished", node_id: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 1 })
-    es.emit(3, { event: "variant_started", index: 1, variant: {} })
+    es.emit(1, begin(0))
+    es.emit(2, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 1 })
+    es.emit(3, begin(1))
     const tabs = within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button").map((b) => b.textContent)
     expect(tabs).toEqual(["400 characters", "200 characters, running", "By sentence, waiting"])
     const stop = screen.getByRole("button", { name: "Stop the run" })
     stop.focus()
-    es.emit(5, { event: "node_finished", node_id: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 1 })
+    es.emit(5, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a1", cache_hit: false, duration_ms: 1 })
     await waitFor(() => expect(within(screen.getByRole("group", { name: "Recipe shown" })).getAllByRole("button")[1].textContent).toBe("200 characters"))
     expect(document.activeElement).toBe(stop)
   })
@@ -804,7 +833,7 @@ describe("the open view", () => {
     const back = screen.getByRole("button", { name: "Back to all five recipes" })
     back.focus()
     const before = screen.getAllByTestId("chunk-numbers").length
-    es.emit(50, { event: "node_finished", node_id: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
+    es.emit(50, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "a2", cache_hit: false, duration_ms: 1 })
     await waitFor(() => expect((within(strip).getAllByRole("button").find((b) => b.textContent === running.textContent) as HTMLButtonElement).disabled).toBe(false))
     expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(before)
     expect(document.activeElement).toBe(back)
@@ -877,8 +906,8 @@ describe("experiments", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     const es = await driven()
     ;["a0", "a1", "a2"].forEach((id, i) => {
-      es.emit(i * 2 + 1, { event: "variant_started", index: i, variant: {} })
-      es.emit(i * 2 + 2, { event: "node_finished", node_id: "chunk", artifact_id: id, cache_hit: false, duration_ms: 1 })
+      es.emit(i * 2 + 1, begin(i))
+      es.emit(i * 2 + 2, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: id, cache_hit: false, duration_ms: 1 })
     })
     es.emit(9, { event: "stream_end", status: "finished", ok: true })
     await waitFor(() => expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(3))
@@ -904,11 +933,12 @@ describe("experiments", () => {
 })
 
 describe("a run the server rejects", () => {
-  const rejected = (loc: string[], msg: string) =>
-    new Response(JSON.stringify({ detail: { node_id: "chunk", errors: [{ loc, msg, type: "value_error" }] } }), { status: 422 })
+  /** A 422 as pandion-api says it: one Pandion problem sentence about one setting of the Chunk step. */
+  const rejected = (transform: string, field: string, msg: string) =>
+    new Response(JSON.stringify({ detail: { problems: [`index.chunk (${transform}): ${field}: ${msg}`] } }), { status: 422 })
 
   it("puts the message under the recipe it belongs to, in plain words, with that field's editor open", async () => {
-    serve({}, { "/api/sweeps": rejected(["overlap_sentences"], "Overlap must be smaller than the number of sentences per chunk.") })
+    serve({}, { "/api/v2/comparisons": rejected("sentence_window", "overlap_sentences", "Overlap must be smaller than the number of sentences per chunk.") })
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
@@ -924,7 +954,7 @@ describe("a run the server rejects", () => {
   it("below 820 px, returns to the cards with the failing recipe's editor open", async () => {
     FakeResizeObserver.width = 753
     vi.stubGlobal("ResizeObserver", FakeResizeObserver)
-    serve({}, { "/api/sweeps": rejected(["overlap_sentences"], "Overlap must be smaller than the number of sentences per chunk.") })
+    serve({}, { "/api/v2/comparisons": rejected("sentence_window", "overlap_sentences", "Overlap must be smaller than the number of sentences per chunk.") })
     render(<Compare />)
     fireEvent.click(await screen.findByRole("button", { name: "Run 3 recipes" }))
     await screen.findByRole("alert")
@@ -933,7 +963,7 @@ describe("a run the server rejects", () => {
   })
 
   it("says an error it cannot tie to one recipe above the cards, and opens no editor", async () => {
-    serve({}, { "/api/sweeps": rejected(["chunk_size"], "Input should be greater than 0.") })
+    serve({}, { "/api/v2/comparisons": rejected("recursive_character", "chunk_size", "Input should be greater than 0.") })
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
@@ -941,6 +971,43 @@ describe("a run the server rejects", () => {
     expect(alert.textContent).toBe("Chunk, Chunk size: Input should be greater than 0.")
     expect(screen.queryByRole("dialog")).toBeNull()
     expect(columns()).toHaveLength(3)
+  })
+
+  const refused = (detail: unknown) => new Response(JSON.stringify({ detail }), { status: 422 })
+
+  it("gives each refused setting its own title under the recipe, and opens the first one's editor", async () => {
+    serve({}, {
+      "/api/v2/comparisons": refused({
+        problems: ["index.chunk (sentence_window): sentences_per_chunk: Input should be greater than 0; overlap_sentences: Overlap must be smaller than the number of sentences per chunk."],
+      }),
+    })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const card = screen.getByRole("article", { name: "Recipe 3" })
+    const alert = await within(card).findByRole("alert")
+    expect(alert.textContent).toBe("Sentences per piece: Input should be greater than 0. Overlap sentences: Overlap must be smaller than the number of sentences per chunk.")
+    expect(within(card).getByRole("dialog", { name: "Sentences per piece" })).toBeTruthy()
+  })
+
+  it("says a problem with the whole step above the cards, in the server's own words", async () => {
+    const sentence = "index.chunk (sentence_window): settings: Value error, overlap must be smaller."
+    serve({}, { "/api/v2/comparisons": refused({ problems: [sentence] }) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toBe(sentence)
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("keeps the server's message for a refusal in the old field shape", async () => {
+    serve({}, { "/api/v2/comparisons": refused({ node_id: "chunk", errors: [{ loc: ["chunk_size"], msg: "Input should be greater than 0.", type: "value_error" }] }) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toContain("Input should be greater than 0.")
   })
 })
 
@@ -952,30 +1019,125 @@ describe("after a run on one of the sample's own questions", () => {
 
   it("says where the answer is, and the slip that holds it says so", async () => {
     const graph = sampleGraph(registry, SOURCE)
-    const through = terminalNode(graph)!.id
     const question = String(graph.nodes.find((n) => n.stage === "query")!.config.text)
     serve(
       { c: recursiveJson, h: hybridJson, d: denseJson, b: bm25Json },
       {
         "/api/samples": [{ name: "chunking-primer", title: "A primer on chunking", blurb: "", shows: "", stresses: "chunk", pages: 2, sha: SOURCE.sha, filename: SOURCE.filename }],
         "/api/samples/chunking-primer/questions": [{ id: "q1", question, gold_answer: "Overlap protects answers that straddle", gold_answers: [], tags: [] }],
+        "/api/v2/runs/r1": snapshot(scored([1, 1, 1], [0, 1, 2])),
       },
     )
     openAt("?node=retrieve")
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
+    await questionsRead()
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
     await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
     const es = DrivenEventSource.instances[0]
     let seq = 1
     ;["h", "d", "b"].forEach((id, i) => {
-      es.emit(seq++, { event: "variant_started", index: i, variant: {} })
-      es.emit(seq++, { event: "node_finished", node_id: "chunk", artifact_id: "c", cache_hit: false, duration_ms: 1 })
-      es.emit(seq++, { event: "node_finished", node_id: through, artifact_id: id, cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, begin(i))
+      es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "c", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "retrieve", step: "search", artifact_id: id, cache_hit: false, duration_ms: 1 })
     })
     es.emit(seq, { event: "stream_end", status: "finished", ok: true })
     await waitFor(() => expect(screen.getByTestId("compare-finding").textContent).toMatch(/^All three put the answer first\. /))
     await waitFor(() => expect(screen.getAllByText(", holds the answer").length).toBe(3))
+    // All three tie for best, so the mark would say nothing the finding does not: no recipe shows it.
+    expect(text()).not.toMatch(/Best/)
+    expect(posted()).toMatchObject({ stage: "search", questions: [{ id: "question", question, gold_answers: ["Overlap protects answers that straddle"], tags: [] }], top_k: 5 })
+    expect(posted()).not.toHaveProperty("question")
+  })
+})
+
+describe("the server's scores", () => {
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  const SAMPLE = [{ name: "chunking-primer", title: "A primer on chunking", blurb: "", shows: "", stresses: "chunk", pages: 2, sha: SOURCE.sha, filename: SOURCE.filename }]
+  const question = () => String(sampleGraph(registry, SOURCE).nodes.find((n) => n.stage === "query")!.config.text)
+
+  /** Run three searches on the sample's own question, answered by the result given; `end` is how the stream ends. */
+  async function runScored(result: unknown, runs: Record<string, unknown> = {}, end: Record<string, unknown> = { status: "finished", ok: true }) {
+    serve(
+      { c: recursiveJson, h: hybridJson, d: denseJson, b: bm25Json },
+      {
+        "/api/samples": SAMPLE,
+        "/api/samples/chunking-primer/questions": [{ id: "q1", question: question(), gold_answer: "Overlap protects answers that straddle", gold_answers: [], tags: [] }],
+        "/api/v2/runs/r1": snapshot(result),
+        ...runs,
+      },
+    )
+    openAt("?node=retrieve")
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    await questionsRead()
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    let seq = 1
+    ;["h", "d", "b"].forEach((id, i) => {
+      es.emit(seq++, begin(i))
+      es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "c", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "retrieve", step: "search", artifact_id: id, cache_hit: false, duration_ms: 1 })
+    })
+    es.emit(seq, { event: "stream_end", ...end })
+  }
+
+  const heads = () => [0, 1, 2].map((i) => within(column(i)).getByRole("heading").textContent)
+
+  it("sends a Chunk comparison through the chunk step, with no question", async () => {
+    DrivenEventSource.instances = []
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    await driven()
+    const body = posted()
+    expect(body).toMatchObject({ stage: "chunk", through: "chunk", documents: [SOURCE.sha] })
+    expect(body.variants).toHaveLength(3)
+    expect(body.variants[0]).toMatchObject({ use: "recursive_character", chunk_size: 400 })
+    expect(body.config.index.chunk).toMatchObject({ use: "recursive_character" })
+    expect(body).not.toHaveProperty("question")
+    expect(body).not.toHaveProperty("questions")
+  })
+
+  it("marks the recipe the server names best, and reads each answer's rank from the result", async () => {
+    await runScored(scored([2, 1, null], [1]))
+    await waitFor(() => expect(heads()[1]).toMatch(/Best$/))
+    expect(heads()[0]).not.toMatch(/Best/)
+    expect(heads()[2]).not.toMatch(/Best/)
+    expect(screen.getByTestId("compare-finding").textContent).toMatch(/answer/)
+  })
+
+  it("shows searches on a typed question unscored, with no Best", async () => {
+    serve({ c: recursiveJson, h: hybridJson, d: denseJson, b: bm25Json }, { "/api/v2/runs/r1": snapshot(EMPTY_RESULT) })
+    openAt("?node=retrieve")
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    await driven()
+    expect(posted()).toMatchObject({ stage: "search", question: question(), answer: false })
+    expect(posted()).not.toHaveProperty("questions")
+    expect(posted()).not.toHaveProperty("through")
+    expect(text()).not.toMatch(/Best/)
+  })
+
+  it("names no best when the run was stopped", async () => {
+    await runScored({ ...scored([1, null, null], [0]), cancelled: true }, {}, { status: "cancelled", ok: false })
+    // A scored run's finding waits for its result, so the finding showing means the result was read.
+    await screen.findByTestId("compare-finding")
+    expect(heads().some((h) => /Best/.test(h ?? ""))).toBe(false)
+  })
+
+  it("says plainly when the scores could not be read", async () => {
+    await runScored(EMPTY_RESULT, { "/api/v2/runs/r1": new Response("{}", { status: 500 }) })
+    expect(await screen.findByText("The scores could not be read. Run it again.")).toBeTruthy()
+    expect(text()).not.toMatch(/Best/)
+    // With no scores, nothing says a recipe missed the answer.
+    expect((await screen.findByTestId("compare-finding")).textContent).not.toMatch(/answer/)
+    expect(text()).not.toMatch(/Does not return the answer|None of them returns the answer/)
   })
 })
 
@@ -1094,8 +1256,8 @@ describe("a Compare run waiting its turn on the busy demo", () => {
     es.emit(0, { event: "queued", ahead: 0 })
     await waitFor(() => expect(screen.getByTestId("tally").textContent).toContain("The demo is busy with other learners. Your run starts in a moment."))
     es.emit(1, { event: "unqueued" })
-    es.emit(2, { event: "variant_started", index: 0, variant: {} })
-    es.emit(3, { event: "node_started", node_id: "chunk", transform: "x", artifact_id: "x" })
+    es.emit(2, begin(0))
+    es.emit(3, { event: "node_started", node_id: "chunk", step: "chunk", transform: "x", artifact_id: "x" })
     await waitFor(() => expect(screen.getByTestId("tally").textContent).toContain("Running recipe 1 of"))
     expect(screen.getByTestId("tally").textContent).not.toContain("The demo is busy")
   })

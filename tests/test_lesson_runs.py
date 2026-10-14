@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from scripts.lesson_runs import evaluate_pipeline, run_pipeline
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,3 +40,27 @@ def test_an_evaluation_is_pandions_report(tmp_path):
     questions = [{"id": "q", "question": "Why do chunk boundaries matter?", "gold_answers": ["chunk"]}]
     report = evaluate_pipeline(FAST, PDF, tmp_path, questions)
     assert report["total"] == 1 and report["questions"][0]["id"] == "q"
+
+
+def test_a_pipeline_keeps_its_own_models_block_with_the_cpu_default(tmp_path):
+    from scripts.lesson_runs import _pipeline
+
+    own = _pipeline({**FAST, "models": {"download": "never"}}, tmp_path).to_dict()["models"]
+    assert own["download"] == "never" and own["device"] == "cpu"
+    kept = _pipeline({**FAST, "models": {"device": "auto"}}, tmp_path).to_dict().get("models", {})
+    assert kept.get("device", "auto") == "auto"
+
+
+def test_no_document_is_named(tmp_path):
+    empty = tmp_path / "nothing"
+    empty.mkdir()
+    with pytest.raises(SystemExit, match="no document"):
+        run_pipeline(FAST, empty, tmp_path / "root")
+
+
+def test_a_question_without_a_search_step_is_named(tmp_path):
+    index_only = {"index": FAST["index"]}
+    with pytest.raises(SystemExit, match="no search step"):
+        run_pipeline(index_only, PDF, tmp_path, question="Why?")
+    with pytest.raises(SystemExit, match="no search step"):
+        evaluate_pipeline(index_only, PDF, tmp_path, [{"question": "Why?", "gold_answers": ["chunk"]}])

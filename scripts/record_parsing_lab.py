@@ -136,7 +136,7 @@ def _measure(sample, parser: str, root: Path) -> dict:
     questions = sample.questions()
     out = run_pipeline(pipeline(parser, cfg), sample.pdf, root)
     text = document_text(out["parse"])
-    report = evaluate_pipeline(pipeline(parser, cfg), sample.pdf, root, question_set(questions))
+    report = evaluate_pipeline(pipeline(parser, cfg), sample.pdf, root, question_set(questions), top_k=TOP_K)
     failed = {q["id"]: q["error"] for q in report["questions"] if q["error"]}
     if failed:
         raise SystemExit(f"{sample.name}/{parser} failed: {failed}")

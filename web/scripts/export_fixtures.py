@@ -277,8 +277,12 @@ def write_run_events(out: Path, pdf: bytes, root: Path) -> None:
             for line in r.iter_lines():
                 if line.startswith("data: "):
                     events.append(json.loads(line[6:]))
+    # Timestamps and durations vary run to run: zero the one and round the
+    # other, so a diff of a regenerated fixture shows shape changes, not clock noise.
     for e in events:
         e["ts"] = 0
+        if "duration_ms" in e:
+            e["duration_ms"] = round(e["duration_ms"], 3)
     dump("run_events.json", events)
 
 

@@ -1,11 +1,11 @@
 import type { ReactNode } from "react"
 
-import artifacts from "@/api/fixtures/artifacts.json"
 import chatOutput from "@/api/fixtures/output.chat.json"
 import chunkMarkdown from "@/api/fixtures/chunk_set.markdown_header.json"
 import chunkRecursive from "@/api/fixtures/chunk_set.recursive_character.json"
 import chunkRecursiveLines from "@/api/fixtures/chunk_set.recursive_character.join_lines_off.json"
 import chunkToken from "@/api/fixtures/chunk_set.token_based.json"
+import indexDescriptor from "@/api/fixtures/index.lancedb.json"
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
 import cleanedDoc from "@/api/fixtures/parsed_doc_cleaned.json"
 import type { ChatOutput, ChunkSet, ParsedDoc } from "@/api/types"
@@ -86,7 +86,7 @@ export function Inspect() {
           <ArtifactInspector type="parsed_doc" data={cleaned} context={{ before: parsed }} />
         </Section>
         <Section title="Fallback" note="Artifact types without an inspector render as a JSON tree.">
-          <ArtifactInspector type="index" data={artifacts} />
+          <ArtifactInspector type="index" data={indexDescriptor} />
         </Section>
         <Section title="States">
           <div className="grid items-start gap-3 lg:grid-cols-2">

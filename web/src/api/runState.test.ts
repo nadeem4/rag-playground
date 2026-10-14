@@ -69,11 +69,8 @@ describe("runReducer: sweeps", () => {
 
 describe("runReducer: a plain run", () => {
   it("reduces the real /api/v2 stream of a run through chunk", () => {
-    const events = [
-      ...(fixtureEvents as RunEvent[]),
-      e({ event: "stream_end", status: "finished", ok: true }),
-    ]
-    const state = reduceEvents(events)
+    // The exported stream ends with the server's own stream_end.
+    const state = reduceEvents(fixtureEvents as RunEvent[])
     expect(state.variants).toHaveLength(1)
     const { nodes, order } = state.variants[0]
     expect(Object.keys(nodes)).toEqual(order)

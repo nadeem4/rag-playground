@@ -130,3 +130,29 @@ def test_the_warm_up_covers_every_parse_config_on_a_sample_that_is_not_a_case():
     configs = {(p, tuple(sorted(script.parse_config(p, c).items()))) for c in script.CASES for p in script.PARSERS}
     warmed = {(p, tuple(sorted(cfg.items()))) for p, cfg in script.WARM_UP_CONFIGS}
     assert configs <= warmed
+
+
+def test_the_evaluation_checks_top_k_pieces(monkeypatch):
+    import scripts.lesson_runs as lesson_runs
+
+    seen = {}
+
+    def evaluate(pipeline, pdf, root, questions, top_k=5):
+        seen["top_k"] = top_k
+        return {"found": 1, "questions": [{"id": "1", "error": None}]}
+
+    monkeypatch.setattr(lesson_runs, "run_pipeline", lambda *a, **k: {
+        "parse": {"elements": [], "page_count": 1}, "duration_ms": {"parse": 3.0}})
+    monkeypatch.setattr(lesson_runs, "evaluate_pipeline", evaluate)
+
+    class Sample:
+        name = "two-column-report"
+        pdf = Path("x.pdf")
+
+        def questions(self):
+            return [{"question": "q?", "gold_answer": "A b."}]
+
+    script = _script()
+    script.TOP_K = 7
+    script._measure(Sample(), "pdfium", Path("."))
+    assert seen["top_k"] == 7

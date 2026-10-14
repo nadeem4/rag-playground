@@ -49,6 +49,10 @@ class Policy:
         """Keys to add to a document in the list, for this caller."""
         return {}
 
+    def private(self, sha: str, request: Request) -> bool:
+        """Is this document one caller's own? Its page images are then cached privately."""
+        return False
+
     # --- runs -------------------------------------------------------------------
 
     def max_active_runs(self) -> int | None:

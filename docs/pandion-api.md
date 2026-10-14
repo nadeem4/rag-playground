@@ -61,6 +61,16 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /documents` | the documents this caller may read, by name: `sha`, `filename`, `size`, `content_type`, plus what the Policy's `describe` adds. Never cached. |
 | `POST /documents` | multipart `file`: keeps it by its fingerprint and returns its record. The same bytes twice are one document. |
 | `DELETE /documents/{id}` | `{"sha", "deleted"}`: deletes the file, its record and its question set, if the Policy agrees |
+| `GET /documents/{id}/file` | the file's own bytes. Never cached. |
+| `GET /documents/{id}/pages` | each page's size in PDF points: `[{"n", "width", "height"}]` |
+| `GET /documents/{id}/pages/{n}?scale=1` | the page as PNG, `scale` above 0 and at most 8, lowered so the image stays within 25 million pixels |
+| `GET /documents/{id}/pages/{n}/find?text=` | where the text (1 to 2,000 characters) is on the page: `{"rects": [[left, bottom, right, top], ...], "matched": "exact" or "normalized" or "none"}` |
+
+A document this caller may not read is answered exactly like one that does not exist: 404,
+with the same sentence. A page number past the last page is 404, and a `scale` or `text`
+outside its range is 422. pdfium is not thread-safe, so every page request holds
+`pandion_api.pages.PDFIUM_LOCK`; anything else in the same process that uses pdfium on
+request threads should hold it too.
 
 ## Site rules: the Policy
 
@@ -75,6 +85,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `on_uploaded(document, request)` | nothing | with the store's lock held, after the record is written |
 | `on_delete(sha, document, request)` | 404 without a record, else `True` | with the lock held: `True` deletes the file, `False` keeps it |
 | `describe(document, request)` | `{}` | keys added to each document in the list |
+| `private(sha, request)` | `False` | a page image's Cache-Control: private when True |
 | `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
 | `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
 | `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
@@ -92,7 +103,7 @@ RAG Playground's Policy gives every `/api/v2` request a visitor cookie, and on i
 demo holds uploads to the demo's limits (a PDF of at most 10 MB and 20 pages, no page over
 41 inches a side, three live uploads a visitor, a cap on the whole disk), shows a visitor
 the samples and only their own uploads, and deletes only their own upload, keeping a
-file another visitor also uploaded. The old `/api/sources` routes call the same Policy.
+file another visitor also uploaded. On the demo an upload's page images are cached privately, a sample's publicly. The old `/api/sources` routes call the same Policy.
 
 ## What a request cannot set
 

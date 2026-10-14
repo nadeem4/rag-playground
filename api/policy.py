@@ -24,6 +24,7 @@ from pandion_api.documents import META_DIR, Document
 
 from api import credentials, demo, expiry, sample_set, visitor
 from api.routes import sources
+from api.routes.artifacts import NO_CLEARING
 from api.routes.registry import served_catalog
 from api.routes.runs import DEMO_NO_CUSTOM, NOT_AVAILABLE, PROMPTS_FIXED
 
@@ -98,8 +99,10 @@ def scrub_paths(text: str, data_dir: Path | None = None) -> str:
     if data_dir is not None:
         # First, whole: the folder's name may hold a space, where a bare match stops.
         folder = Path(data_dir).resolve()
+        # Only where it ends a path part: `/data` is not the start of `/database`
+        # or of `https://huggingface.co/datasets/x`.
         for form in sorted({str(folder), folder.as_posix()}, key=len, reverse=True):
-            text = text.replace(form, SERVER_PATH)
+            text = re.sub(re.escape(form) + r"""(?=[\\/"'\s]|\Z)""", lambda _: SERVER_PATH, text)
 
     def short(match: re.Match[str]) -> str:
         path = match.group("quoted") or match.group("bare")
@@ -216,6 +219,14 @@ class PlaygroundPolicy(Policy):
         """On the demo a run is its visitor's own: to anyone else it is a 404.
         Locally anyone may follow or cancel it."""
         return _visitor(request) if demo.enabled() else None
+
+    # --- the cache -----------------------------------------------------------------
+
+    def check_clear_cache(self, request: Request) -> None:
+        """One cache serves every visitor on the demo: clearing it would wipe
+        everyone's results. The old DELETE /api/cache asks this too."""
+        if demo.enabled():
+            raise HTTPException(status_code=403, detail=NO_CLEARING)
 
     # --- keys ---------------------------------------------------------------------
 

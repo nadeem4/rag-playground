@@ -61,3 +61,17 @@ def test_an_empty_question_or_a_bad_k_is_422(client):
     sha = upload(client)["sha"]
     assert client.post("/ask", json={"config": PIPELINE, "documents": [sha], "question": ""}).status_code == 422
     assert client.post("/ask", json={"config": PIPELINE, "documents": [sha], "question": "x", "k": 0}).status_code == 422
+
+
+def test_a_question_too_long_or_a_k_too_large_is_422(client):
+    sha = upload(client)["sha"]
+    asked = {"config": PIPELINE, "documents": [sha]}
+    assert client.post("/ask", json={**asked, "question": "x" * 2001}).status_code == 422
+    assert client.post("/ask", json={**asked, "question": "x", "k": 101}).status_code == 422
+
+
+def test_a_document_id_is_matched_whole():
+    from pandion_api.documents import SHA
+
+    assert SHA.pattern.startswith("^") and SHA.match("a" * 64)
+    assert not SHA.match("a" * 64 + "\n") and not SHA.match("x" + "a" * 64)

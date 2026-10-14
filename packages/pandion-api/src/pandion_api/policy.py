@@ -82,6 +82,11 @@ class Policy:
         follow or cancel it."""
         return None
 
+    # --- the cache -----------------------------------------------------------------
+
+    def check_clear_cache(self, request: Request) -> None:
+        """Refuse DELETE /cache (raise HTTPException), for example where many share one cache."""
+
     # --- keys ---------------------------------------------------------------------
 
     def server_key(self, provider: str) -> tuple[str | None, str]:

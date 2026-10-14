@@ -20,12 +20,14 @@ from api.deps import build_deps
 from api.main import create_app
 from tests.api import (
     conftest,
+    test_artifacts,
     test_delete_source,
     test_demo,
     test_pages,
     test_runs,
     test_source_file,
     test_sources,
+    test_trace,
 )
 
 #: (pattern, replacement): the first that matches wins; None keeps the path.
@@ -76,7 +78,17 @@ def make_v2_client(dirs, registry=None) -> TestClient:
 
 
 #: The modules whose tests run here: each looks up `make_client` at call time.
-MODULES = (conftest, test_delete_source, test_demo, test_pages, test_runs, test_source_file, test_sources)
+MODULES = (
+    conftest,
+    test_artifacts,
+    test_delete_source,
+    test_demo,
+    test_pages,
+    test_runs,
+    test_source_file,
+    test_sources,
+    test_trace,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -281,3 +293,25 @@ def test_a_run_is_read_on_v2(client):
     run_id = start(client, conftest.ingest_graph(src["sha"], src["filename"]))
     r = client.get(f"/api/runs/{run_id}")
     assert r.request.url.path == f"/api/v2/runs/{run_id}" and "result" in r.json()
+
+
+# --- results, cache and trace (Task 11) -------------------------------------------
+# The old routes' runs write into the same store, so a result an old run made is
+# read here through /api/v2/results. Clearing on /api/v2 answers "results", not
+# "artifacts", empties embeddings/ too, and uses pandion.ResultStore, not the
+# app's store object: test_delete_cache_* stay with the old route, and
+# packages/pandion-api/tests/test_api_results.py covers clearing on /api/v2.
+
+from tests.api.test_artifacts import (  # noqa: E402
+    test_artifact_meta,
+    test_artifact_payload,
+    test_index_payload_is_its_descriptor,
+    test_index_without_descriptor_is_404,
+    test_malformed_artifact_id_is_404,
+    test_unknown_artifact_is_404,
+)
+from tests.api.test_demo import test_demo_refuses_to_clear_the_shared_cache  # noqa: E402
+from tests.api.test_trace import (  # noqa: E402
+    test_the_route_refuses_an_unknown_artifact,
+    test_the_route_traces_a_real_run,
+)

@@ -71,10 +71,14 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
 | `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question, and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
+| `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
+| `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
+| `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
+| `POST /trace` | why one question missed, followed step by step down a finished run's results (`pandion.evaluation.trace`) |
 
 A document this caller may not read is answered exactly like one that does not exist: 404,
-with the same fixed sentence, which never repeats the id the request sent. A page number past the last page is 404, and a `scale` or `text`
-outside its range is 422. pdfium is not thread-safe, so every page request holds
+with the same fixed sentence, which never repeats the id the request sent. A page
+number past the last page is 404, and a `scale` or `text` outside its range is 422. pdfium is not thread-safe, so every page request holds
 `pandion_api.pages.PDFIUM_LOCK`; anything else in the same process that uses pdfium on
 request threads should hold it too.
 
@@ -98,7 +102,9 @@ anything runs.
 
 A document in a run is named by the filename it was uploaded under, so the same bytes
 under the same name give the same result ids however often they are uploaded. Two
-documents in one run cannot share a name.
+documents in one run cannot share a name. The same bytes uploaded by two callers are one
+record, so its name is the latest uploader's file name. A suffix the store would not keep
+(see Documents) is left off the name, so Pandion never keeps a copy under it.
 
 A model's key comes from the request's header for its provider (`X-Anthropic-Api-Key`,
 `X-OpenAI-Api-Key`, `X-Custom-Api-Key`, `X-OpenRouter-Api-Key`), else from the server's
@@ -129,6 +135,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
 | `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
 | `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
+| `check_clear_cache(request)` | allows | `DELETE /cache` |
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
 | `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`), and on every error a run shows |
 | `not_readable` (attribute) | "This document is not available." | the 403 a run gets for a document `can_read` refuses |
@@ -146,10 +153,12 @@ RAG Playground's Policy gives every `/api/v2` request a visitor cookie, and on i
 demo holds uploads to the demo's limits (a PDF of at most 10 MB and 20 pages, no page over
 41 inches a side, three live uploads a visitor, a cap on the whole disk), shows a visitor
 the samples and only their own uploads, and deletes only their own upload, keeping a
-file another visitor also uploaded. On the demo an upload's page images are cached privately, a sample's publicly. The old `/api/sources` routes call the same Policy.
+file another visitor also uploaded. On the demo an upload's page images are cached
+privately, a sample's publicly. The old `/api/sources` routes call the same Policy.
 On the demo a run is its visitor's own, on `/api/v2` and on the old `/api/runs/{id}` routes,
 which share the run manager. In every mode its errors keep only the last part of any
-server path (`[server]/x.py`).
+server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it refuses
+`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike.
 
 ## What a request cannot set
 

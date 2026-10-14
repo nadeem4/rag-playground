@@ -21,7 +21,7 @@ from typing import Any
 
 #: A document id is a sha256 in lowercase hex. Checked before an id reaches a
 #: path, so a crafted one such as `../../x` never leaves the folder.
-SHA = re.compile(r"[0-9a-f]{64}\Z")
+SHA = re.compile(r"^[0-9a-f]{64}\Z")
 #: The 404 for a document that is not there, or not for this caller. It never
 #: repeats the id the request sent.
 NO_SUCH_DOCUMENT = "There is no document with that fingerprint."

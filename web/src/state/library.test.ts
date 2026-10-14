@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { SampleCard, Source } from "@/api/types"
 
-import { initialGraph } from "./graph"
+import { initialGraph, sampleGraph } from "./graph"
 import {
   SOON_HOURS,
   base64ToBytes,
@@ -17,6 +17,7 @@ import {
   keptLine,
   pipelineSummary,
   uploadsOf,
+  VERSION,
 } from "./library"
 import type { SavedExperiment } from "./libraryExperiments"
 import { fromOld, usableGraph, type SavedPipeline } from "./pipelines"
@@ -123,7 +124,7 @@ describe("export and import", () => {
     const docs = [{ sha: UP, filename: "notes.pdf", pdfBase64: bytesToBase64(new Uint8Array([37, 80, 68, 70])) }]
     const file = buildExport(items, docs, NOW)
     expect(file.format).toBe("rag-playground-library")
-    expect(file.version).toBe(1)
+    expect(file.version).toBe(2)
     expect(file.exportedAt).toBe("2026-10-04T12:00:00.000Z")
     expect(file.items.map((i) => i.kind)).toEqual(["experiment", "pipeline"])
     const back = parseImport(JSON.stringify(file))
@@ -150,7 +151,7 @@ describe("export and import", () => {
     const g = initialGraph(R)
     const graph = { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { sha: UP, filename: "notes.pdf" } } : n)) }
     const old = { kind: "pipeline", id: "p1", name: "Old", savedAt: "2026-10-01T00:00:00Z", graph }
-    const back = parseImport(JSON.stringify({ ...file, items: [old] }))
+    const back = parseImport(JSON.stringify({ ...file, version: 1, items: [old] }))
     if (!back.ok) throw new Error(back.error)
     expect(back.pipelines[0].documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
   })
@@ -164,7 +165,7 @@ describe("export and import", () => {
   it("refuses a file that is not a library export, in plain words", () => {
     expect(parseImport("not json")).toEqual({ ok: false, error: "This is not a RAG Playground file. Export from Library makes one." })
     expect(parseImport(JSON.stringify({ format: "other" })).ok).toBe(false)
-    expect(parseImport(JSON.stringify({ format: "rag-playground-library", version: 2, items: [] }))).toEqual({
+    expect(parseImport(JSON.stringify({ format: "rag-playground-library", version: 3, items: [] }))).toEqual({
       ok: false,
       error: "This file was made by a newer RAG Playground. Update this copy to import it.",
     })
@@ -175,7 +176,7 @@ describe("export and import", () => {
     const r = parseImport(
       JSON.stringify({
         format: "rag-playground-library",
-        version: 1,
+        version: 2,
         items: [{ kind: "pipeline", id: 1 }, { kind: "what" }, null, tooMany],
         documents: [{ sha: "x" }, null],
       }),
@@ -221,5 +222,64 @@ describe("export and import", () => {
     expect(importResultLine({ ...none, pipelines: 1, unreadable: 1, damaged: ["a.pdf"], mismatched: ["b.pdf"] })).toBe(
       "Imported 1 pipeline from f.json. Skipped 1 item that is not a pipeline or an experiment. a.pdf: the document in the file is damaged. b.pdf was uploaded, but it is not the document the file names, so saved items may still ask for it.",
     )
+  })
+})
+
+const DOC = { sha: "1".repeat(64), filename: "x.pdf" }
+const BROKEN = { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }
+
+describe("export and import with configs", () => {
+  it("imports a version 1 file, converting each pipeline or keeping it with its reason", () => {
+    const file = {
+      format: "rag-playground-library",
+      version: 1,
+      exportedAt: "2026-10-01T00:00:00.000Z",
+      items: [
+        { kind: "pipeline", id: "aaaaaaaa", name: "Good", graph: sampleGraph(R, DOC), documents: [DOC], savedAt: "2026-10-01T00:00:00.000Z" },
+        { kind: "pipeline", id: "bbbbbbbb", name: "Odd", graph: BROKEN, documents: [], savedAt: "2026-10-01T00:00:00.000Z" },
+      ],
+      documents: [],
+    }
+    const r = parseImport(JSON.stringify(file))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.pipelines[0].config?.index.parse.use).toBe("pdfium")
+    expect(r.pipelines[1]).toMatchObject({ name: "Odd", config: null, kept: { problem: expect.stringContaining("enrich") } })
+    expect(r.skipped).toBe(0)
+  })
+
+  it("writes version 2 with configs, and a kept item comes back as it went", () => {
+    const v1 = parseImport(JSON.stringify({ format: "rag-playground-library", version: 1, exportedAt: "", documents: [], items: [
+      { kind: "pipeline", id: "bbbbbbbb", name: "Odd", graph: BROKEN, documents: [], savedAt: "2026-10-01T00:00:00.000Z" },
+      { kind: "pipeline", id: "aaaaaaaa", name: "Good", graph: sampleGraph(R, DOC), documents: [DOC], savedAt: "2026-10-02T00:00:00.000Z" },
+    ] }))
+    if (!v1.ok) throw new Error(v1.error)
+    const file = buildExport(libraryItems(v1.pipelines, []), [], Date.parse("2026-10-13T00:00:00Z"))
+    expect(file.version).toBe(VERSION)
+    expect(VERSION).toBe(2)
+    const good = file.items.find((i) => i.name === "Good")!
+    expect(good).toHaveProperty("config")
+    expect(good).not.toHaveProperty("graph")
+    const again = parseImport(JSON.stringify(file))
+    if (!again.ok) throw new Error(again.error)
+    expect(again.pipelines.find((p) => p.name === "Odd")).toMatchObject({ config: null, kept: { graph: BROKEN } })
+    expect(again.pipelines.find((p) => p.name === "Good")?.config).toEqual((good as SavedPipeline).config)
+  })
+
+  it("still refuses a file from a newer version", () => {
+    const r = parseImport(JSON.stringify({ format: "rag-playground-library", version: 3, items: [] }))
+    expect(r).toEqual({ ok: false, error: expect.stringContaining("newer") })
+  })
+
+  it("never skips a version 1 pipeline item, even one with no graph at all", () => {
+    const r = parseImport(JSON.stringify({ format: "rag-playground-library", version: 1, items: [{ kind: "pipeline", id: "cccccccc", name: "Empty" }] }))
+    if (!r.ok) throw new Error(r.error)
+    expect(r.skipped).toBe(0)
+    expect(r.pipelines[0]).toMatchObject({ id: "cccccccc", name: "Empty", config: null, kept: { problem: expect.any(String) } })
+  })
+
+  it("never writes a model key into the file", () => {
+    const file = buildExport(libraryItems([fromOld({ id: "aaaaaaaa", name: "Good", graph: sampleGraph(R, DOC), savedAt: "2026-10-01T00:00:00Z" }, 0)], []), [], NOW)
+    expect(JSON.stringify(file)).not.toMatch(/api_key|apiKey|"keys"/)
   })
 })

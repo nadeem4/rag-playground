@@ -119,8 +119,11 @@ export function asSaved(raw: unknown): SavedPipeline | null {
 /**
  * An incoming item of either shape: a config (asSaved), or a graph an older
  * version saved (fromOld, converted or kept). Null when it is neither.
+ * `fileVersion` 1 is an export file an older version wrote: every pipeline in
+ * it held a graph, so each one is converted or kept, never skipped.
  */
-export function asIncoming(raw: unknown, place: number): SavedPipeline | null {
+export function asIncoming(raw: unknown, place: number, fileVersion?: number): SavedPipeline | null {
+  if (fileVersion === 1) return fromOld(raw, place)
   const saved = asSaved(raw)
   if (saved) return saved
   return isRecord(raw) && "graph" in raw ? fromOld(raw, place) : null
@@ -298,7 +301,7 @@ export function mergeById<T extends { id: string; savedAt: string }>(
 /** Library import: add saved pipelines from a file (I3 cap, I4 fresh read). Null when storage refused the write. */
 export function importPipelines(incoming: readonly unknown[]): ImportResult<SavedPipeline> | null {
   const current = freshPipelines()
-  const valid = incoming.map(asIncoming).filter((p): p is SavedPipeline => p !== null)
+  const valid = incoming.map((raw, place) => asIncoming(raw, place)).filter((p): p is SavedPipeline => p !== null)
   const { add, result } = mergeById(new Set(current.map((p) => p.id)), current.length, valid, MAX_PIPELINES)
   const next = [...current, ...add].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
   return persist(next) ? result : null

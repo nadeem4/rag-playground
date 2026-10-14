@@ -218,6 +218,17 @@ describe("Library", () => {
     expect(storedGraphJson()).toContain(UP)
   })
 
+  it("opens a pipeline with the registry the page already holds, without asking the server again", async () => {
+    seed()
+    const go = await ready()
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/registry")).toBe(true))
+    await within(row("Resume, sections whole")).findByText(/Docling|PDFium|Recursive/)
+    const asked = fetchMock.mock.calls.filter(([url]) => url === "/api/registry").length
+    fireEvent.click(within(row("Resume, sections whole")).getByRole("button", { name: "Open in Build" }))
+    await waitFor(() => expect(go).toHaveBeenCalledWith("/build"))
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/registry").length).toBe(asked)
+  })
+
   it("opens an experiment on Compare through sessionStorage", async () => {
     seed()
     const go = await ready()
@@ -243,7 +254,7 @@ describe("Library", () => {
     await waitFor(() => expect(click).toHaveBeenCalled())
     const file = JSON.parse(await blobs[0].text())
     expect(file.format).toBe("rag-playground-library")
-    expect(file.version).toBe(1)
+    expect(file.version).toBe(2)
     expect(file.items.map((i: { id: string }) => i.id)).toEqual(["p1"])
     expect(file.documents).toEqual([{ sha: UP, filename: "NK_Resume.pdf", pdfBase64: bytesToBase64(PDF) }])
     const anchor = click.mock.contexts[0] as HTMLAnchorElement

@@ -120,7 +120,8 @@ export function uploadsOf(items: readonly LibraryItem[], samples: readonly Pick<
 // ------------------------------------------------------- export, import --
 
 export const FORMAT = "rag-playground-library"
-export const VERSION = 1
+/** Version 2 holds each pipeline as its settings (a config); version 1 held a graph, and still imports. */
+export const VERSION = 2
 
 export interface ExportedDocument {
   sha: string
@@ -181,25 +182,25 @@ export function parseImport(text: string): ParsedImport {
     return { ok: false, error: NOT_OURS }
   }
   if (typeof data !== "object" || data === null || (data as LibraryFile).format !== FORMAT) return { ok: false, error: NOT_OURS }
-  const file = data as Partial<LibraryFile> & { version?: unknown }
+  const file = data as Omit<Partial<LibraryFile>, "version"> & { version?: unknown }
   if (typeof file.version === "number" && file.version > VERSION) {
     return { ok: false, error: "This file was made by a newer RAG Playground. Update this copy to import it." }
   }
-  if (file.version !== VERSION || !Array.isArray(file.items)) return { ok: false, error: NOT_OURS }
+  if ((file.version !== 1 && file.version !== VERSION) || !Array.isArray(file.items)) return { ok: false, error: NOT_OURS }
   const pipelines: SavedPipeline[] = []
   const experiments: SavedExperiment[] = []
   let skipped = 0
   for (const [place, raw] of (file.items as unknown[]).entries()) {
     const item = raw as { kind?: unknown } | null
-    // A file holds configs, or graphs when an older version made it: those are converted or kept.
-    const pipeline = item?.kind === "pipeline" ? asIncoming(item, place) : null
+    // Version 2 holds configs. Version 1 held graphs: each is converted or kept with the reason, never skipped.
+    const { kind: _kind, ...rest } = (item ?? {}) as Record<string, unknown>
+    const pipeline = item?.kind === "pipeline" ? asIncoming(rest, place, file.version) : null
     if (pipeline) {
       pipelines.push(pipeline)
       continue
     }
     if (item?.kind === "experiment" && asIncomingExperiment(item)) {
       // Kept as it came, so fields Compare added survive the round trip.
-      const { kind: _kind, ...rest } = item as Record<string, unknown>
       experiments.push(rest as unknown as SavedExperiment)
     } else skipped += 1
   }

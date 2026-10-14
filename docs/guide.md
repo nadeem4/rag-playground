@@ -416,6 +416,11 @@ gone, or on this machine when you run locally. A pipeline's row also names every
 it owns. Exported files carry that list, and a file exported before the list existed is
 read as a pipeline with its one document.
 
+Export writes version 2 files: each pipeline as its settings, documents and question.
+Files from older versions still import. A pipeline in one that cannot be opened here is
+imported as a kept item with the reason, never skipped, and a kept item exported again comes
+back the same.
+
 - **Open** sends a pipeline to Build as the working pipeline, or an experiment to Compare.
 - An item an older version saved that cannot be opened here is listed with the reason.
   Export keeps a copy; nothing removes it but Delete. Saving a new pipeline when twenty are

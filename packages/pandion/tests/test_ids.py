@@ -100,3 +100,32 @@ def test_short_id_and_shard_path():
     aid = "ab" + "cd" + "e" * 60
     assert short_id(aid) == aid[:16]
     assert shard_path(aid) == ("ab", "cd", aid[:16])
+
+
+from typing import ClassVar
+
+from pandion.ids import AddedSettings
+
+
+class _Before(AddedSettings):
+    size: int = 1
+
+
+class _After(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("ratio",)
+    size: int = 1
+    ratio: float = 1.5
+
+
+def test_an_added_setting_at_its_default_is_left_out_of_the_dump():
+    assert _After().model_dump(mode="json") == _Before().model_dump(mode="json") == {"size": 1}
+    assert _After(ratio=1.5).model_dump() == {"size": 1}
+
+
+def test_an_added_setting_that_was_changed_is_dumped():
+    assert _After(ratio=2.0).model_dump(mode="json") == {"size": 1, "ratio": 2.0}
+
+
+def test_an_added_setting_is_still_in_the_schema_and_readable():
+    assert _After.model_json_schema()["properties"]["ratio"]["default"] == 1.5
+    assert _After().ratio == 1.5

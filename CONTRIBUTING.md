@@ -136,6 +136,13 @@ model, so a new strategy needs no frontend change.
 
 `packages/pandion/src/pandion/plugins/clean/drop_matching.py` is a small, complete example.
 
+**Adding a setting to a built-in step.** A result id hashes a step's settings, so a new
+field would move every id of that step and rebuild every cache. Give the settings model
+`pandion.ids.AddedSettings` as its base and name the field in `added`, with today's
+behaviour as its default: it is then left out of the hash while it holds that default.
+Changing that default later changes what the step does, so bump the step's `version`.
+`packages/pandion/tests/test_recipe_hash.py` must pass unchanged.
+
 ## The samples
 
 The bundled samples live under `samples/<name>/`: the PDF, its question set

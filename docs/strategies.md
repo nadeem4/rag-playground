@@ -51,6 +51,9 @@ no stored text comes out empty. Fast, with no model to load.
 
 - `join_lines` (on by default): rebuilds paragraphs from the page layout. Off, it keeps
   one element per extracted line.
+- `paragraph_gap_ratio` (1.5): with lines joined, a line starts a new paragraph when the
+  gap above it is more than this many times the page's usual line spacing. Raise it when
+  paragraphs come out split; lower it when they run together.
 
 **Use it** as a fast baseline, or to see what a parser without a layout model misses.
 
@@ -92,6 +95,10 @@ pass, because removing a page number can expose another footer behind it.
   edge, to count as a running head or foot.
 - `drop` (on): removes the blocks found. Off, they are only retyped, which keeps them out
   of the text that is chunked while leaving them visible for inspection.
+- `max_running_chars` (120): the longest a header or footer can be, in characters. A
+  longer repeated block is the duplicate cleaner's job.
+- `min_pages` (2): the fewest pages a header or footer must repeat on, whatever
+  `min_page_ratio` says.
 
 ### Remove duplicate blocks (`dedupe_blocks`)
 
@@ -287,6 +294,9 @@ the small pool of candidates the search found.
 - `model`: a sentence-transformers CrossEncoder. `cross-encoder/ms-marco-MiniLM-L-6-v2`
   (the default) is small and fast; `BAAI/bge-reranker-base` is stronger;
   `BAAI/bge-reranker-v2-m3` is strongest and slow on a CPU.
+- `revision` (empty): the model's commit on Hugging Face. Empty uses the commit Pandion
+  pins for each model, its main branch on 2026-10-13, so scores stay the same when a model
+  is updated.
 
 **Use it** for single-fact questions. It needs no key.
 
@@ -430,11 +440,10 @@ Pandion's default `table_mode` is `fast`.
 
 ### cross_encoder (sentence-transformers)
 
-- Sets in `CrossEncoder(...)`: the model id, the `device`, `cache_folder` and
-  `local_files_only` from the model settings. In `predict(...)`: one (question, piece)
-  pair per candidate.
-- Leaves at the default: the model's revision (its main branch, not pinned), the longest
-  pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
+- Sets in `CrossEncoder(...)`: the model id, the model's `revision`, pinned per model (see
+  `revision` above), the `device`, `cache_folder` and `local_files_only` from the model
+  settings. In `predict(...)`: one (question, piece) pair per candidate.
+- Leaves at the default: the longest pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
   the scores are the ones the model gives.
 
 ### mmr (numpy)

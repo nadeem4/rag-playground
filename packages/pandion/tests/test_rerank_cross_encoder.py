@@ -321,6 +321,7 @@ def test_the_model_loads_on_the_device_and_folder_the_settings_name(built, tmp_p
     assert built == [
         {
             "model_id": "m-1",
+            "revision": "main",
             "device": "cpu",
             "cache_folder": str(tmp_path),
             "local_files_only": False,
@@ -417,3 +418,31 @@ def test_explain_says_scores_differ_between_models():
         "Scores are on the model's own scale and differ between models, so "
         "compare the order, not the numbers."
     ) in explanation.settings + " " + explanation.tradeoff
+
+
+import typing
+
+
+def test_every_model_is_pinned_to_a_commit():
+    assert set(ce.PINNED) == set(typing.get_args(ce.CrossEncoderModel))
+    assert all(len(sha) == 40 and int(sha, 16) >= 0 for sha in ce.PINNED.values())
+
+
+def test_the_default_revision_keeps_the_id_and_a_set_one_moves_it():
+    default = CrossEncoderConfig()
+    assert default.revision == ""
+    assert default.model_dump(mode="json") == {"model": MINILM, "top_k": 5}
+    assert CrossEncoderRerank().fingerprint(default) == MINILM
+    pinned = CrossEncoderConfig(revision="abc123")
+    assert pinned.model_dump(mode="json")["revision"] == "abc123"
+    assert CrossEncoderRerank().fingerprint(pinned) == f"{MINILM}@abc123"
+
+
+def test_a_model_loads_at_its_pinned_revision(built):
+    ce._load(MINILM, CPU)
+    assert built[0]["revision"] == ce.PINNED[MINILM]
+
+
+def test_a_revision_that_was_set_is_the_one_loaded(built):
+    ce._model_for(CrossEncoderConfig(revision="abc123"), CPU)
+    assert built[0]["revision"] == "abc123"

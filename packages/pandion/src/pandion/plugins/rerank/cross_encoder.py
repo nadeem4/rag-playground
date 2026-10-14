@@ -16,19 +16,21 @@ The model loads lazily and once per process per device, like the embedders in
 sentence-transformers, which come with the `local` extra. Where the model is
 kept, whether it may download and the device come from the run's
 `context_extras["models"]` (`pandion.models.ModelSettings`), never from the
-config, so they are not part of the recipe hash.
+config, so they are not part of the recipe hash. The model is loaded at the
+commit in `PINNED`, or at `revision` when it is set.
 """
 
 from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Literal, Mapping
+from typing import Any, ClassVar, Literal, Mapping
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from pandion.artifacts import ArtifactType
 from pandion.errors import require
+from pandion.ids import AddedSettings
 from pandion.models import ModelSettings, check_downloaded, resolve_device
 from pandion.payloads import Hit, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note
@@ -53,8 +55,18 @@ _SIZES: dict[str, str] = {
     "BAAI/bge-reranker-v2-m3": "a large model of 568 million parameters",
 }
 
+#: The commit each model is loaded at: its main branch on Hugging Face on
+#: 2026-10-13. Pinned, so scores do not drift when a model's main branch moves.
+PINNED: dict[str, str] = {
+    "cross-encoder/ms-marco-MiniLM-L-6-v2": "233902d25c440f23af6f7d6e94d2946bac0bee0a",
+    "BAAI/bge-reranker-base": "2cfc18c9415c912f9d8155881c133215df768a70",
+    "BAAI/bge-reranker-v2-m3": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+}
 
-class CrossEncoderConfig(BaseModel):
+
+class CrossEncoderConfig(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("revision",)
+
     model: CrossEncoderModel = Field(
         title="Model",
         default="cross-encoder/ms-marco-MiniLM-L-6-v2",
@@ -70,35 +82,56 @@ class CrossEncoderConfig(BaseModel):
         title="Pieces kept",
         description="How many pieces the reranker keeps.",
     )
+    #: Added after version 2's results were stored; see pandion.ids.AddedSettings.
+    revision: str = Field(
+        default="",
+        title="Revision",
+        description=(
+            "The model's commit on Hugging Face. Empty uses the commit Pandion "
+            "pins for the model, so scores do not change when the model is updated."
+        ),
+    )
 
 
 _LOAD_LOCK = threading.Lock()
-_MODELS: dict[tuple[str, str], Any] = {}
+_MODELS: dict[tuple[str, str, str], Any] = {}
 
 
 def _load(model_id: str, settings: ModelSettings | None = None) -> Any:
-    """Load a cross-encoder once per process and device; the import happens here.
+    """The model at the revision Pandion pins for it (main for any other id)."""
+    return _load_at(model_id, PINNED.get(model_id, "main"), settings)
+
+
+def _load_at(model_id: str, revision: str, settings: ModelSettings | None = None) -> Any:
+    """Load a cross-encoder once per process, revision and device; the import happens here.
 
     The lock stops two threads racing a first load from each pulling the model
-    into memory, the same rule as `pandion.embeddings._load_model`. The model
-    has no pinned revision, so `download: never` looks for its main revision.
+    into memory, the same rule as `pandion.embeddings._load_model`.
     """
     settings = settings or ModelSettings()
     with _LOAD_LOCK:
         device = resolve_device(settings.device)
-        key = (model_id, device)
+        key = (model_id, revision, device)
         if key not in _MODELS:
-            check_downloaded(model_id, "main", settings)
+            check_downloaded(model_id, revision, settings)
             st = require(
                 "sentence_transformers", extra="local", step="The cross_encoder reranker"
             )
             _MODELS[key] = st.CrossEncoder(
                 model_id,
+                revision=revision,
                 device=device,
                 cache_folder=str(settings.cache_dir) if settings.cache_dir else None,
                 local_files_only=settings.download == "never",
             )
         return _MODELS[key]
+
+
+def _model_for(config: CrossEncoderConfig, settings: ModelSettings | None) -> Any:
+    """The model the settings name: pinned when `revision` is empty."""
+    if not config.revision:
+        return _load(config.model, settings)
+    return _load_at(config.model, config.revision, settings)
 
 
 @register
@@ -123,7 +156,8 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
     )
 
     def fingerprint(self, config: CrossEncoderConfig | None = None) -> str:
-        return (config or CrossEncoderConfig()).model
+        config = config or CrossEncoderConfig()
+        return config.model if not config.revision else f"{config.model}@{config.revision}"
 
     def explain(self, config: CrossEncoderConfig) -> Explanation:
         top = config.top_k
@@ -165,7 +199,7 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
         # Load before starting the clock: the note reports scoring time, and a
         # first run's download would otherwise read as a slow reranker.
         extras = ctx.extras if ctx is not None else {}
-        model = _load(config.model, extras.get("models"))
+        model = _model_for(config, extras.get("models"))
         started = time.perf_counter()
         scores = [
             float(s)

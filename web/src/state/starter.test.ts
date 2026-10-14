@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import type { SampleCard } from "@/api/types"
+import registryFixture from "@/api/fixtures/registry.json"
+import starterConfig from "@/api/fixtures/starter.config.json"
+import type { Registry, SampleCard } from "@/api/types"
 
+import { graphToConfig, sameConfig, type PipelineConfig, type Step } from "./config"
 import { documentOf } from "./document"
 import { sampleGraph } from "./graph"
 import { STARTER_ID } from "./pipelines"
@@ -67,5 +70,33 @@ describe("the planted-miss line", () => {
   it("says nothing when no question is planted", () => {
     expect(plantedLine([q("sentence"), q("misses if you change: Fast text")])).toBeNull()
     expect(plantedLine([])).toBeNull()
+  })
+})
+
+describe("the Starter as a config", () => {
+  it("is samples/starter.yaml, for every setting the file names", () => {
+    const registry = registryFixture as unknown as Registry
+    const samples = [{ name: "primer", sha: "a".repeat(64), filename: "primer.pdf", default: true, question: "Why?" }] as unknown as SampleCard[]
+    const c = graphToConfig(starterPipeline(registry, samples)!.graph)
+    expect(c.ok).toBe(true)
+    if (!c.ok) return
+    const file = starterConfig as unknown as PipelineConfig
+    const got = c.pipeline.config
+    // The column fills every setting at its default; the file names only what it changes.
+    const named = (s: Step, f: Step): Step => Object.fromEntries(Object.keys(f).map((k) => [k, s[k]])) as Step
+    const picked: PipelineConfig = {
+      index: {
+        parse: named(got.index.parse, file.index.parse),
+        clean: got.index.clean!.map((s, i) => named(s, file.index.clean![i])),
+        chunk: named(got.index.chunk, file.index.chunk),
+        embed: named(got.index.embed!, file.index.embed!),
+        store: named(got.index.store, file.index.store),
+      },
+      retrieve: { search: named(got.retrieve!.search, file.retrieve!.search) },
+      answer: named(got.answer!, file.answer!),
+    }
+    expect(sameConfig(picked, file)).toBe(true)
+    expect(got.retrieve?.rewrite).toBeUndefined()
+    expect(got.retrieve?.rerank).toBeUndefined()
   })
 })

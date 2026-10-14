@@ -14,6 +14,7 @@ that talks to the API.
 - [Artifacts and the cache](#artifacts-and-the-cache)
 - [The run stream](#the-run-stream)
 - [How the web app talks to the API](#how-the-web-app-talks-to-the-api)
+- [How the web app holds a pipeline](#how-the-web-app-holds-a-pipeline)
 
 ## The layout of the repo
 
@@ -325,3 +326,17 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
 
 The app also has lessons, a guided walk through each step, but they are switched off
 (`LESSONS_ENABLED` in `web/src/state/lessons.ts`) while they are reworked.
+
+## How the web app holds a pipeline
+
+The browser holds a pipeline as the pipeline file's shape (`PipelineConfig` in
+`web/src/state/config.ts`), with the documents it runs on and the question Ask asks beside
+it, never `path`, `models` or `plugins`. Pipelines saved by older versions held a graph of
+steps; `graphToConfig` converts each one once, and one it cannot convert is kept with the
+reason and never deleted. Build draws its column from the config (`columnOf`); each card's
+id maps to the step name runs report (`clean_2` is `clean.2`, `retrieve` is `search`).
+
+These functions are tested, and no page uses them yet. The fixture
+`web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the browser holds
+it, and two tests pin that converting the app's Starter gives that file, so a visitor's
+Starter keeps its result ids.

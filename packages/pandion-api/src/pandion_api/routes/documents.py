@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 
 from pandion_api.deps import get_documents, get_policy
-from pandion_api.documents import SHA, DocumentStore
+from pandion_api.documents import PART_REFUSED, SHA, DocumentStore, is_part
 from pandion_api.policy import Policy
 
 router = APIRouter()
@@ -42,12 +42,14 @@ async def upload_document(
     store: DocumentStore = Depends(get_documents),
     policy: Policy = Depends(get_policy),
 ) -> dict[str, Any]:
-    data = await policy.check_upload(file, request)
-    if not data:
-        raise HTTPException(status_code=400, detail="empty upload")
     # Only the name's last part, and only its suffix reaches a path: the
     # stored file is `<sha><suffix>`, whatever the request called it.
     filename = Path(file.filename or "upload").name
+    if is_part(filename):
+        raise HTTPException(status_code=400, detail=PART_REFUSED)
+    data = await policy.check_upload(file, request)
+    if not data:
+        raise HTTPException(status_code=400, detail="empty upload")
     content_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     sha = store.save(data, filename)
     with store.lock:

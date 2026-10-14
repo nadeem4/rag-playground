@@ -33,6 +33,10 @@ SIDECAR_LOCK = threading.Lock()
 #: separator) is dropped, and the file is kept under its sha alone.
 SAFE_SUFFIX = re.compile(r"^\.[A-Za-z0-9_-]{1,16}$")
 
+#: The refusal for a name ending in `.part`: a stored file with that suffix
+#: would look like a half-written one, which every reader skips.
+PART_REFUSED = "A file name ending in .part cannot be uploaded; rename it and try again."
+
 _PUBLIC = ("sha", "filename", "size", "content_type")
 
 
@@ -40,6 +44,11 @@ def suffix(filename: str) -> str:
     """The suffix a file is stored with: its name's, when it is a plain one, else none."""
     found = Path(filename).suffix
     return found if SAFE_SUFFIX.match(found) else ""
+
+
+def is_part(filename: str) -> bool:
+    """Whether the name ends in `.part`, in any case (see PART_REFUSED)."""
+    return filename.lower().endswith(".part")
 
 
 def read_sidecar(path: Path) -> dict[str, Any]:
@@ -93,13 +102,14 @@ class DocumentStore:
         return self.folder / QUESTIONS_DIR / f"{sha}.json"
 
     def save(self, data: bytes, filename: str) -> str:
-        """Keep `data` as `<sha><suffix of filename>`, unless it is here. Only a
-        plain suffix comes from the name (see `suffix`). The bytes go to a side
-        file first and are renamed into place, so a reader never sees half a
-        file. Returns the sha."""
+        """Keep `data` as `<sha><suffix of filename>`, unless a file with this sha
+        is here already, under any suffix: the same bytes are never stored
+        twice, whatever they are called. Only a plain suffix comes from the
+        name (see `suffix`). The bytes go to a side file first and are renamed
+        into place, so a reader never sees half a file. Returns the sha."""
         sha = hashlib.sha256(data).hexdigest()
         dest = self.folder / f"{sha}{suffix(filename)}"
-        if not dest.is_file():
+        if self.file(sha) is None:
             self.folder.mkdir(parents=True, exist_ok=True)
             part = dest.with_name(dest.name + ".part")
             part.write_bytes(data)

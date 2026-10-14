@@ -133,3 +133,20 @@ def test_a_file_name_never_chooses_where_the_file_goes(client, tmp_path, name, s
     sources = tmp_path / "data" / "sources"
     assert [p.name for p in sources.iterdir() if p.is_file()] == [f"{sha}{stored}"]
     assert [p for p in tmp_path.rglob("*") if p.is_file() and "outside" in p.name] == []
+
+
+def test_the_same_bytes_under_another_name_are_never_stored_twice(client, tmp_path):
+    data = build_pdf(SAMPLE_PAGES)
+    sha = upload(client, "r.pdf", data)["sha"]
+    upload(client, "r.bin", data)
+    upload(client, "r", data)
+    sources = tmp_path / "data" / "sources"
+    assert [p.name for p in sources.iterdir() if p.is_file()] == [f"{sha}.pdf"]
+
+
+@pytest.mark.parametrize("name", ["r.part", "R.PART"])
+def test_a_name_ending_in_part_is_refused(client, tmp_path, name):
+    r = client.post("/documents", files={"file": (name, build_pdf(SAMPLE_PAGES), "application/pdf")})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "A file name ending in .part cannot be uploaded; rename it and try again."
+    assert not (tmp_path / "data" / "sources").exists() or not any((tmp_path / "data" / "sources").iterdir())

@@ -46,7 +46,9 @@ Every pipeline a request sends runs with `data_dir` as its `path`, so Pandion ke
 and `embeddings/` (the embedding cache) there. pandion-api keeps each document's record
 in `sources/.meta/` and its question set in `sources/questions/`. A file is kept as
 `<sha256><suffix>`; only a plain suffix such as `.pdf` comes from the name a request
-sends, so a name never chooses where a file goes.
+sends, so a name never chooses where a file goes. The same bytes are stored once: an
+upload under another name writes no second file. A name ending in `.part` is refused
+with a 400, because a stored file with that suffix would look half-written.
 
 ## Endpoints
 

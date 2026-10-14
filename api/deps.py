@@ -11,9 +11,11 @@ The package takes every folder as an argument, so a run gets them through
 `Deps.run_extras()`, which the run routes pass as `context_extras`.
 
 **The sources folder reaches a run as `Sources(sources_dir)`.** The upload
-step resolves `<sha><suffix>` in it, so the API stores uploads there under the
-same name (`pandion.sources.Sources`), or every run fails with
-FileNotFoundError.
+step resolves `<sha><suffix>` in it, so the old /api/sources route stores
+uploads there under the same name (`pandion.sources.Sources`), or every run
+fails with FileNotFoundError. /api/v2 stores through pandion-api's
+`DocumentStore` in the same folder, which keeps only a plain suffix and never
+stores the same bytes twice.
 """
 
 from __future__ import annotations

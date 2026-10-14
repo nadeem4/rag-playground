@@ -1,8 +1,12 @@
 """Uploaded source files, content addressed exactly as the `upload` step resolves them.
 
-The stored name is `<sha256><original suffix>` (`pandion.sources.Sources`). The original filename, size and
-content type live in a sidecar under `.meta/`, since the stored name alone
-cannot give the filename back.
+The old /api/sources route stores a file as `<sha256><original suffix>`
+(`pandion.sources.Sources`), the name the old run graph's upload step looks
+for, so it keeps the raw suffix. /api/v2 stores through pandion-api's
+`DocumentStore`, which keeps only a plain suffix and never stores the same
+bytes twice. Both write the same record (`.meta/<sha>.json`: the original
+filename, size and content type, and who uploaded it) under one lock, and both
+refuse a name ending in `.part`.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from pandion.sources import Sources
 
 # The record helpers are pandion-api's, so both stacks share one record format
 # and one lock (`SIDECAR_LOCK`, held here, in `expiry.sweep` and on /api/v2).
-from pandion_api.documents import META_DIR, SHA, SIDECAR_LOCK, DocumentStore
+from pandion_api.documents import META_DIR, PART_REFUSED, SHA, SIDECAR_LOCK, DocumentStore, is_part
 from pandion_api.documents import read_sidecar as _read_sidecar
 
 from api import demo, sample_set, visitor, warmup
@@ -219,12 +223,15 @@ async def upload_source(request: Request, response: Response, file: UploadFile) 
     # Locally a first upload mints the visitor id; on the demo it never does:
     # a client that drops cookies would get a fresh id, and a fresh cap, each time.
     me = visitor.ensure_visitor(request, response) if not demo.enabled() else visitor.visitor_id(request)
+    filename = Path(file.filename or "upload").name
+    if is_part(filename):
+        raise HTTPException(status_code=400, detail=PART_REFUSED)
     data = await request.app.state.policy.check_upload(file, request)
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
     return _store(
         request.app.state.deps.sources_dir,
-        Path(file.filename or "upload").name,
+        filename,
         data,
         file.content_type,
         visitor=me,
@@ -269,8 +276,9 @@ def _store(
     sample = next((s for s in sample_set.all_samples() if s.sha == hashlib.sha256(data).hexdigest()), None)
     if sample is not None:
         filename = sample.pdf.name  # a sample's bytes are stored under the sample's own name
+    # The raw suffix, as the old run graph's upload step looks for it.
+    sha = Sources(sources).add_bytes(data, filename).sha
     store = DocumentStore(sources)
-    sha = store.save(data, filename)
     ctype = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     with SIDECAR_LOCK:
         store.write(sha, filename, len(data), ctype)

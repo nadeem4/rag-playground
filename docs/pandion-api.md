@@ -79,6 +79,8 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
 | `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
 | `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
+| `GET /settings/models` | where the server's own key for each provider comes from (`env`, or `none`; the Policy may name others), never a key |
+| `POST /settings/models/check` | `{"provider", "base_url"?}`: whether the key this request would use works, with one call that costs no tokens (a model listing, or OpenRouter's key endpoint): `{"ok", "source", "error"}`. A custom endpoint needs `base_url`, which must pass the same address check as a run; an unknown provider is 422. The key is never echoed, and an error has it taken out. |
 | `POST /trace` | why one question missed, followed step by step down a finished run's results (`pandion.evaluation.trace`) |
 
 A document this caller may not read is answered exactly like one that does not exist: 404,
@@ -162,6 +164,8 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `not_keeping_note` (attribute) | "This server checked your questions but did not keep them." | the report's note when a set was not kept |
 | `server_key(provider)` | the environment variable, else `(None, "none")` | a run's keys, and `GET /settings/models` |
 | `key(provider, request)` | the header, else `server_key` | a run's keys, and the key check |
+| `missing_key(provider)` | names the header and the variable | the key check's error when there is no key |
+| `check_provider(provider, request)` | allows | `POST /settings/models/check` |
 | `credentials(request)` | every provider whose `key` resolves | every run |
 | `on_startup(app)`, `on_shutdown(app)` | nothing | once each, around serving |
 
@@ -180,7 +184,10 @@ On the demo a run is its visitor's own, on `/api/v2` and on the old `/api/runs/{
 which share the run manager. In every mode its errors keep only the last part of any
 server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it refuses
 `DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. A comparison
-on `/api/v2` takes at most ten variants, as many as an old sweep takes recipes. It checks a
+on `/api/v2` takes at most ten variants, as many as an old sweep takes recipes. A key
+check on `/api/v2` gives the old `/api/settings/llm/check` answers: the demo refuses to
+check a custom endpoint (403), never uses a server key, and its missing-key sentence names
+no server variable. It checks a
 question set and hands the report back, but keeps no set, so one visitor's questions
 never reach another's browser; the old `/api/sources/{id}/questions` routes ask the same
 Policy.

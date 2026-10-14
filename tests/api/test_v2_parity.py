@@ -21,6 +21,8 @@ from api.main import create_app
 from tests.api import (
     conftest,
     test_artifacts,
+    test_credentials,
+    test_credentials_providers,
     test_delete_source,
     test_demo,
     test_pages,
@@ -82,6 +84,8 @@ def make_v2_client(dirs, registry=None) -> TestClient:
 MODULES = (
     conftest,
     test_artifacts,
+    test_credentials,
+    test_credentials_providers,
     test_delete_source,
     test_demo,
     test_pages,
@@ -346,3 +350,44 @@ from tests.api.test_questions import (  # noqa: E402
     test_the_report_carries_the_question_and_its_id,
     test_the_report_says_which_parser_read_the_document,
 )
+
+
+# --- model keys (Task 14) ---------------------------------------------------------
+
+from tests.api.test_credentials import (  # noqa: E402
+    test_check_auth_failure_is_readable_and_redacted,
+    test_check_ok_with_env,
+    test_check_ok_with_header,
+    test_check_other_failure_is_redacted,
+    test_check_with_no_key,
+    test_settings_reports_server_source_only,
+)
+from tests.api.test_credentials_providers import (  # noqa: E402
+    test_check_custom_in_demo_mode_does_not_follow_redirects,
+    test_check_custom_is_refused_in_demo_mode,
+    test_check_custom_uses_the_base_url_and_needs_no_key,
+    test_check_custom_validates_the_endpoint_behind_the_demo_ban,
+    test_check_custom_without_a_base_url_makes_no_call,
+    test_check_openai_other_failure_is_redacted,
+    test_check_openai_rejected_key_is_readable_and_redacted,
+    test_check_openai_with_header,
+    test_check_openai_with_no_key_makes_no_call,
+    test_check_openrouter_asks_openrouter_about_the_key,
+    test_check_openrouter_rejected_key_is_readable_and_redacted,
+    test_check_openrouter_with_no_key_makes_no_call,
+    test_check_unknown_provider_is_a_422,
+    test_demo_settings_report_none_for_every_provider,
+    test_on_the_demo_a_missing_key_never_points_at_a_server_variable,
+    test_settings_report_one_source_per_provider,
+)
+from tests.api.test_demo import (  # noqa: E402
+    test_check_never_spends_the_host_key,
+    test_settings_report_no_server_key,
+)
+
+
+def test_both_stacks_check_a_key_with_one_function():
+    from api.routes import settings
+    from pandion_api import keycheck
+
+    assert settings.check_key is keycheck.check_key

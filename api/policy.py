@@ -28,6 +28,8 @@ from api.routes.artifacts import NO_CLEARING
 from api.routes.questions import NO_STORING
 from api.routes.registry import served_catalog
 from api.routes.runs import DEMO_NO_CUSTOM, MAX_VARIANTS, NOT_AVAILABLE, PROMPTS_FIXED
+from api.routes.settings import DEMO_NO_CUSTOM as NO_CUSTOM_CHECK
+from api.routes.settings import no_key
 
 #: The most a model step may write, in tokens (`max_tokens` on a step that calls a model).
 MAX_OUTPUT_TOKENS = 16000
@@ -248,6 +250,16 @@ class PlaygroundPolicy(Policy):
         """The environment, then `.env` at the repo root; on the demo, nothing:
         only a key the visitor typed is ever used."""
         return credentials.resolve_key(None, provider)
+
+    def missing_key(self, provider: str) -> str:
+        """The old key check's sentence: on the demo it names no server variable."""
+        return no_key(provider)
+
+    def check_provider(self, provider: str, request: Request) -> None:
+        """The demo never checks a custom endpoint: it would send a request to a
+        URL a visitor chose. The old POST /api/settings/llm/check refuses it the same way."""
+        if provider == "custom" and demo.enabled():
+            raise HTTPException(status_code=403, detail=NO_CUSTOM_CHECK)
 
     # --- what leaves the server -----------------------------------------------------
 

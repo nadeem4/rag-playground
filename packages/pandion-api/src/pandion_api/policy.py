@@ -120,6 +120,17 @@ class Policy:
                 out[spec.extra] = key
         return out
 
+    def missing_key(self, provider: str) -> str:
+        """What a key check says when there is no key: where one can go."""
+        spec = PROVIDERS[provider]
+        return (
+            f"no API key: send one in the {spec.header} header, or set {spec.env_var} "
+            "for the server process"
+        )
+
+    def check_provider(self, provider: str, request: Request) -> None:
+        """Refuse a key check for this provider (raise HTTPException)."""
+
     # --- what leaves the server -----------------------------------------------------
 
     def scrub(self, text: str) -> str:

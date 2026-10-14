@@ -58,6 +58,7 @@ describe("Your data and privacy", () => {
     }
     expect(rowFor(browser, "A question set you upload for Evaluate").textContent).toContain("In this tab only")
     expect(rowFor(browser, "API keys you add").textContent).toContain("never written to storage, a cookie, a link or a saved file")
+    expect(rowFor(browser, "The pipeline you are working on").textContent).toContain("it is kept as it was and Build says why")
   })
 
   it("names the Hugging Face terms that cover the hosting", async () => {

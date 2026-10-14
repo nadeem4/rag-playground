@@ -20,6 +20,10 @@ beforeEach(() => window.sessionStorage.clear())
 afterEach(() => vi.restoreAllMocks())
 
 describe("the Build session", () => {
+  it("is keyed v2: results run on the old graph's card ids are not read back", () => {
+    expect(BUILD_SESSION_KEY).toBe("rag-playground:build-session:v2")
+  })
+
   it("comes back as it was written, for this tab only", () => {
     writeBuildSession(SESSION)
     expect(readBuildSession()).toEqual(SESSION)

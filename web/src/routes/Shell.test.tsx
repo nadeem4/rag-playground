@@ -324,10 +324,14 @@ describe("the Ask panel on Build", () => {
   })
 })
 
+/** The column of the stored working pipeline, as Build draws it. */
+function storedColumn() {
+  return readStoredGraph(liveRegistry as never)
+}
+
 /** The stages of the stored graph. */
 function storedStages() {
-  const read = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1") ?? "{}") as { nodes?: { stage: string }[] }
-  return (read.nodes ?? []).map((n) => n.stage)
+  return (storedColumn()?.nodes ?? []).map((n) => n.stage)
 }
 
 describe("the main pane", () => {
@@ -713,20 +717,29 @@ describe("First run (plan I-15)", () => {
   })
 
   it("does not show when the stored graph already has a source", async () => {
-    window.localStorage.setItem(
-      "rag-playground:graph:v1",
-      JSON.stringify({ nodes: [{ id: "source", stage: "source", transform: "upload", config: { sha: SOURCE.sha, filename: "x.pdf" } }], edges: [] }),
-    )
+    storeGraph(sampleGraph(liveRegistry as never, { sha: SOURCE.sha, filename: "x.pdf" }))
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
     expect(document.querySelector('[aria-label="Document"]')).toBeNull()
+  })
+
+  it("an old pipeline that cannot be opened is kept, Build says so once and opens the Starter", async () => {
+    const old = JSON.stringify({ nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] })
+    window.localStorage.setItem("rag-playground:graph:v1", old)
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    expect(screen.getByText(/could not be opened here/).textContent).toContain("enrich")
+    expect(storedColumn()!.nodes.find((n) => n.stage === "source")!.config).toEqual({ sha: SAMPLE.sha, filename: SAMPLE.filename })
+    fireEvent.click(screen.getByRole("button", { name: "Got it" }))
+    expect(screen.queryByText(/could not be opened here/)).toBeNull()
+    expect(window.localStorage.getItem("rag-playground:graph:v1")).toBe(old)
   })
 
   it("arriving fresh opens the Starter: the sample graph on the default sample, without running anything", async () => {
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
     expect(sampleCalls).toBe(0)
-    const stored = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as { nodes: { id: string; stage: string; transform: string; config: Record<string, unknown> }[] }
+    const stored = storedColumn()!
     const ids = [...document.querySelectorAll("[data-node-id]")].map((el) => el.getAttribute("data-node-id"))
     const byId = new Map(stored.nodes.map((n) => [n.id, n]))
     expect(ids.map((id) => [byId.get(id!)!.stage, byId.get(id!)!.transform])).toEqual([
@@ -749,8 +762,7 @@ describe("First run (plan I-15)", () => {
 
 /** The question text in the stored graph. The Ask panel shows it from Task 3. */
 function storedQuestion() {
-  const read = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1") ?? "{}") as { nodes?: { stage: string; config: { text?: string } }[] }
-  return read.nodes?.find((n) => n.stage === "query")?.config.text
+  return storedColumn()?.nodes.find((n) => n.stage === "query")?.config.text
 }
 
 describe("picking a sample in the Document menu", () => {
@@ -796,15 +808,15 @@ describe("picking a sample in the Document menu", () => {
     await act(() => loadSampleDocument(CARD))
     await waitFor(() => expect(storedQuestion()).toBe("How long did the survey run?"))
     expect(sampled).toEqual(["two-column-report"])
-    type Stored = { nodes: { id: string; config: Record<string, unknown> }[] }
     // The graph reaches storage through a passive effect, so wait for it.
     const stored = await waitFor(() => {
-      const read = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as Stored
+      const read = storedColumn()!
       expect(read.nodes.find((n) => n.id === "source")?.config).toEqual({ sha: TWO_COL.sha, filename: TWO_COL.filename })
       return read
     })
     const byId = new Map(stored.nodes.map((n) => [n.id, n.config]))
-    expect(byId.get("chunk")).toEqual({ ...chunk.config, chunk_size: 321 })
+    // The column fills any setting left at its default, so only the ones set are compared.
+    expect(byId.get("chunk")).toMatchObject({ ...chunk.config, chunk_size: 321 })
     expect(stored.nodes.map((n) => n.id)).toEqual(g.nodes.map((n) => n.id))
     expect(within(card("source")).getByTestId("document-item").textContent).toContain("two-column-report.pdf")
     expect((panel().getByLabelText("Question") as HTMLTextAreaElement).value).toBe("How long did the survey run?")
@@ -1530,7 +1542,7 @@ describe("the Ask panel results on Build", () => {
     await waitFor(() => expect(askButton.disabled).toBe(false))
     fireEvent.click(askButton)
     await waitFor(() => expect(streams).toHaveLength(2))
-    const stored = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as { nodes: { id: string; stage: string }[] }
+    const stored = storedColumn()!
     const rerankId = stored.nodes.find((n) => n.stage === "rerank")!.id
     emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
     emit({ event: "node_finished", node_id: rerankId, artifact_id: "rr1", cache_hit: false, duration_ms: 1 }, "2")
@@ -1570,7 +1582,7 @@ describe("the Ask panel results on Build", () => {
     fireEvent.click(await built())
     await waitFor(() => expect(streams).toHaveLength(2))
     expect(panel().getByRole("button", { name: "Asking" })).toBeTruthy()
-    const stored = JSON.parse(window.localStorage.getItem("rag-playground:graph:v1")!) as { nodes: { id: string; stage: string }[] }
+    const stored = storedColumn()!
     const rerankId = stored.nodes.find((n) => n.stage === "rerank")!.id
     emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
     // None while the reranker is still working.

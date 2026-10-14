@@ -25,7 +25,7 @@ import "@/components/learn/learn.css"
  *   (state/buildSession.ts) are in sessionStorage; on the demo the server checks a
  *   set and keeps nothing (api/routes/questions.py).
  * - Saved items and the working pipeline: localStorage (state/pipelines.ts,
- *   state/libraryExperiments.ts, state/graph.ts). The Ask panel's side, width
+ *   state/libraryExperiments.ts, state/working.ts). The Ask panel's side, width
  *   and open or closed: localStorage (components/ask/AskDock.tsx).
  * - Run results: packages/pandion/src/pandion/storage.py never expires an entry, api/expiry.py deletes
  *   only uploads, and DELETE /api/cache (api/routes/artifacts.py) clears them.
@@ -108,7 +108,11 @@ export function Privacy() {
 
   const browserRows: Row[] = [
     ["Saved pipelines and experiments", "In this browser's storage", "Until you delete them here or clear this site's data. They never leave this browser unless you export them or share a link."],
-    ["The pipeline you are working on", "In this browser's storage", "Until you change it. It is how Build, Compare and Evaluate share one pipeline."],
+    [
+      "The pipeline you are working on",
+      "In this browser's storage",
+      "Until you change it. It is how Build, Compare and Evaluate share one pipeline. A pipeline from an older version stays where it was; it is converted once, and if it cannot be, it is kept as it was and Build says why.",
+    ],
     ["Theme and contrast", "In this browser's storage", "Until you change them."],
     ["Where the Ask panel sits on Build", "In this browser's storage", "Its side, its width and whether it is open, until you change them."],
     [

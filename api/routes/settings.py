@@ -16,8 +16,7 @@ from pydantic import BaseModel
 
 from api import demo, visitor
 from api.credentials import PROVIDERS, redact, resolve_key, server_source
-from pandion.endpoints import EndpointRefused, guard_endpoint
-from pandion.llm import openai_client_kwargs
+from pandion.extend import EndpointRefused, guard_endpoint, openai_client_kwargs
 
 router = APIRouter()
 

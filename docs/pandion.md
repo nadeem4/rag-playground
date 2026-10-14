@@ -506,6 +506,9 @@ anything runs, with a `QuestionSetError` naming the question:
 `pandion.evaluation.load_questions` reads a set on its own, and
 `pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
 is really in a document's text.
+`pandion.evaluation.document_text(pandion.parse("report.pdf", use="pdfium"))` gives the
+text gold passages are looked for in, and `check_questions(questions, text)` says, per
+passage, whether it is really in it.
 
 **How a question is scored.** By the `eval` step, the same one the playground's
 Evaluate page runs. A piece holds the answer when it contains a gold passage exactly,
@@ -939,6 +942,11 @@ The ports each stage reads:
 An `ambient=True` port is found for you: the `query` port is filled by the rewrite step
 without any wiring. Everything in the table, and `register`, `set_note`, `get_embedder`
 and `raw_file`, comes from `pandion.extend`.
+
+A strategy that calls a model at an address its settings name checks the address with
+`guard_endpoint(base_url, public_only=...)`, which raises `EndpointRefused` for a private
+or plain-http address when only public ones are allowed, and builds an OpenAI client's
+arguments with `openai_client_kwargs`.
 
 A short parser, for a start:
 

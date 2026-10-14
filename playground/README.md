@@ -7,8 +7,8 @@ You can also run the same app on your own machine.
 
 The app has two halves:
 
-- **The frontend** is the React app you see in the browser. It is still in `web/` at the
-  root of the repo for now, and it moves to `playground/frontend/` next.
+- **The frontend** is the React app you see in the browser, in
+  [frontend/](frontend/README.md).
 - **The backend** is the Python server in [backend/](backend/README.md).
 
 ## How the two halves fit
@@ -27,7 +27,7 @@ pandion-api runs every pipeline with [Pandion](../docs/pandion.md), the engine.
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
 flowchart TB
-    FE["Frontend (web/)"] -->|"/api/v2 and /api"| BE["Backend (playground/backend)"]
+    FE["Frontend (playground/frontend)"] -->|"/api/v2 and /api"| BE["Backend (playground/backend)"]
     BE --> API["pandion-api with PlaygroundPolicy"]
     API --> CORE["Pandion"]
 ```
@@ -37,15 +37,15 @@ flowchart TB
 You need Python 3.13 with [uv](https://docs.astral.sh/uv/), and Node.js 22.
 
 ```bash
-cd web && npm install && npm run build && cd ..
+cd playground/frontend && npm install && npm run build && cd ../..
 uv run rag-playground
 ```
 
 The server starts on http://127.0.0.1:8000 and opens your browser. It serves the build in
-`web/dist`. You can also start it with `uv run uvicorn playground.backend.main:app`.
+`playground/frontend/dist`. You can also start it with `uv run uvicorn playground.backend.main:app`.
 
 To work on the frontend, keep the server running and start the Vite dev server with
-`cd web && npm run dev`. It sends every `/api` request to the server on port 8000.
+`cd playground/frontend && npm run dev`. It sends every `/api` request to the server on port 8000.
 
 [docs/architecture.md](../docs/architecture.md) explains the whole design, and
 [CONTRIBUTING.md](../CONTRIBUTING.md) covers the tests.

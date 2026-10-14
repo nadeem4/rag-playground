@@ -1,9 +1,9 @@
 """Regenerate the frontend's JSON fixtures from the real engine.
 
-    uv run python web/scripts/export_fixtures.py
+    uv run python playground/frontend/scripts/export_fixtures.py
 
 The UI is built against these files, so they must be *produced*, never typed by
-hand: every shape in `web/src/api/fixtures/` is exactly what the API will serve.
+hand: every shape in `playground/frontend/src/api/fixtures/` is exactly what the API will serve.
 
 It runs on Pandion's public API and on pandion-api, as any app would:
 
@@ -53,7 +53,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 from unittest.mock import patch  # noqa: E402
@@ -62,7 +62,7 @@ from pandion import Pipeline, ResultStore  # noqa: E402
 from scripts.lesson_runs import run_pipeline  # noqa: E402
 from tests.steps.conftest import build_paragraph_pdf  # noqa: E402
 
-OUT = ROOT / "web" / "src" / "api" / "fixtures"
+OUT = ROOT / "playground" / "frontend" / "src" / "api" / "fixtures"
 FILENAME = "chunking-notes.pdf"
 RUNNING_HEAD = "RAG Playground - chunking notes"
 REPEATED = "Token counts in this note come from the heuristic counter, not a model tokenizer."

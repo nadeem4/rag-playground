@@ -3,10 +3,10 @@
     uv run python scripts/record_e2e_lesson.py
 
 Runs the bundled sample through the real pipeline, in-process, on Pandion's
-public API (`scripts/lesson_runs.py`), the way `web/scripts/export_fixtures.py`
+public API (`scripts/lesson_runs.py`), the way `playground/frontend/scripts/export_fixtures.py`
 does: Docling, the duplicate cleaner, recursive chunks of 400 characters with
 80 of overlap, a LanceDB index on Qwen3, one question, hybrid search, MMR and Search. It writes only what the
-lesson draws to `web/src/learn/e2e-run.json`. Every number on the lesson page
+lesson draws to `playground/frontend/src/learn/e2e-run.json`. Every number on the lesson page
 is computed from that file.
 
 Needs the Docling and Qwen3 models (downloaded on first use). Everything runs
@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
-OUT = ROOT / "web" / "src" / "learn" / "e2e-run.json"
+OUT = ROOT / "playground" / "frontend" / "src" / "learn" / "e2e-run.json"
 QUESTION = "Why do chunk boundaries matter?"
 
 PIPELINE = {

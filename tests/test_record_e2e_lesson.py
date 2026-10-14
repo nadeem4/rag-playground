@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-RECORDED = ROOT / "web" / "src" / "learn" / "e2e-run.json"
+RECORDED = ROOT / "playground" / "frontend" / "src" / "learn" / "e2e-run.json"
 
 
 def _script():

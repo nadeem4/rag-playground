@@ -19,7 +19,7 @@ it, Node.js 22 or newer to build the web app once, and about 2 GB of disk for th
 
 ```bash
 git clone https://github.com/nadeem4/rag-playground.git && cd rag-playground
-cd web && npm install && npm run build && cd ..
+cd playground/frontend && npm install && npm run build && cd ../..
 uv run rag-playground
 ```
 

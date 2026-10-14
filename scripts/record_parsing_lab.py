@@ -8,7 +8,7 @@ way `scripts/record_e2e_lesson.py` does: parse, recursive chunks of 400
 characters with 80 of overlap, a LanceDB index on Qwen3, then every question in
 the sample's `questions.json` through hybrid search and `pandion.evaluate`
 with top_k 5. It writes only what the lab shows to
-`web/src/learn/parsing-lab.json`. The chunking primer is recorded the same
+`playground/frontend/src/learn/parsing-lab.json`. The chunking primer is recorded the same
 way as a baseline: one column of prose, where the two parsers should agree.
 
 Parse, chunk and index are cached by recipe, so they run once per sample and
@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-OUT = ROOT / "web" / "src" / "learn" / "parsing-lab.json"
+OUT = ROOT / "playground" / "frontend" / "src" / "learn" / "parsing-lab.json"
 CASES = ["two-column-report", "table-of-figures", "scanned-notes"]
 PARSERS = ["pdfium", "docling"]
 #: Only the scanned sample needs OCR; it is much slower everywhere else.

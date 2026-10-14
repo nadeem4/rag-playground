@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
 
-# Stage 1: build the UI into web/dist.
+# Stage 1: build the UI into playground/frontend/dist.
 FROM node:22-slim AS web
 WORKDIR /web
-COPY web/package.json web/package-lock.json ./
+COPY playground/frontend/package.json playground/frontend/package-lock.json ./
 RUN npm ci
-COPY web/ ./
+COPY playground/frontend/ ./
 RUN npm run build
 
 # Stage 2: the Python server, which also serves the built UI.
@@ -39,12 +39,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --no-install-workspace
 
 COPY packages/ packages/
-COPY playground/ playground/
+# The server only: stage 1 built the frontend.
+COPY playground/__init__.py playground/__init__.py
+COPY playground/backend/ playground/backend/
 COPY samples/ samples/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-COPY --from=web /web/dist web/dist
+COPY --from=web /web/dist playground/frontend/dist
 
 RUN useradd --create-home --uid 1000 app \
     && mkdir -p /data/hf /data/sources /data/artifacts \

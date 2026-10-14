@@ -7,7 +7,7 @@ public API (`scripts/lesson_runs.py`), once per chunking strategy: Docling,
 the duplicate cleaner, the strategy at its own defaults, a LanceDB index on
 Qwen3, then every question in `samples/chunking-primer/questions.json` through
 hybrid search and `pandion.evaluate`. It writes what the lesson draws to
-`web/src/learn/chunking-strategies.json`.
+`playground/frontend/src/learn/chunking-strategies.json`.
 
 Every strategy runs at its defaults, because that is what a newcomer gets. The
 parse is shared, so all three cut the same text and the offsets in the file are
@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
 QUESTIONS_FILE = ROOT / "samples" / "chunking-primer" / "questions.json"
-OUT = ROOT / "web" / "src" / "learn" / "chunking-strategies.json"
+OUT = ROOT / "playground" / "frontend" / "src" / "learn" / "chunking-strategies.json"
 
 #: The three chunk-stage strategies, each run with an empty config.
 STRATEGIES = ("recursive_character", "markdown_header", "token_based")

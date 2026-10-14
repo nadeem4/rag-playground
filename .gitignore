@@ -26,7 +26,7 @@ embeddings/
 
 # Node (phase 5)
 node_modules/
-web/dist/
+playground/frontend/dist/
 
 # Editors / OS
 .vscode/

@@ -11,7 +11,7 @@ from pandion.registry import registry
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The Starter as the app builds it today (web/src/state/graph.ts, sampleGraph).
+#: The Starter as the app builds it today (playground/frontend/src/state/graph.ts, sampleGraph).
 APP_STARTER = [
     (Stage.PARSE, "docling", {}),
     (Stage.CLEAN, "dedupe_blocks", {}),
@@ -44,5 +44,5 @@ def test_the_web_fixture_is_the_starter_file():
     data = Pipeline.from_yaml(ROOT / "samples" / "starter.yaml").to_dict()
     data.pop("path")
     data.pop("models", None)
-    fixture = json.loads((ROOT / "web" / "src" / "api" / "fixtures" / "starter.config.json").read_text(encoding="utf-8"))
+    fixture = json.loads((ROOT / "playground" / "frontend" / "src" / "api" / "fixtures" / "starter.config.json").read_text(encoding="utf-8"))
     assert fixture == data

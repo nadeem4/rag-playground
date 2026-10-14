@@ -15,7 +15,7 @@ def png_size(path: Path) -> tuple[int, int]:
 
 
 def test_the_page_names_an_absolute_share_image():
-    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    html = (ROOT / "playground" / "frontend" / "index.html").read_text(encoding="utf-8")
     image = re.search(r'property="og:image" content="([^"]+)"', html)
     assert image and image.group(1) == f"{DEMO}/og-image.png"
     assert 'name="twitter:card" content="summary_large_image"' in html
@@ -23,7 +23,7 @@ def test_the_page_names_an_absolute_share_image():
 
 
 def test_the_share_image_is_served_and_matches_the_banner():
-    og = ROOT / "web" / "public" / "og-image.png"
+    og = ROOT / "playground" / "frontend" / "public" / "og-image.png"
     banner = ROOT / "assets" / "banner.png"
     assert png_size(og) == (1200, 630)
     assert og.read_bytes() == banner.read_bytes()

@@ -43,5 +43,5 @@ def build_deps(
         sources_dir=Path(
             sources_dir or os.environ.get("RAG_PLAYGROUND_SOURCES") or REPO_ROOT / "sources"
         ),
-        web_dist=Path(web_dist or REPO_ROOT / "web" / "dist"),
+        web_dist=Path(web_dist or REPO_ROOT / "playground" / "frontend" / "dist"),
     )

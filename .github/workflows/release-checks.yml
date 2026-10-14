@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: playground/frontend/package-lock.json
       - name: Cache the models
         uses: actions/cache@v4
         with:
@@ -55,7 +55,7 @@ jobs:
         # Tests that need the owner's private files skip themselves here.
         run: uv run --frozen pytest -m models -q
       - name: Build the web app
-        working-directory: web
+        working-directory: playground/frontend
         run: |
           npm ci
           npm run build

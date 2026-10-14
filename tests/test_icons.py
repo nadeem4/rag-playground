@@ -5,7 +5,7 @@ import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = ROOT / "web" / "public"
+PUBLIC = ROOT / "playground" / "frontend" / "public"
 ACCENT = "#0f6e51"  # --accent in tokens.css, oklch(0.48 0.095 166)
 
 
@@ -45,7 +45,7 @@ def test_the_manifest_names_the_app_and_its_icons():
 
 
 def test_the_page_links_every_icon():
-    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    html = (ROOT / "playground" / "frontend" / "index.html").read_text(encoding="utf-8")
     for tag in (
         '<link rel="icon" type="image/svg+xml" href="/favicon.svg" />',
         '<link rel="icon" href="/favicon.ico" sizes="32x32" />',

@@ -1,4 +1,4 @@
-"""Serve the built SPA from `web/dist`, with a fallback for client routes.
+"""Serve the built SPA from `playground/frontend/dist`, with a fallback for client routes.
 
 Registered after the API routers, so `/api/*` always wins. An unknown `/api`
 path is a JSON 404, never the SPA. When there is no build yet, every page is a
@@ -19,7 +19,7 @@ NOT_BUILT = """<!doctype html>
 <h1>RAG Playground</h1>
 <p>The API is running, but the web UI has not been built yet.</p>
 <p>Build it once, then reload this page:</p>
-<pre>cd web
+<pre>cd playground/frontend
 npm install
 npm run build</pre>
 <p>The API itself is under <a href="/docs">/api/v2</a>.</p>

@@ -6,8 +6,8 @@ artifacts/
 
 # Build outputs and environments, rebuilt inside the image
 .venv/
-web/node_modules/
-web/dist/
+playground/frontend/node_modules/
+playground/frontend/dist/
 
 # Local tooling, private notes and docs
 docs/

@@ -1,10 +1,10 @@
 import type { NodeState } from "@/api/runState"
 import type { StripLine } from "@/components/pipeline/RunStrip"
-import type { Registry } from "@/api/types"
+import type { Registry, Totals } from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { strategyLabel } from "@/learn/challenges"
 
-import { percent, pipelineSteps, type EvalMetrics, type RecipeStep } from "./evaluate"
+import { percent, pipelineSteps, type RecipeStep } from "./evaluate"
 import { askNodes, rewriteOf, type PipelineGraph } from "./graph"
 
 /**
@@ -23,21 +23,22 @@ export interface Figure {
 const rank = (r: number | null, digits: number) => (r === null ? "none" : r.toFixed(digits))
 
 /**
- * The row of numbers: each by its plain name with the technical name in
- * brackets, the k it was scored at in the hit rate's name. Recall comes only
- * when some question has more than one passage, since otherwise it equals the
- * hit rate.
+ * The row of numbers, as the server worked them out (`totals`): each by its
+ * plain name with the technical name in brackets, the k it was scored at in
+ * the hit rate's name. Recall comes only when the server sends one, which it
+ * does only when some question has more than one passage, since otherwise it
+ * equals the hit rate.
  */
-export function numbersRow(now: EvalMetrics, before: EvalMetrics | null, k: number): Figure[] {
-  const row: { label: string; of: (m: EvalMetrics) => string }[] = [
-    { label: `Hit rate (Hit@${k})`, of: (m) => percent(m.hitRate) ?? "none" },
+export function numbersRow(t: Totals, before: Totals | null, k: number): Figure[] {
+  const row: { label: string; of: (m: Totals) => string }[] = [
+    { label: `Hit rate (Hit@${k})`, of: (m) => percent(m.hit_rate) ?? "none" },
     { label: "Mean reciprocal rank (MRR)", of: (m) => (m.mrr === null ? "none" : m.mrr.toFixed(2)) },
-    { label: "Average rank when found (mean rank)", of: (m) => rank(m.meanRank, 1) },
-    { label: "Middle rank when found (median rank)", of: (m) => (m.medianRank === null ? "none" : String(m.medianRank)) },
+    { label: "Average rank when found (mean rank)", of: (m) => rank(m.mean_rank, 1) },
+    { label: "Middle rank when found (median rank)", of: (m) => (m.median_rank === null ? "none" : String(m.median_rank)) },
   ]
-  if (now.recall !== null) row.push({ label: `Evidence found (recall at ${k})`, of: (m) => percent(m.recall) ?? "none" })
+  if (t.recall !== null) row.push({ label: `Evidence found (recall at ${k})`, of: (m) => percent(m.recall) ?? "none" })
   return row.map(({ label, of }) => {
-    const value = of(now)
+    const value = of(t)
     const then = before ? of(before) : null
     return { label, value, was: then !== null && then !== value ? then : null }
   })

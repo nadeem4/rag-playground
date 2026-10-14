@@ -1,38 +1,32 @@
 import { describe, expect, it } from "vitest"
 
-import type { EvalPayload, Registry } from "@/api/types"
+import type { Registry, Totals } from "@/api/types"
 import type { NodeState } from "@/api/runState"
 import liveRegistry from "@/api/fixtures/registry.json"
 
-import { metrics } from "./evaluate"
 import { evalStripLine, indexLine, indexSteps, numbersRow, progressLine, runSummary, searchSteps, slowReadNote, staleLine, evidenceCells } from "./evaluateView"
 import { sampleGraph, setConfig, setTransform } from "./graph"
 
 const registry = liveRegistry as unknown as Registry
 
-function pay(hit: boolean, rank: number | null, over: Partial<EvalPayload> = {}): EvalPayload {
-  return {
-    question: "q",
-    gold_answer: "g",
-    hit,
-    rank,
-    matched_chunk_id: hit ? "c" : "",
-    match: hit ? "exact" : "none",
-    golds_total: 1,
-    golds_found: hit ? 1 : 0,
-    considered: 5,
-    total_candidates: 10,
-    found_at: null,
-    returned: 10,
-    ...over,
-  } as EvalPayload
-}
-
 const state = (status: NodeState["status"], id = "x"): NodeState => ({ id, status })
 
 describe("numbersRow", () => {
+  /** The server's totals (pandion.evaluation), as /api/v2/evaluations returns them. */
+  const totals = (over: Partial<Totals> = {}): Totals => ({
+    total: 4,
+    scored: 4,
+    found: 3,
+    hit_rate: 0.75,
+    mrr: 0.4583,
+    recall: null,
+    mean_rank: 2,
+    median_rank: 2,
+    ...over,
+  })
+
   it("names each number with its technical name and the k it was scored at", () => {
-    const row = numbersRow(metrics([pay(true, 1), pay(true, 2), pay(false, null), pay(true, 3)]), null, 5)
+    const row = numbersRow(totals(), null, 5)
     expect(row.map((n) => n.label)).toEqual([
       "Hit rate (Hit@5)",
       "Mean reciprocal rank (MRR)",
@@ -43,22 +37,22 @@ describe("numbersRow", () => {
     expect(row.every((n) => n.was === null)).toBe(true)
   })
 
-  it("adds recall only when a question has more than one passage", () => {
-    const row = numbersRow(metrics([pay(true, 1, { golds_total: 2, golds_found: 1 })]), null, 5)
+  it("adds recall only when the server sends one", () => {
+    const row = numbersRow(totals({ recall: 0.5 }), null, 5)
     expect(row.map((n) => n.label)).toContain("Evidence found (recall at 5)")
     expect(row.find((n) => n.label.startsWith("Evidence"))!.value).toBe("50%")
   })
 
   it("says what each number was when the last run differs, and nothing when it is the same", () => {
-    const now = metrics([pay(true, 1), pay(true, 1)])
-    const before = metrics([pay(true, 1), pay(false, null)])
+    const now = totals({ total: 2, scored: 2, found: 2, hit_rate: 1, mrr: 1, mean_rank: 1, median_rank: 1 })
+    const before = totals({ total: 2, scored: 2, found: 1, hit_rate: 0.5, mrr: 0.5, mean_rank: 1, median_rank: 1 })
     const row = numbersRow(now, before, 5)
     expect(row[0]).toMatchObject({ value: "100%", was: "50%" })
     expect(row[2]).toMatchObject({ value: "1.0", was: null })
   })
 
   it("says none when nothing was found, rather than a number", () => {
-    const row = numbersRow(metrics([pay(false, null)]), null, 5)
+    const row = numbersRow(totals({ found: 0, hit_rate: 0, mrr: 0, mean_rank: null, median_rank: null }), null, 5)
     expect(row[2].value).toBe("none")
     expect(row[3].value).toBe("none")
   })

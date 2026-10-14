@@ -4,8 +4,9 @@ import { Circle, CircleAlert, Clock, LoaderCircle } from "lucide-react"
 
 import { api } from "@/api/client"
 import { v2 } from "@/api/v2"
-import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
-import type { EvalPayload, Registry, RetrievalResult, SampleQuestion, Trace, TraceRequest, Variant } from "@/api/types"
+import { useApiKey } from "@/api/apiKey"
+import { QUEUED_LINE, type NodeState } from "@/api/runState"
+import type { EvalPayload, EvaluationResult, Registry, RetrievalResult, SampleQuestion, Totals, Trace } from "@/api/types"
 import { useSamples } from "@/api/samples"
 import { loadPayload } from "@/api/useArtifact"
 import { usePayloads } from "@/api/usePayloads"
@@ -21,39 +22,36 @@ import { MissTrace } from "@/components/evaluate/MissTrace"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { CONTROL } from "@/components/fields/types"
 import { EvidenceSlip, LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
-import { ordinal, rowsFromResult, scoreKey, type FindingPart } from "@/components/inspectors/hits"
+// Two modules export rowsFromResult: the hits of one search here, the report's verdicts by id from state/evaluate.
+import { ordinal, rowsFromResult as hitRows, scoreKey, type FindingPart } from "@/components/inspectors/hits"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { Button } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { cn } from "@/lib/utils"
+import { cardOfStepIn, graphToConfig } from "@/state/config"
 import {
-  batches,
   changeFor,
   changeText,
-  evalGraph,
+  evaluationRequest,
   hasRetriever,
-  isEvalOutput,
-  metrics,
-  metricsByTag,
   piecesWarning,
   pipelineLine,
+  plainTrace,
   pipelineSteps,
-  questionVariants,
   readPreviousEvaluation,
   reasonText,
   rerankEffect,
   rerankLine,
-  SWEEP_LIMIT,
+  // Renamed beside hitRows: this one reads the report's verdicts by question id.
+  rowsFromResult as verdictsById,
   storePreviousEvaluation,
   scoreFinding,
-  summarize,
   fixHref,
-  traceRequest,
   type PreviousEvaluation,
   type RowChange,
 } from "@/state/evaluate"
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
-import { columnOrder, storeGraph, upstreamOfStage, useStoredGraph, type PipelineGraph } from "@/state/graph"
+import { columnOrder, storeGraph, useStoredGraph, type PipelineGraph } from "@/state/graph"
 import { evalStripLine, evidenceCells, indexSteps, progressLine, runSummary, searchSteps, slowReadNote, staleLine } from "@/state/evaluateView"
 import { sameDocuments, useDocStatus, withDocuments, type DocRef } from "@/state/document"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
@@ -77,10 +75,12 @@ import { RegistryScreen } from "./Shell"
  * without altering a saved pipeline. Build your own makes a new one in a side
  * sheet. Arriving with nothing chosen opens on the Starter, ready to score.
  *
- * It takes the chosen graph, swaps the use case for `eval`, and sweeps the
- * question node over every question, each variant carrying the question and
- * the sentence that answers it. Only the use case changes, so parsing,
- * chunking and indexing come straight from the cache on the second run.
+ * It sends the chosen pipeline, as a Pandion config, with its documents and
+ * the whole question set in one request (`POST /api/v2/evaluations`). Pandion
+ * searches for every question, scores it with the eval step and adds up the
+ * totals; the page shows the server's numbers and adds up no score itself.
+ * Each row fills in as its question finishes. The index is built once and
+ * comes straight from the cache on the next run.
  *
  * The previous evaluation of each pipeline is kept in session storage, keyed
  * by document and pipeline, and every row says how it changed. Nothing is
@@ -371,8 +371,6 @@ function EvaluateBody({
     <Evaluation
       registry={registry}
       graph={graph}
-      queryId={query.id}
-      useCaseId={useCase.id}
       sourceSha={sourceSha}
       pipelineKey={pipelineKey}
       onBusy={onBusy}
@@ -403,12 +401,17 @@ const finished = (n?: NodeState) => n !== undefined && (n.status === "done" || n
 /** One question, and everything this page knows about how it did. */
 interface Row {
   question: Question
+  /** The eval step's payload, from the server's report. */
   payload?: EvalPayload
-  /** What the miss trace asks for, once every step this question ran has finished. */
-  trace: TraceRequest | null
+  /** Why a miss missed, step by step: the server traced it. */
+  trace?: Trace | null
+  /** The retrieval result the eval step scored, read by its id in the report. */
   result?: RetrievalResult
   resultStatus: InspectorStatus
-  failed?: NodeState
+  /** The question's search failed: the server's sentence. */
+  failed?: { message: string }
+  /** Whether the answer came back, as soon as the question finishes, before the report. */
+  found?: boolean
   started: boolean
 }
 
@@ -418,11 +421,24 @@ const PIECES_HELP =
 
 const INDEX_STAGES = ["parse", "clean", "chunk", "index"]
 
+/** Said when the run's scores could not be read, twice: never an empty table that reads as zero. */
+const SCORES_UNREAD = "The scores could not be read. Run it again."
+
+/** Only the totals of a report, so the stored last run stays small. */
+const totalsOf = (r: EvaluationResult): Totals => ({
+  total: r.total,
+  scored: r.scored,
+  found: r.found,
+  hit_rate: r.hit_rate,
+  mrr: r.mrr,
+  recall: r.recall,
+  mean_rank: r.mean_rank,
+  median_rank: r.median_rank,
+})
+
 function Evaluation({
   registry,
   graph,
-  queryId,
-  useCaseId,
   sourceSha,
   pipelineKey,
   onBusy,
@@ -434,8 +450,6 @@ function Evaluation({
 }: {
   registry: Registry
   graph: PipelineGraph
-  queryId: string
-  useCaseId: string
   sourceSha: string
   pipelineKey: string
   onBusy: (busy: boolean) => void
@@ -449,9 +463,6 @@ function Evaluation({
 }) {
   const topKId = useId()
   const questionsId = useId()
-  const query = graph.nodes.find((n) => n.id === queryId)!
-  // The step whose hits the eval step reads: the last reranker, else Retrieve.
-  const resultNode = upstreamOfStage(graph, useCaseId, ["rerank", "retrieve"])
   const defaultTopK = Number(registry.use_case?.eval?.config_schema?.properties?.top_k?.default ?? 5)
   const [topK, setTopK] = useState(defaultTopK)
   const [sample, setSample] = useState<SampleQuestion[] | null>(null)
@@ -467,27 +478,17 @@ function Evaluation({
   const [previous, setPrevious] = useState<PreviousEvaluation | null>(() => readPreviousEvaluation(sourceSha, pipelineKey))
   // The question whose details are open in the side sheet.
   const [detail, setDetail] = useState<string | null>(null)
-  const run = useRun(runId)
-  // More questions than one sweep takes run as several sweeps in a row
-  // (SWEEP_LIMIT). `offset` is where the current sweep's first question sits in
-  // the set, `earlier` holds the finished sweeps' variants under their place in
-  // the set, and `rest` the sweeps still to start.
-  const [offset, setOffset] = useState(0)
-  const [earlier, setEarlier] = useState<VariantState[]>([])
-  const [rest, setRest] = useState<{ offset: number; variants: Variant[] }[]>([])
-  const [evalGraphUsed, setEvalGraphUsed] = useState<PipelineGraph | null>(null)
-  // True from handing over to a new sweep until its state replaces the old
-  // one: useRun resets on the next effect, so for one render `run` still
-  // describes the sweep that just closed.
-  const [handover, setHandover] = useState(false)
-  useEffect(() => {
-    if (handover && !run.closed) setHandover(false)
-  }, [handover, run.closed])
-  const busy = submitting || handover || (runId !== null && !run.closed) || rest.length > 0
+  const { keys } = useApiKey()
+  // A stacked step (`clean.2`) lands on the card at that place in this column.
+  const run = useRun(runId, (step) => cardOfStepIn(graph, step))
+  const busy = submitting || (runId !== null && !run.closed)
   useEffect(() => {
     onBusy(busy)
     return () => onBusy(false)
   }, [busy, onBusy])
+  // The server's report, once the run has ended and it has been read.
+  const result = (run.result as EvaluationResult | null) ?? null
+  const byId = verdictsById(result)
 
   // Which set is in use, and whether it belongs to the document on Build.
   const uploaded = useQuestionSet(sourceSha)
@@ -518,52 +519,9 @@ function Evaluation({
     }
   }, [matched?.name])
 
-  const stateOf = (i: number) =>
-    earlier.find((s) => s.index === i) ?? (handover ? undefined : run.variants.find((s) => s.index !== null && s.index + offset === i))
-
-  // When a sweep ends and more are waiting, start the next. A cancelled or
-  // crashed sweep ends the evaluation: what finished stays on the page.
-  useEffect(() => {
-    if (runId === null || !run.closed || rest.length === 0) return
-    if (run.status === "cancelled" || run.error || !evalGraphUsed) {
-      setRest([])
-      return
-    }
-    const [next, ...after] = rest
-    const finished = run.variants.map((v) => ({ ...v, index: v.index === null ? null : v.index + offset }))
-    let live = true
-    api
-      .createSweep({ graph: evalGraphUsed, node_id: queryId, variants: next.variants, through: useCaseId })
-      .then(
-        ({ run_id }) => {
-          if (!live) return
-          setEarlier((e) => [...e, ...finished])
-          setHandover(true)
-          setOffset(next.offset)
-          setRest(after)
-          setRunId(run_id)
-        },
-        (err: unknown) => {
-          if (!live) return
-          setRest([])
-          setError(err instanceof Error ? err.message : String(err))
-        },
-      )
-    return () => {
-      live = false
-    }
-  }, [runId, run.closed]) // eslint-disable-line react-hooks/exhaustive-deps
-  const artifactOf = (i: number, id: string | undefined) => {
-    const s = stateOf(i)
-    return id && finished(s?.nodes[id]) ? s!.nodes[id].artifact_id : undefined
-  }
-  const ids = asked.map((_, i) => ({ out: artifactOf(i, useCaseId), result: artifactOf(i, resultNode?.id) }))
-
-  // How many pieces the pipeline made, read once from the chunk step of the
-  // first variant that finished it. Every variant shares that step.
-  const searchId = graph.nodes.find((n) => n.stage === "retrieve")?.id ?? queryId
+  // How many pieces the pipeline made: read once from the first question's chunk step.
   const chunkId = graph.nodes.find((n) => n.stage === "chunk")?.id
-  const chunkArtifact = asked.map((_, i) => artifactOf(i, chunkId)).find((id) => id !== undefined)
+  const chunkArtifact = chunkId ? run.variants.map((v) => (finished(v.nodes[chunkId]) ? v.nodes[chunkId].artifact_id : undefined)).find((id) => id !== undefined) : undefined
   const [pieces, setPieces] = useState<number | null>(null)
   useEffect(() => {
     if (!chunkArtifact) {
@@ -582,76 +540,101 @@ function Evaluation({
       live = false
     }
   }, [chunkArtifact])
-  const payload = usePayloads(ids.flatMap((x) => [x.out, x.result]))
 
   const ran = runId !== null
   // Before a run the questions are listed as they will be asked; after, as they were.
   const listed = ran ? asked : (questions ?? [])
-  const rows: Row[] = listed.map((question, i) => {
-    if (!ran) return { question, trace: null, resultStatus: { kind: "ready" }, started: false }
-    const s = stateOf(i)
-    const out = payload(ids[i].out).data
-    const got = payload(ids[i].result)
-    const result = got.data as RetrievalResult | undefined
-    const evaluated = isEvalOutput(out) ? out.payload : undefined
+  // The hits each question's search returned, by the result id in the report.
+  const resultIdOf = (id: string) => byId[id]?.result_id ?? undefined
+  const payload = usePayloads(listed.map((q) => resultIdOf(q.id)))
+  const retrieveId = graph.nodes.find((n) => n.stage === "retrieve")?.id ?? "retrieve"
+  const rows: Row[] = listed.map((question) => {
+    if (!ran) return { question, resultStatus: { kind: "ready" }, started: false }
+    const verdict = byId[question.id]
+    const live = run.questions[question.id]
+    const group = run.variants.find((v) => v.question === question.id)
+    const got = payload(resultIdOf(question.id))
+    const hits = got.data as RetrievalResult | undefined
+    const message = verdict?.error ?? live?.error
     return {
       question,
-      payload: evaluated,
-      trace: evaluated ? traceRequest(graph, (id) => artifactOf(i, id), question.gold_answers, shownK) : null,
-      result: result && Array.isArray(result.hits) ? result : undefined,
-      resultStatus: got.status,
-      failed: s ? Object.values(s.nodes).find((n) => n.status === "failed") : undefined,
-      // A question's run builds the index first; it is running once Retrieve starts, the first
-      // step that needs the finished index. (The question step has no inputs and runs at once.)
-      started: s !== undefined && (s.nodes[searchId]?.status ?? "pending") !== "pending",
+      // A question whose search failed has no score: the server leaves it out of the rates.
+      payload: verdict && !verdict.error ? verdict.score : undefined,
+      trace: verdict && !verdict.found ? verdict.trace : null,
+      result: hits && Array.isArray(hits.hits) ? hits : undefined,
+      resultStatus: verdict ? got.status : { kind: "loading" },
+      failed: message ? { message } : undefined,
+      found: verdict?.found ?? live?.found,
+      // A question's run builds the index first; it is running once its search starts,
+      // the first step that needs the finished index.
+      started: live !== undefined || verdict !== undefined || (group?.nodes[retrieveId]?.status ?? "pending") !== "pending",
     }
   })
 
-  const scoredRows = ran ? rows : []
-  const summary = summarize(scoredRows.map((r) => r.payload))
-  const scores = metrics(scoredRows.map((r) => r.payload))
+  // Every number is the server's: the totals, and the same per tag.
+  const totals: Totals | null = result
+  const byTag = result?.by_tag ?? {}
+  // A stopped run scored only part of the set, so it is compared with no last run.
+  const cancelled = result?.cancelled === true
+  const compared = cancelled ? null : previous
   // A number is compared only with a last run scored at the same Pieces checked.
-  const beforeScores = previous && (previous.k === undefined || previous.k === shownK) ? metrics(Object.values(previous.byId)) : null
-  const byTag = metricsByTag(scoredRows.map((r) => ({ tags: r.question.tags, payload: r.payload })))
+  const beforeTotals = compared && (compared.k === undefined || compared.k === shownK) ? compared.totals : null
+  const scoredRows = ran ? rows : []
   const effect = graph.nodes.some((n) => n.stage === "rerank")
-    ? rerankEffect(scoredRows.map((r) => ({ payload: r.payload, rows: r.result ? rowsFromResult(r.result) : undefined })))
+    ? rerankEffect(scoredRows.map((r) => ({ payload: r.payload, rows: r.result ? hitRows(r.result) : undefined })))
     : null
   const rerankText = effect ? rerankLine(effect) : null
-  const settled = scoredRows.filter((r) => r.payload || r.failed).length
+  const settled = Object.keys(run.questions).length
   const firstFailure = scoredRows.find((r) => r.failed)?.failed
   const steps = pipelineSteps(graph)
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
   const misses = scoredRows.flatMap((r) => (r.payload && !r.payload.hit ? [r.payload] : []))
   const warning = piecesWarning(pieces, shownK, misses)
-  const score = scoreFinding(
-    summary,
-    previous,
-    scoredRows.map((r) => ({ now: r.payload, before: previous?.byId[r.question.id] })),
-    steps,
-    shownK,
-  )
+  const stopped = !result?.cancelled
+    ? null
+    : result.total === 0
+      ? "Stopped before any question was scored."
+      : `Stopped after ${result.total} of ${asked.length} ${asked.length === 1 ? "question" : "questions"}.`
+  // Every row goes in, a failed one with no score, so a failed search keeps "every answer
+  // came back first" from being said. A stopped run words only the questions it scored.
+  const found = totals
+    ? scoreFinding(
+        totals,
+        compared,
+        (cancelled ? scoredRows.filter((r) => r.payload) : scoredRows).map((r) => ({ now: r.payload, before: compared?.byId[r.question.id] })),
+        steps,
+        shownK,
+      )
+    : null
+  // A run stopped before any question was scored has no score to word, only the stop.
+  const score =
+    found && totals && totals.total > 0
+      ? cancelled
+        ? { ...found, finding: `${stopped} ${totals.found} of the ${totals.total} ${totals.total === 1 ? "question" : "questions"} scored before the stop found the answer.` }
+        : found
+      : null
   const stale = ran && !busy ? staleLine(scoredK, topK) : null
+  // The run has ended: a question it never got to is not run, not still waiting.
+  const over = ran && run.closed
 
   // While a run goes: is the index from the cache, and how far through the questions.
   const indexIds = columnOrder(graph)
     .filter((n) => INDEX_STAGES.includes(n.stage))
     .map((n) => n.id)
   const stepName = (id: string) => steps.find((s) => s.label.toLowerCase() === graph.nodes.find((n) => n.id === id)?.stage)?.label ?? id
-  // Every sweep so far: the finished ones, then the one running.
-  const allVariants = [...earlier, ...(handover ? [] : run.variants)]
-  const firstStarted = stateOf(0) ?? allVariants[0]
-  // The index steps as Build's run strip shows them: live while the run goes,
-  // then each step done, reused from the cache, or failed.
+  // The index steps as Build's run strip shows them, from the first question's run,
+  // which builds the index: live while the run goes, then each step done, reused or failed.
   const indexNodes = columnOrder(graph).filter((n) => INDEX_STAGES.includes(n.stage))
-  const firstNodes = firstStarted?.nodes ?? {}
+  const firstNodes = run.variants[0]?.nodes ?? {}
   const segments = stripSegments(indexNodes, firstNodes, new Set(), busy ? { ids: new Set(indexIds), nodes: firstNodes } : undefined)
   const segmentTitle = (id: string) => segments.find((x) => x.id === id)?.title ?? stepName(id)
   const stripLine = evalStripLine(firstNodes, indexIds, segmentTitle, run.queued)
   const parseId = indexNodes.find((n) => n.stage === "parse")?.id
   const slowNote = slowReadNote(parseId ? firstNodes[parseId] : undefined)
   const current = settled < asked.length ? asked[settled]?.question : undefined
-  const retrieveId = graph.nodes.find((n) => n.stage === "retrieve")?.id
-  const cachedSearches = allVariants.filter((v) => retrieveId && v.nodes[retrieveId]?.status === "cached").length
+  const cachedSearches = run.variants.filter((v) => v.nodes[retrieveId]?.status === "cached").length
+  // The searches that ran to the end: every question's, or fewer when the run was stopped.
+  const searches = run.variants.filter((v) => finished(v.nodes[retrieveId])).length
 
   // Each row's element, so a mark can bring its row into view.
   const rowEls = useRef(new Map<string, HTMLLIElement>())
@@ -660,10 +643,10 @@ function Evaluation({
   }
 
   // The finished evaluation on screen, to compare the next one against. It is
-  // written to session storage as soon as it finishes, because changing a
-  // setting means a trip to Build and a fresh page.
-  const done = runId !== null && run.closed && rest.length === 0 && rows.length > 0 && rows.every((r) => r.payload !== undefined)
-  // How long the whole evaluation took, every batch together, measured here.
+  // written to session storage as soon as its report is read, because changing
+  // a setting means a trip to Build and a fresh page. A stopped run is not kept.
+  const done = runId !== null && run.closed && result !== null
+  // How long the whole evaluation took, measured here.
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [tookMs, setTookMs] = useState<number | null>(null)
   useEffect(() => {
@@ -672,15 +655,23 @@ function Evaluation({
       setStartedAt(null)
     }
   }, [done, startedAt])
-  const finishedRun: PreviousEvaluation | null = done
-    ? { sourceSha, pipelineKey, byId: Object.fromEntries(rows.map((r) => [r.question.id, r.payload!])), summary, steps, k: shownK }
-    : null
-  const fingerprint = finishedRun ? JSON.stringify(finishedRun.summary) + rows.map((r) => r.payload!.rank).join(",") : ""
+  const finishedRun: PreviousEvaluation | null =
+    done && result && !result.cancelled
+      ? {
+          sourceSha,
+          pipelineKey,
+          byId: Object.fromEntries(rows.flatMap((r) => (r.payload ? [[r.question.id, r.payload] as const] : []))),
+          totals: totalsOf(result),
+          steps,
+          k: shownK,
+        }
+      : null
   const latest = useRef<PreviousEvaluation | null>(null)
   latest.current = finishedRun
+  const stored = finishedRun ? runId : null
   useEffect(() => {
     if (latest.current) storePreviousEvaluation(latest.current)
-  }, [fingerprint])
+  }, [stored])
 
   async function evaluate() {
     if (!questions?.length) return
@@ -691,19 +682,9 @@ function Evaluation({
     setStartedAt(Date.now())
     setTookMs(null)
     try {
-      const g = evalGraph(graph, registry, topK)
-      if (!g) throw new Error("This server has no eval step.")
-      const [first, ...after] = batches(questionVariants(query, questions), SWEEP_LIMIT)
-      const { run_id } = await api.createSweep({
-        graph: g,
-        node_id: queryId,
-        variants: first.items,
-        through: useCaseId,
-      })
-      setEarlier([])
-      setOffset(0)
-      setEvalGraphUsed(g)
-      setRest(after.map((b) => ({ offset: b.offset, variants: b.items })))
+      const c = graphToConfig(graph)
+      if (!c.ok) throw new Error(c.problem)
+      const { run_id } = await v2.createEvaluation(evaluationRequest(c.pipeline, questions, topK), { keys })
       if (before) setPrevious(before)
       setAsked(questions)
       setScoredK(topK)
@@ -743,10 +724,7 @@ function Evaluation({
       {busy && runId ? (
         <Button
           variant="outline"
-          onClick={() => {
-            setRest([])
-            void v2.cancelRun(runId).catch(() => undefined)
-          }}
+          onClick={() => void v2.cancelRun(runId).catch(() => undefined)}
         >
           Cancel
         </Button>
@@ -850,7 +828,7 @@ function Evaluation({
             </p>
             {previous ? (
               <p data-testid="previous" className="text-sm text-fg-muted">
-                The last evaluation in this tab found {previous.summary.hits} of {previous.summary.total}.
+                The last evaluation in this tab found {previous.totals.found} of {previous.totals.total}.
               </p>
             ) : null}
           </div>
@@ -898,7 +876,7 @@ function Evaluation({
               </>
             )}
           </div>
-        ) : (
+        ) : score ? (
           <div aria-live="polite" className="flex flex-col gap-2">
             <p data-testid="summary" className="max-w-[52ch] text-[1.375rem] leading-snug text-balance text-fg">
               <MonoNumbers text={score.finding} />
@@ -909,6 +887,18 @@ function Evaluation({
               </p>
             ) : null}
           </div>
+        ) : stopped ? (
+          <p data-testid="stopped" className="max-w-[70ch] text-fg-muted">
+            {stopped}
+          </p>
+        ) : run.resultFailed ? (
+          <p role="alert" data-testid="scores-unread" className="text-sm text-danger">
+            {SCORES_UNREAD}
+          </p>
+        ) : run.error ? null : (
+          <p role="status" className="text-sm text-fg-muted">
+            Reading the scores
+          </p>
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
 
@@ -916,20 +906,20 @@ function Evaluation({
           <div data-testid="run-summary" className="flex max-w-[40rem] flex-col gap-1 text-sm">
             <RunStrip segments={segments} line={stripLine} bare />
             <p className="text-xs text-fg-muted">
-              <MonoNumbers text={runSummary(asked.length, cachedSearches, tookMs)} />
+              {searches ? <MonoNumbers text={runSummary(searches, cachedSearches, tookMs)} /> : null}
             </p>
           </div>
         ) : null}
 
-        {ran && !busy ? (
-          <EvalNumbers metrics={scores} before={beforeScores} byTag={byTag} topK={shownK} rerank={rerankText} onExplain={onExplain} />
+        {ran && !busy && totals && totals.total > 0 ? (
+          <EvalNumbers totals={totals} before={beforeTotals} byTag={byTag} topK={shownK} rerank={rerankText} onExplain={onExplain} />
         ) : null}
 
         {ran && !run.queued ? (
           <div role="list" aria-label="One mark per question" className="flex flex-wrap gap-2">
             {rows.map((row, i) => (
               <span role="listitem" key={row.question.id} className="flex">
-                <Mark n={i + 1} verdict={verdictOf(row, ran)} onPress={() => showRow(row.question.id)} />
+                <Mark n={i + 1} verdict={verdictOf(row, ran, over)} onPress={() => showRow(row.question.id)} />
               </span>
             ))}
           </div>
@@ -950,7 +940,7 @@ function Evaluation({
 
       {firstFailure ? (
         <p role="alert" className="font-mono text-xs break-words text-danger">
-          {errorHeadline(firstFailure.error ?? "A step failed.")}
+          {errorHeadline(firstFailure.message)}
         </p>
       ) : null}
 
@@ -965,7 +955,8 @@ function Evaluation({
                 key={row.question.id}
                 row={row}
                 ran={ran}
-                before={previous?.byId[row.question.id]}
+                over={over}
+                before={compared?.byId[row.question.id]}
                 topK={shownK}
                 onDetail={() => setDetail(row.question.id)}
                 rowRef={(el) => {
@@ -989,10 +980,13 @@ function Evaluation({
 
 type Verdict = "notrun" | "waiting" | "running" | "found" | "missed" | "failed"
 
-function verdictOf(row: Row, ran: boolean): Verdict {
+function verdictOf(row: Row, ran: boolean, over = false): Verdict {
   if (!ran) return "notrun"
   if (row.failed) return "failed"
   if (row.payload) return row.payload.hit ? "found" : "missed"
+  // Finished, before the report: the question_finished event already says which.
+  if (row.found !== undefined) return row.found ? "found" : "missed"
+  if (over) return "notrun"
   return row.started ? "running" : "waiting"
 }
 
@@ -1106,6 +1100,7 @@ function Evidence({ gold }: { gold: string }) {
 function QuestionRow({
   row,
   ran,
+  over,
   before,
   topK,
   onDetail,
@@ -1113,6 +1108,8 @@ function QuestionRow({
 }: {
   row: Row
   ran: boolean
+  /** The run has ended, so a question it never got to reads Not run. */
+  over: boolean
   before?: EvalPayload
   topK: number
   onDetail: () => void
@@ -1121,9 +1118,9 @@ function QuestionRow({
   const p = row.payload
   const change = changeFor(p, before)
   const moved = changeText(change, before)
-  const verdictKind = verdictOf(row, ran)
+  const verdictKind = verdictOf(row, ran, over)
   const verdict = VERDICT[verdictKind]
-  const reason = row.failed ? errorHeadline(row.failed.error ?? "Failed") : p ? reasonText(p, topK) : null
+  const reason = row.failed ? errorHeadline(row.failed.message) : p ? reasonText(p, topK) : null
   const gold = row.question.gold_answers[0]
   return (
     <li
@@ -1192,32 +1189,6 @@ function QuestionRow({
   )
 }
 
-/**
- * The miss trace for a question, fetched once per request.
- */
-function TraceSlot({ request, graph }: { request: TraceRequest; graph: PipelineGraph }) {
-  const key = JSON.stringify(request)
-  const [state, setState] = useState<{ key: string; trace?: Trace; error?: string } | null>(null)
-  useEffect(() => {
-    const ctrl = new AbortController()
-    api.trace(JSON.parse(key) as TraceRequest, ctrl.signal).then(
-      (trace) => setState({ key, trace }),
-      (err: unknown) => {
-        if (!ctrl.signal.aborted) setState({ key, error: err instanceof Error ? err.message : String(err) })
-      },
-    )
-    return () => ctrl.abort()
-  }, [key])
-  const current = state?.key === key ? state : null
-  return current?.trace ? (
-    <MissTrace trace={current.trace} fixHref={fixHref(graph, current.trace)} />
-  ) : current?.error ? (
-    <p className="text-sm break-words text-danger">Could not trace this question: {current.error}</p>
-  ) : (
-    <p className="text-sm text-fg-muted">Following the answer through each step.</p>
-  )
-}
-
 /** The slips shown before Show all. */
 const TOP = 3
 
@@ -1229,7 +1200,7 @@ const TOP = 3
 function QuestionDetail({ row, graph }: { row: Row; graph: PipelineGraph }) {
   const [all, setAll] = useState(false)
   const gold = row.question.gold_answers[0]
-  const hits = row.result ? rowsFromResult(row.result) : []
+  const hits = row.result ? hitRows(row.result) : []
   const shown = all ? hits : hits.slice(0, TOP)
   const scale = scoreKey(hits)
   const matched = row.payload?.hit ? row.payload.matched_chunk_id : null
@@ -1240,7 +1211,11 @@ function QuestionDetail({ row, graph }: { row: Row; graph: PipelineGraph }) {
       {missed ? (
         <section data-testid="detail-trace" className="flex flex-col gap-2">
           <h3 className="text-base font-semibold">Why did this miss?</h3>
-          {row.trace ? <TraceSlot request={row.trace} graph={graph} /> : <p className="text-sm text-fg-muted">Following the answer through each step.</p>}
+          {row.trace ? (
+            <MissTrace trace={plainTrace(row.trace, graph)} fixHref={fixHref(graph, row.trace)} />
+          ) : (
+            <p className="text-sm text-fg-muted">No trace came with this miss.</p>
+          )}
         </section>
       ) : null}
       {gold ? (

@@ -286,6 +286,11 @@ Evaluate scores a pipeline on its documents. It asks the pipeline every question
 question set and says how many found their answer, at what rank and in which piece. It
 needs no key.
 
+Evaluate sends the whole question set in one request (`POST /api/v2/evaluations`). Pandion
+scores every question; the page shows its numbers: the hit rate, mean reciprocal rank,
+recall when a question has several passages, and the ranks, overall and by tag. Each
+question's row fills in as it finishes.
+
 Pick the pipeline first. The **Pipeline** picker lists **Ready to use** (the Starter
 pipeline, marked Ready-made), **Your pipelines**, and **On Build** when Build has a pipeline
 that is not saved (marked Not saved), then **Build your own…**. The Starter on a document
@@ -340,8 +345,8 @@ the check finds is one the score can find. A question may carry several gold ans
 the document answers it in more than one place; any of them counts. A table row given both
 with and without its `|` bars is one answer written two ways, so it counts once.
 
-A set can hold any number of questions. Evaluate runs them ten at a time, one batch after
-another, and scores them as one evaluation.
+A set can hold up to 500 questions. Evaluate sends them all in one request and the
+server scores them as one evaluation.
 
 The bundled sets are about the bundled samples. Each question may name the document its
 evidence is in, as `document` (a column in CSV). A question without one belongs to the set's
@@ -380,6 +385,14 @@ the last run when that differs. "What these mean" opens the explanation.
 Changing Pieces checked after a run does not relabel the numbers: the page says "Scored at 5
 pieces. Evaluate again to use 3."
 
+**Cancel** stops the run before its next question. The questions that finished keep their
+rows and the score counts only them: "Stopped after 4 of 10 questions. 3 of the 4
+questions scored before the stop found the answer." The questions it never reached read
+Not run. A stopped run is compared with no last run, and it is not kept as the last run
+to compare against. If the scores cannot be read once the run ends, the page tries once
+more, then says "The scores could not be read. Run it again." instead of showing an empty
+score.
+
 One mark per question sits under the score; pressing a mark brings its row into view. Each
 row gives its verdict in a word and why in a sentence, such as "Found in the 1st piece, word
 for word." or "Not in any of the 6 pieces that came back, so no number of pieces checked
@@ -392,7 +405,8 @@ previous score of each pipeline in this tab is kept.
 
 A missed row has a **Why did this miss?** button. It opens the side sheet, which follows
 the answer sentence down the pipeline, one step at a time, and stops at the first step that
-lost it:
+lost it. The server traces every miss as it scores it, so the trace arrives with the
+scores:
 
 - **Parse.** Is the answer sentence in the parsed text? When all its words are there but
   other text sits between them, the row shows the parsed text with the answer's words
@@ -405,9 +419,8 @@ lost it:
 - **Top 5.** Was it among the pieces checked?
 
 The steps after the one that lost it say "Not checked." The trace ends with a fix to try and
-a button that opens that step on Build. A row that found its answer shows the same steps,
-all passed. The check is the same one Evaluate scores with, so a trace never disagrees
-with the score.
+a button that opens that step on Build. The check is the same one Evaluate scores with, so
+a trace never disagrees with the score.
 
 ## Library
 

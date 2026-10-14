@@ -1,32 +1,33 @@
+import type { Totals } from "@/api/types"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { cn } from "@/lib/utils"
-import type { EvalMetrics, TagMetrics } from "@/state/evaluate"
 import { numbersRow } from "@/state/evaluateView"
 
 /**
  * Every number behind the headline, in one row under the finding: each by its
  * plain name with the technical name in brackets, and what it was in the last
- * run when that differs. Recall joins only when a question has more than one
- * passage; the per-tag hit rates and the reranker's effect follow in a line.
+ * run when that differs. Every number is the server's (`totals`, `by_tag`):
+ * the page adds nothing up. Recall joins only when the server sends one; the
+ * per-tag counts and the reranker's effect follow in a line.
  * "What these mean" opens How it is scored, where each number is worked out.
  */
 export function EvalNumbers({
-  metrics: m,
+  totals,
   before,
   byTag,
   topK,
   rerank,
   onExplain,
 }: {
-  metrics: EvalMetrics
-  before: EvalMetrics | null
-  byTag: TagMetrics[]
+  totals: Totals
+  before: Totals | null
+  byTag: Record<string, Totals>
   topK: number
   rerank: string | null
   onExplain: () => void
 }) {
-  const figures = numbersRow(m, before, topK)
-  const tags = byTag.map((t) => `${t.tag} ${t.metrics.hits} of ${t.metrics.scored} found`)
+  const figures = numbersRow(totals, before, topK)
+  const tags = Object.entries(byTag).map(([tag, t]) => `${tag} ${t.found} of ${t.scored} found`)
   return (
     <div className="flex flex-col gap-2 border-y border-hairline py-3">
       <dl data-testid="numbers" className="m-0 flex flex-wrap gap-x-6 gap-y-2">

@@ -71,6 +71,8 @@ export interface RunState {
   questions: Record<string, { found: boolean; error: string | null; number: number }>
   /** What the run returned, from `GET /api/v2/runs/{id}` once the stream ended. */
   result: unknown
+  /** True when that read failed twice, so a page can say the result could not be read rather than show nothing. */
+  resultFailed: boolean
 }
 
 /** What a page says while its run waits its turn on the busy demo. */
@@ -87,6 +89,7 @@ export const initialRunState: RunState = {
   lastSeq: -1,
   questions: {},
   result: null,
+  resultFailed: false,
 }
 
 /** The card a Pandion step is drawn as, or null when the column has none for it. */
@@ -97,6 +100,7 @@ export type RunAction =
   | { type: "snapshot"; snapshot: RunSnapshot; cardOf?: CardOf }
   | { type: "reset" }
   | { type: "result"; result: unknown }
+  | { type: "result_failed" }
 
 function withCurrent(state: RunState, update: (v: VariantState) => VariantState): RunState {
   const variants = state.variants.length
@@ -241,6 +245,7 @@ export function runReducer(state: RunState, action: RunAction): RunState {
         lastSeq: action.snapshot.last_event_id,
         closed: rebuilt.closed || action.snapshot.status !== "running",
         result: action.snapshot.result ?? null,
+        resultFailed: false,
       }
     }
     case "event": {
@@ -250,7 +255,9 @@ export function runReducer(state: RunState, action: RunAction): RunState {
       return action.seq === undefined ? next : { ...next, lastSeq: action.seq }
     }
     case "result":
-      return { ...state, result: action.result }
+      return { ...state, result: action.result, resultFailed: false }
+    case "result_failed":
+      return { ...state, resultFailed: true }
   }
 }
 

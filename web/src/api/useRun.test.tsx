@@ -1,5 +1,5 @@
 import { StrictMode, type ReactNode } from "react"
-import { act, renderHook, waitFor } from "@testing-library/react"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { RunEvent, RunSnapshot } from "./types"
@@ -53,6 +53,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Unmount every hook, so no run of one test is still reading in the next.
+  cleanup()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -165,6 +167,45 @@ describe("useRun", () => {
     await waitFor(() => expect(result.current.result).toEqual({ hit_rate: 0.5 }))
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledWith("/api/v2/runs/r5", undefined)
+  })
+
+  it("tries the result read once more when it fails", async () => {
+    const snapshot: RunSnapshot = {
+      run_id: "r6",
+      kind: "evaluation",
+      status: "finished",
+      ok: true,
+      cancel_requested: false,
+      last_event_id: 0,
+      events: [],
+      result: { hit_rate: 1 },
+    }
+    let calls = 0
+    const fetchMock = vi.fn(async () => (++calls === 1 ? new Response("down", { status: 500 }) : new Response(JSON.stringify(snapshot), { status: 200 })))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { result } = renderHook(() => useRun("r6"))
+    FakeEventSource.instances[0].emit(0, { event: "stream_end", status: "finished", ok: true })
+
+    await waitFor(() => expect(result.current.result).toEqual({ hit_rate: 1 }))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result.current.resultFailed).toBe(false)
+  })
+
+  it("says the result could not be read when the second read fails too, and reads no more", async () => {
+    const fetchMock = vi.fn(async () => new Response("down", { status: 500 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { result } = renderHook(() => useRun("r7"))
+    expect(result.current.resultFailed).toBe(false)
+    FakeEventSource.instances[0].emit(0, { event: "stream_end", status: "finished", ok: true })
+
+    await waitFor(() => expect(result.current.resultFailed).toBe(true))
+    expect(result.current.result).toBeNull()
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400))
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it("closes the stream on unmount", async () => {

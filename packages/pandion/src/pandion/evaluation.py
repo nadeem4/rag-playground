@@ -527,8 +527,8 @@ def compare(
     then the highest mean reciprocal rank; see `Comparisons.best`.
 
     `on_event` gets every event, with the variant's number (from 1) under
-    "variant" and the number of variants under "total"; `cancel` starts no further variant, and the result says it was
-    cancelled.
+    "variant" and the number of variants under "variants"; `cancel` starts no
+    further variant, and the result says it was cancelled.
     """
     section = COMPARE_STAGES.get(stage)
     if section is None:
@@ -563,7 +563,7 @@ def compare(
         emit = None
         if on_event is not None:
             def emit(e: dict[str, Any], n: int = n) -> None:
-                on_event({**e, "variant": n, "total": len(variants)})
+                on_event({**e, "variant": n, "variants": len(variants)})
         index = pipeline.index.run(documents, on_event=emit, cancel=cancel, credentials=credentials)
         report = None
         if asked is not None and index.ok:

@@ -594,12 +594,15 @@ plain JSON with `comparisons`, each comparison's `to_dict()`, and `best`, the pl
 the best ones in the list, such as `[1]`.
 
 `on_event` gets every event with the variant's number under `variant` and the number of
-variants under `total`, and `cancel` starts no further variant (`results.cancelled`). A
-variant whose index run a cancel stopped prints `stopped`, and one whose evaluation was
-stopped partway prints its count followed by `(stopped early)`. Neither can be the best:
-when no variant finished, there is no `Best:` line. The last line is then
-`Stopped before every variant had finished.`, and `r.cancelled`, also in `r.to_dict()`,
-says which variants a cancel stopped.
+variants under `variants`. An evaluation's own fields, such as `total` (the number of
+questions) on `question_finished`, are left as they are. `cancel` starts no further
+variant. A variant whose index run a cancel stopped prints `stopped`, and one whose
+evaluation was stopped partway prints its count followed by `(stopped early)`. Neither
+can be the best: when no variant finished, there is no `Best:` line. The last line is
+then `Stopped before every variant had finished.` `results.cancelled`, also in
+`results.to_dict()`, is one flag for the whole comparison: a cancel stopped it. Each
+comparison has its own `r.cancelled`, also in `r.to_dict()`, which says whether a cancel
+stopped that variant.
 
 ## Running a pipeline from an app
 

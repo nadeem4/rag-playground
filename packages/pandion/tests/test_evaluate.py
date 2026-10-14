@@ -225,7 +225,6 @@ def test_a_question_as_a_dict_carries_the_id_of_its_final_result(tmp_path, docs)
     assert failed.to_dict()["result_id"] is None
 
 
-
 def test_documents_are_searched_without_reindexing_the_pipeline(tmp_path, docs):
     bees = tmp_path / "bees.pdf"
     bees.write_bytes(build_pdf(OTHER_DOC))

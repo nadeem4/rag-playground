@@ -76,7 +76,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
 | `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
 | `POST /evaluations` | `{"config", "documents", "questions"?, "top_k"?}`: search for every question and say whether its answer came back, and for a miss the step that lost it (`pandion.evaluate`). Without `questions`, the sets kept against the documents. A run; its result is the report's `to_dict()`. |
-| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. |
+| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?, "question"?, "answer"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. `question` (one question, no gold passage, at most 2,000 characters) instead of `questions` runs each variant's search (or, with `answer: true`, its answer) and returns the results unscored, as `{"comparisons": [{"stage", "variant", "ok", "cancelled", "retrieval" or "answer"}], "best": [], "cancelled"}`; `best` is then empty. Sending both `question` and `questions` is a 400. |
 | `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
 | `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
 | `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
@@ -110,7 +110,8 @@ not yet. Its kind is `ask`, or `retrieve` when `answer` is false. A pipeline wit
 anything runs.
 
 An evaluation's events carry the question's id under `question`, with a `question_finished`
-event after each. A comparison's carry the variant's number under `variant`. Every variant
+event after each. A comparison's carry the variant's number under `variant`. A comparison on one question
+carries `variant` on every event, as with questions, and `variants`, the number of them. Every variant
 is checked like a pipeline before anything runs, so a variant the Policy refuses is
 refused at once. A variant is taken as `pandion.compare` takes it: a bare name is
 `{"use": name}`, and one block for `clean` or `rerank` is a list of one. A question set

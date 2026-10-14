@@ -414,3 +414,36 @@ def test_no_key_ever_reaches_the_payload(openai_fake, pipeline, index):
 
 def test_the_plugin_module_still_imports_no_sdk():
     assert not hasattr(chat_module, "openai") and not hasattr(chat_module, "anthropic")
+
+
+from pandion.plugins.answer.chat import SYSTEM_PROMPT
+
+
+def test_the_prompt_and_max_tokens_are_settings(fake, pipeline):
+    fake.reply = response(text_block("An answer."))
+    ask(pipeline, prompt="Answer in one word.", max_tokens=2000)
+    req = fake.client.requests[0]
+    assert req["system"] == "Answer in one word." and req["max_tokens"] == 2000
+
+
+def test_the_sentence_prompt_is_a_setting(openai_fake, pipeline, index):
+    ask(pipeline, index=index, model="gpt-6-astra", sentence_prompt="Cite the ids.")
+    [req] = openai_fake.client.requests
+    assert req["messages"][0] == {"role": "system", "content": "Cite the ids."}
+
+
+def test_the_new_chat_settings_are_left_out_of_the_id_at_their_defaults():
+    cfg = ChatConfig()
+    assert (cfg.prompt, cfg.sentence_prompt, cfg.max_tokens) == (SYSTEM_PROMPT, SENTENCE_PROMPT, 16000)
+    assert set(cfg.model_dump(mode="json")) == {
+        "model", "custom_base_url", "custom_model", "openrouter_model",
+        "citation_method", "support_threshold", "max_chunks",
+    }
+
+
+@pytest.mark.parametrize(
+    "key, value",
+    [("prompt", "Answer in one word."), ("sentence_prompt", "Cite the ids."), ("max_tokens", 2000)],
+)
+def test_a_new_chat_setting_moves_the_id_when_changed(key, value):
+    assert ChatConfig(**{key: value}).model_dump(mode="json")[key] == value

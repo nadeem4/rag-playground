@@ -295,3 +295,45 @@ def test_user_facing_text_has_no_long_dashes():
     exp = LlmRewrite().explain(LlmRewriteConfig(text=QUESTION))
     text = exp.settings + (exp.tradeoff or "") + LlmRewrite.summary + UNUSABLE_NOTE
     assert "\N{EM DASH}" not in text and "\N{EN DASH}" not in text
+
+
+from pandion.plugins.query.llm_rewrite import system_prompt
+
+
+def test_the_prompt_and_budgets_are_settings(reply, tmp_path):
+    fake = reply(REWRITE)
+    rewrite(tmp_path, doc=parsed_doc("EXPERIENCE " + "x" * 3000),
+            prompt="Rewrite it.", doc_budget_chars=20, max_tokens=500)
+    call = fake.calls[0]
+    assert call["system"] == "Rewrite it."
+    assert call["max_tokens"] == 500
+    assert "EXPERIENCE " + "x" * 9 in call["user"] and "x" * 10 not in call["user"]
+
+
+def test_an_empty_prompt_is_the_built_in_one_for_the_style(reply, tmp_path):
+    fake = reply(REWRITE)
+    rewrite(tmp_path, style="keywords")
+    assert fake.calls[0]["system"] == system_prompt("keywords")
+    assert fake.calls[0]["max_tokens"] == 16000
+
+
+def test_max_rewrite_chars_decides_what_is_too_long(reply, tmp_path):
+    reply("x" * 50)
+    query, note = rewrite(tmp_path, max_rewrite_chars=40)
+    assert query.text == QUESTION and note == UNUSABLE_NOTE
+
+
+def test_the_new_rewrite_settings_are_left_out_of_the_id_at_their_defaults():
+    assert set(LlmRewriteConfig().model_dump(mode="json")) == {
+        "text", "gold_answer", "gold_answers", "model", "custom_base_url",
+        "custom_model", "openrouter_model", "style",
+    }
+    assert LlmRewriteConfig.model_json_schema()["properties"]["prompt"]["readOnly"] is True
+
+
+@pytest.mark.parametrize(
+    "key, value",
+    [("prompt", "Rewrite it."), ("doc_budget_chars", 20), ("max_rewrite_chars", 40), ("max_tokens", 500)],
+)
+def test_a_new_rewrite_setting_moves_the_id_when_changed(key, value):
+    assert LlmRewriteConfig(**{key: value}).model_dump(mode="json")[key] == value

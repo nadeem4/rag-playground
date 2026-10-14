@@ -30,6 +30,8 @@ export type StripLine =
   | { kind: "refused" }
   /** The run waits its turn on the busy demo. */
   | { kind: "queued" }
+  /** Cancel was pressed: the step running now finishes, then the run ends. */
+  | { kind: "stopping" }
   | null
 
 /**
@@ -100,6 +102,8 @@ function LineText({ line }: { line: Exclude<StripLine, null> }) {
   switch (line.kind) {
     case "queued":
       return <>{QUEUED_LINE}</>
+    case "stopping":
+      return <>Stopping after this step.</>
     case "building":
       return line.title ? (
         <>

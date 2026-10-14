@@ -6,7 +6,7 @@ import { strategyIn } from "@/state/graph"
 
 /**
  * Sweep bookkeeping. The runState reducer has already grouped node events
- * under their `variant_started` (node ids repeat across variants); these read
+ * by the variant each event carries (node ids repeat across variants); these read
  * those groups.
  */
 

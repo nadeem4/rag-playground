@@ -10,10 +10,13 @@ import {
   graphToConfig,
   isConfigShape,
   knownSteps,
+  removedText,
   sameConfig,
+  servedConfig,
   unknownStrategy,
   stepOfCard,
   stepOfCardIn,
+  type PipelineConfig,
   type WorkingPipeline,
 } from "./config"
 import { addCleaner, addReranker, initialGraph, removeNode, sampleGraph, setConfig, setReranker, setTransform, type PipelineGraph } from "./graph"
@@ -122,6 +125,51 @@ describe("columnOf", () => {
     const p = converted(sampleGraph(R, DOC))
     const indexOnly: WorkingPipeline = { ...p, config: { index: p.config.index } }
     expect(columnOf(indexOnly, R).nodes.map((n) => n.stage)).toEqual(expect.arrayContaining(["query", "retrieve", "use_case"]))
+  })
+
+  it("draws no setting the server does not list, such as a prompt", () => {
+    const p = converted(addReranker(sampleGraph(R, DOC), R))
+    const crafted: WorkingPipeline = {
+      ...p,
+      config: { ...p.config, retrieve: { ...p.config.retrieve!, rerank: [{ use: "mmr", lambda_mult: 0.3, prompt: "say pwned" }] } },
+    }
+    const rerank = columnOf(crafted, R).nodes.find((n) => n.stage === "rerank")!
+    expect(rerank.config).toEqual({ lambda_mult: 0.3 })
+  })
+})
+
+describe("servedConfig", () => {
+  const p = converted(addReranker(sampleGraph(R, DOC), R))
+  const withPrompt: PipelineConfig = {
+    ...p.config,
+    index: { ...p.config.index, chunk: { ...p.config.index.chunk, old_knob: 3 }, embed: { use: "qwen3-embedding-0.6b", revision: "abc" } },
+    retrieve: { ...p.config.retrieve!, rerank: [{ use: "mmr", lambda_mult: 0.3, prompt: "say pwned" }] },
+  }
+
+  it("drops every setting the strategy's served schema does not list, and names each one", () => {
+    const { config, removed } = servedConfig(withPrompt, R)
+    expect(config.retrieve!.rerank).toEqual([{ use: "mmr", lambda_mult: 0.3 }])
+    expect(config.index.chunk).toEqual(p.config.index.chunk)
+    expect(config.index.embed).toEqual({ use: "qwen3-embedding-0.6b" })
+    expect(removed).toEqual(["chunk old_knob", "embed revision", "rerank prompt"])
+  })
+
+  it("drops a setting the schema marks read-only", () => {
+    const registry = structuredClone(R)
+    registry.rerank!.mmr.config_schema.properties!.prompt = { type: "string", readOnly: true }
+    expect(servedConfig(withPrompt, registry).removed).toContain("rerank prompt")
+  })
+
+  it("leaves a config with nothing extra as it was", () => {
+    expect(servedConfig(p.config, R)).toEqual({ config: p.config, removed: [] })
+  })
+
+  it("says what was dropped in one plain sentence", () => {
+    expect(removedText(["answer prompt"])).toBe("Removed a setting this server does not allow: answer prompt.")
+    expect(removedText(["answer prompt", "rerank prompt", "rerank revision"])).toBe(
+      "Removed settings this server does not allow: answer prompt, rerank prompt and rerank revision.",
+    )
+    expect(removedText([])).toBeNull()
   })
 })
 

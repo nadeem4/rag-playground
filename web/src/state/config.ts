@@ -222,13 +222,61 @@ export function graphToConfig(graph: unknown): Converted {
 }
 
 /**
+ * A config from a link, a file or storage as the browser may hold it: every
+ * step keeps only the settings its strategy's served schema lists and does not
+ * mark read-only. A prompt, a model revision, or a setting Pandion no longer
+ * knows is dropped, and named in `removed` ("rerank prompt"). A step whose
+ * strategy this server lacks is left as it is: it is not opened at all.
+ */
+export function servedConfig(config: PipelineConfig, registry: Registry): { config: PipelineConfig; removed: string[] } {
+  const removed: string[] = []
+  const keep = (stage: Stage, s: Step, name: string, schemaOf: string = s.use): Step => {
+    const props = strategyIn(registry, stage, schemaOf)?.config_schema.properties
+    if (!props) return s
+    const allowed = (k: string) => k === "use" || (Object.hasOwn(props, k) && !props[k].readOnly)
+    for (const k of Object.keys(s)) if (!allowed(k)) removed.push(`${name} ${clip(k)}`)
+    return Object.fromEntries(Object.entries(s).filter(([k]) => allowed(k))) as Step
+  }
+  const each = (stage: Stage, list: Step[], name: string) => list.map((s, i) => keep(stage, s, list.length > 1 ? `${name} ${i + 1}` : name))
+  const { index, retrieve, answer } = config
+  const out: PipelineConfig = {
+    index: {
+      ...(index.source ? { source: index.source } : {}),
+      parse: keep("parse", index.parse, "parse"),
+      ...(index.clean ? { clean: each("clean", index.clean, "clean") } : {}),
+      chunk: keep("chunk", index.chunk, "chunk"),
+      // The embedder's settings are the Index card's: they are checked against the store's schema.
+      ...(index.embed ? { embed: keep("index", index.embed, "embed", index.store.use) } : {}),
+      store: keep("index", index.store, "store"),
+    },
+  }
+  if (retrieve) {
+    out.retrieve = {
+      ...(retrieve.rewrite ? { rewrite: keep("query", retrieve.rewrite, "rewrite") } : {}),
+      search: keep("retrieve", retrieve.search, "search"),
+      ...(retrieve.rerank ? { rerank: each("rerank", retrieve.rerank, "rerank") } : {}),
+    }
+  }
+  if (answer) out.answer = keep("use_case", answer, "answer")
+  return removed.length ? { config: out, removed } : { config, removed }
+}
+
+/** The one sentence that tells the visitor which settings were dropped, or null when none were. */
+export function removedText(removed: readonly string[]): string | null {
+  if (!removed.length) return null
+  if (removed.length === 1) return `Removed a setting this server does not allow: ${removed[0]}.`
+  return `Removed settings this server does not allow: ${removed.slice(0, -1).join(", ")} and ${removed[removed.length - 1]}.`
+}
+
+/**
  * The column drawn from a config: the cards Build shows, with the positional
  * ids of Decision 4, every setting a step leaves out at its default, wired, and
  * with any default stage the config lacks added (an index-only pipeline still
- * shows Ask, Retrieve and Search).
+ * shows Ask, Retrieve and Search). Only the settings `servedConfig` keeps are
+ * drawn, so the browser never holds one the server does not list.
  */
 export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph {
-  const { index, retrieve, answer } = p.config
+  const { index, retrieve, answer } = servedConfig(p.config, registry).config
   const nodes: GraphNode[] = []
   const add = (id: string, stage: Stage, s: Step | undefined, extra: Record<string, unknown> = {}) => {
     if (!s) return

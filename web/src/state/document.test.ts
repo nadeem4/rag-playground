@@ -15,7 +15,7 @@ import {
   withDocument,
 } from "./document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, type PipelineGraph } from "./graph"
-import { readCurrentId, resetPipelinesForTests, sameGraph, STARTER_ID } from "./pipelines"
+import { isEdited, readCurrentId, readPipelines, resetPipelinesForTests, sameGraph, savePipeline, STARTER_ID } from "./pipelines"
 
 const registry = liveRegistry as unknown as Registry
 const SAMPLE_SHA = "cd".repeat(32)
@@ -261,6 +261,17 @@ describe("a sample saved with an old fingerprint", () => {
     await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
     expect(result.current.status).toBe("ready")
     await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+  })
+
+  it("a saved pipeline opened on the old fingerprint follows the current copy, so it does not open as edited (M7)", async () => {
+    const opened = sampleGraph(registry, ref(OLD, "chunking-primer.pdf"))
+    const { saved } = savePipeline("Migrated", opened)!
+    storeGraph(opened)
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+    const p = readPipelines().find((x) => x.id === saved.id)!
+    expect(p.documents).toEqual([ref(SAMPLE_SHA, "chunking-primer.pdf")])
+    expect(isEdited(p, readStoredGraph(registry)!)).toBe(false)
   })
 
   it("does nothing while the lists are still loading", async () => {

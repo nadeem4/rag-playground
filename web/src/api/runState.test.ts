@@ -11,32 +11,28 @@ const ts = 1789956625
 let seq = 0
 const e = (event: Record<string, unknown>): RunEvent => ({ ts: ts + seq++, ...event }) as RunEvent
 
-/** A two-variant sweep: the node ids repeat across variants. */
+/** A two-variant comparison: each event carries its variant, and the node ids repeat across variants. */
 const sweepEvents: RunEvent[] = [
-  e({ event: "variant_started", index: 0, variant: { transform: "recursive_character", config: {} } }),
-  e({ event: "run_started", nodes: ["src", "parse", "chunk"], selected: ["chunk", "parse", "src"] }),
-  e({ event: "node_started", node_id: "src", transform: "upload", artifact_id: "a1" }),
-  e({ event: "node_finished", node_id: "src", artifact_id: "a1", cache_hit: false, duration_ms: 3.2 }),
-  e({ event: "node_started", node_id: "parse", transform: "pdfium", artifact_id: "a2" }),
-  e({ event: "node_finished", node_id: "parse", artifact_id: "a2", cache_hit: false, duration_ms: 67.5 }),
-  e({ event: "node_started", node_id: "chunk", transform: "recursive_character", artifact_id: "a3" }),
-  e({ event: "node_finished", node_id: "chunk", artifact_id: "a3", cache_hit: false, duration_ms: 4.1 }),
-  e({ event: "run_finished", ok: true, cancelled: false }),
-  e({ event: "variant_finished", index: 0, ok: true }),
-  e({ event: "variant_started", index: 1, variant: { transform: "token_based", config: { max_tokens: 96 } } }),
-  e({ event: "run_started", nodes: ["src", "parse", "chunk"], selected: ["chunk", "parse", "src"] }),
-  e({ event: "node_started", node_id: "src", transform: "upload", artifact_id: "a1" }),
-  e({ event: "node_finished", node_id: "src", artifact_id: "a1", cache_hit: true, duration_ms: 0.4 }),
-  e({ event: "node_started", node_id: "parse", transform: "pdfium", artifact_id: "a2" }),
-  e({ event: "node_finished", node_id: "parse", artifact_id: "a2", cache_hit: true, duration_ms: 0.6 }),
-  e({ event: "node_started", node_id: "chunk", transform: "token_based", artifact_id: "a4" }),
-  e({ event: "node_failed", node_id: "chunk", error: "Traceback (most recent call last):\n  ValueError: boom" }),
-  e({ event: "run_finished", ok: false, cancelled: false }),
-  e({ event: "variant_finished", index: 1, ok: false }),
+  e({ variant: 1, event: "run_started", nodes: ["src", "parse", "chunk"], selected: ["chunk", "parse", "src"] }),
+  e({ variant: 1, event: "node_started", node_id: "src", transform: "upload", artifact_id: "a1" }),
+  e({ variant: 1, event: "node_finished", node_id: "src", artifact_id: "a1", cache_hit: false, duration_ms: 3.2 }),
+  e({ variant: 1, event: "node_started", node_id: "parse", transform: "pdfium", artifact_id: "a2" }),
+  e({ variant: 1, event: "node_finished", node_id: "parse", artifact_id: "a2", cache_hit: false, duration_ms: 67.5 }),
+  e({ variant: 1, event: "node_started", node_id: "chunk", transform: "recursive_character", artifact_id: "a3" }),
+  e({ variant: 1, event: "node_finished", node_id: "chunk", artifact_id: "a3", cache_hit: false, duration_ms: 4.1 }),
+  e({ variant: 1, event: "run_finished", ok: true, cancelled: false }),
+  e({ variant: 2, event: "run_started", nodes: ["src", "parse", "chunk"], selected: ["chunk", "parse", "src"] }),
+  e({ variant: 2, event: "node_started", node_id: "src", transform: "upload", artifact_id: "a1" }),
+  e({ variant: 2, event: "node_finished", node_id: "src", artifact_id: "a1", cache_hit: true, duration_ms: 0.4 }),
+  e({ variant: 2, event: "node_started", node_id: "parse", transform: "pdfium", artifact_id: "a2" }),
+  e({ variant: 2, event: "node_finished", node_id: "parse", artifact_id: "a2", cache_hit: true, duration_ms: 0.6 }),
+  e({ variant: 2, event: "node_started", node_id: "chunk", transform: "token_based", artifact_id: "a4" }),
+  e({ variant: 2, event: "node_failed", node_id: "chunk", error: "Traceback (most recent call last):\n  ValueError: boom" }),
+  e({ variant: 2, event: "run_finished", ok: false, cancelled: false }),
   e({ event: "stream_end", status: "finished", ok: false, extra_field_from_a_newer_server: 1 }),
 ]
 
-describe("runReducer: sweeps", () => {
+describe("runReducer: comparisons", () => {
   it("does not close after the first run_finished", () => {
     const firstRunFinished = sweepEvents.findIndex((x) => x.event === "run_finished")
     const state = reduceEvents(sweepEvents.slice(0, firstRunFinished + 1))
@@ -52,7 +48,7 @@ describe("runReducer: sweeps", () => {
     expect(v0.nodes.chunk).toMatchObject({ status: "done", artifact_id: "a3", cache_hit: false })
     expect(v0.ok).toBe(true)
     expect(v1.index).toBe(1)
-    expect(v1.variant?.transform).toBe("token_based")
+    expect(v1.nodes.chunk.transform).toBe("token_based")
     expect(v1.nodes.src).toMatchObject({ status: "cached", cache_hit: true })
     expect(v1.nodes.chunk.status).toBe("failed")
     expect(v1.nodes.chunk.error).toContain("ValueError: boom")

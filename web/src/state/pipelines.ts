@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
-import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
+import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, servedConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
 
@@ -261,6 +261,31 @@ export function updatePipeline(id: string, graph: PipelineGraph, documents: DocR
   return persist(list.map((p) => (p.id === id ? { ...p, ...next } : p)))
 }
 
+/**
+ * Drop from a saved pipeline the settings this server does not allow (a
+ * prompt, a revision, a setting Pandion no longer knows), as `servedConfig`
+ * decides, once it is opened. Returns what was dropped, so the page can say so.
+ */
+export function cleanSavedPipeline(id: string, registry: Registry): string[] {
+  const list = freshPipelines()
+  const p = list.find((x) => x.id === id)
+  if (!p?.config) return []
+  const { config, removed } = servedConfig(p.config, registry)
+  if (!removed.length || !persist(list.map((x) => (x.id === id ? { ...x, config } : x)))) return []
+  return removed
+}
+
+/**
+ * A sample's bytes changed, so its fingerprint did (state/document.ts). Saved
+ * pipelines on the old fingerprint follow it to the current copy: only the
+ * fingerprint changes, so a pipeline opened that way is not edited.
+ */
+export function followSample(oldSha: string, now: DocRef): void {
+  const list = freshPipelines()
+  if (!list.some((p) => p.documents[0]?.sha === oldSha)) return
+  persist(list.map((p) => (p.documents[0]?.sha === oldSha ? { ...p, documents: [{ ...now }, ...p.documents.slice(1)] } : p)))
+}
+
 export function renamePipeline(id: string, name: string): boolean {
   const clean = cleanName(name)
   if (!clean) return false
@@ -412,8 +437,8 @@ export function encodePipeline(name: string, graph: PipelineGraph, documents: Do
   return toBase64Url(JSON.stringify({ v: 3, name, config: c.pipeline.config, documents, question: c.pipeline.question }))
 }
 
-export type Decoded = { ok: true; name: string; graph: PipelineGraph; documents: DocRef[] } | { ok: false; problem: string }
-
+/** `removed` names the settings the link carried that this server does not allow, which were dropped. */
+export type Decoded = { ok: true; name: string; graph: PipelineGraph; documents: DocRef[]; removed?: string[] } | { ok: false; problem: string }
 
 /** Null when the code is not a pipeline link; otherwise the pipeline, or why it cannot open here. */
 export function decodePipeline(code: string, registry: Registry): Decoded | null {
@@ -436,8 +461,10 @@ export function decodePipeline(code: string, registry: Registry): Decoded | null
     const why = p.config && notHere(p.config, registry)
     if (why) return { ok: false, problem: why }
     const graph = usableGraph(p, registry)
-    if (!graph) return null
-    return { ok: true, name: parsed.name, graph, documents: p.documents }
+    if (!graph || !p.config) return null
+    // Drawn without the settings the server does not allow; the page says which went.
+    const { removed } = servedConfig(p.config, registry)
+    return { ok: true, name: parsed.name, graph, documents: p.documents, ...(removed.length ? { removed } : {}) }
   } catch {
     // A backstop: whatever a crafted link holds, it is not a link, never a crash.
     return null

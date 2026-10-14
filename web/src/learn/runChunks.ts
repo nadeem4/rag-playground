@@ -1,4 +1,4 @@
-import type { ChunkSet, Registry } from "@/api/types"
+import type { ChunkSet } from "@/api/types"
 import { loadPayload } from "@/api/useArtifact"
 import { v2 } from "@/api/v2"
 import { errorHeadline } from "@/state/pipeline"
@@ -11,9 +11,7 @@ import { errorHeadline } from "@/state/pipeline"
  */
 
 export interface ChunkRunOptions {
-  registry: Registry
   sha: string
-  filename?: string
   parse: { transform: string; config: Record<string, unknown> }
   strategy: string
   config: Record<string, unknown>

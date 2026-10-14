@@ -6,7 +6,7 @@ import { v2 } from "@/api/v2"
 import { sampleQuestionTexts } from "@/api/samples"
 import type { SampleCard, Source } from "@/api/types"
 
-import { setCurrentId, STARTER_ID } from "./pipelines"
+import { followSample, setCurrentId, STARTER_ID } from "./pipelines"
 import { initialGraph, readStoredGraph, sampleGraph, storedGraphJson, storeGraph, subscribeGraph, type PipelineGraph } from "./graph"
 import { parseWorking, readWorking, storeWorking } from "./working"
 
@@ -169,14 +169,20 @@ let recovering = false
 /** Switch a working graph whose sample has an old fingerprint to that sample's current copy, and say so once. */
 function recoverStaleSample(): void {
   if (recovering) return
-  const card = staleSample(storedDocument(storedGraphJson()), state.sources, state.samples, state.known)
-  if (!card) return
+  const old = storedDocument(storedGraphJson())
+  const card = staleSample(old, state.sources, state.samples, state.known)
+  if (!card || !old) return
   recovering = true
   const gen = generation
+  const now = { sha: card.sha, filename: card.filename }
   // No question: only the fingerprint changes, so the query text the visitor typed stays.
-  chooseDocument({ sha: card.sha, filename: card.filename })
+  chooseDocument(now)
     .then(
-      () => gen === generation && set({ recovered: card.filename }),
+      () => {
+        // A saved pipeline on the old fingerprint follows too, so it does not open as edited.
+        followSample(old.sha, now)
+        if (gen === generation) set({ recovered: card.filename })
+      },
       () => {},
     )
     .finally(() => {

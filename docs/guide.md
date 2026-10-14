@@ -129,6 +129,9 @@ visit with no document, the first-visit card offers the samples, **Upload a PDF*
 - **Build the index** runs the steps. Each card also has its own **Run**. Each card runs
   the pipeline only as far as itself (`through` in `POST /api/v2/runs`); what is already
   stored comes from the cache.
+- **Cancel** stops a run after the step it is on, since a step cannot be stopped half way.
+  Until the run ends, the line beside the step bars says "Stopping after this step." The
+  steps that finished stay in the cache, so the next build reuses them.
 - The **gear** on a card opens its settings. Once the index is built, the line above the
   cards invites you to change a step, such as the chunk size, and build again, and points
   to Compare for several settings side by side.
@@ -173,6 +176,17 @@ all is refused and nothing is saved. If it was built on a bundled
 sample, Build the index and Ask work at once. Your own uploads do not travel with the link:
 the Document card tags the file Removed from the server, and picking a sample keeps every
 shared setting.
+
+A pipeline only keeps the settings this server offers on its cards. A link, an imported
+file, a saved pipeline or the pipeline on Build may carry one it does not: a prompt or the
+reranker revision, which are fixed in the playground, or a setting Pandion no longer knows.
+That setting is dropped as the pipeline opens, from the saved copy too, and the page says
+so in one sentence, such as "Removed a setting this server does not allow: answer prompt."
+The pipeline then runs as usual.
+
+When a bundled sample is updated, its fingerprint changes. A pipeline saved on the old
+copy opens on the current one, says so once, and is not marked edited, so **Copy link**
+works at once.
 
 Opened from Evaluate's **Open on Build to watch each step**, Build shows **Back to
 Evaluate**, and saving there goes back to Evaluate with the new pipeline selected.

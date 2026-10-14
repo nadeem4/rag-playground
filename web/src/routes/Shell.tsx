@@ -54,9 +54,11 @@ import {
 import { documentOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
 import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
-import { cardOfStepIn, graphToConfig } from "@/state/config"
+import { cardOfStepIn, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
+import { readWorking } from "@/state/working"
 import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
+  cleanSavedPipeline,
   decodePipeline,
   droppedText,
   FULL_OF_KEPT,
@@ -165,6 +167,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   }, [starter, noStarter, samples, registry])
   const noDocument = needsDocument(docStatus)
   const [runId, setRunId] = useState<string | null>(null)
+  // The run Cancel was pressed for: a run stops only after the step it is on, so the strip says so.
+  const [stopping, setStopping] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // What this tab built and asked, kept across page loads (Read and Compare are their own pages).
   const [session] = useState(readBuildSession)
@@ -283,6 +287,19 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   }, [])
 
   const [barNotice, setBarNotice] = useState<string | null>(null)
+  // The stored working pipeline, and the saved one it came from, may carry a setting the
+  // server does not allow (a prompt, a setting Pandion no longer knows). The column is drawn
+  // without it; here both are stored without it, and the visitor is told once.
+  useEffect(() => {
+    const stored = readWorking()
+    const drawn = stored && unknownStrategy(stored.config, registry) === null ? servedConfig(stored.config, registry).removed : []
+    if (drawn.length) storeGraph(graph)
+    const id = readCurrentId()
+    const saved = id && id !== STARTER_ID ? cleanSavedPipeline(id, registry) : []
+    const note = removedText([...new Set([...drawn, ...saved])])
+    if (note) setBarNotice(note)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount by design
+  }, [registry])
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const code = params.get("pipeline")
@@ -300,19 +317,21 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       // A link can carry any name; clamp it to what Save as accepts (M2).
       const name = decoded.name.trim().slice(0, 60).trim() || "Shared pipeline"
       const existing = readPipelines().find((p) => p.name === name && !isUnsaved(p, decoded.graph))
+      // The link's settings the server does not allow are already gone from the graph; say which.
+      const removed = removedText(decoded.removed ?? [])
+      setBarNotice(removed)
       if (existing) {
         setCurrentId(existing.id)
       } else {
         const result = savePipeline(name, decoded.graph, { documents: decoded.documents })
-        if (result?.dropped) setBarNotice(droppedText(result.dropped))
+        if (result?.dropped) setBarNotice([removed, droppedText(result.dropped)].filter(Boolean).join(" "))
         if (!result) {
           // Keeping the old selection would let "Save changes" overwrite it with this graph.
           setCurrentId(null)
-          setBarNotice(
-            fullOfKept()
-              ? `${FULL_OF_KEPT} The shared pipeline is loaded as the working copy.`
-              : "The shared pipeline could not be saved in this browser. It is loaded as the working copy.",
-          )
+          const why = fullOfKept()
+            ? `${FULL_OF_KEPT} The shared pipeline is loaded as the working copy.`
+            : "The shared pipeline could not be saved in this browser. It is loaded as the working copy."
+          setBarNotice([removed, why].filter(Boolean).join(" "))
         }
       }
       edit(decoded.graph)
@@ -450,7 +469,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   // The last run was Build the index, and it has ended.
   const built = !busy && runId !== null && !fromAsk && runTarget !== undefined && runTarget === indexNode(graph)?.id
   let stripLine: StripLine = null
-  if (busy && run.queued) stripLine = { kind: "queued" }
+  if (busy && stopping !== null && stopping === runId) stripLine = { kind: "stopping" }
+  else if (busy && run.queued) stripLine = { kind: "queued" }
   else if (building) stripLine = { kind: "building", title: runningTitle, startedAt: runningSince }
   else if (runningStep && runningTitle) stripLine = { kind: "running", title: runningTitle, startedAt: runningSince }
   // Refused before it started: no step ran, so the strip points at the note above the cards.
@@ -477,7 +497,15 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           <h1 className="text-xl font-semibold">Index pipeline</h1>
           <div className="flex items-center gap-2">
             {busy && runId ? (
-              <Button variant="outline" size="sm" onClick={() => void v2.cancelRun(runId).catch(() => undefined)}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={stopping === runId}
+                onClick={() => {
+                  setStopping(runId)
+                  void v2.cancelRun(runId).catch(() => undefined)
+                }}
+              >
                 Cancel
               </Button>
             ) : null}
@@ -501,11 +529,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           starter={starter}
           fromEvaluate={fromEvaluate}
           onSaved={fromEvaluate ? (id) => navigate(`/evaluate?pipeline=${encodeURIComponent(id)}`) : undefined}
-          onLoad={(g) => {
+          onLoad={(g, note) => {
             // Errors from the last run belong to the graph being replaced (M4).
             setErrors({})
             setColumnError(null)
             setKeyNotice(null)
+            setBarNotice(note ?? null)
             edit(g)
           }}
           notice={barNotice}

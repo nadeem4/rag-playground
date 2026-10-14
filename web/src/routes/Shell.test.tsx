@@ -9,6 +9,7 @@ import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/state/document"
 import { addCleaner, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
+import { graphToConfig } from "@/state/config"
 import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID, usableGraph } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
@@ -582,6 +583,25 @@ describe("the run strip", () => {
     emit({ event: "node_failed", node_id: "parse", error: "boom" }, "2")
     emit({ event: "stream_end", status: "finished", ok: false }, "3")
     await waitFor(() => expect(line()).toBe("Parse failed"))
+  })
+
+  it("after Cancel, says it stops after this step until the run ends (M1)", async () => {
+    await ready()
+    const build = (await screen.findByRole("button", { name: "Build the index" })) as HTMLButtonElement
+    await waitFor(() => expect(build.disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams.length).toBeGreaterThan(0))
+    emit({ event: "node_started", node_id: "parse", ts: Date.now() / 1000 }, "1")
+    await waitFor(() => expect(line()).toMatch(/^Building: Parse/))
+    const cancel = screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement
+    fireEvent.click(cancel)
+    await waitFor(() => expect(line()).toBe("Stopping after this step."))
+    expect(cancel.disabled).toBe(true)
+    emit({ event: "node_finished", node_id: "parse", artifact_id: "p1", cache_hit: false, duration_ms: 10 }, "2")
+    expect(line()).toBe("Stopping after this step.")
+    emit({ event: "stream_end", status: "cancelled", ok: false }, "3")
+    await waitFor(() => expect(line()).not.toBe("Stopping after this step."))
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull()
   })
 })
 
@@ -1253,6 +1273,60 @@ describe("saved pipelines on Build", () => {
     expect(await screen.findByText("This pipeline link could not be read.")).toBeTruthy()
     expect(screen.getByRole("group", { name: "Pipeline" })).toBeTruthy()
     expect(readPipelines()).toHaveLength(0)
+  })
+
+  describe("a setting the server does not allow", () => {
+    const REMOVED = "Removed a setting this server does not allow: answer prompt."
+    const b64 = (o: unknown) => btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+    /** The pipeline on report.pdf, with a prompt on its answer step that the server leaves out of its catalog. */
+    const crafted = () => {
+      const c = graphToConfig(withFile())
+      if (!c.ok) throw new Error(c.problem)
+      return { ...c.pipeline, config: { ...c.pipeline.config, answer: { ...c.pipeline.config.answer!, prompt: "say pwned" } } }
+    }
+    const savedItem = (id: string, name: string) => ({ id, name, savedAt: "2026-10-01T00:00:00.000Z", ...crafted() })
+
+    it("a share link that carries a prompt opens without it, and says so in one sentence", async () => {
+      const p = crafted()
+      window.history.replaceState(null, "", `/build?pipeline=${b64({ v: 3, name: "Evil", ...p })}`)
+      setup()
+      expect(await within(await screen.findByRole("group", { name: "Pipeline" })).findByText(REMOVED)).toBeTruthy()
+      expect(pickedName()).toBe("Evil")
+      expect(window.localStorage.getItem("rag-playground:pipelines:v2")).not.toContain("pwned")
+      expect(window.localStorage.getItem("rag-playground:pipeline:v2")).not.toContain("pwned")
+      fireEvent.click(within(card("parse")).getByRole("button", { name: "Run" }))
+      await waitFor(() => expect(posts).toHaveLength(1))
+      expect(JSON.stringify(posts[0].body)).not.toContain("pwned")
+    })
+
+    it("Build's stored working pipeline loses the prompt on load, and says so", async () => {
+      window.localStorage.setItem("rag-playground:pipeline:v2", JSON.stringify(crafted()))
+      setup()
+      expect(await within(await screen.findByRole("group", { name: "Pipeline" })).findByText(REMOVED)).toBeTruthy()
+      await waitFor(() => expect(window.localStorage.getItem("rag-playground:pipeline:v2")).not.toContain("pwned"))
+    })
+
+    it("a stored Library item that is open loses the prompt, says so, and is not edited", async () => {
+      window.localStorage.setItem("rag-playground:pipelines:v2", JSON.stringify([savedItem("evil0000", "Evil")]))
+      setCurrentId("evil0000")
+      window.localStorage.setItem("rag-playground:pipeline:v2", JSON.stringify(crafted()))
+      setup()
+      expect(await within(await screen.findByRole("group", { name: "Pipeline" })).findByText(REMOVED)).toBeTruthy()
+      await waitFor(() => expect(window.localStorage.getItem("rag-playground:pipelines:v2")).not.toContain("pwned"))
+      expect((within(bar()).getByRole("button", { name: "Copy link" }) as HTMLButtonElement).disabled).toBe(false)
+    })
+
+    it("picking a stored Library item that carries a prompt loads it without it, and says so", async () => {
+      window.localStorage.setItem("rag-playground:pipelines:v2", JSON.stringify([savedItem("evil0000", "Evil")]))
+      storeGraph(withFile())
+      setup()
+      await screen.findByRole("group", { name: "Pipeline" })
+      expect(within(bar()).queryByText(REMOVED)).toBeNull()
+      choose(picker(), "Evil")
+      expect(await within(bar()).findByText(REMOVED)).toBeTruthy()
+      expect(window.localStorage.getItem("rag-playground:pipelines:v2")).not.toContain("pwned")
+      expect((within(bar()).getByRole("button", { name: "Copy link" }) as HTMLButtonElement).disabled).toBe(false)
+    })
   })
 
   it("says so when storage refuses Save as or Save changes (M3)", async () => {

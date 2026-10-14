@@ -24,6 +24,7 @@ from tests.api import (
     test_delete_source,
     test_demo,
     test_pages,
+    test_questions,
     test_runs,
     test_source_file,
     test_sources,
@@ -84,6 +85,7 @@ MODULES = (
     test_delete_source,
     test_demo,
     test_pages,
+    test_questions,
     test_runs,
     test_source_file,
     test_sources,
@@ -314,4 +316,28 @@ from tests.api.test_demo import test_demo_refuses_to_clear_the_shared_cache  # n
 from tests.api.test_trace import (  # noqa: E402
     test_the_route_refuses_an_unknown_artifact,
     test_the_route_traces_a_real_run,
+)
+
+
+# --- question sets (Task 12) ------------------------------------------------------
+
+from tests.api.test_questions import (  # noqa: E402
+    test_a_gold_passage_copied_from_the_document_is_found,
+    test_a_passage_broken_across_a_line_is_found_normalized,
+    test_a_passage_from_another_document_has_no_close_match,
+    test_a_passage_retyped_with_other_quotes_is_found_normalized,
+    test_a_question_is_only_found_when_all_of_its_golds_are,
+    test_a_second_upload_replaces_the_first,
+    test_a_set_can_be_removed,
+    test_a_set_cannot_be_stored_against_an_unknown_document,
+    test_a_set_is_stored_against_the_document_and_read_back,
+    test_a_set_with_a_missing_passage_is_still_stored,
+    test_a_source_that_is_not_a_pdf_says_so,
+    test_a_typo_is_not_found_and_the_closest_passage_shows_why,
+    test_an_unreadable_file_is_a_400_naming_the_row,
+    test_demo_mode_checks_a_set_but_keeps_nothing,
+    test_demo_mode_serves_no_set_for_another_document,
+    test_no_set_yet_is_an_empty_answer_not_an_error,
+    test_the_report_carries_the_question_and_its_id,
+    test_the_report_says_which_parser_read_the_document,
 )

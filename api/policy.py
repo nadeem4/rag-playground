@@ -25,6 +25,7 @@ from pandion_api.documents import META_DIR, Document
 from api import credentials, demo, expiry, sample_set, visitor
 from api.routes import sources
 from api.routes.artifacts import NO_CLEARING
+from api.routes.questions import NO_STORING
 from api.routes.registry import served_catalog
 from api.routes.runs import DEMO_NO_CUSTOM, NOT_AVAILABLE, PROMPTS_FIXED
 
@@ -116,6 +117,7 @@ def scrub_paths(text: str, data_dir: Path | None = None) -> str:
 
 class PlaygroundPolicy(Policy):
     not_readable = NOT_AVAILABLE
+    not_keeping_note = NO_STORING
 
     def __init__(self) -> None:
         self._sweeper: asyncio.Task | None = None
@@ -188,6 +190,12 @@ class PlaygroundPolicy(Policy):
         """On the demo an upload is one browser's own: no shared cache may keep it.
         The old page route asks this too."""
         return demo.enabled() and sha not in sample_set.readable_shas()
+
+    def keeps_question_sets(self, request: Request) -> bool:
+        """The demo checks a set and hands the result back, but keeps nothing, so
+        one visitor's questions never reach another's browser. The old
+        POST /api/sources/{sha}/questions asks this too."""
+        return not demo.enabled()
 
     # --- runs -------------------------------------------------------------------
 

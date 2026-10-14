@@ -66,11 +66,14 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /documents/{id}/pages` | each page's size in PDF points: `[{"n", "width", "height"}]` |
 | `GET /documents/{id}/pages/{n}?scale=1` | the page as PNG, `scale` above 0 and at most 8, lowered so the image stays within 25 million pixels |
 | `GET /documents/{id}/pages/{n}/find?text=` | where the text (1 to 2,000 characters) is on the page: `{"rects": [[left, bottom, right, top], ...], "matched": "exact" or "normalized" or "none"}` |
+| `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document as pdfium reads it, keeps the set if the Policy keeps sets, and reports per question whether each passage was found |
+| `GET /documents/{id}/questions` | the set kept for the document, or `null` |
+| `DELETE /documents/{id}/questions` | remove it: 204 |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. |
 | `GET /runs/{run_id}` | the run's status, its whole event log, and once it ended its `result` |
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
-| `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question, and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
+| `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
 | `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
 | `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
 | `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
@@ -131,6 +134,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `on_delete(sha, document, request)` | 404 without a record, else `True` | with the lock held: `True` deletes the file, `False` keeps it |
 | `describe(document, request)` | `{}` | keys added to each document in the list |
 | `private(sha, request)` | `False` | a page image's Cache-Control: private when True |
+| `keeps_question_sets(request)` | `True` | `POST /documents/{id}/questions`: False checks the set and keeps nothing |
 | `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
 | `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
 | `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
@@ -139,6 +143,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
 | `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`), and on every error a run shows |
 | `not_readable` (attribute) | "This document is not available." | the 403 a run gets for a document `can_read` refuses |
+| `not_keeping_note` (attribute) | "This server checked your questions but did not keep them." | the report's note when a set was not kept |
 | `server_key(provider)` | the environment variable, else `(None, "none")` | a run's keys, and `GET /settings/models` |
 | `key(provider, request)` | the header, else `server_key` | a run's keys, and the key check |
 | `credentials(request)` | every provider whose `key` resolves | every run |
@@ -158,7 +163,10 @@ privately, a sample's publicly. The old `/api/sources` routes call the same Poli
 On the demo a run is its visitor's own, on `/api/v2` and on the old `/api/runs/{id}` routes,
 which share the run manager. In every mode its errors keep only the last part of any
 server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it refuses
-`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike.
+`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. It checks a
+question set and hands the report back, but keeps no set, so one visitor's questions
+never reach another's browser; the old `/api/sources/{id}/questions` routes ask the same
+Policy.
 
 ## What a request cannot set
 

@@ -23,7 +23,6 @@ from typing import Any
 import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile
 
-from api import demo
 from api.routes.pages import source_path
 from pandion.evaluation import (
     GOLD_SEPARATOR,
@@ -131,7 +130,7 @@ def get_template(format: str = Query("json", pattern="^(json|csv)$")) -> Respons
 
 @router.post("/sources/{sha}/questions")
 async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict[str, Any]:
-    """Check every gold passage, and store the set unless this is a hosted demo."""
+    """Check every gold passage, and store the set if the Policy keeps sets (not on a hosted demo)."""
     path = source_path(request, sha)
     try:
         parsed = parse_question_set(await file.read(), file.filename or "")
@@ -150,7 +149,9 @@ async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict
             "questions": parsed["questions"],
         },
     }
-    keep = not demo.enabled()
+    # The site's rule, the same one POST /api/v2/documents/{id}/questions asks.
+    policy = request.app.state.policy
+    keep = policy.keeps_question_sets(request)
     if keep:
         stored = _store(request, sha)
         stored.parent.mkdir(parents=True, exist_ok=True)
@@ -159,7 +160,7 @@ async def upload_questions(sha: str, request: Request, file: UploadFile) -> dict
     return {
         **record,
         "stored": keep,
-        "note": "" if keep else NO_STORING,
+        "note": "" if keep else policy.not_keeping_note,
         "parser": PARSER,
         "parser_note": PARSER_NOTE,
         "summary": {

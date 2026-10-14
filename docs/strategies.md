@@ -294,6 +294,9 @@ the small pool of candidates the search found.
 - `model`: a sentence-transformers CrossEncoder. `cross-encoder/ms-marco-MiniLM-L-6-v2`
   (the default) is small and fast; `BAAI/bge-reranker-base` is stronger;
   `BAAI/bge-reranker-v2-m3` is strongest and slow on a CPU.
+- `revision` (empty): the model's commit on Hugging Face. Empty uses the commit Pandion
+  pins for each model, its main branch on 2026-10-13, so scores stay the same when a model
+  is updated.
 
 **Use it** for single-fact questions. It needs no key.
 
@@ -437,11 +440,10 @@ Pandion's default `table_mode` is `fast`.
 
 ### cross_encoder (sentence-transformers)
 
-- Sets in `CrossEncoder(...)`: the model id, the `device`, `cache_folder` and
-  `local_files_only` from the model settings. In `predict(...)`: one (question, piece)
-  pair per candidate.
-- Leaves at the default: the model's revision (its main branch, not pinned), the longest
-  pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
+- Sets in `CrossEncoder(...)`: the model id, the model's `revision`, pinned per model (see
+  `revision` above), the `device`, `cache_folder` and `local_files_only` from the model
+  settings. In `predict(...)`: one (question, piece) pair per candidate.
+- Leaves at the default: the longest pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
   the scores are the ones the model gives.
 
 ### mmr (numpy)

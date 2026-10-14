@@ -4,7 +4,7 @@ The sources and artifacts folders default to `sources/` and `artifacts/` at the
 repo root and can be moved with `RAG_PLAYGROUND_SOURCES` and
 `RAG_PLAYGROUND_ARTIFACTS`; tests pass temp dirs to `build_deps` directly. The
 two must sit side by side in one folder, which pandion-api runs every pipeline
-under (`api.main.api_settings`); it keeps the embedding cache in `embeddings/`
+under (`playground.backend.main.api_settings`); it keeps the embedding cache in `embeddings/`
 beside them. The teaching routes read the sources folder, the expiry sweeper
 deletes uploads from it, and the web build is served from `web_dist`.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pandion import ModelSettings
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: How the app loads local models: on the CPU, from the Hugging Face folder.
 APP_MODELS = ModelSettings(device="cpu")

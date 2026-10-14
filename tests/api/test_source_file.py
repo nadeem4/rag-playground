@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from api import sample_set
+from playground.backend import sample_set
 from tests.api.conftest import build_pdf, make_client, upload_pdf
 from tests.steps.conftest import SAMPLE_PAGES
 

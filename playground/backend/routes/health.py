@@ -13,7 +13,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import APIRouter
 
-from api import demo
+from playground.backend import demo
 
 router = APIRouter()
 

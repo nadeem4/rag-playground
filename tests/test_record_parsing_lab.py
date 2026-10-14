@@ -30,7 +30,7 @@ def _script():
 
 def test_committed_recording_matches_the_samples():
     """Every case and the baseline match the sample as it is now, questions included."""
-    from api.sample_set import all_samples
+    from playground.backend.sample_set import all_samples
 
     data = json.loads(RECORDED.read_text(encoding="utf-8"))
     assert [c["name"] for c in data["cases"]] == CASES

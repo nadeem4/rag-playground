@@ -182,6 +182,7 @@ the strategy's id in the API and in exported files.
 Every pipeline you build can be copied as a Pandion YAML file and run outside the playground.
 
 The server is [pandion-api](docs/pandion-api.md), Pandion's REST layer, with the playground's own rules for the hosted demo.
+Its code is in `playground/backend/`; [playground/README.md](playground/README.md) explains how the app is put together.
 The browser keeps your pipeline as a Pandion config: one working copy on Build, and named
 copies in the Library. [Architecture](docs/architecture.md#how-the-web-app-holds-a-pipeline)
 explains how.
@@ -198,6 +199,7 @@ explains how.
 - [Pandion](docs/pandion.md): the package. Run a step on its own, or build a pipeline in a
   file or in code, then index, search and ask.
 - [pandion-api](docs/pandion-api.md): Pandion over HTTP, with one Policy object for a site's rules. The playground's server is built on it.
+- [The playground app](playground/README.md): how its server and its web app fit together.
 - [Architecture](docs/architecture.md): the three layers, the pipeline and its stages,
   plugins, the cache, the run stream and how the browser holds a pipeline.
 - [Lessons learned](docs/lessons-learned.md): real problems we hit building the pipeline,

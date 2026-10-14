@@ -39,7 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --no-install-workspace
 
 COPY packages/ packages/
-COPY api/ api/
+COPY playground/ playground/
 COPY samples/ samples/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev

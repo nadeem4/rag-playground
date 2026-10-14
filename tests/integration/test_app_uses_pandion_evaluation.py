@@ -10,8 +10,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 import pandion
-from api.deps import build_deps
-from api.main import create_app
+from playground.backend.deps import build_deps
+from playground.backend.main import create_app
 from pandion import Pipeline
 from tests.api.conftest import read_sse
 from tests.steps.conftest import SAMPLE_PAGES, build_pdf

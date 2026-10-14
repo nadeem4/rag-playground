@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_the_app_has_no_step_of_its_own():
-    assert not (ROOT / "api" / "steps").exists()
+    assert not (ROOT / "playground" / "backend" / "steps").exists()
 
 
 def test_the_catalog_lists_every_pandion_strategy():

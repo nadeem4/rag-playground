@@ -39,8 +39,8 @@ def test_the_old_module_is_gone(module):
 
 def test_the_warm_up_loads_docling_and_qwen3_through_the_public_preloads(monkeypatch):
     import pandion
-    from api import warmup
-    from api.deps import APP_MODELS
+    from playground.backend import warmup
+    from playground.backend.deps import APP_MODELS
 
     loaded: list = []
     monkeypatch.setattr(pandion, "preload_parser", lambda use="docling": loaded.append(("parser", use)))

@@ -1,13 +1,13 @@
-"""The playground is a pandion-api app with its own Policy (api/policy.py)."""
+"""The playground is a pandion-api app with its own Policy (playground/backend/policy.py)."""
 
 from __future__ import annotations
 
 import pytest
 
-from api import demo
-from api.deps import build_deps
-from api.main import API_PREFIX, api_settings, create_app
-from api.policy import PlaygroundPolicy
+from playground.backend import demo
+from playground.backend.deps import build_deps
+from playground.backend.main import API_PREFIX, api_settings, create_app
+from playground.backend.policy import PlaygroundPolicy
 
 
 def test_the_demo_allows_two_runs_at_once_and_a_local_run_has_no_limit(monkeypatch):

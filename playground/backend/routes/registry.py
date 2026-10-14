@@ -11,8 +11,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from api import demo
-from api.stage_copy import STAGE_LESSON, STAGE_WHAT
+from playground.backend import demo
+from playground.backend.stage_copy import STAGE_LESSON, STAGE_WHAT
 from pandion.extend import Stage
 
 router = APIRouter()

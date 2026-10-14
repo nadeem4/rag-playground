@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from api import credentials
+from playground.backend import credentials
 from tests.api.test_credentials import FAKE_KEY
 
 OPENAI_KEY = "sk-openai-test-DO-NOT-LEAK-0123456789"
@@ -272,7 +272,7 @@ def test_check_unknown_provider_is_a_422(client):
 def test_check_custom_validates_the_endpoint_behind_the_demo_ban(client, monkeypatch):
     """The route refuses custom endpoints on the demo first. If that ban were
     lifted, the endpoint check would still refuse a private address."""
-    from api.routes import settings
+    from playground.backend.routes import settings
 
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr(settings.demo, "enabled", lambda: False)
@@ -288,7 +288,7 @@ def test_check_custom_validates_the_endpoint_behind_the_demo_ban(client, monkeyp
 
 
 def test_check_custom_in_demo_mode_does_not_follow_redirects(client, monkeypatch):
-    from api.routes import settings
+    from playground.backend.routes import settings
 
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr(settings.demo, "enabled", lambda: False)
@@ -425,7 +425,7 @@ def test_on_the_demo_the_catalog_offers_no_custom_model(client, monkeypatch):
 def test_the_check_asks_the_sites_policy_about_the_provider(client, monkeypatch):
     from fastapi import HTTPException
 
-    from api.policy import PlaygroundPolicy
+    from playground.backend.policy import PlaygroundPolicy
 
     def refuse(self, provider, request):
         raise HTTPException(403, f"No {provider} here.")

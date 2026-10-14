@@ -1,8 +1,9 @@
 """The package stands on its own: nothing in it imports the app.
 
-The RAG Playground (`api`) depends on pandion, never the other way round.
-`core`, `plugins` and `providers` are listed too, because that is where the
-engine lived before it moved here.
+The RAG Playground (`playground`) depends on pandion, never the other way round.
+`api` (the app's folder before `playground/backend`), `core`, `plugins` and
+`providers` are listed too, because that is where the code lived before. The
+engine moved here from the last three.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import ast
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "pandion"
-APP = {"api", "plugins", "providers", "core"}
+APP = {"playground", "api", "plugins", "providers", "core"}
 
 
 def imported_modules(path: Path) -> list[tuple[int, str]]:

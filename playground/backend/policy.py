@@ -1,6 +1,6 @@
 """The playground's site rules, as a pandion-api Policy.
 
-Demo mode (`api.demo`) is read on every call, so a test can turn it on and off.
+Demo mode (`playground.backend.demo`) is read on every call, so a test can turn it on and off.
 The web reaches every rule here through /api/v2; the playground's own routes are
 only the teaching routes.
 """
@@ -22,11 +22,11 @@ from pandion_api import Policy
 from pandion_api.checks import changed_read_only_settings, custom_endpoint_steps, steps
 from pandion_api.documents import META_DIR, Document
 
-from api import credentials, demo, expiry, sample_set, visitor
-from api.routes import sources
-from api.routes.questions import NO_STORING
-from api.routes.registry import served_catalog
-from api.routes.settings import no_key
+from playground.backend import credentials, demo, expiry, sample_set, visitor
+from playground.backend.routes import sources
+from playground.backend.routes.questions import NO_STORING
+from playground.backend.routes.registry import served_catalog
+from playground.backend.routes.settings import no_key
 
 PROMPTS_FIXED = "The prompts and the model revision are fixed in the playground. Set them in a pipeline file or in code."
 

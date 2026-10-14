@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.static import mount_spa
+from playground.backend.static import mount_spa
 
 
 def _app(dist: Path) -> TestClient:

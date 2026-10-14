@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from api import sample_set
+from playground.backend import sample_set
 
 ROOT = Path(__file__).resolve().parents[2]
 

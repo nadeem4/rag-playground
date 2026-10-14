@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from api.deps import build_deps
-from api.main import create_app
+from playground.backend.deps import build_deps
+from playground.backend.main import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -24,11 +24,13 @@ packages/pandion/  the engine as its own Python package, pandion: artifacts, tra
                    graph, the executor, the content-addressed store, the embedding models
                    and their cache, the chat model client, and the pipeline file
 packages/pandion-api/  pandion-api: Pandion's public API over HTTP, with a Policy for a site's rules
-api/         the playground's server: pandion-api with the playground's Policy (api/policy.py)
-             under /api/v2, the teaching routes under /api (api/routes/: health, samples,
-             lessons, stage copy, app settings, the question template), demo mode, and the
-             web build. It has no steps of its own: Pandion loads its plugins itself
-web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
+playground/backend/  the playground's server: pandion-api with the playground's Policy
+             (playground/backend/policy.py) under /api/v2, the teaching routes under /api
+             (playground/backend/routes/: health, samples, lessons, stage copy, app settings,
+             the question template), demo mode, and the web build. It has no steps of its
+             own: Pandion loads its plugins itself. See playground/README.md
+web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors. It
+             moves to playground/frontend/ next
 samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
 tests/       pytest: unit, plugin contract, API and integration tests
@@ -88,7 +90,7 @@ index's own model through two public names of `pandion.plugins.retrieve`,
 `read_descriptor` and `embedder_for`.
 
 The package takes every folder as an argument. The app keeps only where its files live in
-`api/deps.py`: the sources and artifacts folders, from `RAG_PLAYGROUND_SOURCES` and
+`playground/backend/deps.py`: the sources and artifacts folders, from `RAG_PLAYGROUND_SOURCES` and
 `RAG_PLAYGROUND_ARTIFACTS`, and the web build. pandion-api runs every pipeline under the
 one folder that holds them, with the embedding cache in `embeddings/` beside them, and
 loads models with the app's model settings (`APP_MODELS`, on the CPU). The warm-up loads
@@ -101,14 +103,14 @@ The package never reads the demo switch either. A step that calls a chat model t
 `public_endpoints_only` from the run (and `pandion.llm` takes `public_only=`): when it is
 on, a custom endpoint must be a public https address, its client follows no redirects,
 and no message suggests setting a key on the server. `PlaygroundPolicy.public_endpoints_only`
-turns it on when `RAG_PLAYGROUND_DEMO` is `1`, read by `api.demo.public_endpoints_only()`. The package's
+turns it on when `RAG_PLAYGROUND_DEMO` is `1`, read by `playground.backend.demo.public_endpoints_only()`. The package's
 `llm_rewrite`, `llm_rerank` and `chat` take it from the run. That check is the second line:
 `PlaygroundPolicy.check_run` refuses a custom endpoint on the demo with a 403 first, and the
 second line reads the switch on its own, so it holds even if the first is lifted. API keys reach a run only as
 `context_extras["credentials"]`, never in a config or a hash.
 The prompts of `llm_rewrite`, `llm_rerank` and `chat` are settings marked `readOnly` in
 their schema. `GET /api/v2/strategies` leaves them out of the forms (through
-`served_catalog` in `api/routes/registry.py`), and the playground's Policy refuses with a
+`served_catalog` in `playground/backend/routes/registry.py`), and the playground's Policy refuses with a
 403 a run, an evaluation or a comparison that sets one to anything but its default, in
 every mode. A pipeline file or code can set them. The browser never holds one:
 `servedConfig` in `web/src/state/config.ts` keeps only the settings a step's served schema
@@ -120,7 +122,7 @@ what went in one sentence.
 `tests/integration/test_package_boundary.py` fails on any other Pandion import, with no
 allow-list. The public API is `pandion`, the stage namespaces (`pandion.parse` to
 `pandion.answer`), `pandion.extend` and `pandion.evaluation`, each a name in the module's
-`__all__`. The test reads `api/`, `scripts/` and `web/scripts/`.
+`__all__`. The test reads `playground/`, `scripts/` and `web/scripts/`.
 `packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
 
 ## Using the package on its own
@@ -133,7 +135,7 @@ See the [pandion guide](pandion.md).
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
 flowchart TB
     CLI["The pandion command"] --> CORE
-    WEB["Web app: /api/v2 and the teaching routes"] --> APP["api/: the playground's server"]
+    WEB["Web app: /api/v2 and the teaching routes"] --> APP["playground/backend/: the playground's server"]
     APP --> API["pandion-api: create_app(settings, policy)"]
     API --> CORE["Pandion: its public API only"]
 ```

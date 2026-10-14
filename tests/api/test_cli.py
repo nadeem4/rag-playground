@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from api import cli
+from playground.backend import cli
 
 
 @pytest.fixture

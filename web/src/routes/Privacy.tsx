@@ -17,18 +17,18 @@ import "@/components/learn/learn.css"
  * Your data and privacy: what RAG Playground keeps, where and for how long.
  * Every line is true of the code, and names nothing it cannot show:
  *
- * - Uploads: api/demo.py (24 hours, 3 files, 10 MB, 20 pages), deleted by
- *   api/expiry.py, which runs in demo mode only.
- * - The `rag_visitor` cookie: api/visitor.py, one year.
+ * - Uploads: playground/backend/demo.py (24 hours, 3 files, 10 MB, 20 pages), deleted by
+ *   playground/backend/expiry.py, which runs in demo mode only.
+ * - The `rag_visitor` cookie: playground/backend/visitor.py, one year.
  * - API keys: api/apiKey.tsx keeps them in memory only.
  * - The question set (state/goldSet.ts), the last evaluation
  *   (state/evaluate.ts) and Build's results with the questions asked
  *   (state/buildSession.ts) are in sessionStorage; on the demo the server checks a
- *   set and keeps nothing (api/routes/questions.py).
+ *   set and keeps nothing (playground/backend/routes/questions.py).
  * - Saved items and the working pipeline: localStorage (state/pipelines.ts,
  *   state/libraryExperiments.ts, state/working.ts). The Ask panel's side, width
  *   and open or closed: localStorage (components/ask/AskDock.tsx).
- * - Run results: packages/pandion/src/pandion/storage.py never expires an entry, api/expiry.py deletes
+ * - Run results: packages/pandion/src/pandion/storage.py never expires an entry, playground/backend/expiry.py deletes
  *   only uploads, and DELETE /api/v2/cache clears them.
  *   The demo runs without persistent storage: scripts/publish_space.py asks
  *   for none, and the Dockerfile writes them under /data inside the

@@ -11,8 +11,8 @@ from typing import Any
 
 from fastapi import APIRouter, Request, Response
 
-from api import demo, visitor
-from api.credentials import PROVIDERS
+from playground.backend import demo, visitor
+from playground.backend.credentials import PROVIDERS
 
 router = APIRouter()
 

@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> None:
         url = f"http://{args.host}:{args.port}/"
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
 
-    uvicorn.run("api.main:app", host=args.host, port=args.port, reload=args.reload)
+    uvicorn.run("playground.backend.main:app", host=args.host, port=args.port, reload=args.reload)
 
 
 if __name__ == "__main__":

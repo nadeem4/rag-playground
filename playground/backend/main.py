@@ -1,5 +1,5 @@
 """The FastAPI app: pandion-api with the playground's Policy, the teaching
-routes, and the web build. `create_app(deps)` for tests; `api.main:app` for
+routes, and the web build. `create_app(deps)` for tests; `playground.backend.main:app` for
 uvicorn.
 
 pandion-api's routes sit under /api/v2: every run, document, result and key
@@ -20,10 +20,10 @@ from fastapi import FastAPI
 from pandion_api import ApiSettings
 from pandion_api import create_app as create_api
 
-from api.deps import APP_MODELS, Deps, build_deps
-from api.policy import PlaygroundPolicy
-from api.routes import health, learn, questions, registry, samples, settings, sources
-from api.static import mount_spa
+from playground.backend.deps import APP_MODELS, Deps, build_deps
+from playground.backend.policy import PlaygroundPolicy
+from playground.backend.routes import health, learn, questions, registry, samples, settings, sources
+from playground.backend.static import mount_spa
 
 #: Where pandion-api's routes sit, beside the teaching routes under /api.
 API_PREFIX = "/api/v2"

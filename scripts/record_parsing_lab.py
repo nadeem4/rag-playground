@@ -151,7 +151,7 @@ def _measure(sample, parser: str, root: Path) -> dict:
 
 def record(out: Path = OUT) -> dict:
     """Run every case through both parsers and write the lab's JSON to `out`."""
-    from api.sample_set import all_samples
+    from playground.backend.sample_set import all_samples
 
     samples = {s.name: s for s in all_samples()}
 

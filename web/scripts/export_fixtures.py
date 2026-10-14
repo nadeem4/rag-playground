@@ -291,8 +291,8 @@ def served_strategies(root: Path) -> dict:
     under `stages`: without the settings the app keeps read-only."""
     from fastapi.testclient import TestClient
 
-    from api.deps import build_deps
-    from api.main import create_app
+    from playground.backend.deps import build_deps
+    from playground.backend.main import create_app
 
     deps = build_deps(artifacts_dir=root / "artifacts", sources_dir=root / "sources", web_dist=root / "dist")
     with TestClient(create_app(deps)) as client:

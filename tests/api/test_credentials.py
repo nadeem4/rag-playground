@@ -12,7 +12,7 @@ from pathlib import Path
 import anthropic
 import httpx
 
-from api import credentials
+from playground.backend import credentials
 
 FAKE_KEY = "sk-ant-test-DO-NOT-LEAK-0123456789"
 ENV_KEY = "sk-ant-test-ENV-0123456789"

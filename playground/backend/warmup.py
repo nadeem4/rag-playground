@@ -33,7 +33,7 @@ def _warm() -> None:
 
 
 def _warm_index_models() -> None:
-    from api.deps import APP_MODELS
+    from playground.backend.deps import APP_MODELS
     from pandion import preload_embedder, preload_parser
 
     preload_parser("docling")
@@ -43,7 +43,7 @@ def _warm_index_models() -> None:
 def _warm_reranker() -> None:
     """Load the default cross-encoder. A failed download is logged, never
     raised: the reranker loads the model again when it first runs."""
-    from api.deps import APP_MODELS
+    from playground.backend.deps import APP_MODELS
     from pandion import preload_reranker
 
     try:

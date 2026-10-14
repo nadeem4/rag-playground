@@ -155,6 +155,8 @@ the strategy's id in the API and in exported files.
 
 [docs/strategies.md](docs/strategies.md) explains each one and its settings.
 
+The server is [pandion-api](docs/pandion-api.md), Pandion's REST layer, with the playground's own rules for the hosted demo.
+
 ## Learn more
 
 - [Guide](docs/guide.md): every page of the app in detail.

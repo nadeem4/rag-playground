@@ -391,3 +391,73 @@ def test_both_stacks_check_a_key_with_one_function():
     from pandion_api import keycheck
 
     assert settings.check_key is keycheck.check_key
+
+
+# --- every rule test runs here or says why (Task 15) ------------------------------
+
+#: The modules that hold today's site rules: every test in them runs above or is listed below.
+RULE_MODULES = (test_demo, test_delete_source, test_source_file)
+
+_APP_SETTINGS = "GET /api/settings/app (the demo flag, its limits, the visitor cookie) is the playground's own route and stays."
+_GRAPHS = (
+    "Graphs, overrides and sweeps do not exist on /api/v2. The same ban is proven on the pipeline dict "
+    "by test_v2_strategies.py and test_v2_runs.py (validate, runs, ask, evaluations, comparisons)."
+)
+_KEYS = (
+    "Runs a graph with a test registry. On /api/v2: "
+    "test_v2_runs.py::test_on_the_demo_a_run_gets_only_the_visitors_own_key."
+)
+
+EXCLUDED: dict[str, str] = {
+    "test_demo.test_app_settings_report_demo_off_by_default": _APP_SETTINGS,
+    "test_demo.test_only_1_turns_demo_on": _APP_SETTINGS,
+    "test_demo.test_app_settings_report_demo_on": _APP_SETTINGS,
+    "test_demo.test_demo_settings_report_the_limits": _APP_SETTINGS,
+    "test_demo.test_demo_limits_report_the_total_budget": _APP_SETTINGS,
+    "test_demo.test_runs_and_sweeps_read_only_the_sample": (
+        "Runs a graph. On /api/v2: test_v2_runs.py::test_a_run_reads_only_what_this_browser_may_read."
+    ),
+    "test_demo.test_resolver_ignores_env_and_dotenv": (
+        "A unit test of api.credentials.resolve_key, which PlaygroundPolicy.server_key calls; no route."
+    ),
+    "test_demo.test_host_key_never_reaches_a_run": _KEYS,
+    "test_demo.test_host_key_never_reaches_a_sweep": _KEYS,
+    "test_demo.test_visitor_header_key_still_reaches_a_run": _KEYS,
+    "test_demo.test_a_custom_chat_node_is_refused_in_runs": _GRAPHS,
+    "test_demo.test_an_override_cannot_switch_a_chat_node_to_custom": _GRAPHS,
+    "test_demo.test_a_custom_chat_variant_is_refused_in_sweeps": _GRAPHS,
+    "test_demo.test_a_custom_llm_rerank_node_is_refused_in_runs": _GRAPHS,
+    "test_demo.test_an_override_cannot_switch_an_llm_rerank_node_to_custom": _GRAPHS,
+    "test_demo.test_a_custom_llm_rerank_variant_is_refused_in_sweeps": _GRAPHS,
+    "test_demo.test_a_custom_llm_rewrite_node_is_refused_in_runs": _GRAPHS,
+    "test_demo.test_outside_demo_a_custom_chat_node_is_not_refused": _GRAPHS,
+    "test_demo.test_the_sweeper_runs_only_in_demo_mode": (
+        "Startup, not a route. It runs as it is against the one app, whose sweeper "
+        "PlaygroundPolicy.on_startup starts."
+    ),
+}
+
+
+def _rule_tests() -> dict[str, object]:
+    """'module.name' to the function, for every test in the rule modules."""
+    return {
+        f"{module.__name__.rsplit('.', 1)[-1]}.{name}": fn
+        for module in RULE_MODULES
+        for name, fn in vars(module).items()
+        if name.startswith("test_") and callable(fn) and getattr(fn, "__module__", "") == module.__name__
+    }
+
+
+def test_every_rule_test_runs_on_v2_or_names_its_reason():
+    here = {id(v) for v in globals().values() if callable(v)}
+    missing = sorted(name for name, fn in _rule_tests().items() if id(fn) not in here and name not in EXCLUDED)
+    assert not missing, (
+        "these rule tests neither run on /api/v2 here nor say why in EXCLUDED: " + ", ".join(missing)
+    )
+
+
+def test_the_exclusions_name_only_tests_that_exist_and_do_not_run_here():
+    tests = _rule_tests()
+    here = {id(v) for v in globals().values() if callable(v)}
+    stale = sorted(name for name in EXCLUDED if name not in tests or id(tests[name]) in here)
+    assert not stale, "delete these from EXCLUDED: " + ", ".join(stale)

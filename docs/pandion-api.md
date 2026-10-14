@@ -19,6 +19,7 @@ plus the playground's teaching routes.
 - [Runs](#runs)
 - [Site rules: the Policy](#site-rules-the-policy)
 - [What a request cannot set](#what-a-request-cannot-set)
+- [The playground on pandion-api](#the-playground-on-pandion-api)
 - [Errors](#errors)
 
 ## Run it
@@ -181,23 +182,8 @@ needs there (for example who uploaded the file) through `on_uploaded`, and reads
 as `document.extra`. Hold `pandion_api.documents.SIDECAR_LOCK` (or `DocumentStore.lock`)
 around any change you make to a record yourself.
 
-RAG Playground's Policy gives every `/api/v2` request a visitor cookie, and on its hosted
-demo holds uploads to the demo's limits (a PDF of at most 10 MB and 20 pages, no page over
-41 inches a side, three live uploads a visitor, a cap on the whole disk), shows a visitor
-the samples and only their own uploads, and deletes only their own upload, keeping a
-file another visitor also uploaded. On the demo an upload's page images are cached
-privately, a sample's publicly. The old `/api/sources` routes call the same Policy.
-On the demo a run is its visitor's own, on `/api/v2` and on the old `/api/runs/{id}` routes,
-which share the run manager. In every mode its errors keep only the last part of any
-server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it refuses
-`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. A comparison
-on `/api/v2` takes at most ten variants, as many as an old sweep takes recipes. A key
-check on `/api/v2` gives the old `/api/settings/llm/check` answers: the demo refuses to
-check a custom endpoint (403, `check_provider`, which the old route asks too), never uses
-a server key, and its missing-key sentence names no server variable. It checks a
-question set and hands the report back, but keeps no set, so one visitor's questions
-never reach another's browser; the old `/api/sources/{id}/questions` routes ask the same
-Policy.
+RAG Playground's own Policy, rule by rule, is in
+[The playground on pandion-api](#the-playground-on-pandion-api).
 
 ## What a request cannot set
 
@@ -223,6 +209,79 @@ mode, `max_tokens` above 16,000 on a step that calls a model, and a text budget 
 setting named `..._budget_chars`) above four times its default. Its old `/api/runs` and
 `/api/sweeps` routes refuse the same caps on each graph node with the same function
 (`api.policy.step_over_limit`).
+
+## The playground on pandion-api
+
+RAG Playground's server is `pandion_api.create_app(settings, PlaygroundPolicy())`
+(`api/main.py`), with its routes under `/api/v2`, plus what is the playground's own:
+the old `/api` routes the web uses until part 5, the samples (`/api/samples`,
+`/api/sources/sample`), the lessons (`/api/learn`), the stage copy (`/api/stages`),
+`/api/settings/app` (demo mode, its limits and the visitor cookie), the question-set
+template, the model warm-up, and the web build.
+
+`PlaygroundPolicy` (`api/policy.py`) is the hosted demo's rules. Each calls the function
+the old route uses, or the old route calls it, so the two cannot drift apart:
+
+| Rule | On the demo | Locally |
+|---|---|---|
+| `dependencies` | every `/api/v2` request gets a visitor cookie | the same |
+| `can_read` | a sample, or this browser's own upload | any document |
+| `check_upload` | a visitor cookie; at most 10 MB, a PDF, 20 pages, 41 inches a side; three live uploads a browser; 200 MB for all uploads | anything |
+| `on_uploaded` | records which browser uploaded the file, and when | the same |
+| `on_delete` | only your own upload; a file another browser holds stays; never a sample | any upload, never a sample |
+| `describe` | the upload time: this browser's own when it uploaded the file, else the latest | the same |
+| `private` | an upload's page images are cached privately, a sample's publicly | public |
+| `keeps_question_sets` | no: checked and handed back | yes |
+| `check_run` | no custom endpoint; no changed prompt or model revision; `max_tokens` at most 16,000 on a step that calls a model; a text budget at most four times its default | the same, but a custom endpoint is allowed |
+| `public_endpoints_only` | yes | no |
+| `max_active_runs` | 2 | no limit |
+| `max_variants` | 10 | 10 |
+| `run_owner` | the visitor: to anyone else the run is a 404 | no one |
+| `scrub` | a server path keeps only its last part (`[server]/x.py`) | the same |
+| `credentials` | only the key in the request | the request, then the environment, then `.env` |
+| `missing_key` | "type one in the UI", naming no server variable | also names the variable and `.env` |
+| `check_provider` | a custom endpoint is not checked (403) | allowed |
+| `check_clear_cache` | refused: every visitor shares the cache | allowed |
+| `strategies` | no custom endpoint, no test embedder, no read-only settings | no read-only settings |
+| `on_startup` | puts every sample's file in the store, and starts deleting uploads after 24 hours | puts every sample's file in the store |
+
+The old routes ask the same rules. `POST /api/sources` calls `check_upload` and
+`on_uploaded`, the old delete calls `on_delete`, the old page route asks `private`, the
+old question-set route asks `keeps_question_sets`, `DELETE /api/cache` asks
+`check_clear_cache`, and the old key check asks `check_provider`. `/api/runs` and
+`/api/sweeps` refuse the same caps with `api.policy.step_over_limit`, and their runs share
+the one run manager, so the demo's two at once hold across both stacks and a run is its
+visitor's own on `/api/runs/{id}` too. A stored file is never written twice for the same
+bytes on `/api/v2`, and a name ending in `.part` is refused on both stacks. A question
+set is held to 1 MB, 500 questions and 20 gold passages a question on both stacks.
+
+`tests/api/test_v2_parity.py` runs today's tests of these rules a second time against
+`/api/v2`, and fails if a new rule test neither runs there nor says why. A test that
+cannot run there (it sends a graph, or reads `/api/settings/app`, which stays) is in its
+`EXCLUDED` list with the reason and, where there is one, the `/api/v2` test that proves
+the same rule.
+
+### What part 5 must decide
+
+Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left for it:
+
+- **A body-size limit before the route.** A multipart upload is spooled to disk before a
+  route's own cap reads it. A limit at the app, or at the proxy in front of it, would
+  refuse a huge body before it is written.
+- **A per-visitor queue cap.** The demo lets two runs work at once; the rest wait. One
+  visitor can still queue many runs.
+- **Results readable by id.** `GET /results/{id}` and `POST /trace` answer any visitor
+  who has a result's id, as today's `/api/artifacts` and `/api/trace` do. An id is a
+  content hash that needs the upload's bytes to compute. A per-visitor check would be
+  a new Policy hook.
+- **Time spent checking a question set.** Gold passages are matched in a worker thread
+  with no time cap. The caps on size and count bound it, but not by the clock.
+- **Two embedding caches.** The old routes cache embeddings in `artifacts/.embcache` (or
+  `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Deleting the old routes
+  deletes the variable and the old cache.
+- **Compare's per-card `through`.** `POST /comparisons` now takes `through`, so Compare's
+  Build view can stop each variant after one card without embedding every variant, as the
+  old `/api/sweeps` does. Part 5 checks it covers what Build needs.
 
 ## Errors
 

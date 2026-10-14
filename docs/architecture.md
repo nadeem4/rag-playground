@@ -277,7 +277,15 @@ today. `/api/v2` holds pandion-api's routes with the playground's Policy, which 
 pipeline as the pipeline file's shape. Both share one run queue, one record lock and one
 pdfium lock (`pandion_api.pages.PDFIUM_LOCK`: pdfium is not thread-safe), and every site
 rule has one implementation. `tests/api/test_v2_parity.py` runs today's tests a second time against
-`/api/v2` to prove the rules hold there.
+`/api/v2` to prove the rules hold there, and fails if a rule test neither runs there nor
+says why.
+
+Part 5 moves the web onto `/api/v2`: it keeps a pipeline as the pipeline file's shape
+instead of a graph, runs one card with `POST /api/v2/runs` and `through`, asks with
+`POST /api/v2/ask`, and evaluates and compares with `POST /api/v2/evaluations` and
+`/comparisons`. Then the old routes and their tests go, and the allow-list in
+`tests/integration/test_package_boundary.py` with them. What part 5 must still decide is
+listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
 
 - **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
 - **Runs.** It posts the pipeline graph to `/api/runs` and opens an `EventSource` on the

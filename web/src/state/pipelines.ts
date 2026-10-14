@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
-import { columnOf, graphToConfig, isConfigShape, otherSource, sameConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
+import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
 
@@ -108,7 +108,10 @@ export function fromOld(raw: unknown, place: number): SavedPipeline {
 export function asSaved(raw: unknown): SavedPipeline | null {
   if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.name !== "string" || typeof raw.savedAt !== "string") return null
   const documents = docList(raw.documents)
-  const q = isRecord(raw.question) && typeof raw.question.text === "string" && Array.isArray(raw.question.gold_answers) ? (raw.question as unknown as AskQuestion) : NO_QUESTION
+  const q: AskQuestion =
+    isRecord(raw.question) && typeof raw.question.text === "string" && Array.isArray(raw.question.gold_answers)
+      ? { text: raw.question.text, gold_answers: goldsOf(raw.question.gold_answers) }
+      : NO_QUESTION
   if (raw.config === null && isRecord(raw.kept) && typeof raw.kept.problem === "string") {
     return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: null, documents: documents ?? [], question: q, kept: { graph: raw.kept.graph, problem: raw.kept.problem } }
   }

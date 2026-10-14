@@ -484,3 +484,30 @@ describe("crafted share links", () => {
     expect(asSaved({ id: "a", name: "a", savedAt: "", config: { index: { clean: "a" } }, documents: [] })).toBeNull()
   })
 })
+
+describe("a link or a file that names an Object.prototype key", () => {
+  const bent = () => {
+    const c = graphToConfig(sampleGraph(R, DOC))
+    if (!c.ok) throw new Error(c.problem)
+    return { ...c.pipeline.config, index: { ...c.pipeline.config.index, chunk: { use: "constructor" } } }
+  }
+
+  it("a link is refused, and nothing throws", () => {
+    const code = b64({ v: 3, name: "x", config: bent(), documents: [DOC], question: { text: "", gold_answers: [] } })
+    expect(() => decodePipeline(code, R)).not.toThrow()
+    expect(decodePipeline(code, R)).toBeNull()
+  })
+
+  it("an import stores nothing", () => {
+    const r = importPipelines([{ id: "cccccccc", name: "x", savedAt: "2026-10-01T00:00:00Z", config: bent(), documents: [DOC], question: { text: "", gold_answers: [] } }])
+    expect(r?.added).toBe(0)
+    expect(readPipelines()).toEqual([])
+  })
+
+  it("a saved item keeps only the string gold answers", () => {
+    const c = graphToConfig(sampleGraph(R, DOC))
+    if (!c.ok) throw new Error(c.problem)
+    const p = asSaved({ id: "a", name: "a", savedAt: "", config: c.pipeline.config, documents: [DOC], question: { text: "Q?", gold_answers: ["yes", 5, null, { x: 1 }] } })
+    expect(p?.question).toEqual({ text: "Q?", gold_answers: ["yes"] })
+  })
+})

@@ -1,7 +1,7 @@
 import type { GraphNode, Registry, Stage } from "@/api/types"
 
 import { documentsOf, type DocRef } from "./document"
-import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, titleFor, wire, type PipelineGraph } from "./graph"
+import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, strategyIn, titleFor, wire, type PipelineGraph } from "./graph"
 
 /**
  * A pipeline as the browser holds it: the pipeline file's shape (spec rule 2),
@@ -114,10 +114,14 @@ export function cardNamedIn(sentence: string, graph?: PipelineGraph): string | n
   return graph ? cardOfStepIn(graph, step) : cardOfStep(step)
 }
 
+/** The gold answers that are text; anything else in a stored or shared list is dropped. */
+export const goldsOf = (list: unknown[]): string[] => list.filter((x): x is string => typeof x === "string" && x !== "")
+
 /** Why a pipeline whose documents do not come from uploads cannot open here. */
 export const otherSource = (use: string) => `Its documents come from ${clip(use)}, and this version reads uploaded files only.`
 
-const isStep = (v: unknown): v is Step => isRecord(v) && typeof v.use === "string"
+/** A step names its strategy; a name that is an Object.prototype key ("constructor", "__proto__") is not one. */
+const isStep = (v: unknown): v is Step => isRecord(v) && typeof v.use === "string" && v.use !== "" && !(v.use in Object.prototype)
 const isStepList = (v: unknown): v is Step[] => Array.isArray(v) && v.every(isStep)
 const optional = (v: unknown, check: (x: unknown) => boolean) => v === undefined || check(v)
 
@@ -183,7 +187,7 @@ export function graphToConfig(graph: unknown): Converted {
   ]
   for (const chain of chains) {
     const broken = chain.slice(1).find((n, i) => !fed(chain[i], n))
-    if (broken) return no(`Its ${titleFor(broken)} step is not fed by the step above it, so it is not a column of steps.`)
+    if (broken) return no(`Its ${clip(titleFor(broken))} step is not fed by the step above it, so it is not a column of steps.`)
   }
 
   const { embedder, ...storeSettings } = index.config ?? {}
@@ -207,7 +211,7 @@ export function graphToConfig(graph: unknown): Converted {
   }
   const q = query?.config ?? {}
   const golds = Array.isArray(q.gold_answers)
-    ? q.gold_answers.filter((x): x is string => typeof x === "string" && x !== "")
+    ? goldsOf(q.gold_answers)
     : typeof q.gold_answer === "string" && q.gold_answer
       ? [q.gold_answer]
       : []
@@ -229,7 +233,7 @@ export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph 
   const add = (id: string, stage: Stage, s: Step | undefined, extra: Record<string, unknown> = {}) => {
     if (!s) return
     const { use, ...settings } = s
-    const info = registry[stage]?.[use]
+    const info = strategyIn(registry, stage, use)
     nodes.push({ id, stage, transform: use, config: { ...(info ? defaultConfig(info) : {}), ...settings, ...extra } })
   }
   const doc = p.documents[0]
@@ -268,7 +272,7 @@ export function unknownStrategy(config: PipelineConfig, registry: Registry): str
     ["use_case", answer],
   ]
   // A step whose `use` is not a name is unknown, never taken as known.
-  const odd = steps.find(([stage, s]) => s && (typeof s.use !== "string" || !registry[stage]?.[s.use]))
+  const odd = steps.find(([stage, s]) => s && !strategyIn(registry, stage, s.use))
   if (!odd) return null
   return typeof odd[1]?.use === "string" ? odd[1].use : "a step with no name"
 }

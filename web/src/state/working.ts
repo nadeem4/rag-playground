@@ -1,4 +1,4 @@
-import { graphToConfig, type WorkingPipeline } from "./config"
+import { goldsOf, graphToConfig, type WorkingPipeline } from "./config"
 
 /**
  * Form 1 of the owner's two: the pipeline on Build, saved or not, as a config.
@@ -53,7 +53,8 @@ export function parseWorking(json: string | null): WorkingPipeline | null {
   if (!json) return null
   try {
     const v = JSON.parse(json) as unknown
-    return isWorking(v) ? v : null
+    // Only the gold answers that are text are kept, as graphToConfig keeps them.
+    return isWorking(v) ? { ...v, question: { text: v.question.text, gold_answers: goldsOf(v.question.gold_answers) } } : null
   } catch {
     return null
   }

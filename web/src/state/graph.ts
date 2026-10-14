@@ -64,8 +64,18 @@ export function transformsFor(registry: Registry, stage: Stage): TransformInfo[]
   return Object.values(registry[stage] ?? {})
 }
 
+/**
+ * The strategy `use` names in a stage, read from the registry's own keys only,
+ * so a name from a link or a file such as "constructor" or "__proto__" is never
+ * taken for a strategy.
+ */
+export function strategyIn(registry: Registry, stage: string, use: unknown): TransformInfo | undefined {
+  const of = Object.hasOwn(registry, stage) ? registry[stage as Stage] : undefined
+  return of && typeof use === "string" && Object.hasOwn(of, use) ? of[use] : undefined
+}
+
 export function infoFor(registry: Registry, node: Pick<GraphNode, "stage" | "transform">): TransformInfo | undefined {
-  return registry[node.stage]?.[node.transform]
+  return strategyIn(registry, node.stage, node.transform)
 }
 
 export function defaultConfig(info: TransformInfo): Record<string, unknown> {
@@ -82,11 +92,11 @@ export const PREFERRED_DEFAULT: Partial<Record<Stage, string>> = { parse: "docli
 
 function defaultTransform(registry: Registry, stage: Stage): TransformInfo | undefined {
   const preferred = PREFERRED_DEFAULT[stage]
-  return (preferred && registry[stage]?.[preferred]) || transformsFor(registry, stage)[0]
+  return (preferred && strategyIn(registry, stage, preferred)) || transformsFor(registry, stage)[0]
 }
 
 function makeNode(registry: Registry, id: string, stage: Stage, transform?: string): GraphNode | null {
-  const info = transform ? registry[stage]?.[transform] : defaultTransform(registry, stage)
+  const info = transform ? strategyIn(registry, stage, transform) : defaultTransform(registry, stage)
   if (!info) return null
   return { id, stage, transform: info.name, config: stage === "source" ? {} : defaultConfig(info) }
 }
@@ -500,7 +510,7 @@ export function rewriteOf(g: PipelineGraph): RewriteMode {
 /** Swap the query node's transform, keeping the question and gold answers it shares with the new one. */
 function setQueryTransform(g: PipelineGraph, registry: Registry, transform: string): PipelineGraph {
   const old = askNodes(g).query
-  if (!old || old.transform === transform || !registry.query?.[transform]) return g
+  if (!old || old.transform === transform || !strategyIn(registry, "query", transform)) return g
   const swapped = setTransform(g, old.id, transform, registry)
   const node = swapped.nodes.find((n) => n.id === old.id)!
   const kept = Object.fromEntries(Object.entries(old.config).filter(([k]) => k in node.config))
@@ -554,7 +564,7 @@ export function loadGraph(raw: string | null, registry: Registry): PipelineGraph
   try {
     const g = JSON.parse(raw) as PipelineGraph
     if (!Array.isArray(g?.nodes) || !Array.isArray(g?.edges)) return null
-    if (!g.nodes.every((n) => typeof n.id === "string" && registry[n.stage]?.[n.transform])) return null
+    if (!g.nodes.every((n) => typeof n.id === "string" && strategyIn(registry, n.stage, n.transform))) return null
     const ids = new Set(g.nodes.map((n) => n.id))
     if (!g.edges.every((e) => ids.has(e.src) && ids.has(e.dst) && typeof e.port === "string")) return null
     return completeGraph(g, registry)

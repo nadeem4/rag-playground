@@ -2,6 +2,7 @@ import type { VariantState } from "@/api/runState"
 import type { GraphNode, Registry, Stage, Variant } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
 import { fmtMs } from "@/components/pipeline/NodeCard"
+import { strategyIn } from "@/state/graph"
 
 /**
  * Sweep bookkeeping. The runState reducer has already grouped node events
@@ -90,7 +91,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export function variantLabels(variants: Variant[], registry: Registry, stage: Stage): VariantLabel[] {
   return variants.map((v) => {
     const peers = variants.filter((p) => p.transform === v.transform)
-    const schema = registry[stage]?.[v.transform]?.config_schema
+    const schema = strategyIn(registry, stage, v.transform)?.config_schema
     const defaults = schema ? defaultsFor(schema, schema) : {}
     const fields = Object.entries(v.config)
       .filter(([k, val]) => (peers.length > 1 ? peers.some((p) => !same(p.config[k], val)) : !same(defaults[k], val)))

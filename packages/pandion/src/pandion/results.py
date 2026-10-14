@@ -58,21 +58,33 @@ class ResultStore:
         if not isinstance(result_id, str) or not _RESULT_ID.fullmatch(result_id):
             raise KeyError(f"{result_id!r} is not a result id: one is 64 lowercase hex characters.")
         if not self._store.has(result_id):
-            raise KeyError(f"No stored result has the id {result_id} under {self.path}.")
+            raise _unknown(result_id)
         return result_id
 
     def info(self, result_id: str) -> dict[str, Any]:
         """The result's id, its type, and the meta its step left (plain JSON)."""
-        artifact = self._store.get_meta(self._checked(result_id))
+        result_id = self._checked(result_id)
+        try:
+            artifact = self._store.get_meta(result_id)
+        except FileNotFoundError:  # cleared since it was checked
+            raise _unknown(result_id) from None
         return {"id": artifact.id, "type": str(artifact.type), "meta": artifact.meta}
 
     def get(self, result_id: str) -> Any:
         """The stored result: a dict for every result but an index, whose result is its folder."""
-        artifact = self._store.get_meta(self._checked(result_id))
-        return self._store.load(artifact.id, artifact.type)
+        result_id = self._checked(result_id)
+        try:
+            artifact = self._store.get_meta(result_id)
+            return self._store.load(artifact.id, artifact.type)
+        except FileNotFoundError:  # cleared since it was checked
+            raise _unknown(result_id) from None
 
     def clear(self) -> dict[str, Any]:
-        """Remove every stored result and the embedding cache. The documents stay."""
+        """Remove every stored result and the embedding cache. The documents stay.
+
+        Clearing while a run is writing under the same path is not supported:
+        the run may fail, or leave some of its results behind.
+        """
         roots = (self._store.root, self.path / "embeddings")
         results, size = _usage(roots)
         for _ in range(self.RETRIES):
@@ -88,6 +100,12 @@ class ResultStore:
             "bytes": size - left_size,
             "complete": not any(root.exists() for root in roots),
         }
+
+
+def _unknown(result_id: str) -> KeyError:
+    """The id is well formed, but nothing is stored under it. The folder is not
+    named: a server hands this sentence back to whoever sent the id."""
+    return KeyError(f"No stored result has the id {result_id}.")
 
 
 def _usage(roots: tuple[Path, ...]) -> tuple[int, int]:

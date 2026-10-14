@@ -652,7 +652,11 @@ results.clear()            # {"results": 12, "bytes": 48210, "complete": True}
 ```
 
 An id that is not 64 lowercase hex characters, or that nothing is stored under, is a
-`KeyError`. `clear()` removes `artifacts/` and `embeddings/` and keeps `sources/`.
+`KeyError` whose message names the id but not the folder, so a server can hand it back.
+`clear()` removes `artifacts/` and `embeddings/` and keeps `sources/`. Clearing while a
+run is writing under the same path is not supported: the run may fail or leave some of
+its results behind. A result cleared while it is being read is a `KeyError`, as if it
+was never stored.
 
 ### One step, progress, stop, keys and re-runs
 

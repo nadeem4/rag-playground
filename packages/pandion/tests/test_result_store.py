@@ -95,3 +95,24 @@ def test_clear_tries_again_while_a_file_is_held(indexed, monkeypatch):
     monkeypatch.setattr(ResultStore, "RETRY_DELAY_S", 0)
     assert ResultStore(p.config.path).clear()["complete"] is True
     assert len(calls) > 2
+
+
+def test_an_unknown_id_does_not_name_the_servers_folder(tmp_path):
+    with pytest.raises(KeyError) as info:
+        ResultStore(tmp_path).info("0" * 64)
+    assert str(tmp_path) not in info.value.args[0]
+    assert info.value.args[0] == f"No stored result has the id {'0' * 64}."
+
+
+def test_a_result_cleared_while_it_is_read_is_an_unknown_id(indexed, monkeypatch):
+    p, report = indexed
+    store = ResultStore(p.config.path)
+
+    def gone(*args, **kwargs):
+        raise FileNotFoundError("cleared meanwhile")
+
+    monkeypatch.setattr(store._store, "load", gone)
+    monkeypatch.setattr(store._store, "get_meta", gone)
+    for read in (store.get, store.info):
+        with pytest.raises(KeyError, match="No stored result has the id"):
+            read(report.index.artifact_id)

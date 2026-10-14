@@ -63,7 +63,7 @@ from pandion.models import ModelSettings
 from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import UnknownTransformError, registry
-from pandion.stages import _strategy
+from pandion.stages import _problems, _strategy
 
 TOP_KEYS = ("plugins", "path", "models", "index", "retrieve", "answer")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
@@ -146,16 +146,14 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
     models = data.get("models") or {}
     if not isinstance(models, dict):
         raise ConfigError("models must be a mapping of settings.")
+    _named(models, "models")
     models = dict(models)
     if models.get("cache_dir"):
         models["cache_dir"] = _resolve(models["cache_dir"], base)
     try:
         settings = ModelSettings(**models)
     except ValidationError as exc:
-        problems = "; ".join(
-            f"models.{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()
-        )
-        raise ConfigError(problems) from None
+        raise ConfigError(f"models: {_problems(exc)}.") from None
     if "index" not in data:
         raise ConfigError("The pipeline file has no index section.")
     if "answer" in data and "retrieve" not in data:
@@ -517,10 +515,19 @@ def _store(embed: Any, store: Any) -> tuple[str, dict[str, Any]]:
 
 
 def _use(step: Any, where: str) -> tuple[str, dict[str, Any]]:
-    if not isinstance(step, dict) or not step.get("use"):
+    use = step.get("use") if isinstance(step, dict) else None
+    if not isinstance(use, str) or not use:
         raise ConfigError(f"{where} must say which strategy to use, as use: <name>.")
+    _named(step, where)
     settings = dict(step)
     return settings.pop("use"), settings
+
+
+def _named(settings: dict[Any, Any], where: str) -> None:
+    """Every setting is named by text: a Python caller could pass any key."""
+    for key in settings:
+        if not isinstance(key, str):
+            raise ConfigError(f"{where} has a setting whose name is not text: {key!r}.")
 
 
 def _keys(data: Any, valid: tuple[str, ...], where: str) -> None:

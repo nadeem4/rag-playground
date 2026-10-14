@@ -927,8 +927,9 @@ keyword index, which the hybrid search in every question template needs.
 - **Balanced** runs hybrid search (`hybrid_rrf`, 20 candidates), then the small MiniLM
   cross-encoder keeps the top five.
 - **Exact terms** runs hybrid search (30 candidates) with `bm25_weight: 2`, so the keyword
-  search counts twice as much as the meaning search, then the `BAAI/bge-reranker-v2-m3`
-  cross-encoder, which copes better with rare codes than the small ones.
+  search counts twice as much as the meaning search, then the small, fast
+  `cross-encoder/ms-marco-MiniLM-L-6-v2` cross-encoder. Best precision uses the stronger,
+  slower reranker.
 - **Best precision** runs hybrid search (30 candidates), then `BAAI/bge-reranker-v2-m3`,
   the strongest cross-encoder in the catalog. It is slower on a CPU, and it reads long
   pieces in full. MiniLM reads only about the first 512 tokens of the question and a

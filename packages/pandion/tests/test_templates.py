@@ -84,7 +84,13 @@ def test_balanced_reranks_with_the_small_cross_encoder_and_no_template_uses_mmr(
     assert not [q for q in _by_id("questions") if any(r["use"] == "mmr" for r in _rerankers(q))]
 
 
-@pytest.mark.parametrize("question", ["exact", "precision", "vague", "chat"])
+def test_exact_terms_reranks_with_the_small_fast_cross_encoder():
+    assert _rerankers("exact") == [
+        {"use": "cross_encoder", "model": "cross-encoder/ms-marco-MiniLM-L-6-v2", "top_k": 5}
+    ]
+
+
+@pytest.mark.parametrize("question", ["precision", "vague", "chat"])
 def test_the_precise_templates_rerank_with_the_strongest_cross_encoder(question):
     [rerank] = _rerankers(question)
     assert rerank["model"] == "BAAI/bge-reranker-v2-m3"

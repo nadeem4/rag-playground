@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 
-import artifacts from "./fixtures/artifacts.json"
 import chunkMarkdown from "./fixtures/chunk_set.markdown_header.json"
 import chunkRecursive from "./fixtures/chunk_set.recursive_character.json"
 import chunkToken from "./fixtures/chunk_set.token_based.json"
@@ -80,7 +79,6 @@ describe("types mirror the engine's real payloads", () => {
       s.chunks.map((c) => `${c.start_char}-${c.end_char}`).join(","),
     )
     expect(new Set(cuts).size).toBe(3)
-    expect(Object.keys(artifacts)).toContain("chunk_token")
   })
 })
 

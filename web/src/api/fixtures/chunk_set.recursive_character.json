@@ -148,6 +148,7 @@
   "chunker_meta": {
     "chunker": "recursive_character",
     "chunk_size": 400,
-    "chunk_overlap": 80
+    "chunk_overlap": 80,
+    "heading_context": true
   }
 }

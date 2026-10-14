@@ -18,6 +18,7 @@ release and record the Home clips. For how the code fits together, see
 - [Releasing](#releasing)
 - [Publishing pandion](#publishing-pandion)
 - [Recording the Home clips](#recording-the-home-clips)
+- [Regenerating the fixtures and the lesson recordings](#regenerating-the-fixtures-and-the-lesson-recordings)
 
 ## Development setup
 
@@ -95,8 +96,8 @@ Follow test-driven development: write the failing test first, then the code.
   font is fetched from the network at run time.
 - The **Dev** menu in the header opens the component inspectors and a token specimen
   page. It is hidden in demo mode.
-- The web tests use JSON fixtures generated from the real engine. Regenerate them with
-  `uv run python web/scripts/export_fixtures.py`.
+- The web tests use JSON fixtures generated from the real engine. See
+  [Regenerating the fixtures and the lesson recordings](#regenerating-the-fixtures-and-the-lesson-recordings).
 
 ## Adding a strategy
 
@@ -338,3 +339,31 @@ uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_cli
   ffmpeg that `imageio-ffmpeg` ships, so no system ffmpeg is needed. The pauses in the
   script set the length, 8 to 15 seconds. It prints each clip's length and size, and warns
   above 1.5 MB. The poster is a screenshot at the clip's telling moment.
+
+## Regenerating the fixtures and the lesson recordings
+
+The web's JSON fixtures in `web/src/api/fixtures/` and the lessons' recorded runs in
+`web/src/learn/` are produced by scripts, never typed by hand:
+
+```bash
+uv run python web/scripts/export_fixtures.py          # the web fixtures
+uv run python scripts/record_e2e_lesson.py            # web/src/learn/e2e-run.json
+uv run python scripts/record_chunking_comparison.py   # web/src/learn/chunking-strategies.json
+uv run python scripts/record_parsing_lab.py           # web/src/learn/parsing-lab.json
+```
+
+- They run on Pandion's public API and on pandion-api, as any app would. Each pipeline
+  is a plain pipeline dict, run by `scripts/lesson_runs.py`: `run_pipeline` indexes a
+  PDF (and asks a question) and returns each step's stored result by its step name, and
+  `evaluate_pipeline` is `pandion.evaluate` as plain JSON.
+- `export_fixtures.py` reads `registry.json` from the app's `GET /api/v2/strategies`, and
+  writes `run_events.json` from a `POST /runs` on a pandion-api test client, so the events
+  name each step (`step`, `document`) as `/api/v2` sends them. The fixtures run on the
+  `fake-deterministic` embedder, so they need no model. A web test that reads a field the
+  server no longer sends fails, and is updated to the field it now sends.
+- The three lesson recordings need the Docling, RapidOCR and Qwen3 models, which download
+  on first use. Run again on the same machine with the same models, a recording leaves its
+  file as it is, so `git diff web/src/learn` stays empty. The parsing lab is the one
+  exception: it records the date and each parse's time in milliseconds, and those change
+  on every run. If any other number moves, a setting differs between the old run and the
+  new one; fix the pipeline dict until it matches.

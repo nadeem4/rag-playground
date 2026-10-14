@@ -3,17 +3,18 @@
     uv run python scripts/record_parsing_lab.py
 
 For each of three samples and each of pdfium and Docling, runs the real
-pipeline in-process, the way `scripts/record_e2e_lesson.py` does: parse,
-recursive chunks of 400 characters with 80 of overlap, a LanceDB index on
-Qwen3, then every question in the sample's `questions.json` through hybrid
-search and the eval step with top_k 5. It writes only what the lab shows to
+pipeline in-process on Pandion's public API (`scripts/lesson_runs.py`), the
+way `scripts/record_e2e_lesson.py` does: parse, recursive chunks of 400
+characters with 80 of overlap, a LanceDB index on Qwen3, then every question in
+the sample's `questions.json` through hybrid search and `pandion.evaluate`
+with top_k 5. It writes only what the lab shows to
 `web/src/learn/parsing-lab.json`. The chunking primer is recorded the same
 way as a baseline: one column of prose, where the two parsers should agree.
 
 Parse, chunk and index are cached by recipe, so they run once per sample and
-parser; only the question, retrieval and eval run per question. The parse
-time is the parse step's own duration on the first run, in whole milliseconds.
-The warm-up runs in a store of its own, so the baseline's parse is not a cache hit.
+parser; only the search and the scoring run per question. The parse time is
+the parse step's own duration on its first run, in whole milliseconds. The
+warm-up runs in a folder of its own, so the baseline's parse is not a cache hit.
 
 Needs the Docling, RapidOCR and Qwen3 models (downloaded on first use).
 Everything runs in a temp directory; nothing is written to `sources/` or the
@@ -30,9 +31,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-
-from pandion.extend import ArtifactType, Stage  # noqa: E402
-from pandion.graph import Edge, Graph, Node  # noqa: E402
 
 OUT = ROOT / "web" / "src" / "learn" / "parsing-lab.json"
 CASES = ["two-column-report", "table-of-figures", "scanned-notes"]
@@ -67,29 +65,27 @@ def golds(question: dict) -> list[str]:
     return out
 
 
-def build_graph(sha: str, filename: str, parser: str, parse_cfg: dict, question: str, gold: list[str]) -> Graph:
-    """One sample, one parser, one question. The query reaches retrieval and eval ambiently.
+def pipeline(parser: str, parse_cfg: dict) -> dict:
+    """One sample's pipeline with one parser."""
+    return {
+        "index": {
+            "parse": {"use": parser, **parse_cfg},
+            "chunk": {"use": CHUNKER["chunker"], **{k: v for k, v in CHUNKER.items() if k != "chunker"}},
+            "embed": {"use": "qwen3-embedding-0.6b"},
+            "store": {"use": "lancedb"},
+        },
+        "retrieve": {"search": {"use": "hybrid_rrf"}},
+    }
 
-    The query node carries every gold passage, the way the Evaluate page's
-    `questionVariants` does, so a table row may be found in either form.
-    """
-    nodes = [
-        Node("src", Stage.SOURCE, "upload", {"sha": sha, "filename": filename}),
-        Node("parse", Stage.PARSE, parser, parse_cfg),
-        Node("chunk", Stage.CHUNK, CHUNKER["chunker"], {k: v for k, v in CHUNKER.items() if k != "chunker"}),
-        Node("index", Stage.INDEX, "lancedb", {"embedder": "qwen3-embedding-0.6b"}),
-        Node("ask", Stage.QUERY, "text", {"text": question, "gold_answer": gold[0], "gold_answers": gold}),
-        Node("retrieve", Stage.RETRIEVE, "hybrid_rrf", {}),
-        Node("eval", Stage.USE_CASE, "eval", {"top_k": TOP_K}),
+
+def question_set(questions: list[dict]) -> list[dict]:
+    """The questions as `pandion.evaluate` takes them, each with every gold
+    passage, the way the Evaluate page's `questionVariants` does, so a table
+    row may be found in either form."""
+    return [
+        {"id": str(n), "question": q["question"], "gold_answers": golds(q)}
+        for n, q in enumerate(questions, start=1)
     ]
-    edges = [
-        Edge("src", "parse", "file"),
-        Edge("parse", "chunk", "doc"),
-        Edge("chunk", "index", "chunks"),
-        Edge("index", "retrieve", "index"),
-        Edge("retrieve", "eval", "result"),
-    ]
-    return Graph(nodes=nodes, edges=edges)
 
 
 def ms(duration_ms: float) -> int:
@@ -97,20 +93,12 @@ def ms(duration_ms: float) -> int:
     return round(duration_ms)
 
 
-def warm_up(sample, store, registry, run) -> None:
-    """Parse the warm-up sample once with every configuration; discard the results."""
+def warm_up(pdf: Path, root: Path) -> None:
+    """Index the warm-up sample once with every configuration; discard the results."""
+    from scripts.lesson_runs import run_pipeline
+
     for parser, cfg in WARM_UP_CONFIGS:
-        graph = Graph(
-            nodes=[
-                Node("src", Stage.SOURCE, "upload", {"sha": sample.sha, "filename": sample.pdf.name}),
-                Node("parse", Stage.PARSE, parser, cfg),
-            ],
-            edges=[Edge("src", "parse", "file")],
-        )
-        result = run(graph, registry, store)
-        if not result.ok:
-            failures = {nid: r.error for nid, r in result.nodes.items() if r.error}
-            raise SystemExit(f"warm-up {parser} {cfg} failed: {failures}")
+        run_pipeline(pipeline(parser, cfg), pdf, root)
 
 
 def excerpt(text: str, gold: str) -> str | None:
@@ -140,53 +128,38 @@ def first_excerpt(text: str, passages: list[str]) -> str | None:
     return None
 
 
-def _measure(sample, parser: str, store, registry, run) -> dict:
-    from pandion.plugins.chunk import DocView
+def _measure(sample, parser: str, root: Path) -> dict:
+    from pandion.evaluation import document_text
+    from scripts.lesson_runs import evaluate_pipeline, run_pipeline
 
     cfg = parse_config(parser, sample.name)
     questions = sample.questions()
-    entry: dict = {}
-    hits = 0
-    for n, q in enumerate(questions):
-        graph = build_graph(sample.sha, sample.pdf.name, parser, cfg, q["question"], golds(q))
-        result = run(graph, registry, store)
-        if not result.ok:
-            failures = {nid: r.error for nid, r in result.nodes.items() if r.error}
-            raise SystemExit(f"{sample.name}/{parser} failed: {failures}")
-        if n == 0:
-            parse = result.nodes["parse"]
-            doc = store.load(parse.artifact.id, ArtifactType.PARSED_DOC)
-            text = DocView.of(doc).text
-            entry["ms"] = ms(parse.duration_ms)
-            entry["chars"] = len(text)
-        output = store.load(result.nodes["eval"].artifact.id, ArtifactType.OUTPUT)
-        hits += bool(output["payload"]["hit"])
-    entry["hits"] = hits
-    entry["ocr"] = bool(cfg.get("do_ocr", False))
-    entry["excerpt"] = first_excerpt(text, golds(questions[0]))
-    return entry
+    out = run_pipeline(pipeline(parser, cfg), sample.pdf, root)
+    text = document_text(out["parse"])
+    report = evaluate_pipeline(pipeline(parser, cfg), sample.pdf, root, question_set(questions), top_k=TOP_K)
+    failed = {q["id"]: q["error"] for q in report["questions"] if q["error"]}
+    if failed:
+        raise SystemExit(f"{sample.name}/{parser} failed: {failed}")
+    return {
+        "ms": ms(out["duration_ms"]["parse"]),
+        "chars": len(text),
+        "hits": report["found"],
+        "ocr": bool(cfg.get("do_ocr", False)),
+        "excerpt": first_excerpt(text, golds(questions[0])),
+    }
 
 
 def record(out: Path = OUT) -> dict:
     """Run every case through both parsers and write the lab's JSON to `out`."""
-    import api.steps
     from api.sample_set import all_samples
-    from functools import partial
 
-    from pandion.executor import run
-    from pandion.registry import registry
-    from pandion.storage import Store
-    from api.deps import build_deps
-    from pandion.sources import Sources
-
-    api.steps.discover()
     samples = {s.name: s for s in all_samples()}
-    def measured(sample) -> dict:
-        (sources / f"{sample.sha}.pdf").write_bytes(sample.pdf.read_bytes())
+
+    def measured(sample, root: Path) -> dict:
         questions = sample.questions()
         parsers = {}
         for parser in PARSERS:
-            parsers[parser] = _measure(sample, parser, store, registry, run)
+            parsers[parser] = _measure(sample, parser, root)
             print(f"{sample.name} / {parser}: {parsers[parser]}", flush=True)
         return {
             "name": sample.name,
@@ -200,17 +173,10 @@ def record(out: Path = OUT) -> dict:
         }
 
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        sources = root / "sources"
-        sources.mkdir()
-        extras = {**build_deps().run_extras(), "sources": Sources(sources)}
-        run = partial(run, context_extras=extras)
-        warm = samples[WARM_UP]
-        (sources / f"{warm.sha}.pdf").write_bytes(warm.pdf.read_bytes())
-        warm_up(warm, Store(root / "warm-up"), registry, run)
-        store = Store(root / "store")
-        cases = [measured(samples[name]) for name in CASES]
-        baseline = measured(samples[BASELINE])
+        warm_up(samples[WARM_UP].pdf, Path(tmp) / "warm-up")
+        root = Path(tmp) / "runs"
+        cases = [measured(samples[name], root) for name in CASES]
+        baseline = measured(samples[BASELINE], root)
     data = {
         "recorded_on": datetime.date.today().isoformat(),
         "chunker": CHUNKER,

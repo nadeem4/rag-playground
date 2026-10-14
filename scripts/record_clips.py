@@ -105,7 +105,7 @@ def start_server(port: int, data: Path) -> subprocess.Popen:
         if proc.poll() is not None:
             raise SystemExit(f"the server exited with code {proc.returncode} before it answered")
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/registry", timeout=2)
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v2/health", timeout=2)
             return proc
         except OSError:
             time.sleep(0.5)

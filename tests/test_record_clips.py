@@ -97,3 +97,22 @@ def test_build_clip_is_wide_enough_for_the_slope_beside_the_docked_panel():
     assert _mod.size_for("compare") == _mod.size_for("evaluate") == {"width": 1280, "height": 800}
     assert _mod.DOCK_SEED == {"open": True, "side": "right", "width": 698}
     assert 1440 - 380 - 360 - 2 == _mod.DOCK_SEED["width"]
+
+
+def test_waits_for_the_server_on_api_v2_health(monkeypatch, tmp_path):
+    asked = []
+
+    class Running:
+        returncode = None
+
+        def poll(self):
+            return None
+
+    def urlopen(url, timeout):
+        asked.append(url)
+
+    monkeypatch.setattr(_mod.subprocess, "Popen", lambda *a, **k: Running())
+    monkeypatch.setattr(_mod.urllib.request, "urlopen", urlopen)
+    port = _free_port()
+    _mod.start_server(port, tmp_path)
+    assert asked == [f"http://127.0.0.1:{port}/api/v2/health"]

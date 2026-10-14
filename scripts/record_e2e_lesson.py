@@ -2,10 +2,10 @@
 
     uv run python scripts/record_e2e_lesson.py
 
-Runs the bundled sample through the real pipeline, in-process, the way
-`web/scripts/export_fixtures.py` does: Docling, the duplicate cleaner,
-recursive chunks of 400 characters with 80 of overlap, a LanceDB index on
-Qwen3, one question, hybrid search, MMR and Search. It writes only what the
+Runs the bundled sample through the real pipeline, in-process, on Pandion's
+public API (`scripts/lesson_runs.py`), the way `web/scripts/export_fixtures.py`
+does: Docling, the duplicate cleaner, recursive chunks of 400 characters with
+80 of overlap, a LanceDB index on Qwen3, one question, hybrid search, MMR and Search. It writes only what the
 lesson draws to `web/src/learn/e2e-run.json`. Every number on the lesson page
 is computed from that file.
 
@@ -15,7 +15,6 @@ in a temp directory; nothing is written to `sources/` or the artifact store.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 import tempfile
@@ -24,37 +23,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pandion.extend import ArtifactType, Stage  # noqa: E402
-from pandion.graph import Edge, Graph, Node  # noqa: E402
-
 SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
 OUT = ROOT / "web" / "src" / "learn" / "e2e-run.json"
 QUESTION = "Why do chunk boundaries matter?"
 
-
-def build_graph(sha: str, filename: str) -> Graph:
-    """The lesson's pipeline. The query reaches retrieval and MMR ambiently."""
-    nodes = [
-        Node("src", Stage.SOURCE, "upload", {"sha": sha, "filename": filename}),
-        Node("parse", Stage.PARSE, "docling", {}),
-        Node("clean", Stage.CLEAN, "dedupe_blocks", {}),
-        Node("chunk", Stage.CHUNK, "recursive_character", {"chunk_size": 400, "chunk_overlap": 80}),
-        Node("index", Stage.INDEX, "lancedb", {"embedder": "qwen3-embedding-0.6b"}),
-        Node("ask", Stage.QUERY, "text", {"text": QUESTION}),
-        Node("retrieve", Stage.RETRIEVE, "hybrid_rrf", {}),
-        Node("rerank", Stage.RERANK, "mmr", {}),
-        Node("search", Stage.USE_CASE, "search", {}),
-    ]
-    edges = [
-        Edge("src", "parse", "file"),
-        Edge("parse", "clean", "doc"),
-        Edge("clean", "chunk", "doc"),
-        Edge("chunk", "index", "chunks"),
-        Edge("index", "retrieve", "index"),
-        Edge("retrieve", "rerank", "result"),
-        Edge("rerank", "search", "result"),
-    ]
-    return Graph(nodes=nodes, edges=edges)
+PIPELINE = {
+    "index": {
+        "parse": {"use": "docling"},
+        "clean": [{"use": "dedupe_blocks"}],
+        "chunk": {"use": "recursive_character", "chunk_size": 400, "chunk_overlap": 80},
+        "embed": {"use": "qwen3-embedding-0.6b"},
+        "store": {"use": "lancedb"},
+    },
+    "retrieve": {"search": {"use": "hybrid_rrf"}, "rerank": [{"use": "mmr"}]},
+    "answer": {"use": "search"},
+}
 
 
 def _round(value: float | None, digits: int) -> float | None:
@@ -113,41 +96,15 @@ def summarize(payloads: dict, question: str) -> dict:
 
 def record() -> dict:
     """Run the real pipeline on the sample and return the lesson's summary."""
-    import api.steps
-    from pandion.executor import run
-    from pandion.registry import registry
-    from pandion.storage import Store
-    from api.deps import build_deps
-    from pandion.sources import Sources
+    from scripts.lesson_runs import run_pipeline
 
-    api.steps.discover()
-    pdf = SAMPLE.read_bytes()
-    sha = hashlib.sha256(pdf).hexdigest()
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        sources = root / "sources"
-        sources.mkdir()
-        (sources / f"{sha}.pdf").write_bytes(pdf)
-        extras = {**build_deps().run_extras(), "sources": Sources(sources)}
-        store = Store(root / "store")
-        result = run(build_graph(sha, SAMPLE.name), registry, store, context_extras=extras)
-        if not result.ok:
-            failures = {n: r.error for n, r in result.nodes.items() if r.error}
-            raise SystemExit(f"pipeline failed: {failures}")
-
-        def load(nid: str, t: ArtifactType):
-            return store.load(result.nodes[nid].artifact.id, t)
-
-        index_dir = Path(load("index", ArtifactType.INDEX))
-        payloads = {
-            "parse": load("parse", ArtifactType.PARSED_DOC),
-            "clean": load("clean", ArtifactType.PARSED_DOC),
-            "chunk": load("chunk", ArtifactType.CHUNK_SET),
-            "index": json.loads((index_dir / "descriptor.json").read_text(encoding="utf-8")),
-            "retrieve": load("retrieve", ArtifactType.RETRIEVAL_RESULT),
-            "rerank": load("rerank", ArtifactType.RETRIEVAL_RESULT),
-        }
-        return summarize(payloads, QUESTION)
+        out = run_pipeline(PIPELINE, SAMPLE, Path(tmp), question=QUESTION)
+    payloads = {
+        "parse": out["parse"], "clean": out["clean.1"], "chunk": out["chunk"],
+        "index": out["index"], "retrieve": out["search"], "rerank": out["rerank.1"],
+    }
+    return summarize(payloads, QUESTION)
 
 
 def main() -> None:

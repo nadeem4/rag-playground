@@ -213,8 +213,8 @@
   "fetch_k": 20,
   "total_candidates": 6,
   "timings_ms": {
-    "embed": 3.613000037148595,
-    "search": 63.49369999952614
+    "embed": 5.580500001087785,
+    "search": 20.8316000062041
   },
   "expanded_query": null,
   "expansion_terms": []

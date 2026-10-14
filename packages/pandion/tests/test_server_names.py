@@ -39,3 +39,15 @@ def test_the_endpoint_check_is_public_and_the_same_object():
 def test_a_private_address_is_refused_when_only_public_ones_are_allowed():
     with pytest.raises(EndpointRefused):
         guard_endpoint("http://127.0.0.1:8080/v1", public_only=True)
+
+
+def test_paragraph_spans_are_public_and_inside_the_text(tmp_path):
+    from pandion.evaluation import document_text, paragraph_spans
+    from pdfs import SAMPLE_PAGES, build_pdf
+
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(build_pdf(SAMPLE_PAGES))
+    doc = pandion.parse(pdf, use="pdfium")
+    text = document_text(doc)
+    spans = paragraph_spans(doc)
+    assert spans and all(0 <= a < b <= len(text) for a, b in spans)

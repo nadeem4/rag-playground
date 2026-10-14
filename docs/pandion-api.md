@@ -44,7 +44,9 @@ routes are mounted, for example `/api/v2`) and `title`.
 Every pipeline a request sends runs with `data_dir` as its `path`, so Pandion keeps
 `sources/` (each document once, by its fingerprint), `artifacts/` (every step's result)
 and `embeddings/` (the embedding cache) there. pandion-api keeps each document's record
-in `sources/.meta/` and its question set in `sources/questions/`.
+in `sources/.meta/` and its question set in `sources/questions/`. A file is kept as
+`<sha256><suffix>`; only a plain suffix such as `.pdf` comes from the name a request
+sends, so a name never chooses where a file goes.
 
 ## Endpoints
 
@@ -54,6 +56,9 @@ in `sources/.meta/` and its question set in `sources/questions/`.
 | `GET /strategies` | `{"stages": ..., "defaults": ...}`: every strategy by stage with its settings as a JSON schema (`pandion.catalog()`, as the Policy shows it), and the strategy a new pipeline starts with per part (`pandion.defaults()`) |
 | `POST /explain` | `{"stage", "use", "settings"}` gives what that strategy will do with those settings, in plain words (`pandion.explain`). Nothing runs. |
 | `POST /pipelines/validate` | `{"config": <pipeline>}` gives `{"ok": true, "problems": [], "config": <the pipeline in the file's shape>}` or `{"ok": false, "problems": [<sentence>]}` |
+| `GET /documents` | the documents this caller may read, by name: `sha`, `filename`, `size`, `content_type`, plus what the Policy's `describe` adds. Never cached. |
+| `POST /documents` | multipart `file`: keeps it by its fingerprint and returns its record. The same bytes twice are one document. |
+| `DELETE /documents/{id}` | `{"sha", "deleted"}`: deletes the file, its record and its question set, if the Policy agrees |
 
 ## Site rules: the Policy
 
@@ -63,6 +68,11 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | Method | Default | Called |
 |---|---|---|
 | `dependencies()` | `[]` | FastAPI dependencies run on every route |
+| `can_read(sha, request)` | `True` | the list, a document's file, pages and questions (404 when False), and a run on it (403) |
+| `check_upload(file, request)` | reads it all | `POST /documents`: return the bytes, or raise to refuse. Read no more than you accept. |
+| `on_uploaded(document, request)` | nothing | with the store's lock held, after the record is written |
+| `on_delete(sha, document, request)` | 404 without a record, else `True` | with the lock held: `True` deletes the file, `False` keeps it |
+| `describe(document, request)` | `{}` | keys added to each document in the list |
 | `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
 | `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
 | `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
@@ -70,6 +80,17 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `run_owner(request)` | None (anyone) | not yet called: the run routes will start a run for whoever it names, and only they may follow or cancel it |
 | `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`); the run routes will use it too |
 | `on_startup(app)`, `on_shutdown(app)` | nothing | once each, around serving |
+
+A document's record may hold more keys than a client is shown: a Policy keeps what it
+needs there (for example who uploaded the file) through `on_uploaded`, and reads it back
+as `document.extra`. Hold `pandion_api.documents.SIDECAR_LOCK` (or `DocumentStore.lock`)
+around any change you make to a record yourself.
+
+RAG Playground's Policy gives every `/api/v2` request a visitor cookie, and on its hosted
+demo holds uploads to the demo's limits (a PDF of at most 10 MB and 20 pages, no page over
+41 inches a side, three live uploads a visitor, a cap on the whole disk), shows a visitor
+the samples and only their own uploads, and deletes only their own upload, keeping a
+file another visitor also uploaded. The old `/api/sources` routes call the same Policy.
 
 ## What a request cannot set
 
@@ -92,7 +113,9 @@ the cross-encoder's revision) that is not at its default.
 The default Policy allows every setting. RAG Playground's Policy refuses with a 403 a
 custom model endpoint on its hosted demo, a changed prompt or model revision in every
 mode, `max_tokens` above 16,000 on a step that calls a model, and a text budget (a
-setting named `..._budget_chars`) above four times its default.
+setting named `..._budget_chars`) above four times its default. Its old `/api/runs` and
+`/api/sweeps` routes refuse the same caps on each graph node with the same function
+(`api.policy.step_over_limit`).
 
 ## Errors
 

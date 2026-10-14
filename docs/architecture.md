@@ -269,6 +269,12 @@ so every client route opens the app, and every API route lives under `/api`. The
 relative paths, so the same code works in development, where Vite on port 5173 proxies
 `/api` to the server on port 8000.
 
+The server answers on two prefixes until part 5. `/api` holds the routes the web uses
+today. `/api/v2` holds pandion-api's routes with the playground's Policy, which take a
+pipeline as the pipeline file's shape. Both share one run queue, one record lock and one
+pdfium lock, and every site rule has one implementation. `tests/api/test_v2_parity.py`
+runs today's tests a second time against `/api/v2` to prove the rules hold there.
+
 - **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
 - **Runs.** It posts the pipeline graph to `/api/runs` and opens an `EventSource` on the
   events, one per run.

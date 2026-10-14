@@ -106,3 +106,40 @@ def test_a_text_budget_may_be_at_most_four_times_its_default(client):
     r = validate(client, reranked(cap + 1))
     assert r.status_code == 403
     assert r.json()["detail"] == f"retrieve.rerank.1.text_budget_chars is {cap + 1}; the playground allows at most {cap}."
+
+
+# --- the same caps on the old /api/runs and /api/sweeps ---------------------------
+
+
+def chat_graph(config: dict) -> dict:
+    return {"nodes": [{"id": "chat", "stage": "use_case", "transform": "chat", "config": config}], "edges": []}
+
+
+def test_the_old_runs_route_caps_a_model_output_as_v2_does(client):
+    r = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": 16001})})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "chat.max_tokens is 16001; the playground allows at most 16000."
+    at_the_cap = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": 16000})})
+    assert at_the_cap.status_code != 403
+
+
+def test_an_override_cannot_lift_the_cap_on_the_old_runs_route(client):
+    r = client.post("/api/runs", json={"graph": chat_graph({}), "overrides": {"chat": {"max_tokens": 20000}}})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "chat.max_tokens is 20000; the playground allows at most 16000."
+
+
+def test_the_old_sweeps_route_caps_a_text_budget_as_v2_does(client):
+    import pandion
+
+    props = pandion.catalog()["rerank"]["llm_rerank"]["config_schema"]["properties"]
+    cap = 4 * props["text_budget_chars"]["default"]
+    graph = {"nodes": [{"id": "rr", "stage": "rerank", "transform": "llm_rerank", "config": {}}], "edges": []}
+    r = client.post(
+        "/api/sweeps",
+        json={"graph": graph, "node_id": "rr",
+              "variants": [{"transform": "llm_rerank", "config": {}},
+                           {"transform": "llm_rerank", "config": {"text_budget_chars": cap + 1}}]},
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == f"rr.text_budget_chars is {cap + 1}; the playground allows at most {cap}."

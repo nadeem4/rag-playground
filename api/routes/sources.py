@@ -10,8 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
-import re
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,32 +20,17 @@ from pydantic import BaseModel
 
 from pandion.sources import Sources
 
+# The record helpers are pandion-api's, so both stacks share one record format
+# and one lock (`SIDECAR_LOCK`, held here, in `expiry.sweep` and on /api/v2).
+from pandion_api.documents import META_DIR, SHA, SIDECAR_LOCK, DocumentStore
+from pandion_api.documents import read_sidecar as _read_sidecar
+
 from api import demo, sample_set, visitor, warmup
 
 router = APIRouter()
 
-META_DIR = ".meta"
-
-#: A stored sha is always a sha256 hex digest. Checked before a sha reaches a
-#: filesystem path, so a crafted value like `../../x` can never escape
-#: `META_DIR` or the sources directory. Shared with `pages.py`.
-SHA = re.compile(r"^[0-9a-f]{64}$")
-
-#: Held around every sidecar read-modify-write, here and in `expiry.sweep`, so
-#: two uploads of the same bytes, or an upload racing the sweep, never lose an owner.
-SIDECAR_LOCK = threading.Lock()
-
 NO_VISITOR = "This browser sent no visitor id. Open the demo in its own tab or enable cookies, then try again."
 DEMO_FULL = "The demo is full right now. Try again later, or run the playground locally."
-
-
-def _read_sidecar(path: Path) -> dict[str, Any]:
-    """A sidecar's parsed JSON, or `{}` when it is missing, unreadable, or not an object."""
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 def owners(sources: Path, sha: str) -> dict[str, str]:
@@ -157,6 +140,24 @@ def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
         raise HTTPException(503, DEMO_FULL)
 
 
+def record_upload(sources: Path, sha: str, visitor: str | None) -> None:
+    """After the record is written, with SIDECAR_LOCK held. A sample's bytes stay
+    public under the sample's own name, with no owner, so the sweep never deletes
+    the shared file and no cap counts it. An upload gains this visitor's upload
+    time; the demo's 24 hours count from it."""
+    meta_path = sources / META_DIR / f"{sha}.json"
+    body = _read_sidecar(meta_path)
+    sample = next((s for s in sample_set.all_samples() if s.sha == sha), None)
+    if sample is not None:
+        body["filename"], visitor = sample.pdf.name, None
+    visitors = dict(body.get("visitors") or {})
+    if visitor:
+        visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if visitors:
+        body["visitors"] = visitors
+    meta_path.write_text(json.dumps(body), encoding="utf-8")
+
+
 @router.get("/sources")
 def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
     visitor.ensure_visitor(request, response)
@@ -205,58 +206,22 @@ def delete_source(sha: str, request: Request) -> dict[str, Any]:
     sources: Path = request.app.state.deps.sources_dir
     if not SHA.match(sha):
         raise HTTPException(404, "There is no upload with that fingerprint.")
-    if sha in sample_set.readable_shas():
-        raise HTTPException(403, "A sample cannot be deleted. It is there for everyone.")
-    meta_path = sources / META_DIR / f"{sha}.json"
-    me = visitor.visitor_id(request) if demo.enabled() else None
-    if demo.enabled() and me is None:
-        raise HTTPException(400, NO_VISITOR)
+    store = DocumentStore(sources)
     with SIDECAR_LOCK:
-        body = _read_sidecar(meta_path)
-        visitors = dict(body.get("visitors") or {})
-        if not body or (demo.enabled() and me not in visitors):
-            raise HTTPException(404, "There is no upload of yours with that fingerprint.")
-        if demo.enabled():
-            visitors.pop(me, None)
-            if visitors:
-                meta_path.write_text(json.dumps({**body, "visitors": visitors}), encoding="utf-8")
-                return {"sha": sha, "deleted": False}
-        for f in sources.glob(f"{sha}*"):
-            if f.is_file():
-                f.unlink()
-        meta_path.unlink(missing_ok=True)
-        # A question set stored beside it (locally only; the demo keeps none).
-        (sources / "questions" / f"{sha}.json").unlink(missing_ok=True)
+        if not request.app.state.policy.on_delete(sha, store.get(sha), request):
+            return {"sha": sha, "deleted": False}
+        store.remove(sha)
     return {"sha": sha, "deleted": True}
 
 
 @router.post("/sources")
 async def upload_source(request: Request, response: Response, file: UploadFile) -> dict[str, Any]:
-    if not demo.enabled():
-        me = visitor.ensure_visitor(request, response)
-        data = await file.read()
-    else:
-        # Never mint here: a client that drops cookies would get a fresh id, and
-        # so a fresh upload cap, on every request.
-        me = visitor.visitor_id(request)
-        if me is None:
-            raise HTTPException(400, NO_VISITOR)
-        # Refuse on the declared size before reading, and never read more than
-        # one byte past the cap, so a huge body never lands in memory. The
-        # request's Content-Length also counts the multipart framing, so it is
-        # the check only when the file's own size is unknown.
-        if file.size is not None and file.size > demo.MAX_UPLOAD_BYTES:
-            raise _too_big(file.size)
-        length = request.headers.get("content-length", "")
-        if file.size is None and length.isdigit() and int(length) > demo.MAX_UPLOAD_BYTES:
-            raise _too_big(None)
-        data = await file.read(demo.MAX_UPLOAD_BYTES + 1)
-        if len(data) > demo.MAX_UPLOAD_BYTES:
-            raise _too_big(None)
+    # Locally a first upload mints the visitor id; on the demo it never does:
+    # a client that drops cookies would get a fresh id, and a fresh cap, each time.
+    me = visitor.ensure_visitor(request, response) if not demo.enabled() else visitor.visitor_id(request)
+    data = await request.app.state.policy.check_upload(file, request)
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
-    if demo.enabled():
-        _check_demo_limits(request.app.state.deps.sources_dir, me, data)
     return _store(
         request.app.state.deps.sources_dir,
         Path(file.filename or "upload").name,
@@ -301,31 +266,13 @@ def _store(
     content_type: str | None,
     visitor: str | None = None,
 ) -> dict[str, Any]:
-    sha = hashlib.sha256(data).hexdigest()
-    sample = next((s for s in sample_set.all_samples() if s.sha == sha), None)
+    sample = next((s for s in sample_set.all_samples() if s.sha == hashlib.sha256(data).hexdigest()), None)
     if sample is not None:
-        # A sample's bytes stay public under the sample's own name: no owner, so
-        # the sweep never deletes the shared file and no cap counts it, and one
-        # visitor's filename never renames the sample for everyone.
-        filename, visitor = sample.pdf.name, None
-    Sources(sources).add_bytes(data, filename)
-
-    body = {
-        "sha": sha,
-        "filename": filename,
-        "size": len(data),
-        "content_type": content_type
-        or mimetypes.guess_type(filename)[0]
-        or "application/octet-stream",
-    }
-    meta_dir = sources / META_DIR
-    meta_dir.mkdir(exist_ok=True)
-    meta_path = meta_dir / f"{sha}.json"
+        filename = sample.pdf.name  # a sample's bytes are stored under the sample's own name
+    store = DocumentStore(sources)
+    sha = store.save(data, filename)
+    ctype = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     with SIDECAR_LOCK:
-        previous = _read_sidecar(meta_path)
-        visitors = dict(previous.get("visitors") or {})
-        if visitor:
-            visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        stored = {**body, **({"visitors": visitors} if visitors else {})}
-        meta_path.write_text(json.dumps(stored), encoding="utf-8")
-    return body
+        store.write(sha, filename, len(data), ctype)
+        record_upload(sources, sha, visitor)
+    return store.get(sha).record()

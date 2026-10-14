@@ -11,7 +11,9 @@ transform that puts a key in an exception message cannot surface it in
 `node_failed`.
 
 In demo mode a chat node set to the `custom` model is refused with a 403: it
-would make the server send a request to a URL a visitor chose.
+would make the server send a request to a URL a visitor chose. In every mode
+a node's `max_tokens` or text budget above the playground's caps is a 403, with
+the function /api/v2 uses (`api.policy.step_over_limit`).
 """
 
 from __future__ import annotations
@@ -98,6 +100,14 @@ def _check(
     for nd in graph.nodes:
         if _changes_a_read_only_setting(registry, nd, overrides.get(nd.id, nd.config)):
             raise HTTPException(status_code=403, detail=PROMPTS_FIXED)
+    # The playground's caps on model output and text budgets, as on /api/v2.
+    # Imported here: api.policy imports this module for its messages.
+    from api.policy import step_over_limit
+
+    for nd in graph.nodes:
+        refusal = step_over_limit(nd.id, nd.stage.value, nd.transform, overrides.get(nd.id, nd.config))
+        if refusal:
+            raise HTTPException(status_code=403, detail=refusal)
     try:
         graph.validate(registry)
     except GraphValidationError as exc:
@@ -256,6 +266,12 @@ async def create_sweep(
         for v in body.variants
     ):
         raise HTTPException(status_code=403, detail=PROMPTS_FIXED)
+    from api.policy import step_over_limit  # api.policy imports this module
+
+    for v in body.variants:
+        refusal = step_over_limit(target.id, target.stage.value, v.transform, v.config)
+        if refusal:
+            raise HTTPException(status_code=403, detail=refusal)
     for v in body.variants:
         try:
             deps.registry.get(target.stage, v.transform)

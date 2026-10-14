@@ -375,9 +375,11 @@ Saved pipelines (form 2, the Library list) are kept as configs under
 `rag-playground:pipelines:v2`. The first read that finds no list there converts the old list
 under `rag-playground:pipelines:v1` once, item by item. An item that cannot be converted is
 kept in the new list as it was, with `config: null` and the reason, listed in Library and
-never opened. The old key is never written or removed. The cap of twenty never drops a kept
-item: a save drops the oldest item that is not kept, and is refused when every other item is
-kept. An export file still reads either shape. Share links still hold a graph; they move to
+never opened. The conversion never writes or removes the old key; the one exception is the
+privacy page's Delete saved pipelines and experiments, which removes it because the visitor
+asked, and leaves the new list empty so nothing converts again. The cap of twenty never drops
+a kept item: a save drops the oldest item that is not kept, and is refused when every other
+item is kept, with a line that says the list is full of older pipelines. An export file still reads either shape. Share links still hold a graph; they move to
 the config in a later change. The fixture
 `web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the browser holds
 it, and two tests pin that converting the app's Starter gives that file, so a visitor's

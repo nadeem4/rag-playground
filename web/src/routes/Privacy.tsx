@@ -8,7 +8,7 @@ import { refreshUploads, useDocument } from "@/state/document"
 import { LESSONS_ENABLED } from "@/state/lessons"
 import { listWords } from "@/state/library"
 import { clearExperiments, useExperiments } from "@/state/libraryExperiments"
-import { clearPipelines, usePipelines } from "@/state/pipelines"
+import { clearPipelines, oldListStored, usePipelines } from "@/state/pipelines"
 
 import "@/components/learn/learn.css"
 
@@ -149,7 +149,7 @@ export function Privacy() {
 
   function askSaved() {
     setDone(null)
-    if (!pipelines.length && !experiments.length) setDone("There is nothing saved in this browser.")
+    if (!pipelines.length && !experiments.length && !oldListStored()) setDone("There is nothing saved in this browser.")
     else setAsking("saved")
   }
 
@@ -185,7 +185,12 @@ export function Privacy() {
     setDone([gone.length ? `Deleted ${plural(gone.length, "upload")} from the demo.` : "", ...failed].filter(Boolean).join(" "))
   }
 
-  const savedWords = [pipelines.length ? plural(pipelines.length, "saved pipeline") : "", experiments.length ? plural(experiments.length, "experiment") : ""].filter(Boolean)
+  const savedWords = [
+    pipelines.length ? plural(pipelines.length, "saved pipeline") : "",
+    experiments.length ? plural(experiments.length, "experiment") : "",
+    // Asked only when nothing else is listed: the old list's items are listed once converted.
+    !pipelines.length && asking === "saved" && oldListStored() ? "the list of pipelines an older version saved" : "",
+  ].filter(Boolean)
 
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-surface">

@@ -1219,6 +1219,21 @@ describe("saved pipelines on Build", () => {
     expect(chunkTransform()).toBe("token_based")
   })
 
+  it("says the list is full of older pipelines when Save as new or a share link cannot make room", async () => {
+    const enrich = { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }
+    const kept = Array.from({ length: 20 }, (_, i) => ({ id: `k${String(i).padStart(7, "0")}`, name: `Old ${i}`, graph: enrich, savedAt: "2026-01-01T00:00:00Z" }))
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(kept))
+    const full = "The list is full of older pipelines that could not be converted. Delete one in the Library to save this."
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("From a friend", withFile())}`)
+    setup()
+    await screen.findByRole("group", { name: "Pipeline" })
+    expect(within(bar()).getByText(`${full} The shared pipeline is loaded as the working copy.`)).toBeTruthy()
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save as new" }))
+    fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "Another" } })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
+    expect(within(bar()).getByText(full)).toBeTruthy()
+  })
+
   it("says so when storage refuses Save as or Save changes (M3)", async () => {
     savePipeline("Mine", withFile())
     setup()

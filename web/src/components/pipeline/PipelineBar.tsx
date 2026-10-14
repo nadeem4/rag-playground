@@ -12,7 +12,10 @@ import {
   deletePipeline,
   droppedText,
   encodePipeline,
+  FULL_OF_KEPT,
+  fullOfKept,
   isEdited,
+  keptReason,
   renamePipeline,
   savePipeline,
   setCurrentId,
@@ -82,7 +85,8 @@ export function PipelineBar({
     const made = naming === "rename" && saved ? null : savePipeline(name, graph)
     const ok = naming === "rename" && saved ? renamePipeline(saved.id, name) : made !== null
     if (!ok) {
-      setNameError(name.trim() ? "The pipeline could not be saved in this browser." : "Give the pipeline a name.")
+      const full = naming !== "rename" && name.trim() !== "" && fullOfKept()
+      setNameError(full ? FULL_OF_KEPT : name.trim() ? "The pipeline could not be saved in this browser." : "Give the pipeline a name.")
       return
     }
     if (made?.dropped) setFlash(droppedText(made.dropped))
@@ -134,7 +138,7 @@ export function PipelineBar({
         group: "Your pipelines",
         lock: usable
           ? undefined
-          : { kind: "hard" as const, reason: p.kept ? `Saved by an older version, and it cannot be opened here: ${p.kept.problem}` : "This server does not have every step this pipeline uses." },
+          : { kind: "hard" as const, reason: keptReason(p.kept?.problem) },
         tags: p.id === saved?.id && edited ? editedTag : undefined,
       }
     }),

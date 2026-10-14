@@ -8,6 +8,9 @@ import {
   MAX_PIPELINES,
   OLD_LIST_KEY,
   fromOld,
+  FULL_OF_KEPT,
+  fullOfKept,
+  keptReason,
   usableGraph,
   clearPipelines,
   importPipelines,
@@ -364,5 +367,48 @@ describe("the Library list as configs", () => {
   it("fromOld keeps the old documents list only when it agrees with the graph's document", () => {
     const other = { sha: "f".repeat(64), filename: "other.pdf" }
     expect(fromOld({ ...oldItem("cccccccc", sampleGraph(R, DOC)), documents: [other] }, 0).documents).toEqual([DOC])
+  })
+})
+
+describe("fix round 1", () => {
+  it("converts once: a later change to the old list is not read again", () => {
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("aaaaaaaa", sampleGraph(R, DOC))]))
+    readPipelines()
+    const v2 = window.localStorage.getItem(LIST_KEY)
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("zzzzzzzz", BROKEN), oldItem("yyyyyyyy", BROKEN)]))
+    resetPipelinesForTests()
+    expect(readPipelines().map((p) => p.id)).toEqual(["aaaaaaaa"])
+    expect(window.localStorage.getItem(LIST_KEY)).toBe(v2)
+  })
+
+  it("Delete on the privacy page removes the old list too, and nothing converts again", () => {
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("aaaaaaaa", sampleGraph(R, DOC)), oldItem("bbbbbbbb", BROKEN)]))
+    expect(readPipelines()).toHaveLength(2)
+    clearPipelines()
+    expect(window.localStorage.getItem(OLD_LIST_KEY)).toBeNull()
+    expect(window.localStorage.getItem(LIST_KEY)).toBe("[]")
+    resetPipelinesForTests()
+    expect(readPipelines()).toEqual([])
+  })
+
+  it("gives an old item without an id a random one, so two imports do not collide", () => {
+    const a = fromOld({ name: "No id", graph: BROKEN }, 0)
+    const b = fromOld({ name: "No id", graph: BROKEN }, 0)
+    expect(a.id).toMatch(/^kept-1-[A-Za-z0-9_-]{8}$/)
+    expect(a.id).not.toBe(b.id)
+  })
+
+  it("says why a save is refused when the list is full of kept items", () => {
+    expect(fullOfKept()).toBe(false)
+    const kept = Array.from({ length: MAX_PIPELINES }, (_, i) => oldItem(`k${String(i).padStart(7, "0")}`, BROKEN))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify(kept))
+    expect(savePipeline("New", g())).toBeNull()
+    expect(fullOfKept()).toBe(true)
+    expect(FULL_OF_KEPT).toBe("The list is full of older pipelines that could not be converted. Delete one in the Library to save this.")
+  })
+
+  it("names a kept item's own problem as the reason it cannot be opened", () => {
+    expect(keptReason("It has an enrich step.")).toBe("Saved by an older version, and it cannot be opened here: It has an enrich step.")
+    expect(keptReason(undefined)).toBe("This server does not have every step this pipeline uses.")
   })
 })

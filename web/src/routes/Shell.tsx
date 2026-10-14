@@ -60,6 +60,8 @@ import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } 
 import {
   decodePipeline,
   droppedText,
+  FULL_OF_KEPT,
+  fullOfKept,
   isEdited,
   isUnsaved,
   readCurrentId,
@@ -301,7 +303,11 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         if (!result) {
           // Keeping the old selection would let "Save changes" overwrite it with this graph.
           setCurrentId(null)
-          setBarNotice("The shared pipeline could not be saved in this browser. It is loaded as the working copy.")
+          setBarNotice(
+            fullOfKept()
+              ? `${FULL_OF_KEPT} The shared pipeline is loaded as the working copy.`
+              : "The shared pipeline could not be saved in this browser. It is loaded as the working copy.",
+          )
         }
       }
       edit(decoded.graph)

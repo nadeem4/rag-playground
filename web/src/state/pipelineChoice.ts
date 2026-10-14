@@ -26,6 +26,8 @@ export interface PipelineChoice {
   kind: "ready" | "saved" | "build"
   /** Null for a saved pipeline this server cannot run. */
   graph: PipelineGraph | null
+  /** Why a kept item, saved by an older version, cannot be opened. */
+  problem?: string
   documents: DocRef[]
   /** Which last score this one is compared with: an edited pipeline compares with its own. */
   key: string
@@ -46,7 +48,9 @@ export function pipelineChoices({
 }): PipelineChoice[] {
   const out: PipelineChoice[] = []
   if (starter) out.push({ ...starter, label: starter.name, kind: "ready", key: STARTER_ID })
-  for (const p of saved) out.push({ id: p.id, name: p.name, label: p.name, kind: "saved", graph: usableGraph(p, registry), documents: p.documents, key: p.id })
+  for (const p of saved) {
+    out.push({ id: p.id, name: p.name, label: p.name, kind: "saved", graph: usableGraph(p, registry), documents: p.documents, key: p.id, ...(p.kept ? { problem: p.kept.problem } : {}) })
+  }
   if (working && documentOf(working)) {
     const current = currentId === STARTER_ID ? starter : (saved.find((p) => p.id === currentId) ?? null)
     // The Starter on the visitor's own document is unsaved work too, even though Build does not call it edited.

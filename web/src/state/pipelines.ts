@@ -18,8 +18,10 @@ import { loadGraph, type PipelineGraph } from "./graph"
  * read that finds no list under LIST_KEY converts every old item with
  * `graphToConfig` and writes the result to LIST_KEY once. An item that cannot
  * be converted is kept as it was, with the reason, and listed but never
- * opened. The old key is never written or removed. Nothing but its owner's
- * Delete removes a kept item: the cap of twenty never drops one.
+ * opened. The conversion never writes or removes the old key. The one thing
+ * that removes it is the privacy page's Delete saved pipelines, which the
+ * visitor asks for (clearPipelines). Nothing but its owner's Delete removes a
+ * kept item: the cap of twenty never drops one.
  */
 
 export interface SavedPipeline {
@@ -40,7 +42,10 @@ export const STARTER_ID = "starter"
 
 export const MAX_PIPELINES = 20
 export const LIST_KEY = "rag-playground:pipelines:v2"
-/** Where versions before part 5 kept the list, as graphs. Read once, never written or removed. */
+/**
+ * Where versions before part 5 kept the list, as graphs. Read once and never
+ * written. Removed only when the visitor deletes every saved pipeline (clearPipelines).
+ */
 export const OLD_LIST_KEY = "rag-playground:pipelines:v1"
 const CURRENT_KEY = "rag-playground:pipelines:current"
 const MAX_NAME = 60
@@ -83,7 +88,8 @@ const docList = (listed: unknown): DocRef[] | null =>
 /** One item of the old list or of an old export file, converted, or kept with the reason. Never null. */
 export function fromOld(raw: unknown, place: number): SavedPipeline {
   const r = isRecord(raw) ? raw : {}
-  const id = typeof r.id === "string" && r.id ? r.id : `kept-${place + 1}`
+  // A random suffix, so items without an id from two imports never share one.
+  const id = typeof r.id === "string" && r.id ? r.id : `kept-${place + 1}-${newId()}`
   const name = typeof r.name === "string" && r.name.trim() ? r.name : OLD_NAME
   const savedAt = typeof r.savedAt === "string" ? r.savedAt : new Date(0).toISOString()
   const listed = docList(r.documents)
@@ -200,6 +206,20 @@ export function savePipeline(
   return { saved: p, dropped }
 }
 
+/** Why a save was refused when every item in a full list is kept. */
+export const FULL_OF_KEPT = "The list is full of older pipelines that could not be converted. Delete one in the Library to save this."
+
+/** The list is full and every item is kept, so a save is refused rather than drop one. */
+export function fullOfKept(): boolean {
+  const list = freshPipelines()
+  return list.length >= MAX_PIPELINES && list.every((p) => p.kept)
+}
+
+/** Why a saved pipeline cannot be opened: a kept item's own problem, else steps this server lacks. */
+export function keptReason(problem: string | undefined): string {
+  return problem ? `Saved by an older version, and it cannot be opened here: ${problem}` : "This server does not have every step this pipeline uses."
+}
+
 /** The line that says a save pushed the oldest pipeline out (I3). */
 export const droppedText = (dropped: SavedPipeline) =>
   `Saved. ${dropped.name}, the oldest pipeline, was removed to keep ${MAX_PIPELINES}.`
@@ -284,10 +304,20 @@ export function importPipelines(incoming: readonly unknown[]): ImportResult<Save
   return persist(next) ? result : null
 }
 
-/** Delete every saved pipeline, and the selection with them. The working copy on Build stays. */
+/**
+ * Delete every saved pipeline, and the selection with them. The working copy on
+ * Build stays. The visitor asked for this, so the list an older version saved
+ * goes too; the new list stays as an empty one, so nothing converts again.
+ */
 export function clearPipelines(): void {
   persist([])
+  write(OLD_LIST_KEY, null)
   setCurrentId(null)
+}
+
+/** Whether the list an older version saved is still in this browser. */
+export function oldListStored(): boolean {
+  return read(OLD_LIST_KEY, (raw) => raw) !== null
 }
 
 export function readCurrentId(): string | null {

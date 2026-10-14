@@ -409,3 +409,16 @@ def test_on_the_demo_the_registry_offers_no_custom_model(client, monkeypatch):
     local = client.get("/api/registry").json()
     for stage, name in MODEL_STEPS:
         assert "custom" in model_field(local, stage, name)["enum"]
+
+
+def test_the_old_check_asks_the_sites_policy_about_the_provider(client, monkeypatch):
+    from fastapi import HTTPException
+
+    from api.policy import PlaygroundPolicy
+
+    def refuse(self, provider, request):
+        raise HTTPException(403, f"No {provider} here.")
+
+    monkeypatch.setattr(PlaygroundPolicy, "check_provider", refuse)
+    r = client.post("/api/settings/llm/check", json={"provider": "openai"})
+    assert r.status_code == 403 and r.json()["detail"] == "No openai here."

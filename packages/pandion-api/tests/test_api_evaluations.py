@@ -117,3 +117,80 @@ def test_a_variant_the_policy_refuses_is_refused_before_anything_runs(tmp_path):
         body = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha]}
         r = c.post("/comparisons", json=body)
     assert r.status_code == 403 and r.json()["detail"] == "Pieces stay small here."
+
+
+def keep(client, sha, questions):
+    data = json.dumps({"questions": questions}).encode()
+    r = client.post(f"/documents/{sha}/questions", files={"file": ("q.json", data, "application/json")})
+    assert r.status_code == 200, r.text
+
+
+def test_a_comparison_without_questions_is_index_only_even_with_a_kept_set(client):
+    sha = upload(client)["sha"]
+    keep(client, sha, QUESTIONS)
+    body = {"config": {"index": PIPELINE["index"]}, "stage": "chunk", "variants": VARIANTS, "documents": [sha]}
+    state, _ = finish(client, client.post("/comparisons", json=body))
+    assert state["ok"] is True and [c["report"] for c in state["result"]["comparisons"]] == [None, None]
+
+
+def test_a_comparison_with_questions_needs_a_search_step(client):
+    sha = upload(client)["sha"]
+    body = {"config": {"index": PIPELINE["index"]}, "stage": "chunk", "variants": VARIANTS, "documents": [sha], "questions": QUESTIONS}
+    r = client.post("/comparisons", json=body)
+    assert r.status_code == 422
+    assert "retrieve" in r.json()["detail"]["problems"][0]
+
+
+def test_a_comparison_can_stop_each_variant_after_a_step(client):
+    sha = upload(client)["sha"]
+    body = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha], "through": "chunk"}
+    state, events = finish(client, client.post("/comparisons", json=body))
+    assert state["ok"] is True and [c["ok"] for c in state["result"]["comparisons"]] == [True, True]
+    assert not any(e.get("step") in ("embed", "store", "index") for e in events if e["event"] == "node_started")
+
+
+def test_through_with_questions_or_naming_no_step_is_400_before_anything_runs(client):
+    sha = upload(client)["sha"]
+    base = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha]}
+    r = client.post("/comparisons", json={**base, "through": "chunk", "questions": QUESTIONS})
+    assert r.status_code == 400 and "through" in r.json()["detail"]
+    r = client.post("/comparisons", json={**base, "through": "parse"})
+    assert r.status_code == 400 and "before the chunk step" in r.json()["detail"]
+    assert client.post("/comparisons", json={**base, "through": "nowhere"}).status_code == 400
+
+
+def test_a_variant_is_taken_as_compare_takes_it(tmp_path):
+    seen: list[dict] = []
+
+    class Recording(Policy):
+        def check_run(self, config, request):
+            seen.append(config)
+
+    with make_client(tmp_path, Recording()) as c:
+        sha = upload(c)["sha"]
+        body = {"config": PIPELINE, "stage": "clean", "variants": [{"use": "dedupe_blocks"}, "dedupe_blocks"], "documents": [sha]}
+        state, _ = finish(c, c.post("/comparisons", json=body))
+    assert state["ok"] is True
+    assert [s["index"]["clean"] for s in seen[1:]] == [[{"use": "dedupe_blocks"}]] * 2
+
+
+def test_kept_sets_from_several_documents_keep_every_question_apart(client):
+    first = upload(client)["sha"]
+    from pdfs import SAMPLE_PAGES, build_pdf
+
+    second = upload(client, "other.pdf", build_pdf([*SAMPLE_PAGES, ["One more page."]]))["sha"]
+    keep(client, first, QUESTIONS)
+    keep(client, second, QUESTIONS)
+    state, _ = finish(client, client.post("/evaluations", json={"config": PIPELINE, "documents": [first, second]}))
+    ids = [q["id"] for q in state["result"]["questions"]]
+    assert ids == ["report.pdf: capital", "other.pdf: capital"]
+
+
+def test_kept_sets_together_hold_at_most_500_questions(client):
+    from pdfs import SAMPLE_PAGES, build_pdf
+
+    shas = [upload(client)["sha"], upload(client, "other.pdf", build_pdf([*SAMPLE_PAGES, ["One more page."]]))["sha"]]
+    for n, sha in enumerate(shas):
+        keep(client, sha, [{"id": f"{n}-{i}", "question": "Where?", "gold_answers": ["Paris."]} for i in range(300)])
+    r = client.post("/evaluations", json={"config": PIPELINE, "documents": shas})
+    assert r.status_code == 400 and "500" in r.json()["detail"]

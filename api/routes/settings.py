@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Header, Request, Response
 from pydantic import BaseModel
 
 from api import demo, visitor
@@ -54,6 +54,7 @@ def get_llm_settings() -> dict[str, str]:
 
 @router.post("/settings/llm/check")
 def check_llm_key(
+    request: Request,
     body: CheckIn | None = None,
     x_anthropic_api_key: str | None = Header(default=None),
     x_openai_api_key: str | None = Header(default=None),
@@ -68,8 +69,9 @@ def check_llm_key(
         "openrouter": x_openrouter_api_key,
     }
     provider = body.provider
-    if provider == "custom" and demo.enabled():
-        raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
+    # The site's rule (the demo checks no custom endpoint) lives in its Policy,
+    # which /api/v2/settings/models/check asks too.
+    request.app.state.policy.check_provider(provider, request)
     key, source = resolve_key(headers[provider], provider)
     return check_key(
         provider,

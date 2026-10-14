@@ -75,7 +75,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
 | `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
 | `POST /evaluations` | `{"config", "documents", "questions"?, "top_k"?}`: search for every question and say whether its answer came back, and for a miss the step that lost it (`pandion.evaluate`). Without `questions`, the sets kept against the documents. A run; its result is the report's `to_dict()`. |
-| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each (`pandion.compare`). Without `questions`, the sets kept against the documents, if any. A run; its result names the best. |
+| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. |
 | `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
 | `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
 | `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
@@ -111,13 +111,20 @@ anything runs.
 An evaluation's events carry the question's id under `question`, with a `question_finished`
 event after each. A comparison's carry the variant's number under `variant`. Every variant
 is checked like a pipeline before anything runs, so a variant the Policy refuses is
-refused at once. A question set in the request is held to the caps of an uploaded one
-(over 1 MB is 413; more than 500 questions, or more than 20 gold passages in one, is 400
-with its sentence). Without one, the questions are those of the sets kept against the
-documents, in the order the documents are listed; an evaluation with no questions at all
-is a 400, and so is a comparison of a `rewrite`, `search` or `rerank` step. A pipeline
-with no `retrieve` section cannot be evaluated (422), and a stage that cannot be compared
-is a 400.
+refused at once. A variant is taken as `pandion.compare` takes it: a bare name is
+`{"use": name}`, and one block for `clean` or `rerank` is a list of one. A question set
+in the request is held to the caps of an uploaded one (over 1 MB is 413; more than 500
+questions, or more than 20 gold passages in one, is 400 with its sentence).
+
+An evaluation sent without questions asks those of the sets kept against its documents,
+in the order the documents are listed. An id that two documents' sets both use is
+prefixed with each document's name (`report.pdf: capital`), and the kept sets together
+hold at most 500 questions (400 past that). An evaluation with no questions at all is a
+400. A comparison asks only the questions it is sent: without them it is index only,
+and a comparison of a `rewrite`, `search` or `rerank` step without them is a 400. A
+pipeline with no `retrieve` section cannot be evaluated, nor compared with questions
+(422). A stage that cannot be compared is a 400, and so is a `through` sent with
+questions, one that names no step, or one that stops before the varied step.
 
 A document in a run is named by the filename it was uploaded under, so the same bytes
 under the same name give the same result ids however often they are uploaded. Two
@@ -186,8 +193,8 @@ server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it
 `DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. A comparison
 on `/api/v2` takes at most ten variants, as many as an old sweep takes recipes. A key
 check on `/api/v2` gives the old `/api/settings/llm/check` answers: the demo refuses to
-check a custom endpoint (403), never uses a server key, and its missing-key sentence names
-no server variable. It checks a
+check a custom endpoint (403, `check_provider`, which the old route asks too), never uses
+a server key, and its missing-key sentence names no server variable. It checks a
 question set and hands the report back, but keeps no set, so one visitor's questions
 never reach another's browser; the old `/api/sources/{id}/questions` routes ask the same
 Policy.

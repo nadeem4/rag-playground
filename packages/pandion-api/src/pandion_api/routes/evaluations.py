@@ -3,14 +3,16 @@ compare the settings of one stage. Both are runs, started through the same
 path as index runs and questions (`pandion_api.jobs.start`): the same owner,
 the same scrub, the same queue.
 
-A question set comes from the request, held to the same caps as an uploaded
-one, or, when the request sends none, from the sets kept against its documents
-(POST /documents/{id}/questions).
+An evaluation's question set comes from the request, held to the same caps as
+an uploaded one, or, when the request sends none, from the sets kept against
+its documents (POST /documents/{id}/questions). A comparison asks only the
+questions the request sends; without them it is index only, as `pandion.compare` is.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -52,22 +54,33 @@ def _checked(questions: QuestionSet) -> list[dict[str, Any]]:
     return parsed["questions"]
 
 
-def _kept(shas: list[str], request: Request) -> list[dict[str, Any]]:
-    """The questions of the sets kept against these documents, in their order."""
+def _kept(shas: list[str], names: list[str], request: Request) -> list[dict[str, Any]]:
+    """The questions of the sets kept against these documents, in their order.
+    An id two documents' sets both use is prefixed with each document's name,
+    so every question stays apart; together they hold at most MAX_QUESTIONS."""
     store = request.app.state.documents
-    out: list[dict[str, Any]] = []
-    for sha in shas:
+    sets: list[tuple[str, list[dict[str, Any]]]] = []
+    for sha, name in zip(shas, names):
         kept = store.questions(sha)
         if kept.is_file():
-            out.extend(json.loads(kept.read_text(encoding="utf-8"))["set"]["questions"])
-    return out
-
-
-async def question_set(questions: QuestionSet | None, shas: list[str], request: Request) -> list[dict[str, Any]]:
-    """The questions a run asks; empty when there are none. Off the event loop."""
-    if questions is not None:
-        return await run_in_threadpool(_checked, questions)
-    return await run_in_threadpool(_kept, shas, request)
+            sets.append((name, json.loads(kept.read_text(encoding="utf-8"))["set"]["questions"]))
+    total = sum(len(qs) for _, qs in sets)
+    if total > MAX_QUESTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The sets kept against these documents hold {total} questions together; "
+            f"at most {MAX_QUESTIONS} fit in one run, so evaluate fewer documents at once.",
+        )
+    owners: dict[str, set[str]] = {}
+    for name, qs in sets:
+        for q in qs:
+            if q.get("id"):
+                owners.setdefault(q["id"], set()).add(name)
+    return [
+        {**q, "id": f"{name}: {q['id']}"} if q.get("id") and len(owners[q["id"]]) > 1 else q
+        for name, qs in sets
+        for q in qs
+    ]
 
 
 class EvaluationIn(BaseModel):
@@ -86,7 +99,10 @@ async def create_evaluation(body: EvaluationIn, request: Request) -> dict[str, s
     if p.retrieval is None:
         raise problems(NO_SEARCH)
     documents = documents_of(body.documents, request)
-    questions = await question_set(body.questions, body.documents, request)
+    if body.questions is not None:
+        questions = await run_in_threadpool(_checked, body.questions)
+    else:
+        questions = await run_in_threadpool(_kept, body.documents, list(documents), request)
     if not questions:
         raise HTTPException(status_code=400, detail=NO_QUESTIONS)
 
@@ -101,6 +117,21 @@ async def create_evaluation(body: EvaluationIn, request: Request) -> dict[str, s
     return start(request, "evaluation", work)
 
 
+def _check_through(p: Any, body: "ComparisonIn", documents: dict[str, str], questions: Any) -> None:
+    """Pandion's own check of `through`, run before the run starts: compare
+    checks every argument first and, with `cancel` already set, starts no
+    variant, so nothing is indexed. A refusal is a 400 with its sentence."""
+    stopped = threading.Event()
+    stopped.set()
+    try:
+        compare(
+            p, body.stage, body.variants, documents, questions,
+            top_k=body.top_k, cancel=stopped, through=body.through,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
 class ComparisonIn(BaseModel):
     config: Any
     #: The stage that varies: parse, clean, chunk, embed, store, rewrite, search or rerank.
@@ -108,9 +139,11 @@ class ComparisonIn(BaseModel):
     #: What the pipeline file takes for that stage, once per variant (a list for clean and rerank).
     variants: list[Any] = Field(min_length=1)
     documents: list[str] = Field(min_length=1)
-    #: Left out: the sets kept against the documents, if any.
+    #: Left out: index only, nothing is asked.
     questions: QuestionSet | None = None
     top_k: int = Field(default=5, ge=1, le=50)
+    #: Without questions, the step each variant's index run stops after, as for POST /runs.
+    through: str | None = None
 
 
 @router.post("/comparisons", status_code=202)
@@ -130,20 +163,23 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
     if not isinstance(body.config, dict):
         raise problems(NOT_A_MAPPING)
     p = prepare(body.config, request)
-    for variant in body.variants:
-        prepare(variant_config(body.config, body.stage, variant), request)
-    documents = documents_of(body.documents, request)
-    questions = await question_set(body.questions, body.documents, request) or None
-    if COMPARE_STAGES[body.stage] == "retrieve" and questions is None:
+    prepared = [prepare(variant_config(body.config, body.stage, v), request) for v in body.variants]
+    if COMPARE_STAGES[body.stage] == "retrieve" and body.questions is None:
         raise HTTPException(
             status_code=400,
             detail=f"A {body.stage} step can only be compared with questions: without them nothing is searched.",
         )
+    if body.questions is not None and any(v.retrieval is None for v in [p, *prepared]):
+        raise problems(NO_SEARCH)
+    documents = documents_of(body.documents, request)
+    questions = await run_in_threadpool(_checked, body.questions) if body.questions is not None else None
+    if body.through is not None:
+        _check_through(p, body, documents, questions)
 
     def work(on_event, cancel, credentials):
         results = compare(
-            p, body.stage, body.variants, documents, questions,
-            top_k=body.top_k, credentials=credentials, on_event=on_event, cancel=cancel,
+            p, body.stage, body.variants, documents, questions, top_k=body.top_k,
+            credentials=credentials, on_event=on_event, cancel=cancel, through=body.through,
         )
         stopped = len(results) < len(body.variants)
         return not stopped and all(c.index.ok for c in results), stopped, results.to_dict()

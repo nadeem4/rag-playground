@@ -17,6 +17,11 @@ A run is stopped through its `cancel`, a `threading.Event`, which Pandion's
 starts. With a limit (`Policy.max_active_runs`), runs past it wait in arrival
 order: a waiting run logs `queued` (with how many wait ahead of it), then
 `unqueued` when its turn comes. Cancelling a waiting run ends it unrun.
+
+A finished run is kept for KEEP_FINISHED_S after it ended, and only the
+KEEP_FINISHED most recent finished runs are kept: past that the oldest goes
+first. A run that works or waits is never dropped. A dropped run is a 404,
+the same as one that never was.
 """
 
 from __future__ import annotations
@@ -40,6 +45,11 @@ Emit = Callable[[dict[str, Any]], None]
 #: The work a run does in a worker thread, given the emit and the run's cancel
 #: event. Returns (ok, cancelled), or (ok, cancelled, result) with a plain JSON result.
 Job = Callable[[Emit, threading.Event], tuple]
+
+#: How long a finished run is kept after it ended, in seconds.
+KEEP_FINISHED_S = 3600.0
+#: The most finished runs kept; past this the oldest is dropped first.
+KEEP_FINISHED = 200
 
 #: Seconds between SSE comment heartbeats on an idle stream.
 HEARTBEAT_S = 15.0
@@ -71,6 +81,8 @@ class RunState:
     result: Any = None
     #: Who started the run, as the site's `Policy.run_owner` names them. None: anyone.
     owner: str | None = None
+    #: When the run ended, on the manager's clock. None while it works or waits.
+    ended_at: float | None = None
 
     @property
     def cancel_requested(self) -> bool:
@@ -113,14 +125,43 @@ class RunManager:
     order: a waiting run logs `queued` (with how many wait ahead of it), then
     `unqueued` when it gets its turn. Cancelling a waiting run ends it unrun."""
 
-    def __init__(self, limit: Callable[[], int | None] = lambda: None) -> None:
+    def __init__(
+        self,
+        limit: Callable[[], int | None] = lambda: None,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        keep_finished_s: float = KEEP_FINISHED_S,
+        keep_finished: int = KEEP_FINISHED,
+    ) -> None:
         self.runs: dict[str, RunState] = {}
         self._limit = limit
         self._working = 0
         self._waiting: deque[tuple[RunState, _Turn]] = deque()
+        self._clock = clock
+        self._keep_s = keep_finished_s
+        self._keep = keep_finished
 
     def get(self, run_id: str) -> RunState | None:
+        self._evict()
         return self.runs.get(run_id)
+
+    def _evict(self) -> None:
+        """Drop finished runs that ended more than `keep_finished_s` ago, then the
+        oldest finished ones past `keep_finished`. A working or waiting run stays."""
+        now = self._clock()
+        ended = sorted(
+            (s for s in self.runs.values() if s.ended_at is not None), key=lambda s: s.ended_at
+        )
+        fresh = [s for s in ended if now - s.ended_at <= self._keep_s]
+        kept = {s.run_id for s in fresh[max(len(fresh) - self._keep, 0) :]} if self._keep > 0 else set()
+        for s in ended:
+            if s.run_id not in kept:
+                del self.runs[s.run_id]
+
+    def _ended(self, state: RunState) -> None:
+        """Note when the run ended, then drop what is no longer kept."""
+        state.ended_at = self._clock()
+        self._evict()
 
     def active(self) -> list[RunState]:
         return [s for s in self.runs.values() if not s.done]
@@ -139,6 +180,7 @@ class RunManager:
         `scrub` takes what may not leave the server out of a crash's traceback
         before it is logged as `run_error`."""
         loop = asyncio.get_running_loop()
+        self._evict()
         state = RunState(run_id=uuid.uuid4().hex, kind=kind, owner=owner)
         self.runs[state.run_id] = state
 
@@ -149,6 +191,7 @@ class RunManager:
             if not await self._take_turn(state):
                 state.ok, state.status = False, "cancelled"
                 self._publish(state, event("stream_end", status="cancelled", ok=False))
+                self._ended(state)
                 return
             try:
                 ok, was_cancelled, *rest = await anyio.to_thread.run_sync(
@@ -167,6 +210,7 @@ class RunManager:
             # thread's completion was, so the log is complete at this point.
             state.ok, state.status = ok, status
             self._publish(state, event("stream_end", status=status, ok=ok))
+            self._ended(state)
 
         state.task = loop.create_task(main())
         return state

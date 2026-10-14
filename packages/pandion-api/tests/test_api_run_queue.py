@@ -163,3 +163,85 @@ def test_a_run_remembers_who_started_it():
         assert mine.owner == "visitor-a" and anyones.owner is None
 
     asyncio.run(scenario())
+
+
+# --- finished runs are not kept forever ----------------------------------------
+
+
+class _Clock:
+    """A clock a test moves by hand."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _quick(emit, cancel):
+    return True, False
+
+
+def test_a_finished_run_is_dropped_an_hour_after_it_ended():
+    async def scenario():
+        clock = _Clock()
+        manager = RunManager(clock=clock)
+        done = manager.start("run", _quick)
+        await done.task
+        clock.now += 3599
+        assert manager.get(done.run_id) is done
+        clock.now += 2
+        assert manager.get(done.run_id) is None
+        assert done.run_id not in manager.runs
+
+    asyncio.run(scenario())
+
+
+def test_an_active_or_queued_run_is_never_dropped_however_old():
+    async def scenario():
+        clock = _Clock()
+        manager = RunManager(limit=lambda: 1, clock=clock, keep_finished=0)
+        gate = threading.Event()
+        working = manager.start("run", _blocking_job(gate, [], "a"))
+        waiting = manager.start("run", _blocking_job(threading.Event(), [], "b"))
+        await asyncio.sleep(0.2)
+        clock.now += 10 * 3600
+        assert manager.get(working.run_id) is working
+        assert manager.get(waiting.run_id) is waiting
+        manager.cancel(waiting)
+        gate.set()
+        await asyncio.gather(working.task, waiting.task)
+
+    asyncio.run(scenario())
+
+
+def test_at_most_the_newest_finished_runs_are_kept_oldest_dropped_first():
+    async def scenario():
+        clock = _Clock()
+        manager = RunManager(clock=clock, keep_finished=3)
+        runs = []
+        for _ in range(5):
+            state = manager.start("run", _quick)
+            await state.task
+            clock.now += 1
+            runs.append(state)
+        kept = [s for s in runs if manager.get(s.run_id) is not None]
+        assert kept == runs[2:]
+
+    asyncio.run(scenario())
+
+
+def test_by_default_two_hundred_finished_runs_are_kept():
+    async def scenario():
+        clock = _Clock()
+        manager = RunManager(clock=clock)
+        runs = []
+        for _ in range(201):
+            state = manager.start("run", _quick)
+            await state.task
+            clock.now += 0.001
+            runs.append(state)
+        assert manager.get(runs[0].run_id) is None
+        assert all(manager.get(s.run_id) is s for s in runs[1:])
+
+    asyncio.run(scenario())

@@ -1,7 +1,7 @@
 import { useState, type MouseEvent } from "react"
 import { Eye } from "lucide-react"
 
-import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { usePageSizes } from "@/api/usePdf"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -60,7 +60,7 @@ export function FactsLine({ facts }: { facts: DocumentFacts }) {
 /** A small picture of page 1, or a blank page when the file is gone. */
 function Thumb({ doc, removed, className }: { doc: DocRef; removed: boolean; className: string }) {
   const box = cn("aspect-[612/792] shrink-0 rounded-[3px] bg-white object-cover shadow-[0_0_0_1px_var(--hairline)]", className)
-  return removed ? <span aria-hidden className={box} /> : <img src={api.pageImageUrl(doc.sha, 1, 0.25)} alt="" aria-hidden className={box} />
+  return removed ? <span aria-hidden className={box} /> : <img src={v2.pageImageUrl(doc.sha, 1, 0.25)} alt="" aria-hidden className={box} />
 }
 
 /**

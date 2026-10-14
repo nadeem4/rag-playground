@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react"
 import { Popover } from "radix-ui"
 
-import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { checkMessage, keyShortLabel, keySourceLabel, PROVIDER_INFO, PROVIDERS, useApiKey, withArticle } from "@/api/apiKey"
 import { useDemo } from "@/api/useDemo"
 import type { LlmCheck, LlmProvider, LlmServerSource, LlmSettings } from "@/api/types"
@@ -32,7 +32,7 @@ export function ApiKeyControl() {
   // What the server can supply. Re-read on every open: someone may edit .env.
   useEffect(() => {
     let live = true
-    api.llmSettings().then(
+    v2.modelSources().then(
       (s) => {
         if (!live) return
         setServer(s)
@@ -121,7 +121,7 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
   const runCheck = async () => {
     setCheck({ state: "checking" })
     try {
-      setCheck({ state: "done", result: await api.checkLlm(provider, { keys }) })
+      setCheck({ state: "done", result: await v2.checkModel(provider, { keys }) })
     } catch (err) {
       setCheck({ state: "error", message: err instanceof Error ? err.message : String(err) })
     }

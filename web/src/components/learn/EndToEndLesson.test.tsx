@@ -18,8 +18,8 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b))
       if (url === "/api/learn/document") return ok({ filename: RUN.filename, page_count: RUN.page_count, text: "A retriever scores each chunk as a whole." })
-      if (url === `/api/sources/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
-      if (url.startsWith(`/api/sources/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
+      if (url === `/api/v2/documents/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
+      if (url.startsWith(`/api/v2/documents/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
       return new Response("{}", { status: 404 })
     }),
   )

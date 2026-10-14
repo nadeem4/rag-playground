@@ -55,10 +55,10 @@ function serve(sources: Source[]) {
     "fetch",
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/stages") return ok(liveStages)
-      if (url === "/api/sources") return ok(sources)
-      if (url === "/api/explain") return ok({ settings: "Splits on paragraphs first.", blocking: false })
+      if (url === "/api/v2/documents") return ok(sources)
+      if (url === "/api/v2/explain") return ok({ settings: "Splits on paragraphs first.", blocking: false })
       if (url === "/api/samples") return ok([SAMPLE_CARD])
       if (url === "/api/samples/chunking-primer/questions") return ok([{ id: "a", question: "How big is a chunk?", gold_answer: "One question well." }])
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })

@@ -309,7 +309,21 @@ and the recording scripts `scripts/record_*.py`. Runs also do not hold the pdfiu
 today: a run's pdfium parse step can meet a page request on another thread. What part 5
 must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
 
-- **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
+The web calls only pandion-api's routes under `/api/v2` and the playground's teaching
+routes: `/api/samples`, `/api/sources/sample`, `/api/learn/...`, `/api/stages`,
+`/api/settings/app`, `/api/questions/template`, `/api/health`. A test,
+`web/src/api/oldRoutes.test.ts`, reads every non-test file under `web/src` (but the
+`/api/v2` client) and fails if one names an old route in a string, written relative to the
+old client (`"/runs"`), in full (`"/api/runs"`) or after `${API_BASE}`, or calls a deleted
+function on the old client (`api.createRun`). It cannot see a path built up from pieces.
+
+- **Strategies.** The app reads `stages` from `GET /api/v2/strategies` to build the step
+  cards and their forms. Each card's sentence about its settings comes from
+  `POST /api/v2/explain`. When the server refuses a card's settings, Run waits until they
+  are fixed: a problem Pandion words about one setting is shown under that setting, with a
+  short warning on the card; any other refusal is shown on the card as it was said; a 404
+  says this server does not have that strategy. A server error or a dropped connection
+  leaves the card as it was.
 - **Runs.** A card's Run sends the pipeline as a config with `through` set to the card's
   step, to `POST /api/v2/runs`; Build the index is the Index card's Run. Ask sends the
   config, its documents and the question to `POST /api/v2/ask`, with `answer: false` when
@@ -321,14 +335,17 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
   `GET /api/v2/runs/{id}` once the stream ends, trying a failed read once more; Stop posts
   to `/api/v2/runs/{id}/cancel`. The `/api/v2` client is `web/src/api/v2.ts`; it sends keys
   in the same headers as `/api`.
-- **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.
+- **Results.** The inspectors read results with `GET /api/v2/results/{id}/payload`, and
+  Build checks that a kept result is still there with `GET /api/v2/results/{id}`.
 - **Miss trace.** Each missed question in an evaluation's result carries its trace, the
   first step that lost the answer, worked out by `pandion.evaluate` with the eval step's own
   matching. Evaluate shows it with each step's code name swapped for Build's name
   (`plainTrace`); the web no longer calls `POST /api/trace`.
-- **Sources.** Uploads, page images and the PDF itself come from `/api/sources`.
+- **Documents.** Uploads, page images, the PDF itself and a document's question set come
+  from `/api/v2/documents`. Loading a bundled sample is still `POST /api/sources/sample`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
-- **Keys.** A key typed in the app is sent as a header on runs, evaluations, comparisons and key checks.
+- **Keys.** A key typed in the app is sent as a header on runs, evaluations, comparisons and key checks
+  (`POST /api/v2/settings/models/check`).
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
   storage; see [privacy.md](privacy.md).
 - **Pipelines and documents.** A saved pipeline is a name, a config (a pipeline file's
@@ -350,8 +367,8 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
   name, the page count and Sample or Your upload, or compact, with the picture and the
   title. Its Preview (`DocumentPreview.tsx`) opens the shared side sheet
   (`web/src/components/SideSheet.tsx`) on every page, from the same page sizes and page
-  images the PDF viewer uses (`GET /api/sources/{sha}/pages` and
-  `/api/sources/{sha}/pages/{n}.png`). The Document control (`DocumentControl.tsx`) is the
+  images the PDF viewer uses (`GET /api/v2/documents/{sha}/pages` and
+  `/api/v2/documents/{sha}/pages/{n}`). The Document control (`DocumentControl.tsx`) is the
   link beside it that changes the document: in Build's Document step, under Evaluate's
   Documents and on Compare's Document line. The header has none.
 

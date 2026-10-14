@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from "react"
 
-import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import type { PdfRect } from "@/api/types"
 import { usePageSizes } from "@/api/usePdf"
 import { Button } from "@/components/ui/button"
@@ -75,7 +75,7 @@ export function PdfPageView({ sha, initialPage, highlights, slot = null, title, 
     count = sizes.data.length
     const n = Math.min(Math.max(1, page), count)
     const size = sizes.data.find((p) => p.n === n) ?? sizes.data[n - 1]
-    const src = api.pageImageUrl(sha, n, IMAGE_SCALE)
+    const src = v2.pageImageUrl(sha, n, IMAGE_SCALE)
     const failed = img.src === src && img.state === "error"
     const loaded = img.src === src && img.state === "ok"
     const here = highlights.filter((h) => h.page === n)

@@ -29,9 +29,9 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-      const payload = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      const payload = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (payload) return ok(payloads[payload[1]])
-      const meta = /^\/api\/artifacts\/([^/]+)$/.exec(url)
+      const meta = /^\/api\/v2\/results\/([^/]+)$/.exec(url)
       if (meta) return ok({ id: meta[1], type: "chunk_set", meta: {} })
       return ok([])
     }),

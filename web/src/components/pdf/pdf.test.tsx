@@ -29,7 +29,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       urls.push(url)
-      if (url === `/api/sources/${SHA}/pages`) return new Response(JSON.stringify(PAGES))
+      if (url === `/api/v2/documents/${SHA}/pages`) return new Response(JSON.stringify(PAGES))
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )
@@ -64,7 +64,7 @@ describe("Show in PDF on a chunk", () => {
     expect(parseFloat(second.style.top)).toBeCloseTo((792 - t) * scale, 3)
     expect(parseFloat(second.style.width)).toBeCloseTo((r - l) * scale, 3)
     // The image is the server's page render at scale 2.
-    expect(view().querySelector("img")!.getAttribute("src")).toBe(`/api/sources/${SHA}/pages/1.png?scale=2`)
+    expect(view().querySelector("img")!.getAttribute("src")).toBe(`/api/v2/documents/${SHA}/pages/1?scale=2`)
   })
 
   it("a chunk spanning pages shows its first page and offers the other", async () => {

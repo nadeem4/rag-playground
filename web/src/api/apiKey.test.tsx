@@ -11,8 +11,9 @@ import { TEST_REGISTRY } from "@/state/testRegistry"
 import { resetAppSettingsForTests } from "@/api/useDemo"
 
 import { ApiKeyProvider, checkMessage, hasAnyKey, hasKeyFor, keyMissing, keyNeedFor, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
-import { api, KEY_HEADERS, keyHeaders } from "./client"
+import { KEY_HEADERS, keyHeaders } from "./client"
 import type { LlmProvider } from "./types"
+import { v2 } from "./v2"
 
 // Obviously fake keys. Never a real one in a test.
 const FAKE: Record<LlmProvider, string> = {
@@ -78,17 +79,18 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       sent.push({ url, method: init?.method ?? "GET", headers: headersOf(init), body: String(init?.body ?? "") })
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
-      if (url === "/api/registry") return ok(TEST_REGISTRY)
-      if (url === "/api/sources") return ok([SOURCE])
-      if (url === "/api/settings/llm") return ok(servers)
+      if (url === "/api/v2/strategies") return ok({ stages: TEST_REGISTRY, defaults: {} })
+      if (url === "/api/v2/documents") return ok([SOURCE])
+      if (url === "/api/v2/settings/models") return ok(servers)
       if (url === "/api/settings/app") return ok({ demo })
-      if (url === "/api/settings/llm/check") {
+      if (url === "/api/v2/settings/models/check") {
         const p = JSON.parse(String(init?.body)).provider as LlmProvider
         const has = headersOf(init)[H(p)]
         return ok(has ? { ok: false, source: "header", error: "invalid key" } : { ok: true, source: "dotenv", error: null })
       }
-      if (["/api/runs", "/api/sweeps", "/api/v2/runs", "/api/v2/ask"].includes(url) && init?.method === "POST") return ok({ run_id: "r1" }, 202)
+      if (["/api/v2/runs", "/api/v2/ask", "/api/v2/comparisons"].includes(url) && init?.method === "POST") return ok({ run_id: "r1" }, 202)
       if (url.endsWith("/pages")) return ok([{ n: 1, width: 612, height: 792 }])
+      if (url === "/api/v2/explain") return ok({ settings: "s", tradeoff: null, warning: null, blocking: false })
       return ok({ detail: "not found" }, 404)
     }),
   )
@@ -139,7 +141,7 @@ function enterKey(p: LlmProvider, key: string) {
   return r
 }
 
-const runPosts = () => sent.filter((s) => ["/api/runs", "/api/v2/runs", "/api/v2/ask"].includes(s.url) && s.method === "POST")
+const runPosts = () => sent.filter((s) => ["/api/v2/runs", "/api/v2/ask"].includes(s.url) && s.method === "POST")
 
 describe("keyHeaders", () => {
   it("names one header per provider", () => {
@@ -161,11 +163,12 @@ describe("keyHeaders", () => {
     expect(keyHeaders(undefined)).toEqual({})
   })
 
-  it("createRun and createSweep send every set key, and only when asked to", async () => {
-    await api.createRun({ graph: { nodes: [], edges: [] } })
-    await api.createRun({ graph: { nodes: [], edges: [] } }, { keys: FAKE })
-    await api.createSweep({ graph: { nodes: [], edges: [] }, node_id: "x", variants: [] }, { keys: null })
-    await api.createSweep({ graph: { nodes: [], edges: [] }, node_id: "x", variants: [] }, { keys: FAKE })
+  it("createRun and createComparison send every set key, and only when asked to", async () => {
+    const config = { index: { parse: { use: "pdfium" }, chunk: { use: "token_based" }, store: { use: "lancedb" } } }
+    await v2.createRun({ config, documents: ["ab"] })
+    await v2.createRun({ config, documents: ["ab"] }, { keys: FAKE })
+    await v2.createComparison({ config, stage: "chunk", variants: [], documents: ["ab"] }, { keys: null })
+    await v2.createComparison({ config, stage: "chunk", variants: [], documents: ["ab"] }, { keys: FAKE })
     for (const p of PROVIDERS) {
       expect(sent.map((s) => s.headers[H(p)] ?? null)).toEqual([null, FAKE[p], null, FAKE[p]])
     }
@@ -174,20 +177,20 @@ describe("keyHeaders", () => {
   })
 
   it("the check names its provider and carries only that provider's UI key", async () => {
-    await api.checkLlm("openai")
-    await api.checkLlm("openai", { keys: FAKE })
+    await v2.checkModel("openai")
+    await v2.checkModel("openai", { keys: FAKE })
     expect(sent.map((s) => [s.url, s.method, JSON.parse(s.body), s.headers[H("openai")] ?? null])).toEqual([
-      ["/api/settings/llm/check", "POST", { provider: "openai" }, null],
-      ["/api/settings/llm/check", "POST", { provider: "openai" }, FAKE.openai],
+      ["/api/v2/settings/models/check", "POST", { provider: "openai" }, null],
+      ["/api/v2/settings/models/check", "POST", { provider: "openai" }, FAKE.openai],
     ])
     expect(sent[1].headers[H("anthropic")]).toBeUndefined()
     expect(sent[1].headers[H("custom")]).toBeUndefined()
   })
 
   it("other requests never carry a key", async () => {
-    await api.registry()
-    await api.llmSettings()
-    await api.pages("ab")
+    await v2.strategies()
+    await v2.modelSources()
+    await v2.pages("ab")
     for (const p of PROVIDERS) expect(sent.every((s) => !(H(p) in s.headers))).toBe(true)
   })
 })
@@ -389,7 +392,7 @@ describe("the API key panel", () => {
     const r = enterKey(p, FAKE[p])
     fireEvent.click(within(r).getByRole("button", { name: "Check key" }))
     await waitFor(() => expect(within(r).getByTestId("key-check").textContent).toMatch(/did not work/))
-    const check = sent.find((s) => s.url === "/api/settings/llm/check")!
+    const check = sent.find((s) => s.url === "/api/v2/settings/models/check")!
     expect(JSON.parse(check.body)).toEqual({ provider: p })
     expect(check.headers[H(p)]).toBe(FAKE[p])
   })

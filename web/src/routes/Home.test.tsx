@@ -45,16 +45,16 @@ function serve({ settings = { demo: false } as AppSettings, sources = [] as Sour
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/samples") return ok([FIRST, SECOND])
-      if (url === "/api/sources" && init?.method === "POST") {
+      if (url === "/api/v2/documents" && init?.method === "POST") {
         const file = (init.body as FormData).get("file") as File
         uploaded.push(file.name)
         if (refuseUpload) return new Response(JSON.stringify({ detail: refuseUpload }), { status: 422 })
         const answer = () => ok({ ...OWN, filename: file.name })
         return holdUpload ? new Promise<Response>((resolve) => (releaseUpload = () => resolve(answer()))) : answer()
       }
-      if (url === "/api/sources") return sources === "never" ? new Promise<Response>(() => {}) : ok(sources)
+      if (url === "/api/v2/documents") return sources === "never" ? new Promise<Response>(() => {}) : ok(sources)
       if (url === "/api/settings/app") return ok(settings)
       if (url === "/api/sources/sample" && init?.method === "POST") {
         const name = JSON.parse(String(init.body ?? "{}")).name as string

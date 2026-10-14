@@ -60,9 +60,9 @@ beforeEach(() => {
         appCalls += 1
         return ok(demo ? { demo, limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, ttl_hours: 24 } } : { demo })
       }
-      if (url === "/api/registry") return ok(liveRegistry)
-      if (url === "/api/sources" && init?.method === "POST") return new Response(JSON.stringify({ detail: uploadRefusal }), { status: 413 })
-      if (url === "/api/sources") return ok([SAMPLE])
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
+      if (url === "/api/v2/documents" && init?.method === "POST") return new Response(JSON.stringify({ detail: uploadRefusal }), { status: 413 })
+      if (url === "/api/v2/documents") return ok([SAMPLE])
       if (url === "/api/samples") return ok(SAMPLES)
       if (url === "/api/sources/sample") {
         posted.push(init?.body ? JSON.parse(String(init.body)).name : null)
@@ -132,7 +132,7 @@ describe("FirstRun", () => {
   })
 
   it("says so, and still shows Upload, when the sample list cannot be read", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/sources" ? [] : { detail: "down" }), { status: url === "/api/sources" ? 200 : 500 })))
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/v2/documents" ? [] : { detail: "down" }), { status: url === "/api/v2/documents" ? 200 : 500 })))
     render(<FirstRun />)
     expect((await screen.findByRole("alert")).textContent).toMatch(/Could not list the samples/)
     await waitFor(() => expect(uploadButton()).not.toBeNull())
@@ -162,7 +162,7 @@ describe("FirstRun", () => {
       vi.fn(async (url: string) => {
         const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
         if (url === "/api/settings/app") return ok({ demo: true })
-        if (url === "/api/sources") return ok([SAMPLE])
+        if (url === "/api/v2/documents") return ok([SAMPLE])
         if (url === "/api/samples") return ok(SAMPLES)
         return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
       }),

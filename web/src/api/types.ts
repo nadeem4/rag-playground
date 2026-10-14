@@ -96,7 +96,7 @@ export interface Lesson {
   more: string[]
 }
 
-/** `GET /api/registry`: stage -> transform name -> info. */
+/** `stages` of `GET /api/v2/strategies`: stage -> transform name -> info. */
 export type Registry = Partial<Record<Stage, Record<string, TransformInfo>>>
 
 // ---------------------------------------------------------------- payloads --
@@ -255,21 +255,6 @@ export interface Variant {
 
 // ---------------------------------------------------------------- REST I/O --
 
-export interface RunRequest {
-  graph: Graph
-  overrides?: Record<string, Record<string, unknown>>
-  targets?: string[]
-  force?: boolean
-}
-
-export interface SweepRequest {
-  graph: Graph
-  node_id: string
-  variants: Variant[]
-  through?: string
-  force?: boolean
-}
-
 export interface RunCreated {
   run_id: string
 }
@@ -285,7 +270,7 @@ export interface Source {
   filename: string
   size: number
   content_type: string
-  /** `GET /api/sources` only: when this browser uploaded it (the demo's hours count from it). Absent for a sample. */
+  /** `GET /api/v2/documents` only: when this browser uploaded it (the demo's hours count from it). Absent for a sample. */
   uploaded_at?: string
 }
 
@@ -304,22 +289,10 @@ export interface SampleCard {
   question: string
 }
 
-export interface ArtifactMeta {
-  id: string
-  type: ArtifactType
-  meta: Record<string, unknown>
-}
-
-export interface CacheCleared {
-  artifacts: number
-  bytes: number
-  complete: boolean
-}
-
 export type RunStatus = "running" | "finished" | "cancelled" | "error"
 
 /**
- * `GET /api/v2/runs/{id}` (or the old `/api/runs/{id}`): everything needed to
+ * `GET /api/v2/runs/{id}`: everything needed to
  * resync after a reconnect, and on /api/v2 the run's `result` once it ended.
  */
 export interface RunSnapshot {
@@ -461,14 +434,14 @@ export interface AppSettings {
 export type LlmProvider = "anthropic" | "openai" | "custom" | "openrouter"
 
 /**
- * `GET /api/settings/llm`: the key the SERVER itself can supply. "none" means
+ * `GET /api/v2/settings/models`: the key the SERVER itself can supply. "none" means
  * the UI must supply one. A UI key is known only to the browser's own state.
  */
 export type LlmServerSource = "env" | "dotenv" | "none"
 
 export type LlmSettings = Record<LlmProvider, LlmServerSource>
 
-/** `POST /api/settings/llm/check`. `source` is the key that was checked. */
+/** `POST /api/v2/settings/models/check`. `source` is the key that was checked. */
 export interface LlmCheck {
   ok: boolean
   source: "header" | "env" | "dotenv" | "none"
@@ -481,14 +454,14 @@ export interface LlmCheck {
 
 export type PdfRect = [number, number, number, number]
 
-/** One entry of `GET /api/sources/{sha}/pages`. `n` is 1-based; sizes in points. */
+/** One entry of `GET /api/v2/documents/{sha}/pages`. `n` is 1-based; sizes in points. */
 export interface PdfPageSize {
   n: number
   width: number
   height: number
 }
 
-/** `GET /api/sources/{sha}/pages/{n}/find?text=...` */
+/** `GET /api/v2/documents/{sha}/pages/{n}/find?text=...` */
 export interface FindResult {
   rects: PdfRect[]
   matched: "exact" | "normalized" | "none"
@@ -702,7 +675,7 @@ export interface GoldQuestionCheck {
   golds: GoldCheck[]
 }
 
-/** `GET /api/sources/{sha}/questions`: the record the server keeps. */
+/** `GET /api/v2/documents/{sha}/questions`: the record the server keeps. */
 export interface StoredQuestionSet {
   /** The document fingerprint this set is stored against. */
   sha: string
@@ -714,7 +687,7 @@ export interface StoredQuestionSet {
   set: { version: number; document: string; questions: GoldQuestion[] }
 }
 
-/** `POST /api/sources/{sha}/questions`: the record, plus the check it ran. */
+/** `POST /api/v2/documents/{sha}/questions`: the record, plus the check it ran. */
 export interface QuestionSetUpload extends StoredQuestionSet {
   /** False when the server would not keep it, as a hosted demo will not. */
   stored: boolean
@@ -726,7 +699,7 @@ export interface QuestionSetUpload extends StoredQuestionSet {
   questions: GoldQuestionCheck[]
 }
 
-/** `POST /api/explain`: what a transform will do with THESE settings. */
+/** `POST /api/v2/explain`: what a transform will do with THESE settings. */
 export interface Explanation {
   settings: string
   tradeoff: string | null
@@ -734,12 +707,6 @@ export interface Explanation {
   warning: string | null
   /** True: the UI disables Run. */
   blocking: boolean
-}
-
-export interface ExplainRequest {
-  stage: Stage
-  transform: string
-  config: Record<string, unknown>
 }
 
 // ------------------------------------------------------------ miss trace --
@@ -750,7 +717,7 @@ export interface NamedArtifact {
   name: string
 }
 
-/** POST /api/trace: the artifacts one question's run made, and what to look for. */
+/** `POST /api/v2/trace`: the artifacts one question's run made, and what to look for. */
 export interface TraceRequest {
   gold_answers: string[]
   parse: NamedArtifact

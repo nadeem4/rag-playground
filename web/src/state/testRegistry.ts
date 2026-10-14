@@ -1,7 +1,7 @@
 import type { JsonSchema, PortSchema, Registry, Stage, TransformInfo } from "@/api/types"
 
 /**
- * A small registry for unit tests, shaped like `GET /api/registry`. Tests use
+ * A small registry for unit tests, shaped like `stages` of `GET /api/v2/strategies`. Tests use
  * this rather than the generated fixture so they do not depend on its exact
  * contents.
  */

@@ -59,7 +59,13 @@ const OVERLAPPED = chunkSet([[0, A0 + 20], [A0 - 5, DOC.length]])
 
 /** Which chunk set a config gets. Tests overwrite it to make the real result disagree. */
 let outcome: (config: Record<string, unknown>) => ChunkSet
-let posts: { graph: { nodes: { id: string; transform: string; config: Record<string, unknown> }[] } }[] = []
+let posts: { config: { index: { chunk: { use: string } & Record<string, unknown> } } }[] = []
+
+/** The chunk step a run asked for, as its strategy and its settings. */
+function chunkOf(post: (typeof posts)[number]) {
+  const { use, ...config } = post.config.index.chunk
+  return { transform: use, config }
+}
 let failRuns = false
 /** Artifact ids stay unique across tests: payloads are cached for the session. */
 let seq = 0
@@ -81,22 +87,22 @@ beforeEach(() => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
       if (url === "/api/learn/chunking") return ok(DATA)
       if (url === "/api/learn/document") return ok({ filename: "chunking-primer.pdf", page_count: 3, text: DOC })
-      if (url === `/api/sources/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
-      if (url.startsWith(`/api/sources/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
+      if (url === `/api/v2/documents/${SHA}/pages`) return ok([{ n: 1, width: 612, height: 792 }])
+      if (url.startsWith(`/api/v2/documents/${SHA}/pages/1/find`)) return ok({ rects: [], matched: "none" })
       if (url === "/api/stages") return ok({ chunk: { what: "x", lesson: ["Before a search can find anything, the document has to be cut."] } })
-      if (url === "/api/runs" && init?.method === "POST") {
+      if (url === "/api/v2/runs" && init?.method === "POST") {
         posts.push(JSON.parse(String(init.body)))
         return ok({ run_id: `r${posts.length}` }, 202)
       }
-      const run = /^\/api\/runs\/r(\d+)$/.exec(url)
+      const run = /^\/api\/v2\/runs\/r(\d+)$/.exec(url)
       if (run) {
         const i = Number(run[1]) - 1
         const id = `a${++seq}`
-        configs.set(id, posts[i].graph.nodes.find((n) => n.id === "chunk")!.config)
-        if (failRuns) return ok({ status: "finished", ok: false, events: [{ event: "node_failed", node_id: "chunk", error: "Traceback\nValueError: bad settings", ts: 0 }] })
-        return ok({ status: "finished", ok: true, events: [{ event: "node_finished", node_id: "chunk", artifact_id: id, cache_hit: true, duration_ms: 1, ts: 0 }] })
+        configs.set(id, chunkOf(posts[i]).config)
+        if (failRuns) return ok({ status: "finished", ok: false, events: [{ event: "node_failed", node_id: "d::chunk", step: "chunk", error: "Traceback\nValueError: bad settings", ts: 0 }] })
+        return ok({ status: "finished", ok: true, events: [{ event: "node_finished", node_id: "d::chunk", step: "chunk", artifact_id: id, cache_hit: true, duration_ms: 1, ts: 0 }] })
       }
-      const art = /^\/api\/artifacts\/(a\d+)\/payload$/.exec(url)
+      const art = /^\/api\/v2\/results\/(a\d+)\/payload$/.exec(url)
       if (art) return ok(outcome(configs.get(art[1])!))
       return ok({ detail: "not found" }, 404)
     }),
@@ -124,7 +130,7 @@ function result() {
   return screen.getByRole("region", { name: "The step" })
 }
 
-const lastChunkConfig = () => posts[posts.length - 1].graph.nodes.find((n) => n.id === "chunk")!
+const lastChunkConfig = () => chunkOf(posts[posts.length - 1])
 
 describe("Chunking lesson", () => {
   it("opens on the idea, in a shell of steps with the document beside it", async () => {

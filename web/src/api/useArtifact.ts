@@ -2,8 +2,8 @@ import { useEffect, useState } from "react"
 
 import type { InspectorStatus } from "@/components/inspectors/status"
 
-import { api } from "./client"
-import type { ArtifactMeta } from "./types"
+import type { ResultInfo } from "./types"
+import { v2 } from "./v2"
 
 /**
  * Load an artifact's payload. Artifacts are content-addressed and immutable,
@@ -20,7 +20,7 @@ export function loadPayload(id: string): Promise<unknown> {
 function fetchPayload(id: string): Promise<unknown> {
   let p = cache.get(id)
   if (!p) {
-    p = api.artifactPayload(id)
+    p = v2.resultPayload(id)
     // A failed fetch is not cached: the next request tries again.
     p.catch(() => cache.delete(id))
     cache.set(id, p)
@@ -57,13 +57,13 @@ export function useArtifactPayload(id: string | undefined): ArtifactState {
   return state.id === id ? state.value : { status: { kind: "loading" } }
 }
 
-const metaCache = new Map<string, Promise<ArtifactMeta>>()
+const metaCache = new Map<string, Promise<ResultInfo>>()
 
-/** `GET /api/artifacts/{id}`, once per session: meta is as immutable as the payload. */
-export function loadMeta(id: string): Promise<ArtifactMeta> {
+/** `GET /api/v2/results/{id}`, once per session: meta is as immutable as the payload. */
+export function loadMeta(id: string): Promise<ResultInfo> {
   let p = metaCache.get(id)
   if (!p) {
-    p = api.artifact(id)
+    p = v2.result(id)
     p.catch(() => metaCache.delete(id))
     metaCache.set(id, p)
   }

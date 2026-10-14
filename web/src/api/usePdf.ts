@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 
-import { api } from "./client"
+import { v2 } from "./v2"
 import type { FindResult, PdfPageSize } from "./types"
 
 /**
@@ -43,13 +43,13 @@ function useLoad<T>(key: string | null, load: () => Promise<T>): Loaded<T> {
 
 /** `sha` null skips the request (a file the server no longer has, or a count already known). */
 export function usePageSizes(sha: string | null): Loaded<PdfPageSize[]> {
-  return useLoad(sha, () => once(pagesCache, sha!, () => api.pages(sha!)))
+  return useLoad(sha, () => once(pagesCache, sha!, () => v2.pages(sha!)))
 }
 
 /** `text` null skips the search. */
 export function useFind(sha: string, page: number | null, text: string | null): Loaded<FindResult> {
   const key = page === null || text === null ? null : JSON.stringify([sha, page, text])
-  return useLoad(key, () => once(findCache, key!, () => api.findOnPage(sha, page!, text!)))
+  return useLoad(key, () => once(findCache, key!, () => v2.findOnPage(sha, page!, text!)))
 }
 
 /** Tests only. */

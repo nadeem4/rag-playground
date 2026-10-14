@@ -279,7 +279,7 @@ function serve(app: { demo: boolean }, keys: Record<string, string> = { anthropi
     "fetch",
     vi.fn(async (url: string) => {
       if (url === "/api/settings/app") return new Response(JSON.stringify(app), { status: 200 })
-      if (url === "/api/settings/llm") return new Response(JSON.stringify(keys), { status: 200 })
+      if (url === "/api/v2/settings/models") return new Response(JSON.stringify(keys), { status: 200 })
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )

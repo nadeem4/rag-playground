@@ -51,7 +51,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-      const payload = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      const payload = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (payload && payloads[payload[1]] !== undefined) return ok(payloads[payload[1]])
       if (url === "/api/samples") return ok([CARD])
       if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)

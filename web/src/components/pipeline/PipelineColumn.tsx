@@ -117,7 +117,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
               stale={p.stale.has(node.id)}
               selected={p.selected === node.id}
               busy={p.busy}
-              fieldErrors={errs?.fields}
+              fieldErrors={errs?.fields ?? p.explanations?.[node.id]?.fields}
               message={errs?.message}
               missing={node.stage === "source" && p.missingSource}
               onSelect={() => p.onSelect(node.id)}

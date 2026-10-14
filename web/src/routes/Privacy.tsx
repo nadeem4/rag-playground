@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from "react"
 
-import { api, ApiError } from "@/api/client"
+import { ApiError } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { useAppSettings } from "@/api/useDemo"
 import { SiteFooter } from "@/components/SiteFooter"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,7 @@ import "@/components/learn/learn.css"
  *   state/libraryExperiments.ts, state/working.ts). The Ask panel's side, width
  *   and open or closed: localStorage (components/ask/AskDock.tsx).
  * - Run results: packages/pandion/src/pandion/storage.py never expires an entry, api/expiry.py deletes
- *   only uploads, and DELETE /api/cache (api/routes/artifacts.py) clears them.
+ *   only uploads, and DELETE /api/v2/cache clears them.
  *   The demo runs without persistent storage: scripts/publish_space.py asks
  *   for none, and the Dockerfile writes them under /data inside the
  *   container, so a restart starts them over. Turning on persistent storage
@@ -172,7 +173,7 @@ export function Privacy() {
     const failed: string[] = []
     for (const u of mine ?? []) {
       try {
-        await api.deleteSource(u.sha)
+        await v2.deleteDocument(u.sha)
         gone.push(u.filename)
       } catch (err) {
         const why = err instanceof ApiError && typeof err.detail === "string" ? err.detail : "the server did not answer."

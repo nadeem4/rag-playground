@@ -28,8 +28,8 @@ beforeEach(() => {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/settings/app") return ok(demo ? { demo: true, limits: LIMITS } : { demo: false })
     if (url === "/api/samples") return ok([{ sha: SAMPLE, filename: "primer.pdf", name: "primer" }])
-    if (url === `/api/sources/${UP}` && init?.method === "DELETE") return ok({ sha: UP, deleted: true })
-    if (url === "/api/sources") return ok([{ sha: UP, filename: "mine.pdf", size: 1, content_type: "application/pdf", uploaded_at: new Date().toISOString() }])
+    if (url === `/api/v2/documents/${UP}` && init?.method === "DELETE") return ok({ sha: UP, deleted: true })
+    if (url === "/api/v2/documents") return ok([{ sha: UP, filename: "mine.pdf", size: 1, content_type: "application/pdf", uploaded_at: new Date().toISOString() }])
     return new Response("not found", { status: 404 })
   })
   vi.stubGlobal("fetch", fetchMock)
@@ -117,7 +117,7 @@ describe("Your data and privacy", () => {
     expect(ask.textContent).toContain("mine.pdf")
     fireEvent.click(within(ask).getByRole("button", { name: "Delete them" }))
     await waitFor(() => expect(screen.getByText("Deleted 1 upload from the demo.")).toBeTruthy())
-    expect(fetchMock.mock.calls.some(([u, i]) => u === `/api/sources/${UP}` && i?.method === "DELETE")).toBe(true)
+    expect(fetchMock.mock.calls.some(([u, i]) => u === `/api/v2/documents/${UP}` && i?.method === "DELETE")).toBe(true)
   })
 
   it("says saved items leave only by export or a share link, that page images may stay in the cache, and why results go on a restart", async () => {
@@ -135,8 +135,8 @@ describe("Your data and privacy", () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === "/api/settings/app") return ok({ demo: true, limits: LIMITS })
       if (url === "/api/samples") return new Promise<Response>((r) => (answerSamples = r))
-      if (url.startsWith("/api/sources/") && init?.method === "DELETE") return ok({ sha: UP, deleted: true })
-      if (url === "/api/sources")
+      if (url.startsWith("/api/v2/documents/") && init?.method === "DELETE") return ok({ sha: UP, deleted: true })
+      if (url === "/api/v2/documents")
         return ok([
           { sha: UP, filename: "mine.pdf", size: 1, content_type: "application/pdf", uploaded_at: new Date().toISOString() },
           { sha: SAMPLE, filename: "primer.pdf", size: 1, content_type: "application/pdf" },
@@ -154,7 +154,7 @@ describe("Your data and privacy", () => {
     expect(ask.textContent).not.toContain("primer.pdf")
     fireEvent.click(within(ask).getByRole("button", { name: "Delete them" }))
     await waitFor(() => expect(screen.getByText("Deleted 1 upload from the demo.")).toBeTruthy())
-    expect(fetchMock.mock.calls.some(([u, i]) => u === `/api/sources/${SAMPLE}` && i?.method === "DELETE")).toBe(false)
+    expect(fetchMock.mock.calls.some(([u, i]) => u === `/api/v2/documents/${SAMPLE}` && i?.method === "DELETE")).toBe(false)
   })
 
   it("has a site footer that links Privacy", () => {

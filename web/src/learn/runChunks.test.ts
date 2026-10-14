@@ -5,6 +5,7 @@ import { TEST_REGISTRY } from "@/state/testRegistry"
 import { runChunks } from "./runChunks"
 
 const SHA = "cd".repeat(32)
+const R = TEST_REGISTRY
 const PAYLOAD = { chunks: [], doc_id: "d", source_text: "", chunker_meta: {} }
 
 let posts: unknown[] = []
@@ -19,20 +20,20 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
-      if (url === "/api/runs" && init?.method === "POST") {
+      if (url === "/api/v2/runs" && init?.method === "POST") {
         posts.push(JSON.parse(String(init.body)))
         return ok({ run_id: `r${posts.length}` }, 202)
       }
-      if (url.startsWith("/api/runs/")) {
+      if (url.startsWith("/api/v2/runs/")) {
         polls += 1
         if (polls < 2) return ok({ status: "running", events: [] })
         const events =
           finish === "ok"
-            ? [{ event: "node_finished", node_id: "chunk", artifact_id: `art${posts.length}`, cache_hit: true, duration_ms: 1, ts: 0 }]
-            : [{ event: "node_failed", node_id: "chunk", error: "Traceback\nValueError: overlap must be smaller", ts: 0 }]
+            ? [{ event: "node_finished", node_id: "d::chunk", step: "chunk", artifact_id: `art${posts.length}`, cache_hit: true, duration_ms: 1, ts: 0 }]
+            : [{ event: "node_failed", node_id: "d::chunk", step: "chunk", error: "Traceback\nValueError: overlap must be smaller", ts: 0 }]
         return ok({ status: "finished", ok: finish === "ok", events })
       }
-      if (url.startsWith("/api/artifacts/art") && url.endsWith("/payload")) return ok(PAYLOAD)
+      if (url.startsWith("/api/v2/results/art") && url.endsWith("/payload")) return ok(PAYLOAD)
       return ok({ detail: "not found" }, 404)
     }),
   )
@@ -50,19 +51,11 @@ describe("runChunks", () => {
       pollMs: 1,
     })
     expect(set).toEqual(PAYLOAD)
-    const body = posts[0] as { graph: { nodes: { id: string; transform: string; config: unknown }[]; edges: unknown[] }; targets: string[] }
-    expect(body.targets).toEqual(["chunk"])
-    expect(body.graph.nodes.map((n) => [n.id, n.transform])).toEqual([
-      ["source", "upload"],
-      ["parse", "pdfium"],
-      ["chunk", "token_based"],
-    ])
-    expect(body.graph.nodes[0].config).toEqual({ sha: SHA, filename: "chunking-primer.pdf" })
-    expect(body.graph.nodes[2].config).toEqual({ max_tokens: 100, overlap: 35 })
-    expect(body.graph.edges).toEqual([
-      { src: "source", dst: "parse", port: "file" },
-      { src: "parse", dst: "chunk", port: "doc" },
-    ])
+    expect(posts[0]).toMatchObject({
+      documents: [SHA],
+      through: "chunk",
+      config: { index: { parse: { use: "pdfium" }, chunk: { use: "token_based", max_tokens: 100, overlap: 35 } } },
+    })
   })
 
   it("throws the last line of the error when the chunker fails", async () => {
@@ -70,5 +63,20 @@ describe("runChunks", () => {
     await expect(
       runChunks({ registry: TEST_REGISTRY, sha: SHA, parse: { transform: "pdfium", config: {} }, strategy: "token_based", config: {}, pollMs: 1 }),
     ).rejects.toThrow("ValueError: overlap must be smaller")
+  })
+
+  it("runs the chunker through the chunk step on /api/v2", async () => {
+    const calls: { url: string; body?: unknown }[] = []
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      if (url === "/api/v2/runs") return new Response(JSON.stringify({ run_id: "r" }), { status: 202 })
+      if (url === "/api/v2/runs/r")
+        return new Response(JSON.stringify({ run_id: "r", kind: "run", status: "finished", ok: true, cancel_requested: false, last_event_id: 0,
+          events: [{ event: "node_finished", ts: 1, node_id: "d::chunk", step: "chunk", document: "d", artifact_id: "c1", cache_hit: false, duration_ms: 1 }] }))
+      return new Response(JSON.stringify({ chunks: [] }))
+    }))
+    await runChunks({ registry: R, sha: "s".repeat(64), parse: { transform: "pdfium", config: {} }, strategy: "recursive_character", config: { chunk_size: 400 }, pollMs: 0 })
+    expect(calls[0]).toMatchObject({ url: "/api/v2/runs", body: { documents: ["s".repeat(64)], through: "chunk", config: { index: { parse: { use: "pdfium" }, chunk: { use: "recursive_character", chunk_size: 400 } } } } })
+    expect(calls.at(-1)?.url).toBe("/api/v2/results/c1/payload")
   })
 })

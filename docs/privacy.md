@@ -30,6 +30,11 @@ with a run, and a question set while it is checked.
 | An anonymous browser id | A cookie named `rag_visitor` | One year. It only links your uploads to this browser. It holds no name, email or account. |
 | Run results (pieces, indexes, answers) | On the demo server, as a cache shared by recipe | So a repeat run is quick. Nothing deletes them on a timer, not even when the upload they came from is deleted. They stay until the demo restarts or the cache is cleared, since the demo runs without persistent storage. |
 
+The app uploads a PDF with `POST /api/v2/documents`, deletes one with
+`DELETE /api/v2/documents/{id}` and shows its pages from `GET /api/v2/documents/{id}/pages`
+and `GET /api/v2/documents/{id}/pages/{n}`. A question set is kept, checked or deleted at
+`/api/v2/documents/{id}/questions`. The rules above are the same on every one of them.
+
 ## On your machine
 
 When you run RAG Playground yourself with demo mode off:

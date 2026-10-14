@@ -141,14 +141,15 @@ The Anthropic, OpenAI and OpenRouter rows of the key panel have **Check key**, w
 the key without spending tokens: with a model listing, or for OpenRouter with its key
 endpoint. A custom endpoint's key is checked when a step runs against it.
 
-The API behind it:
+The key check is `POST /api/v2/settings/models/check`; where the server's own key comes
+from is `GET /api/v2/settings/models`.
 
-- `GET /api/settings/llm` reports only which source the server itself has for each
+- `GET /api/v2/settings/models` reports only which source the server itself has for each
   provider, as `env`, `dotenv` or `none`. In demo mode it is always `none`.
-- `POST /api/settings/llm/check` with `{"provider": "anthropic"}` (or `openai`, `custom`
-  or `openrouter`) tests one key. A custom check also needs `"base_url"`, and is refused
-  on the demo.
+- `POST /api/v2/settings/models/check` with `{"provider": "anthropic"}` (or `openai`,
+  `custom` or `openrouter`) tests one key. A custom check also needs `"base_url"`, and is
+  refused on the demo.
 
-pandion-api's `GET /api/v2/settings/models` and `POST /api/v2/settings/models/check` make
-the same report and the same check as Settings, with the same answers: both stacks call
-one function, `pandion_api.keycheck.check_key`.
+The old `GET /api/settings/llm` and `POST /api/settings/llm/check` give the same answers,
+since both call one function, `pandion_api.keycheck.check_key`; the app no longer calls
+them, and they go when the old routes do.

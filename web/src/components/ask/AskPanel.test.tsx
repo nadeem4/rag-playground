@@ -50,7 +50,7 @@ beforeEach(() => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/samples") return ok([CARD])
       if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)
-      if (url === "/api/artifacts/idx1/payload") return ok({ doc_count: 42 })
+      if (url === "/api/v2/results/idx1/payload") return ok({ doc_count: 42 })
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )
@@ -149,7 +149,7 @@ describe("finding the answer", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        const m = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+        const m = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
         return m && m[1] in payloads ? new Response(JSON.stringify(payloads[m[1]]), { status: 200 }) : base(url, init)
       }),
     )

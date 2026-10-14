@@ -23,8 +23,8 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/learn/document") return ok(DOC)
-      if (url === `/api/sources/${SHA}/pages`) return ok(PAGES)
-      if (url.startsWith(`/api/sources/${SHA}/pages/1/find`)) {
+      if (url === `/api/v2/documents/${SHA}/pages`) return ok(PAGES)
+      if (url.startsWith(`/api/v2/documents/${SHA}/pages/1/find`)) {
         finds.push(new URL(url, "http://x").searchParams.get("text")!)
         return ok({ rects: [[72, 600, 540, 612]], matched: "exact" })
       }
@@ -45,7 +45,7 @@ describe("The document panel", () => {
     render(<DocumentPanel sha={SHA} document={{ filename: "two-column-report.pdf", pages: 2, caption: "Two-column report, 2 pages. Pick a parser." }} />)
     expect(within(panel()).getByText("Two-column report, 2 pages. Pick a parser.")).toBeTruthy()
     expect(within(panel()).queryByRole("tab", { name: "Text" })).toBeNull()
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u) === `/api/sources/${SHA}/pages`)).toBe(true))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u) === `/api/v2/documents/${SHA}/pages`)).toBe(true))
     expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u) === "/api/learn/document")).toBe(false)
     expect(within(panel()).queryByText(/chunking-primer/)).toBeNull()
   })
@@ -58,7 +58,7 @@ describe("The document panel", () => {
   it("stays open beside the step and shows the real pages first", async () => {
     render(<DocumentPanel sha={SHA} />)
     await waitFor(() => expect(document.querySelector("img")).toBeTruthy())
-    expect(document.querySelector("img")?.getAttribute("src")).toBe(`/api/sources/${SHA}/pages/1.png?scale=2`)
+    expect(document.querySelector("img")?.getAttribute("src")).toBe(`/api/v2/documents/${SHA}/pages/1?scale=2`)
   })
 
   it("switches to the parsed text the steps work on, and says why the two differ", async () => {

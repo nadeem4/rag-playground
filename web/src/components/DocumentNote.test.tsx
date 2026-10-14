@@ -26,7 +26,7 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/settings/app") return ok({ demo })
-      if (url === "/api/sources") return ok([])
+      if (url === "/api/v2/documents") return ok([])
       if (url === "/api/samples") return ok([SAMPLE])
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),

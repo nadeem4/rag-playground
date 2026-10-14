@@ -28,18 +28,18 @@ class SilentEventSource {
   close() {}
 }
 
-/** Artifact payloads by id, served at `/api/artifacts/{id}/payload`; `extra` answers other URLs (a Response as it is). */
+/** Artifact payloads by id, served at `/api/v2/results/{id}/payload`; `extra` answers other URLs (a Response as it is). */
 function serve(artifacts: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
   const missing = () => new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (url === "/api/registry") return ok(liveRegistry)
+      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url in extra) return extra[url] instanceof Response ? extra[url] : ok(extra[url])
       if (url === "/api/v2/comparisons") return ok({ run_id: "r1" })
       if (url === "/api/v2/runs/r1") return ok(snapshot(EMPTY_RESULT))
-      const artifact = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      const artifact = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (artifact) return artifact[1] in artifacts ? ok(artifacts[artifact[1]]) : missing()
       return missing()
     }),
@@ -1181,7 +1181,7 @@ describe("the document on the page", () => {
 
   it("names the document once above the recipes, compact, with Preview and Change", async () => {
     storeGraph(sampleGraph(registry, SOURCE))
-    serve({}, { "/api/sources": [], "/api/samples": [CARD] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [CARD] })
     render(<Compare />)
     const line = await screen.findByTestId("document-line")
     await waitFor(() => expect(within(line).getByTestId("document-item").textContent).toContain("A primer on chunking"))
@@ -1196,7 +1196,7 @@ describe("the document on the page", () => {
 
   it("says the document is missing and disables the run", async () => {
     storeGraph(sampleGraph(registry, { sha: "ef".repeat(32), filename: "NK_Resume.pdf" }))
-    serve({}, { "/api/sources": [], "/api/samples": [] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [] })
     render(<Compare />)
     const note = await screen.findByTestId("document-note")
     expect(note.textContent).toContain("Pick a document above to run these recipes.")
@@ -1207,7 +1207,7 @@ describe("the document on the page", () => {
   it("asks for a document when the pipeline has none, instead of No pipeline to compare", async () => {
     const g = sampleGraph(registry, SOURCE)
     storeGraph(setConfig(g, "source", {}))
-    serve({}, { "/api/sources": [], "/api/samples": [] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [] })
     render(<Compare />)
     const note = await screen.findByTestId("document-note")
     expect(note.textContent).toContain("Pick a document above to run these recipes.")
@@ -1236,7 +1236,7 @@ describe("the document on the page", () => {
       sha: "cd".repeat(32),
       question: "Why do chunk boundaries matter?",
     }
-    serve({}, { "/api/sources": [], "/api/samples": [card] })
+    serve({}, { "/api/v2/documents": [], "/api/samples": [card] })
     render(<Compare />)
     await waitFor(() => expect(screen.getAllByRole("article").length).toBeGreaterThan(0))
     expect(screen.queryByText("No pipeline to compare")).toBeNull()

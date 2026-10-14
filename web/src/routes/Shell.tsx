@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import { keyMissing, keyNeedFor, needsKey, useApiKey, withArticle } from "@/api/apiKey"
-import { api } from "@/api/client"
 import { v2 } from "@/api/v2"
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
@@ -219,7 +218,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   // Ask is left alone.
   const [server, setServer] = useState<LlmSettings | null>(null)
   useEffect(() => {
-    api.llmSettings().then(setServer, () => setServer(null))
+    v2.modelSources().then(setServer, () => setServer(null))
   }, [])
 
   // Set when a keyless Ask stopped before Chat. A new key clears it.

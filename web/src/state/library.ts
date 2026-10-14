@@ -86,7 +86,7 @@ export interface DocContext {
   /** The demo's upload lifetime (`limits.ttl_hours`). */
   ttlHours: number
   now: number
-  /** `GET /api/sources`; null until it answers. */
+  /** `GET /api/v2/documents`; null until it answers. */
   sources: readonly Source[] | null
   /** `GET /api/samples`; null until it answers, an empty list if it failed. */
   samples: readonly Pick<SampleCard, "sha">[] | null

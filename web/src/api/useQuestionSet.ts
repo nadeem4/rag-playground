@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react"
 
 import { clearTabSet, readTabSet, report, storeTabSet, type Report } from "@/state/goldSet"
 
-import { ApiError, api } from "./client"
+import { ApiError } from "./client"
+import { v2 } from "./v2"
 import type { StoredQuestionSet } from "./types"
 
 /**
@@ -54,7 +55,7 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
       setTabOnly(held !== null)
       setLoading(false)
     }
-    api.questionSet(sourceSha).then((s) => {
+    v2.questionSet(sourceSha).then((s) => {
       if (!live) return
       if (!s) return fromTab()
       setSet(s)
@@ -70,7 +71,7 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
       setBusy(true)
       setError(null)
       try {
-        const s = await api.uploadQuestionSet(sourceSha, file)
+        const s = await v2.uploadQuestionSet(sourceSha, file)
         const kept = s.stored !== false
         if (!kept) storeTabSet(s)
         setSet(s)
@@ -89,7 +90,7 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
     setBusy(true)
     setError(null)
     try {
-      await api.deleteQuestionSet(sourceSha)
+      await v2.deleteQuestionSet(sourceSha)
     } catch {
       // Nothing on the server to delete, which is the state we wanted anyway.
     }

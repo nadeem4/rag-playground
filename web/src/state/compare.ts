@@ -179,21 +179,6 @@ export function rejectedRecipe(variants: Variant[], previous: Variant[], fields:
   return found.length === 1 ? found[0] : null
 }
 
-/**
- * The settings a Pandion problem sentence is about, as `pandion.stages` words it:
- * "index.chunk (sentence_window): overlap_sentences: Overlap must be ...", with
- * several settings joined by "; ". Each comes back with its own sentence. Null
- * for a sentence about anything else, or about the whole step ("settings: ..."),
- * which no one setting owns.
- */
-export function settingProblems(sentence: string): { transform: string; settings: { field: string; message: string }[] } | null {
-  const m = /^[\w.]+(?: step \d+)? \(([\w-]+)\): (.+?)\.?$/.exec(sentence)
-  if (!m) return null
-  const settings = m[2].split("; ").map((part) => /^([\w.]+): (.+?)\.?$/.exec(part))
-  if (settings.some((x) => !x || x[1] === "settings")) return null
-  return { transform: m[1], settings: settings.map((x) => ({ field: x![1], message: `${x![2]}.` })) }
-}
-
 // ------------------------------------------------------------------- plan --
 
 /** How the results open: as columns, one tab at a time, or as an overview to sort. */

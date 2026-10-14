@@ -108,11 +108,9 @@ export function ExplainPanel({ title, stage, transform, what, summary, explain, 
         ) : null}
         <Part label="With your settings">
           <div aria-live="polite" className="flex flex-col gap-1">
-            {explain?.invalid ? (
-              <p className="m-0 text-sm leading-[1.55] whitespace-pre-wrap text-danger">These settings are not valid. {explain.invalid}</p>
-            ) : data ? (
+            {data ? (
               <>
-                <p className={BODY}>{data.settings}</p>
+                {data.settings ? <p className={BODY}>{data.settings}</p> : null}
                 {data.warning ? <p className="m-0 text-sm leading-[1.55] text-danger">{data.warning}</p> : null}
                 {data.tradeoff ? <p className={BODY}>Trade-off: {data.tradeoff}</p> : null}
               </>

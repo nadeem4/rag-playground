@@ -83,7 +83,6 @@ import {
   retrieveManyFinding,
   serverBest,
   serverRanks,
-  settingProblems,
   sharedTop,
   shownCard,
   sortRecipes,
@@ -99,7 +98,7 @@ import { firstSentence } from "@/lib/sentence"
 import { compatibility } from "@/state/compat"
 import { recipeSentence } from "@/state/recipeSentence"
 import { cardNamedIn, cardOfStepIn, goldsOf, graphToConfig, stepOfCardIn } from "@/state/config"
-import { errorHeadline, routeRunError } from "@/state/pipeline"
+import { errorHeadline, routeRunError, settingProblems } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
 import { RegistryScreen } from "./Shell"

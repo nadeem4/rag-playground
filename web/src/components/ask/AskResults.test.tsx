@@ -48,9 +48,9 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
-      const payload = /^\/api\/artifacts\/([^/]+)\/payload$/.exec(url)
+      const payload = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (payload && payloads[payload[1]] !== undefined) return ok(await payloads[payload[1]])
-      if (url === "/api/artifacts/rr1" || url === "/api/artifacts/rr2") {
+      if (url === "/api/v2/results/rr1" || url === "/api/v2/results/rr2") {
         return ok({ id: "rr1", meta: { note: "Scored 6 candidates with MiniLM in 0.2 s. 4 of the top 5 changed place." } })
       }
       if (url === "/api/samples") return ok([])
@@ -147,7 +147,7 @@ describe("the comparison, with a reranker", () => {
     payloads.rrOnce = reranked()
     const base = vi.mocked(fetch).getMockImplementation()!
     vi.mocked(fetch).mockImplementation(async (url) =>
-      url === "/api/artifacts/rrOnce" ? new Response(JSON.stringify({ id: "rrOnce", meta: { note: NOTE } }), { status: 200 }) : base(url),
+      url === "/api/v2/results/rrOnce" ? new Response(JSON.stringify({ id: "rrOnce", meta: { note: NOTE } }), { status: 200 }) : base(url),
     )
     render(<Panel {...props(withCrossEncoder(), { ...RERANKED, rerank_1: done("rerank_1", "rrOnce") })} />)
     const note = await screen.findByText(NOTE)
@@ -159,14 +159,14 @@ describe("the comparison, with a reranker", () => {
     expect(screen.queryByTestId("fact-moved")).toBeNull()
     expect(document.body.textContent).not.toMatch(/Moved \d+ of/)
     // The note was fetched once.
-    expect(vi.mocked(fetch).mock.calls.filter(([u]) => u === "/api/artifacts/rrOnce")).toHaveLength(1)
+    expect(vi.mocked(fetch).mock.calls.filter(([u]) => u === "/api/v2/results/rrOnce")).toHaveLength(1)
   })
 
   it("holds the sub line's place while the run note loads, so it does not push the lists down late", async () => {
     let release: (r: Response) => void = () => {}
     payloads.rrLate = reranked()
     const base = vi.mocked(fetch).getMockImplementation()!
-    vi.mocked(fetch).mockImplementation(async (url) => (url === "/api/artifacts/rrLate" ? new Promise<Response>((r) => (release = r)) : base(url)))
+    vi.mocked(fetch).mockImplementation(async (url) => (url === "/api/v2/results/rrLate" ? new Promise<Response>((r) => (release = r)) : base(url)))
     render(<Panel {...props(withCrossEncoder(), { ...RERANKED, rerank_1: done("rerank_1", "rrLate") })} />)
     await waitFor(() => expect(badges()).toHaveLength(5))
     const sub = screen.getByTestId("sub-line")

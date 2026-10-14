@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from api import sample_set
-from pandion.ports import RunContext, Stage
+from pandion.extend import RunContext, Stage
 from pandion.registry import registry
 from pandion.plugins.chunk import DocView, count_tokens
 

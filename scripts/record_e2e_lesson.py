@@ -24,9 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pandion.artifacts import ArtifactType  # noqa: E402
+from pandion.extend import ArtifactType, Stage  # noqa: E402
 from pandion.graph import Edge, Graph, Node  # noqa: E402
-from pandion.ports import Stage  # noqa: E402
 
 SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
 OUT = ROOT / "web" / "src" / "learn" / "e2e-run.json"

@@ -77,7 +77,6 @@ PUBLIC_MODULES = (
 #: commit as its last use. Part 5 deletes the list.
 ENGINE_IMPORTS: frozenset[str] = frozenset(
     {
-        "pandion.artifacts:ArtifactType",
         "pandion.embedding_cache:EmbeddingCache",
         "pandion.endpoints:EndpointRefused",
         "pandion.endpoints:guard_endpoint",
@@ -93,8 +92,6 @@ ENGINE_IMPORTS: frozenset[str] = frozenset(
         "pandion.plugins.chunk:DocView",
         "pandion.plugins.chunk:count_tokens",
         "pandion.plugins.parse:docling",
-        "pandion.ports:RunContext",
-        "pandion.ports:Stage",
         "pandion.registry:Registry",
         "pandion.registry:UnknownTransformError",
         "pandion.registry:registry",

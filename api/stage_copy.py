@@ -7,7 +7,7 @@ the registry schema.
 
 from __future__ import annotations
 
-from pandion.ports import Stage
+from pandion.extend import Stage
 
 #: What each step is for in RAG, in one plain paragraph. The UI shows it in
 #: every card's explanation, so a newcomer learns the pipeline by reading it.

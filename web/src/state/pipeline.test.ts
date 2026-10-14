@@ -78,7 +78,7 @@ describe("routeRunError on /api/v2", () => {
     const sentences: [number, string][] = [
       [429, "You already have 2 runs going. Wait for one to finish, or stop one."],
       [413, "The demo scores at most 50 questions in one run, and this set has 51. Use fewer questions, or run the playground locally for more."],
-      [413, "The demo scores at most 100 recipe-questions in one comparison (recipes times questions), and this one asks for 102. Use fewer recipes or questions, or run the playground locally for more."],
+      [413, "The demo scores at most 120 recipe-questions in one comparison (recipes times questions), and this one asks for 123. Use fewer recipes or questions, or run the playground locally for more."],
     ]
     for (const [status, message] of sentences) {
       for (const path of ["/runs", "/ask", "/evaluations", "/comparisons"]) {

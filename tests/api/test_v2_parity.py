@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import build_deps
 from api.main import create_app
-from tests.api import conftest, test_delete_source, test_demo, test_sources
+from tests.api import conftest, test_delete_source, test_demo, test_pages, test_source_file, test_sources
 
 #: (pattern, replacement): the first that matches wins; None keeps the path.
 REWRITES: tuple[tuple[re.Pattern[str], str | None], ...] = (
@@ -65,7 +65,7 @@ def make_v2_client(dirs, registry=None) -> TestClient:
 
 
 #: The modules whose tests run here: each looks up `make_client` at call time.
-MODULES = (conftest, test_delete_source, test_demo, test_sources)
+MODULES = (conftest, test_delete_source, test_demo, test_pages, test_source_file, test_sources)
 
 
 @pytest.fixture(autouse=True)
@@ -106,6 +106,28 @@ def test_both_stacks_hold_the_same_record_lock():
     from pandion_api.documents import SIDECAR_LOCK
 
     assert sources.SIDECAR_LOCK is SIDECAR_LOCK
+
+
+def test_both_stacks_hold_the_same_pdfium_lock():
+    from api.routes import pages
+    from pandion_api.pages import PDFIUM_LOCK
+
+    assert pages.PDFIUM_LOCK is PDFIUM_LOCK
+
+
+def test_both_stacks_cap_the_find_text(dirs):
+    from fastapi.testclient import TestClient as Plain
+
+    from pandion_api.pages import MAX_FIND_CHARS
+    from tests.api.conftest import upload_pdf
+
+    deps = build_deps(artifacts_dir=dirs["artifacts"], sources_dir=dirs["sources"], web_dist=dirs["web"])
+    with Plain(create_app(deps)) as c:
+        sha = upload_pdf(c)["sha"]
+        for base in ("/api/sources", "/api/v2/documents"):
+            url = f"{base}/{sha}/pages/1/find"
+            assert c.get(url, params={"text": "x" * (MAX_FIND_CHARS + 1)}).status_code == 422
+            assert c.get(url, params={"text": "x" * MAX_FIND_CHARS}).status_code == 200
 
 
 # --- documents (Task 7) -----------------------------------------------------------
@@ -175,3 +197,42 @@ def test_your_own_reupload_under_another_name_stores_no_second_copy(client, dirs
     sha = client.post("/api/sources", files={"file": ("mine.pdf", data, "application/pdf")}).json()["sha"]
     assert client.post("/api/sources", files={"file": ("mine-again.bin", data, "application/pdf")}).status_code == 200
     assert [p.name for p in dirs["sources"].glob(f"{sha}*") if p.is_file()] == [f"{sha}.pdf"]
+
+
+# --- a document's file and pages (Task 8) -----------------------------------------
+
+from tests.api.test_pages import (  # noqa: E402
+    test_a_huge_page_at_scale_8_is_clamped_to_25_megapixels,
+    test_find_across_two_lines_gives_one_rect_per_line,
+    test_find_exact_sentence,
+    test_find_is_page_scoped,
+    test_find_normalized_handles_hyphenation_and_whitespace,
+    test_find_normalized_handles_parser_line_breaks,
+    test_find_nothing,
+    test_find_requires_text,
+    test_in_demo_mode_an_uploads_pages_are_cached_privately,
+    test_many_renders_at_once_all_succeed,
+    test_malformed_sha_is_404,
+    test_non_pdf_source_is_415,
+    test_out_of_range_page_is_404,
+    test_pages_lists_sizes_in_points,
+    test_png_at_scale_2,
+    test_png_bad_scale_is_422,
+    test_png_default_scale_is_1,
+    test_source_file_is_not_locked_after_rendering,
+    test_unknown_sha_is_404,
+)
+from tests.api.test_source_file import (  # noqa: E402
+    test_an_unknown_or_malformed_sha_is_404,
+    test_demo_never_serves_another_visitors_upload,
+    test_demo_serves_a_sample,
+    test_demo_serves_your_own_upload_privately,
+    test_every_sample_is_readable_straight_after_startup,
+    test_the_file_comes_back_byte_for_byte,
+)
+from tests.api.test_demo import (  # noqa: E402
+    test_every_sample_is_readable_in_demo_mode,
+    test_outside_demo_any_uploaded_sha_is_served,
+    test_pages_serve_only_the_sample,
+    test_the_demo_refuses_uploads_past_its_total_budget,
+)

@@ -145,6 +145,11 @@ class PlaygroundPolicy(Policy):
         listed = sources._listed({**document.record(), **document.extra}, _visitor(request))
         return {"uploaded_at": listed["uploaded_at"]} if "uploaded_at" in listed else {}
 
+    def private(self, sha: str, request: Request) -> bool:
+        """On the demo an upload is one browser's own: no shared cache may keep it.
+        The old page route asks this too."""
+        return demo.enabled() and sha not in sample_set.readable_shas()
+
     # --- runs -------------------------------------------------------------------
 
     def max_active_runs(self) -> int | None:

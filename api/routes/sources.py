@@ -20,8 +20,6 @@ import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from pandion.sources import Sources
-
 # The record helpers are pandion-api's, so the app and /api/v2 share one record
 # format and one lock (`SIDECAR_LOCK`, held here, in `expiry.sweep` and on /api/v2).
 from pandion_api.documents import META_DIR, SHA, SIDECAR_LOCK, DocumentStore  # noqa: F401 (expiry reads them here)
@@ -198,9 +196,10 @@ def seed_sample_files(sources: Path) -> None:
     its file. Only the file: no record, so the list still shows a sample once a
     visitor loads it, as before."""
     sources.mkdir(parents=True, exist_ok=True)
+    store = DocumentStore(sources)
     for sample in sample_set.all_samples():
-        if not Sources(sources).path(sample.sha, sample.pdf.name).is_file():
-            Sources(sources).add_bytes(sample.pdf.read_bytes(), sample.pdf.name)
+        if store.file(sample.sha) is None:
+            store.save(sample.pdf.read_bytes(), sample.pdf.name)
 
 
 def _store(
@@ -213,9 +212,8 @@ def _store(
     sample = next((s for s in sample_set.all_samples() if s.sha == hashlib.sha256(data).hexdigest()), None)
     if sample is not None:
         filename = sample.pdf.name  # a sample's bytes are stored under the sample's own name
-    # The raw suffix, as the old run graph's upload step looks for it.
-    sha = Sources(sources).add_bytes(data, filename).sha
     store = DocumentStore(sources)
+    sha = store.save(data, filename)
     ctype = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     with SIDECAR_LOCK:
         store.write(sha, filename, len(data), ctype)

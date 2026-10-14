@@ -1,13 +1,14 @@
 """On the demo, every step that calls a custom endpoint refuses a private one.
 
-The run routes already refuse custom endpoints on the demo; this checks the
-second line: chat, llm_rerank and llm_rewrite all reach `pandion.llm.complete`,
+The playground's Policy already refuses custom endpoints on the demo; this
+checks the second line: chat, llm_rerank and llm_rewrite all reach `pandion.llm.complete`,
 which validates the `base_url` before any client is built. The resolver is
 mocked to answer 127.0.0.1, as a DNS name pointed at the host would.
 
 pandion never reads the demo switch. The package's chat, llm_rewrite and
 llm_rerank get it from the run, as `context_extras["public_endpoints_only"]`,
-which the app sets in `Deps.run_extras()` from the demo switch.
+which pandion-api sets from `PlaygroundPolicy.public_endpoints_only`, and so
+from the demo switch. The graph runs here get it from `tests.engine_deps`.
 """
 
 from __future__ import annotations
@@ -15,7 +16,8 @@ from __future__ import annotations
 import pytest
 
 from api import demo as api_demo
-from api.deps import build_deps
+from api.policy import PlaygroundPolicy
+from tests.engine_deps import engine_deps
 from pandion import llm
 from pandion.endpoints import DEMO_ENDPOINT_ERROR, EndpointRefused
 from pandion.executor import NodeStatus, run
@@ -53,7 +55,7 @@ def test_chat_refuses_a_private_endpoint_with_the_apps_run_extras(
     demo, pipeline, index, tmp_path  # noqa: F811
 ):
     run_ctx = context()
-    run_ctx.extras.update(build_deps(artifacts_dir=tmp_path / "a").run_extras())
+    run_ctx.extras.update(engine_deps(artifacts_dir=tmp_path / "a").run_extras())
     with pytest.raises(EndpointRefused) as info:
         ask(pipeline, index=index, ctx=run_ctx, **CUSTOM)
     assert str(info.value) == DEMO_ENDPOINT_ERROR
@@ -69,7 +71,7 @@ def test_chat_without_the_extra_reaches_the_client(demo, pipeline, index):  # no
 
 def test_llm_rerank_refuses_a_private_endpoint_with_the_apps_run_extras(demo, tmp_path):
     run_ctx = rerank_ctx(tmp_path, creds=None)
-    run_ctx.extras.update(build_deps(artifacts_dir=tmp_path / "a").run_extras())
+    run_ctx.extras.update(engine_deps(artifacts_dir=tmp_path / "a").run_extras())
     with pytest.raises(EndpointRefused) as info:
         LlmRerank().apply(
             {"result": payload(["a", "b"]), "query": {"text": QUESTION}},
@@ -82,32 +84,31 @@ def test_llm_rerank_refuses_a_private_endpoint_with_the_apps_run_extras(demo, tm
 
 def test_llm_rewrite_refuses_a_private_endpoint_with_the_apps_run_extras(demo, tmp_path):
     run_ctx = rerank_ctx(tmp_path, creds=None)
-    run_ctx.extras.update(build_deps(artifacts_dir=tmp_path / "a").run_extras())
+    run_ctx.extras.update(engine_deps(artifacts_dir=tmp_path / "a").run_extras())
     with pytest.raises(EndpointRefused):
         LlmRewrite().apply({}, LlmRewriteConfig(text=QUESTION, **CUSTOM), run_ctx)
     assert demo == []
 
 
-def test_on_the_demo_every_run_asks_for_public_endpoints_only(monkeypatch, tmp_path):
-    deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
+def test_on_the_demo_every_run_asks_for_public_endpoints_only(monkeypatch):
+    policy = PlaygroundPolicy()
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    assert deps.run_extras()["public_endpoints_only"] is True
+    assert policy.public_endpoints_only(None) is True
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
-    assert deps.run_extras()["public_endpoints_only"] is False
+    assert policy.public_endpoints_only(None) is False
 
 
-def test_the_run_extra_holds_even_if_the_route_ban_is_lifted(monkeypatch, tmp_path):
+def test_the_run_switch_holds_even_if_the_policy_ban_is_lifted(monkeypatch):
     """The 403 reads `api.demo.enabled()`; the second line reads `public_endpoints_only()`."""
-    deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     monkeypatch.setattr(api_demo, "enabled", lambda: False)
-    assert deps.run_extras()["public_endpoints_only"] is True
+    assert PlaygroundPolicy().public_endpoints_only(None) is True
 
 
 def test_a_demo_run_of_llm_rewrite_fails_on_a_private_endpoint(demo, tmp_path):
-    """The whole app path: the executor, the app's registry and store, and
-    `Deps.run_extras()`, as the run routes call it (behind their 403)."""
-    deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
+    """The whole engine path: the executor, the registry, a store and the run
+    extras, from `tests.engine_deps` (behind the Policy's 403)."""
+    deps = engine_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
     graph = Graph(
         nodes=[Node("q", Stage.QUERY, "llm_rewrite", {"text": QUESTION, **CUSTOM})],
         edges=[],
@@ -121,13 +122,13 @@ def test_a_demo_run_of_llm_rewrite_fails_on_a_private_endpoint(demo, tmp_path):
 
 def test_a_demo_run_of_llm_rerank_fails_on_a_private_endpoint(demo, tmp_path):
     """The whole app path for the reranker: index a PDF with the fake embedder,
-    retrieve, then llm_rerank, run with `Deps.run_extras()` (behind the 403)."""
+    retrieve, then llm_rerank, run with the run extras from `tests.engine_deps` (behind the 403)."""
     from pandion.graph import Edge
     from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))
-    deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
+    deps = engine_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
     stored = deps.run_extras()["sources"].add(pdf)
     graph = Graph(
         nodes=[
@@ -156,13 +157,13 @@ def test_a_demo_run_of_llm_rerank_fails_on_a_private_endpoint(demo, tmp_path):
 
 def test_a_demo_run_of_chat_fails_on_a_private_endpoint(demo, tmp_path):
     """The whole app path for the package's chat step: index a PDF with the
-    fake embedder, retrieve, then chat, run with `Deps.run_extras()`."""
+    fake embedder, retrieve, then chat, run with the run extras from `tests.engine_deps`."""
     from pandion.graph import Edge
     from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))
-    deps = build_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
+    deps = engine_deps(artifacts_dir=tmp_path / "a", sources_dir=tmp_path / "s")
     stored = deps.run_extras()["sources"].add(pdf)
     graph = Graph(
         nodes=[

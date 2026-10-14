@@ -135,14 +135,13 @@ on localhost work, question sets are kept beside their document, and the Dev men
 | `RAG_PLAYGROUND_HOST` | `127.0.0.1` | The interface, when `--host` is not given. |
 | `RAG_PLAYGROUND_SOURCES` | `sources/` in the repo | Where uploads and uploaded question sets are kept. `/data/sources` in Docker. |
 | `RAG_PLAYGROUND_ARTIFACTS` | `artifacts/` in the repo | Where cached run results are kept. `/data/artifacts` in Docker. |
-| `RAG_PLAYGROUND_EMBED_CACHE` | `.embcache` in the artifacts folder | Where the embedding cache is kept. |
 | `HF_HOME` | `~/.cache/huggingface` | Hugging Face's own variable: where models are downloaded. `/data/hf` in Docker. |
 | `RAG_PLAYGROUND_PORT` | `8000` | Docker Compose only: the port published on your machine. |
 
 The sources and artifacts folders must sit side by side in one folder, named `sources`
 and `artifacts` (the Docker image uses `/data/sources` and `/data/artifacts`); the server
-refuses to start otherwise. Runs through `/api/v2` keep their embedding cache in
-`embeddings/` beside them.
+refuses to start otherwise. Embeddings are cached in `<data>/embeddings` beside `sources`
+and `artifacts`; an old `artifacts/.embcache` folder is no longer read and can be deleted.
 
 Secrets, each optional and used only with demo mode off:
 

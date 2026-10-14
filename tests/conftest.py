@@ -23,14 +23,6 @@ import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _isolated_embedding_cache(tmp_path_factory, monkeypatch):
-    """Every test gets its own embedding cache, never the repo's `artifacts/`."""
-    monkeypatch.setenv(
-        "RAG_PLAYGROUND_EMBED_CACHE", str(tmp_path_factory.mktemp("embcache"))
-    )
-
-
-@pytest.fixture(autouse=True)
 def _no_model_downloads_outside_models_tests(request, monkeypatch):
     """The default suite must never download or load a real embedding model.
 

@@ -1,12 +1,12 @@
 """The app retrieves with the pandion package, not with a copy of its own.
 
-The `dense`, `bm25` and `hybrid_rrf` retrievers moved into pandion. These
-tests prove the app runs on them: the app's registry holds the package's
-classes, the old module is gone, and a graph run the way the API runs it (the
-executor, the app's registry and store, `Deps.run_extras`) returns the same
-hits, in the same order with the same scores, as the same graph run with only
-the package: its executor, its own store, sources, embedding cache and model
-settings. The fake embedder keeps it offline.
+The `dense`, `bm25` and `hybrid_rrf` retrievers moved into pandion. These tests
+prove the app runs on them: the app's registry holds the package's classes, the
+old module is gone, and a graph run the way the old run routes ran it (the
+executor, the registry, a store and the run extras, from `tests.engine_deps`)
+returns the same hits, in the same order with the same scores, as the same
+graph run with only the package: its executor, its own store, sources,
+embedding cache and model settings. The fake embedder keeps it offline.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import importlib.util
 
 import pytest
 
-from api.deps import build_deps
+from tests.engine_deps import engine_deps
 from pandion.artifacts import ArtifactType
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeStatus, run
@@ -84,10 +84,9 @@ def test_the_app_run_returns_the_same_hits_as_the_package(tmp_path):
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))
 
-    deps = build_deps(
+    deps = engine_deps(
         artifacts_dir=tmp_path / "artifacts",
         sources_dir=tmp_path / "sources",
-        web_dist=tmp_path / "web",
     )
     stored = deps.run_extras()["sources"].add(pdf)
     in_app = run(

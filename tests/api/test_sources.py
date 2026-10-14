@@ -32,8 +32,6 @@ def test_empty_upload_is_400(client):
 
 def test_uploaded_file_is_findable_by_the_upload_transform(client, dirs):
     body = upload_pdf(client)
-    deps = client.app.state.deps
-    assert deps.run_extras()["sources"].root == dirs["sources"]
     cls = upload.Upload
     ctx = RunContext(
         output_dir=dirs["artifacts"], emit=lambda e: None, tmp=dirs["artifacts"],

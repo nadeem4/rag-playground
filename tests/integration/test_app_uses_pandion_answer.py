@@ -3,10 +3,10 @@
 The `search` and `chat` steps moved into pandion as the answer step. These
 tests prove the app runs on them: the app's registry holds the package's
 classes under the use_case stage, the old modules are gone, the app's own
-plugins are only `eval` and the demo switch, and a graph run the way the API
-runs it (the executor, the app's registry and store, `Deps.run_extras`) gives
-the same artifact ids and the same answer as `p.ask` with the same settings on
-the same file. The fake embedder keeps it offline.
+plugins are only `eval` and the demo switch, and a graph run the way the old
+run routes ran it (the executor, the registry, a store and the run extras, from
+`tests.engine_deps`) gives the same artifact ids and the same answer as `p.ask`
+with the same settings on the same file. The fake embedder keeps it offline.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from api.deps import build_deps
+from tests.engine_deps import engine_deps
 from pandion import Pipeline
 from pandion.artifacts import ArtifactType
 from pandion.executor import run
@@ -69,10 +69,9 @@ def test_the_app_run_gives_the_same_answer_as_p_ask(tmp_path):
     pdf = docs / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))
 
-    deps = build_deps(
+    deps = engine_deps(
         artifacts_dir=tmp_path / "artifacts",
         sources_dir=tmp_path / "sources",
-        web_dist=tmp_path / "web",
     )
     stored = deps.run_extras()["sources"].add(pdf)
     graph = Graph(

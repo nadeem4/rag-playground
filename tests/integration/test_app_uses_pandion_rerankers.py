@@ -4,9 +4,10 @@ The `mmr`, `cross_encoder` and `llm_rerank` steps moved into pandion. These
 tests prove the app runs on them: the app's registry holds the package's
 classes, the old module is gone, the warm-up loads the cross-encoder through
 the public `preload_reranker` with the app's model settings, and a graph run
-the way the API runs it (the executor, the app's registry and store,
-`Deps.run_extras`) gives the same artifact ids and hits as `p.retrieve` with
-the same settings on the same file. The fake embedder keeps it offline.
+the way the old run routes ran it (the executor, the registry, a store and the
+run extras, from `tests.engine_deps`) gives the same artifact ids and hits as
+`p.retrieve` with the same settings on the same file. The fake embedder keeps
+it offline.
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ import pytest
 import yaml
 
 from api import warmup
-from api.deps import APP_MODELS, build_deps
+from api.deps import APP_MODELS
+from tests.engine_deps import engine_deps
 from pandion import Pipeline
 from pandion.artifacts import ArtifactType
 from pandion.executor import NodeStatus, run
@@ -144,10 +146,9 @@ def test_the_app_run_gives_the_same_hits_as_p_retrieve(tmp_path):
     pdf = docs / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))
 
-    deps = build_deps(
+    deps = engine_deps(
         artifacts_dir=tmp_path / "artifacts",
         sources_dir=tmp_path / "sources",
-        web_dist=tmp_path / "web",
     )
     stored = deps.run_extras()["sources"].add(pdf)
     in_app = run(

@@ -92,13 +92,15 @@ variant and evaluates each; the app's Compare page runs it through
 index's own model through two public names of `pandion.plugins.retrieve`,
 `read_descriptor` and `embedder_for`.
 
-The package takes every folder as an argument. A run is handed the sources folder, the
-embedding cache and the model settings in `context_extras`, which are never hashed. The
-app builds them once in `api/deps.py` from its environment variables
-(`RAG_PLAYGROUND_SOURCES`, `RAG_PLAYGROUND_ARTIFACTS`, `RAG_PLAYGROUND_EMBED_CACHE`) and
-passes them to every run as `Deps.run_extras()`. It loads models on the CPU, and the
-warm-up loads the default embedder and cross-encoder with the public
-`pandion.preload_embedder` and `pandion.preload_reranker`.
+The package takes every folder as an argument. The app keeps only where its files live in
+`api/deps.py`: the sources and artifacts folders, from `RAG_PLAYGROUND_SOURCES` and
+`RAG_PLAYGROUND_ARTIFACTS`, and the web build. pandion-api runs every pipeline under the
+one folder that holds them, with the embedding cache in `embeddings/` beside them, and
+loads models with the app's model settings (`APP_MODELS`, on the CPU). The warm-up loads
+Docling, the default embedder and the default cross-encoder with the public
+`pandion.preload_parser`, `pandion.preload_embedder` and `pandion.preload_reranker`. The
+lessons parse their sample with `pandion.parse` and read its text with
+`pandion.evaluation.document_text`.
 
 The package never reads the demo switch either. A step that calls a chat model takes
 `public_endpoints_only` from the run (and `pandion.llm` takes `public_only=`): when it is
@@ -114,14 +116,12 @@ their schema. `GET /api/v2/strategies` leaves them out of the forms (through
 `served_catalog` in `api/routes/registry.py`), and the playground's Policy refuses with a
 403 a run, an evaluation or a comparison that sets one to anything but its default, in
 every mode. A pipeline file or code can set them.
-The app imports Pandion through its public API: `pandion`, the stage namespaces
-(`pandion.parse` to `pandion.answer`) and `pandion.extend`, each a name in the module's
-`__all__`. It never imports a private name (one starting with an underscore), and the
-package never imports the app. The engine names the app still imports from Pandion's
-inner modules (`pandion.graph`, `pandion.executor`, `pandion.storage` and the rest) are
-listed in `ENGINE_IMPORTS` in `tests/integration/test_package_boundary.py`. That list may
-only shrink: a new engine import fails the test, and so does a line the app no longer
-needs. `packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
+**The package boundary.** The app imports only Pandion's public API and pandion-api;
+`tests/integration/test_package_boundary.py` fails on any other Pandion import, with no
+allow-list. The public API is `pandion`, the stage namespaces (`pandion.parse` to
+`pandion.answer`), `pandion.extend` and `pandion.evaluation`, each a name in the module's
+`__all__`. The test reads `api/`, `scripts/` and `web/scripts/`.
+`packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
 
 ## Using the package on its own
 
@@ -230,7 +230,7 @@ one cached parse and three new chunk sets.
   sync deletes one entry, the index a sync has replaced.
 - **The embedding cache** (`pandion/embedding_cache.py`) keeps embeddings in SQLite at
   full width, keyed by model, revision, dtype, kind and text, so the same piece is
-  embedded once. The app keeps it in `.embcache` under the artifacts folder.
+  embedded once. The app keeps it in `embeddings/` beside the sources and artifacts folders.
 - **Uploads** are stored once under the sources folder, named by a fingerprint of their
   bytes (`pandion/sources.py`).
 

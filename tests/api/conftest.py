@@ -53,12 +53,11 @@ def dirs(tmp_path: Path) -> dict[str, Path]:
     }
 
 
-def make_client(dirs, registry=None) -> TestClient:
+def make_client(dirs) -> TestClient:
     deps = build_deps(
         artifacts_dir=dirs["artifacts"],
         sources_dir=dirs["sources"],
         web_dist=dirs["web"],
-        registry=registry,
     )
     return TestClient(create_app(deps))
 

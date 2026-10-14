@@ -35,11 +35,11 @@ def api_settings(deps: Deps) -> ApiSettings:
     data_dir = deps.sources_dir.parent
     if (
         deps.sources_dir.name != "sources"
-        or deps.store.root.resolve() != (data_dir / "artifacts").resolve()
+        or deps.artifacts_dir.resolve() != (data_dir / "artifacts").resolve()
     ):
         raise ValueError(
             f"The sources folder ({deps.sources_dir}) and the artifacts folder "
-            f"({deps.store.root}) must sit side by side in one folder, named sources "
+            f"({deps.artifacts_dir}) must sit side by side in one folder, named sources "
             "and artifacts, because every pipeline runs under one path. Set "
             "RAG_PLAYGROUND_SOURCES to <folder>/sources and RAG_PLAYGROUND_ARTIFACTS "
             "to <folder>/artifacts."

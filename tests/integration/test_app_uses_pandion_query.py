@@ -3,9 +3,10 @@
 The `text` and `llm_rewrite` query steps, the chat model client and the custom
 endpoint check moved into pandion. These tests prove the app runs on them: the
 app's registry holds the package's query steps, its chat and rerank steps call
-the package's client, the old modules are gone, and a graph run the way the API
-runs it (the executor, the app's registry and store, `Deps.run_extras`) gives
-the same query as `pandion.rewrite` with the same settings. No model is called.
+the package's client, the old modules are gone, and a graph run the way the old
+run routes ran it (the executor, the registry, a store and the run extras, from
+`tests.engine_deps`) gives the same query as `pandion.rewrite` with the same
+settings. No model is called.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import importlib.util
 import pytest
 
 import pandion
-from api.deps import build_deps
+from tests.engine_deps import engine_deps
 from pandion import llm
 from pandion.artifacts import ArtifactType
 from pandion.executor import NodeStatus, run
@@ -73,7 +74,7 @@ class FakeComplete:
 
 
 def app_query(tmp_path, transform: str, config: dict, extras: dict | None = None) -> Query:
-    deps = build_deps(artifacts_dir=tmp_path / "artifacts", sources_dir=tmp_path / "sources")
+    deps = engine_deps(artifacts_dir=tmp_path / "artifacts", sources_dir=tmp_path / "sources")
     graph = Graph(nodes=[Node("q", Stage.QUERY, transform, config)], edges=[])
     result = run(
         graph, deps.registry, deps.store, context_extras={**deps.run_extras(), **(extras or {})}

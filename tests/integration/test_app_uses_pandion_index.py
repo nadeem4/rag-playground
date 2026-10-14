@@ -1,11 +1,11 @@
 """The app indexes with the pandion package, not with a copy of its own.
 
-The embedders, the embedding cache, the lancedb index and the upload step
-moved into pandion. These tests prove the app runs on them: the app's registry
-holds the package's classes, the old modules are gone, and a graph run the way
-the API runs it (the executor, the app's registry and store, `Deps.run_extras`)
-stores the same index, with the same ids and vectors, as the package's
-`Pipeline` on the same file with the same settings.
+The embedders, the embedding cache, the lancedb index and the upload step moved
+into pandion. These tests prove the app runs on them: the app's registry holds
+the package's classes, the old modules are gone, and a graph run the way the
+old run routes ran it (the executor, the registry, a store and the run extras,
+from `tests.engine_deps`) stores the same index, with the same ids and vectors,
+as the package's `Pipeline` on the same file with the same settings.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 import lancedb
 import pytest
 
-from api.deps import build_deps
+from tests.engine_deps import engine_deps
 from pandion import Pipeline
 from pandion.artifacts import ArtifactType
 from pandion.executor import run
@@ -73,10 +73,9 @@ def rows(index_dir: Path) -> list[dict]:
 def test_the_app_run_stores_the_same_index_as_the_pipeline(tmp_path):
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))
-    deps = build_deps(
+    deps = engine_deps(
         artifacts_dir=tmp_path / "artifacts",
         sources_dir=tmp_path / "sources",
-        web_dist=tmp_path / "web",
     )
     stored = deps.run_extras()["sources"].add(pdf)
     graph = Graph(
@@ -108,3 +107,15 @@ def test_the_app_run_stores_the_same_index_as_the_pipeline(tmp_path):
     assert len(app_rows) > 1
     assert [r["id"] for r in app_rows] == [r["id"] for r in pipeline_rows]
     assert [r["vector"] for r in app_rows] == [r["vector"] for r in pipeline_rows]
+
+
+def test_the_warm_up_loads_docling_and_qwen3_through_the_public_preloads(monkeypatch):
+    import pandion
+    from api import warmup
+    from api.deps import APP_MODELS
+
+    loaded: list = []
+    monkeypatch.setattr(pandion, "preload_parser", lambda use="docling": loaded.append(("parser", use)))
+    monkeypatch.setattr(pandion, "preload_embedder", lambda name, settings=None: loaded.append((name, settings)))
+    warmup._warm_index_models()
+    assert loaded == [("parser", "docling"), ("qwen3-embedding-0.6b", APP_MODELS)]

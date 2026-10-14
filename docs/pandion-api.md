@@ -284,16 +284,12 @@ Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left 
   a new Policy hook.
 - **Time spent checking a question set.** Gold passages are matched in a worker thread
   with no time cap. The caps on size and count bound it, but not by the clock.
-- **Two embedding caches.** The old routes cache embeddings in `artifacts/.embcache` (or
-  `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Deleting the old routes
-  deletes the variable and the old cache.
-- **The allow-list cannot just be deleted.** `ENGINE_IMPORTS` in
-  `tests/integration/test_package_boundary.py` lists engine names the app still imports.
-  Deleting the old routes is not enough to empty it: these playground parts use engine
-  internals too, and each needs porting to Pandion's public API or removing:
-  `api/routes/learn.py` (the lessons), `api/warmup.py` (the model warm-up), `api/deps.py`
-  (the store, the sources and the embedding cache), `POST /api/sources/sample`, and the
-  recording scripts `scripts/record_*.py`.
+- **Two embedding caches.** The old routes cached embeddings in `artifacts/.embcache` (or
+  `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Done: the variable is gone,
+  and only `embeddings/` is used.
+- **The allow-list.** Done: the lessons, the warm-up, `api/deps.py`, the samples and the
+  scripts use only Pandion's public API, and `ENGINE_IMPORTS` is deleted from
+  `tests/integration/test_package_boundary.py`.
 - **Runs do not hold the pdfium lock.** A page request and a question-set check hold
   `pandion_api.pages.PDFIUM_LOCK`, but a run's pdfium parse step does not. pdfium is not
   thread-safe, so a run that parses with pdfium can still meet a page request on another

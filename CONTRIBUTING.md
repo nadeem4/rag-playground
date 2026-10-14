@@ -13,6 +13,7 @@ release and record the Home clips. For how the code fits together, see
 - [Styling and fixtures](#styling-and-fixtures)
 - [Adding a strategy](#adding-a-strategy)
 - [Adding an endpoint](#adding-an-endpoint)
+- [The package boundary](#the-package-boundary)
 - [The samples](#the-samples)
 - [Staging](#staging)
 - [Releasing](#releasing)
@@ -172,6 +173,17 @@ a new endpoint or Policy method in [docs/pandion-api.md](docs/pandion-api.md).
 
 A new test of a site rule goes in `tests/api/` (`test_demo.py`, `test_delete_source.py`,
 `test_source_file.py` and the rest) and calls the `/api/v2` route the web calls.
+
+## The package boundary
+
+The app (`api/`, `scripts/` and `web/scripts/`) imports only Pandion's public API and
+pandion-api: `pandion`, a stage namespace (`pandion.parse` to `pandion.answer`),
+`pandion.extend` and `pandion.evaluation`, each a name in its `__all__`.
+`tests/integration/test_package_boundary.py` fails on any other Pandion import, and there
+is no allow-list to add to. If the app needs a name that is not public, make it public in
+Pandion first: add it to the module's `__all__`, describe it in
+[docs/pandion.md](docs/pandion.md), and add a test for it in `packages/pandion/tests/`.
+Tests may still reach inside the engine.
 
 ## The samples
 

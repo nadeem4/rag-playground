@@ -9,6 +9,8 @@ question; and one builds the same pipeline three ways.
   `recursive_character` chunker and a lancedb index, then a `retrieve` section that
   searches with `hybrid_rrf` and reranks with `mmr`, and an `answer` section that shows
   the top three pieces with `search`.
+- `cli.yaml`: `pipeline.yaml` with the fake embedder, for the `pandion` command
+  examples at the end of this page. It downloads nothing.
 - `index_samples.py`: runs the pipeline twice and prints each step's note. The second
   run shows every step was reused.
 - `sync_samples.py`: copies two samples into a folder and syncs the index with it, then
@@ -75,3 +77,34 @@ script, `pandion-search-example/` for the search script, `pandion-ask-example/` 
 ask script and `pandion-styles-example/` for the three styles) in the folder you run from. Use `--work` to
 choose another folder. The full format of the pipeline file is in
 [docs/pandion.md](../../docs/pandion.md).
+
+## From the command line
+
+The `pandion` command runs a pipeline file with no script. `cli.yaml` is `pipeline.yaml`
+with the fake embedder, so these commands download nothing. Swap in `pipeline.yaml` for
+real results; its first run downloads `qwen3-embedding-0.6b`. From this folder
+(`examples/pandion`):
+
+```bash
+uv run pandion validate cli.yaml
+uv run pandion index cli.yaml ../../samples/chunking-primer/chunking-primer.pdf --sync
+uv run pandion ask cli.yaml "How big should a chunk be?"
+uv run pandion eval cli.yaml ../../samples/chunking-primer/questions.json
+uv run pandion compare cli.yaml --vary chunk.chunk_size=200,400,800 ../../samples/chunking-primer/chunking-primer.pdf --questions ../../samples/chunking-primer/questions.json
+```
+
+`ask` and `eval` need no `--documents` here, because the sync is remembered. `compare`
+runs the pipeline three times, reusing every step above Chunk from the cache. The index
+goes to `cli-index/` in this folder.
+
+`own_strategies/` reads one Markdown file per document with its own source, which cannot
+sync. So name the files each time. From `own_strategies/`:
+
+```bash
+uv run pandion index pipeline.yaml notes/bees.md notes/bread.md notes/tides.md
+uv run pandion ask pipeline.yaml "What causes the tides?" --documents notes/bees.md notes/bread.md notes/tides.md
+```
+
+Its file lists `plugins: [my_strategies]`. For a file that does not, `--plugins
+my_strategies` imports them from the current folder. See
+[the pandion command](../../docs/pandion.md#the-pandion-command).

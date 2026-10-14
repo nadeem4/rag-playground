@@ -30,6 +30,7 @@ installs the built package in new environments, with and without extras, and tes
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
+- [The pandion command](#the-pandion-command)
 - [Write your own strategy](#write-your-own-strategy)
 - [Loading your strategies](#loading-your-strategies)
 - [Errors](#errors)
@@ -901,6 +902,118 @@ in the Python that runs it. With `--print`, it only prints the command:
 ```bash
 pandion install pipeline.yaml --print
 ```
+
+## The pandion command
+
+The `pandion` command runs a pipeline file without writing any Python. It uses only
+Pandion's public API, the same calls an app makes, so what it prints is what `Pipeline`
+returns.
+
+```bash
+pandion validate pipeline.yaml
+pandion strategies --stage chunk
+pandion index pipeline.yaml report.pdf notes/
+pandion retrieve pipeline.yaml "What is chunking?" --documents report.pdf
+pandion ask pipeline.yaml "What is chunking?" --documents report.pdf
+pandion eval pipeline.yaml questions.json --documents report.pdf
+pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 report.pdf --questions questions.json
+pandion install pipeline.yaml --print
+```
+
+**`pandion validate FILE`** reads the file and checks every step, with no run. It prints
+`pipeline.yaml is a valid pipeline.`, or the reason it is not, such as
+`pandion: The pipeline file has no index section.`
+
+**`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
+its summary. `--stage chunk` shows one stage. `--json` prints only the names, as JSON.
+
+**`pandion index FILE DOC... [--sync] [--through STEP]`** indexes files and folders, the
+same as `p.index.run`. It prints one line per document and step, then the index:
+
+```text
+report.pdf  source  executed  2 ms
+report.pdf  parse  executed  120 ms
+report.pdf  chunk  executed  4 ms
+index  lancedb  executed  310 ms
+```
+
+`--through chunk` stops every document after that step (`parse`, `clean`, `clean.2`,
+`chunk` or `index`), so there is no index line. `--sync` runs `p.index.sync` instead and
+then says, per document, `added`, `changed`, `removed` or `unchanged`.
+
+**`pandion retrieve FILE QUESTION [--k K] [--documents DOC...]`** searches the index and
+prints the hits, one per line, as the rank, the score and the start of the piece:
+
+```text
+1. 0.8231  The capital of France is Paris. It is on the Seine.
+```
+
+`--k` is how many hits the last step keeps; without it the file's `top_k` holds.
+
+**`pandion ask FILE QUESTION [--documents DOC...]`** prints the answer's text: the chat
+answer, or the pieces found when the answer step is `search`.
+
+`--documents` names the documents to search, indexing them first through the cache when
+needed. Each command is a new process, so only a sync is remembered from one command to
+the next: after `pandion index ... --sync`, `retrieve` and `ask` work without
+`--documents`; after a plain `pandion index`, name the documents again.
+
+**`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json]`** runs
+`pandion.evaluate` on a question set (JSON or CSV, as in
+[Evaluate a pipeline](#evaluate-a-pipeline)) and prints the report as Pandion prints it:
+one line per question, then the totals. `--top-k` is how many of the top pieces are
+checked (5 when left out). `--json` prints the report's `to_dict()` instead. It exits
+with 1 when a question could not be scored.
+
+**`pandion compare FILE --vary SPEC DOC... [--questions QUESTIONS] [--top-k K] [--json]`**
+runs `pandion.compare`: the pipeline once per value of one setting, indexing `DOC...`
+each time, so every step above the changed one comes from the cache. It prints one line
+per variant and, with `--questions`, the best one. `--json` prints `to_dict()`.
+
+`--vary` takes `stage.setting=a,b,c`, and each value is read as YAML, so `200` is a
+number and `null` is no value:
+
+- `chunk.chunk_size=200,400,800` changes one setting of the chunk step.
+- `search.use=dense,bm25` changes the strategy itself; the other settings go back to
+  that strategy's own.
+- `clean.2.min_chars=20,40` changes a setting of the second clean step. Clean and rerank
+  are lists of steps, so name the step by its place, from 1. (`min_chars` belongs to
+  `drop_short`, the cleaner in the own_strategies example, where
+  `--vary clean.1.min_chars=20,200` works as is.)
+
+The stages `--vary` can name are parse, clean, chunk, embed, store, rewrite, search and
+rerank. Without `--questions`, compare only indexes, and shows each variant's step; it
+cannot compare a search, rewrite or rerank step that way, because nothing is searched.
+
+**`pandion install FILE [--print]`** installs the extras the file needs, as described in
+[Install what a file needs](#install-what-a-file-needs).
+
+### --plugins
+
+Every command takes `--plugins a,b`: modules to import before the file is read, from the
+current folder first, so the strategies they register can be named in the file. It works
+like `plugins:` in the file, for a file that does not list them. A module that cannot be
+imported is an error that names it. The worked example in
+[examples/pandion/own_strategies/](../examples/pandion/own_strategies) has a strategy at
+every step in its `my_strategies` folder. From that folder:
+
+```bash
+pandion strategies --plugins my_strategies --stage chunk   # per_block is in the list
+pandion validate copy.yaml --plugins my_strategies         # copy.yaml: pipeline.yaml without its plugins: line
+```
+
+Without `--plugins`, the second command fails, because `per_block` and the others are not
+registered.
+
+### Keys and exit codes
+
+A model's key comes from the environment, never from the file or a flag:
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY` and
+`OPENROUTER_API_KEY`. Only the ones that are set are passed on, and a key is never
+printed.
+
+The command exits with 0 when it is done, 1 when a step failed (the line for that step
+says why), and 2 when the file or a flag is wrong (the message starts with `pandion: `).
 
 ## Write your own strategy
 

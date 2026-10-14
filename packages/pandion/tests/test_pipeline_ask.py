@@ -13,7 +13,7 @@ import pytest
 
 from pandion import Answer, Pipeline, QueryPipeline
 from pandion import llm
-from pandion.cli import extras_for
+from pandion.pipeline import extras_for
 from pandion.config import ConfigError
 from pandion.llm import Completion
 from pandion.payloads import Output, RetrievalResult

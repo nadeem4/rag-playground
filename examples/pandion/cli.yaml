@@ -1,0 +1,30 @@
+# pipeline.yaml with the fake embedder, so the pandion command examples in
+# README.md run with no download. The fake embedder is for trying things out:
+# its scores mean little. Use pipeline.yaml for real results.
+path: ./cli-index
+
+index:
+  parse:
+    use: pdfium
+  clean:
+    - use: dedupe_blocks
+  chunk:
+    use: recursive_character
+    chunk_size: 400
+    chunk_overlap: 40
+  embed:
+    use: fake-deterministic
+  store:
+    use: lancedb
+
+retrieve:
+  search:
+    use: hybrid_rrf
+    top_k: 20
+  rerank:
+    - use: mmr
+      top_k: 5
+
+answer:
+  use: search
+  top_k: 3

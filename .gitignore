@@ -51,3 +51,5 @@ skills-lock.json
 
 # The own-strategies example writes its index here
 examples/pandion/own_strategies/work/
+# The pandion command examples write their index here
+examples/pandion/cli-index/

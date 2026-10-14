@@ -64,7 +64,6 @@ import {
   isUnsaved,
   readCurrentId,
   readPipelines,
-  sameGraph,
   savePipeline,
   setCurrentId,
   STARTER_ID,
@@ -293,7 +292,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     } else {
       // A link can carry any name; clamp it to what Save as accepts (M2).
       const name = decoded.name.trim().slice(0, 60).trim() || "Shared pipeline"
-      const existing = readPipelines().find((p) => p.name === name && sameGraph(p.graph, decoded.graph))
+      const existing = readPipelines().find((p) => p.name === name && !isUnsaved(p, decoded.graph))
       if (existing) {
         setCurrentId(existing.id)
       } else {

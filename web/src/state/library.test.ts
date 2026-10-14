@@ -14,11 +14,12 @@ import {
   importResultLine,
   libraryItems,
   parseImport,
+  keptLine,
   pipelineSummary,
   uploadsOf,
 } from "./library"
 import type { SavedExperiment } from "./libraryExperiments"
-import type { SavedPipeline } from "./pipelines"
+import { fromOld, usableGraph, type SavedPipeline } from "./pipelines"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const UP = "ab".repeat(32)
@@ -27,13 +28,16 @@ const NOW = Date.parse("2026-10-04T12:00:00Z")
 
 const pipeline = (id: string, savedAt: string, sha = UP): SavedPipeline => {
   const g = initialGraph(R)
-  return {
-    id,
-    name: `Pipeline ${id}`,
-    savedAt,
-    graph: { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { ...n.config, sha, filename: "notes.pdf" } } : n)) },
-    documents: [{ sha, filename: "notes.pdf" }],
-  }
+  return fromOld(
+    {
+      id,
+      name: `Pipeline ${id}`,
+      savedAt,
+      graph: { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { ...n.config, sha, filename: "notes.pdf" } } : n)) },
+      documents: [{ sha, filename: "notes.pdf" }],
+    },
+    0,
+  )
 }
 
 const experiment = (id: string, savedAt: string, doc: SavedExperiment["doc"] = { sha: SAMPLE, filename: "primer.pdf" }): SavedExperiment => ({
@@ -65,7 +69,8 @@ describe("the library list", () => {
   })
 
   it("sums up a pipeline by its steps and an experiment by its step and recipe count", () => {
-    expect(pipelineSummary(pipeline("p", "2026-10-01T00:00:00Z").graph)).toMatch(/^[^,]+(, [^,]+)+$/)
+    expect(pipelineSummary(usableGraph(pipeline("p", "2026-10-01T00:00:00Z"), R))).toMatch(/^[^,]+(, [^,]+)+$/)
+    expect(pipelineSummary(null)).toBe("")
     expect(experimentSummary(experiment("e", "x"))).toBe("Chunk, 2 recipes")
     expect(experimentSummary({ ...experiment("e", "x"), recipes: [{ transform: "a", config: {} }] })).toBe("Chunk, 1 recipe")
   })
@@ -124,15 +129,27 @@ describe("export and import", () => {
     const back = parseImport(JSON.stringify(file))
     if (!back.ok) throw new Error(back.error)
     expect(back.pipelines.map((p) => p.id)).toEqual(["p1"])
-    expect(back.pipelines[0].graph).toEqual(items[1].kind === "pipeline" ? items[1].pipeline.graph : null)
+    expect(back.pipelines[0].config).toEqual(items[1].kind === "pipeline" ? items[1].pipeline.config : null)
     expect(back.experiments.map((e) => e.id)).toEqual(["e1"])
     expect(Array.from(base64ToBytes(back.documents[0].pdfBase64))).toEqual([37, 80, 68, 70])
+  })
+
+  it("exports a kept item as it was, with its reason, and reads it back kept", () => {
+    const kept = fromOld({ id: "keptkept", name: "From last year", graph: { nodes: [], edges: [] }, savedAt: "2026-01-01T00:00:00Z" }, 0)
+    expect(keptLine(kept)).toMatch(/^Saved by an older version\. It cannot be opened here: .+ It is kept in this browser, and Export keeps a copy\.$/)
+    const back = parseImport(JSON.stringify(buildExport(libraryItems([kept], []), [], NOW)))
+    if (!back.ok) throw new Error(back.error)
+    expect(back.pipelines).toEqual([kept])
+    expect(keptLine(back.pipelines[0])).toBe(keptLine(kept))
   })
 
   it("carries each pipeline's documents, and reads an older file's pipeline as a list of one", () => {
     const file = buildExport(libraryItems([pipeline("p1", "2026-10-01T00:00:00Z")], []), [], NOW)
     expect((file.items[0] as SavedPipeline).documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
-    const { documents: _gone, ...old } = file.items[0] as SavedPipeline & { kind: "pipeline" }
+    // A file an older version made holds a graph, and its document only in the graph's source node.
+    const g = initialGraph(R)
+    const graph = { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { sha: UP, filename: "notes.pdf" } } : n)) }
+    const old = { kind: "pipeline", id: "p1", name: "Old", savedAt: "2026-10-01T00:00:00Z", graph }
     const back = parseImport(JSON.stringify({ ...file, items: [old] }))
     if (!back.ok) throw new Error(back.error)
     expect(back.pipelines[0].documents).toEqual([{ sha: UP, filename: "notes.pdf" }])

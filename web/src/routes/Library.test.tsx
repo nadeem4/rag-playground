@@ -343,3 +343,18 @@ describe("Library", () => {
     expect(document.body.textContent).not.toMatch(/[\u2013\u2014]/)
   })
 })
+
+describe("kept pipelines from an older version", () => {
+  it("lists a kept old pipeline with its reason, without Open, and keeps it on Export", async () => {
+    window.localStorage.setItem(
+      "rag-playground:pipelines:v1",
+      JSON.stringify([{ id: "keptkept", name: "From last year", graph: { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }, documents: [], savedAt: "2026-01-01T00:00:00.000Z" }]),
+    )
+    render(<Library go={vi.fn()} />)
+    expect(await screen.findByText("From last year")).toBeTruthy()
+    expect(screen.getByText(/cannot be opened here/)).toBeTruthy()
+    expect(within(row("From last year")).queryByRole("button", { name: /Open/ })).toBeNull()
+    expect(within(row("From last year")).getByRole("button", { name: "Export" })).toBeTruthy()
+    expect(within(row("From last year")).getByRole("button", { name: "Delete From last year" })).toBeTruthy()
+  })
+})

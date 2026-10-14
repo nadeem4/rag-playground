@@ -101,7 +101,9 @@ export function PipelineBar({
 
   async function copyLink() {
     if (!saved) return
-    const url = `${window.location.origin}/build?pipeline=${encodePipeline(saved.name, saved.graph, saved.documents)}`
+    const drawn = usableGraph(saved, registry)
+    if (!drawn) return
+    const url = `${window.location.origin}/build?pipeline=${encodePipeline(saved.name, drawn, saved.documents)}`
     try {
       await navigator.clipboard.writeText(url)
       setFlash("Link copied")
@@ -128,9 +130,11 @@ export function PipelineBar({
       return {
         value: p.id,
         name: p.name,
-        help: pipelineLine(usable ?? p.graph),
+        help: usable ? pipelineLine(usable) : "",
         group: "Your pipelines",
-        lock: usable ? undefined : { kind: "hard" as const, reason: "This server does not have every step this pipeline uses." },
+        lock: usable
+          ? undefined
+          : { kind: "hard" as const, reason: p.kept ? `Saved by an older version, and it cannot be opened here: ${p.kept.problem}` : "This server does not have every step this pipeline uses." },
         tags: p.id === saved?.id && edited ? editedTag : undefined,
       }
     }),

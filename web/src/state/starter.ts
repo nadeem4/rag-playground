@@ -2,6 +2,7 @@ import { useMemo } from "react"
 
 import type { Registry, SampleCard } from "@/api/types"
 
+import { graphToConfig, type PipelineConfig } from "./config"
 import { useDocument } from "./document"
 import { sampleGraph, type PipelineGraph } from "./graph"
 import { STARTER_ID, type SavedPipeline } from "./pipelines"
@@ -16,7 +17,12 @@ import { STARTER_ID, type SavedPipeline } from "./pipelines"
 
 export const STARTER_NAME = "Starter pipeline"
 
-export type StarterPipeline = Pick<SavedPipeline, "id" | "name" | "documents"> & { graph: PipelineGraph }
+/**
+ * `config` is null only on a server whose default column is not a pipeline
+ * file (it has no search strategy): the Starter is still listed, and pages say
+ * what it lacks.
+ */
+export type StarterPipeline = Pick<SavedPipeline, "id" | "name" | "documents"> & { graph: PipelineGraph; config: PipelineConfig | null }
 
 /** The sample marked default, else the first; null when there are none. */
 export function defaultSample(samples: readonly SampleCard[] | null): SampleCard | null {
@@ -28,7 +34,9 @@ export function starterPipeline(registry: Registry, samples: readonly SampleCard
   const card = (name ? samples?.find((s) => s.name === name) : undefined) ?? defaultSample(samples)
   if (!card) return null
   const doc = { sha: card.sha, filename: card.filename }
-  return { id: STARTER_ID, name: STARTER_NAME, graph: sampleGraph(registry, doc, card.question), documents: [doc] }
+  const graph = sampleGraph(registry, doc, card.question)
+  const c = graphToConfig(graph)
+  return { id: STARTER_ID, name: STARTER_NAME, graph, config: c.ok ? c.pipeline.config : null, documents: [doc] }
 }
 
 /**

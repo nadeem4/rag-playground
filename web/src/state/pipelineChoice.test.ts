@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest"
 import { withDocument } from "./document"
 import { initialGraph, sampleGraph, setTransform } from "./graph"
 import { defaultChoice, ON_BUILD, pipelineChoices } from "./pipelineChoice"
-import { STARTER_ID, type SavedPipeline } from "./pipelines"
+import { fromOld, STARTER_ID, usableGraph, type SavedPipeline } from "./pipelines"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const primer = { sha: "a".repeat(64), filename: "chunking-primer.pdf" }
 const table = { sha: "b".repeat(64), filename: "table-of-figures.pdf" }
-const starter = { id: STARTER_ID, name: "Starter pipeline", graph: sampleGraph(R, primer), documents: [primer] }
-const saved = (id: string, name: string, graph = sampleGraph(R, table)): SavedPipeline => ({ id, name, graph, documents: [table], savedAt: "2026-10-01T00:00:00Z" })
+const configOf = (graph: ReturnType<typeof sampleGraph>) => fromOld({ graph }, 0).config!
+const starter = { id: STARTER_ID, name: "Starter pipeline", graph: sampleGraph(R, primer), config: configOf(sampleGraph(R, primer)), documents: [primer] }
+const saved = (id: string, name: string, graph = sampleGraph(R, table)): SavedPipeline => ({ ...fromOld({ id, name, graph, savedAt: "2026-10-01T00:00:00Z" }, 0), documents: [table] })
 const tokens = (g = sampleGraph(R, table)) => setTransform(g, "chunk", "token_based", R)
 
 describe("the pipelines Evaluate can score", () => {
@@ -66,7 +67,7 @@ describe("which pipeline Evaluate opens on", () => {
   it("opens on the unsaved pipeline on Build, else Build's selection", () => {
     const unsaved = pipelineChoices({ starter, saved: [mine], registry: R, working: tokens(), currentId: null })
     expect(defaultChoice(unsaved, null)).toBe(ON_BUILD)
-    const picked = pipelineChoices({ starter, saved: [mine], registry: R, working: withDocument(mine.graph, table), currentId: "mine1234" })
+    const picked = pipelineChoices({ starter, saved: [mine], registry: R, working: withDocument(usableGraph(mine, R)!, table), currentId: "mine1234" })
     expect(defaultChoice(picked, "mine1234")).toBe("mine1234")
   })
 

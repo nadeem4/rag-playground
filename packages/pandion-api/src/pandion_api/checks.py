@@ -6,6 +6,7 @@ gives it, and the strategies' settings as `pandion.catalog()` describes them.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import pandion
@@ -32,28 +33,32 @@ def _section(config: dict[str, Any], name: str) -> dict[str, Any]:
     return section if isinstance(section, dict) else {}
 
 
-def steps(config: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
-    """(where, stage, use, settings) for every step in `config`."""
-    found: list[tuple[str, str, str, dict[str, Any]]] = []
-
-    def add(where: str, stage: str, block: dict[str, Any]) -> None:
-        found.append((where, stage, block["use"], {k: v for k, v in block.items() if k != "use"}))
-
+def _blocks(config: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+    """(where, stage, block) for every step in `config`; each block is the dict in `config`."""
+    found: list[tuple[str, str, dict[str, Any]]] = []
     # index.embed is not visited: to_dict folds the embedder's settings into it,
     # and no embedder has a read-only setting or a custom endpoint today.
     for section, key, stage in SINGLE:
         block = _block(_section(config, section).get(key))
         if block:
-            add(f"{section}.{key}", stage, block)
+            found.append((f"{section}.{key}", stage, block))
     for section, key, stage in LISTS:
         blocks = _section(config, section).get(key)
         for n, block in enumerate(blocks if isinstance(blocks, list) else [], start=1):
             if _block(block):
-                add(f"{section}.{key}.{n}", stage, block)
+                found.append((f"{section}.{key}.{n}", stage, block))
     answer = _block(config.get("answer"))
     if answer:
-        add("answer", "use_case", answer)
+        found.append(("answer", "use_case", answer))
     return found
+
+
+def steps(config: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
+    """(where, stage, use, settings) for every step in `config`."""
+    return [
+        (where, stage, block["use"], {k: v for k, v in block.items() if k != "use"})
+        for where, stage, block in _blocks(config)
+    ]
 
 
 def _properties(catalog: dict[str, Any], stage: str, use: str) -> dict[str, Any]:
@@ -83,3 +88,15 @@ def changed_read_only_settings(config: dict[str, Any], catalog: dict[str, Any] |
             if prop.get("readOnly") and key in settings and settings[key] != prop.get("default"):
                 found.append(f"{where}.{key}")
     return found
+
+
+def without_read_only(config: dict[str, Any], catalog: dict[str, Any] | None = None) -> dict[str, Any]:
+    """A copy of `config` without any setting marked readOnly (a prompt, a model
+    revision), so each takes its default wherever the copy is read."""
+    catalog = catalog if catalog is not None else pandion.catalog()
+    out = copy.deepcopy(config)
+    for _, stage, block in _blocks(out):
+        for key, prop in _properties(catalog, stage, block["use"]).items():
+            if prop.get("readOnly"):
+                block.pop(key, None)
+    return out

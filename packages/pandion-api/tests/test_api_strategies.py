@@ -180,3 +180,22 @@ def test_a_valid_pipeline_comes_back_as_a_file_pandion_reads(client, tmp_path):
 def test_an_invalid_pipeline_has_no_yaml(client):
     body = client.post("/pipelines/validate", json={"config": {"index": {}}}).json()
     assert body["ok"] is False and "yaml" not in body
+
+
+def test_the_pipeline_file_leaves_out_the_read_only_settings(client):
+    config = {
+        **PIPELINE,
+        "retrieve": {
+            "search": {"use": "dense", "top_k": 3},
+            "rerank": [{"use": "cross_encoder", "revision": "0123456789abcdef0123456789abcdef01234567"}],
+        },
+        "answer": {"use": "chat", "model": "claude-haiku-4-5", "prompt": "Be brief.", "sentence_prompt": "Cite."},
+    }
+    body = client.post("/pipelines/validate", json={"config": config}).json()
+    assert body["ok"] is True, body
+    data = yaml.safe_load(body["yaml"])
+    assert data["retrieve"]["rerank"][0]["use"] == "cross_encoder"
+    assert "revision" not in data["retrieve"]["rerank"][0]
+    assert data["answer"]["model"] == "claude-haiku-4-5"
+    assert "prompt" not in data["answer"] and "sentence_prompt" not in data["answer"]
+    assert "Be brief." not in body["yaml"] and "0123456789abcdef0123456789abcdef01234567" not in body["yaml"]

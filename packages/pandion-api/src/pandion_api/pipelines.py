@@ -15,6 +15,7 @@ from fastapi import HTTPException, Request
 
 from pandion import ConfigError, Pipeline
 from pandion.evaluation import COMPARE_STAGES
+from pandion_api.checks import without_read_only
 
 NOT_A_MAPPING = "The pipeline must be a mapping of settings, in the pipeline file's shape."
 PLUGINS_REFUSED = (
@@ -28,8 +29,11 @@ YAML_PATH = "./pandion-index"
 
 
 def as_yaml(config: dict[str, Any]) -> str:
-    """`config` (the file's shape, without the server's folder) as a pipeline file."""
-    return yaml.safe_dump({"path": YAML_PATH, **config}, sort_keys=False, allow_unicode=True)
+    """`config` (the file's shape, without the server's folder) as a pipeline file.
+    Read-only settings (the prompts, the cross-encoder's revision) are left out,
+    so the file takes their defaults."""
+    data = {"path": YAML_PATH, **without_read_only(config)}
+    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
 
 
 def problems(*sentences: str) -> HTTPException:

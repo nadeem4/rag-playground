@@ -43,6 +43,14 @@ ONE_OR_THE_OTHER = (
     "Send questions (a question set, to score each variant) or question (one "
     "question, to see each variant's results), not both."
 )
+NO_THROUGH_WITH_QUESTION = (
+    "through stops an index-only comparison after a step; a comparison on one "
+    "question searches, so send question or through, not both."
+)
+ANSWER_NEEDS_QUESTION = (
+    "answer goes on to the answer step for one question, so it needs question; "
+    "a comparison with questions scores the search and has no answer step."
+)
 
 
 def _checked(questions: QuestionSet) -> list[dict[str, Any]]:
@@ -174,6 +182,10 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
         raise problems(f"A comparison runs at most {most} variants; this one has {len(body.variants)}.")
     if body.question is not None and body.questions is not None:
         raise HTTPException(status_code=400, detail=ONE_OR_THE_OTHER)
+    if body.question is not None and body.through is not None:
+        raise HTTPException(status_code=400, detail=NO_THROUGH_WITH_QUESTION)
+    if body.answer and body.question is None:
+        raise HTTPException(status_code=400, detail=ANSWER_NEEDS_QUESTION)
     if not isinstance(body.config, dict):
         raise problems(NOT_A_MAPPING)
     # Reading and checking every variant's pipeline is Pandion's work: off the loop.

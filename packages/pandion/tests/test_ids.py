@@ -165,3 +165,8 @@ def test_an_added_setting_without_a_plain_default_is_refused():
         class _Required(AddedSettings):
             added: ClassVar[tuple[str, ...]] = ("size",)
             size: int
+
+
+def test_the_added_names_are_worked_out_once_when_the_class_is_defined():
+    assert _Child.__added_names__ == ("ratio", "depth")
+    assert _Before.__added_names__ == ()

@@ -105,6 +105,9 @@ class AddedSettings(BaseModel):
     """
 
     added: ClassVar[tuple[str, ...]] = ()
+    #: Every name in `added` across the class and its parents, worked out once
+    #: when the class is defined.
+    __added_names__: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def _added_names(cls) -> tuple[str, ...]:
@@ -118,7 +121,8 @@ class AddedSettings(BaseModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
-        for name in cls._added_names():
+        cls.__added_names__ = cls._added_names()
+        for name in cls.__added_names__:
             field = cls.model_fields.get(name)
             if field is None:
                 raise TypeError(
@@ -136,7 +140,7 @@ class AddedSettings(BaseModel):
     def _added_left_out_at_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data = handler(self)
         fields = type(self).model_fields
-        for name in type(self)._added_names():
+        for name in type(self).__added_names__:
             if name in data and getattr(self, name) == fields[name].default:
                 del data[name]
         return data

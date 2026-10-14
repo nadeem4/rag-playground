@@ -7,13 +7,14 @@ records the prompt and returns whatever reply the test names.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 import pandion.plugins.rerank.llm_rerank as lr
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
+from pandion.plugins.rerank.llm_rerank import SYSTEM_PROMPT, LlmRerank, LlmRerankConfig
 from pandion import llm
 from pandion.llm import CHAT_MODELS, Completion
 
@@ -402,9 +403,6 @@ def test_the_explanation_never_names_the_server_variable():
         assert "_API_KEY" not in settings and "key button" in settings
 
 
-from pandion.plugins.rerank.llm_rerank import SYSTEM_PROMPT, LlmRerankConfig
-
-
 def test_the_prompt_and_budgets_are_settings(reply, tmp_path):
     fake = reply("2, 1")
     rerank(["a" * 100, "b" * 100], tmp_path, prompt="Order them.", text_budget_chars=10, max_tokens=300)
@@ -430,3 +428,8 @@ def test_the_new_rerank_settings_are_left_out_of_the_id_at_their_defaults():
 )
 def test_a_new_rerank_setting_moves_the_id_when_changed(key, value):
     assert LlmRerankConfig(**{key: value}).model_dump(mode="json")[key] == value
+
+
+def test_an_empty_prompt_is_refused():
+    with pytest.raises(ValidationError):
+        LlmRerankConfig(prompt="")

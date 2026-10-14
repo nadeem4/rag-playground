@@ -110,6 +110,7 @@ class LlmRerankConfig(AddedSettings):
     #: Added after version 3's results were stored; see pandion.ids.AddedSettings.
     prompt: str = Field(
         default=SYSTEM_PROMPT,
+        min_length=1,
         title="Prompt",
         description="The instructions the model is given.",
         json_schema_extra=_READ_ONLY,

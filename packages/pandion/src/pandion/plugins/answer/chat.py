@@ -158,6 +158,7 @@ class ChatConfig(AddedSettings):
     #: Added after version 3's results were stored; see pandion.ids.AddedSettings.
     prompt: str = Field(
         default=SYSTEM_PROMPT,
+        min_length=1,
         title="Prompt",
         description=(
             "The instructions the model is given when it cites with its own "
@@ -167,6 +168,7 @@ class ChatConfig(AddedSettings):
     )
     sentence_prompt: str = Field(
         default=SENTENCE_PROMPT,
+        min_length=1,
         title="Numbered sentence prompt",
         description="The instructions the model is given when it cites numbered sentences.",
         json_schema_extra=_READ_ONLY,

@@ -12,13 +12,19 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Output, ParsedDoc
 from pandion.ports import RunContext
 from pandion.plugins.answer import chat as chat_module
 from pandion.plugins.answer._grounding import number_sources
-from pandion.plugins.answer.chat import SENTENCE_PROMPT, ChatConfig, ChatUseCase
+from pandion.plugins.answer.chat import (
+    SENTENCE_PROMPT,
+    SYSTEM_PROMPT,
+    ChatConfig,
+    ChatUseCase,
+)
 from pandion import llm
 from tests.steps.rerank_fakes import write_index
 from tests.steps.test_use_case_chat import (  # noqa: F401  (fixtures)
@@ -416,9 +422,6 @@ def test_the_plugin_module_still_imports_no_sdk():
     assert not hasattr(chat_module, "openai") and not hasattr(chat_module, "anthropic")
 
 
-from pandion.plugins.answer.chat import SYSTEM_PROMPT
-
-
 def test_the_prompt_and_max_tokens_are_settings(fake, pipeline):
     fake.reply = response(text_block("An answer."))
     ask(pipeline, prompt="Answer in one word.", max_tokens=2000)
@@ -447,3 +450,9 @@ def test_the_new_chat_settings_are_left_out_of_the_id_at_their_defaults():
 )
 def test_a_new_chat_setting_moves_the_id_when_changed(key, value):
     assert ChatConfig(**{key: value}).model_dump(mode="json")[key] == value
+
+
+@pytest.mark.parametrize("key", ["prompt", "sentence_prompt"])
+def test_an_empty_chat_prompt_is_refused(key):
+    with pytest.raises(ValidationError):
+        ChatConfig(**{key: ""})

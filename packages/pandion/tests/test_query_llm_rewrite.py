@@ -17,6 +17,7 @@ from pandion.plugins.query.llm_rewrite import (
     UNUSABLE_NOTE,
     LlmRewrite,
     LlmRewriteConfig,
+    system_prompt,
 )
 from pandion import llm
 from pandion.llm import CHAT_MODELS, Completion
@@ -297,9 +298,6 @@ def test_user_facing_text_has_no_long_dashes():
     assert "\N{EM DASH}" not in text and "\N{EN DASH}" not in text
 
 
-from pandion.plugins.query.llm_rewrite import system_prompt
-
-
 def test_the_prompt_and_budgets_are_settings(reply, tmp_path):
     fake = reply(REWRITE)
     rewrite(tmp_path, doc=parsed_doc("EXPERIENCE " + "x" * 3000),
@@ -337,3 +335,11 @@ def test_the_new_rewrite_settings_are_left_out_of_the_id_at_their_defaults():
 )
 def test_a_new_rewrite_setting_moves_the_id_when_changed(key, value):
     assert LlmRewriteConfig(**{key: value}).model_dump(mode="json")[key] == value
+
+
+def test_a_blank_prompt_is_the_built_in_one_and_the_field_says_so(reply, tmp_path):
+    fake = reply(REWRITE)
+    rewrite(tmp_path, prompt="   ")
+    assert fake.calls[0]["system"] == system_prompt("document words")
+    description = LlmRewriteConfig.model_json_schema()["properties"]["prompt"]["description"]
+    assert "spaces only" in description

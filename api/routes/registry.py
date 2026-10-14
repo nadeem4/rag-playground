@@ -63,6 +63,14 @@ def _without_custom_models(schema: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def read_only_settings(properties: dict[str, Any]) -> list[str]:
+    """The settings a config schema's `properties` mark `readOnly` (the prompts).
+
+    The registry leaves them out of the forms and the run routes refuse a
+    changed one, both through this function, so the two cannot drift."""
+    return [key for key, prop in properties.items() if prop.get("readOnly")]
+
+
 def _without_read_only(schema: dict[str, Any]) -> dict[str, Any]:
     """A copy without the settings marked readOnly (the prompts): the forms
     cannot show a setting read-only yet, and a visitor must not edit them."""
@@ -70,7 +78,7 @@ def _without_read_only(schema: dict[str, Any]) -> dict[str, Any]:
     for transforms in out.values():
         for info in transforms.values():
             props = info["config_schema"].get("properties", {})
-            for key in [k for k, v in props.items() if v.get("readOnly")]:
+            for key in read_only_settings(props):
                 del props[key]
     return out
 

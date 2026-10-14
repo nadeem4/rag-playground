@@ -127,8 +127,8 @@ class LlmRewriteConfig(TextQueryConfig, AddedSettings):
         default="",
         title="Prompt",
         description=(
-            "The instructions the model is given. Empty uses the built-in ones "
-            "for the style."
+            "The instructions the model is given. Empty, or spaces only, uses "
+            "the built-in ones for the style."
         ),
         json_schema_extra=_READ_ONLY,
     )

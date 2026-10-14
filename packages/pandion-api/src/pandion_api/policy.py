@@ -76,7 +76,11 @@ class Policy:
 
     def check_run(self, config: dict[str, Any], request: Request) -> None:
         """Refuse a pipeline before it runs (raise HTTPException). `config` is
-        the pipeline file's shape, with the server's path and models in it."""
+        the pipeline file's shape, with the server's path and models in it.
+        It holds each value as the request sent it, not as Pandion will read
+        it: a number may come as a string ("16001") or a float (16001.0) that
+        pydantic later makes an int. A site that compares numbers must coerce
+        them first, for example with `pydantic.TypeAdapter(int).validate_python`."""
 
     def public_endpoints_only(self, request: Request) -> bool:
         """A step that calls a custom model endpoint accepts only a public https address."""

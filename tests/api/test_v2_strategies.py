@@ -143,3 +143,65 @@ def test_the_old_sweeps_route_caps_a_text_budget_as_v2_does(client):
     )
     assert r.status_code == 403
     assert r.json()["detail"] == f"rr.text_budget_chars is {cap + 1}; the playground allows at most {cap}."
+
+
+# --- a cap reads the value as pydantic will: a string or a float is no way around it ---
+
+#: Sent as a string or a float, each is the number pydantic makes of it.
+OVER_THE_CAP = ["999999", 999999.0, "16001"]
+AT_THE_CAP = ["16000", 16000.0]
+
+
+def _answer(n) -> dict:
+    return {**PIPELINE, "answer": {"use": "chat", "max_tokens": n}}
+
+
+@pytest.mark.parametrize("sent", OVER_THE_CAP)
+def test_a_cap_cannot_be_passed_with_a_string_or_a_float_on_validate(client, sent):
+    r = validate(client, _answer(sent))
+    assert r.status_code == 403
+    assert r.json()["detail"] == f"answer.max_tokens is {int(float(sent))}; the playground allows at most 16000."
+
+
+@pytest.mark.parametrize("sent", AT_THE_CAP)
+def test_a_string_or_a_float_at_the_cap_passes_it_on_validate(client, sent):
+    assert validate(client, _answer(sent)).json()["ok"] is True
+
+
+@pytest.mark.parametrize("sent", OVER_THE_CAP)
+def test_a_cap_cannot_be_passed_with_a_string_or_a_float_on_a_v2_run(client, sent):
+    sample = client.post("/api/sources/sample").json()
+    r = client.post("/api/v2/runs", json={"config": _answer(sent), "documents": [sample["sha"]], "through": "parse"})
+    assert r.status_code == 403
+    assert r.json()["detail"] == f"answer.max_tokens is {int(float(sent))}; the playground allows at most 16000."
+
+
+@pytest.mark.parametrize("sent", AT_THE_CAP)
+def test_a_string_or_a_float_at_the_cap_passes_it_on_a_v2_run(client, sent):
+    sample = client.post("/api/sources/sample").json()
+    r = client.post("/api/v2/runs", json={"config": _answer(sent), "documents": [sample["sha"]], "through": "parse"})
+    assert r.status_code == 202
+
+
+def test_a_text_budget_cannot_be_passed_with_a_string(client):
+    import pandion
+
+    props = pandion.catalog()["rerank"]["llm_rerank"]["config_schema"]["properties"]
+    cap = 4 * props["text_budget_chars"]["default"]
+    config = {**PIPELINE, "retrieve": {**PIPELINE["retrieve"], "rerank": [{"use": "llm_rerank", "text_budget_chars": str(cap + 1)}]}}
+    r = validate(client, config)
+    assert r.status_code == 403
+    assert r.json()["detail"] == f"retrieve.rerank.1.text_budget_chars is {cap + 1}; the playground allows at most {cap}."
+
+
+@pytest.mark.parametrize("sent", OVER_THE_CAP)
+def test_the_old_runs_route_refuses_a_string_or_a_float_over_the_cap(client, sent):
+    r = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": sent})})
+    assert r.status_code == 403
+    assert r.json()["detail"] == f"chat.max_tokens is {int(float(sent))}; the playground allows at most 16000."
+
+
+@pytest.mark.parametrize("sent", AT_THE_CAP)
+def test_the_old_runs_route_lets_a_string_or_a_float_at_the_cap_pass_it(client, sent):
+    r = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": sent})})
+    assert r.status_code != 403

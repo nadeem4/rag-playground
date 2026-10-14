@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
+from pydantic import TypeAdapter, ValidationError
 
 import pandion
 from pandion_api import Policy
@@ -60,7 +61,7 @@ def step_over_limit(
     catalog = catalog if catalog is not None else pandion.catalog()
     props = catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {})
     for key, value in settings.items():
-        if not isinstance(value, int) or key not in props:
+        if key not in props:
             continue
         if key == "max_tokens" and "model" in props:
             cap = MAX_OUTPUT_TOKENS
@@ -68,9 +69,22 @@ def step_over_limit(
             cap = BUDGET_TIMES * props[key]["default"]
         else:
             continue
-        if value > cap:
-            return f"{where}.{key} is {value}; the playground allows at most {cap}."
+        number = _as_int(value)
+        if number is not None and number > cap:
+            return f"{where}.{key} is {number}; the playground allows at most {cap}."
     return None
+
+
+_INT = TypeAdapter(int)
+
+
+def _as_int(value: Any) -> int | None:
+    """`value` as the number pydantic makes of it later ("16001" and 16001.0 are
+    16001), or None when it is no whole number: Pandion's own check refuses that."""
+    try:
+        return _INT.validate_python(value)
+    except ValidationError:
+        return None
 
 
 def _mint_visitor(request: Request, response: Response) -> None:
@@ -214,7 +228,12 @@ class PlaygroundPolicy(Policy):
         URL a visitor chose. In every mode, no changed prompt or model revision:
         the app has no control for them, so a changed one comes from a crafted
         request or a shared link, and would run on another visitor's key. Then
-        no model output or text budget above the playground's caps."""
+        no model output or text budget above the playground's caps.
+
+        `config` holds each value as the request sent it, not yet validated: a
+        number may come as a string ("16001") or a float (16001.0), which
+        pydantic later makes an int. So a cap reads the value as pydantic will
+        (`_as_int`) before comparing it."""
         if demo.enabled() and custom_endpoint_steps(config):
             raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
         if changed_read_only_settings(config):

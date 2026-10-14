@@ -42,7 +42,7 @@ how it fits with the frontend.
   - `questions.py`: the question set template to fill in.
   - `settings.py`: whether demo mode is on, and its limits.
   - `health.py`: whether the app is up, and which commit and version it runs.
-  - `registry.py`: what each step is for, and the strategy list as the playground shows it.
+  - `registry.py`: `GET /api/stages`, what each step is for. Its `served_catalog` also hides read-only and test-only settings from the strategy list pandion-api serves.
   - `sources.py`: adds a sample to the store like an upload, and holds the helpers for
     the demo's upload records.
 

@@ -5,6 +5,8 @@
     pandion index pipeline.yaml report.pdf notes/ [--sync] [--through chunk]
     pandion retrieve pipeline.yaml "What is chunking?" [--k 5] [--documents report.pdf]
     pandion ask pipeline.yaml "What is chunking?" [--documents report.pdf]
+    pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json]
+    pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
 
 Every command takes --plugins a,b: modules imported before the file is read,
@@ -23,8 +25,11 @@ import subprocess
 import sys
 from typing import Any
 
+import yaml
+
 import pandion
 from pandion import ConfigError, Pipeline
+from pandion.evaluation import COMPARE_STAGES, QuestionSetError
 
 #: Pandion's name for each key, and the environment variable it is read from.
 ENV_KEYS = {
@@ -177,6 +182,74 @@ def cmd_ask(args: argparse.Namespace) -> int:
     return 0
 
 
+VARY_FORM = "--vary takes stage.setting=a,b,c, such as chunk.chunk_size=200,400,800 or clean.2.min_chars=20,40"
+
+
+def parse_vary(text: str, config: dict[str, Any]) -> tuple[str, list[Any]]:
+    """`stage.setting=a,b,c` as (stage, variants): the stage's block with that one setting changed, once per value.
+    `stage.use=a,b` varies the strategy itself. Clean and rerank are lists: name the step, `clean.2.min_chars=...`."""
+    key, sep, values = text.partition("=")
+    parts = key.split(".")
+    if not sep or not values or len(parts) not in (2, 3):
+        raise ValueError(f"{VARY_FORM}; not '{text}'.")
+    stage, setting = parts[0], parts[-1]
+    section = COMPARE_STAGES.get(stage)
+    if section is None:
+        raise ValueError(f"--vary names a stage compare can vary: one of {', '.join(COMPARE_STAGES)}; not '{stage}'.")
+    current = (config.get(section) or {}).get(stage)
+    listed = stage in ("clean", "rerank")
+    if listed:
+        steps = list(current or [])
+        if len(parts) != 3 or not parts[1].isdigit():
+            raise ValueError(f"{stage} is a list of steps: name one, such as {stage}.1.{setting}=...")
+        n = int(parts[1])
+        if not 1 <= n <= len(steps):
+            raise ValueError(f"The pipeline has {len(steps)} {stage} step(s); {stage}.{n} is not one of them.")
+    elif len(parts) != 2:
+        raise ValueError(f"{VARY_FORM}; not '{text}'.")
+    elif current is None:
+        raise ValueError(f"The pipeline has no {section}.{stage} step to vary.")
+
+    def changed(block: Any, value: Any) -> dict[str, Any]:
+        base = dict(block) if isinstance(block, dict) else {"use": block}
+        return {"use": value} if setting == "use" else {**base, setting: value}
+
+    variants: list[Any] = []
+    for raw in values.split(","):
+        value = yaml.safe_load(raw.strip())
+        if listed:
+            new = [dict(s) if isinstance(s, dict) else {"use": s} for s in current]
+            new[n - 1] = changed(new[n - 1], value)
+            variants.append(new)
+        else:
+            variants.append(changed(current, value))
+    return stage, variants
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    p = _load(args)
+    try:
+        report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
+    except QuestionSetError as exc:
+        raise ValueError(str(exc)) from None
+    print(json.dumps(report.to_dict(), indent=2) if args.json else report)
+    return 0 if all(q.error is None for q in report.questions) else 1
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    p = _load(args)
+    stage, variants = parse_vary(args.vary, p.to_dict())
+    try:
+        results = pandion.compare(
+            p, stage, variants, args.documents, args.questions,
+            top_k=args.top_k, credentials=credentials_from_env(),
+        )
+    except QuestionSetError as exc:
+        raise ValueError(str(exc)) from None
+    print(json.dumps(results.to_dict(), indent=2) if args.json else results)
+    return 0 if all(c.index.ok for c in results) else 1
+
+
 def cmd_install(args: argparse.Namespace) -> int:
     extras = _load(args).extras()
     package = f"pandion[{','.join(extras)}]" if extras else "pandion"
@@ -216,6 +289,21 @@ def parser() -> argparse.ArgumentParser:
         sub.add_argument("--documents", nargs="+", help="search exactly these documents, indexing them first if needed")
         if name == "retrieve":
             sub.add_argument("--k", type=int, help="how many pieces to show")
+
+    sub = command("eval", "evaluate a pipeline on a question set", cmd_eval)
+    sub.add_argument("config")
+    sub.add_argument("questions", help="a question set, JSON or CSV, in the samples' format")
+    sub.add_argument("--top-k", dest="top_k", type=int, default=5, help="how many of the top pieces are checked (default 5)")
+    sub.add_argument("--documents", nargs="+", help="evaluate on exactly these documents, indexing them first if needed")
+    sub.add_argument("--json", action="store_true", help="print the report as JSON")
+
+    sub = command("compare", "run a pipeline once per value of one setting", cmd_compare)
+    sub.add_argument("config")
+    sub.add_argument("--vary", required=True, help="stage.setting=a,b,c, such as chunk.chunk_size=200,400,800")
+    sub.add_argument("documents", nargs="+", help="files or folders to index")
+    sub.add_argument("--questions", help="a question set: evaluate each variant and name the best")
+    sub.add_argument("--top-k", dest="top_k", type=int, default=5)
+    sub.add_argument("--json", action="store_true", help="print the comparison as JSON")
 
     sub = command("install", "install the extras a pipeline file needs", cmd_install)
     sub.add_argument("config")

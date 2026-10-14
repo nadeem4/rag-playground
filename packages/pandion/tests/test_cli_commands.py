@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from pandion.cli import parse_vary
 from pdfs import SAMPLE_PAGES, build_pdf
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -105,3 +106,60 @@ def test_plugins_name_modules_to_import_before_the_file_is_read(tmp_path):
     assert with_plugins.returncode == 0, with_plugins.stderr
     missing = pandion("validate", file, "--plugins", "no_such_module", cwd=EXAMPLE)
     assert missing.returncode == 2 and "no_such_module" in missing.stderr
+
+
+QUESTIONS = [{"id": "capital", "question": "What is the capital of France?", "gold_answers": ["The capital of France is Paris."]}]
+
+
+@pytest.fixture
+def with_questions(folder: Path) -> Path:
+    (folder / "questions.json").write_text(json.dumps(QUESTIONS), encoding="utf-8")
+    return folder
+
+
+def test_eval_prints_each_question_and_the_totals(with_questions):
+    out = pandion("eval", "pipeline.yaml", "questions.json", "--documents", "report.pdf", "--top-k", "3", cwd=with_questions)
+    assert out.returncode == 0, out.stderr
+    assert "capital found at rank" in out.stdout and "Found 1 of 1" in out.stdout
+    data = json.loads(pandion("eval", "pipeline.yaml", "questions.json", "--documents", "report.pdf", "--json", cwd=with_questions).stdout)
+    assert data["total"] == 1 and data["questions"][0]["id"] == "capital"
+
+
+def test_compare_varies_one_setting_and_names_the_best(with_questions):
+    out = pandion("compare", "pipeline.yaml", "--vary", "chunk.chunk_size=70,200", "report.pdf", "--questions", "questions.json", cwd=with_questions)
+    assert out.returncode == 0, out.stderr
+    assert "chunk recursive_character chunk_size=70" in out.stdout
+    assert "chunk recursive_character chunk_size=200" in out.stdout
+    assert "Best:" in out.stdout or "No variant found an answer." in out.stdout
+
+
+def test_compare_without_questions_shows_each_variants_step(with_questions):
+    out = pandion("compare", "pipeline.yaml", "--vary", "chunk.chunk_size=70,200", "report.pdf", "--json", cwd=with_questions)
+    data = json.loads(out.stdout)
+    assert [c["variant"]["chunk_size"] for c in data["comparisons"]] == [70, 200]
+
+
+@pytest.mark.parametrize(
+    ("spec", "stage", "variants"),
+    [
+        ("chunk.chunk_size=200,400", "chunk", [{"use": "recursive_character", "chunk_size": 200, "chunk_overlap": 10}, {"use": "recursive_character", "chunk_size": 400, "chunk_overlap": 10}]),
+        ("search.use=dense,bm25", "search", [{"use": "dense"}, {"use": "bm25"}]),
+        ("search.top_k=3,null", "search", [{"use": "dense", "top_k": 3}, {"use": "dense", "top_k": None}]),
+    ],
+)
+def test_parse_vary_reads_each_value_as_yaml(spec, stage, variants):
+    assert parse_vary(spec, PIPELINE) == (stage, variants)
+
+
+def test_parse_vary_reads_a_place_in_a_list():
+    config = {**PIPELINE, "index": {**PIPELINE["index"], "clean": [{"use": "dedupe_blocks"}, {"use": "drop_short", "min_chars": 10}]}}
+    stage, variants = parse_vary("clean.2.min_chars=20,40", config)
+    assert stage == "clean"
+    assert variants[1] == [{"use": "dedupe_blocks"}, {"use": "drop_short", "min_chars": 40}]
+
+
+@pytest.mark.parametrize("spec", ["chunk", "chunk.chunk_size", "answer.use=chat", "clean.min_chars=1", "clean.3.min_chars=1"])
+def test_a_wrong_vary_says_how_to_write_it(spec):
+    config = {**PIPELINE, "index": {**PIPELINE["index"], "clean": [{"use": "dedupe_blocks"}]}}
+    with pytest.raises(ValueError):
+        parse_vary(spec, config)

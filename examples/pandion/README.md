@@ -75,3 +75,21 @@ script, `pandion-search-example/` for the search script, `pandion-ask-example/` 
 ask script and `pandion-styles-example/` for the three styles) in the folder you run from. Use `--work` to
 choose another folder. The full format of the pipeline file is in
 [docs/pandion.md](../../docs/pandion.md).
+
+## From the command line
+
+The same file runs with the `pandion` command, with no script. From this folder:
+
+```bash
+pandion validate pipeline.yaml
+pandion index pipeline.yaml notes/ --sync
+pandion ask pipeline.yaml "How big should a chunk be?"
+```
+
+`pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ --questions questions.json`
+runs the pipeline three times, reusing every step above Chunk from the cache. The
+samples each have a `questions.json`, such as `../../samples/chunking-primer/questions.json`.
+
+`own_strategies/` works the same way: its file lists `plugins: [my_strategies]`, and for a
+file that does not, `--plugins my_strategies` imports them from the current folder. See
+[the pandion command](../../docs/pandion.md#the-pandion-command).

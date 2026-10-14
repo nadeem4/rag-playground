@@ -180,13 +180,18 @@ export function rejectedRecipe(variants: Variant[], previous: Variant[], fields:
 }
 
 /**
- * One setting a Pandion problem sentence is about, as `pandion.config` words it:
- * "index.chunk (sentence_window): overlap_sentences: Overlap must be ...".
- * Null for a sentence about anything else.
+ * The settings a Pandion problem sentence is about, as `pandion.stages` words it:
+ * "index.chunk (sentence_window): overlap_sentences: Overlap must be ...", with
+ * several settings joined by "; ". Each comes back with its own sentence. Null
+ * for a sentence about anything else, or about the whole step ("settings: ..."),
+ * which no one setting owns.
  */
-export function settingProblem(sentence: string): { transform: string; field: string; message: string } | null {
-  const m = /^[\w.]+(?: step \d+)? \(([\w-]+)\): ([\w.]+): (.+)$/.exec(sentence)
-  return m ? { transform: m[1], field: m[2], message: m[3] } : null
+export function settingProblems(sentence: string): { transform: string; settings: { field: string; message: string }[] } | null {
+  const m = /^[\w.]+(?: step \d+)? \(([\w-]+)\): (.+?)\.?$/.exec(sentence)
+  if (!m) return null
+  const settings = m[2].split("; ").map((part) => /^([\w.]+): (.+)$/.exec(part))
+  if (settings.some((x) => !x || x[1] === "settings")) return null
+  return { transform: m[1], settings: settings.map((x) => ({ field: x![1], message: `${x![2]}.` })) }
 }
 
 // ------------------------------------------------------------------- plan --
@@ -721,7 +726,9 @@ export function variantBlock(target: GraphNode, v: Variant, p: WorkingPipeline, 
   const own: Step = { use: v.transform, ...strip(v.config, stage === "rewrite" ? QUESTION_KEYS : []) }
   if (stage === "clean" || stage === "rerank") {
     const list = [...((stage === "clean" ? p.config.index.clean : p.config.retrieve?.rerank) ?? [])]
-    list[Math.max(stackPlace(graph, target), 0)] = own
+    const place = stackPlace(graph, target)
+    // A card the column does not have changes no place in the stack.
+    if (place >= 0) list[place] = own
     return list
   }
   return own
@@ -769,7 +776,14 @@ export function serverRanks(result: ComparisonResult | null, n: number): (number
   })
 }
 
-/** The recipes the server names best (pandion's Comparisons.best), by place; none for a stopped run, which is compared with nothing. */
+/**
+ * The recipes the server names best (pandion's Comparisons.best), by place. None
+ * for a stopped run, which is compared with nothing, and none when every scored
+ * recipe is best.
+ */
 export function serverBest(result: ComparisonResult | null): number[] {
-  return result && !result.cancelled ? result.best : []
+  if (!result || result.cancelled) return []
+  // When every scored recipe ties for best, the mark tells nothing the finding does not.
+  const scored = result.comparisons.filter((c) => c.report).length
+  return result.best.length < scored ? result.best : []
 }

@@ -62,10 +62,9 @@ const scored = (ranks: (number | null)[], best: number[]) => ({
   cancelled: false,
 })
 
-/** Wait until the page has read the sample's questions, so Run sends their gold passages. */
+/** Wait until the page says the question's answer is known, so Run sends its gold passages. */
 async function questionsRead() {
-  // The questions may be read now or already be in the page's cache from an earlier test: a few turns of the loop cover both.
-  for (let k = 0; k < 5; k++) await act(() => new Promise((r) => setTimeout(r, 0)))
+  await screen.findByTestId("scored-note")
 }
 
 /** The body of the comparison the page sent. */
@@ -972,6 +971,43 @@ describe("a run the server rejects", () => {
     expect(screen.queryByRole("dialog")).toBeNull()
     expect(columns()).toHaveLength(3)
   })
+
+  const refused = (detail: unknown) => new Response(JSON.stringify({ detail }), { status: 422 })
+
+  it("gives each refused setting its own title under the recipe, and opens the first one's editor", async () => {
+    serve({}, {
+      "/api/v2/comparisons": refused({
+        problems: ["index.chunk (sentence_window): sentences_per_chunk: Input should be greater than 0; overlap_sentences: Overlap must be smaller than the number of sentences per chunk."],
+      }),
+    })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const card = screen.getByRole("article", { name: "Recipe 3" })
+    const alert = await within(card).findByRole("alert")
+    expect(alert.textContent).toBe("Sentences per piece: Input should be greater than 0. Overlap sentences: Overlap must be smaller than the number of sentences per chunk.")
+    expect(within(card).getByRole("dialog", { name: "Sentences per piece" })).toBeTruthy()
+  })
+
+  it("says a problem with the whole step above the cards, in the server's own words", async () => {
+    const sentence = "index.chunk (sentence_window): settings: Value error, overlap must be smaller."
+    serve({}, { "/api/v2/comparisons": refused({ problems: [sentence] }) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toBe(sentence)
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("keeps the server's message for a refusal in the old field shape", async () => {
+    serve({}, { "/api/v2/comparisons": refused({ node_id: "chunk", errors: [{ loc: ["chunk_size"], msg: "Input should be greater than 0.", type: "value_error" }] }) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toContain("Input should be greater than 0.")
+  })
 })
 
 describe("after a run on one of the sample's own questions", () => {
@@ -1007,6 +1043,8 @@ describe("after a run on one of the sample's own questions", () => {
     es.emit(seq, { event: "stream_end", status: "finished", ok: true })
     await waitFor(() => expect(screen.getByTestId("compare-finding").textContent).toMatch(/^All three put the answer first\. /))
     await waitFor(() => expect(screen.getAllByText(", holds the answer").length).toBe(3))
+    // All three tie for best, so the mark would say nothing the finding does not: no recipe shows it.
+    expect(text()).not.toMatch(/Best/)
     expect(posted()).toMatchObject({ stage: "search", questions: [{ id: "question", question, gold_answers: ["Overlap protects answers that straddle"], tags: [] }], top_k: 5 })
     expect(posted()).not.toHaveProperty("question")
   })
@@ -1087,8 +1125,8 @@ describe("the server's scores", () => {
 
   it("names no best when the run was stopped", async () => {
     await runScored({ ...scored([1, null, null], [0]), cancelled: true }, {}, { status: "cancelled", ok: false })
+    // A scored run's finding waits for its result, so the finding showing means the result was read.
     await screen.findByTestId("compare-finding")
-    await new Promise((r) => setTimeout(r, 50))
     expect(heads().some((h) => /Best/.test(h ?? ""))).toBe(false)
   })
 
@@ -1096,6 +1134,9 @@ describe("the server's scores", () => {
     await runScored(EMPTY_RESULT, { "/api/v2/runs/r1": new Response("{}", { status: 500 }) })
     expect(await screen.findByText("The scores could not be read. Run it again.")).toBeTruthy()
     expect(text()).not.toMatch(/Best/)
+    // With no scores, nothing says a recipe missed the answer.
+    expect((await screen.findByTestId("compare-finding")).textContent).not.toMatch(/answer/)
+    expect(text()).not.toMatch(/Does not return the answer|None of them returns the answer/)
   })
 })
 

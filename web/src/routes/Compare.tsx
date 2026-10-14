@@ -83,7 +83,7 @@ import {
   retrieveManyFinding,
   serverBest,
   serverRanks,
-  settingProblem,
+  settingProblems,
   sharedTop,
   shownCard,
   sortRecipes,
@@ -559,11 +559,20 @@ function Sweep({
   const sample = useSamples().samples?.find((x) => x.sha === sha)
   const asked = useSampleQuestions(sample?.name).find((q) => question && q.question.trim() === question.trim())
   const sampleGolds = asked ? goldsOf([asked.gold_answer, ...(asked.gold_answers ?? [])]) : []
+  // The question's own gold passages, else the sample's when the question is one of its own.
+  const configGolds = useMemo(() => {
+    const c = graphToConfig(graph)
+    return c.ok ? c.pipeline.question.gold_answers : []
+  }, [graph])
+  const golds = configGolds.length ? configGolds : sampleGolds
+  // A run that stops at the search, with the answer known, is scored: the page says so before Run.
+  const willScore = question !== "" && golds.length > 0 && throughOf(graph, target, through) === "retrieval"
   // Each recipe's rank of the answer and the best, as the server scored them: only a scored run says "the answer".
   const result = (run.result as ComparisonResult | null) ?? null
   const ranks = serverRanks(result, submitted.variants.length)
   const best = new Set(serverBest(result))
-  const goldKnown = submitted.scored
+  // Only scores that arrived say where the answer is: with none, no recipe is said to miss it.
+  const goldKnown = submitted.scored && result !== null
   // A scored run's sentences wait for its result, so no rank reads as a miss before the scores arrive.
   const scoresReady = !submitted.scored || result !== null || run.resultFailed
   const submittedNames = recipeNames(submitted.variants, target.stage, registry)
@@ -621,8 +630,6 @@ function Sweep({
     try {
       const c = graphToConfig(graph)
       if (!c.ok) throw new Error(c.problem)
-      // The question's own gold passages, else the sample's when the question is one of its own.
-      const golds = c.pipeline.question.gold_answers.length ? c.pipeline.question.gold_answers : sampleGolds
       const p = comparePipeline({ ...c.pipeline, question: { ...c.pipeline.question, gold_answers: golds } }, graph, through)
       const req = compareRequest(p, target, variants, throughOf(graph, target, through), 5, stepOfCardIn(graph, through), graph)
       if ("problem" in req) throw new Error(req.problem)
@@ -637,22 +644,25 @@ function Sweep({
     } catch (err) {
       // The run never started: back on the cards, the message goes under the recipe it belongs to, with that editor open.
       setPhase("setup")
-      // A problem with one setting of this step, as Pandion words it ("index.chunk (sentence_window): overlap_sentences: ...").
+      // Problems with settings of this step, as Pandion words them ("index.chunk (sentence_window): overlap_sentences: ...").
       const sentences = err instanceof ApiError && Array.isArray((err.detail as { problems?: unknown } | null)?.problems) ? (err.detail as { problems: string[] }).problems : []
-      const setting = sentences.length === 1 && cardNamedIn(sentences[0], graph) === target.id ? settingProblem(sentences[0]) : null
-      if (setting) {
-        const field = setting.field.split(".")[0]
-        const at = rejectedRecipe(variants, submitted.variants, [field], target.stage, registry, setting.transform)
-        const schema = infoFor(registry, { stage: target.stage, transform: setting.transform })?.config_schema
-        const title = RECIPE_TITLES[field] ?? schema?.properties?.[field]?.title ?? field
-        if (at === null) setError(`${titleFor(target)}, ${title}: ${setting.message}`)
+      const problem = sentences.length === 1 && cardNamedIn(sentences[0], graph) === target.id ? settingProblems(sentences[0]) : null
+      if (problem) {
+        const fields = problem.settings.map((x) => x.field.split(".")[0])
+        const at = rejectedRecipe(variants, submitted.variants, fields, target.stage, registry, problem.transform)
+        const schema = infoFor(registry, { stage: target.stage, transform: problem.transform })?.config_schema
+        const title = (field: string) => RECIPE_TITLES[field] ?? schema?.properties?.[field]?.title ?? field
+        // Each setting's sentence under its own setting's title.
+        const said = problem.settings.map((x, k) => `${title(fields[k])}: ${x.message}`)
+        if (at === null) setError(said.map((t) => `${titleFor(target)}, ${t}`).join(" "))
         else {
-          setCardErrors({ [items[at].key]: `${title}: ${setting.message}` })
-          setEditing({ key: items[at].key, field: schema?.properties?.[field] ? field : "transform" })
+          setCardErrors({ [items[at].key]: said.join(" ") })
+          setEditing({ key: items[at].key, field: schema?.properties?.[fields[0]] ? fields[0] : "transform" })
         }
       } else {
+        // Anything else is said above the cards, in the server's own words.
         const routed = routeRunError(err, graph)
-        setError("message" in routed ? routed.message : "The server would not run these recipes.")
+        setError("message" in routed ? routed.message : Object.values(routed.errors).flat().join(" "))
       }
     } finally {
       setSubmitting(false)
@@ -992,6 +1002,9 @@ function Sweep({
                 <a href="/build" className="text-fg underline pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center">
                   Change the question on Build
                 </a>
+                {willScore ? (
+                  <span data-testid="scored-note"> Its answer is known, so Pandion scores each recipe.</span>
+                ) : null}
               </>
             ) : null}
           </p>

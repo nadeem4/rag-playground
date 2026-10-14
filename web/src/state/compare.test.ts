@@ -22,7 +22,7 @@ import {
   runningFinding,
   serverBest,
   serverRanks,
-  settingProblem,
+  settingProblems,
   sharedTop,
   shownCard,
   sortRecipes,
@@ -507,6 +507,19 @@ describe("what a comparison runs and shows", () => {
     expect(compareStage(index, both, working())).toEqual({ problem: "Compare the embedder or the index's own settings, one at a time." })
   })
 
+  it("names no best when every scored recipe ties for it, and keeps a partial tie", () => {
+    const report = { questions: [{ rank: 1, score: {} }] }
+    const comparisons = [0, 1, 2].map(() => ({ stage: "search", variant: { use: "x" }, ok: true, cancelled: false, report }))
+    expect(serverBest({ best: [0, 1, 2], cancelled: false, comparisons } as unknown as ComparisonResult)).toEqual([])
+    expect(serverBest({ best: [0, 2], cancelled: false, comparisons } as unknown as ComparisonResult)).toEqual([0, 2])
+  })
+
+  it("leaves a stack as it is when the card is not in the column", () => {
+    const p = working()
+    const stray = { ...node("clean_2"), id: "clean_9" }
+    expect(variantBlock(stray, { transform: "dedupe_blocks", config: {} }, p, "clean", graph)).toEqual(p.config.index.clean)
+  })
+
   it("names no best for a stopped comparison", () => {
     const result = { best: [0], cancelled: true, comparisons: [] } as unknown as ComparisonResult
     expect(serverBest(result)).toEqual([])
@@ -530,14 +543,30 @@ describe("what a comparison runs and shows", () => {
   })
 })
 
-describe("settingProblem", () => {
+describe("settingProblems", () => {
   it("reads the strategy, the setting and the sentence from a Pandion problem", () => {
-    expect(settingProblem("index.chunk (sentence_window): overlap_sentences: Overlap must be smaller than the number of sentences per chunk.")).toEqual({
+    expect(settingProblems("index.chunk (sentence_window): overlap_sentences: Overlap must be smaller than the number of sentences per chunk.")).toEqual({
       transform: "sentence_window",
-      field: "overlap_sentences",
-      message: "Overlap must be smaller than the number of sentences per chunk.",
+      settings: [{ field: "overlap_sentences", message: "Overlap must be smaller than the number of sentences per chunk." }],
     })
-    expect(settingProblem("index.clean step 2 (dedupe_blocks): similarity: Input should be less than or equal to 1.")).toMatchObject({ transform: "dedupe_blocks", field: "similarity" })
-    expect(settingProblem("The index has no embed step.")).toBeNull()
+    expect(settingProblems("index.clean step 2 (dedupe_blocks): similarity: Input should be less than or equal to 1.")).toMatchObject({
+      transform: "dedupe_blocks",
+      settings: [{ field: "similarity" }],
+    })
+    expect(settingProblems("The index has no embed step.")).toBeNull()
+  })
+
+  it("gives each setting its own sentence when Pandion names several", () => {
+    expect(settingProblems("index.chunk (recursive_character): chunk_size: Input should be greater than or equal to 1; chunk_overlap: Input should be greater than or equal to 0.")).toEqual({
+      transform: "recursive_character",
+      settings: [
+        { field: "chunk_size", message: "Input should be greater than or equal to 1." },
+        { field: "chunk_overlap", message: "Input should be greater than or equal to 0." },
+      ],
+    })
+  })
+
+  it("reads a problem with the whole step as no one setting's", () => {
+    expect(settingProblems("index.chunk (sentence_window): settings: Value error, overlap must be smaller.")).toBeNull()
   })
 })

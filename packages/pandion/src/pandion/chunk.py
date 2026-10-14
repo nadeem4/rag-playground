@@ -8,6 +8,7 @@ is the same settings for a pipeline written in code (`pandion.config.step_class`
 import sys
 
 from pandion.config import step_class
+from pandion.plugins.chunk import count_tokens
 from pandion.ports import Stage
 from pandion.stages import StageModule
 from pandion.stages import chunk as run
@@ -18,6 +19,6 @@ MarkdownHeader = step_class(Stage.CHUNK, "markdown_header", __name__)
 TokenBased = step_class(Stage.CHUNK, "token_based", __name__)
 SentenceWindow = step_class(Stage.CHUNK, "sentence_window", __name__)
 
-__all__ = ["LayoutBlocks", "MarkdownHeader", "RecursiveCharacter", "SentenceWindow", "TokenBased"]
+__all__ = ["LayoutBlocks", "MarkdownHeader", "RecursiveCharacter", "SentenceWindow", "TokenBased", "count_tokens"]
 
 sys.modules[__name__].__class__ = StageModule

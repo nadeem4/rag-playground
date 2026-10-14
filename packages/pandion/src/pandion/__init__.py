@@ -13,7 +13,7 @@ stage when called, and hold that stage's step classes. `pandion.retrieve`,
 `compare` (also `pandion.evaluate` and `pandion.compare`).
 """
 
-from pandion.models import ModelSettings, preload_embedder, preload_reranker
+from pandion.models import ModelSettings, preload_embedder, preload_parser, preload_reranker
 from pandion.config import ConfigError
 from pandion.pipeline import (
     Answer,
@@ -63,6 +63,7 @@ __all__ = [
     "explain",
     "parse",
     "preload_embedder",
+    "preload_parser",
     "preload_reranker",
     "rerank",
     "retrieve",

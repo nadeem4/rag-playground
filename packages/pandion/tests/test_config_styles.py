@@ -181,7 +181,8 @@ def test_a_class_has_the_config_models_fields_and_validation():
 )
 def test_every_strategy_has_a_class(module, stage):
     discover()
-    uses = {getattr(module, name).use for name in module.__all__}
+    # A namespace may also export a helper (pandion.chunk.count_tokens); step classes are capitalized.
+    uses = {getattr(module, name).use for name in module.__all__ if name[0].isupper()}
     assert uses == set(registry.all_for(stage))
 
 

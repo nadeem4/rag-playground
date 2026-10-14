@@ -100,3 +100,21 @@ def preload_reranker(
     from pandion.plugins.rerank import cross_encoder
 
     cross_encoder._load(model or cross_encoder.CrossEncoderConfig().model, settings)
+
+
+def preload_parser(use: str = "docling") -> None:
+    """Load the `use` parser's models now, so its first run does not wait for them.
+    A parser with no models to load (pdfium) does nothing."""
+    from pandion.plugins import discover
+    from pandion.ports import Stage
+    from pandion.registry import UnknownTransformError, registry
+
+    discover()
+    try:
+        registry.get(Stage.PARSE, use)
+    except UnknownTransformError as exc:
+        raise KeyError(exc.args[0]) from None
+    if use == "docling":
+        from pandion.plugins.parse import docling
+
+        docling.preload(docling.DoclingConfig())

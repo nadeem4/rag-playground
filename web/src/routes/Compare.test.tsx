@@ -582,7 +582,7 @@ describe("during a run", () => {
     const busy = screen.getByRole("button", { name: "Running" })
     expect(busy.getAttribute("aria-busy")).toBe("true")
     fireEvent.click(screen.getByRole("button", { name: "Stop the run" }))
-    expect(fetch).toHaveBeenCalledWith("/api/runs/r1/cancel", expect.anything())
+    expect(fetch).toHaveBeenCalledWith("/api/v2/runs/r1/cancel", expect.anything())
     es.emit(9, { event: "stream_end", status: "cancelled", ok: false })
     await waitFor(() => expect(statusOf(2)).toBe("Not run. The run was stopped first."))
   })

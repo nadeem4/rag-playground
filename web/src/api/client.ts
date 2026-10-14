@@ -48,30 +48,33 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(API_BASE + path, init)
-  const text = await res.text()
-  let body: unknown = text
-  try {
-    body = text ? JSON.parse(text) : null
-  } catch {
-    // Not JSON (a proxy error page, say). Keep the text as the detail.
+/** The request function for one base path: JSON in and out, `ApiError` on a non-2xx. */
+export function requestFrom(base: string) {
+  return async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(base + path, init)
+    const text = await res.text()
+    let body: unknown = text
+    try {
+      body = text ? JSON.parse(text) : null
+    } catch {
+      // Not JSON (a proxy error page, say). Keep the text as the detail.
+    }
+    if (!res.ok) {
+      const detail = body !== null && typeof body === "object" && "detail" in body ? (body as { detail: unknown }).detail : body
+      throw new ApiError(res.status, detail, path)
+    }
+    return body as T
   }
-  if (!res.ok) {
-    const detail =
-      body !== null && typeof body === "object" && "detail" in body
-        ? (body as { detail: unknown }).detail
-        : body
-    throw new ApiError(res.status, detail, path)
-  }
-  return body as T
 }
 
-const json = (body: unknown, headers: Record<string, string> = {}): RequestInit => ({
+const request = requestFrom(API_BASE)
+
+export const jsonInit = (body: unknown, headers: Record<string, string> = {}): RequestInit => ({
   method: "POST",
   headers: { "Content-Type": "application/json", ...headers },
   body: JSON.stringify(body),
 })
+const json = jsonInit
 
 /** The header that carries each provider's key typed in the UI (plan I-8, I-18). */
 export const KEY_HEADERS: Record<LlmProvider, string> = {

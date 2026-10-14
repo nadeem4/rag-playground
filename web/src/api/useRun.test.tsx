@@ -64,7 +64,7 @@ describe("useRun", () => {
       await new Promise((r) => setTimeout(r, 10))
     })
     expect(FakeEventSource.instances).toHaveLength(1)
-    expect(FakeEventSource.instances[0].url).toBe("/api/runs/r1/events")
+    expect(FakeEventSource.instances[0].url).toBe("/api/v2/runs/r1/events")
     expect(live()).toHaveLength(1)
   })
 
@@ -127,12 +127,12 @@ describe("useRun", () => {
     first.fail()
 
     await waitFor(() => expect(FakeEventSource.instances).toHaveLength(2))
-    expect(fetchMock).toHaveBeenCalledWith("/api/runs/r3", undefined)
+    expect(fetchMock).toHaveBeenCalledWith("/api/v2/runs/r3", undefined)
     expect(result.current.nodes.a.status).toBe("done")
 
     const second = FakeEventSource.instances[1]
     // The reopened stream resumes after the snapshot's last event.
-    expect(second.url).toBe("/api/runs/r3/events?last_event_id=2")
+    expect(second.url).toBe("/api/v2/runs/r3/events?last_event_id=2")
     // Should a server replay anyway, already-applied ids are still skipped.
     second.emit(0, events[0])
     expect(result.current.nodes.a.status).toBe("done")
@@ -140,6 +140,31 @@ describe("useRun", () => {
     second.emit(4, { event: "stream_end", status: "finished", ok: true })
     expect(result.current.nodes.b.status).toBe("cached")
     expect(second.close).toHaveBeenCalled()
+  })
+
+  it("reads the run's result from its snapshot once the stream ends", async () => {
+    const snapshot: RunSnapshot = {
+      run_id: "r5",
+      kind: "evaluation",
+      status: "finished",
+      ok: true,
+      cancel_requested: false,
+      last_event_id: 1,
+      events: [],
+      result: { hit_rate: 0.5 },
+    }
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(snapshot), { status: 200 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { result } = renderHook(() => useRun("r5"))
+    const es = FakeEventSource.instances[0]
+    es.emit(0, { event: "run_started", nodes: ["a"], selected: ["a"] })
+    expect(fetchMock).not.toHaveBeenCalled()
+    es.emit(1, { event: "stream_end", status: "finished", ok: true })
+
+    await waitFor(() => expect(result.current.result).toEqual({ hit_rate: 0.5 }))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith("/api/v2/runs/r5", undefined)
   })
 
   it("closes the stream on unmount", async () => {

@@ -260,3 +260,20 @@ def test_on_the_demo_an_evaluation_is_its_visitors_own(client, monkeypatch):
     assert client.get(f"/api/v2/runs/{run_id}").json()["kind"] == "evaluation"
     as_visitor(client, "bob-" + "b" * 20)
     assert client.get(f"/api/v2/runs/{run_id}").status_code == 404
+
+
+def test_a_run_the_old_route_starts_is_followed_and_stopped_on_v2(client):
+    sample = client.post("/api/sources/sample").json()
+    graph = {
+        "nodes": [
+            {"id": "source", "stage": "source", "transform": "upload", "config": {"sha": sample["sha"], "filename": sample["filename"]}},
+            {"id": "parse", "stage": "parse", "transform": "pdfium", "config": {}},
+        ],
+        "edges": [{"src": "source", "dst": "parse", "port": "file"}],
+    }
+    run_id = client.post("/api/runs", json={"graph": graph}).json()["run_id"]
+    events = read_sse(client, run_id, prefix="/api/v2")
+    assert events[-1]["event"] == "stream_end"
+    snapshot = client.get(f"/api/v2/runs/{run_id}").json()
+    assert snapshot["run_id"] == run_id and snapshot["status"] in ("finished", "error")
+    assert client.post(f"/api/v2/runs/{run_id}/cancel").status_code == 409

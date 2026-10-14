@@ -266,6 +266,15 @@ both stacks). On `/api/v2` an index run is `POST /api/v2/runs` with a pipeline a
 document ids; its result gives each step's result id. On the demo a run started there is
 its visitor's own: to anyone else it is a 404 on both stacks.
 
+The web follows every run on `/api/v2/runs/{id}/events`, whichever route started it,
+because both stacks share one run manager. A `/api/v2` event names its step (`parse`,
+`clean.1`, `search`, `answer`) and, for a document's step, the document; the web draws it
+on the card of the same name (`clean_1`, `retrieve`, `use_case`). A comparison's events
+carry `variant`, an evaluation's `question`, with a `question_finished` after each. When
+the stream ends, the web reads the run's `result` from `GET /api/v2/runs/{id}`. Stop calls
+`POST /api/v2/runs/{id}/cancel`, which answers 409 once the run has finished. Runs still
+start on the old routes until the later part 5 tasks move each page.
+
 ## How the web app talks to the API
 
 The web app is React, built with Vite into `web/dist`. FastAPI serves it, with a fallback
@@ -293,8 +302,9 @@ today: a run's pdfium parse step can meet a page request on another thread. What
 must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
 
 - **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
-- **Runs.** It posts the pipeline graph to `/api/runs` and opens an `EventSource` on the
-  events, one per run.
+- **Runs.** It posts the pipeline graph to `/api/runs` and opens an `EventSource` on
+  `/api/v2/runs/{id}/events`, one per run; Stop posts to `/api/v2/runs/{id}/cancel`. The
+  `/api/v2` client is `web/src/api/v2.ts`; it sends keys in the same headers as `/api`.
 - **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.
 - **Miss trace.** Evaluate posts a question's answer sentences and the artifacts its run
   made to `POST /api/trace`, which says the first step that lost the answer, with the

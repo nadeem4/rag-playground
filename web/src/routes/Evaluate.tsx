@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import { Circle, CircleAlert, Clock, LoaderCircle } from "lucide-react"
 
 import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
 import type { EvalPayload, Registry, RetrievalResult, SampleQuestion, Trace, TraceRequest, Variant } from "@/api/types"
 import { useSamples } from "@/api/samples"
@@ -745,7 +746,7 @@ function Evaluation({
           variant="outline"
           onClick={() => {
             setRest([])
-            void api.cancelRun(runId).catch(() => undefined)
+            void v2.cancelRun(runId).catch(() => undefined)
           }}
         >
           Cancel

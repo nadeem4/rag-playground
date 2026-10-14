@@ -1,5 +1,6 @@
 /**
- * Follow one run (or sweep) over SSE: `/api/runs/{id}/events`.
+ * Follow one run (or sweep) over SSE: `/api/v2/runs/{id}/events`, whichever
+ * route started it, because both stacks share one run manager.
  *
  * - One EventSource per run id, even under React StrictMode, which mounts,
  *   unmounts and re-mounts every effect in development. The cleanup defers
@@ -8,8 +9,9 @@
  *   every event is applied twice.
  * - Every frame arrives through `onmessage` (the server sends no `event:`
  *   field) and is switched on `payload.event` by the reducer.
- * - The stream is closed on `stream_end` only. See runState.ts.
- * - On a dropped connection: fetch the snapshot (`GET /api/runs/{id}`),
+ * - The stream is closed on `stream_end` only. See runState.ts. Then the
+ *   snapshot is read once more for the run's `result`.
+ * - On a dropped connection: fetch the snapshot (`GET /api/v2/runs/{id}`),
  *   rebuild state from its event log, then reopen with
  *   `?last_event_id=<snapshot.last_event_id>`. EventSource cannot set a
  *   `Last-Event-ID` header on a fresh connection, so the query parameter
@@ -19,9 +21,9 @@
 
 import { useEffect, useReducer, useRef } from "react"
 
-import { api } from "./client"
 import { initialRunState, runReducer, type NodeState, type RunAction, type RunState } from "./runState"
 import type { RunEvent } from "./types"
+import { v2 } from "./v2"
 
 const RETRY_MS = [500, 1000, 2000, 5000]
 
@@ -54,7 +56,7 @@ function shutdown(c: Connection) {
 
 function connect(c: Connection, dispatch: (a: RunAction) => void) {
   if (c.dead) return
-  const es = new EventSource(api.eventsUrl(c.runId, c.lastSeq >= 0 ? c.lastSeq : undefined))
+  const es = new EventSource(v2.eventsUrl(c.runId, c.lastSeq >= 0 ? c.lastSeq : undefined))
   c.es = es
 
   es.onopen = () => {
@@ -76,6 +78,12 @@ function connect(c: Connection, dispatch: (a: RunAction) => void) {
     if (event.event === "stream_end") {
       es.close()
       c.es = null
+      void v2.run(c.runId).then(
+        (snapshot) => {
+          if (!c.dead) dispatch({ type: "result", result: snapshot.result ?? null })
+        },
+        () => undefined,
+      )
     }
   }
 
@@ -89,7 +97,7 @@ function connect(c: Connection, dispatch: (a: RunAction) => void) {
 
 async function resync(c: Connection, dispatch: (a: RunAction) => void) {
   try {
-    const snapshot = await api.run(c.runId)
+    const snapshot = await v2.run(c.runId)
     if (c.dead) return
     dispatch({ type: "snapshot", snapshot })
     c.lastSeq = Math.max(c.lastSeq, snapshot.last_event_id)

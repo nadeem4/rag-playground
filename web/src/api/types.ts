@@ -8,6 +8,8 @@
  * web/scripts/export_fixtures.py; types.test.ts checks these types against them.
  */
 
+import type { PipelineConfig, Step } from "@/state/config"
+
 // ---------------------------------------------------------------- registry --
 
 export type Stage =
@@ -316,15 +318,20 @@ export interface CacheCleared {
 
 export type RunStatus = "running" | "finished" | "cancelled" | "error"
 
-/** `GET /api/runs/{id}`: everything needed to resync after a reconnect. */
+/**
+ * `GET /api/v2/runs/{id}` (or the old `/api/runs/{id}`): everything needed to
+ * resync after a reconnect, and on /api/v2 the run's `result` once it ended.
+ */
 export interface RunSnapshot {
   run_id: string
-  kind: "run" | "sweep"
+  kind: string
   status: RunStatus
   ok: boolean | null
   cancel_requested: boolean
   last_event_id: number
   events: RunEvent[]
+  /** What the run returned, plain JSON, once it ended. Only /api/v2 sends it. */
+  result?: unknown
 }
 
 // ------------------------------------------------------------------ events --
@@ -407,6 +414,16 @@ export interface StreamEndEvent extends EventBase {
   ok: boolean
 }
 
+/** An evaluation's question is done: one per question, after its steps. */
+export interface QuestionFinishedEvent extends EventBase {
+  event: "question_finished"
+  question: string
+  number: number
+  total: number
+  found: boolean
+  error: string | null
+}
+
 export type RunEvent =
   | RunStartedEvent
   | WarningEvent
@@ -422,6 +439,7 @@ export type RunEvent =
   | QueuedEvent
   | UnqueuedEvent
   | StreamEndEvent
+  | QuestionFinishedEvent
 
 // ------------------------------------------------------------------- app --
 
@@ -768,4 +786,125 @@ export interface Trace {
   fix: string | null
   golds: string[]
   steps: TraceStep[]
+}
+
+// ------------------------------------------------------------- /api/v2 --
+
+export interface Strategies {
+  stages: Registry
+  defaults: Record<string, string>
+}
+export type Validated = { ok: true; problems: []; config: PipelineConfig; yaml: string } | { ok: false; problems: string[] }
+export interface V2RunRequest {
+  config: PipelineConfig
+  documents: string[]
+  through?: string
+  force?: boolean
+}
+export interface V2AskRequest {
+  config: PipelineConfig
+  documents: string[]
+  question: string
+  k?: number
+  answer?: boolean
+  force?: boolean
+}
+export interface EvalQuestion {
+  id: string
+  question: string
+  gold_answers: string[]
+  tags: string[]
+}
+export interface EvaluationRequest {
+  config: PipelineConfig
+  documents: string[]
+  questions: EvalQuestion[]
+  top_k: number
+}
+/** The stages /api/v2/comparisons varies (pandion.evaluation.COMPARE_STAGES). */
+export type CompareStage = "parse" | "clean" | "chunk" | "embed" | "store" | "rewrite" | "search" | "rerank"
+export interface ComparisonRequest {
+  config: PipelineConfig
+  stage: CompareStage
+  variants: (Step | Step[])[]
+  documents: string[]
+  questions?: EvalQuestion[]
+  question?: string
+  answer?: boolean
+  top_k?: number
+}
+export interface ResultInfo {
+  id: string
+  type: string
+  meta: Record<string, unknown>
+}
+export interface CacheClearedV2 {
+  results: number
+  bytes: number
+  complete: boolean
+}
+/** pandion.evaluation's totals: the server's arithmetic, never the browser's. */
+export interface Totals {
+  total: number
+  scored: number
+  found: number
+  hit_rate: number | null
+  mrr: number | null
+  recall: number | null
+  mean_rank: number | null
+  median_rank: number | null
+}
+export interface EvalQuestionResult {
+  id: string
+  question: string
+  golds: string[]
+  tags: string[]
+  found: boolean
+  rank: number | null
+  lost_at: string | null
+  trace: Trace | null
+  score: EvalPayload
+  error: string | null
+  result_id: string | null
+}
+export interface EvaluationResult extends Totals {
+  top_k: number
+  cancelled: boolean
+  by_tag: Record<string, Totals>
+  questions: EvalQuestionResult[]
+}
+export interface StepReport {
+  stage: string
+  strategy: string
+  status: string
+  result_id: string | null
+  duration_ms: number | null
+  note: string | null
+  error: string | null
+}
+export interface RetrievalReport {
+  ok: boolean
+  index: StepReport | null
+  steps: { rewrite: StepReport | null; search: StepReport | null; rerank: StepReport[] }
+  hits: Hit[]
+}
+export interface AnswerReport extends RetrievalReport {
+  answer: StepReport | null
+  text: string
+  output: unknown
+}
+export interface ComparisonItem {
+  stage: CompareStage
+  variant: Step | Step[]
+  ok: boolean
+  cancelled: boolean
+  outputs?: Record<string, { artifact_id: string | null; status: string; transform: string }>
+  report?: EvaluationResult | null
+  retrieval?: RetrievalReport
+  answer?: AnswerReport
+}
+export interface ComparisonResult {
+  comparisons: ComparisonItem[]
+  best: number[]
+  cancelled: boolean
 }

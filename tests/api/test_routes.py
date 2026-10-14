@@ -22,6 +22,7 @@ TEACHING = {
     ("GET", "/api/stages"),
     ("GET", "/api/settings/app"),
     ("GET", "/api/questions/template"),
+    ("GET", "/api/templates"),
 }
 
 

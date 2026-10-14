@@ -1,0 +1,18 @@
+template:
+  name: Balanced
+  summary: Keyword and meaning search together, then a pass that keeps the top five from repeating each other. No key needed.
+  good_for: Everyday questions, and questions whose answer is spread over several places.
+retrieve:
+  rewrite: none                 # searches with the question as typed
+  search:
+    use: hybrid_rrf             # keyword and meaning search fused by rank, so neither one's blind spot decides
+    top_k: 20                   # enough candidates for the reranker to choose from
+    rrf_k: 60                   # the usual fusion constant: neither list outweighs the other
+    query_expansion: none       # adds no words to the question
+  rerank:
+    - use: mmr                  # swaps near copies for pieces that add something, with no extra model
+      lambda_mult: 0.7          # leans toward relevance, so only pieces that repeat one already picked are pushed down
+      top_k: 5
+answer:
+  use: search                   # shows the pieces as they are: no model and no key
+  top_k: 5

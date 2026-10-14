@@ -1,0 +1,18 @@
+template:
+  name: Best precision
+  summary: Hybrid search, then a stronger cross-encoder reads every candidate with the question. Slower, but the best top five. No key needed.
+  good_for: Single-fact questions, where the one right piece must come first.
+retrieve:
+  rewrite: none                 # searches with the question as typed
+  search:
+    use: hybrid_rrf             # keyword and meaning search fused by rank, for good recall
+    top_k: 30                   # more candidates than usual, because the reranker decides the order
+    rrf_k: 60                   # the usual fusion constant: neither list outweighs the other
+    query_expansion: none       # adds no words to the question
+  rerank:
+    - use: cross_encoder        # reads the question and each piece together and scores the pair
+      model: BAAI/bge-reranker-base   # stronger than MiniLM, and still fast enough on a CPU for 30 pieces
+      top_k: 5
+answer:
+  use: search                   # shows the pieces as they are: no model and no key
+  top_k: 5

@@ -1,0 +1,18 @@
+template:
+  name: Exact terms
+  summary: A wide hybrid search that lets the keyword search's best match count most, then a cross-encoder. No key needed.
+  good_for: Questions that name a part number, a product, a person, a code or a clause.
+retrieve:
+  rewrite: none                 # a rewrite could change the exact term the question names
+  search:
+    use: hybrid_rrf             # keyword search finds the exact term; meaning search covers the words around it
+    top_k: 40                   # a wide net, so a piece only the keyword search finds still reaches the reranker
+    rrf_k: 20                   # hybrid_rrf has no keyword weight; a small constant lets each list's first pick count most
+    query_expansion: none       # PRF would add words the user did not type, which dilutes an exact name or code
+  rerank:
+    - use: cross_encoder        # reads the question and each piece together, so it sees the term in context
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2   # small and fast, enough when the keyword search has done the finding
+      top_k: 5
+answer:
+  use: search                   # shows the pieces as they are: no model and no key
+  top_k: 5

@@ -1,0 +1,23 @@
+template:
+  name: Text documents
+  summary: Reads the PDF's own text, removes running headers, footers and repeats, and cuts at sentence ends.
+  good_for: Articles, policies and plain reports set in one column, with few tables.
+  sample: chunking-primer
+index:
+  parse:
+    use: pdfium                 # reads the text layer as it is: fast, exact, and no layout model to load
+    join_lines: true            # joins wrapped lines back into paragraphs, so no sentence breaks at a line end
+  clean:
+    - use: header_footer_strip  # pdfium cannot tell a running head from body text, so this cleaner finds them
+      min_page_ratio: 0.5       # a block must repeat at the same page edge on half the pages to count
+    - use: dedupe_blocks        # then removes a block repeated word for word, such as a notice on every page
+  chunk:
+    use: sentence_window        # cuts only at sentence ends, so an answer sentence is never cut in half
+    sentences_per_chunk: 5      # about one short paragraph: enough context to answer, small enough to rank well
+    overlap_sentences: 1        # repeats one sentence, so a thought that runs across a cut is still found
+  embed:
+    use: qwen3-embedding-0.6b   # the strongest embedder in the catalog, and small enough to run on a CPU
+  store:
+    use: lancedb
+    metric: cosine              # Qwen3's vectors are compared by direction
+    build_fts: true             # the keyword index, which the hybrid search in every question template needs

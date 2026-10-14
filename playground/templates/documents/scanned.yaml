@@ -1,0 +1,27 @@
+template:
+  name: Scanned PDFs
+  summary: Reads the text from page images with OCR, then cuts along the page layout. Slower, but a scan has no other text.
+  good_for: Scanned paper, photographed pages and any PDF whose text cannot be selected.
+  sample: scanned-notes
+index:
+  parse:
+    use: docling                # a layout model finds headings, paragraphs and tables on each page image
+    do_ocr: true                # reads the text from the page images, because a scan has no text layer
+    do_table_structure: true    # still rebuilds a table's rows when a scanned page holds one
+    table_mode: fast            # OCR is already the slow part, and scanned tables are usually simple grids
+    content_layers: [body]      # leaves page headers and footers out
+  clean:
+    - use: dedupe_blocks
+      scope: near               # OCR reads a repeated line a little differently each time, so compare by likeness
+      similarity: 0.95          # high enough that two different paragraphs are never taken for one
+  chunk:
+    use: layout_blocks          # cuts along the blocks the layout model found, not at a fixed size
+    max_tokens: 400             # packs short paragraphs together up to about a long paragraph
+    keep_tables_whole: true     # never splits a table across pieces
+    heading_context: true       # searches each piece with its heading
+  embed:
+    use: qwen3-embedding-0.6b   # the strongest embedder in the catalog, and small enough to run on a CPU
+  store:
+    use: lancedb
+    metric: cosine              # Qwen3's vectors are compared by direction
+    build_fts: true             # the keyword index, which the hybrid search in every question template needs

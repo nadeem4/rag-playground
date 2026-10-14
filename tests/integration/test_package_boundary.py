@@ -11,7 +11,7 @@ import importlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-APP_DIRS = ("playground/backend", "playground/frontend/scripts", "scripts")
+APP_DIRS = ("playground/backend", "playground/templates", "playground/frontend/scripts", "scripts")
 
 
 def private_pandion_imports(source: str) -> list[str]:

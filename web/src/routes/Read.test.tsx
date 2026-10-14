@@ -109,7 +109,8 @@ describe("Read", () => {
     const columns = { name: "two-column-report", title: "Two-column report", blurb: "", shows: "", stresses: "parse" as const, pages: 3, default: false, filename: "two-column-report.pdf", sha: COLUMNS_SHA, question: "What does the report recommend?" }
     const href = tryLink(registry, columns, "Parse")
     expect(href.startsWith("/build?pipeline=")).toBe(true)
-    const decoded = decodePipeline(href.slice("/build?pipeline=".length), registry)!
+    const decoded = decodePipeline(href.slice("/build?pipeline=".length), registry)
+    if (!decoded?.ok) throw new Error("the link does not open")
     expect(decoded.name).toBe("Read: Parse")
     expect(decoded.graph.nodes.find((n) => n.stage === "source")!.config.sha).toBe(COLUMNS_SHA)
     expect(decoded.graph.nodes.find((n) => n.stage === "query")!.config.text).toBe("What does the report recommend?")

@@ -164,7 +164,10 @@ on any sample, so for it only a step counts. Typing a different question is neve
 **Rename**, **Delete** and **Copy link** sit beside a saved pipeline.
 
 Once a pipeline is saved, **Copy link** puts the whole configuration and its documents in a
-URL. Whoever opens it gets the pipeline on their Build page. If it was built on a bundled
+URL. A link carries the pipeline's settings, its documents and its question. Whoever opens it
+gets the pipeline on their Build page. Links made by older versions still open. One that
+cannot be opened here, because it has a step this version has no place for or a strategy
+this server does not have, stays in the address bar and Build says why. If it was built on a bundled
 sample, Build the index and Ask work at once. Your own uploads do not travel with the link:
 the Document card tags the file Removed from the server, and picking a sample keeps every
 shared setting.

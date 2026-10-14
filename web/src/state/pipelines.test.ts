@@ -161,19 +161,19 @@ describe("the share link codec", () => {
     const graph = setTransform(g(), "chunk", "token_based", R)
     const code = encodePipeline("Token chunks", graph)
     expect(code).toMatch(/^[A-Za-z0-9_-]+$/)
-    expect(decodePipeline(code, R)).toEqual({ name: "Token chunks", graph, documents: [] })
+    expect(decodePipeline(code, R)).toEqual({ ok: true, name: "Token chunks", graph, documents: [] })
   })
 
-  it("refuses garbage, a wrong version, and a graph with an unknown transform", () => {
+  it("refuses garbage and a wrong version, and says why a graph with an unknown transform cannot open", () => {
     expect(decodePipeline("not base64url!", R)).toBeNull()
     expect(decodePipeline(btoa(JSON.stringify({ v: 3, name: "x", graph: g() })).replace(/=+$/, ""), R)).toBeNull()
     const foreign = { ...g(), nodes: g().nodes.map((n) => (n.stage === "chunk" ? { ...n, transform: "semantic" } : n)) }
-    expect(decodePipeline(encodePipeline("x", foreign), R)).toBeNull()
+    expect(decodePipeline(encodePipeline("x", foreign), R)).toEqual({ ok: false, problem: "It uses a step this server does not have: semantic." })
   })
 
   it("keeps non-ASCII names intact", () => {
     const code = encodePipeline("Résumé étape", g())
-    expect(decodePipeline(code, R)?.name).toBe("Résumé étape")
+    expect(decodePipeline(code, R)).toMatchObject({ ok: true, name: "Résumé étape" })
   })
 })
 
@@ -282,7 +282,7 @@ describe("a pipeline owns its documents, as a list", () => {
 
   it("share links carry the documents, and an old link without them still opens", () => {
     const code = encodePipeline("Mine", on(primer))
-    expect(decodePipeline(code, R)?.documents).toEqual([primer])
+    expect(decodePipeline(code, R)).toMatchObject({ ok: true, documents: [primer] })
     const v1 = btoa(JSON.stringify({ v: 1, name: "Old link", graph: on(table) })).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_")
     expect(decodePipeline(v1, R)).toMatchObject({ name: "Old link", documents: [table] })
   })
@@ -410,5 +410,42 @@ describe("fix round 1", () => {
   it("names a kept item's own problem as the reason it cannot be opened", () => {
     expect(keptReason("It has an enrich step.")).toBe("Saved by an older version, and it cannot be opened here: It has an enrich step.")
     expect(keptReason(undefined)).toBe("This server does not have every step this pipeline uses.")
+  })
+})
+
+const b64 = (o: unknown) =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(o)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+
+describe("share links", () => {
+  it("a new link carries the config, the documents and the question, never a graph", () => {
+    const code = encodePipeline("Mine", sampleGraph(R, DOC, "Why?"))
+    const body = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(code.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))))
+    expect(body).toMatchObject({ v: 3, name: "Mine", documents: [DOC], question: { text: "Why?" } })
+    expect(body.config.index.parse.use).toBe("pdfium")
+    expect(body).not.toHaveProperty("graph")
+    const d = decodePipeline(code, R)
+    expect(d?.ok && sameGraph(d.graph, sampleGraph(R, DOC, "Why?"))).toBe(true)
+  })
+
+  it.each([1, 2])("an old version %i link still opens", (v) => {
+    const d = decodePipeline(b64({ v, name: "Old", graph: sampleGraph(R, DOC), ...(v === 2 ? { documents: [DOC] } : {}) }), R)
+    expect(d).toMatchObject({ ok: true, name: "Old", documents: [DOC] })
+  })
+
+  it("an old link that cannot be converted says why", () => {
+    const d = decodePipeline(b64({ v: 2, name: "Odd", graph: BROKEN, documents: [] }), R)
+    expect(d).toEqual({ ok: false, problem: expect.stringContaining("enrich") })
+  })
+
+  it("a link from a server with other strategies says so", () => {
+    const g = sampleGraph(R, DOC)
+    const code = encodePipeline("Elsewhere", g)
+    const other = { ...R, parse: {} }
+    expect(decodePipeline(code, other)).toEqual({ ok: false, problem: expect.stringContaining("this server") })
+  })
+
+  it("something that is not a link at all is null", () => {
+    expect(decodePipeline("%%%", R)).toBeNull()
+    expect(decodePipeline(b64({ v: 9, name: "x" }), R)).toBeNull()
   })
 })

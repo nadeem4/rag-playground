@@ -2,9 +2,9 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
-import { columnOf, graphToConfig, knownSteps, sameConfig, type AskQuestion, type PipelineConfig } from "./config"
+import { columnOf, graphToConfig, knownSteps, sameConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
-import { loadGraph, type PipelineGraph } from "./graph"
+import type { PipelineGraph } from "./graph"
 
 /**
  * Form 2 of the owner's two: saved pipelines, named copies of the pipeline on
@@ -386,23 +386,40 @@ const fromBase64Url = (s: string) => {
   return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
 }
 
-/** Version 2 carries the documents; a version 1 link had them only in the graph. */
+/**
+ * Version 3 carries the config, the documents and the question. Versions 1 and
+ * 2 carried a graph and still open: they are converted once on the way in.
+ * Throws for a graph that is not a column, which the app never makes.
+ */
 export function encodePipeline(name: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): string {
-  return toBase64Url(JSON.stringify({ v: 2, name, graph, documents }))
+  const c = graphToConfig(withDocuments(graph, documents))
+  if (!c.ok) throw new Error(c.problem)
+  return toBase64Url(JSON.stringify({ v: 3, name, config: c.pipeline.config, documents, question: c.pipeline.question }))
 }
 
-/** null unless the code is well formed, version 1 or 2, and every node names a transform this registry has. */
-export function decodePipeline(code: string, registry: Registry): { name: string; graph: PipelineGraph; documents: DocRef[] } | null {
+export type Decoded = { ok: true; name: string; graph: PipelineGraph; documents: DocRef[] } | { ok: false; problem: string }
+
+/** Why a link from a server with other strategies cannot open here, naming the first one missing. */
+const otherServer = (missing: string | null) => `It uses a step this server does not have${missing ? `: ${missing}` : ""}.`
+
+/** Null when the code is not a pipeline link; otherwise the pipeline, or why it cannot open here. */
+export function decodePipeline(code: string, registry: Registry): Decoded | null {
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(fromBase64Url(code)) as { v?: unknown; name?: unknown; graph?: unknown; documents?: unknown }
-    if ((parsed.v !== 1 && parsed.v !== 2) || typeof parsed.name !== "string") return null
-    const loaded = loadGraph(JSON.stringify(parsed.graph), registry)
-    if (!loaded) return null
-    const documents = (parsed.v === 2 ? docList(parsed.documents) : null) ?? documentsOf(loaded)
-    return { name: parsed.name, graph: withDocuments(loaded, documents), documents }
+    parsed = JSON.parse(fromBase64Url(code))
   } catch {
     return null
   }
+  if (!isRecord(parsed) || typeof parsed.name !== "string" || ![1, 2, 3].includes(parsed.v as number)) return null
+  const p =
+    parsed.v === 3
+      ? asSaved({ id: "link", name: parsed.name, savedAt: "", config: parsed.config, documents: parsed.documents, question: parsed.question })
+      : fromOld({ id: "link", name: parsed.name, savedAt: "", graph: parsed.graph, documents: parsed.v === 2 ? parsed.documents : undefined }, 0)
+  if (!p) return null
+  if (p.kept) return { ok: false, problem: p.kept.problem }
+  const graph = usableGraph(p, registry)
+  if (!graph) return { ok: false, problem: otherServer(p.config && unknownStrategy(p.config, registry)) }
+  return { ok: true, name: parsed.name, graph, documents: p.documents }
 }
 
 /** The same steps and settings, whatever document they run on and whatever question is typed. */

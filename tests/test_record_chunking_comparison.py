@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-RECORDED = ROOT / "web" / "src" / "learn" / "chunking-strategies.json"
+RECORDED = ROOT / "playground" / "frontend" / "src" / "learn" / "chunking-strategies.json"
 
 
 def _script():

@@ -28,7 +28,7 @@ You need [uv](https://docs.astral.sh/uv/) (Python 3.13) and Node.js 22 or newer.
 ```bash
 git clone https://github.com/nadeem4/rag-playground.git && cd rag-playground
 uv sync --extra dev
-cd web && npm install && cd ..
+cd playground/frontend && npm install && cd ../..
 ```
 
 The repository is a uv workspace with two packages besides the app: `packages/pandion` (the engine, published as `pandion`) and `packages/pandion-api` (the REST layer, not published). `uv sync` installs both from their folders, so an edit in either is live at once.
@@ -37,21 +37,21 @@ To work on the web app, run the server in one terminal and Vite in another:
 
 ```bash
 uv run rag-playground --no-browser --reload
-cd web && npm run dev
+cd playground/frontend && npm run dev
 ```
 
 Then open http://localhost:5173. Vite proxies `/api` to the server on 127.0.0.1:8000.
 `--reload` restarts the server when a Python file changes.
 
-`cd web && npm run build` writes `web/dist`, which the Python server serves on
-http://127.0.0.1:8000.
+`cd playground/frontend && npm run build` writes `playground/frontend/dist`, which the
+Python server serves on http://127.0.0.1:8000.
 
 ## Running the tests
 
 ```bash
-uv run pytest                 # the fast suite, no model downloads
-uv run pytest -m models       # the slow tests that load Docling, Qwen3 and bge
-cd web && npm test            # Vitest
+uv run pytest                        # the fast suite, no model downloads
+uv run pytest -m models              # the slow tests that load Docling, Qwen3 and bge
+cd playground/frontend && npm test   # Vitest
 ```
 
 `uv run pytest packages/pandion-api/tests` runs pandion-api's own tests. pandion-api may import only Pandion's public API, which `test_api_boundary.py` checks with no allow-list. A test file there is named `test_api_*.py`, so it never shares a name with one of the engine's.
@@ -70,7 +70,7 @@ fails it. It needs the models and a web build, and takes about two minutes:
 
 ```bash
 uv run --with playwright==1.55.0 playwright install chromium   # once
-cd web && npm run build && cd ..
+cd playground/frontend && npm run build && cd ../..
 uv run --with playwright==1.55.0 pytest -m smoke
 ```
 
@@ -96,7 +96,7 @@ Follow test-driven development: write the failing test first, then the code.
 
 ## Styling and fixtures
 
-- Every colour, size and radius is a token in `web/src/styles/tokens.css`. Tailwind's
+- Every colour, size and radius is a token in `playground/frontend/src/styles/tokens.css`. Tailwind's
   default scales are cleared, so values that are not tokens do not compile. Text sizes are
   in rem, so they follow the browser's font size.
 - The typefaces are self-hosted from npm: Atkinson Hyperlegible Next for the interface,
@@ -181,8 +181,8 @@ A new test of a site rule goes in `tests/api/` (`test_demo.py`, `test_delete_sou
 
 ## The package boundary
 
-The app (`playground/`, `scripts/` and `web/scripts/`) imports only Pandion's public API and
-pandion-api: `pandion`, a stage namespace (`pandion.parse` to `pandion.answer`),
+The app (`playground/backend/`, `playground/frontend/scripts/` and `scripts/`) imports only
+Pandion's public API and pandion-api: `pandion`, a stage namespace (`pandion.parse` to `pandion.answer`),
 `pandion.extend` and `pandion.evaluation`, each a name in its `__all__`.
 `tests/integration/test_package_boundary.py` fails on any other Pandion import, and there
 is no allow-list to add to. If the app needs a name that is not public, make it public in
@@ -329,7 +329,7 @@ counts as an app release, because the app's release tags must start with `v`.
 
 ## Recording the Home clips
 
-Home's clips live in `web/public/clips/`: `build.webm`, `compare.webm` and
+Home's clips live in `playground/frontend/public/clips/`: `build.webm`, `compare.webm` and
 `evaluate.webm`, each with a dark version (`build-dark.webm` and so on) and a `.jpg`
 poster for each. On the System theme the page serves the dark file by media query, with
 the light one as the fallback; set to Light or Dark, it plays the matching file.
@@ -337,7 +337,7 @@ the light one as the fallback; set to Light or Dark, it plays the matching file.
 To record them again:
 
 ```bash
-cd web && npm run build && cd ..
+cd playground/frontend && npm run build && cd ../..
 uv run --with playwright==1.55.0 playwright install chromium                                    # once
 uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py           # all three
 uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py compare   # one clip
@@ -365,14 +365,14 @@ uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_cli
 
 ## Regenerating the fixtures and the lesson recordings
 
-The web's JSON fixtures in `web/src/api/fixtures/` and the lessons' recorded runs in
-`web/src/learn/` are produced by scripts, never typed by hand:
+The web's JSON fixtures in `playground/frontend/src/api/fixtures/` and the lessons'
+recorded runs in `playground/frontend/src/learn/` are produced by scripts, never typed by hand:
 
 ```bash
-uv run python web/scripts/export_fixtures.py          # the web fixtures
-uv run python scripts/record_e2e_lesson.py            # web/src/learn/e2e-run.json
-uv run python scripts/record_chunking_comparison.py   # web/src/learn/chunking-strategies.json
-uv run python scripts/record_parsing_lab.py           # web/src/learn/parsing-lab.json
+uv run python playground/frontend/scripts/export_fixtures.py   # the web fixtures
+uv run python scripts/record_e2e_lesson.py           # src/learn/e2e-run.json
+uv run python scripts/record_chunking_comparison.py  # src/learn/chunking-strategies.json
+uv run python scripts/record_parsing_lab.py          # src/learn/parsing-lab.json
 ```
 
 - They run on Pandion's public API and on pandion-api, as any app would. Each pipeline
@@ -386,7 +386,7 @@ uv run python scripts/record_parsing_lab.py           # web/src/learn/parsing-la
   server no longer sends fails, and is updated to the field it now sends.
 - The three lesson recordings need the Docling, RapidOCR and Qwen3 models, which download
   on first use. Run again on the same machine with the same models, a recording leaves its
-  file as it is, so `git diff web/src/learn` stays empty. The parsing lab is the one
+  file as it is, so `git diff playground/frontend/src/learn` stays empty. The parsing lab is the one
   exception: it records the date and each parse's time in milliseconds, and those change
   on every run. If any other number moves, a setting differs between the old run and the
   new one; fix the pipeline dict until it matches.

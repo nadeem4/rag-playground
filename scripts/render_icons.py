@@ -1,4 +1,4 @@
-"""Render the app's icons from web/public/favicon.svg.
+"""Render the app's icons from playground/frontend/public/favicon.svg.
 
     uv run --with playwright==1.55.0 --with pillow python scripts/render_icons.py
 
@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-PUBLIC = Path(__file__).resolve().parents[1] / "web" / "public"
+PUBLIC = Path(__file__).resolve().parents[1] / "playground" / "frontend" / "public"
 SVG = PUBLIC / "favicon.svg"
 ACCENT = "#0f6e51"
 

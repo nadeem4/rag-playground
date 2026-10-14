@@ -1,6 +1,6 @@
 """Record the short clips Home shows, from a real session against a local server.
 
-    cd web && npm run build && cd ..
+    cd playground/frontend && npm run build && cd ../..
     uv run --with playwright==1.55.0 playwright install chromium                                     # once
     uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py            # all three
     uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_clips.py evaluate   # one clip
@@ -23,7 +23,7 @@ moment its page has loaded; the recording is cut to start there, so no blank
 frame opens the loop, and re-encoded to WebM VP9 with the ffmpeg binary that
 the imageio-ffmpeg package ships (`imageio_ffmpeg.get_ffmpeg_exe()`).
 
-Writes `web/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800; Build at
+Writes `playground/frontend/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800; Build at
 1440x900, with the Ask dock seeded open at 698 px so the slope shows), and a
 `.jpg` poster for each, taken with Playwright's screenshot at the clip's
 telling moment.
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from playwright.sync_api import Page
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "web" / "public" / "clips"
+OUT = ROOT / "playground" / "frontend" / "public" / "clips"
 SIZE = {"width": 1280, "height": 800}
 #: Build is recorded wider, still 16:10, so the docked Ask panel can take 698 px:
 #: over the 640 px its comparison needs to set the lists side by side with the slope.
@@ -363,8 +363,8 @@ def main() -> None:
     unknown = sorted(set(clips) - set(CLIPS))
     if unknown:
         ap.error(f"unknown clip: {', '.join(unknown)}")
-    if not (ROOT / "web" / "dist" / "index.html").exists():
-        raise SystemExit("web/dist is missing: run `npm run build` in web/ first")
+    if not (ROOT / "playground" / "frontend" / "dist" / "index.html").exists():
+        raise SystemExit("playground/frontend/dist is missing: run `npm run build` in playground/frontend/ first")
     OUT.mkdir(parents=True, exist_ok=True)
     base = f"http://127.0.0.1:{args.port}"
     with tempfile.TemporaryDirectory() as tmp:

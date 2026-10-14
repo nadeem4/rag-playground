@@ -69,3 +69,5 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["playground"]
+# The wheel is the server only; the React app is built and served from playground/frontend/dist.
+exclude = ["playground/frontend"]

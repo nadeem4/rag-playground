@@ -1,1 +1,1 @@
-"""The RAG Playground app: the backend server here, the frontend in web/ for now."""
+"""The RAG Playground app: the backend server in backend/, the React frontend in frontend/."""

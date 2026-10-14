@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-RECORDED = ROOT / "web" / "src" / "learn" / "parsing-lab.json"
+RECORDED = ROOT / "playground" / "frontend" / "src" / "learn" / "parsing-lab.json"
 CASES = ["two-column-report", "table-of-figures", "scanned-notes"]
 BASELINE = "chunking-primer"
 

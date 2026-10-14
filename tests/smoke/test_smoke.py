@@ -1,7 +1,7 @@
 """A real-browser smoke test of the main flows, against a local demo server.
 
     uv run --with playwright==1.55.0 playwright install chromium     # once
-    cd web && npm run build && cd ..                                # the page under test
+    cd playground/frontend && npm run build && cd ../..                                # the page under test
     uv run --with playwright==1.55.0 pytest -m smoke
 
 Deselected by default, like the `models` tests: it needs the Docling and Qwen3
@@ -48,8 +48,8 @@ def _free_port() -> int:
 @pytest.fixture(scope="session")
 def base():
     """A demo server of our own on a free port, with its data in a temp folder."""
-    if not (ROOT / "web" / "dist" / "index.html").exists():
-        pytest.skip("no web build: run `npm run build` in web/ first")
+    if not (ROOT / "playground" / "frontend" / "dist" / "index.html").exists():
+        pytest.skip("no web build: run `npm run build` in playground/frontend/ first")
     port = _free_port()
     data = Path(tempfile.mkdtemp(prefix="rag-smoke-"))
     env = {

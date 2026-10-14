@@ -1,5 +1,5 @@
 /**
- * The app's mark, the same drawing as web/public/favicon.svg: a page cut into
+ * The app's mark, the same drawing as playground/frontend/public/favicon.svg: a page cut into
  * pieces on the accent tile. Decoration beside the name, so it is hidden from
  * screen readers. The colours are fixed, as in the favicon, so the mark looks
  * the same in both themes.

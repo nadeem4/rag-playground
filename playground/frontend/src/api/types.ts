@@ -5,7 +5,7 @@
  *   events    packages/pandion/src/pandion/executor.py + pandion-api's runs.py (the SSE stream)
  *
  * The fixtures in ./fixtures are generated from the real engine by
- * web/scripts/export_fixtures.py; types.test.ts checks these types against them.
+ * playground/frontend/scripts/export_fixtures.py; types.test.ts checks these types against them.
  */
 
 import type { PipelineConfig, Step } from "@/state/config"

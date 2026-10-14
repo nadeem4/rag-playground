@@ -16,7 +16,7 @@ import { ArtifactInspector } from "@/components/inspectors/registry"
 
 /**
  * The inspector gallery: every inspector rendered against real engine output
- * (web/scripts/export_fixtures.py), plus the empty, loading and error screens.
+ * (playground/frontend/scripts/export_fixtures.py), plus the empty, loading and error screens.
  * Check it in both themes before wiring an inspector to a live run.
  */
 

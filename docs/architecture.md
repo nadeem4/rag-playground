@@ -29,8 +29,8 @@ playground/backend/  the playground's server: pandion-api with the playground's 
              (playground/backend/routes/: health, samples, lessons, stage copy, app settings,
              the question template), demo mode, and the web build. It has no steps of its
              own: Pandion loads its plugins itself. See playground/README.md
-web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors. It
-             moves to playground/frontend/ next
+playground/frontend/  the React app: Home, Build, Compare, Evaluate, Library, Read,
+             inspectors. See playground/frontend/README.md
 samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
 tests/       pytest: unit, plugin contract, API and integration tests
@@ -113,7 +113,7 @@ their schema. `GET /api/v2/strategies` leaves them out of the forms (through
 `served_catalog` in `playground/backend/routes/registry.py`), and the playground's Policy refuses with a
 403 a run, an evaluation or a comparison that sets one to anything but its default, in
 every mode. A pipeline file or code can set them. The browser never holds one:
-`servedConfig` in `web/src/state/config.ts` keeps only the settings a step's served schema
+`servedConfig` in `playground/frontend/src/state/config.ts` keeps only the settings a step's served schema
 lists, and `columnOf` draws a config through it. So a link, an imported file, a saved
 pipeline or Build's stored pipeline that carries a prompt, the revision or a setting
 Pandion no longer knows opens without it, the saved copy loses it too, and the page names
@@ -122,7 +122,7 @@ what went in one sentence.
 `tests/integration/test_package_boundary.py` fails on any other Pandion import, with no
 allow-list. The public API is `pandion`, the stage namespaces (`pandion.parse` to
 `pandion.answer`), `pandion.extend` and `pandion.evaluation`, each a name in the module's
-`__all__`. The test reads `playground/`, `scripts/` and `web/scripts/`.
+`__all__`. The test reads `playground/backend/`, `playground/frontend/scripts/` and `scripts/`.
 `packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
 
 ## Using the package on its own
@@ -295,7 +295,7 @@ the stream ends, the web reads the run's `result` from `GET /api/v2/runs/{id}`. 
 
 ## How the web app talks to the API
 
-The web app is React, built with Vite into `web/dist`. FastAPI serves it, with a fallback
+The web app is React, built with Vite into `playground/frontend/dist`. FastAPI serves it, with a fallback
 so every client route opens the app, and every API route lives under `/api`. The app uses
 relative paths, so the same code works in development, where Vite on port 5173 proxies
 `/api` to the server on port 8000.
@@ -308,13 +308,13 @@ holds only the playground's own teaching routes: `GET /api/health`, `GET /api/sa
 `POST /api/sources/sample`, `GET /api/learn/chunking`, `GET /api/learn/document`,
 `GET /api/stages`, `GET /api/settings/app` and `GET /api/questions/template`.
 `tests/api/test_routes.py` pins that list, and checks that every path the web's two
-clients (`web/src/api/client.ts` and `web/src/api/v2.ts`) name is served. The demo's
+clients (`playground/frontend/src/api/client.ts` and `playground/frontend/src/api/v2.ts`) name is served. The demo's
 rule tests (`tests/api/test_demo.py` and the rest) call `/api/v2` directly. Runs do not
 hold the pdfium lock (`pandion_api.pages.PDFIUM_LOCK`, which the page routes hold): a
 run's pdfium parse step can meet a page request on another thread.
 
 The web calls only pandion-api's routes under `/api/v2` and the teaching routes. A test,
-`web/src/api/oldRoutes.test.ts`, reads every non-test file under `web/src` (but the
+`playground/frontend/src/api/oldRoutes.test.ts`, reads every non-test file under `playground/frontend/src` (but the
 `/api/v2` client) and fails if one names an old route in a string, written relative to the
 old client (`"/runs"`), in full with the `/api` prefix, or after `${API_BASE}`, or calls a deleted
 function on the old client (`api.createRun`). It cannot see a path built up from pieces.
@@ -335,7 +335,7 @@ function on the old client (`api.createRun`). It cannot see a path built up from
   so the browser adds up no score. The app opens an `EventSource` on
   `/api/v2/runs/{id}/events`, one per run, and reads the run's result from
   `GET /api/v2/runs/{id}` once the stream ends, trying a failed read once more; Stop posts
-  to `/api/v2/runs/{id}/cancel`. The `/api/v2` client is `web/src/api/v2.ts`; it sends keys
+  to `/api/v2/runs/{id}/cancel`. The `/api/v2` client is `playground/frontend/src/api/v2.ts`; it sends keys
   in the same headers as `/api`.
 - **Results.** The inspectors read results with `GET /api/v2/results/{id}/payload`, and
   Build checks that a kept result is still there with `GET /api/v2/results/{id}`.
@@ -351,21 +351,21 @@ function on the old client (`api.createRun`). It cannot see a path built up from
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
   storage; see [privacy.md](privacy.md).
 - **Pipelines and documents.** A saved pipeline is a name, a config (a pipeline file's
-  settings), a list of documents and the question Ask asks (`web/src/state/pipelines.ts`).
+  settings), a list of documents and the question Ask asks (`playground/frontend/src/state/pipelines.ts`).
   It is drawn as a column with `columnOf` when it opens, so the run request, recipe hashes
   and cache keys are what they were. Pipelines exported before the list existed get it on
   read, from the graph's source node. Share links, export files and old versions are in
   [How the web app holds a pipeline](#how-the-web-app-holds-a-pipeline). The ready-made Starter pipeline
-  (`web/src/state/starter.ts`) is the default recipe `sampleGraph` builds, on the default
-  sample, and is never stored as a saved pipeline. `web/src/state/pipelineChoice.ts` lists
+  (`playground/frontend/src/state/starter.ts`) is the default recipe `sampleGraph` builds, on the default
+  sample, and is never stored as a saved pipeline. `playground/frontend/src/state/pipelineChoice.ts` lists
   what Evaluate can score and picks the one it opens on. A question in a question set may
   name its `document`; the server fills in the set's one document and refuses a set that
   names two, so scoring several documents later needs no new file format.
 - **Documents on the page.** One element names a document everywhere
-  (`web/src/components/DocumentItem.tsx`): full, with page 1's picture, the title, the file
+  (`playground/frontend/src/components/DocumentItem.tsx`): full, with page 1's picture, the title, the file
   name, the page count and Sample or Your upload, or compact, with the picture and the
   title. Its Preview (`DocumentPreview.tsx`) opens the shared side sheet
-  (`web/src/components/SideSheet.tsx`) on every page, from the same page sizes and page
+  (`playground/frontend/src/components/SideSheet.tsx`) on every page, from the same page sizes and page
   images the PDF viewer uses (`GET /api/v2/documents/{sha}/pages` and
   `/api/v2/documents/{sha}/pages/{n}`). It asks for neither until the document lists say
   the server has the file, so an expired upload shows a blank page and logs no failed
@@ -374,20 +374,20 @@ function on the old client (`api.createRun`). It cannot see a path built up from
   Documents and on Compare's Document line. The header has none.
 
 The app also has lessons, a guided walk through each step, but they are switched off
-(`LESSONS_ENABLED` in `web/src/state/lessons.ts`) while they are reworked.
+(`LESSONS_ENABLED` in `playground/frontend/src/state/lessons.ts`) while they are reworked.
 
 ## How the web app holds a pipeline
 
 The browser holds a pipeline as a Pandion config, the pipeline file's shape
-(`PipelineConfig` in `web/src/state/config.ts`), with the documents it runs on and the
+(`PipelineConfig` in `playground/frontend/src/state/config.ts`), with the documents it runs on and the
 question Ask asks beside it. It never holds `path`, `models` or `plugins`: the server sets
 the first two and refuses the third. There are two kinds of pipeline in the browser.
 
 - **The working pipeline.** Build keeps one pipeline, the copy you edit, in localStorage
-  under `rag-playground:pipeline:v2` (`web/src/state/working.ts`). Every change on Build is
+  under `rag-playground:pipeline:v2` (`playground/frontend/src/state/working.ts`). Every change on Build is
   written there at once. Compare and Evaluate read the same copy.
 - **Saved pipelines.** The Library keeps saved pipelines under
-  `rag-playground:pipelines:v2` (`web/src/state/pipelines.ts`), up to twenty. Each one is a
+  `rag-playground:pipelines:v2` (`playground/frontend/src/state/pipelines.ts`), up to twenty. Each one is a
   named copy. **Save** copies the working pipeline into the list. Opening a saved
   pipeline, from Build's Pipeline picker or from Library, copies it back into the working
   pipeline. Editing on Build never changes a saved pipeline until you save again; until
@@ -445,6 +445,6 @@ removed and another added left its id as `clean_1` (`stepOfCardIn`, `cardOfStepI
 Build's per-tab results are in sessionStorage under `rag-playground:build-session:v2`,
 because the old ones were keyed by the old graph's card ids.
 
-The fixture `web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the
+The fixture `playground/frontend/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the
 browser holds it, and two tests pin that converting the app's Starter gives that file, so
 a visitor's Starter keeps its result ids.

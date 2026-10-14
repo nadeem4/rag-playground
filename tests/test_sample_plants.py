@@ -38,7 +38,7 @@ SAMPLES = ["chunking-primer", "two-column-report", "table-of-figures", "scanned-
 #: exception: with no text layer every question misses until OCR is on.
 TEXT_SAMPLES = ["chunking-primer", "two-column-report", "table-of-figures"]
 SCANNED = "scanned-notes"
-#: The default pipeline's chunker (web/src/state/graph.ts, sampleGraph).
+#: The default pipeline's chunker (playground/frontend/src/state/graph.ts, sampleGraph).
 CHUNKER = ("recursive_character", {"chunk_size": 400, "chunk_overlap": 80})
 TOP_K = 5
 MIN_PIECES = 20

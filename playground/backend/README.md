@@ -24,7 +24,7 @@ how it fits with the frontend.
 - `expiry.py` deletes demo uploads a day after they arrive. It never touches a sample.
 - `sample_set.py` reads the bundled samples in `samples/`, each with its card, its PDF and
   its questions. A broken sample folder stops the server at startup.
-- `static.py` serves the built frontend from `web/dist`, and sends a page route the
+- `static.py` serves the built frontend from `playground/frontend/dist`, and sends a page route the
   browser asks for to `index.html`. An unknown `/api` path stays a JSON 404.
 - `warmup.py` loads the first models a run needs in a background thread, so they are
   likely ready when someone presses Run.

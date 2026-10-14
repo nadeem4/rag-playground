@@ -55,7 +55,7 @@ def _client_paths(file: Path, base: str) -> set[str]:
 def test_every_path_the_web_names_is_served(dirs):
     app = app_for(dirs)
     patterns = [re.compile("^" + re.sub(r"\{[^}]+\}", "[^/]+", p) + "$") for _, p in served(app)]
-    web = ROOT / "web" / "src" / "api"
+    web = ROOT / "playground" / "frontend" / "src" / "api"
     wanted = _client_paths(web / "client.ts", "/api") | _client_paths(web / "v2.ts", "/api/v2")
     missing = sorted(p for p in wanted if not any(rx.match(p.replace("{x}", "x")) for rx in patterns))
     assert not missing, "the web names paths the server does not serve: " + ", ".join(missing)

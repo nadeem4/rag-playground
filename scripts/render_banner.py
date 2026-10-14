@@ -3,7 +3,7 @@
     uv run --with playwright==1.55.0 python scripts/render_banner.py
 
 Writes assets/banner.png (1200 x 630, the Space thumbnail and the README) and
-web/public/og-image.png (the same image, served by the app for link previews).
+playground/frontend/public/og-image.png (the same image, served by the app for link previews).
 With --scale 2 it also writes a 2400 x 1260 copy for uploading to LinkedIn, to
 the path given by --linkedin.
 """
@@ -19,7 +19,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "assets" / "banner.html"
 PNG = ROOT / "assets" / "banner.png"
-OG = ROOT / "web" / "public" / "og-image.png"
+OG = ROOT / "playground" / "frontend" / "public" / "og-image.png"
 
 
 def shoot(page_scale: int, out: Path) -> None:

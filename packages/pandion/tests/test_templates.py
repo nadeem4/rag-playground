@@ -65,3 +65,37 @@ def test_an_unknown_template_names_the_ones_there_are():
 def test_every_composed_pair_is_a_valid_pipeline(document, tmp_path):
     for question in _by_id("questions"):
         pandion.Pipeline.from_dict(pandion.compose_template(document, question, path=str(tmp_path)))
+
+
+def _rerankers(question: str) -> list[dict]:
+    return _by_id("questions")[question]["pipeline"]["retrieve"].get("rerank") or []
+
+
+def test_exact_terms_counts_the_keyword_search_more_than_the_meaning_search():
+    search = _by_id("questions")["exact"]["pipeline"]["retrieve"]["search"]
+    assert search["use"] == "hybrid_rrf"
+    assert search["bm25_weight"] > search.get("dense_weight", 1.0)
+
+
+def test_balanced_reranks_with_the_small_cross_encoder_and_no_template_uses_mmr():
+    assert _rerankers("balanced") == [
+        {"use": "cross_encoder", "model": "cross-encoder/ms-marco-MiniLM-L-6-v2", "top_k": 5}
+    ]
+    assert not [q for q in _by_id("questions") if any(r["use"] == "mmr" for r in _rerankers(q))]
+
+
+@pytest.mark.parametrize("question", ["exact", "precision", "vague", "chat"])
+def test_the_precise_templates_rerank_with_the_strongest_cross_encoder(question):
+    [rerank] = _rerankers(question)
+    assert rerank["model"] == "BAAI/bge-reranker-v2-m3"
+    assert rerank["model"] in pandion.catalog()["rerank"]["cross_encoder"]["config_schema"]["properties"]["model"]["enum"]
+
+
+def test_vague_questions_says_the_reranker_reads_the_question_as_typed():
+    assert "as typed" in _by_id("questions")["vague"]["summary"]
+
+
+@pytest.mark.parametrize("family", ["documents", "questions"])
+def test_good_for_is_a_full_sentence(family):
+    for t in pandion.list_templates()[family]:
+        assert t["good_for"].startswith("It suits ") and t["good_for"].endswith("."), t["id"]

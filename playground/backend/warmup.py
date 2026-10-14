@@ -3,8 +3,7 @@
 The sample document's default graph parses with Docling and indexes with the
 Qwen3 embedder, and each takes a while to load the first time; so does the
 default cross-encoder the first time someone reranks. `start()` loads all
-three in a daemon thread (on the demo also bge-reranker-base, which the Best
-precision template uses), so the models are likely ready by the time the user
+three in a daemon thread, so the models are likely ready by the time the user
 presses Run. It runs at most once per process, never blocks the caller, and a
 failure is only logged: the run itself loads the models again if it has to.
 
@@ -41,24 +40,16 @@ def _warm_index_models() -> None:
     preload_embedder("qwen3-embedding-0.6b", APP_MODELS)
 
 
-#: The cross-encoder the Best precision, Vague questions and Chat answer
-#: templates rerank with. The demo warms it too, so their first run does not wait.
-PRECISION_RERANKER = "BAAI/bge-reranker-base"
-
-
 def _warm_reranker() -> None:
-    """Load the default cross-encoder, and on the demo the templates' stronger
-    one. A failed download is logged, never raised: the reranker loads the
-    model again when it first runs."""
-    from playground.backend import demo
+    """Load the default cross-encoder. A failed download is logged, never
+    raised: the reranker loads the model again when it first runs."""
     from playground.backend.deps import APP_MODELS
     from pandion import preload_reranker
 
-    for model in [None, PRECISION_RERANKER] if demo.enabled() else [None]:
-        try:
-            preload_reranker(model, settings=APP_MODELS)
-        except Exception:
-            log.exception("cross-encoder warm-up failed")
+    try:
+        preload_reranker(settings=APP_MODELS)
+    except Exception:
+        log.exception("cross-encoder warm-up failed")
 
 
 def _run() -> None:

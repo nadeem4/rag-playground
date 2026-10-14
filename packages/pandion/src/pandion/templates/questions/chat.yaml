@@ -1,18 +1,18 @@
 template:
   name: Chat answer
   summary: Best precision, then a chat model writes the answer from the top pieces and cites them. Needs an API key.
-  good_for: Questions you want answered in a sentence or two, with each claim pointing at its source.
+  good_for: It suits questions you want answered in a sentence or two, with each claim pointing at its source.
 retrieve:
   rewrite: none                 # searches with the question as typed
   search:
     use: hybrid_rrf             # keyword and meaning search fused by rank, for good recall
     top_k: 30                   # more candidates than usual, because the reranker decides the order
-    rrf_k: 60                   # the usual fusion constant: neither list outweighs the other
+    rrf_k: 60                   # the usual fusion constant
     query_expansion: none       # adds no words to the question
   rerank:
     - use: cross_encoder        # reads the question and each piece together and scores the pair
-      model: BAAI/bge-reranker-base   # stronger than MiniLM, and still fast enough on a CPU for 30 pieces
-      top_k: 5
+      model: BAAI/bge-reranker-v2-m3   # the same strong reranker as Best precision, so the chat model reads its top five
+      top_k: 5                  # the five pieces the chat model reads
 answer:
   use: chat                     # a chat model answers from the pieces only, and every citation is checked
   model: claude-sonnet-5        # strong enough to follow the citation rules, and cheaper than Opus

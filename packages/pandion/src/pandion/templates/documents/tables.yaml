@@ -1,7 +1,7 @@
 template:
   name: Reports with tables
   summary: Reads the page layout, rebuilds each table's rows and columns, and keeps every table whole in one piece.
-  good_for: Financial reports, data sheets and studies where answers sit in table rows.
+  good_for: It suits financial reports, data sheets and studies whose answers sit in table rows.
   sample: table-of-figures
 index:
   parse:

@@ -1,7 +1,7 @@
 template:
   name: Text documents
   summary: Reads the PDF's own text, removes running headers, footers and repeats, and cuts at sentence ends.
-  good_for: Articles, policies and plain reports set in one column, with few tables.
+  good_for: It suits articles, policies and plain reports set in one column, with few tables.
   sample: chunking-primer
 index:
   parse:

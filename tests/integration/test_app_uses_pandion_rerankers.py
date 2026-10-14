@@ -50,21 +50,9 @@ def test_warm_up_loads_the_default_cross_encoder_on_the_cpu(monkeypatch):
 
     loaded: list = []
     monkeypatch.setattr(ce, "_load", lambda model_id, settings=None: loaded.append((model_id, settings)))
-    monkeypatch.delenv("RAG_PLAYGROUND_DEMO", raising=False)
     warmup._warm_reranker()
     assert loaded == [(MINILM, APP_MODELS)]
     assert APP_MODELS.device == "cpu"
-
-
-def test_the_demo_also_warms_the_best_precision_cross_encoder(monkeypatch):
-    """Best precision, Vague questions and Chat answer rerank with bge-reranker-base."""
-    import pandion.plugins.rerank.cross_encoder as ce
-
-    loaded: list = []
-    monkeypatch.setattr(ce, "_load", lambda model_id, settings=None: loaded.append(model_id))
-    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
-    warmup._warm_reranker()
-    assert loaded == [MINILM, "BAAI/bge-reranker-base"]
 
 
 def test_a_failed_cross_encoder_download_is_logged_not_raised(monkeypatch, caplog):

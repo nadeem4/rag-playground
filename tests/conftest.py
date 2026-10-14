@@ -9,12 +9,12 @@ strictly worse than having no contract suite, because every new plugin would
 look covered.
 
 A root conftest is imported before collection of any test module, so calling
-`discover()` here is what makes the parametrization real.
+Pandion's `discover()` here is what makes the parametrization real.
 """
 
 from __future__ import annotations
 
-from api.steps import discover
+from pandion.plugins import discover
 
 discover()
 

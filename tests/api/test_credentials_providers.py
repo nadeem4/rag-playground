@@ -364,16 +364,25 @@ def test_demo_host_keys_never_reach_a_run(client, monkeypatch):
     assert seen == [None]
 
 
-def test_every_key_is_redacted_from_a_failing_run(client, dirs, monkeypatch):
+def test_every_key_is_redacted_from_a_failing_run(client, monkeypatch):
     spy_runs(monkeypatch, fail=True)
     run_id, stream = start_run(client, ALL_HEADERS)
     assert "[redacted]" in stream
     snapshot = client.get(f"/api/v2/runs/{run_id}").text
-    files = b"".join(p.read_bytes() for p in dirs["sources"].parent.rglob("*") if p.is_file())
     state = repr(vars(client.app.state.runs.get(run_id)))
     for secret in (FAKE_KEY, OPENAI_KEY, CUSTOM_KEY, OPENROUTER_KEY):
         assert secret not in stream and secret not in snapshot and secret not in state
-        assert secret.encode() not in files
+
+
+def test_a_real_run_with_every_key_writes_none_of_them_to_disk(client, dirs):
+    """No spy: the run parses, chunks, embeds and stores, so there are results to read."""
+    run_id, stream = start_run(client, ALL_HEADERS)
+    assert client.get(f"/api/v2/runs/{run_id}").json()["ok"] is True
+    files = [p for p in dirs["sources"].parent.rglob("*") if p.is_file()]
+    assert any("artifacts" in p.parts for p in files), "the run stored no results"
+    for secret in (FAKE_KEY, OPENAI_KEY, CUSTOM_KEY, OPENROUTER_KEY):
+        assert secret not in stream
+        assert not [p for p in files if secret.encode() in p.read_bytes()]
 
 
 @pytest.mark.parametrize("provider", ["anthropic", "openai", "openrouter"])

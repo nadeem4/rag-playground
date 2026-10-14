@@ -129,3 +129,19 @@ def test_the_cli_imports_only_public_pandion_names():
     cli = ROOT / "packages" / "pandion" / "src" / "pandion" / "cli.py"
     private = [entry for entry in pandion_imports(cli.read_text(encoding="utf-8")) if not is_public(entry)]
     assert not private, "the CLI imports names that are not public: " + ", ".join(private)
+
+
+def test_the_app_loads_no_plugin_module_by_name():
+    """An import by string (`importlib.import_module("pandion.plugins.x")`) is
+    not an import statement, so the test above cannot see it. Pandion loads
+    its own plugins; the app never names them."""
+    found = [
+        f"{path.relative_to(ROOT)}:{node.lineno}"
+        for folder in APP_DIRS
+        for path in sorted((ROOT / folder).rglob("*.py"))
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith("pandion.plugins")
+    ]
+    assert not found, "the app names Pandion's plugin modules: " + ", ".join(found)

@@ -13,7 +13,7 @@ holds every word of the answer in order, but with other text between them, is
 That is what a parser that reads straight across two columns does.
 
 Each payload may be the stored JSON or the object a `StageResult` holds.
-`pandion.evaluate` runs this for every miss; the playground's `POST /api/trace`
+`pandion.evaluate` runs this for every miss, and pandion-api's `POST /trace`
 runs it on the results a finished run stored.
 """
 

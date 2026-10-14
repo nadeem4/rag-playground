@@ -2,7 +2,7 @@
  * Hand-written mirrors of the engine's shapes. Sources of truth:
  *   registry  packages/pandion/src/pandion/registry.py  Registry.export_schema()
  *   payloads  packages/pandion/src/pandion/payloads.py
- *   events    packages/pandion/src/pandion/executor.py + api/runs.py (the SSE stream)
+ *   events    packages/pandion/src/pandion/executor.py + pandion-api's runs.py (the SSE stream)
  *
  * The fixtures in ./fixtures are generated from the real engine by
  * web/scripts/export_fixtures.py; types.test.ts checks these types against them.

@@ -1,13 +1,9 @@
 """The app reranks with the pandion package, not with a copy of its own.
 
 The `mmr`, `cross_encoder` and `llm_rerank` steps moved into pandion. These
-tests prove the app runs on them: the app's registry holds the package's
-classes, the old module is gone, the warm-up loads the cross-encoder through
-the public `preload_reranker` with the app's model settings, and a graph run
-the way the old run routes ran it (the executor, the registry, a store and the
-run extras, from `tests.engine_deps`) gives the same artifact ids and hits as
-`p.retrieve` with the same settings on the same file. The fake embedder keeps
-it offline.
+tests prove the app runs on them: the registry holds the package's classes, the
+old module is gone, and the warm-up loads the cross-encoder through the public
+`preload_reranker` with the app's model settings.
 """
 
 from __future__ import annotations
@@ -17,22 +13,13 @@ import logging
 from types import SimpleNamespace
 
 import pytest
-import yaml
 
 from api import warmup
 from api.deps import APP_MODELS
-from tests.engine_deps import engine_deps
-from pandion import Pipeline
-from pandion.artifacts import ArtifactType
-from pandion.executor import NodeStatus, run
-from pandion.graph import Edge, Graph, Node
-from pandion.payloads import RetrievalResult
 from pandion.ports import Stage
 from pandion.registry import registry
-from tests.steps.conftest import SAMPLE_PAGES, build_pdf
 
 RERANKERS = ["mmr", "cross_encoder", "llm_rerank"]
-QUESTION = "What is the capital of France?"
 MINILM = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 
@@ -109,84 +96,3 @@ def test_the_reranker_warms_even_when_the_index_models_fail(monkeypatch, caplog)
         warmup._warm()
     assert calls == ["reranker"]
     assert "docling broke" in caplog.text
-
-
-# -- the same hits both ways -------------------------------------------------------
-
-CHUNK = {"chunk_size": 70, "chunk_overlap": 10}
-SEARCH = {"top_k": 20}
-MMR = {"top_k": 5, "lambda_mult": 0.3}
-
-
-def app_graph(sha: str, filename: str) -> Graph:
-    """pdfium -> chunk -> lancedb -> dense -> mmr, as the Build page wires it."""
-    return Graph(
-        nodes=[
-            Node("src", Stage.SOURCE, "upload", {"sha": sha, "filename": filename}),
-            Node("q", Stage.QUERY, "text", {"text": QUESTION}),
-            Node("parse", Stage.PARSE, "pdfium", {}),
-            Node("chunk", Stage.CHUNK, "recursive_character", CHUNK),
-            Node("index", Stage.INDEX, "lancedb", {"embedder": "fake-deterministic"}),
-            Node("dense", Stage.RETRIEVE, "dense", SEARCH),
-            Node("mmr", Stage.RERANK, "mmr", MMR),
-        ],
-        edges=[
-            Edge("src", "parse", "file"),
-            Edge("parse", "chunk", "doc"),
-            Edge("chunk", "index", "chunks"),
-            Edge("index", "dense", "index"),
-            Edge("dense", "mmr", "result"),
-        ],
-    )
-
-
-def test_the_app_run_gives_the_same_hits_as_p_retrieve(tmp_path):
-    docs = tmp_path / "docs"
-    docs.mkdir()
-    pdf = docs / "sample.pdf"
-    pdf.write_bytes(build_pdf(SAMPLE_PAGES))
-
-    deps = engine_deps(
-        artifacts_dir=tmp_path / "artifacts",
-        sources_dir=tmp_path / "sources",
-    )
-    stored = deps.run_extras()["sources"].add(pdf)
-    in_app = run(
-        app_graph(stored.sha, stored.filename), deps.registry, deps.store,
-        context_extras=deps.run_extras(),
-    )
-    assert in_app.ok
-    app_result = RetrievalResult.model_validate(
-        deps.store.load(in_app.nodes["mmr"].artifact.id, ArtifactType.RETRIEVAL_RESULT)
-    )
-
-    config = tmp_path / "pipeline.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "path": "./pandion",
-                "index": {
-                    "parse": {"use": "pdfium"},
-                    "chunk": {"use": "recursive_character", **CHUNK},
-                    "embed": {"use": "fake-deterministic"},
-                    "store": {"use": "lancedb"},
-                },
-                "retrieve": {
-                    "search": {"use": "dense", **SEARCH},
-                    "rerank": {"use": "mmr", **MMR},
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    p = Pipeline.from_file(config)
-    p.index.run(docs)
-    result = p.retrieve(QUESTION)
-
-    assert result.stages["rerank"][0].artifact_id == in_app.nodes["mmr"].artifact.id
-    assert result.stages["search"].artifact_id == in_app.nodes["dense"].artifact.id
-    assert in_app.nodes["mmr"].status is NodeStatus.EXECUTED
-    assert [(h.chunk.id, h.rank, h.score) for h in result.hits] == [
-        (h.chunk.id, h.rank, h.score) for h in app_result.hits
-    ]
-    assert result.hits

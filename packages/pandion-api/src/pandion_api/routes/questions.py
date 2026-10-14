@@ -35,8 +35,7 @@ PARSER_NOTE = (
     "passage found here can still miss there, and the other way round."
 )
 
-#: The most a question set may be, read, hold or check. The old
-#: /api/sources/{sha}/questions route reads a set through `read_set` too.
+#: The most a question set may be, read, hold or check (`read_set`).
 MAX_SET_BYTES = 1024 * 1024
 MAX_QUESTIONS = 500
 MAX_GOLDS = 20

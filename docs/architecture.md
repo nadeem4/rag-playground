@@ -26,7 +26,7 @@ packages/pandion-api/  pandion-api: Pandion's public API over HTTP, with a Polic
 api/         the playground's server: pandion-api with the playground's Policy (api/policy.py)
              under /api/v2, the teaching routes under /api (api/routes/: health, samples,
              lessons, stage copy, app settings, the question template), demo mode, and the
-             web build; the manifest of the steps it loads is in api/steps/
+             web build. It has no steps of its own: Pandion loads its plugins itself
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
 samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
@@ -73,17 +73,11 @@ unchanged, and deletes the previous index from the store. The app does not use s
 (rewrite, search, rerank) in one graph with the index steps, so the index is a cache hit,
 and returns the hits with every step's `StageResult`. `p.ask(question)` adds the file's
 `answer` step, `search` or `chat`, to that graph and returns an `Answer` with the
-answer step's output and every step's `StageResult`. The app uses neither. The
-app runs the same strategies through its pipeline graph, and
-`tests/integration/test_app_uses_pandion_chunkers.py`,
-`tests/integration/test_app_uses_pandion_index.py`,
-`tests/integration/test_app_uses_pandion_query.py`,
-`tests/integration/test_app_uses_pandion_retrievers.py`,
-`tests/integration/test_app_uses_pandion_rerankers.py`,
-`tests/integration/test_app_uses_pandion_answer.py` and
-`tests/integration/test_app_uses_pandion_evaluation.py` check both give the same pieces,
-the same index, the same query, the same hits, before and after a reranker, the same
-answer, and the same eval verdict. `pandion.evaluate(p, questions)` asks every question
+answer step's output and every step's `StageResult`. The app runs them through
+pandion-api: Build's Ask is `POST /api/v2/ask`. The `tests/integration/test_app_uses_pandion_*.py`
+files check that the registry holds the package's strategies and that the app's old copies
+are gone, and `test_app_uses_pandion_evaluation.py` checks that `POST /api/v2/evaluations`
+gives the same score as `pandion.evaluate`. `pandion.evaluate(p, questions)` asks every question
 and scores it with the same `eval` step; the app's Evaluate page runs it through
 `POST /api/v2/evaluations` and shows the totals it returns.
 `pandion.compare(p, stage, variants, documents, questions)` builds one pipeline per
@@ -201,8 +195,9 @@ model and a `Transform` subclass registered with `@register`. The class declares
 stage, its input ports, its output type, a `summary`, and an `explain(config)` that says
 what these settings will do.
 
-- `api/steps/__init__.py` lists every module the app loads in `PLUGIN_MODULES`, all of them in the package. A test fails if a plugin
-  module exists but is not listed.
+- `PLUGIN_MODULES` in `pandion/plugins/__init__.py` lists every plugin module, and Pandion
+  loads them itself. A test fails if a plugin module exists but is not listed. The app
+  never names a plugin module.
 - `GET /api/v2/strategies` exports every transform with its summary, its config's JSON schema,
   and what it requires, provides and prefers. The web app builds every settings form from
   that schema, so a new strategy needs no frontend change.

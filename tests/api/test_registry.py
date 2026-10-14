@@ -5,8 +5,8 @@ GET /api/v2/strategies, through `PlaygroundPolicy.strategies` and
 from __future__ import annotations
 
 from api.stage_copy import STAGE_LESSON, STAGE_WHAT
-from api.steps import PLUGIN_MODULES
 from pandion.extend import Stage
+from pandion.plugins import PLUGIN_MODULES
 
 
 def test_the_catalog_lists_every_plugin_with_its_contract(client):

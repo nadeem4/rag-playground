@@ -7,9 +7,6 @@ two must sit side by side in one folder, which pandion-api runs every pipeline
 under (`api.main.api_settings`); it keeps the embedding cache in `embeddings/`
 beside them. The teaching routes read the sources folder, the expiry sweeper
 deletes uploads from it, and the web build is served from `web_dist`.
-
-`api.steps.discover()` runs exactly once, at import, so the catalog lists the
-stages in the playground's order.
 """
 
 from __future__ import annotations
@@ -19,11 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pandion import ModelSettings
-from api.steps import discover
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-
-discover()
 
 #: How the app loads local models: on the CPU, from the Hugging Face folder.
 APP_MODELS = ModelSettings(device="cpu")

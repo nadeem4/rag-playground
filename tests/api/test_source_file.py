@@ -1,4 +1,4 @@
-"""An upload's own bytes (`GET /api/sources/{sha}/file`), so Library can export a
+"""An upload's own bytes (`GET /api/v2/documents/{sha}/file`), so Library can export a
 saved item with its document. Readable exactly where the pages are: on the
 demo, a sample or the caller's own upload; locally, any file."""
 

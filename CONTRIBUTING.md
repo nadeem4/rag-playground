@@ -132,9 +132,9 @@ model, so a new strategy needs no frontend change.
      stays selectable, tagged "Falls back";
    - `deterministic = False` if its output can change between runs (a model call), and
      `cacheable = False` if its output should never be reused, as for chat answers.
-2. Add the module to `PLUGIN_MODULES` in `pandion/plugins/__init__.py` and in the app's
-   `api/steps/__init__.py`. A test fails if a plugin module exists but
-   is not listed. Import a heavy library inside the function that uses it, through
+2. Add the module to `PLUGIN_MODULES` in `pandion/plugins/__init__.py`. A test fails if a
+   plugin module exists but is not listed. The app needs no change: it never names a
+   plugin module. Import a heavy library inside the function that uses it, through
    `pandion.errors.require`, so discovering the strategy needs no extra. A package
    strategy also gets a step class, one line in its stage's module (for example
    `Docling = step_class(Stage.PARSE, "docling", __name__)` in

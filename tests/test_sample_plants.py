@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-import api.steps
+import pandion.plugins
 from pandion.artifacts import ArtifactType
 from pandion.executor import run
 from pandion.graph import Edge, Graph, Node
@@ -83,7 +83,7 @@ class Runner:
     """One sample in a fresh store, run through the real pipeline in-process."""
 
     def __init__(self, name: str, tmp_path: Path, monkeypatch) -> None:
-        api.steps.discover()
+        pandion.plugins.discover()
         folder = tmp_path / "sources"
         folder.mkdir()
         self.extras = {

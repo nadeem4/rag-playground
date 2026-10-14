@@ -1,4 +1,4 @@
-"""Deleting an upload now (`DELETE /api/sources/{sha}`), and the upload time the list gives.
+"""Deleting an upload now (`DELETE /api/v2/documents/{sha}`), and the upload time the list gives.
 
 On the demo a visitor deletes only their own upload: another visitor's file,
 a sample, or a sha nobody uploaded is refused. A file two visitors uploaded

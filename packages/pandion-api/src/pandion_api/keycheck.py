@@ -1,7 +1,6 @@
 """Does a model key work? One call that costs no tokens: `models.list()`, or for
 OpenRouter, whose model list is public, `GET /key`, which needs a valid key.
-The playground's old POST /api/settings/llm/check calls this too, so the check
-has one implementation."""
+`POST /settings/models/check` calls it."""
 
 from __future__ import annotations
 

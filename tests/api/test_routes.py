@@ -59,3 +59,39 @@ def test_every_path_the_web_names_is_served(dirs):
     wanted = _client_paths(web / "client.ts", "/api") | _client_paths(web / "v2.ts", "/api/v2")
     missing = sorted(p for p in wanted if not any(rx.match(p.replace("{x}", "x")) for rx in patterns))
     assert not missing, "the web names paths the server does not serve: " + ", ".join(missing)
+
+
+SHA = "a" * 64
+
+#: Every route Task 21 deleted, as (method, path). The schema test above cannot
+#: see a route hidden from the schema, so each is also asked for here.
+DELETED = [
+    ("GET", "/api/registry"),
+    ("POST", "/api/explain"),
+    ("GET", "/api/sources"),
+    ("POST", "/api/sources"),
+    ("DELETE", f"/api/sources/{SHA}"),
+    ("GET", f"/api/sources/{SHA}/file"),
+    ("GET", f"/api/sources/{SHA}/pages"),
+    ("GET", f"/api/sources/{SHA}/pages/1.png"),
+    ("GET", f"/api/sources/{SHA}/pages/1/find?text=x"),
+    ("GET", f"/api/sources/{SHA}/questions"),
+    ("POST", f"/api/sources/{SHA}/questions"),
+    ("DELETE", f"/api/sources/{SHA}/questions"),
+    ("POST", "/api/runs"),
+    ("GET", "/api/runs/x"),
+    ("GET", "/api/runs/x/events"),
+    ("POST", "/api/runs/x/cancel"),
+    ("POST", "/api/sweeps"),
+    ("GET", f"/api/artifacts/{SHA}"),
+    ("GET", f"/api/artifacts/{SHA}/payload"),
+    ("DELETE", "/api/cache"),
+    ("POST", "/api/trace"),
+    ("GET", "/api/settings/llm"),
+    ("POST", "/api/settings/llm/check"),
+]
+
+
+def test_every_deleted_route_is_gone(client):
+    served = {(m, p): client.request(m, p, json={}).status_code for m, p in DELETED}
+    assert {k: v for k, v in served.items() if v not in (404, 405)} == {}

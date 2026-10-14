@@ -39,6 +39,8 @@ def steps(config: dict[str, Any]) -> list[tuple[str, str, str, dict[str, Any]]]:
     def add(where: str, stage: str, block: dict[str, Any]) -> None:
         found.append((where, stage, block["use"], {k: v for k, v in block.items() if k != "use"}))
 
+    # index.embed is not visited: to_dict folds the embedder's settings into it,
+    # and no embedder has a read-only setting or a custom endpoint today.
     for section, key, stage in SINGLE:
         block = _block(_section(config, section).get(key))
         if block:
@@ -66,7 +68,8 @@ def custom_endpoint_steps(config: dict[str, Any], catalog: dict[str, Any] | None
     for where, stage, use, settings in steps(config):
         field = _properties(catalog, stage, use).get("model") or {}
         providers = field.get("x-providers") or {}
-        if providers.get(settings.get("model")) == "openai_compatible":
+        model = settings.get("model")
+        if isinstance(model, str) and providers.get(model) == "openai_compatible":
             found.append(where)
     return found
 

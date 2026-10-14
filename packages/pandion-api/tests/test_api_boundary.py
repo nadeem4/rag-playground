@@ -12,6 +12,8 @@ import ast
 import importlib
 from pathlib import Path
 
+import pytest
+
 SRC = Path(__file__).resolve().parents[1] / "src" / "pandion_api"
 
 PUBLIC_MODULES = (
@@ -30,9 +32,11 @@ PUBLIC_MODULES = (
 
 def pandion_uses(source: str) -> list[str]:
     """Every pandion import in `source` as "module:name" ("module:*" for `import
-    module`), and every attribute read off a name an import bound to a pandion
-    module (`import pandion`, `import pandion as p`, `import pandion.extend as x`)
-    as "module:<attribute>"."""
+    module`), and every dotted read off a name an import bound to a pandion
+    module (`import pandion`, `import pandion as p`, `import pandion.extend as x`,
+    `from pandion import extend`) as "module:<name>": the chain is followed
+    through public modules (`p.extend.Stage` is "pandion.extend:Stage") and the
+    first name past them is the one checked."""
     tree = ast.parse(source)
     bound: dict[str, str] = {}
     found: list[str] = []
@@ -52,10 +56,26 @@ def pandion_uses(source: str) -> list[str]:
             and node.module
             and node.module.split(".")[0] == "pandion"
         ):
-            found += [f"{node.module}:{a.name}" for a in node.names]
+            for a in node.names:
+                found.append(f"{node.module}:{a.name}")
+                if f"{node.module}.{a.name}" in PUBLIC_MODULES:
+                    bound[a.asname or a.name] = f"{node.module}.{a.name}"
+    inner = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in bound:
-            found.append(f"{bound[node.value.id]}:{node.attr}")
+        if not isinstance(node, ast.Attribute) or id(node) in inner:
+            continue
+        chain: list[str] = []
+        part: ast.expr = node
+        while isinstance(part, ast.Attribute):
+            chain.insert(0, part.attr)
+            part = part.value
+        if not isinstance(part, ast.Name) or part.id not in bound:
+            continue
+        module = bound[part.id]
+        while chain and f"{module}.{chain[0]}" in PUBLIC_MODULES:
+            module = f"{module}.{chain.pop(0)}"
+        if chain:
+            found.append(f"{module}:{chain[0]}")
     return found
 
 
@@ -93,9 +113,43 @@ def test_an_alias_does_not_hide_an_engine_name():
 
 
 def test_a_public_module_may_be_imported_whole():
-    assert pandion_uses("import pandion.extend\npandion.extend.Stage") == ["pandion.extend:*", "pandion:extend"]
+    assert pandion_uses("import pandion.extend\npandion.extend.Stage") == ["pandion.extend:*", "pandion.extend:Stage"]
     assert is_public("pandion.extend:*") and is_public("pandion:extend")
     assert not is_public("pandion.graph:*")
+
+
+def offenders(source: str) -> list[str]:
+    return [entry for entry in pandion_uses(source) if not is_public(entry)]
+
+
+@pytest.mark.parametrize(
+    ("source", "caught"),
+    [
+        ("import pandion.extend\npandion.extend.registry", "pandion.extend:registry"),
+        ("import pandion as p\np.extend.registry", "pandion.extend:registry"),
+        ("from pandion import extend\nextend.registry", "pandion.extend:registry"),
+        ("from pandion import extend as x\nx.registry", "pandion.extend:registry"),
+        ("import pandion\npandion.graph.Graph", "pandion:graph"),
+    ],
+)
+def test_an_engine_name_behind_a_public_module_is_caught(source, caught):
+    assert offenders(source) == [caught]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import pandion\npandion.extend.Stage",
+        "import pandion.extend\npandion.extend.Stage",
+        "import pandion as p\np.extend.Stage.name",
+        "from pandion import extend\nextend.Stage",
+        "from pandion import extend as x\nx.Stage",
+        "from pandion.extend import Stage",
+        "import pandion\npandion.Pipeline.from_dict",
+    ],
+)
+def test_the_public_forms_pass(source):
+    assert pandion_uses(source) and offenders(source) == []
 
 
 def test_pandion_api_uses_only_public_pandion_names():

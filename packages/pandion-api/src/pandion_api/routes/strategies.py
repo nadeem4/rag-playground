@@ -51,7 +51,9 @@ def validate(body: ValidateIn, request: Request) -> dict[str, Any]:
     try:
         p = prepare(body.config, request)
     except HTTPException as exc:
-        if exc.status_code == 422 and isinstance(exc.detail, dict):
+        # Only prepare's own problems become a 200; anything else a Policy
+        # raised, even a 422, keeps its status and detail.
+        if exc.status_code == 422 and isinstance(exc.detail, dict) and "problems" in exc.detail:
             return {"ok": False, "problems": exc.detail["problems"]}
         raise
     return {"ok": True, "problems": [], "config": public(p)}

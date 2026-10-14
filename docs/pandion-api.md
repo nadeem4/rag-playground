@@ -79,7 +79,9 @@ A pipeline in a request runs with the server's folder and models, whatever it sa
 refused, because importing a module a request names would run code the request chose.
 The refusal comes before Pandion reads the pipeline, so nothing is imported. The server
 loads its strategies itself: from its own code, or from installed packages through the
-`pandion.strategies` entry point.
+`pandion.strategies` entry point. A source strategy installed that way with a `location`
+setting can name any location, a server folder or an address, so a site that installs
+one must refuse the locations it does not allow in `Policy.check_run`.
 
 `pandion_api.checks` reads a pipeline dict for a site's rules: `steps(config)` lists every
 step as `(where, stage, use, settings)`, `custom_endpoint_steps(config)` names the steps

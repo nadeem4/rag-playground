@@ -151,3 +151,13 @@ def test_the_default_policy_allows_a_changed_prompt_and_any_budget(client):
         "answer": {"use": "chat", "prompt": "Say yes.", "max_tokens": 10**6},
     }
     assert client.post("/pipelines/validate", json={"config": config}).json()["ok"] is True
+
+
+def test_a_policys_own_422_keeps_its_detail_not_a_500(tmp_path):
+    class Picky(Policy):
+        def check_run(self, config, request):
+            raise HTTPException(422, detail={"why": "not today"})
+
+    with make_client(tmp_path, Picky()) as c:
+        r = c.post("/pipelines/validate", json={"config": PIPELINE})
+    assert r.status_code == 422 and r.json()["detail"] == {"why": "not today"}

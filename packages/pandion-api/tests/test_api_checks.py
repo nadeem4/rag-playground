@@ -52,3 +52,8 @@ def test_a_changed_read_only_setting_is_found_and_its_default_is_not():
     assert changed_read_only_settings({**PIPELINE, "answer": {"use": "chat", "prompt": "Say yes."}}) == ["answer.prompt"]
     reranked = {**PIPELINE, "retrieve": {"search": {"use": "dense"}, "rerank": [{"use": "cross_encoder", "revision": "a" * 40}]}}
     assert changed_read_only_settings(reranked) == ["retrieve.rerank.1.revision"]
+
+
+def test_a_model_that_is_not_a_string_is_not_a_custom_endpoint():
+    for model in (["custom"], {"a": 1}, 3, None):
+        assert custom_endpoint_steps({**PIPELINE, "answer": {"use": "chat", "model": model}}) == []

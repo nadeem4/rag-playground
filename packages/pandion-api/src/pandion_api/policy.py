@@ -82,6 +82,11 @@ class Policy:
         """A step that calls a custom model endpoint accepts only a public https address."""
         return False
 
+    def max_variants(self, request: Request) -> int:
+        """How many variants one comparison may run, which bounds the work one
+        request can ask for."""
+        return 10
+
     def run_owner(self, request: Request) -> str | None:
         """Who a run started by `request` belongs to, for example a visitor's
         cookie. A run with an owner is for that owner only. None: anyone may
@@ -114,6 +119,17 @@ class Policy:
             if key:
                 out[spec.extra] = key
         return out
+
+    def missing_key(self, provider: str) -> str:
+        """What a key check says when there is no key: where one can go."""
+        spec = PROVIDERS[provider]
+        return (
+            f"no API key: send one in the {spec.header} header, or set {spec.env_var} "
+            "for the server process"
+        )
+
+    def check_provider(self, provider: str, request: Request) -> None:
+        """Refuse a key check for this provider (raise HTTPException)."""
 
     # --- what leaves the server -----------------------------------------------------
 

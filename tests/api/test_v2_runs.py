@@ -219,3 +219,44 @@ def test_on_the_demo_a_question_is_its_visitors_own(client, monkeypatch):
     assert client.get(f"/api/v2/runs/{run_id}").json()["kind"] == "retrieve"
     as_visitor(client, "bob-" + "b" * 20)
     assert client.get(f"/api/v2/runs/{run_id}").status_code == 404
+
+
+# --- evaluations and comparisons (Task 13) ---------------------------------------------
+
+QUESTIONS = [{"question": "What is chunking?", "gold_answers": ["Chunking splits a document into passages."]}]
+
+
+def test_on_the_demo_an_evaluation_or_a_comparison_with_a_custom_endpoint_is_refused(client, monkeypatch):
+    demo_on(monkeypatch)
+    sample = client.post("/api/sources/sample").json()
+    documents = [sample["sha"]]
+    r = client.post("/api/v2/evaluations", json={"config": CUSTOM_CONFIGS["llm_rerank"], "documents": documents, "questions": QUESTIONS})
+    assert r.status_code == 403 and r.json()["detail"] == DEMO_NO_CUSTOM
+    custom_reranker = CUSTOM_CONFIGS["llm_rerank"]["retrieve"]["rerank"]
+    body = {"config": PIPELINE, "stage": "rerank", "variants": [[], custom_reranker], "documents": documents, "questions": QUESTIONS}
+    r = client.post("/api/v2/comparisons", json=body)
+    assert r.status_code == 403 and r.json()["detail"] == DEMO_NO_CUSTOM
+
+
+def test_on_the_demo_a_comparison_takes_as_many_variants_as_a_sweep(client, monkeypatch):
+    from api.routes.runs import MAX_VARIANTS
+
+    demo_on(monkeypatch)
+    sample = client.post("/api/sources/sample").json()
+    variants = [{"use": "recursive_character", "chunk_size": 100 + n} for n in range(MAX_VARIANTS + 1)]
+    body = {"config": PIPELINE, "stage": "chunk", "variants": variants, "documents": [sample["sha"]]}
+    r = client.post("/api/v2/comparisons", json=body)
+    assert MAX_VARIANTS == 10 and r.status_code == 422
+    assert f"at most {MAX_VARIANTS}" in r.json()["detail"]["problems"][0]
+
+
+def test_on_the_demo_an_evaluation_is_its_visitors_own(client, monkeypatch):
+    demo_on(monkeypatch)
+    as_visitor(client, "ann-" + "a" * 20)
+    sample = client.post("/api/sources/sample").json()
+    body = {"config": PIPELINE, "documents": [sample["sha"]], "questions": QUESTIONS}
+    run_id = client.post("/api/v2/evaluations", json=body).json()["run_id"]
+    read_sse(client, run_id, prefix="/api/v2")
+    assert client.get(f"/api/v2/runs/{run_id}").json()["kind"] == "evaluation"
+    as_visitor(client, "bob-" + "b" * 20)
+    assert client.get(f"/api/v2/runs/{run_id}").status_code == 404

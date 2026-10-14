@@ -87,10 +87,15 @@ class VariantIn(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+#: The most recipes one sweep runs. /api/v2 comparisons are held to the same
+#: number through `PlaygroundPolicy.max_variants`.
+MAX_VARIANTS = 10
+
+
 class SweepIn(BaseModel):
     graph: GraphIn
     node_id: str
-    variants: list[VariantIn] = Field(min_length=1, max_length=10)
+    variants: list[VariantIn] = Field(min_length=1, max_length=MAX_VARIANTS)
     through: str | None = None
     force: bool = False
 

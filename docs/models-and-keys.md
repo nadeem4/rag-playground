@@ -145,3 +145,7 @@ The API behind it:
 - `POST /api/settings/llm/check` with `{"provider": "anthropic"}` (or `openai`, `custom`
   or `openrouter`) tests one key. A custom check also needs `"base_url"`, and is refused
   on the demo.
+
+pandion-api's `GET /api/v2/settings/models` and `POST /api/v2/settings/models/check` make
+the same report and the same check as Settings, with the same answers: both stacks call
+one function, `pandion_api.keycheck.check_key`.

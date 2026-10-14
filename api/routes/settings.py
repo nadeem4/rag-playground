@@ -2,21 +2,20 @@
 provider, and whether a key works.
 
 Neither endpoint ever returns a key. `GET` reports only the source the *server*
-can supply, per provider; `check` makes one call that costs no tokens:
-`models.list()`, or for OpenRouter, whose model list is public, `GET /key`,
-which needs a valid key.
+can supply, per provider; `check` makes one call that costs no tokens
+(`pandion_api.keycheck.check_key`, which /api/v2/settings/models/check calls too).
 """
 
 from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Header, Request, Response
 from pydantic import BaseModel
 
 from api import demo, visitor
-from api.credentials import PROVIDERS, redact, resolve_key, server_source
-from pandion.extend import EndpointRefused, guard_endpoint, openai_client_kwargs
+from api.credentials import PROVIDERS, resolve_key, server_source
+from pandion_api.keycheck import NO_BASE_URL, REJECTED, check_key  # noqa: F401 (re-exported)
 
 router = APIRouter()
 
@@ -31,8 +30,6 @@ def no_key(provider: str) -> str:
     )
 
 
-NO_BASE_URL = "no base URL: send the custom endpoint's base URL to check it"
-REJECTED = "authentication failed: the API key was rejected"
 DEMO_NO_CUSTOM = "custom endpoints are disabled in this hosted demo"
 
 
@@ -57,6 +54,7 @@ def get_llm_settings() -> dict[str, str]:
 
 @router.post("/settings/llm/check")
 def check_llm_key(
+    request: Request,
     body: CheckIn | None = None,
     x_anthropic_api_key: str | None = Header(default=None),
     x_openai_api_key: str | None = Header(default=None),
@@ -71,51 +69,15 @@ def check_llm_key(
         "openrouter": x_openrouter_api_key,
     }
     provider = body.provider
-    if provider == "custom" and demo.enabled():
-        raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
+    # The site's rule (the demo checks no custom endpoint) lives in its Policy,
+    # which /api/v2/settings/models/check asks too.
+    request.app.state.policy.check_provider(provider, request)
     key, source = resolve_key(headers[provider], provider)
-    if provider == "custom":
-        if not body.base_url:
-            return {"ok": False, "source": source, "error": NO_BASE_URL}
-        try:
-            guard_endpoint(body.base_url, public_only=demo.public_endpoints_only())
-        except EndpointRefused as exc:
-            return {"ok": False, "source": source, "error": str(exc)}
-    elif not key:
-        return {"ok": False, "source": source, "error": no_key(provider)}
-
-    try:
-        if provider == "anthropic":
-            import anthropic  # deferred: only this endpoint needs the SDKs
-
-            auth_error: type[Exception] = anthropic.AuthenticationError
-            client = anthropic.Anthropic(api_key=key, max_retries=0, timeout=15.0)
-        else:
-            import openai
-
-            auth_error = openai.AuthenticationError
-            base_url = body.base_url if provider == "custom" else None
-            kwargs: dict[str, Any] = {
-                **openai_client_kwargs(
-                    key,
-                    base_url,
-                    openrouter=provider == "openrouter",
-                    public_only=demo.public_endpoints_only(),
-                ),
-                "max_retries": 0,
-                "timeout": 15.0,
-            }
-            client = openai.OpenAI(**kwargs)
-        if provider == "openrouter":
-            client.get("/key", cast_to=dict)
-        else:
-            client.models.list()
-    except Exception as exc:
-        if isinstance(exc, auth_error):
-            return {"ok": False, "source": source, "error": REJECTED}
-        return {
-            "ok": False,
-            "source": source,
-            "error": redact(f"{type(exc).__name__}: {exc}", key),
-        }
-    return {"ok": True, "source": source, "error": None}
+    return check_key(
+        provider,
+        key,
+        source,
+        base_url=body.base_url,
+        public_only=demo.public_endpoints_only(),
+        missing=no_key(provider),
+    )

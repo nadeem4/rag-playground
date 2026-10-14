@@ -569,7 +569,11 @@ times. Comparing a retrieval stage builds the index once.
 Without `questions`, each result holds the changed step's output, in `r.outputs`: per
 document for parse, clean and chunk (`r.outputs["report.pdf"].output.chunks`), or under
 `"index"` for embed and store. A retrieval stage needs questions, because without them
-nothing is searched. `r.index` is the variant's index run, `r.pipeline` the pipeline
+nothing is searched. Without questions, `through` stops each variant's index run after
+that step, as `index.run(through=...)` does, so comparing ten chunkers with
+`through="chunk"` embeds nothing. It must not stop before the varied step (comparing
+`chunk` with `through="parse"` is a `ValueError`), and with questions it is a
+`ValueError`, because answering needs the whole index. `r.index` is the variant's index run, `r.pipeline` the pipeline
 with that stage changed (`r.pipeline.to_yaml()` writes it as a file), and `r.to_dict()`
 is all of it as plain JSON. A variant whose index run fails is reported, with
 `r.index.ok` false and no `report`.

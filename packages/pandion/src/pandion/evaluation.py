@@ -368,6 +368,22 @@ COMPARE_STAGES: dict[str, str] = {
 }
 
 
+#: Where each index step falls in a run, for `compare`'s `through`.
+_STEP_ORDER = {"parse": 0, "clean": 1, "chunk": 2, "embed": 3, "store": 3, "index": 3}
+
+
+def _check_through(pipeline: Pipeline, stage: str, through: str) -> None:
+    """A ValueError when `through` names no step of `pipeline` (as `index.run`
+    says it) or stops before the varied `stage`, which would leave nothing to compare."""
+    pipeline.index._last_step(through)
+    stop = _STEP_ORDER[through.split(".")[0]]
+    if stop < _STEP_ORDER[stage]:
+        raise ValueError(
+            f"through='{through}' stops before the {stage} step, so there would be nothing "
+            f"to compare. Stop at the {stage} step or after it."
+        )
+
+
 @dataclass
 class Comparison:
     """One variant: the pipeline with that stage changed, its index run, and
@@ -524,6 +540,7 @@ def compare(
     credentials: dict[str, str] | None = None,
     on_event: Callable[[dict[str, Any]], None] | None = None,
     cancel: threading.Event | None = None,
+    through: str | None = None,
 ) -> Comparisons:
     """Run `p` once per variant, with only `stage` changed, and evaluate each.
 
@@ -541,6 +558,11 @@ def compare(
     `on_event` gets every event, with the variant's number (from 1) under
     "variant" and the number of variants under "variants"; `cancel` starts no
     further variant, and the result says it was cancelled.
+
+    `through` stops each variant's index run after that step, as
+    `index.run(through=...)` does, so comparing chunkers need not embed
+    anything. It is only for a comparison without questions, and it must not
+    stop before the varied step.
     """
     section = COMPARE_STAGES.get(stage)
     if section is None:
@@ -553,6 +575,11 @@ def compare(
         raise ValueError(
             f"Comparing {stage} needs questions: without them nothing is searched, "
             f"so there is no {stage} result to compare."
+        )
+    if through is not None and questions is not None:
+        raise ValueError(
+            "through is only for a comparison without questions: answering a question needs "
+            "the whole index, so leave through out or leave the questions out."
         )
     asked = load_questions(questions)["questions"] if questions is not None else None
     base = to_dict(p.config)
@@ -567,6 +594,9 @@ def compare(
             pipelines.append(Pipeline._of(from_dict(data, base=p.config.path)))
         except ConfigError as exc:
             raise ConfigError(f"variant {n}: {exc}") from None
+    if through is not None:
+        for pipeline in pipelines:
+            _check_through(pipeline, stage, through)
     results = Comparisons()
     for n, (variant, pipeline) in enumerate(zip(variants, pipelines), start=1):
         if cancel is not None and cancel.is_set():
@@ -576,7 +606,9 @@ def compare(
         if on_event is not None:
             def emit(e: dict[str, Any], n: int = n) -> None:
                 on_event({**e, "variant": n, "variants": len(variants)})
-        index = pipeline.index.run(documents, on_event=emit, cancel=cancel, credentials=credentials)
+        index = pipeline.index.run(
+            documents, through=through, on_event=emit, cancel=cancel, credentials=credentials
+        )
         report = None
         if asked is not None and index.ok:
             report = evaluate(

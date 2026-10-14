@@ -85,6 +85,15 @@ describe("DocumentItem", () => {
     expect(item.querySelector("img")).toBeNull()
   })
 
+  it("asks the server for no page of an upload it no longer has, so nothing fails on every page load (M6)", async () => {
+    render(<DocumentItem doc={GONE} />)
+    // Not even while the lists are still on their way: no page picture is asked for until the file is known.
+    expect(screen.getByTestId("document-item").querySelector("img")).toBeNull()
+    await waitFor(() => expect(within(screen.getByTestId("document-item")).getByText("Removed from the server")).toBeTruthy())
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((u) => u.includes(GONE.sha))).toEqual([])
+  })
+
   it("a page can mark it removed itself", async () => {
     render(<DocumentItem doc={sample} missing />)
     expect(within(screen.getByTestId("document-item")).getByText("Removed from the server")).toBeTruthy()

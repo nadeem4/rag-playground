@@ -8,7 +8,9 @@ import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { documentsOf, withDocuments } from "@/state/document"
 import { pipelineLine } from "@/state/evaluate"
 import { initialGraph, type PipelineGraph } from "@/state/graph"
+import { removedText } from "@/state/config"
 import {
+  cleanSavedPipeline,
   deletePipeline,
   droppedText,
   encodePipeline,
@@ -49,7 +51,8 @@ export function PipelineBar({
   registry: Registry
   /** The ready-made Starter, once the samples list has answered. */
   starter: StarterPipeline | null
-  onLoad: (g: PipelineGraph) => void
+  /** `note` says which settings the server does not allow were dropped on the way in. */
+  onLoad: (g: PipelineGraph, note?: string) => void
   notice?: string | null
   /** Opened from Evaluate: show Back to Evaluate. */
   fromEvaluate?: boolean
@@ -164,8 +167,10 @@ export function PipelineBar({
     const picked = pipelines.find((p) => p.id === value) ?? null
     const loaded = picked ? usableGraph(picked, registry) : null
     if (!picked || !loaded) return
+    // Drawn without any setting the server does not allow; the saved copy loses it too.
+    const removed = cleanSavedPipeline(picked.id, registry)
     setCurrentId(picked.id)
-    onLoad(loaded)
+    onLoad(loaded, removedText(removed) ?? undefined)
   }
 
   return (

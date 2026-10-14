@@ -110,7 +110,12 @@ The prompts of `llm_rewrite`, `llm_rerank` and `chat` are settings marked `readO
 their schema. `GET /api/v2/strategies` leaves them out of the forms (through
 `served_catalog` in `api/routes/registry.py`), and the playground's Policy refuses with a
 403 a run, an evaluation or a comparison that sets one to anything but its default, in
-every mode. A pipeline file or code can set them.
+every mode. A pipeline file or code can set them. The browser never holds one:
+`servedConfig` in `web/src/state/config.ts` keeps only the settings a step's served schema
+lists, and `columnOf` draws a config through it. So a link, an imported file, a saved
+pipeline or Build's stored pipeline that carries a prompt, the revision or a setting
+Pandion no longer knows opens without it, the saved copy loses it too, and the page names
+what went in one sentence.
 **The package boundary.** The app imports only Pandion's public API and pandion-api;
 `tests/integration/test_package_boundary.py` fails on any other Pandion import, with no
 allow-list. The public API is `pandion`, the stage namespaces (`pandion.parse` to
@@ -360,7 +365,9 @@ function on the old client (`api.createRun`). It cannot see a path built up from
   title. Its Preview (`DocumentPreview.tsx`) opens the shared side sheet
   (`web/src/components/SideSheet.tsx`) on every page, from the same page sizes and page
   images the PDF viewer uses (`GET /api/v2/documents/{sha}/pages` and
-  `/api/v2/documents/{sha}/pages/{n}`). The Document control (`DocumentControl.tsx`) is the
+  `/api/v2/documents/{sha}/pages/{n}`). It asks for neither until the document lists say
+  the server has the file, so an expired upload shows a blank page and logs no failed
+  request. The Document control (`DocumentControl.tsx`) is the
   link beside it that changes the document: in Build's Document step, under Evaluate's
   Documents and on Compare's Document line. The header has none.
 

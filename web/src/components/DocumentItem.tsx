@@ -17,6 +17,8 @@ export interface DocumentFacts {
   pages: number | null
   kind: "Sample" | "Your upload"
   removed: boolean
+  /** The lists say the server has the file. Until then no page is asked for, so a gone upload never fails a request. */
+  known: boolean
 }
 
 /** A readable title from a file name: "my-chunking-notes.pdf" reads "My chunking notes". */
@@ -30,14 +32,16 @@ export function useDocumentFacts(doc: DocRef, removed?: boolean): DocumentFacts 
   const status = useDocStatus(doc)
   const gone = removed ?? status === "missing"
   const sample = samples?.find((s) => s.sha === doc.sha)
-  // A sample knows its page count; an upload asks the server, unless it is gone.
-  const sizes = usePageSizes(gone || sample ? null : doc.sha)
+  const known = !gone && status === "ready"
+  // A sample knows its page count; an upload asks the server once the lists say it is there.
+  const sizes = usePageSizes(!known || sample ? null : doc.sha)
   return {
     title: sample?.title ?? titleFromFilename(doc.filename),
     filename: doc.filename,
     pages: gone ? null : (sample?.pages ?? (sizes.kind === "ready" ? sizes.data.length : null)),
     kind: sample ? "Sample" : "Your upload",
     removed: gone,
+    known,
   }
 }
 
@@ -57,10 +61,10 @@ export function FactsLine({ facts }: { facts: DocumentFacts }) {
   )
 }
 
-/** A small picture of page 1, or a blank page when the file is gone. */
-function Thumb({ doc, removed, className }: { doc: DocRef; removed: boolean; className: string }) {
+/** A small picture of page 1, or a blank page until the file is known to be there. */
+function Thumb({ doc, known, className }: { doc: DocRef; known: boolean; className: string }) {
   const box = cn("aspect-[612/792] shrink-0 rounded-[3px] bg-white object-cover shadow-[0_0_0_1px_var(--hairline)]", className)
-  return removed ? <span aria-hidden className={box} /> : <img src={v2.pageImageUrl(doc.sha, 1, 0.25)} alt="" aria-hidden className={box} />
+  return known ? <img src={v2.pageImageUrl(doc.sha, 1, 0.25)} alt="" aria-hidden className={box} /> : <span aria-hidden className={box} />
 }
 
 /**
@@ -112,7 +116,7 @@ export function DocumentItem({
           data-testid="document-item"
           className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-panel border border-hairline bg-surface-raised py-2 pr-3 pl-2"
         >
-          <Thumb doc={doc} removed={facts.removed} className="w-[36px]" />
+          <Thumb doc={doc} known={facts.known} className="w-[36px]" />
           <span className="flex min-w-0 flex-[1_1_10rem] flex-col">
             <span className="text-sm font-semibold [overflow-wrap:anywhere] text-fg">{facts.title}</span>
             <FactsLine facts={facts} />
@@ -121,7 +125,7 @@ export function DocumentItem({
         </div>
       ) : (
         <span data-testid="document-item" className="inline-flex max-w-full min-w-0 items-center gap-1">
-          <Thumb doc={doc} removed={facts.removed} className="w-[18px] rounded-[2px]" />
+          <Thumb doc={doc} known={facts.known} className="w-[18px] rounded-[2px]" />
           <span className="min-w-0 truncate text-sm font-semibold text-fg" title={facts.title}>
             {facts.title}
           </span>

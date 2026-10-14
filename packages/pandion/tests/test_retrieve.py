@@ -331,7 +331,7 @@ def test_the_default_weights_give_the_same_ranking_and_leave_the_id_alone(tmp_pa
     assert HybridRrfConfig(bm25_weight=2.0).model_dump()["bm25_weight"] == 2.0
 
 
-@pytest.mark.parametrize("weights", [{"bm25_weight": -1.0}, {"dense_weight": -0.1}, {"dense_weight": 0, "bm25_weight": 0}])
+@pytest.mark.parametrize("weights", [{"bm25_weight": -1.0}, {"dense_weight": -0.1}, {"dense_weight": 0, "bm25_weight": 0}, {"bm25_weight": float("inf")}, {"dense_weight": float("nan")}])
 def test_a_negative_weight_or_two_zero_weights_are_refused(weights):
     with pytest.raises(ValueError):
         HybridRrfConfig(**weights)

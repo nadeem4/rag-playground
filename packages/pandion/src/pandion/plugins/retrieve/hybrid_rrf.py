@@ -101,6 +101,7 @@ class HybridRrfConfig(AddedSettings):
     dense_weight: float = Field(
         default=1.0,
         ge=0,
+        allow_inf_nan=False,
         title="Meaning weight",
         description=(
             "How much the vector (meaning) search counts in the fusion. Each "
@@ -111,6 +112,7 @@ class HybridRrfConfig(AddedSettings):
     bm25_weight: float = Field(
         default=1.0,
         ge=0,
+        allow_inf_nan=False,
         title="Keyword weight",
         description=(
             "How much the keyword search counts in the fusion. Set it above "

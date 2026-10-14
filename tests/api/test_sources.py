@@ -126,3 +126,26 @@ def test_a_failing_warm_up_is_logged_not_raised(client, monkeypatch, caplog):
     assert client.post("/api/sources/sample").status_code == 200
     warmup._thread.join(5)
     assert "no model" in caplog.text
+
+
+# --- file names (part 4, PR D fixes) -----------------------------------------
+
+
+def test_an_unusual_suffix_is_stored_as_the_upload_step_looks_for_it(client, dirs):
+    body = upload_pdf(client, "report.v1 final")
+    cls = upload.Upload
+    ctx = RunContext(
+        output_dir=dirs["artifacts"], emit=lambda e: None, tmp=dirs["artifacts"],
+        extras={"sources": Sources(dirs["sources"])},
+    )
+    out = cls().apply({}, cls.config_model(sha=body["sha"], filename=body["filename"]), ctx)
+    assert out["path"] == str(dirs["sources"] / f"{body['sha']}.v1 final")
+
+
+def test_a_name_ending_in_part_is_refused(client, dirs):
+    from tests.api.conftest import build_pdf, SAMPLE_PAGES
+
+    r = client.post("/api/sources", files={"file": ("r.part", build_pdf(SAMPLE_PAGES), "application/pdf")})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "A file name ending in .part cannot be uploaded; rename it and try again."
+    assert not list(dirs["sources"].glob("*.part"))

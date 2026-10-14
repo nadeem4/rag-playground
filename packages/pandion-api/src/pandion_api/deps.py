@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from pandion_api.documents import DocumentStore
 from pandion_api.policy import Policy
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
@@ -19,3 +20,7 @@ def get_settings(request: Request) -> ApiSettings:
 
 def get_runs(request: Request) -> RunManager:
     return request.app.state.runs
+
+
+def get_documents(request: Request) -> DocumentStore:
+    return request.app.state.documents

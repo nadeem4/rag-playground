@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile
+
+from pandion_api.documents import Document
 
 
 class Policy:
@@ -18,6 +20,36 @@ class Policy:
         """FastAPI dependencies (`fastapi.Depends(...)`) run on every route,
         for example one that sets a visitor cookie."""
         return []
+
+    # --- documents --------------------------------------------------------------
+
+    def can_read(self, sha: str, request: Request) -> bool:
+        """May this request read the document with this id (its pages, its file,
+        its questions, or a run on it)?"""
+        return True
+
+    async def check_upload(self, file: UploadFile, request: Request) -> bytes:
+        """Read the upload and return its bytes, or raise to refuse it. Read no
+        more than you accept: `await file.read(limit + 1)`."""
+        return await file.read()
+
+    def on_uploaded(self, document: Document, request: Request) -> None:
+        """Called with the store's lock held, right after the record is written,
+        for example to note who uploaded it in the record."""
+
+    def on_delete(self, sha: str, document: Document | None, request: Request) -> bool:
+        """Called with the store's lock held. Raise to refuse; return True to
+        delete the file now, False to keep it (another owner still holds it).
+        `document` is None when there is no record."""
+        if document is None:
+            raise HTTPException(status_code=404, detail="There is no document with that fingerprint.")
+        return True
+
+    def describe(self, document: Document, request: Request) -> dict[str, Any]:
+        """Keys to add to a document in the list, for this caller."""
+        return {}
+
+    # --- runs -------------------------------------------------------------------
 
     def max_active_runs(self) -> int | None:
         """How many runs may work at once; the rest wait their turn. None: no limit."""

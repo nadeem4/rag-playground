@@ -10,15 +10,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 
 import pandion
 from pandion_api import Policy
 from pandion_api.checks import changed_read_only_settings, custom_endpoint_steps, steps
+from pandion_api.documents import META_DIR, Document
 
-from api import demo, expiry
+from api import demo, expiry, sample_set, visitor
 from api.routes import sources
 from api.routes.registry import served_catalog
 from api.routes.runs import DEMO_NO_CUSTOM, PROMPTS_FIXED
@@ -37,24 +39,113 @@ def over_limit(config: dict[str, Any]) -> str | None:
     holds one of the few run slots."""
     catalog = pandion.catalog()
     for where, stage, use, settings in steps(config):
-        props = catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {})
-        for key, value in settings.items():
-            if not isinstance(value, int) or key not in props:
-                continue
-            if key == "max_tokens" and "model" in props:
-                cap = MAX_OUTPUT_TOKENS
-            elif key.endswith("_budget_chars") and isinstance(props[key].get("default"), int):
-                cap = BUDGET_TIMES * props[key]["default"]
-            else:
-                continue
-            if value > cap:
-                return f"{where}.{key} is {value}; the playground allows at most {cap}."
+        refusal = step_over_limit(where, stage, use, settings, catalog)
+        if refusal:
+            return refusal
     return None
+
+
+def step_over_limit(
+    where: str, stage: str, use: str, settings: dict[str, Any], catalog: dict[str, Any] | None = None
+) -> str | None:
+    """`over_limit` for one step: `where` names it in the sentence. The old
+    /api/runs and /api/sweeps call this on each graph node, so both stacks
+    refuse the same settings with the same 403."""
+    catalog = catalog if catalog is not None else pandion.catalog()
+    props = catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {})
+    for key, value in settings.items():
+        if not isinstance(value, int) or key not in props:
+            continue
+        if key == "max_tokens" and "model" in props:
+            cap = MAX_OUTPUT_TOKENS
+        elif key.endswith("_budget_chars") and isinstance(props[key].get("default"), int):
+            cap = BUDGET_TIMES * props[key]["default"]
+        else:
+            continue
+        if value > cap:
+            return f"{where}.{key} is {value}; the playground allows at most {cap}."
+    return None
+
+
+def _mint_visitor(request: Request, response: Response) -> None:
+    """Every /api/v2 request carries a visitor id. A new one goes out on the
+    response's cookie; this request's handlers read it from request.state."""
+    request.state.visitor = visitor.ensure_visitor(request, response)
+
+
+def _visitor(request: Request) -> str | None:
+    """The cookie's visitor id, or the one just minted for this request."""
+    return visitor.visitor_id(request) or getattr(request.state, "visitor", None)
 
 
 class PlaygroundPolicy(Policy):
     def __init__(self) -> None:
         self._sweeper: asyncio.Task | None = None
+
+    def dependencies(self) -> list[Any]:
+        return [Depends(_mint_visitor)]
+
+    # --- documents --------------------------------------------------------------
+
+    def can_read(self, sha: str, request: Request) -> bool:
+        return demo.readable(sha, request)
+
+    async def check_upload(self, file: UploadFile, request: Request) -> bytes:
+        """Locally, any file. On the demo: a visitor id, at most 10 MB read (and
+        never more than one byte past it), a PDF of at most 20 pages, no page
+        over 41 inches a side, three live uploads a visitor, and room on the
+        shared disk. The old POST /api/sources calls this too."""
+        if not demo.enabled():
+            return await file.read()
+        me = visitor.visitor_id(request)
+        if me is None:
+            raise HTTPException(400, sources.NO_VISITOR)
+        # Refuse on the declared size before reading. The request's
+        # Content-Length also counts the multipart framing, so it is the check
+        # only when the file's own size is unknown.
+        if file.size is not None and file.size > demo.MAX_UPLOAD_BYTES:
+            raise sources._too_big(file.size)
+        length = request.headers.get("content-length", "")
+        if file.size is None and length.isdigit() and int(length) > demo.MAX_UPLOAD_BYTES:
+            raise sources._too_big(None)
+        data = await file.read(demo.MAX_UPLOAD_BYTES + 1)
+        if len(data) > demo.MAX_UPLOAD_BYTES:
+            raise sources._too_big(None)
+        if not data:
+            raise HTTPException(status_code=400, detail="empty upload")
+        sources._check_demo_limits(request.app.state.deps.sources_dir, me, data)
+        return data
+
+    def on_uploaded(self, document: Document, request: Request) -> None:
+        sources.record_upload(request.app.state.deps.sources_dir, document.sha, _visitor(request))
+
+    def on_delete(self, sha: str, document: Document | None, request: Request) -> bool:
+        """A sample is never deleted. On the demo only the caller's own upload:
+        their id is dropped from the record, and the file goes once nobody else
+        holds it. Locally, any upload."""
+        if sha in sample_set.readable_shas():
+            raise HTTPException(403, "A sample cannot be deleted. It is there for everyone.")
+        me = visitor.visitor_id(request) if demo.enabled() else None
+        if demo.enabled() and me is None:
+            raise HTTPException(400, sources.NO_VISITOR)
+        visitors = dict((document.extra.get("visitors") if document else None) or {})
+        if document is None or (demo.enabled() and me not in visitors):
+            raise HTTPException(404, "There is no upload of yours with that fingerprint.")
+        if demo.enabled():
+            visitors.pop(me, None)
+            if visitors:
+                body = {**document.record(), **document.extra, "visitors": visitors}
+                sidecar = request.app.state.deps.sources_dir / META_DIR / f"{sha}.json"
+                sidecar.write_text(json.dumps(body), encoding="utf-8")
+                return False
+        return True
+
+    def describe(self, document: Document, request: Request) -> dict[str, Any]:
+        """The upload time: this browser's own when it uploaded the file, else the latest."""
+        listed = sources._listed({**document.record(), **document.extra}, _visitor(request))
+        return {"uploaded_at": listed["uploaded_at"]} if "uploaded_at" in listed else {}
+
+    # --- runs -------------------------------------------------------------------
 
     def max_active_runs(self) -> int | None:
         """A few runs at once on the shared demo; no limit locally."""

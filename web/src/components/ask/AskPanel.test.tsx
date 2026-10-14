@@ -104,6 +104,13 @@ describe("the Ask button tooltip", () => {
 
 const question = () => screen.getByLabelText("Question") as HTMLTextAreaElement
 
+describe("the question box", () => {
+  it("takes at most 2,000 characters, the server's limit", () => {
+    setup()
+    expect(question().maxLength).toBe(2000)
+  })
+})
+
 describe("finding the answer", () => {
   const ANSWERED = { ...INDEX_DONE, use_case: { id: "use_case", status: "done" as const, artifact_id: "out1" } }
   const HINT = "Change a setting below, such as the search or the reranker, and ask again to see the pieces move."

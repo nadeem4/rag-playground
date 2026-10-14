@@ -1,8 +1,9 @@
 import { ApiError } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { RunRequest } from "@/api/types"
+import type { V2AskRequest, V2RunRequest } from "@/api/types"
 import { errorsFromPydantic, type FieldErrors, type PydanticError } from "@/components/fields/schema"
 
+import { cardNamedIn, stepOfCardIn, type WorkingPipeline } from "./config"
 import type { PipelineGraph } from "./graph"
 
 /**
@@ -11,11 +12,26 @@ import type { PipelineGraph } from "./graph"
  * results of partial runs accumulate.
  */
 
-/** `target` present: that card's Run (the server adds its ancestors). No target: the whole graph (Ask). */
-export function buildRunRequest(graph: PipelineGraph, opts: { target?: string; force?: boolean }): RunRequest {
-  const req: RunRequest = { graph, force: Boolean(opts.force) }
-  if (opts.target) req.targets = [opts.target]
-  return req
+/**
+ * The run a card's Run button sends: the pipeline through that card's step,
+ * on the pipeline's documents. The Document card has no step of its own; it
+ * runs through Parse, which reads it. A Clean card's step is its place in
+ * `graph`, the column the pipeline was made from.
+ */
+export function cardRun(p: WorkingPipeline, card: string, force: boolean, graph: PipelineGraph): V2RunRequest {
+  const through = card === "source" ? "parse" : stepOfCardIn(graph, card)
+  return { config: p.config, documents: p.documents.map((d) => d.sha), through, ...(force ? { force: true } : {}) }
+}
+
+/** What Ask sends: the question on the pipeline's documents, through the answer or only the search. */
+export function askRun(p: WorkingPipeline, opts: { answer: boolean; force: boolean }): V2AskRequest {
+  return {
+    config: p.config,
+    documents: p.documents.map((d) => d.sha),
+    question: p.question.text,
+    answer: opts.answer,
+    ...(opts.force ? { force: true } : {}),
+  }
 }
 
 export type RoutedError =
@@ -34,6 +50,21 @@ function isConfigError(d: unknown): d is ConfigErrorDetail {
   )
 }
 
+/** A /api/v2 refusal: `{problems: [...]}`, one sentence per problem. */
+const isProblems = (d: unknown): d is { problems: string[] } =>
+  typeof d === "object" && d !== null && Array.isArray((d as { problems?: unknown }).problems)
+
+/** A request FastAPI refused field by field: `[{loc, msg}, ...]`. */
+const isPydanticList = (d: unknown): d is PydanticError[] =>
+  Array.isArray(d) && d.length > 0 && d.every((e) => typeof e === "object" && e !== null && typeof (e as PydanticError).msg === "string")
+
+/** One refused field as a sentence: "question: String should have at most 2000 characters." */
+function sentenceOf(e: PydanticError): string {
+  const where = (Array.isArray(e.loc) ? e.loc : []).filter((part) => part !== "body").join(".")
+  const msg = /[.!?]$/.test(e.msg) ? e.msg : `${e.msg}.`
+  return where ? `${where}: ${msg}` : msg
+}
+
 /** The node a graph-validation message is about, if it names exactly one. */
 function nodeNamedIn(message: string, graph: PipelineGraph): string | null {
   const ids = new Set(graph.nodes.map((n) => n.id))
@@ -44,9 +75,17 @@ function nodeNamedIn(message: string, graph: PipelineGraph): string | null {
   return named.size === 1 ? [...named][0] : null
 }
 
-/** Where on the page a failed `POST /api/runs` (or `/sweeps`) is shown. */
+/** Where on the page a failed run request (`/api/v2/runs`, `/api/v2/ask`, or an old route) is shown. */
 export function routeRunError(err: unknown, graph: PipelineGraph): RoutedError {
   if (err instanceof ApiError) {
+    if (isProblems(err.detail)) {
+      const message = err.detail.problems.join(" ")
+      // On one card only when every problem names that card and the column has it.
+      const cards = new Set(err.detail.problems.map((problem) => cardNamedIn(problem, graph)))
+      const [card] = cards
+      return cards.size === 1 && card && graph.nodes.some((n) => n.id === card) ? { kind: "node", nodeId: card, message } : { kind: "column", message }
+    }
+    if (isPydanticList(err.detail)) return { kind: "column", message: err.detail.map(sentenceOf).join(" ") }
     if (err.status === 422 && isConfigError(err.detail)) {
       return { kind: "fields", nodeId: err.detail.node_id, errors: errorsFromPydantic(err.detail.errors) }
     }

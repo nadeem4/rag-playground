@@ -125,7 +125,9 @@ documents, each with **Preview**, and its **Add or change** link picks another. 
 visit with no document, the first-visit card offers the samples, **Upload a PDF**, and
 **Pick a document** for your earlier uploads.
 
-- **Build the index** runs the steps. Each card also has its own **Run**.
+- **Build the index** runs the steps. Each card also has its own **Run**. Each card runs
+  the pipeline only as far as itself (`through` in `POST /api/v2/runs`); what is already
+  stored comes from the cache.
 - The **gear** on a card opens its settings. Once the index is built, the line above the
   cards invites you to change a step, such as the chunk size, and build again, and points
   to Compare for several settings side by side.
@@ -210,9 +212,12 @@ The panel holds the question and three blocks of settings, summed up in one reci
 ### Results
 
 **Ask** runs the question against the index and shows the ranked pieces right under the
-question. When the answer arrives, the panel scrolls to it. The sample's questions and the
-settings come after the answer, so you can change a setting and ask again to see the pieces
-move. Picking one of the sample's questions takes you back up to the question box.
+question. Ask sends the pipeline, its documents and your question to `POST /api/v2/ask`;
+the documents are indexed first when they are not indexed yet. A question can be up to
+2,000 characters long. When the answer arrives, the panel scrolls to it. The sample's
+questions and the settings come after the answer, so you can change a setting and ask
+again to see the pieces move. Picking one of the sample's questions takes you back up to
+the question box.
 
 - Under a fresh answer, a line reads "Try another search or a reranker, and ask again."
   Its **Change settings** button opens the settings and scrolls to them.

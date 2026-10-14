@@ -21,7 +21,7 @@
 
 import { useEffect, useReducer, useRef } from "react"
 
-import { initialRunState, runReducer, type NodeState, type RunAction, type RunState } from "./runState"
+import { initialRunState, runReducer, type CardOf, type NodeState, type RunAction, type RunState } from "./runState"
 import type { RunEvent } from "./types"
 import { v2 } from "./v2"
 
@@ -37,6 +37,8 @@ interface Connection {
   attempts: number
   /** Highest event id seen, so a reopened stream resumes after it. */
   lastSeq: number
+  /** The column's step-to-card mapping when the run started, if the page gave one. */
+  cardOf?: CardOf
   closeTimer?: ReturnType<typeof setTimeout>
   retryTimer?: ReturnType<typeof setTimeout>
 }
@@ -74,7 +76,7 @@ function connect(c: Connection, dispatch: (a: RunAction) => void) {
     if (!event || typeof event !== "object" || typeof event.event !== "string") return
     const seq = msg.lastEventId === "" ? undefined : Number(msg.lastEventId)
     if (seq !== undefined && Number.isFinite(seq)) c.lastSeq = Math.max(c.lastSeq, seq)
-    dispatch({ type: "event", event, seq: Number.isFinite(seq) ? seq : undefined })
+    dispatch({ type: "event", event, seq: Number.isFinite(seq) ? seq : undefined, cardOf: c.cardOf })
     if (event.event === "stream_end") {
       es.close()
       c.es = null
@@ -99,7 +101,7 @@ async function resync(c: Connection, dispatch: (a: RunAction) => void) {
   try {
     const snapshot = await v2.run(c.runId)
     if (c.dead) return
-    dispatch({ type: "snapshot", snapshot })
+    dispatch({ type: "snapshot", snapshot, cardOf: c.cardOf })
     c.lastSeq = Math.max(c.lastSeq, snapshot.last_event_id)
     if (snapshot.status === "running") connect(c, dispatch)
   } catch {
@@ -110,9 +112,16 @@ async function resync(c: Connection, dispatch: (a: RunAction) => void) {
   }
 }
 
-export function useRun(runId: string | null): UseRun {
+/**
+ * `cardOf` names the card each step's events land on. It is read when a run
+ * starts and kept for that run, so the column the run was started from decides
+ * where a stacked step (`clean.2`) shows, even if the column changes meanwhile.
+ */
+export function useRun(runId: string | null, cardOf?: CardOf): UseRun {
   const [state, dispatch] = useReducer(runReducer, initialRunState)
   const conn = useRef<Connection | null>(null)
+  const cardOfNow = useRef(cardOf)
+  cardOfNow.current = cardOf
 
   useEffect(() => {
     if (!runId) {
@@ -128,7 +137,7 @@ export function useRun(runId: string | null): UseRun {
     } else {
       if (current) shutdown(current)
       dispatch({ type: "reset" })
-      const c: Connection = { runId, es: null, dead: false, attempts: 0, lastSeq: -1 }
+      const c: Connection = { runId, es: null, dead: false, attempts: 0, lastSeq: -1, cardOf: cardOfNow.current }
       conn.current = c
       connect(c, dispatch)
     }

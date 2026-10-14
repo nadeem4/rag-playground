@@ -2,6 +2,9 @@ import { useId, type ReactNode } from "react"
 
 import { Errors } from "@/components/fields/FieldShell"
 
+/** The longest question POST /api/v2/ask takes (pandion-api's `AskIn.question`). */
+export const MAX_QUESTION = 2000
+
 /**
  * The Ask panel's question box. It is what a user changes most, so it is a
  * real multi-line box rather than a schema field, and Ctrl+Enter (Cmd+Enter on
@@ -36,6 +39,7 @@ export function QuestionField({
       <textarea
         id={id}
         rows={3}
+        maxLength={MAX_QUESTION}
         value={value}
         placeholder={placeholder}
         aria-invalid={errors.length > 0 || undefined}

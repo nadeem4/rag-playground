@@ -3,20 +3,91 @@ import { describe, expect, it } from "vitest"
 import { ApiError } from "@/api/client"
 import type { NodeState } from "@/api/runState"
 
-import { addCleaner, columnOrder, initialGraph } from "./graph"
-import { buildRunRequest, foldRun, mergeResults, routeRunError, type Tracked } from "./pipeline"
+import { graphToConfig, type WorkingPipeline } from "./config"
+import { addCleaner, columnOrder, initialGraph, removeNode, sampleGraph, type PipelineGraph } from "./graph"
+import { askRun, cardRun, foldRun, mergeResults, routeRunError, type Tracked } from "./pipeline"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
-describe("buildRunRequest", () => {
-  it("a card's Run targets that node only; the server runs its ancestors", () => {
-    const g = initialGraph(R)
-    expect(buildRunRequest(g, { target: "parse" })).toEqual({ graph: g, targets: ["parse"], force: false })
+const DOC = { sha: "c".repeat(64), filename: "a.pdf" }
+const working = (g: PipelineGraph = sampleGraph(R, DOC)): WorkingPipeline => {
+  const c = graphToConfig(g)
+  if (!c.ok) throw new Error(c.problem)
+  return c.pipeline
+}
+/** Two cleaners, the first removed, then one added: a lone clean_2 (`gap`), then [clean_2, clean_1] (`swapped`). */
+const gap = removeNode(addCleaner(sampleGraph(R, DOC), R), "clean_1")
+const swapped = addCleaner(gap, R)
+
+describe("cardRun", () => {
+  it.each([
+    ["source", "parse"],
+    ["parse", "parse"],
+    ["clean_1", "clean.1"],
+    ["chunk", "chunk"],
+    ["index", "index"],
+  ])("runs the %s card through %s, on the pipeline's documents", (card, through) => {
+    const p = working()
+    expect(cardRun(p, card, false, sampleGraph(R, DOC))).toEqual({ config: p.config, documents: [DOC.sha], through })
   })
 
-  it("no target sends the whole graph (Ask), and Rerun sends force", () => {
-    const g = initialGraph(R)
-    expect(buildRunRequest(g, {})).toEqual({ graph: g, force: false })
-    expect(buildRunRequest(g, { target: "chunk", force: true })).toEqual({ graph: g, targets: ["chunk"], force: true })
+  it("asks for every step again only when forced", () => {
+    expect(cardRun(working(), "chunk", true, sampleGraph(R, DOC)).force).toBe(true)
+  })
+
+  it("runs a cleaner through its place in the column, not its id", () => {
+    expect(cardRun(working(gap), "clean_2", false, gap).through).toBe("clean.1")
+    expect(cardRun(working(swapped), "clean_2", false, swapped).through).toBe("clean.1")
+    expect(cardRun(working(swapped), "clean_1", false, swapped).through).toBe("clean.2")
+  })
+})
+
+describe("routeRunError on /api/v2", () => {
+  const g = sampleGraph(R, DOC)
+  it("puts a problem on the card it names", () => {
+    const err = new ApiError(422, { problems: ["index.chunk: chunk_overlap must be smaller than chunk_size."] }, "/runs")
+    expect(routeRunError(err, g)).toEqual({ kind: "node", nodeId: "chunk", message: "index.chunk: chunk_overlap must be smaller than chunk_size." })
+  })
+
+  it("puts a problem that names no card on the column", () => {
+    const err = new ApiError(422, { problems: ["The pipeline must be a mapping of settings."] }, "/runs")
+    expect(routeRunError(err, g)).toEqual({ kind: "column", message: "The pipeline must be a mapping of settings." })
+  })
+
+  it("puts a problem with a stacked step on the card at that place", () => {
+    const err = new ApiError(422, { problems: ["index.clean step 2: similarity must be at most 1."] }, "/runs")
+    expect(routeRunError(err, swapped)).toEqual({ kind: "node", nodeId: "clean_1", message: "index.clean step 2: similarity must be at most 1." })
+    const first = new ApiError(422, { problems: ["index.clean step 1: similarity must be at most 1."] }, "/runs")
+    expect(routeRunError(first, gap)).toMatchObject({ kind: "node", nodeId: "clean_2" })
+  })
+
+  it("puts a problem on the column when the card it names is not in the column", () => {
+    const err = new ApiError(422, { problems: ["index.clean step 2: similarity must be at most 1."] }, "/runs")
+    expect(routeRunError(err, gap)).toEqual({ kind: "column", message: "index.clean step 2: similarity must be at most 1." })
+    const noAnswer = removeNode(g, "use_case")
+    expect(routeRunError(new ApiError(422, { problems: ["answer: bad"] }, "/ask"), noAnswer)).toEqual({ kind: "column", message: "answer: bad" })
+  })
+
+  it("puts problems that name different cards on the column, all of them", () => {
+    const problems = ["index.chunk: chunk_size must be at least 1.", "retrieve.search: top_k must be at least 1."]
+    expect(routeRunError(new ApiError(422, { problems }, "/runs"), g)).toEqual({ kind: "column", message: problems.join(" ") })
+    const same = ["index.chunk: chunk_size must be at least 1.", "index.chunk: chunk_overlap must be at least 0."]
+    expect(routeRunError(new ApiError(422, { problems: same }, "/runs"), g)).toEqual({ kind: "node", nodeId: "chunk", message: same.join(" ") })
+  })
+
+  it("says a request the server refused field by field in plain words, not as JSON", () => {
+    const detail = [{ type: "string_too_long", loc: ["body", "question"], msg: "String should have at most 2000 characters", input: "x" }]
+    expect(routeRunError(new ApiError(422, detail, "/ask"), g)).toEqual({ kind: "column", message: "question: String should have at most 2000 characters." })
+  })
+})
+
+describe("askRun", () => {
+  it("asks the pipeline's question on its documents", () => {
+    const p = { ...working(), question: { text: "What is a chunk?", gold_answers: [] } }
+    expect(askRun(p, { answer: true, force: false })).toEqual({ config: p.config, documents: [DOC.sha], question: "What is a chunk?", answer: true })
+  })
+
+  it("stops before the answer when told to", () => {
+    expect(askRun(working(), { answer: false, force: true })).toMatchObject({ answer: false, force: true })
   })
 })
 

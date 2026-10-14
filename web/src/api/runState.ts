@@ -11,7 +11,8 @@
  *   most recent `variant_started`. A plain run is a single variant with
  *   `index: null`.
  * - A /api/v2 event names Pandion's step, and `cardEvent` turns it into the
- *   card's id first. A comparison's event carries `variant` (from 1) and goes
+ *   card's id first. A page that knows its column passes `cardOf`, so a
+ *   stacked step (`clean.2`) is the card at that place, whatever its id. A comparison's event carries `variant` (from 1) and goes
  *   in that variant's group; an evaluation's carries `question` and goes in
  *   that question's group, in order of first appearance.
  */
@@ -88,9 +89,12 @@ export const initialRunState: RunState = {
   result: null,
 }
 
+/** The card a Pandion step is drawn as, or null when the column has none for it. */
+export type CardOf = (step: string) => string | null
+
 export type RunAction =
-  | { type: "event"; event: RunEvent; seq?: number }
-  | { type: "snapshot"; snapshot: RunSnapshot }
+  | { type: "event"; event: RunEvent; seq?: number; cardOf?: CardOf }
+  | { type: "snapshot"; snapshot: RunSnapshot; cardOf?: CardOf }
   | { type: "reset" }
   | { type: "result"; result: unknown }
 
@@ -111,22 +115,26 @@ function patchNode(state: RunState, id: string, patch: Partial<NodeState>): RunS
 
 type Named = { step?: unknown; steps?: unknown; selected_steps?: unknown; skipped_steps?: unknown }
 
-const cards = (xs: unknown): string[] | undefined =>
-  Array.isArray(xs) ? xs.map((s) => cardOfStep(String((s as { step?: unknown } | null)?.step ?? ""))) : undefined
+/** A step with no card in the column keeps its step name, so it lands on no card. */
+const cardFor = (step: string, cardOf: CardOf) => cardOf(step) ?? step
+
+/** Each card once: a run over several documents names `parse` once per document. */
+const cards = (xs: unknown, cardOf: CardOf): string[] | undefined =>
+  Array.isArray(xs) ? [...new Set(xs.map((s) => cardFor(String((s as { step?: unknown } | null)?.step ?? ""), cardOf)))] : undefined
 
 /**
  * A /api/v2 event names Pandion's step (`clean.1`, `search`); the column names
  * cards (`clean_1`, `retrieve`). An event from an old route has no `step` and
  * comes back as it is.
  */
-export function cardEvent(e: RunEvent): RunEvent {
+export function cardEvent(e: RunEvent, cardOf: CardOf = cardOfStep): RunEvent {
   const n = e as RunEvent & Named
   if (n.event === "run_started" && Array.isArray(n.steps)) {
-    const nodes = cards(n.steps)!
-    return { ...n, nodes, selected: cards(n.selected_steps) ?? nodes } as RunEvent
+    const nodes = cards(n.steps, cardOf)!
+    return { ...n, nodes, selected: cards(n.selected_steps, cardOf) ?? nodes } as RunEvent
   }
-  if (n.event === "run_cancelled" && Array.isArray(n.skipped_steps)) return { ...n, skipped: cards(n.skipped_steps)! } as RunEvent
-  if (typeof n.step === "string" && "node_id" in n) return { ...n, node_id: cardOfStep(n.step) } as RunEvent
+  if (n.event === "run_cancelled" && Array.isArray(n.skipped_steps)) return { ...n, skipped: cards(n.skipped_steps, cardOf)! } as RunEvent
+  if (typeof n.step === "string" && "node_id" in n) return { ...n, node_id: cardFor(n.step, cardOf) } as RunEvent
   return e
 }
 
@@ -225,7 +233,7 @@ export function runReducer(state: RunState, action: RunAction): RunState {
     case "reset":
       return initialRunState
     case "snapshot": {
-      const rebuilt = reduceEvents(action.snapshot.events)
+      const rebuilt = reduceEvents(action.snapshot.events, action.cardOf)
       return {
         ...rebuilt,
         status: action.snapshot.status,
@@ -237,7 +245,7 @@ export function runReducer(state: RunState, action: RunAction): RunState {
     }
     case "event": {
       if (action.seq !== undefined && action.seq <= state.lastSeq) return state
-      const event = cardEvent(action.event)
+      const event = cardEvent(action.event, action.cardOf)
       const next = applyEvent(inGroup(state, event), event)
       return action.seq === undefined ? next : { ...next, lastSeq: action.seq }
     }
@@ -247,9 +255,9 @@ export function runReducer(state: RunState, action: RunAction): RunState {
 }
 
 /** Fold a whole event log, as a snapshot or a test would. */
-export function reduceEvents(events: RunEvent[]): RunState {
+export function reduceEvents(events: RunEvent[], cardOf?: CardOf): RunState {
   return events.reduce<RunState>(
-    (s, event, seq) => runReducer(s, { type: "event", event, seq }),
+    (s, event, seq) => runReducer(s, { type: "event", event, seq, cardOf }),
     initialRunState,
   )
 }

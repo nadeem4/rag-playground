@@ -5,11 +5,13 @@ import type { GraphNode } from "@/api/types"
 import {
   cardNamedIn,
   cardOfStep,
+  cardOfStepIn,
   columnOf,
   graphToConfig,
   knownSteps,
   sameConfig,
   stepOfCard,
+  stepOfCardIn,
   type WorkingPipeline,
 } from "./config"
 import { addCleaner, addReranker, initialGraph, removeNode, sampleGraph, setConfig, setReranker, setTransform, type PipelineGraph } from "./graph"
@@ -145,6 +147,46 @@ describe("card ids and step names", () => {
     ["retrieve.rerank step 3: top_n must be at least 1.", "rerank_3"],
   ])("finds the card in %s", (sentence, card) => {
     expect(cardNamedIn(sentence)).toBe(card)
+  })
+})
+
+describe("stacked cards by their place in the column", () => {
+  // Two cleaners, the first removed, then one added: a lone clean_2, then [clean_2, clean_1].
+  const two = addCleaner(addCleaner(initialGraph(R), R), R)
+  const gap = removeNode(two, "clean_1")
+  const swapped = addCleaner(gap, R)
+  const rr = addReranker(removeNode(addReranker(addReranker(initialGraph(R), R), R), "rerank_1"), R)
+
+  it("the ids are what a user who removed and added a cleaner gets", () => {
+    expect(gap.nodes.filter((n) => n.stage === "clean").map((n) => n.id)).toEqual(["clean_2"])
+    expect(swapped.nodes.filter((n) => n.stage === "clean").map((n) => n.id)).toEqual(["clean_2", "clean_1"])
+  })
+
+  it("the Nth Clean or Rerank card is step N, whatever its id", () => {
+    expect(stepOfCardIn(gap, "clean_2")).toBe("clean.1")
+    expect(stepOfCardIn(swapped, "clean_2")).toBe("clean.1")
+    expect(stepOfCardIn(swapped, "clean_1")).toBe("clean.2")
+    expect(stepOfCardIn(rr, "rerank_2")).toBe("rerank.1")
+    expect(stepOfCardIn(rr, "rerank_1")).toBe("rerank.2")
+    expect(stepOfCardIn(swapped, "chunk")).toBe("chunk")
+    expect(stepOfCardIn(swapped, "retrieve")).toBe("search")
+  })
+
+  it("step N is the Nth card, and a step the column lacks is no card", () => {
+    expect(cardOfStepIn(gap, "clean.1")).toBe("clean_2")
+    expect(cardOfStepIn(gap, "clean.2")).toBeNull()
+    expect(cardOfStepIn(swapped, "clean.1")).toBe("clean_2")
+    expect(cardOfStepIn(swapped, "clean.2")).toBe("clean_1")
+    expect(cardOfStepIn(rr, "rerank.2")).toBe("rerank_1")
+    expect(cardOfStepIn(swapped, "search")).toBe("retrieve")
+  })
+
+  it("a problem sentence names the card at that place", () => {
+    expect(cardNamedIn("index.clean step 2 uses 'nope', which is not registered.", swapped)).toBe("clean_1")
+    expect(cardNamedIn("index.clean.1: bad", swapped)).toBe("clean_2")
+    expect(cardNamedIn("index.clean step 2: bad", gap)).toBeNull()
+    expect(cardNamedIn("index.chunk: bad", swapped)).toBe("chunk")
+    expect(cardNamedIn("index.store: bad", swapped)).toBe("index")
   })
 })
 

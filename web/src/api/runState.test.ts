@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest"
 import fixtureEvents from "./fixtures/run_events.json"
 import { cardEvent, initialRunState, reduceEvents, runReducer } from "./runState"
 import type { RunEvent } from "./types"
+import { cardOfStepIn } from "@/state/config"
+import { addCleaner, initialGraph, removeNode } from "@/state/graph"
+import { TEST_REGISTRY } from "@/state/testRegistry"
 
 const ts = 1789956625
 let seq = 0
@@ -147,6 +150,41 @@ describe("/api/v2 events", () => {
     ] as never)
     expect(s.variants[0].order).toEqual(["parse", "clean_1"])
     expect(s.variants[0].nodes.clean_1).toMatchObject({ status: "done", artifact_id: "x" })
+  })
+
+  it("names each card once when a run covers several documents", () => {
+    const two = (step: string) => [{ document: "doc1", step }, { document: "doc2", step }]
+    const e = cardEvent({
+      event: "run_started", ts, nodes: ["doc1::parse", "doc2::parse", "doc1::chunk", "doc2::chunk"], selected: [],
+      steps: [...two("parse"), ...two("chunk")],
+      selected_steps: [...two("parse"), ...two("chunk")],
+      skipped_steps: two("chunk"),
+    } as never) as unknown as { nodes: string[]; selected: string[] }
+    expect(e.nodes).toEqual(["parse", "chunk"])
+    expect(e.selected).toEqual(["parse", "chunk"])
+    const cancelled = cardEvent({ event: "run_cancelled", ts, skipped: [], skipped_steps: two("index") } as never) as unknown as { skipped: string[] }
+    expect(cancelled.skipped).toEqual(["index"])
+    const s = reduceEvents([{ event: "run_started", ts, nodes: [], selected: [], steps: [...two("parse"), ...two("chunk")] }] as never)
+    expect(s.variants[0].order).toEqual(["parse", "chunk"])
+  })
+
+  it("puts a stacked step's events on the card at its place in the column, given the column", () => {
+    // Two cleaners, the first removed, then one added: the column is [clean_2, clean_1].
+    const g = addCleaner(removeNode(addCleaner(addCleaner(initialGraph(TEST_REGISTRY), TEST_REGISTRY), TEST_REGISTRY), "clean_1"), TEST_REGISTRY)
+    const cardOf = (step: string) => cardOfStepIn(g, step)
+    const events = [
+      { event: "run_started", ts, nodes: [], selected: [], steps: [{ document: "d", step: "clean.1" }, { document: "d", step: "clean.2" }, { document: "d", step: "clean.3" }] },
+      { event: "node_finished", ts, node_id: "d::clean.1", document: "d", step: "clean.1", artifact_id: "first", cache_hit: false, duration_ms: 1 },
+      { event: "node_finished", ts, node_id: "d::clean.2", document: "d", step: "clean.2", artifact_id: "second", cache_hit: false, duration_ms: 1 },
+    ] as never as RunEvent[]
+    const s = reduceEvents(events, cardOf)
+    expect(s.variants[0].order).toEqual(["clean_2", "clean_1", "clean.3"])
+    expect(s.variants[0].nodes.clean_2.artifact_id).toBe("first")
+    expect(s.variants[0].nodes.clean_1.artifact_id).toBe("second")
+    const one = events.reduce((st, event, i) => runReducer(st, { type: "event", event, seq: i, cardOf }), initialRunState)
+    expect(one.variants[0].nodes.clean_2.artifact_id).toBe("first")
+    const snap = runReducer(initialRunState, { type: "snapshot", snapshot: { status: "finished", ok: true, last_event_id: 2, events } as never, cardOf })
+    expect(snap.variants[0].nodes.clean_1.artifact_id).toBe("second")
   })
 
   it("merges the search's run_started into the index's, as Pandion's ask runs both", () => {

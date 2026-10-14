@@ -424,8 +424,8 @@ def test_api_errors_are_readable_and_never_carry_the_key(fake, pipeline, error):
 def test_importing_the_plugin_does_not_import_the_sdk():
     code = (
         "import sys\n"
-        "import api.steps\n"
-        "api.steps.discover()\n"
+        "import pandion.plugins\n"
+        "pandion.plugins.discover()\n"
         "import pandion.plugins.answer.chat\n"
         "leaked = sorted(m for m in sys.modules if m.split('.')[0] == 'anthropic')\n"
         "print(leaked)\n"

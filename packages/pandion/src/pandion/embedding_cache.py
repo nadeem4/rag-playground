@@ -60,7 +60,7 @@ class EmbeddingCache:
     """SQLite, one row per vector, float64 so a cached vector equals a fresh one.
 
     A connection is opened per operation and closed straight after: an open
-    handle on Windows would make `DELETE /api/cache` fail to remove the file.
+    handle on Windows would make clearing the cache (`DELETE /api/v2/cache`) fail to remove the file.
     """
 
     def __init__(self, directory: str | Path) -> None:

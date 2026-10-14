@@ -6,7 +6,8 @@ import re
 
 from api import visitor
 from api.routes.sources import META_DIR, owners
-from tests.api.conftest import build_pdf, ingest_graph, make_client, upload_pdf
+from tests.api.conftest import build_pdf, make_client, read_sse, upload_pdf
+from tests.api.test_v2_strategies import PIPELINE
 from tests.steps.conftest import SAMPLE_PAGES
 
 
@@ -44,22 +45,24 @@ def test_in_demo_mode_an_upload_is_private_to_its_browser(dirs, monkeypatch):
         mine.get("/api/settings/app")  # a demo upload needs the visitor cookie first
         body = upload_pdf(mine, "mine.pdf")
         sha = body["sha"]
-        assert any(s["sha"] == sha for s in mine.get("/api/sources").json())
-        assert mine.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
-        assert mine.post("/api/runs", json={"graph": ingest_graph(sha, "mine.pdf")}).status_code == 202
+        assert any(s["sha"] == sha for s in mine.get("/api/v2/documents").json())
+        assert mine.get(f"/api/v2/documents/{sha}/pages/1").status_code == 200
+        r = mine.post("/api/v2/runs", json={"config": PIPELINE, "documents": [sha], "through": "parse"})
+        assert r.status_code == 202
+        read_sse(mine, r.json()["run_id"], prefix="/api/v2")
 
-        assert all(s["sha"] != sha for s in theirs.get("/api/sources").json())
-        assert theirs.get(f"/api/sources/{sha}/pages").status_code == 404
-        assert theirs.get(f"/api/sources/{sha}/pages/1.png").status_code == 404
-        assert theirs.post("/api/runs", json={"graph": ingest_graph(sha, "mine.pdf")}).status_code == 403
+        assert all(s["sha"] != sha for s in theirs.get("/api/v2/documents").json())
+        assert theirs.get(f"/api/v2/documents/{sha}/pages").status_code == 404
+        assert theirs.get(f"/api/v2/documents/{sha}/pages/1").status_code == 404
+        assert theirs.post("/api/v2/runs", json={"config": PIPELINE, "documents": [sha]}).status_code == 403
 
 
 def test_the_samples_stay_public_in_demo_mode(dirs, monkeypatch):
     demo_on(monkeypatch)
     with make_client(dirs) as a, make_client(dirs) as b:
         sha = a.post("/api/sources/sample").json()["sha"]
-        assert any(s["sha"] == sha for s in b.get("/api/sources").json())
-        assert b.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
+        assert any(s["sha"] == sha for s in b.get("/api/v2/documents").json())
+        assert b.get(f"/api/v2/documents/{sha}/pages/1").status_code == 200
 
 
 def test_the_same_bytes_uploaded_by_two_visitors_belong_to_both(dirs, monkeypatch):
@@ -70,7 +73,7 @@ def test_the_same_bytes_uploaded_by_two_visitors_belong_to_both(dirs, monkeypatc
         sha = upload_pdf(a)["sha"]
         assert upload_pdf(b)["sha"] == sha
         for c in (a, b):
-            assert c.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
+            assert c.get(f"/api/v2/documents/{sha}/pages/1").status_code == 200
 
 
 def test_clearing_the_cookie_loses_access_and_gets_a_fresh_id(dirs, monkeypatch):
@@ -80,28 +83,27 @@ def test_clearing_the_cookie_loses_access_and_gets_a_fresh_id(dirs, monkeypatch)
         sha = upload_pdf(c)["sha"]
         old = c.cookies.get(visitor.COOKIE)
         c.cookies.clear()
-        r = c.get("/api/sources")
+        r = c.get("/api/v2/documents")
         assert r.status_code == 200 and all(s["sha"] != sha for s in r.json())
         assert c.cookies.get(visitor.COOKIE) not in (None, old)
-        assert c.get(f"/api/sources/{sha}/pages/1.png").status_code == 404
+        assert c.get(f"/api/v2/documents/{sha}/pages/1").status_code == 404
 
 
 def test_outside_demo_mode_every_client_sees_every_upload(dirs):
     with make_client(dirs) as a, make_client(dirs) as b:
         sha = upload_pdf(a)["sha"]
-        assert any(s["sha"] == sha for s in b.get("/api/sources").json())
-        assert b.get(f"/api/sources/{sha}/pages/1.png").status_code == 200
+        assert any(s["sha"] == sha for s in b.get("/api/v2/documents").json())
+        assert b.get(f"/api/v2/documents/{sha}/pages/1").status_code == 200
 
 
 # --- a crafted sha must never reach a filesystem path -------------------------
 
 
-def test_a_crafted_sha_in_a_run_graph_is_refused_not_500(dirs, monkeypatch):
+def test_a_crafted_sha_in_a_run_is_refused_not_500(dirs, monkeypatch):
     demo_on(monkeypatch)
     with make_client(dirs) as c:
-        graph = ingest_graph("../../etc/passwd", "x.pdf")
-        r = c.post("/api/runs", json={"graph": graph})
-        assert r.status_code == 403
+        r = c.post("/api/v2/runs", json={"config": PIPELINE, "documents": ["../../etc/passwd"]})
+        assert r.status_code == 404 and "passwd" not in r.text
 
 
 def test_owners_rejects_a_sha_that_is_not_a_valid_digest(tmp_path):
@@ -116,7 +118,7 @@ def test_a_corrupted_sidecar_is_skipped_not_500(client, dirs):
     sidecar = dirs["sources"] / META_DIR / f"{sha}.json"
     sidecar.write_text("not json", encoding="utf-8")
     assert owners(dirs["sources"], sha) == {}
-    r = client.get("/api/sources")
+    r = client.get("/api/v2/documents")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -148,7 +150,7 @@ def test_in_demo_mode_an_upload_without_a_cookie_is_refused_and_mints_nothing(di
     with make_client(dirs) as c:
         c.cookies.clear()
         data = build_pdf(SAMPLE_PAGES)
-        r = c.post("/api/sources", files={"file": ("a.pdf", data, "application/pdf")})
+        r = c.post("/api/v2/documents", files={"file": ("a.pdf", data, "application/pdf")})
         assert r.status_code == 400
         assert r.json()["detail"] == (
             "This browser sent no visitor id. Open the demo in its own tab or enable cookies, then try again."
@@ -164,6 +166,6 @@ def test_a_sidecar_without_a_filename_is_skipped_not_500(client, dirs):
     sidecar = dirs["sources"] / META_DIR / f"{sha}.json"
     sidecar.write_text('{"sha": "%s", "size": 1}' % sha, encoding="utf-8")
     (dirs["sources"] / META_DIR / "odd.json").write_text('{"sha": 5, "filename": "x.pdf"}', encoding="utf-8")
-    r = client.get("/api/sources")
+    r = client.get("/api/v2/documents")
     assert r.status_code == 200
     assert r.json() == []

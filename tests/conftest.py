@@ -9,25 +9,17 @@ strictly worse than having no contract suite, because every new plugin would
 look covered.
 
 A root conftest is imported before collection of any test module, so calling
-`discover()` here is what makes the parametrization real.
+Pandion's `discover()` here is what makes the parametrization real.
 """
 
 from __future__ import annotations
 
-from api.steps import discover
+from pandion.plugins import discover
 
 discover()
 
 
 import pytest  # noqa: E402
-
-
-@pytest.fixture(autouse=True)
-def _isolated_embedding_cache(tmp_path_factory, monkeypatch):
-    """Every test gets its own embedding cache, never the repo's `artifacts/`."""
-    monkeypatch.setenv(
-        "RAG_PLAYGROUND_EMBED_CACHE", str(tmp_path_factory.mktemp("embcache"))
-    )
 
 
 @pytest.fixture(autouse=True)

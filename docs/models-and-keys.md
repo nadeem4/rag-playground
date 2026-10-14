@@ -149,7 +149,3 @@ from is `GET /api/v2/settings/models`.
 - `POST /api/v2/settings/models/check` with `{"provider": "anthropic"}` (or `openai`,
   `custom` or `openrouter`) tests one key. A custom check also needs `"base_url"`, and is
   refused on the demo.
-
-The old `GET /api/settings/llm` and `POST /api/settings/llm/check` give the same answers,
-since both call one function, `pandion_api.keycheck.check_key`; the app no longer calls
-them, and they go when the old routes do.

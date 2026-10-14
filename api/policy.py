@@ -1,9 +1,8 @@
 """The playground's site rules, as a pandion-api Policy.
 
 Demo mode (`api.demo`) is read on every call, so a test can turn it on and off.
-Each rule is implemented once: a method here calls the function the old /api
-route uses, or the old route calls this policy, so the old routes and /api/v2
-cannot drift apart before part 5 retires the old ones.
+The web reaches every rule here through /api/v2; the playground's own routes are
+only the teaching routes.
 """
 
 from __future__ import annotations
@@ -25,12 +24,35 @@ from pandion_api.documents import META_DIR, Document
 
 from api import credentials, demo, expiry, sample_set, visitor
 from api.routes import sources
-from api.routes.artifacts import NO_CLEARING
 from api.routes.questions import NO_STORING
 from api.routes.registry import served_catalog
-from api.routes.runs import DEMO_NO_CUSTOM, MAX_VARIANTS, NOT_AVAILABLE, PROMPTS_FIXED
-from api.routes.settings import DEMO_NO_CUSTOM as NO_CUSTOM_CHECK
 from api.routes.settings import no_key
+
+PROMPTS_FIXED = "The prompts and the model revision are fixed in the playground. Set them in a pipeline file or in code."
+
+#: The 403 for a document this browser may not read (`PlaygroundPolicy.not_readable`).
+NOT_AVAILABLE = (
+    "This document is not available to this browser. It may be an upload that has "
+    "expired, or one made from another browser. Load a sample or upload the file again."
+)
+
+#: The demo's 403 for a run that calls a custom endpoint.
+DEMO_NO_CUSTOM = (
+    "custom endpoints are disabled in this hosted demo: the server would send "
+    "a request to a URL a visitor chose. Run the playground locally to use one."
+)
+
+#: The demo's 403 for checking a key against a custom endpoint.
+NO_CUSTOM_CHECK = "custom endpoints are disabled in this hosted demo"
+
+#: The demo's 403 for DELETE /api/v2/cache (`PlaygroundPolicy.check_clear_cache`).
+NO_CLEARING = (
+    "The hosted demo keeps one cache for every visitor, so it cannot be cleared here. "
+    "Run the playground locally to clear it."
+)
+
+#: The most recipes one comparison runs (`PlaygroundPolicy.max_variants`).
+MAX_VARIANTS = 10
 
 #: The most a model step may write, in tokens (`max_tokens` on a step that calls a model).
 MAX_OUTPUT_TOKENS = 16000
@@ -55,9 +77,7 @@ def over_limit(config: dict[str, Any]) -> str | None:
 def step_over_limit(
     where: str, stage: str, use: str, settings: dict[str, Any], catalog: dict[str, Any] | None = None
 ) -> str | None:
-    """`over_limit` for one step: `where` names it in the sentence. The old
-    /api/runs and /api/sweeps call this on each graph node, so both stacks
-    refuse the same settings with the same 403."""
+    """`over_limit` for one step: `where` names it in the sentence."""
     catalog = catalog if catalog is not None else pandion.catalog()
     props = catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {})
     for key, value in settings.items():
@@ -152,7 +172,7 @@ class PlaygroundPolicy(Policy):
         """Locally, any file. On the demo: a visitor id, at most 10 MB read (and
         never more than one byte past it), a PDF of at most 20 pages, no page
         over 41 inches a side, three live uploads a visitor, and room on the
-        shared disk. The old POST /api/sources calls this too."""
+        shared disk."""
         if not demo.enabled():
             return await file.read()
         me = visitor.visitor_id(request)
@@ -204,14 +224,12 @@ class PlaygroundPolicy(Policy):
         return {"uploaded_at": listed["uploaded_at"]} if "uploaded_at" in listed else {}
 
     def private(self, sha: str, request: Request) -> bool:
-        """On the demo an upload is one browser's own: no shared cache may keep it.
-        The old page route asks this too."""
+        """On the demo an upload is one browser's own: no shared cache may keep it."""
         return demo.enabled() and sha not in sample_set.readable_shas()
 
     def keeps_question_sets(self, request: Request) -> bool:
         """The demo checks a set and hands the result back, but keeps nothing, so
-        one visitor's questions never reach another's browser. The old
-        POST /api/sources/{sha}/questions asks this too."""
+        one visitor's questions never reach another's browser."""
         return not demo.enabled()
 
     # --- runs -------------------------------------------------------------------
@@ -246,8 +264,8 @@ class PlaygroundPolicy(Policy):
         return demo.public_endpoints_only()
 
     def max_variants(self, request: Request) -> int:
-        """As many as one old sweep takes, in every mode, so the demo's bound on
-        one request's work is the same on both stacks."""
+        """At most ten recipes in every mode, which bounds the work one request
+        can ask of the hosted demo."""
         return MAX_VARIANTS
 
     def run_owner(self, request: Request) -> str | None:
@@ -259,7 +277,7 @@ class PlaygroundPolicy(Policy):
 
     def check_clear_cache(self, request: Request) -> None:
         """One cache serves every visitor on the demo: clearing it would wipe
-        everyone's results. The old DELETE /api/cache asks this too."""
+        everyone's results."""
         if demo.enabled():
             raise HTTPException(status_code=403, detail=NO_CLEARING)
 
@@ -271,12 +289,12 @@ class PlaygroundPolicy(Policy):
         return credentials.resolve_key(None, provider)
 
     def missing_key(self, provider: str) -> str:
-        """The old key check's sentence: on the demo it names no server variable."""
+        """Why there is no key to check: on the demo it names no server variable."""
         return no_key(provider)
 
     def check_provider(self, provider: str, request: Request) -> None:
         """The demo never checks a custom endpoint: it would send a request to a
-        URL a visitor chose. The old POST /api/settings/llm/check refuses it the same way."""
+        URL a visitor chose."""
         if provider == "custom" and demo.enabled():
             raise HTTPException(status_code=403, detail=NO_CUSTOM_CHECK)
 

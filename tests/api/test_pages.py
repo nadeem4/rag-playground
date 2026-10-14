@@ -17,13 +17,13 @@ def png_size(data: bytes) -> tuple[int, int]:
 
 
 def upload_bytes(client, data: bytes, name: str = "doc.pdf") -> str:
-    r = client.post("/api/sources", files={"file": (name, data, "application/pdf")})
+    r = client.post("/api/v2/documents", files={"file": (name, data, "application/pdf")})
     assert r.status_code == 200, r.text
     return r.json()["sha"]
 
 
 def find(client, sha, n, text):
-    r = client.get(f"/api/sources/{sha}/pages/{n}/find", params={"text": text})
+    r = client.get(f"/api/v2/documents/{sha}/pages/{n}/find", params={"text": text})
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -35,7 +35,7 @@ def inside_page(rect) -> bool:
 
 def test_pages_lists_sizes_in_points(client):
     sha = upload_pdf(client)["sha"]
-    r = client.get(f"/api/sources/{sha}/pages")
+    r = client.get(f"/api/v2/documents/{sha}/pages")
     assert r.status_code == 200
     assert r.json() == [
         {"n": i, "width": W, "height": H} for i in range(1, len(SAMPLE_PAGES) + 1)
@@ -44,28 +44,28 @@ def test_pages_lists_sizes_in_points(client):
 
 def test_unknown_sha_is_404(client):
     sha = "0" * 64
-    assert client.get(f"/api/sources/{sha}/pages").status_code == 404
-    assert client.get(f"/api/sources/{sha}/pages/1.png").status_code == 404
-    r = client.get(f"/api/sources/{sha}/pages/1/find", params={"text": "x"})
+    assert client.get(f"/api/v2/documents/{sha}/pages").status_code == 404
+    assert client.get(f"/api/v2/documents/{sha}/pages/1").status_code == 404
+    r = client.get(f"/api/v2/documents/{sha}/pages/1/find", params={"text": "x"})
     assert r.status_code == 404
 
 
 def test_malformed_sha_is_404(client):
-    assert client.get("/api/sources/..%2F..%2Fetc/pages").status_code == 404
-    assert client.get("/api/sources/abc/pages").status_code == 404
+    assert client.get("/api/v2/documents/..%2F..%2Fetc/pages").status_code == 404
+    assert client.get("/api/v2/documents/abc/pages").status_code == 404
 
 
 def test_out_of_range_page_is_404(client):
     sha = upload_pdf(client)["sha"]
     for n in (0, 4, 99):
-        assert client.get(f"/api/sources/{sha}/pages/{n}.png").status_code == 404
-        r = client.get(f"/api/sources/{sha}/pages/{n}/find", params={"text": "Paris"})
+        assert client.get(f"/api/v2/documents/{sha}/pages/{n}").status_code == 404
+        r = client.get(f"/api/v2/documents/{sha}/pages/{n}/find", params={"text": "Paris"})
         assert r.status_code == 404
 
 
 def test_png_at_scale_2(client):
     sha = upload_pdf(client)["sha"]
-    r = client.get(f"/api/sources/{sha}/pages/1.png", params={"scale": 2})
+    r = client.get(f"/api/v2/documents/{sha}/pages/1", params={"scale": 2})
     assert r.status_code == 200
     assert r.headers["content-type"] == "image/png"
     assert "max-age" in r.headers["cache-control"]
@@ -74,20 +74,20 @@ def test_png_at_scale_2(client):
 
 def test_png_default_scale_is_1(client):
     sha = upload_pdf(client)["sha"]
-    r = client.get(f"/api/sources/{sha}/pages/2.png")
+    r = client.get(f"/api/v2/documents/{sha}/pages/2")
     assert png_size(r.content) == (612, 792)
 
 
 def test_png_bad_scale_is_422(client):
     sha = upload_pdf(client)["sha"]
-    assert client.get(f"/api/sources/{sha}/pages/1.png?scale=0").status_code == 422
-    assert client.get(f"/api/sources/{sha}/pages/1.png?scale=50").status_code == 422
+    assert client.get(f"/api/v2/documents/{sha}/pages/1?scale=0").status_code == 422
+    assert client.get(f"/api/v2/documents/{sha}/pages/1?scale=50").status_code == 422
 
 
 def test_source_file_is_not_locked_after_rendering(client, dirs):
     # Opened from bytes, so no handle outlives the request (Windows locks).
     sha = upload_pdf(client)["sha"]
-    client.get(f"/api/sources/{sha}/pages/1.png")
+    client.get(f"/api/v2/documents/{sha}/pages/1")
     find(client, sha, 1, "Paris")
     path = dirs["sources"] / f"{sha}.pdf"
     path.unlink()
@@ -152,15 +152,15 @@ def test_find_nothing(client):
 
 def test_find_requires_text(client):
     sha = upload_pdf(client)["sha"]
-    assert client.get(f"/api/sources/{sha}/pages/1/find").status_code == 422
-    r = client.get(f"/api/sources/{sha}/pages/1/find", params={"text": ""})
+    assert client.get(f"/api/v2/documents/{sha}/pages/1/find").status_code == 422
+    r = client.get(f"/api/v2/documents/{sha}/pages/1/find", params={"text": ""})
     assert r.status_code == 422
 
 
 def test_non_pdf_source_is_415(client):
-    r = client.post("/api/sources", files={"file": ("a.txt", b"hello", "text/plain")})
+    r = client.post("/api/v2/documents", files={"file": ("a.txt", b"hello", "text/plain")})
     sha = r.json()["sha"]
-    assert client.get(f"/api/sources/{sha}/pages").status_code == 415
+    assert client.get(f"/api/v2/documents/{sha}/pages").status_code == 415
 
 
 def _big_page_pdf(side: int) -> bytes:
@@ -184,7 +184,7 @@ def _big_page_pdf(side: int) -> bytes:
 
 def test_a_huge_page_at_scale_8_is_clamped_to_25_megapixels(client):
     sha = upload_bytes(client, _big_page_pdf(5000), "huge.pdf")
-    r = client.get(f"/api/sources/{sha}/pages/1.png", params={"scale": 8})
+    r = client.get(f"/api/v2/documents/{sha}/pages/1", params={"scale": 8})
     assert r.status_code == 200
     w, h = png_size(r.content)
     assert w <= 5000 and h <= 5000
@@ -198,10 +198,10 @@ def test_in_demo_mode_an_uploads_pages_are_cached_privately(dirs, monkeypatch):
         c.get("/api/settings/app")
         sha = upload_pdf(c)["sha"]
         sample = c.post("/api/sources/sample").json()["sha"]
-        assert c.get(f"/api/sources/{sha}/pages/1.png").headers["cache-control"] == (
+        assert c.get(f"/api/v2/documents/{sha}/pages/1").headers["cache-control"] == (
             "private, max-age=31536000, immutable"
         )
-        assert c.get(f"/api/sources/{sample}/pages/1.png").headers["cache-control"] == (
+        assert c.get(f"/api/v2/documents/{sample}/pages/1").headers["cache-control"] == (
             "public, max-age=31536000, immutable"
         )
 
@@ -212,7 +212,7 @@ def test_many_renders_at_once_all_succeed(client):
     from concurrent.futures import ThreadPoolExecutor
 
     sha = upload_pdf(client)["sha"]
-    urls = [f"/api/sources/{sha}/pages/{n}.png?scale=1.5" for n in range(1, len(SAMPLE_PAGES) + 1)] * 8
+    urls = [f"/api/v2/documents/{sha}/pages/{n}?scale=1.5" for n in range(1, len(SAMPLE_PAGES) + 1)] * 8
     with ThreadPoolExecutor(max_workers=12) as pool:
         codes = list(pool.map(lambda u: client.get(u).status_code, urls))
     assert codes == [200] * len(urls)

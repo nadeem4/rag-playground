@@ -1,9 +1,7 @@
 """The app uses only pandion's public names.
 
-A module or name that starts with an underscore is private to the package and
-may change without notice. The app (`api`, `scripts`)
-must not import one, so that the package can change its insides freely and the
-playground keeps testing the same API a package user gets.
+The app, its scripts and the fixture exporter use only Pandion's public API and
+pandion-api. There is no allow-list: part 5 deleted it.
 """
 
 from __future__ import annotations
@@ -13,7 +11,7 @@ import importlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-APP_DIRS = ("api", "scripts")
+APP_DIRS = ("api", "scripts", "web/scripts")
 
 
 def private_pandion_imports(source: str) -> list[str]:
@@ -71,32 +69,6 @@ PUBLIC_MODULES = (
     "pandion.evaluation",
 )
 
-#: Engine imports the app and its scripts still make, as "module:name". This
-#: list may only shrink: a new engine import fails the first test below, and a
-#: line the app no longer needs fails the second, so it is deleted in the same
-#: commit as its last use. Part 5 deletes the list.
-ENGINE_IMPORTS: frozenset[str] = frozenset(
-    {
-        "pandion.embedding_cache:EmbeddingCache",
-        "pandion.executor:run",
-        "pandion.executor:sweep",
-        "pandion.graph:Edge",
-        "pandion.graph:Graph",
-        "pandion.graph:GraphValidationError",
-        "pandion.graph:Node",
-        "pandion.plugins.chunk:DocView",
-        "pandion.plugins.chunk:count_tokens",
-        "pandion.plugins.parse:docling",
-        "pandion.registry:Registry",
-        "pandion.registry:UnknownTransformError",
-        "pandion.registry:registry",
-        "pandion.sources:Sources",
-        "pandion.storage:META",
-        "pandion.storage:Store",
-    }
-)
-
-
 def pandion_imports(source: str) -> list[str]:
     """Every pandion import in `source`, as "module:name", or "module:*" for `import module`."""
     found: list[str] = []
@@ -143,20 +115,13 @@ def test_an_engine_import_is_told_apart_from_a_public_one():
     assert is_public("pandion:*")
 
 
-def test_the_app_imports_the_engine_only_from_the_allow_list():
-    new = sorted(engine_imports() - ENGINE_IMPORTS)
-    assert not new, (
-        "the app imports engine names that are not public and not on the allow-list: "
-        + ", ".join(new)
-        + ". Import them from pandion's public API (pandion, a stage namespace, "
-        "pandion.extend), or make them public first."
-    )
-
-
-def test_the_allow_list_has_no_line_the_app_no_longer_needs():
-    stale = sorted(ENGINE_IMPORTS - engine_imports())
-    assert not stale, (
-        "delete these from ENGINE_IMPORTS, the app no longer imports them: " + ", ".join(stale)
+def test_the_app_imports_no_engine_name():
+    found = sorted(engine_imports())
+    assert not found, (
+        "the app imports Pandion names that are not public: "
+        + ", ".join(found)
+        + ". Use pandion's public API (pandion, a stage namespace, pandion.extend, "
+        "pandion.evaluation) or pandion-api, or make the name public in Pandion first."
     )
 
 
@@ -164,3 +129,19 @@ def test_the_cli_imports_only_public_pandion_names():
     cli = ROOT / "packages" / "pandion" / "src" / "pandion" / "cli.py"
     private = [entry for entry in pandion_imports(cli.read_text(encoding="utf-8")) if not is_public(entry)]
     assert not private, "the CLI imports names that are not public: " + ", ".join(private)
+
+
+def test_the_app_loads_no_plugin_module_by_name():
+    """An import by string (`importlib.import_module("pandion.plugins.x")`) is
+    not an import statement, so the test above cannot see it. Pandion loads
+    its own plugins; the app never names them."""
+    found = [
+        f"{path.relative_to(ROOT)}:{node.lineno}"
+        for folder in APP_DIRS
+        for path in sorted((ROOT / folder).rglob("*.py"))
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith("pandion.plugins")
+    ]
+    assert not found, "the app names Pandion's plugin modules: " + ", ".join(found)

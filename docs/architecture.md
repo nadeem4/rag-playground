@@ -23,10 +23,10 @@ packages/pandion/  the engine as its own Python package, pandion: artifacts, tra
                    graph, the executor, the content-addressed store, the embedding models
                    and their cache, the chat model client, and the pipeline file
 packages/pandion-api/  pandion-api: Pandion's public API over HTTP, with a Policy for a site's rules
-api/         the playground's server: pandion-api with the playground's Policy (api/policy.py),
-             the old /api routes until part 5, the teaching routes (samples, lessons, stage
-             copy), demo mode, and the web build; the manifest of the steps it loads is in
-             api/steps/
+api/         the playground's server: pandion-api with the playground's Policy (api/policy.py)
+             under /api/v2, the teaching routes under /api (api/routes/: health, samples,
+             lessons, stage copy, app settings, the question template), demo mode, and the
+             web build. It has no steps of its own: Pandion loads its plugins itself
 web/         the React app: Home, Build, Compare, Evaluate, Library, Read, inspectors
 samples/     the bundled sample PDFs, each with its question set
 scripts/     generate the samples, record the Home clips, publish the Space
@@ -73,17 +73,11 @@ unchanged, and deletes the previous index from the store. The app does not use s
 (rewrite, search, rerank) in one graph with the index steps, so the index is a cache hit,
 and returns the hits with every step's `StageResult`. `p.ask(question)` adds the file's
 `answer` step, `search` or `chat`, to that graph and returns an `Answer` with the
-answer step's output and every step's `StageResult`. The app uses neither. The
-app runs the same strategies through its pipeline graph, and
-`tests/integration/test_app_uses_pandion_chunkers.py`,
-`tests/integration/test_app_uses_pandion_index.py`,
-`tests/integration/test_app_uses_pandion_query.py`,
-`tests/integration/test_app_uses_pandion_retrievers.py`,
-`tests/integration/test_app_uses_pandion_rerankers.py`,
-`tests/integration/test_app_uses_pandion_answer.py` and
-`tests/integration/test_app_uses_pandion_evaluation.py` check both give the same pieces,
-the same index, the same query, the same hits, before and after a reranker, the same
-answer, and the same eval verdict. `pandion.evaluate(p, questions)` asks every question
+answer step's output and every step's `StageResult`. The app runs them through
+pandion-api: Build's Ask is `POST /api/v2/ask`. The `tests/integration/test_app_uses_pandion_*.py`
+files check that the registry holds the package's strategies and that the app's old copies
+are gone, and `test_app_uses_pandion_evaluation.py` checks that `POST /api/v2/evaluations`
+gives the same score as `pandion.evaluate`. `pandion.evaluate(p, questions)` asks every question
 and scores it with the same `eval` step; the app's Evaluate page runs it through
 `POST /api/v2/evaluations` and shows the totals it returns.
 `pandion.compare(p, stage, variants, documents, questions)` builds one pipeline per
@@ -92,36 +86,36 @@ variant and evaluates each; the app's Compare page runs it through
 index's own model through two public names of `pandion.plugins.retrieve`,
 `read_descriptor` and `embedder_for`.
 
-The package takes every folder as an argument. A run is handed the sources folder, the
-embedding cache and the model settings in `context_extras`, which are never hashed. The
-app builds them once in `api/deps.py` from its environment variables
-(`RAG_PLAYGROUND_SOURCES`, `RAG_PLAYGROUND_ARTIFACTS`, `RAG_PLAYGROUND_EMBED_CACHE`) and
-passes them to every run as `Deps.run_extras()`. It loads models on the CPU, and the
-warm-up loads the default embedder and cross-encoder with the public
-`pandion.preload_embedder` and `pandion.preload_reranker`.
+The package takes every folder as an argument. The app keeps only where its files live in
+`api/deps.py`: the sources and artifacts folders, from `RAG_PLAYGROUND_SOURCES` and
+`RAG_PLAYGROUND_ARTIFACTS`, and the web build. pandion-api runs every pipeline under the
+one folder that holds them, with the embedding cache in `embeddings/` beside them, and
+loads models with the app's model settings (`APP_MODELS`, on the CPU). The warm-up loads
+Docling, the default embedder and the default cross-encoder with the public
+`pandion.preload_parser`, `pandion.preload_embedder` and `pandion.preload_reranker`. The
+lessons parse their sample with `pandion.parse` and read its text with
+`pandion.evaluation.document_text`.
 
 The package never reads the demo switch either. A step that calls a chat model takes
 `public_endpoints_only` from the run (and `pandion.llm` takes `public_only=`): when it is
 on, a custom endpoint must be a public https address, its client follows no redirects,
-and no message suggests setting a key on the server. `Deps.run_extras()` turns it on
-when `RAG_PLAYGROUND_DEMO` is `1`, read by `api.demo.public_endpoints_only()`. The package's
-`llm_rewrite`, `llm_rerank` and `chat` take it from the run. That check is the second line: the run routes still
-refuse a custom endpoint on the demo with a 403 first, and the second line reads the
-switch on its own, so it holds even if the first is lifted. API keys reach a run only as
+and no message suggests setting a key on the server. `PlaygroundPolicy.public_endpoints_only`
+turns it on when `RAG_PLAYGROUND_DEMO` is `1`, read by `api.demo.public_endpoints_only()`. The package's
+`llm_rewrite`, `llm_rerank` and `chat` take it from the run. That check is the second line:
+`PlaygroundPolicy.check_run` refuses a custom endpoint on the demo with a 403 first, and the
+second line reads the switch on its own, so it holds even if the first is lifted. API keys reach a run only as
 `context_extras["credentials"]`, never in a config or a hash.
 The prompts of `llm_rewrite`, `llm_rerank` and `chat` are settings marked `readOnly` in
-their schema. `GET /api/registry` leaves them out of the forms, and the run routes
-(`POST /api/runs` and each variant of `POST /api/sweeps`) refuse with a 403 a run that sets
-one to anything but its default, in every mode. Both read the marker through
-`read_only_settings` in `api/routes/registry.py`. A pipeline file or code can set them.
-The app imports Pandion through its public API: `pandion`, the stage namespaces
-(`pandion.parse` to `pandion.answer`) and `pandion.extend`, each a name in the module's
-`__all__`. It never imports a private name (one starting with an underscore), and the
-package never imports the app. The engine names the app still imports from Pandion's
-inner modules (`pandion.graph`, `pandion.executor`, `pandion.storage` and the rest) are
-listed in `ENGINE_IMPORTS` in `tests/integration/test_package_boundary.py`. That list may
-only shrink: a new engine import fails the test, and so does a line the app no longer
-needs. `packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
+their schema. `GET /api/v2/strategies` leaves them out of the forms (through
+`served_catalog` in `api/routes/registry.py`), and the playground's Policy refuses with a
+403 a run, an evaluation or a comparison that sets one to anything but its default, in
+every mode. A pipeline file or code can set them.
+**The package boundary.** The app imports only Pandion's public API and pandion-api;
+`tests/integration/test_package_boundary.py` fails on any other Pandion import, with no
+allow-list. The public API is `pandion`, the stage namespaces (`pandion.parse` to
+`pandion.answer`), `pandion.extend` and `pandion.evaluation`, each a name in the module's
+`__all__`. The test reads `api/`, `scripts/` and `web/scripts/`.
+`packages/pandion/tests/test_boundaries.py` checks the package never imports the app.
 
 ## Using the package on its own
 
@@ -142,8 +136,7 @@ which `packages/pandion-api/tests/test_api_boundary.py` checks with no allow-lis
 takes a pipeline as the pipeline file's shape. A site's rules are one `Policy` object. A
 request's pipeline always runs with the server's folder and models, and a request cannot
 name plugins to import (`pandion_api.pipelines.prepare`). The playground's Policy refuses
-on `/api/v2` what its old routes refuse: a custom model endpoint on the demo and a changed
-prompt or model revision everywhere. It also caps a model step's output at 16,000 tokens
+a custom model endpoint on the demo and a changed prompt or model revision everywhere. It also caps a model step's output at 16,000 tokens
 and each text budget at four times its default. See [pandion-api](pandion-api.md).
 
 ## The pipeline graph and its stages
@@ -202,9 +195,10 @@ model and a `Transform` subclass registered with `@register`. The class declares
 stage, its input ports, its output type, a `summary`, and an `explain(config)` that says
 what these settings will do.
 
-- `api/steps/__init__.py` lists every module the app loads in `PLUGIN_MODULES`, all of them in the package. A test fails if a plugin
-  module exists but is not listed.
-- `GET /api/registry` exports every transform with its summary, its config's JSON schema,
+- `PLUGIN_MODULES` in `pandion/plugins/__init__.py` lists every plugin module, and Pandion
+  loads them itself. A test fails if a plugin module exists but is not listed. The app
+  never names a plugin module.
+- `GET /api/v2/strategies` exports every transform with its summary, its config's JSON schema,
   and what it requires, provides and prefers. The web app builds every settings form from
   that schema, so a new strategy needs no frontend change.
 - **Requires** is a hard lock: a retriever that needs a keyword index cannot run on an
@@ -227,11 +221,11 @@ one cached parse and three new chunk sets.
 - **The store** (`pandion/storage.py`) keeps each artifact in its own folder under the
   artifacts folder. A write goes to a temp folder and is moved into place, and its
   `meta.json` is written last, so a crash never leaves an entry that looks finished.
-  Nothing expires an entry; `DELETE /api/cache` clears the store. Only the package's
+  Nothing expires an entry; `DELETE /api/v2/cache` clears the store. Only the package's
   sync deletes one entry, the index a sync has replaced.
 - **The embedding cache** (`pandion/embedding_cache.py`) keeps embeddings in SQLite at
   full width, keyed by model, revision, dtype, kind and text, so the same piece is
-  embedded once. The app keeps it in `.embcache` under the artifacts folder.
+  embedded once. The app keeps it in `embeddings/` beside the sources and artifacts folders.
 - **Uploads** are stored once under the sources folder, named by a fingerprint of their
   bytes (`pandion/sources.py`).
 
@@ -244,16 +238,13 @@ branches keep running.
 
 A run is two requests:
 
-1. `POST /api/runs` with the graph validates it, resolves the API keys from the request
-   headers, starts the run in a worker thread and answers 202 with the run's id.
-2. `GET /api/runs/{run_id}/events` streams the run's events as server-sent events:
+1. `POST /api/v2/runs` (a card's Run on Build) or `POST /api/v2/ask` (Ask) takes the
+   pipeline as a config, checks it, resolves the API keys from the request headers, starts
+   the run in a worker thread and answers 202 with the run's id.
+2. `GET /api/v2/runs/{run_id}/events` streams the run's events as server-sent events:
    `run_started`, `node_started`, `node_skipped`, `node_failed`, `run_finished` or
    `run_cancelled`, then `stream_end`. A client that reconnects passes the last event id
    and gets the rest from there.
-
-Build no longer uses this route: a card's Run starts with `POST /api/v2/runs` and Ask with
-`POST /api/v2/ask`, which take the pipeline as a config and answer 202 with a run id in the
-same way. The events stream from `GET /api/v2/runs/{run_id}/events`.
 
 Compare uses `POST /api/v2/comparisons`: one stage, up to ten variants, each the block the
 pipeline file takes for that stage. It sends one of three shapes. Through an index step,
@@ -263,25 +254,21 @@ Pandion ranks the answer for each variant and names the best. Otherwise it sends
 `question`, with `answer` for a chat step, and each variant's results come back unscored.
 `POST /api/v2/runs/{run_id}/cancel` stops a run.
 
-The run manager is `pandion_api.runs.RunManager`, one per app. The playground's old routes
-and pandion-api's routes use the same one, so the demo's limit on runs at once holds
-across both. A run is stopped through its `cancel`, a `threading.Event` that Pandion takes
-as it is.
+The run manager is `pandion_api.runs.RunManager`, one per app, so the demo's limit on runs
+at once holds across runs, questions, evaluations and comparisons. A run is stopped through
+its `cancel`, a `threading.Event` that Pandion takes as it is.
 
 The keys live only in the run's worker for its duration, and every event passes through a
-filter that replaces a key with `[redacted]` (`pandion_api.credentials.redact`, one for
-both stacks). On `/api/v2` an index run is `POST /api/v2/runs` with a pipeline and
-document ids; its result gives each step's result id. On the demo a run started there is
-its visitor's own: to anyone else it is a 404 on both stacks.
+filter that replaces a key with `[redacted]` (`pandion_api.credentials.redact`). An index
+run is `POST /api/v2/runs` with a pipeline and document ids; its result gives each step's
+result id. On the demo a run is its visitor's own: to anyone else it is a 404.
 
-The web follows every run on `/api/v2/runs/{id}/events`, whichever route started it,
-because both stacks share one run manager. A `/api/v2` event names its step (`parse`,
+The web follows every run on `/api/v2/runs/{id}/events`. An event names its step (`parse`,
 `clean.1`, `search`, `answer`) and, for a document's step, the document; the web draws it
 on the card of the same name (`clean_1`, `retrieve`, `use_case`). A comparison's events
 carry `variant`, an evaluation's `question`, with a `question_finished` after each. When
 the stream ends, the web reads the run's `result` from `GET /api/v2/runs/{id}`. Stop calls
-`POST /api/v2/runs/{id}/cancel`, which answers 409 once the run has finished. Runs still
-start on the old routes until the later part 5 tasks move each page.
+`POST /api/v2/runs/{id}/cancel`, which answers 409 once the run has finished.
 
 ## How the web app talks to the API
 
@@ -290,28 +277,20 @@ so every client route opens the app, and every API route lives under `/api`. The
 relative paths, so the same code works in development, where Vite on port 5173 proxies
 `/api` to the server on port 8000.
 
-The server answers on two prefixes until part 5. `/api` holds the routes the web uses
-today. `/api/v2` holds pandion-api's routes with the playground's Policy, which take a
-pipeline as the pipeline file's shape. Both share one run queue, one record lock and one
-pdfium lock (`pandion_api.pages.PDFIUM_LOCK`: pdfium is not thread-safe), and every site
-rule has one implementation. `tests/api/test_v2_parity.py` runs today's tests a second time against
-`/api/v2` to prove the rules hold there, and fails if a rule test neither runs there nor
-says why.
+The server answers on two prefixes. `/api/v2` holds pandion-api's routes with the
+playground's Policy, which take a pipeline as the pipeline file's shape: every run,
+question, evaluation, comparison, document, result and key check goes through them. `/api`
+holds only the playground's own teaching routes: `GET /api/health`, `GET /api/samples`,
+`GET /api/samples/questions`, `GET /api/samples/{name}/questions`,
+`POST /api/sources/sample`, `GET /api/learn/chunking`, `GET /api/learn/document`,
+`GET /api/stages`, `GET /api/settings/app` and `GET /api/questions/template`.
+`tests/api/test_routes.py` pins that list, and checks that every path the web's two
+clients (`web/src/api/client.ts` and `web/src/api/v2.ts`) name is served. The demo's
+rule tests (`tests/api/test_demo.py` and the rest) call `/api/v2` directly. Runs do not
+hold the pdfium lock (`pandion_api.pages.PDFIUM_LOCK`, which the page routes hold): a
+run's pdfium parse step can meet a page request on another thread.
 
-Part 5 moves the web onto `/api/v2`: it keeps a pipeline as the pipeline file's shape
-instead of a graph, runs one card with `POST /api/v2/runs` and `through`, asks with
-`POST /api/v2/ask`, and evaluates and compares with `POST /api/v2/evaluations` and
-`/comparisons`. Then the old routes and their tests go. The allow-list in
-`tests/integration/test_package_boundary.py` cannot simply go with them: other playground
-parts still use engine internals and need porting to the public API or removing first.
-They are `api/routes/learn.py`, `api/warmup.py`, `api/deps.py`, `POST /api/sources/sample`
-and the recording scripts `scripts/record_*.py`. Runs also do not hold the pdfium lock
-today: a run's pdfium parse step can meet a page request on another thread. What part 5
-must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
-
-The web calls only pandion-api's routes under `/api/v2` and the playground's teaching
-routes: `/api/samples`, `/api/sources/sample`, `/api/learn/...`, `/api/stages`,
-`/api/settings/app`, `/api/questions/template`, `/api/health`. A test,
+The web calls only pandion-api's routes under `/api/v2` and the teaching routes. A test,
 `web/src/api/oldRoutes.test.ts`, reads every non-test file under `web/src` (but the
 `/api/v2` client) and fails if one names an old route in a string, written relative to the
 old client (`"/runs"`), in full (`"/api/runs"`) or after `${API_BASE}`, or calls a deleted
@@ -340,7 +319,7 @@ function on the old client (`api.createRun`). It cannot see a path built up from
 - **Miss trace.** Each missed question in an evaluation's result carries its trace, the
   first step that lost the answer, worked out by `pandion.evaluate` with the eval step's own
   matching. Evaluate shows it with each step's code name swapped for Build's name
-  (`plainTrace`); the web no longer calls `POST /api/trace`.
+  (`plainTrace`), so it needs no request of its own.
 - **Documents.** Uploads, page images, the PDF itself and a document's question set come
   from `/api/v2/documents`. Loading a bundled sample is still `POST /api/sources/sample`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.

@@ -22,7 +22,7 @@ NOT_BUILT = """<!doctype html>
 <pre>cd web
 npm install
 npm run build</pre>
-<p>The API itself is under <a href="/api/registry">/api</a>.</p>
+<p>The API itself is under <a href="/docs">/api/v2</a>.</p>
 </body>
 </html>
 """

@@ -1,11 +1,11 @@
-"""On /api/v2 the catalog, the custom endpoint ban and the fixed prompts hold
-exactly as on the old routes (`/api/registry`, `/api/runs`, `/api/explain`)."""
+"""On /api/v2 the playground's rules hold: the custom endpoint ban on the demo,
+the fixed prompts and model revision, and the caps on model output and text budgets."""
 
 from __future__ import annotations
 
 import pytest
 
-from api.routes.runs import DEMO_NO_CUSTOM, PROMPTS_FIXED
+from api.policy import DEMO_NO_CUSTOM, PROMPTS_FIXED
 
 PIPELINE = {
     "index": {
@@ -37,13 +37,6 @@ def validate(client, config):
     return client.post("/api/v2/pipelines/validate", json={"config": config})
 
 
-@pytest.mark.parametrize("demo", [False, True])
-def test_the_catalog_is_the_one_the_old_registry_serves(client, monkeypatch, demo):
-    if demo:
-        demo_on(monkeypatch)
-    assert client.get("/api/v2/strategies").json()["stages"] == client.get("/api/registry").json()
-
-
 @pytest.mark.parametrize("name", list(CUSTOM_CONFIGS))
 def test_on_the_demo_a_custom_endpoint_is_refused(client, monkeypatch, name):
     demo_on(monkeypatch)
@@ -70,12 +63,6 @@ def test_on_the_demo_the_custom_endpoint_is_refused_before_a_fixed_prompt(client
     demo_on(monkeypatch)
     both = {**PIPELINE, "answer": {"use": "chat", "prompt": "Say yes.", **CUSTOM}}
     assert validate(client, both).json()["detail"] == DEMO_NO_CUSTOM
-
-
-def test_explain_matches_the_old_route(client):
-    old = client.post("/api/explain", json={"stage": "chunk", "transform": "recursive_character", "config": {"chunk_size": 200}})
-    new = client.post("/api/v2/explain", json={"stage": "chunk", "use": "recursive_character", "settings": {"chunk_size": 200}})
-    assert new.status_code == old.status_code == 200 and new.json() == old.json()
 
 
 def test_a_model_may_write_at_most_16000_tokens(client):
@@ -107,43 +94,6 @@ def test_a_text_budget_may_be_at_most_four_times_its_default(client):
     r = validate(client, reranked(cap + 1))
     assert r.status_code == 403
     assert r.json()["detail"] == f"retrieve.rerank.1.text_budget_chars is {cap + 1}; the playground allows at most {cap}."
-
-
-# --- the same caps on the old /api/runs and /api/sweeps ---------------------------
-
-
-def chat_graph(config: dict) -> dict:
-    return {"nodes": [{"id": "chat", "stage": "use_case", "transform": "chat", "config": config}], "edges": []}
-
-
-def test_the_old_runs_route_caps_a_model_output_as_v2_does(client):
-    r = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": 16001})})
-    assert r.status_code == 403
-    assert r.json()["detail"] == "chat.max_tokens is 16001; the playground allows at most 16000."
-    at_the_cap = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": 16000})})
-    assert at_the_cap.status_code != 403
-
-
-def test_an_override_cannot_lift_the_cap_on_the_old_runs_route(client):
-    r = client.post("/api/runs", json={"graph": chat_graph({}), "overrides": {"chat": {"max_tokens": 20000}}})
-    assert r.status_code == 403
-    assert r.json()["detail"] == "chat.max_tokens is 20000; the playground allows at most 16000."
-
-
-def test_the_old_sweeps_route_caps_a_text_budget_as_v2_does(client):
-    import pandion
-
-    props = pandion.catalog()["rerank"]["llm_rerank"]["config_schema"]["properties"]
-    cap = 4 * props["text_budget_chars"]["default"]
-    graph = {"nodes": [{"id": "rr", "stage": "rerank", "transform": "llm_rerank", "config": {}}], "edges": []}
-    r = client.post(
-        "/api/sweeps",
-        json={"graph": graph, "node_id": "rr",
-              "variants": [{"transform": "llm_rerank", "config": {}},
-                           {"transform": "llm_rerank", "config": {"text_budget_chars": cap + 1}}]},
-    )
-    assert r.status_code == 403
-    assert r.json()["detail"] == f"rr.text_budget_chars is {cap + 1}; the playground allows at most {cap}."
 
 
 # --- a cap reads the value as pydantic will: a string or a float is no way around it ---
@@ -195,14 +145,3 @@ def test_a_text_budget_cannot_be_passed_with_a_string(client):
     assert r.json()["detail"] == f"retrieve.rerank.1.text_budget_chars is {cap + 1}; the playground allows at most {cap}."
 
 
-@pytest.mark.parametrize("sent", OVER_THE_CAP)
-def test_the_old_runs_route_refuses_a_string_or_a_float_over_the_cap(client, sent):
-    r = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": sent})})
-    assert r.status_code == 403
-    assert r.json()["detail"] == f"chat.max_tokens is {int(float(sent))}; the playground allows at most 16000."
-
-
-@pytest.mark.parametrize("sent", AT_THE_CAP)
-def test_the_old_runs_route_lets_a_string_or_a_float_at_the_cap_pass_it(client, sent):
-    r = client.post("/api/runs", json={"graph": chat_graph({"max_tokens": sent})})
-    assert r.status_code != 403

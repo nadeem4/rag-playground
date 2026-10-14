@@ -9,16 +9,13 @@ test says which challenge no longer tells the story.
 from __future__ import annotations
 
 from functools import cache
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any
 
 from fastapi import APIRouter
 
+import pandion
 from api import sample_set
-from pandion.extend import RunContext, Stage
-from pandion.plugins.chunk import DocView, count_tokens
-from pandion.registry import registry
+from pandion.evaluation import document_text
 
 router = APIRouter()
 
@@ -72,7 +69,7 @@ def get_chunking_lesson() -> dict[str, Any]:
         # Counted the way each chunker counts: recursive_character in
         # characters, token_based with the shared token counter.
         "sentence_chars": len(ANSWER_SENTENCE),
-        "sentence_tokens": count_tokens(ANSWER_SENTENCE),
+        "sentence_tokens": pandion.chunk.count_tokens(ANSWER_SENTENCE),
         "parse": PARSE,
         "challenges": CHALLENGES,
     }
@@ -85,17 +82,8 @@ def _parsed_sample() -> tuple[str, int]:
     The text is the projection the chunkers cut, so the Text view in a lesson
     shows exactly what the steps work on. Parsed once per process.
     """
-    cls = registry.get(Stage.PARSE, PARSE["transform"])
-    sample = sample_set.default_sample().pdf
-    with TemporaryDirectory() as tmp:
-        ctx = RunContext(output_dir=Path(tmp), emit=lambda event: None, tmp=Path(tmp))
-        doc = cls().apply(
-            {"file": {"path": str(sample), "sha": "sample", "filename": sample.name}},
-            cls.config_model(**PARSE["config"]),
-            ctx,
-        )
-    view = DocView.of(doc)
-    return view.text, view.doc.page_count
+    result = pandion.parse(sample_set.default_sample().pdf, use=PARSE["transform"], **PARSE["config"])
+    return document_text(result), result.output.page_count
 
 
 @router.get("/learn/document")

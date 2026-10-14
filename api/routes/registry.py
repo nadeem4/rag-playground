@@ -1,36 +1,27 @@
-"""The plugin catalogue, the stage explanations, and per-settings explanations."""
+"""What every stage is for (`GET /api/stages`), and the catalog as the playground serves it.
+
+`PlaygroundPolicy.strategies` serves the catalog through `served_catalog`, so
+GET /api/v2/strategies leaves out what a visitor must not set.
+"""
 
 from __future__ import annotations
 
 import copy
-import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field, ValidationError
+from fastapi import APIRouter
 
 from api import demo
 from api.stage_copy import STAGE_LESSON, STAGE_WHAT
 from pandion.extend import Stage
-from pandion.registry import UnknownTransformError
 
 router = APIRouter()
-
-
-@router.get("/registry")
-def get_registry(request: Request) -> dict[str, Any]:
-    """The catalogue. On the demo, the custom endpoint is left out of every
-    model choice, with its two fields: a run that picks it is refused with 403
-    anyway. The test-only embedder is left out too. Read-only settings (the
-    prompts) are left out everywhere until the forms can show them read-only."""
-    return served_catalog(request.app.state.deps.registry.export_schema())
 
 
 def served_catalog(schema: dict[str, Any]) -> dict[str, Any]:
     """The catalog as the playground serves it: read-only settings left out
     everywhere; on the demo, the custom endpoint and the test-only embedder too.
-    `schema` is not changed. The old /api/registry and PlaygroundPolicy both
-    serve through this function."""
+    `schema` is not changed. PlaygroundPolicy serves through this function."""
     served = _without_read_only(schema)
     return _without_test_options(_without_custom_models(served)) if demo.enabled() else served
 
@@ -74,8 +65,7 @@ def _without_custom_models(schema: dict[str, Any]) -> dict[str, Any]:
 def read_only_settings(properties: dict[str, Any]) -> list[str]:
     """The settings a config schema's `properties` mark `readOnly` (the prompts).
 
-    The registry leaves them out of the forms and the run routes refuse a
-    changed one, both through this function, so the two cannot drift."""
+    The served catalog leaves them out of the forms through this function."""
     return [key for key, prop in properties.items() if prop.get("readOnly")]
 
 
@@ -101,34 +91,3 @@ def get_stages() -> dict[str, dict[str, Any]]:
         if stage in STAGE_LESSON:
             out[str(stage)]["lesson"] = STAGE_LESSON[stage]
     return out
-
-
-class ExplainIn(BaseModel):
-    #: A plain string, not `Stage`, so an unknown stage is a 404 like an
-    #: unknown transform rather than a request-validation 422.
-    stage: str
-    transform: str
-    config: dict[str, Any] = Field(default_factory=dict)
-
-
-@router.post("/explain")
-def explain(body: ExplainIn, request: Request) -> dict[str, Any]:
-    """What one transform will do with one config (I-12).
-
-    Pure: the config is validated and `explain()` reads it. No model is loaded,
-    nothing is run, nothing is stored.
-    """
-    try:
-        stage = Stage(body.stage)
-        cls = request.app.state.deps.registry.get(stage, body.transform)
-    except (ValueError, UnknownTransformError) as exc:
-        raise HTTPException(
-            status_code=404, detail=f"unknown transform {body.stage}/{body.transform}"
-        ) from exc
-    try:
-        config = cls.config_model(**body.config)
-    except ValidationError as exc:
-        raise HTTPException(
-            status_code=422, detail={"errors": json.loads(exc.json())}
-        ) from exc
-    return cls().explain(config).model_dump()

@@ -72,7 +72,7 @@ def base():
             if proc.poll() is not None:
                 pytest.fail(f"the server exited with code {proc.returncode} before it answered")
             try:
-                urllib.request.urlopen(url + "/api/registry", timeout=2)
+                urllib.request.urlopen(url + "/api/v2/health", timeout=2)
                 break
             except OSError:
                 if time.time() > deadline:

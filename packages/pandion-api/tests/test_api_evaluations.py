@@ -304,3 +304,73 @@ def test_answer_without_one_question_is_refused(client):
         }
         r = client.post("/comparisons", json=body)
         assert r.status_code == 400 and r.json()["detail"] == ANSWER_NEEDS_QUESTION
+
+
+# --- the visitor's key reaches each question-asking run, and is never stored ----------
+
+KEY = "sk-secret-evaluate-123"
+
+
+class Keyed(Policy):
+    def credentials(self, request):
+        return {"anthropic_api_key": KEY}
+
+
+def _spy(monkeypatch, target, name: str, seen: list) -> None:
+    """Record each call's credentials, then run the real function."""
+    real = getattr(target, name)
+
+    def spy(*args, credentials=None, **kwargs):
+        seen.append(credentials)
+        return real(*args, credentials=credentials, **kwargs)
+
+    monkeypatch.setattr(target, name, spy)
+
+
+def _no_key_on_disk(tmp_path) -> None:
+    files = [p for p in (tmp_path / "data").rglob("*") if p.is_file()]
+    assert files, "the run wrote nothing, so this check would prove nothing"
+    assert not [p for p in files if KEY.encode() in p.read_bytes()]
+
+
+def test_an_evaluation_gets_the_key_and_stores_none_of_it(tmp_path, monkeypatch):
+    from pandion_api.routes import evaluations
+
+    seen: list = []
+    _spy(monkeypatch, evaluations, "evaluate", seen)
+    with make_client(tmp_path, Keyed()) as client:
+        sha = upload(client)["sha"]
+        state, events = finish(client, client.post("/evaluations", json={"config": PIPELINE, "documents": [sha], "questions": QUESTIONS}))
+    assert state["ok"] is True
+    assert seen == [{"anthropic_api_key": KEY}]
+    assert KEY not in json.dumps([state, events])
+    _no_key_on_disk(tmp_path)
+
+
+def test_a_comparison_gets_the_key_and_stores_none_of_it(tmp_path, monkeypatch):
+    from pandion_api.routes import evaluations
+
+    seen: list = []
+    _spy(monkeypatch, evaluations, "compare", seen)
+    with make_client(tmp_path, Keyed()) as client:
+        sha = upload(client)["sha"]
+        body = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha], "questions": QUESTIONS}
+        state, events = finish(client, client.post("/comparisons", json=body))
+    assert state["ok"] is True
+    assert seen == [{"anthropic_api_key": KEY}]
+    assert KEY not in json.dumps([state, events])
+    _no_key_on_disk(tmp_path)
+
+
+def test_a_comparison_on_one_question_gets_the_key_for_each_variant(tmp_path, monkeypatch):
+    from pandion import Pipeline
+
+    seen: list = []
+    _spy(monkeypatch, Pipeline, "retrieve", seen)
+    with make_client(tmp_path, Keyed()) as client:
+        sha = upload(client)["sha"]
+        body = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha], "question": "Capital?"}
+        state, _ = finish(client, client.post("/comparisons", json=body))
+    assert state["ok"] is True
+    assert seen == [{"anthropic_api_key": KEY}] * len(VARIANTS)
+    _no_key_on_disk(tmp_path)

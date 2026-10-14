@@ -223,21 +223,22 @@ The default Policy allows every setting. RAG Playground's Policy refuses with a 
 custom model endpoint on its hosted demo, a changed prompt or model revision in every
 mode, `max_tokens` above 16,000 on a step that calls a model, and a text budget (a
 setting named `..._budget_chars`) above four times its default. A cap reads the value as
-pydantic will, so `"999999"` and `999999.0` are refused like `999999`. Its old `/api/runs` and
-`/api/sweeps` routes refuse the same caps on each graph node with the same function
-(`api.policy.step_over_limit`).
+pydantic will, so `"999999"` and `999999.0` are refused like `999999`.
 
 ## The playground on pandion-api
 
 RAG Playground's server is `pandion_api.create_app(settings, PlaygroundPolicy())`
-(`api/main.py`), with its routes under `/api/v2`, plus what is the playground's own:
-the old `/api` routes the web uses until part 5, the samples (`/api/samples`,
-`/api/sources/sample`), the lessons (`/api/learn`), the stage copy (`/api/stages`),
-`/api/settings/app` (demo mode, its limits and the visitor cookie), the question-set
-template, the model warm-up, and the web build.
+(`api/main.py`), with its routes under `/api/v2`, plus what is the playground's own: the
+model warm-up, the web build, and its teaching routes under `/api`. The old `/api` routes
+for runs, sweeps, the catalog, explanations, documents, results, the miss trace and keys
+are gone; the web calls their `/api/v2` twins. The playground's own routes are
+`GET /api/health`, `GET /api/samples`, `GET /api/samples/questions`,
+`GET /api/samples/{name}/questions`, `POST /api/sources/sample`, `GET /api/learn/chunking`,
+`GET /api/learn/document`, `GET /api/stages`, `GET /api/settings/app` (demo mode, its
+limits and the visitor cookie) and `GET /api/questions/template`.
+`tests/api/test_routes.py` pins that list.
 
-`PlaygroundPolicy` (`api/policy.py`) is the hosted demo's rules. Each calls the function
-the old route uses, or the old route calls it, so the two cannot drift apart:
+`PlaygroundPolicy` (`api/policy.py`) is the hosted demo's rules:
 
 | Rule | On the demo | Locally |
 |---|---|---|
@@ -262,21 +263,11 @@ the old route uses, or the old route calls it, so the two cannot drift apart:
 | `strategies` | no custom endpoint, no test embedder, no read-only settings | no read-only settings |
 | `on_startup` | puts every sample's file in the store, and starts deleting uploads after 24 hours | puts every sample's file in the store |
 
-The old routes ask the same rules. `POST /api/sources` calls `check_upload` and
-`on_uploaded`, the old delete calls `on_delete`, the old page route asks `private`, the
-old question-set route asks `keeps_question_sets`, `DELETE /api/cache` asks
-`check_clear_cache`, and the old key check asks `check_provider`. `/api/runs` and
-`/api/sweeps` refuse the same caps with `api.policy.step_over_limit`, and their runs share
-the one run manager, so the demo's two at once hold across both stacks and a run is its
-visitor's own on `/api/runs/{id}` too. A stored file is never written twice for the same
-bytes on `/api/v2`, and a name ending in `.part` is refused on both stacks. A question
-set is held to 1 MB, 500 questions and 20 gold passages a question on both stacks.
+A stored file is never written twice for the same bytes, and a name ending in `.part` is
+refused. A question set is held to 1 MB, 500 questions and 20 gold passages a question.
 
-`tests/api/test_v2_parity.py` runs today's tests of these rules a second time against
-`/api/v2`, and fails if a new rule test neither runs there nor says why. A test that
-cannot run there (it sends a graph, or reads `/api/settings/app`, which stays) is in its
-`EXCLUDED` list with the reason and, where there is one, the `/api/v2` test that proves
-the same rule.
+The demo's rule tests (`tests/api/test_demo.py`, `test_delete_source.py`,
+`test_source_file.py` and the rest) call `/api/v2` directly.
 
 ### What part 5 must decide
 
@@ -288,28 +279,24 @@ Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left 
 - **A per-visitor queue cap.** The demo lets two runs work at once; the rest wait. One
   visitor can still queue many runs.
 - **Results readable by id.** `GET /results/{id}` and `POST /trace` answer any visitor
-  who has a result's id, as today's `/api/artifacts` and `/api/trace` do. An id is a
+  who has a result's id, as the old `/api` routes did. An id is a
   content hash that needs the upload's bytes to compute. A per-visitor check would be
   a new Policy hook.
 - **Time spent checking a question set.** Gold passages are matched in a worker thread
   with no time cap. The caps on size and count bound it, but not by the clock.
-- **Two embedding caches.** The old routes cache embeddings in `artifacts/.embcache` (or
-  `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Deleting the old routes
-  deletes the variable and the old cache.
-- **The allow-list cannot just be deleted.** `ENGINE_IMPORTS` in
-  `tests/integration/test_package_boundary.py` lists engine names the app still imports.
-  Deleting the old routes is not enough to empty it: these playground parts use engine
-  internals too, and each needs porting to Pandion's public API or removing:
-  `api/routes/learn.py` (the lessons), `api/warmup.py` (the model warm-up), `api/deps.py`
-  (the store, the sources and the embedding cache), `POST /api/sources/sample`, and the
-  recording scripts `scripts/record_*.py`.
+- **Two embedding caches.** The old routes cached embeddings in `artifacts/.embcache` (or
+  `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Done: the variable is gone,
+  and only `embeddings/` is used.
+- **The allow-list.** Done: the lessons, the warm-up, `api/deps.py`, the samples and the
+  scripts use only Pandion's public API, and `ENGINE_IMPORTS` is deleted from
+  `tests/integration/test_package_boundary.py`.
 - **Runs do not hold the pdfium lock.** A page request and a question-set check hold
   `pandion_api.pages.PDFIUM_LOCK`, but a run's pdfium parse step does not. pdfium is not
   thread-safe, so a run that parses with pdfium can still meet a page request on another
   thread. Part 5 decides whether Pandion's pdfium step takes a lock of its own.
 - **Compare's per-card `through`.** `POST /comparisons` takes `through`, so Compare stops
   each variant after the card it shows without embedding every variant, as the old
-  `/api/sweeps` did. The web's Compare page sends it for every comparison through an index
+  sweeps route did. The web's Compare page sends it for every comparison through an index
   step.
 
 ## Errors

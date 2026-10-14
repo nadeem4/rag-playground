@@ -13,6 +13,7 @@ release and record the Home clips. For how the code fits together, see
 - [Styling and fixtures](#styling-and-fixtures)
 - [Adding a strategy](#adding-a-strategy)
 - [Adding an endpoint](#adding-an-endpoint)
+- [The package boundary](#the-package-boundary)
 - [The samples](#the-samples)
 - [Staging](#staging)
 - [Releasing](#releasing)
@@ -54,6 +55,13 @@ cd web && npm test            # Vitest
 ```
 
 `uv run pytest packages/pandion-api/tests` runs pandion-api's own tests. pandion-api may import only Pandion's public API, which `test_api_boundary.py` checks with no allow-list. A test file there is named `test_api_*.py`, so it never shares a name with one of the engine's.
+
+The playground's own tests are in `tests/api/`. The demo's rule tests (`test_demo.py`,
+`test_delete_source.py`, `test_source_file.py` and the rest) call `/api/v2` directly: the
+old `/api` routes are gone, and so is the module that ran each rule test a second time
+against `/api/v2`. `tests/api/test_routes.py` lists the routes the playground serves
+under `/api` besides `/api/v2`, and checks that every path the web's clients name is
+served.
 
 The smoke test drives the real app in a real browser. It starts its own demo server on a
 free port, builds the index, asks a question, runs Compare and Evaluate, then opens every
@@ -124,9 +132,9 @@ model, so a new strategy needs no frontend change.
      stays selectable, tagged "Falls back";
    - `deterministic = False` if its output can change between runs (a model call), and
      `cacheable = False` if its output should never be reused, as for chat answers.
-2. Add the module to `PLUGIN_MODULES` in `pandion/plugins/__init__.py` and in the app's
-   `api/steps/__init__.py`. A test fails if a plugin module exists but
-   is not listed. Import a heavy library inside the function that uses it, through
+2. Add the module to `PLUGIN_MODULES` in `pandion/plugins/__init__.py`. A test fails if a
+   plugin module exists but is not listed. The app needs no change: it never names a
+   plugin module. Import a heavy library inside the function that uses it, through
    `pandion.errors.require`, so discovering the strategy needs no extra. A package
    strategy also gets a step class, one line in its stage's module (for example
    `Docling = step_class(Stage.PARSE, "docling", __name__)` in
@@ -159,13 +167,23 @@ An endpoint any site would want goes in pandion-api
 `packages/pandion-api/tests/test_api_boundary.py` checks. A rule only some sites want is a
 `Policy` method with a default that allows everything, and the playground's version goes in
 `api/policy.py`, tested on `/api/v2` in `tests/api/`. An endpoint only the playground wants
-(a lesson, a sample) goes in `api/routes/`. Describe a new endpoint or Policy method in
-[docs/pandion-api.md](docs/pandion-api.md).
+(a lesson, a sample) goes in `api/routes/`, and in the `TEACHING` list of
+`tests/api/test_routes.py`, which fails on a route under `/api` it does not list. Describe
+a new endpoint or Policy method in [docs/pandion-api.md](docs/pandion-api.md).
 
-A new test of a site rule in `tests/api/test_demo.py`, `test_delete_source.py` or
-`test_source_file.py` must also run on `/api/v2`: import it into
-`tests/api/test_v2_parity.py`, or add it to `EXCLUDED` there with the reason. A test
-fails until you do one or the other.
+A new test of a site rule goes in `tests/api/` (`test_demo.py`, `test_delete_source.py`,
+`test_source_file.py` and the rest) and calls the `/api/v2` route the web calls.
+
+## The package boundary
+
+The app (`api/`, `scripts/` and `web/scripts/`) imports only Pandion's public API and
+pandion-api: `pandion`, a stage namespace (`pandion.parse` to `pandion.answer`),
+`pandion.extend` and `pandion.evaluation`, each a name in its `__all__`.
+`tests/integration/test_package_boundary.py` fails on any other Pandion import, and there
+is no allow-list to add to. If the app needs a name that is not public, make it public in
+Pandion first: add it to the module's `__all__`, describe it in
+[docs/pandion.md](docs/pandion.md), and add a test for it in `packages/pandion/tests/`.
+Tests may still reach inside the engine.
 
 ## The samples
 

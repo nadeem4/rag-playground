@@ -1,12 +1,10 @@
-"""Uploaded source files, content addressed exactly as the `upload` step resolves them.
+"""The bundled samples as documents, and the demo's upload rules.
 
-The old /api/sources route stores a file as `<sha256><original suffix>`
-(`pandion.sources.Sources`), the name the old run graph's upload step looks
-for, so it keeps the raw suffix. /api/v2 stores through pandion-api's
-`DocumentStore`, which keeps only a plain suffix and never stores the same
-bytes twice. Both write the same record (`.meta/<sha>.json`: the original
-filename, size and content type, and who uploaded it) under one lock, and both
-refuse a name ending in `.part`.
+`POST /api/sources/sample` stores a sample like an upload. Uploads themselves
+go through pandion-api (`/api/v2/documents`); `PlaygroundPolicy` calls the
+helpers here for the demo's limits and the record of who uploaded what
+(`.meta/<sha>.json`: the original filename, size and content type, and each
+uploader's time), written under pandion-api's `SIDECAR_LOCK`.
 """
 
 from __future__ import annotations
@@ -19,17 +17,15 @@ from pathlib import Path
 from typing import Any
 
 import pypdfium2 as pdfium
-from fastapi import APIRouter, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from pandion.sources import Sources
-
-# The record helpers are pandion-api's, so both stacks share one record format
-# and one lock (`SIDECAR_LOCK`, held here, in `expiry.sweep` and on /api/v2).
-from pandion_api.documents import META_DIR, PART_REFUSED, SHA, SIDECAR_LOCK, DocumentStore, is_part
+# The record helpers are pandion-api's, so the app and /api/v2 share one record
+# format and one lock (`SIDECAR_LOCK`, held here, in `expiry.sweep` and on /api/v2).
+from pandion_api.documents import META_DIR, SHA, SIDECAR_LOCK, DocumentStore  # noqa: F401 (expiry reads them here)
 from pandion_api.documents import read_sidecar as _read_sidecar
 
-from api import demo, sample_set, visitor, warmup
+from api import demo, sample_set, warmup
 
 router = APIRouter()
 
@@ -162,27 +158,6 @@ def record_upload(sources: Path, sha: str, visitor: str | None) -> None:
     meta_path.write_text(json.dumps(body), encoding="utf-8")
 
 
-@router.get("/sources")
-def list_sources(request: Request, response: Response) -> list[dict[str, Any]]:
-    visitor.ensure_visitor(request, response)
-    # Per visitor, with upload times: no browser or proxy may keep a copy.
-    response.headers["Cache-Control"] = "private, no-store"
-    meta_dir = request.app.state.deps.sources_dir / META_DIR
-    if not meta_dir.is_dir():
-        return []
-    items = [_read_sidecar(p) for p in meta_dir.glob("*.json")]
-    # a hand-edited sidecar without a string sha and filename is skipped, not a 500
-    items = [
-        m
-        for m in items
-        if isinstance(m.get("sha"), str)
-        and isinstance(m.get("filename"), str)
-        and demo.readable(m["sha"], request)
-    ]
-    me = visitor.visitor_id(request)
-    return sorted((_listed(m, me) for m in items), key=lambda m: m["filename"].lower())
-
-
 def _listed(meta: dict[str, Any], me: str | None) -> dict[str, Any]:
     """A sidecar as the list shows it: never the visitor ids, and `uploaded_at`
     when there is an upload time to give. That is this browser's own time when
@@ -196,46 +171,6 @@ def _listed(meta: dict[str, Any], me: str | None) -> dict[str, Any]:
         if stamp:
             out["uploaded_at"] = stamp
     return out
-
-
-@router.delete("/sources/{sha}")
-def delete_source(sha: str, request: Request) -> dict[str, Any]:
-    """Delete an upload now instead of when it expires.
-
-    On the demo only the caller's own upload: their visitor id is dropped from
-    the record, and the file goes once nobody else holds it. Running locally,
-    any upload. A sample is never deleted. `deleted` says whether the file left
-    the disk.
-    """
-    sources: Path = request.app.state.deps.sources_dir
-    if not SHA.match(sha):
-        raise HTTPException(404, "There is no upload with that fingerprint.")
-    store = DocumentStore(sources)
-    with SIDECAR_LOCK:
-        if not request.app.state.policy.on_delete(sha, store.get(sha), request):
-            return {"sha": sha, "deleted": False}
-        store.remove(sha)
-    return {"sha": sha, "deleted": True}
-
-
-@router.post("/sources")
-async def upload_source(request: Request, response: Response, file: UploadFile) -> dict[str, Any]:
-    # Locally a first upload mints the visitor id; on the demo it never does:
-    # a client that drops cookies would get a fresh id, and a fresh cap, each time.
-    me = visitor.ensure_visitor(request, response) if not demo.enabled() else visitor.visitor_id(request)
-    filename = Path(file.filename or "upload").name
-    if is_part(filename):
-        raise HTTPException(status_code=400, detail=PART_REFUSED)
-    data = await request.app.state.policy.check_upload(file, request)
-    if not data:
-        raise HTTPException(status_code=400, detail="empty upload")
-    return _store(
-        request.app.state.deps.sources_dir,
-        filename,
-        data,
-        file.content_type,
-        visitor=me,
-    )
 
 
 class SampleRequest(BaseModel):
@@ -261,9 +196,10 @@ def seed_sample_files(sources: Path) -> None:
     its file. Only the file: no record, so the list still shows a sample once a
     visitor loads it, as before."""
     sources.mkdir(parents=True, exist_ok=True)
+    store = DocumentStore(sources)
     for sample in sample_set.all_samples():
-        if not Sources(sources).path(sample.sha, sample.pdf.name).is_file():
-            Sources(sources).add_bytes(sample.pdf.read_bytes(), sample.pdf.name)
+        if store.file(sample.sha) is None:
+            store.save(sample.pdf.read_bytes(), sample.pdf.name)
 
 
 def _store(
@@ -276,9 +212,8 @@ def _store(
     sample = next((s for s in sample_set.all_samples() if s.sha == hashlib.sha256(data).hexdigest()), None)
     if sample is not None:
         filename = sample.pdf.name  # a sample's bytes are stored under the sample's own name
-    # The raw suffix, as the old run graph's upload step looks for it.
-    sha = Sources(sources).add_bytes(data, filename).sha
     store = DocumentStore(sources)
+    sha = store.save(data, filename)
     ctype = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     with SIDECAR_LOCK:
         store.write(sha, filename, len(data), ctype)

@@ -319,7 +319,9 @@ the small pool of candidates the search found.
   `BAAI/bge-reranker-v2-m3` is strongest and slow on a CPU.
 - `revision` (empty): the model's commit on Hugging Face. Empty uses the commit Pandion
   pins for each model, its main branch on 2026-10-13, so scores stay the same when a model
-  is updated.
+  is updated. Any other value must be a full commit id, 40 lowercase hex characters; a
+  branch name, a short id or a pull request ref is refused. Set it in a pipeline file or
+  in code. It is fixed in the playground, which hides it and refuses a run that sets it.
 
 **Use it** for single-fact questions. It needs no key.
 

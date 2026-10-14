@@ -531,7 +531,10 @@ class IndexPipeline:
         cancel: threading.Event | None = None,
         credentials: dict[str, str] | None = None,
         force: bool = False,
+        remember: bool = True,
     ) -> IndexReport:
+        """Index `documents`. `remember=False` leaves `self.documents` as it
+        was; evaluate's trace of a miss uses it so the pipeline is unchanged."""
         graph, roles = self.graph(documents)
         targets = {f"{doc_id}::{stop}" for doc_id in documents} if stop else None
         result = self.execute(
@@ -554,7 +557,8 @@ class IndexPipeline:
                 index = stage
             else:
                 reports[doc_id].stages[role] = stage
-        self.documents = documents
+        if remember:
+            self.documents = documents
         return IndexReport(documents=reports, index=index)
 
     def execute(

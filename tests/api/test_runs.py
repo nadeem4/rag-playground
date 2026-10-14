@@ -399,7 +399,7 @@ def test_idle_stream_sends_heartbeat(dirs, gates, monkeypatch):
 # prompts are fixed in the playground (read-only settings)
 # ---------------------------------------------------------------------------
 
-PROMPTS_FIXED = "The prompts are fixed in the playground. Set them in a pipeline file or in code."
+PROMPTS_FIXED = "The prompts and the model revision are fixed in the playground. Set them in a pipeline file or in code."
 
 
 def lone_node(stage: str, transform: str, config: dict) -> dict:
@@ -437,5 +437,12 @@ def test_a_sweep_variant_that_changes_a_prompt_is_refused(client):
               "variants": [{"transform": "llm_rerank", "config": {"prompt": SYSTEM_PROMPT}},
                            {"transform": "llm_rerank", "config": {"prompt": "Order them."}}]},
     )
+    assert r.status_code == 403
+    assert r.json()["detail"] == PROMPTS_FIXED
+
+
+def test_a_run_that_sets_a_cross_encoder_revision_is_refused(client):
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    r = client.post("/api/runs", json={"graph": lone_node("rerank", "cross_encoder", {"revision": revision})})
     assert r.status_code == 403
     assert r.json()["detail"] == PROMPTS_FIXED

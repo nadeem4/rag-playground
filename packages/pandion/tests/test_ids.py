@@ -1,7 +1,9 @@
+from typing import ClassVar
+
 import pytest
 
 from pandion.artifacts import ArtifactType
-from pandion.ids import canonical_json, compute_artifact_id, shard_path, short_id
+from pandion.ids import AddedSettings, canonical_json, compute_artifact_id, shard_path, short_id
 
 
 def base(**over):
@@ -100,11 +102,6 @@ def test_short_id_and_shard_path():
     aid = "ab" + "cd" + "e" * 60
     assert short_id(aid) == aid[:16]
     assert shard_path(aid) == ("ab", "cd", aid[:16])
-
-
-from typing import ClassVar
-
-from pandion.ids import AddedSettings
 
 
 class _Before(AddedSettings):

@@ -22,11 +22,12 @@ commit in `PINNED`, or at `revision` when it is set.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import Any, ClassVar, Literal, Mapping
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from pandion.artifacts import ArtifactType
 from pandion.errors import require
@@ -64,6 +65,10 @@ PINNED: dict[str, str] = {
 }
 
 
+#: A full commit id on Hugging Face: 40 lowercase hex characters.
+_COMMIT = re.compile(r"[0-9a-f]{40}")
+
+
 class CrossEncoderConfig(AddedSettings):
     added: ClassVar[tuple[str, ...]] = ("revision",)
 
@@ -90,7 +95,21 @@ class CrossEncoderConfig(AddedSettings):
             "The model's commit on Hugging Face. Empty uses the commit Pandion "
             "pins for the model, so scores do not change when the model is updated."
         ),
+        # Fixed in the playground: any other value downloads another copy of the model.
+        json_schema_extra={"readOnly": True},
     )
+
+    @field_validator("revision")
+    @classmethod
+    def _full_commit(cls, value: str) -> str:
+        """A branch or tag can move and a pull request ref can point at
+        someone else's upload, so only a full commit id is taken."""
+        if value and not _COMMIT.fullmatch(value):
+            raise ValueError(
+                "revision must be empty or a full 40-character commit id in lowercase hex, "
+                f"not '{value}'."
+            )
+        return value
 
 
 _LOAD_LOCK = threading.Lock()

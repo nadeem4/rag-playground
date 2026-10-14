@@ -95,3 +95,11 @@ def test_the_prompts_stay_out_of_the_forms_until_they_can_be_shown_read_only(cli
         assert key not in body[stage][name]["config_schema"]["properties"], f"{name}.{key}"
         assert pandion.catalog()[stage][name]["config_schema"]["properties"][key]["readOnly"] is True
     assert "max_tokens" in body["use_case"]["chat"]["config_schema"]["properties"]
+
+
+def test_the_cross_encoder_revision_stays_out_of_the_forms(client):
+    import pandion
+
+    body = client.get("/api/registry").json()
+    assert "revision" not in body["rerank"]["cross_encoder"]["config_schema"]["properties"]
+    assert pandion.catalog()["rerank"]["cross_encoder"]["config_schema"]["properties"]["revision"]["readOnly"] is True

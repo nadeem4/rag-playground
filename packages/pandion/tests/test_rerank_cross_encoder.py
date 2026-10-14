@@ -307,6 +307,8 @@ def built(monkeypatch):
 
 
 CPU = ModelSettings(device="cpu")
+#: A full commit id, the only kind of revision the config takes.
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 
 def test_load_caches_one_model_per_id(built):
@@ -433,9 +435,9 @@ def test_the_default_revision_keeps_the_id_and_a_set_one_moves_it():
     assert default.revision == ""
     assert default.model_dump(mode="json") == {"model": MINILM, "top_k": 5}
     assert CrossEncoderRerank().fingerprint(default) == MINILM
-    pinned = CrossEncoderConfig(revision="abc123")
-    assert pinned.model_dump(mode="json")["revision"] == "abc123"
-    assert CrossEncoderRerank().fingerprint(pinned) == f"{MINILM}@abc123"
+    pinned = CrossEncoderConfig(revision=COMMIT)
+    assert pinned.model_dump(mode="json")["revision"] == COMMIT
+    assert CrossEncoderRerank().fingerprint(pinned) == f"{MINILM}@{COMMIT}"
 
 
 def test_a_model_loads_at_its_pinned_revision(built):
@@ -444,12 +446,26 @@ def test_a_model_loads_at_its_pinned_revision(built):
 
 
 def test_a_revision_that_was_set_is_the_one_loaded(built):
-    ce._model_for(CrossEncoderConfig(revision="abc123"), CPU)
-    assert built[0]["revision"] == "abc123"
+    ce._model_for(CrossEncoderConfig(revision=COMMIT), CPU)
+    assert built[0]["revision"] == COMMIT
 
 
 def test_explain_names_a_set_revision():
     pinned = CrossEncoderRerank().explain(CrossEncoderConfig()).settings
     assert "at commit" not in pinned
-    text = CrossEncoderRerank().explain(CrossEncoderConfig(revision="abc123")).settings
-    assert "MiniLM at commit abc123," in text
+    text = CrossEncoderRerank().explain(CrossEncoderConfig(revision=COMMIT)).settings
+    assert f"MiniLM at commit {COMMIT}," in text
+
+
+def test_revision_takes_only_a_full_commit_id():
+    """Empty or 40 lowercase hex characters: a branch, a short sha or a pull
+    request ref could move or point at someone else's upload."""
+    assert CrossEncoderConfig(revision=COMMIT).revision == COMMIT
+    for bad in ("main", "233902d", "refs/pr/1", COMMIT.upper()):
+        with pytest.raises(ValueError, match="revision must be empty or a full 40-character commit id"):
+            CrossEncoderConfig(revision=bad)
+
+
+def test_revision_is_read_only_in_the_app():
+    prop = CrossEncoderConfig.model_json_schema()["properties"]["revision"]
+    assert prop["readOnly"] is True

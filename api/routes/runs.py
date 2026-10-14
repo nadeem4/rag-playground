@@ -36,7 +36,7 @@ from pandion.registry import Registry, UnknownTransformError
 
 router = APIRouter()
 
-PROMPTS_FIXED = "The prompts are fixed in the playground. Set them in a pipeline file or in code."
+PROMPTS_FIXED = "The prompts and the model revision are fixed in the playground. Set them in a pipeline file or in code."
 
 DEMO_NO_CUSTOM = (
     "custom endpoints are disabled in this hosted demo: the server would send "
@@ -143,7 +143,7 @@ _MODEL_CALLERS = {
 
 
 def _changes_a_read_only_setting(registry: Registry, nd: Node, cfg: dict[str, Any]) -> bool:
-    """Whether `cfg` sets a readOnly setting (a prompt) to anything but its default.
+    """Whether `cfg` sets a readOnly setting (a prompt, a model revision) to anything but its default.
 
     In every mode: the app has no control that sets a prompt, so a changed one
     can only come from a crafted request, a share link or an imported pipeline,

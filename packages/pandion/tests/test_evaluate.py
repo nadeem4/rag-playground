@@ -230,8 +230,10 @@ def test_documents_are_searched_without_reindexing_the_pipeline(tmp_path, docs):
     bees.write_bytes(build_pdf(OTHER_DOC))
     p = pipeline(tmp_path)
     p.index.run(docs)
-    report = pandion.evaluate(p, [BEES], documents=[bees])
+    # NOT_IN_DOC misses, so its trace indexes the given documents too.
+    report = pandion.evaluate(p, [BEES, NOT_IN_DOC], documents=[bees])
     assert report.found == 1
+    assert report.questions[1].trace is not None
     assert set(p.index.indexed()) == {"sample.pdf"}
 
 

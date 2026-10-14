@@ -21,6 +21,7 @@ import { fresh } from "@/components/ask/AskResults"
 import { askSnapshot, logEntry, type AskSnapshot, type TranscriptEntry } from "@/components/ask/Transcript"
 import { WhatYouAreSeeing } from "@/components/learn/WhatYouAreSeeing"
 import { FirstRun } from "@/components/pipeline/FirstRun"
+import { KeptNotice } from "@/components/pipeline/KeptNotice"
 import { fmtMs, plainName } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
@@ -469,6 +470,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           </div>
         </div>
         <RunStrip segments={segments} line={stripLine} />
+        <KeptNotice />
         <PipelineBar
           graph={graph}
           registry={registry}

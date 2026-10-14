@@ -346,7 +346,23 @@ steps; `graphToConfig` converts each one once, and one it cannot convert is kept
 reason and never deleted. Build draws its column from the config (`columnOf`); each card's
 id maps to the step name runs report (`clean_2` is `clean.2`, `retrieve` is `search`).
 
-These functions are tested, and no page uses them yet. The fixture
+Build's working pipeline is kept this way (`web/src/state/working.ts`), in localStorage
+under `rag-playground:pipeline:v2`, so Build, Compare and Evaluate share it. `graph.ts`
+keeps the names every page already used (`useStoredGraph`, `storeGraph`): they draw the
+column from the stored config and store a column as a config. A column that is not one
+(no Parse step, say) is not stored. Versions before this one kept a graph under
+`rag-playground:graph:v1`. The first time nothing is stored under the new key, that graph
+is converted once. If it cannot be, the reason is written under
+`rag-playground:graph:v1:kept`, Build opens on the Starter and says why once, and the old
+graph is never tried again. The old key is never written or removed, so the old pipeline is
+kept either way. A stored pipeline that uses a strategy this server does not have cannot be
+drawn, and every page would store a Starter in its place. Before that, it is copied as it was
+to `rag-playground:pipeline:v2:kept` with the reason, beside any kept before, and Build says
+why once. Build's per-tab results moved to `rag-playground:build-session:v2`,
+because the old ones were keyed by the old graph's card ids.
+
+Saved pipelines, share links and export files still hold a graph; they move to the config
+in later changes. The fixture
 `web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the browser holds
 it, and two tests pin that converting the app's Starter gives that file, so a visitor's
 Starter keeps its result ids.

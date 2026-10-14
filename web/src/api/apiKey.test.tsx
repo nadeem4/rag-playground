@@ -408,7 +408,7 @@ describe("the API key panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
     await waitFor(() => expect(runPosts()).toHaveLength(1))
     const post = runPosts()[0]
-    const graph = window.localStorage.getItem("rag-playground:graph:v1")
+    const graph = window.localStorage.getItem("rag-playground:pipeline:v2")
     expect(graph).toBeTruthy()
     for (const p of PROVIDERS) {
       const k = FAKE[p]

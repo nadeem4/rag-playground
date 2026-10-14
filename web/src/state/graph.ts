@@ -3,6 +3,9 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
 import type { Graph, GraphEdge, GraphNode, PortSchema, Registry, Stage, TransformInfo } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
 
+import { columnOf, graphToConfig, unknownStrategy } from "./config"
+import { keepUndrawn, parseWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
+
 /**
  * The pipeline as a graph: nodes and port-typed edges, exactly what
  * `POST /api/runs` executes. This is the source of truth for the Build page.
@@ -560,67 +563,50 @@ export function loadGraph(raw: string | null, registry: Registry): PipelineGraph
   }
 }
 
-const STORAGE_KEY = "rag-playground:graph:v1"
-
 /**
- * The working graph is a small store every page reads: Build edits it, the
- * Document control and Compare and Evaluate follow it. Navigation is
- * a full page load, so localStorage is what carries it between pages; within
- * a page, `storeGraph` tells every subscriber.
- *
- * Storage is read on each snapshot, so a test (or another tab) that clears it
- * is seen. When a write fails (a private window, blocked storage) the graph
- * lives in memory for the rest of the page.
+ * The working pipeline, as Build's column. It is stored as a config
+ * (state/working.ts); these keep the names every page already uses. The import
+ * cycle (graph, working, config) is between function bodies only.
  */
-let memory: string | null = null
-let storageFailed = false
-const listeners = new Set<() => void>()
-
-/** The stored JSON: a string, so a snapshot comparison is cheap. */
 export function storedGraphJson(): string | null {
-  if (storageFailed) return memory
-  try {
-    return window.localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return memory
-  }
+  return storedWorkingJson()
 }
 
 export function subscribeGraph(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
-
-/** The graph is shared between Build, Compare and Evaluate through per-viewer storage. */
-export function readStoredGraph(registry: Registry): PipelineGraph | null {
-  return loadGraph(storedGraphJson(), registry)
-}
-
-export function storeGraph(g: PipelineGraph): void {
-  const json = JSON.stringify(g)
-  memory = json
-  try {
-    window.localStorage.setItem(STORAGE_KEY, json)
-    storageFailed = false
-  } catch {
-    // Private window or blocked storage: the page still works, it just forgets on reload.
-    storageFailed = true
-  }
-  for (const l of [...listeners]) l()
+  return subscribeWorking(listener)
 }
 
 /**
- * The stored working graph, kept up to date with `storeGraph`. The graph keeps
- * its identity until its JSON changes. With a `fallback` and nothing usable
- * stored, it returns the fallback (built once) and stores it.
+ * Null when nothing is stored or a step names a strategy this server lacks.
+ * Every page then stores a Starter in its place, so such a pipeline is kept
+ * first (`keepUndrawn`), as it was, and Build says why.
  */
+const columnFrom = (json: string | null, registry: Registry): PipelineGraph | null => {
+  const p = parseWorking(json)
+  if (!p || !json) return null
+  const odd = unknownStrategy(p.config, registry)
+  if (odd === null) return columnOf(p, registry)
+  keepUndrawn(json, `One of its steps uses ${odd}, which this server does not have.`)
+  return null
+}
+
+export function readStoredGraph(registry: Registry): PipelineGraph | null {
+  return columnFrom(storedGraphJson(), registry)
+}
+
+/** Store the column as a config. False, and nothing stored, when it is not a column. */
+export function storeGraph(g: PipelineGraph): boolean {
+  const c = graphToConfig(g)
+  if (!c.ok) return false
+  storeWorking(c.pipeline)
+  return true
+}
+
 export function useStoredGraph(registry: Registry): PipelineGraph | null
 export function useStoredGraph(registry: Registry, fallback: () => PipelineGraph): PipelineGraph
 export function useStoredGraph(registry: Registry, fallback?: () => PipelineGraph): PipelineGraph | null {
-  const json = useSyncExternalStore(subscribeGraph, storedGraphJson)
-  const stored = useMemo(() => loadGraph(json, registry), [json, registry])
+  const json = useSyncExternalStore(subscribeWorking, storedWorkingJson)
+  const stored = useMemo(() => columnFrom(json, registry), [json, registry])
   const seed = useRef<PipelineGraph | null>(null)
   if (!stored && fallback && !seed.current) seed.current = fallback()
   const graph = stored ?? (fallback ? seed.current : null)
@@ -632,6 +618,5 @@ export function useStoredGraph(registry: Registry, fallback?: () => PipelineGrap
 
 /** Tests only: forget the in-memory copy. */
 export function resetStoredGraphForTests(): void {
-  memory = null
-  storageFailed = false
+  resetWorkingForTests()
 }

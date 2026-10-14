@@ -19,7 +19,6 @@ import { Compare, seedVariants, VariantResult } from "./Compare"
 import { FakeResizeObserver } from "./fakeResizeObserver"
 
 const registry = liveRegistry as unknown as Registry
-const GRAPH_KEY = "rag-playground:graph:v1"
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
 
 class SilentEventSource {
@@ -884,7 +883,7 @@ describe("experiments", () => {
     es.emit(9, { event: "stream_end", status: "finished", ok: true })
     await waitFor(() => expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(3))
     fireEvent.click(within(column(1)).getByRole("button", { name: "Use on Build" }))
-    const chunk = JSON.parse(window.localStorage.getItem(GRAPH_KEY)!).nodes.find((n: { stage: string }) => n.stage === "chunk")
+    const chunk = readStoredGraph(registry)!.nodes.find((n) => n.stage === "chunk")!
     expect(chunk.config).toMatchObject({ chunk_size: 200 })
     expect(within(column(1)).getByText("Now on Build")).toBeTruthy()
     expect(within(column(0)).queryByRole("button", { name: "Use on Build" })).toBeNull()

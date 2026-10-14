@@ -6,12 +6,14 @@ import type { SampleCard, Source } from "@/api/types"
 
 import { setCurrentId, STARTER_ID } from "./pipelines"
 import { initialGraph, readStoredGraph, sampleGraph, storedGraphJson, storeGraph, subscribeGraph, type PipelineGraph } from "./graph"
+import { parseWorking, readWorking, storeWorking } from "./working"
 
 /**
- * The document every page works on. It lives where it always has, in the
- * working graph's source node (`config.sha`, `config.filename`), so saved
- * pipelines, share links and the run request keep their shape. This module
- * reads it from the stored graph, so the header needs no registry, and keeps
+ * The document every page works on. The working pipeline holds it in its
+ * `documents` (state/working.ts); a graph holds it in its source node
+ * (`config.sha`, `config.filename`), so saved pipelines, share links and the
+ * run request keep their shape. This module reads it from the stored working
+ * pipeline, so the header needs no registry, and keeps
  * what is known about it for one page load: this browser's uploads, the
  * samples, the files chosen on this page, and whether the menu is open.
  */
@@ -165,7 +167,7 @@ let recovering = false
 /** Switch a working graph whose sample has an old fingerprint to that sample's current copy, and say so once. */
 function recoverStaleSample(): void {
   if (recovering) return
-  const card = staleSample(documentOf(rawGraph(storedGraphJson())), state.sources, state.samples, state.known)
+  const card = staleSample(storedDocument(storedGraphJson()), state.sources, state.samples, state.known)
   if (!card) return
   recovering = true
   const gen = generation
@@ -240,15 +242,9 @@ export function openDocumentMenu(event?: { currentTarget: EventTarget | null }):
   opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
 }
 
-/** The stored graph's raw JSON as a graph, without the registry. */
-function rawGraph(json: string | null): PipelineGraph | null {
-  if (!json) return null
-  try {
-    const g = JSON.parse(json) as PipelineGraph
-    return Array.isArray(g?.nodes) && Array.isArray(g?.edges) ? g : null
-  } catch {
-    return null
-  }
+/** The stored working pipeline's first document, without the registry. */
+function storedDocument(json: string | null): DocRef | null {
+  return parseWorking(json)?.documents[0] ?? null
 }
 
 /**
@@ -260,17 +256,14 @@ function rawGraph(json: string | null): PipelineGraph | null {
  */
 export async function chooseDocument(doc: DocRef, question?: string): Promise<void> {
   set({ known: new Set(state.known).add(doc.sha), uploadError: null, recovered: null })
-  const current = rawGraph(storedGraphJson())
-  if (current && documentOf(current)) {
-    let g = withDocument(current, doc)
+  const current = readWorking()
+  const from = current?.documents[0]
+  if (current && from) {
     // A sample's question the app filled in means nothing on another document; a typed one stays.
     // Answered at once when it can be, so a switch that needs no list waits on nothing.
-    const hit = question === undefined ? isSampleQuestion(current, doc) : false
+    const hit = question === undefined ? isSampleQuestion(from, current.question.text, doc) : false
     const text = question ?? ((typeof hit === "boolean" ? hit : await hit) ? "" : undefined)
-    if (text !== undefined) {
-      g = { ...g, nodes: g.nodes.map((n) => (n.stage === "query" ? { ...n, config: { ...n.config, text } } : n)) }
-    }
-    storeGraph(g)
+    storeWorking({ ...current, documents: [doc], question: text === undefined ? current.question : { ...current.question, text } })
   } else {
     const registry = await api.registry()
     const isSample = question !== undefined || (state.samples?.some((s) => s.sha === doc.sha) ?? false)
@@ -281,13 +274,11 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
   setDocumentMenuOpen(false)
 }
 
-/** True when `g` is on a sample other than `next` and its query is one of that sample's own questions. */
-function isSampleQuestion(g: PipelineGraph, next: DocRef): boolean | Promise<boolean> {
-  const from = documentOf(g)
-  const card = state.samples?.find((c) => c.sha === from?.sha)
+/** True when `from` is a sample other than `next` and `text` is one of that sample's own questions. */
+function isSampleQuestion(from: DocRef, text: string, next: DocRef): boolean | Promise<boolean> {
+  const card = state.samples?.find((c) => c.sha === from.sha)
   if (!card || card.sha === next.sha) return false
-  const text = g.nodes.find((n) => n.stage === "query")?.config.text
-  if (typeof text !== "string" || !text) return false
+  if (!text) return false
   if (text === card.question) return true
   return sampleQuestionTexts(card.name).then((texts) => texts.includes(text))
 }
@@ -327,7 +318,7 @@ export interface DocumentState {
 export function useDocument(): DocumentState {
   const json = useSyncExternalStore(subscribeGraph, storedGraphJson)
   const s = useSyncExternalStore(subscribe, getState)
-  const doc = useMemo(() => documentOf(rawGraph(json)), [json])
+  const doc = useMemo(() => storedDocument(json), [json])
   const uploads = useMemo(
     () => (s.sources ? s.sources.filter((x) => !(s.samples?.some((c) => c.sha === x.sha) ?? false)) : null),
     [s.sources, s.samples],

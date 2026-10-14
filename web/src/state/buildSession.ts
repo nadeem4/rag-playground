@@ -10,7 +10,7 @@ import type { AskSnapshot, TranscriptEntry } from "@/components/ask/Transcript"
 
 import type { Tracked } from "./pipeline"
 
-export const BUILD_SESSION_KEY = "rag-playground:build-session:v1"
+export const BUILD_SESSION_KEY = "rag-playground:build-session:v2"
 
 export interface BuildSession {
   tracked: Tracked

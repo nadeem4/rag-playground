@@ -13,7 +13,7 @@ with a run, and a question set while it is checked.
 | What | Where | How long |
 |---|---|---|
 | Saved pipelines and experiments | In this browser's storage | Until you delete them on the privacy page or clear this site's data. They never leave this browser unless you export them or share a link. |
-| The pipeline you are working on | In this browser's storage | Until you change it. It is how Build, Compare and Evaluate share one pipeline. |
+| The pipeline you are working on | In this browser's storage | Until you change it. It is how Build, Compare and Evaluate share one pipeline. The pipeline on Build is kept as a pipeline file's settings, under `rag-playground:pipeline:v2`. A pipeline from an older version stays where it was (`rag-playground:graph:v1`); it is converted once, and if it cannot be, it is kept as it was and Build says why. A pipeline that uses a strategy this server does not have is kept the same way, under `rag-playground:pipeline:v2:kept`, before Build opens the Starter. |
 | Theme and contrast | In this browser's storage | Until you change them. |
 | Where the Ask panel sits on Build | In this browser's storage | Its side, its width and whether it is open, until you change them. |
 | Page images you viewed | In this browser's cache | They may stay in this browser's cache until it is cleared, even after the upload they show is deleted. |

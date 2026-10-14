@@ -13,6 +13,7 @@ Compare, Evaluate, Library, Read and the privacy page. For what each strategy do
 - [Compare](#compare)
 - [Evaluate](#evaluate)
 - [Library](#library)
+- [Take your pipeline with you](#take-your-pipeline-with-you)
 - [Read](#read)
 - [Your data and privacy](#your-data-and-privacy)
 
@@ -438,6 +439,14 @@ Choose the file, or drop it on the Library page, in any browser.
 - An experiment is checked as Compare checks its own: 1 to 10 recipes.
 - A PDF in the file is uploaded again. On the demo its limits still apply, and a refusal
   is said in plain words.
+
+## Take your pipeline with you
+
+**Copy as YAML** on Build puts your pipeline on the clipboard as a Pandion pipeline file.
+Save it as `pipeline.yaml` and run it with the `pandion` command or `Pipeline.from_yaml`.
+The prompts and the reranker revision are Pandion's own, as in the playground. If the
+pipeline has a problem, the page says what it is and copies nothing. If the browser refuses
+the clipboard, the page says so.
 
 ## Read
 

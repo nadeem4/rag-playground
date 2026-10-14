@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react"
 
 import type { Registry } from "@/api/types"
 import { CONTROL } from "@/components/fields/types"
+import { CopyYaml } from "@/components/pipeline/CopyYaml"
 import { Button } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { documentsOf, withDocuments } from "@/state/document"
@@ -233,6 +234,7 @@ export function PipelineBar({
               </Button>
             </>
           ) : null}
+          <CopyYaml graph={graph} />
           {flash ? (
             <span role="status" className="text-xs text-fg-muted">
               {flash}

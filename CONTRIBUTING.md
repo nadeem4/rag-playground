@@ -12,6 +12,7 @@ release and record the Home clips. For how the code fits together, see
 - [Running the tests](#running-the-tests)
 - [Styling and fixtures](#styling-and-fixtures)
 - [Adding a strategy](#adding-a-strategy)
+- [Adding an endpoint](#adding-an-endpoint)
 - [The samples](#the-samples)
 - [Staging](#staging)
 - [Releasing](#releasing)
@@ -148,6 +149,22 @@ Changing that default later changes what the step does, so bump the step's `vers
 A subclass keeps its parents' `added` names. The default must be a plain value, not a
 `default_factory`, and a name that is not a setting is refused when the class is defined.
 `packages/pandion/tests/test_recipe_hash.py` must pass unchanged.
+
+## Adding an endpoint
+
+An endpoint any site would want goes in pandion-api
+(`packages/pandion-api/src/pandion_api/routes/`), with its tests in
+`packages/pandion-api/tests/`; it may use only Pandion's public API, which
+`packages/pandion-api/tests/test_api_boundary.py` checks. A rule only some sites want is a
+`Policy` method with a default that allows everything, and the playground's version goes in
+`api/policy.py`, tested on `/api/v2` in `tests/api/`. An endpoint only the playground wants
+(a lesson, a sample) goes in `api/routes/`. Describe a new endpoint or Policy method in
+[docs/pandion-api.md](docs/pandion-api.md).
+
+A new test of a site rule in `tests/api/test_demo.py`, `test_delete_source.py` or
+`test_source_file.py` must also run on `/api/v2`: import it into
+`tests/api/test_v2_parity.py`, or add it to `EXCLUDED` there with the reason. A test
+fails until you do one or the other.
 
 ## The samples
 

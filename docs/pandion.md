@@ -503,12 +503,11 @@ its evidence is in, and pass them all in `documents=`. In a CSV file, several go
 passages share one cell, separated by `||`. A set with a problem is refused before
 anything runs, with a `QuestionSetError` naming the question:
 "The question set at questions.json cannot be used: question 3: no question text."
-`pandion.evaluation.load_questions` reads a set on its own, and
-`pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
-is really in a document's text.
+`pandion.evaluation.load_questions` reads a set on its own.
 `pandion.evaluation.document_text(pandion.parse("report.pdf", use="pdfium"))` gives the
-text gold passages are looked for in, and `check_questions(questions, text)` says, per
-passage, whether it is really in it.
+text gold passages are looked for in, and
+`pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
+is really in that text.
 
 **How a question is scored.** By the `eval` step, the same one the playground's
 Evaluate page runs. A piece holds the answer when it contains a gold passage exactly,

@@ -258,3 +258,15 @@ def test_the_default_policy_takes_a_key_from_the_header_then_the_environment(mon
     assert policy.key("anthropic", request) == ("from-env", "env")
     assert policy.key("custom", request) == (None, "none")
     assert policy.credentials(request) == {"openai_api_key": "from-header", "anthropic_api_key": "from-env"}
+
+
+def test_a_run_dropped_after_an_hour_is_404_like_one_that_never_was(client):
+    sha = upload(client)["sha"]
+    r = client.post("/runs", json={"config": PIPELINE, "documents": [sha], "through": "parse"})
+    run_id = r.json()["run_id"]
+    finish(client, r)
+    manager = client.app.state.runs
+    later = manager._clock() + 3601
+    manager._clock = lambda: later
+    for r in (client.get(f"/runs/{run_id}"), client.post(f"/runs/{run_id}/cancel"), client.get(f"/runs/{run_id}/events")):
+        assert r.status_code == 404 and r.json()["detail"] == f"unknown run {run_id}"

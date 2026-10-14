@@ -194,3 +194,37 @@ def test_kept_sets_together_hold_at_most_500_questions(client):
         keep(client, sha, [{"id": f"{n}-{i}", "question": "Where?", "gold_answers": ["Paris."]} for i in range(300)])
     r = client.post("/evaluations", json={"config": PIPELINE, "documents": shas})
     assert r.status_code == 400 and "500" in r.json()["detail"]
+
+
+def _on_the_loop() -> bool:
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def test_a_comparison_prepares_its_variants_and_checks_through_off_the_event_loop(client, monkeypatch):
+    from pandion_api.routes import evaluations
+
+    seen: list[tuple[str, bool]] = []
+    real_prepare, real_compare = evaluations.prepare, evaluations.compare
+
+    def prepare(*args, **kwargs):
+        seen.append(("prepare", _on_the_loop()))
+        return real_prepare(*args, **kwargs)
+
+    def compare(*args, **kwargs):
+        seen.append(("compare", _on_the_loop()))
+        return real_compare(*args, **kwargs)
+
+    monkeypatch.setattr(evaluations, "prepare", prepare)
+    monkeypatch.setattr(evaluations, "compare", compare)
+    sha = upload(client)["sha"]
+    body = {"config": PIPELINE, "stage": "chunk", "variants": VARIANTS, "documents": [sha], "through": "chunk"}
+    finish(client, client.post("/comparisons", json=body))
+    assert [name for name, _ in seen].count("prepare") == 3
+    assert "compare" in [name for name, _ in seen]
+    assert not any(on_loop for _, on_loop in seen), seen

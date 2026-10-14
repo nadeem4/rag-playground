@@ -19,6 +19,7 @@ plus the playground's teaching routes.
 - [Runs](#runs)
 - [Site rules: the Policy](#site-rules-the-policy)
 - [What a request cannot set](#what-a-request-cannot-set)
+- [The playground on pandion-api](#the-playground-on-pandion-api)
 - [Errors](#errors)
 
 ## Run it
@@ -138,6 +139,13 @@ A model's key comes from the request's header for its provider (`X-Anthropic-Api
 environment variable, as the Policy's `key` decides. It is never stored or logged, and it
 is scrubbed from every event and result.
 
+A finished run (finished, cancelled or failed) is kept in memory for one hour after it
+ended, with its events and its result, and the server keeps at most the 200 most recent
+finished runs: past that the oldest finished run goes first. A run that works or waits
+its turn is never dropped. A dropped run's state, events and cancel are a 404, the same
+as a run that does not exist. A step's results stay in the cache, readable by id
+(`GET /results/{id}`), after its run is dropped.
+
 A run belongs to whoever the Policy's `run_owner` names when it starts. To anyone else
 its state, its events and its cancel are a 404, the same as a run that does not exist.
 The default Policy names no one, so anyone with the `run_id` may follow it. Every error a
@@ -161,12 +169,12 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `keeps_question_sets(request)` | `True` | `POST /documents/{id}/questions`: False checks the set and keeps nothing |
 | `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
 | `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
-| `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
+| `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models, and holds each value as the request sent it (see below) |
 | `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
 | `check_clear_cache(request)` | allows | `DELETE /cache` |
 | `max_variants(request)` | 10 | `POST /comparisons`: more variants than this is a 422 |
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
-| `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`), and on every error a run shows |
+| `scrub(text)` | the text as it is | on a `ConfigError`'s problem sentence, on the problem and 404 sentences of `POST /explain`, and on every error a run shows (see [Errors](#errors)) |
 | `not_readable` (attribute) | "This document is not available." | the 403 a run gets for a document `can_read` refuses |
 | `not_keeping_note` (attribute) | "This server checked your questions but did not keep them." | the report's note when a set was not kept |
 | `server_key(provider)` | the environment variable, else `(None, "none")` | a run's keys, and `GET /settings/models` |
@@ -181,23 +189,8 @@ needs there (for example who uploaded the file) through `on_uploaded`, and reads
 as `document.extra`. Hold `pandion_api.documents.SIDECAR_LOCK` (or `DocumentStore.lock`)
 around any change you make to a record yourself.
 
-RAG Playground's Policy gives every `/api/v2` request a visitor cookie, and on its hosted
-demo holds uploads to the demo's limits (a PDF of at most 10 MB and 20 pages, no page over
-41 inches a side, three live uploads a visitor, a cap on the whole disk), shows a visitor
-the samples and only their own uploads, and deletes only their own upload, keeping a
-file another visitor also uploaded. On the demo an upload's page images are cached
-privately, a sample's publicly. The old `/api/sources` routes call the same Policy.
-On the demo a run is its visitor's own, on `/api/v2` and on the old `/api/runs/{id}` routes,
-which share the run manager. In every mode its errors keep only the last part of any
-server path (`[server]/x.py`). The demo keeps one cache for every visitor, so it refuses
-`DELETE /cache` with a 403, on `/api/v2` and on the old `/api/cache` alike. A comparison
-on `/api/v2` takes at most ten variants, as many as an old sweep takes recipes. A key
-check on `/api/v2` gives the old `/api/settings/llm/check` answers: the demo refuses to
-check a custom endpoint (403, `check_provider`, which the old route asks too), never uses
-a server key, and its missing-key sentence names no server variable. It checks a
-question set and hands the report back, but keeps no set, so one visitor's questions
-never reach another's browser; the old `/api/sources/{id}/questions` routes ask the same
-Policy.
+RAG Playground's own Policy, rule by rule, is in
+[The playground on pandion-api](#the-playground-on-pandion-api).
 
 ## What a request cannot set
 
@@ -217,12 +210,105 @@ set to call a model at an address the request chose, and
 `changed_read_only_settings(config)` names every setting marked read-only (the prompts,
 the cross-encoder's revision) that is not at its default.
 
+The `config` a Policy is given holds each value as the request sent it, not yet
+validated. Pandion's settings are pydantic models, which later make the string `"16001"`
+and the float `16001.0` the int `16001`. So a site that compares numbers must coerce them
+first, for example with `pydantic.TypeAdapter(int).validate_python(value)`, or a string
+or a float passes a cap that an int would not. A value that does not coerce can be left
+alone: Pandion's own check refuses it as a problem (a 422, or `ok: false` from
+`POST /pipelines/validate`).
+
 The default Policy allows every setting. RAG Playground's Policy refuses with a 403 a
 custom model endpoint on its hosted demo, a changed prompt or model revision in every
 mode, `max_tokens` above 16,000 on a step that calls a model, and a text budget (a
-setting named `..._budget_chars`) above four times its default. Its old `/api/runs` and
+setting named `..._budget_chars`) above four times its default. A cap reads the value as
+pydantic will, so `"999999"` and `999999.0` are refused like `999999`. Its old `/api/runs` and
 `/api/sweeps` routes refuse the same caps on each graph node with the same function
 (`api.policy.step_over_limit`).
+
+## The playground on pandion-api
+
+RAG Playground's server is `pandion_api.create_app(settings, PlaygroundPolicy())`
+(`api/main.py`), with its routes under `/api/v2`, plus what is the playground's own:
+the old `/api` routes the web uses until part 5, the samples (`/api/samples`,
+`/api/sources/sample`), the lessons (`/api/learn`), the stage copy (`/api/stages`),
+`/api/settings/app` (demo mode, its limits and the visitor cookie), the question-set
+template, the model warm-up, and the web build.
+
+`PlaygroundPolicy` (`api/policy.py`) is the hosted demo's rules. Each calls the function
+the old route uses, or the old route calls it, so the two cannot drift apart:
+
+| Rule | On the demo | Locally |
+|---|---|---|
+| `dependencies` | every `/api/v2` request gets a visitor cookie | the same |
+| `can_read` | a sample, or this browser's own upload | any document |
+| `check_upload` | a visitor cookie; at most 10 MB, a PDF, 20 pages, 41 inches a side; three live uploads a browser; 200 MB for all uploads | anything |
+| `on_uploaded` | records which browser uploaded the file, and when | the same |
+| `on_delete` | only your own upload; a file another browser holds stays; never a sample | any upload, never a sample |
+| `describe` | the upload time: this browser's own when it uploaded the file, else the latest | the same |
+| `private` | an upload's page images are cached privately, a sample's publicly | public |
+| `keeps_question_sets` | no: checked and handed back | yes |
+| `check_run` | no custom endpoint; no changed prompt or model revision; `max_tokens` at most 16,000 on a step that calls a model; a text budget at most four times its default | the same, but a custom endpoint is allowed |
+| `public_endpoints_only` | yes | no |
+| `max_active_runs` | 2 | no limit |
+| `max_variants` | 10 | 10 |
+| `run_owner` | the visitor: to anyone else the run is a 404 | no one |
+| `scrub` | a server path keeps only its last part (`[server]/x.py`) | the same |
+| `credentials` | only the key in the request | the request, then the environment, then `.env` |
+| `missing_key` | "type one in the UI", naming no server variable | also names the variable and `.env` |
+| `check_provider` | a custom endpoint is not checked (403) | allowed |
+| `check_clear_cache` | refused: every visitor shares the cache | allowed |
+| `strategies` | no custom endpoint, no test embedder, no read-only settings | no read-only settings |
+| `on_startup` | puts every sample's file in the store, and starts deleting uploads after 24 hours | puts every sample's file in the store |
+
+The old routes ask the same rules. `POST /api/sources` calls `check_upload` and
+`on_uploaded`, the old delete calls `on_delete`, the old page route asks `private`, the
+old question-set route asks `keeps_question_sets`, `DELETE /api/cache` asks
+`check_clear_cache`, and the old key check asks `check_provider`. `/api/runs` and
+`/api/sweeps` refuse the same caps with `api.policy.step_over_limit`, and their runs share
+the one run manager, so the demo's two at once hold across both stacks and a run is its
+visitor's own on `/api/runs/{id}` too. A stored file is never written twice for the same
+bytes on `/api/v2`, and a name ending in `.part` is refused on both stacks. A question
+set is held to 1 MB, 500 questions and 20 gold passages a question on both stacks.
+
+`tests/api/test_v2_parity.py` runs today's tests of these rules a second time against
+`/api/v2`, and fails if a new rule test neither runs there nor says why. A test that
+cannot run there (it sends a graph, or reads `/api/settings/app`, which stays) is in its
+`EXCLUDED` list with the reason and, where there is one, the `/api/v2` test that proves
+the same rule.
+
+### What part 5 must decide
+
+Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left for it:
+
+- **A body-size limit before the route.** A multipart upload is spooled to disk before a
+  route's own cap reads it. A limit at the app, or at the proxy in front of it, would
+  refuse a huge body before it is written.
+- **A per-visitor queue cap.** The demo lets two runs work at once; the rest wait. One
+  visitor can still queue many runs.
+- **Results readable by id.** `GET /results/{id}` and `POST /trace` answer any visitor
+  who has a result's id, as today's `/api/artifacts` and `/api/trace` do. An id is a
+  content hash that needs the upload's bytes to compute. A per-visitor check would be
+  a new Policy hook.
+- **Time spent checking a question set.** Gold passages are matched in a worker thread
+  with no time cap. The caps on size and count bound it, but not by the clock.
+- **Two embedding caches.** The old routes cache embeddings in `artifacts/.embcache` (or
+  `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Deleting the old routes
+  deletes the variable and the old cache.
+- **The allow-list cannot just be deleted.** `ENGINE_IMPORTS` in
+  `tests/integration/test_package_boundary.py` lists engine names the app still imports.
+  Deleting the old routes is not enough to empty it: these playground parts use engine
+  internals too, and each needs porting to Pandion's public API or removing:
+  `api/routes/learn.py` (the lessons), `api/warmup.py` (the model warm-up), `api/deps.py`
+  (the store, the sources and the embedding cache), `POST /api/sources/sample`, and the
+  recording scripts `scripts/record_*.py`.
+- **Runs do not hold the pdfium lock.** A page request and a question-set check hold
+  `pandion_api.pages.PDFIUM_LOCK`, but a run's pdfium parse step does not. pdfium is not
+  thread-safe, so a run that parses with pdfium can still meet a page request on another
+  thread. Part 5 decides whether Pandion's pdfium step takes a lock of its own.
+- **Compare's per-card `through`.** `POST /comparisons` now takes `through`, so Compare's
+  Build view can stop each variant after one card without embedding every variant, as the
+  old `/api/sweeps` does. Part 5 checks it covers what Build needs.
 
 ## Errors
 
@@ -232,5 +318,10 @@ setting named `..._budget_chars`) above four times its default. Its old `/api/ru
   mapping is refused the same way, before Pandion reads it.
 - A site rule's refusal is the status and sentence the Policy raised, usually 403.
 - An unknown stage or strategy in `POST /explain` is a 404 naming the ones there are.
-- Every problem and 404 sentence passes through `Policy.scrub` before it leaves the
-  server. A `ConfigError` names settings and strategies, never a server folder.
+- `Policy.scrub` runs over the sentences that could carry a server path: a `ConfigError`'s
+  problem (on every route that reads a pipeline, and on `POST /pipelines/validate`), the
+  problem and the 404 of `POST /explain`, and every error a run shows (a failed step's
+  `error` and a crash's `run_error`, after the keys are taken out).
+- Every other sentence is returned as Pandion or the route wrote it, unscrubbed: Pandion's
+  own refusals (such as a `through` that names no step), the question-set 400s and 413,
+  and the route's fixed sentences. None of them holds a server path.

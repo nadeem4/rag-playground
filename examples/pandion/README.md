@@ -87,13 +87,13 @@ real results; its first run downloads `qwen3-embedding-0.6b`. From this folder
 
 ```bash
 uv run pandion validate cli.yaml
-uv run pandion index cli.yaml ../../samples/chunking-primer/chunking-primer.pdf --sync
+uv run pandion index cli.yaml ../../samples/chunking-primer/chunking-primer.pdf
 uv run pandion ask cli.yaml "How big should a chunk be?"
 uv run pandion eval cli.yaml ../../samples/chunking-primer/questions.json
 uv run pandion compare cli.yaml --vary chunk.chunk_size=200,400,800 ../../samples/chunking-primer/chunking-primer.pdf --questions ../../samples/chunking-primer/questions.json
 ```
 
-`ask` and `eval` need no `--documents` here, because the sync is remembered. `compare`
+`ask` and `eval` need no `--documents` here, because `pandion index` remembers what it indexed. `compare`
 runs the pipeline three times, reusing every step above Chunk from the cache. The index
 goes to `cli-index/` in this folder.
 

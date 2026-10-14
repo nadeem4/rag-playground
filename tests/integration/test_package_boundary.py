@@ -78,8 +78,6 @@ PUBLIC_MODULES = (
 ENGINE_IMPORTS: frozenset[str] = frozenset(
     {
         "pandion.embedding_cache:EmbeddingCache",
-        "pandion.endpoints:EndpointRefused",
-        "pandion.endpoints:guard_endpoint",
         "pandion.events:Emit",
         "pandion.events:event",
         "pandion.executor:run",
@@ -88,7 +86,6 @@ ENGINE_IMPORTS: frozenset[str] = frozenset(
         "pandion.graph:Graph",
         "pandion.graph:GraphValidationError",
         "pandion.graph:Node",
-        "pandion.llm:openai_client_kwargs",
         "pandion.plugins.chunk:DocView",
         "pandion.plugins.chunk:count_tokens",
         "pandion.plugins.parse:docling",

@@ -506,6 +506,9 @@ anything runs, with a `QuestionSetError` naming the question:
 `pandion.evaluation.load_questions` reads a set on its own, and
 `pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
 is really in a document's text.
+`pandion.evaluation.document_text(pandion.parse("report.pdf", use="pdfium"))` gives the
+text gold passages are looked for in, and `check_questions(questions, text)` says, per
+passage, whether it is really in it.
 
 **How a question is scored.** By the `eval` step, the same one the playground's
 Evaluate page runs. A piece holds the answer when it contains a gold passage exactly,
@@ -635,6 +638,25 @@ Every `StageResult` has an `artifact_id`. `p.result(id)` reads that result back 
 store later, for example when a page asks for one card's output: a dict for every result
 but an index, whose result is its folder. An id that is not a result id, or that has no
 stored result, is a `KeyError`.
+
+A server that keeps many pipelines under one folder does not need a pipeline to read a
+result. `ResultStore` reads, describes and clears what is stored under a `path`:
+
+```python
+from pandion import ResultStore
+
+results = ResultStore("./my-index")
+results.info(result_id)    # {"id": ..., "type": "chunk_set", "meta": {...}}
+results.get(result_id)     # the result, as p.result(result_id) gives it
+results.clear()            # {"results": 12, "bytes": 48210, "complete": True}
+```
+
+An id that is not 64 lowercase hex characters, or that nothing is stored under, is a
+`KeyError` whose message names the id but not the folder, so a server can hand it back.
+`clear()` removes `artifacts/` and `embeddings/` and keeps `sources/`. Clearing while a
+run is writing under the same path is not supported: the run may fail or leave some of
+its results behind. A result cleared while it is being read is a `KeyError`, as if it
+was never stored.
 
 ### One step, progress, stop, keys and re-runs
 
@@ -829,7 +851,7 @@ the same files with the same pipeline file again and every step is read from the
 Change one setting and only the steps from that point on run again. Changing
 `chunk_size`, for example, reuses the parse and the clean, and builds new pieces and a
 new index. The embedding cache also keeps each embedding by the model and the text, so a
-text is embedded once.
+text is embedded once. `pandion.ResultStore(path).clear()` empties it.
 
 [Architecture](architecture.md#artifacts-and-the-cache) explains the hash in detail.
 
@@ -924,6 +946,11 @@ The ports each stage reads:
 An `ambient=True` port is found for you: the `query` port is filled by the rewrite step
 without any wiring. Everything in the table, and `register`, `set_note`, `get_embedder`
 and `raw_file`, comes from `pandion.extend`.
+
+A strategy that calls a model at an address its settings name checks the address with
+`guard_endpoint(base_url, public_only=...)`, which raises `EndpointRefused` for a private
+or plain-http address when only public ones are allowed, and builds an OpenAI client's
+arguments with `openai_client_kwargs`.
 
 A short parser, for a start:
 
@@ -1150,6 +1177,14 @@ The same checks apply to `pandion.parse`, `pandion.clean`, `pandion.chunk` and
 `pandion.rewrite`, where the message starts with "The chunker", "Clean step 1" or "The
 query step" instead of the place in the file. A
 pipeline file problem is a `pandion.ConfigError`, a `ValueError`.
+
+Every problem in a pipeline file or dict is a `ConfigError` whose message is one line: an
+unknown strategy names the strategies there are, and a value a setting does not accept
+names the step, the strategy and the setting, for example
+`index.chunk (recursive_character): chunk_size: Input should be a valid integer.` An app can
+show the message as it is. Calling one stage with a bad value (`pandion.chunk(doc,
+use="recursive_character", chunk_size="big")`) raises a `ValueError` with the same kind of
+sentence.
 
 A missing extra says which one to install:
 

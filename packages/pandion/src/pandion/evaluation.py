@@ -49,11 +49,21 @@ __all__ = [
     "StepInput",
     "check_questions",
     "compare",
+    "document_text",
     "evaluate",
     "load_questions",
     "parse_question_set",
     "trace",
 ]
+
+
+def document_text(doc: Any) -> str:
+    """A parsed document's text, as the chunkers cut it and as `check_questions`
+    looks for gold passages in it. `doc` is a ParsedDoc, what `pandion.parse`
+    returns, or a stored parse result."""
+    if isinstance(doc, StageResult):
+        doc = doc.output
+    return DocView.of(doc).text
 
 
 @dataclass

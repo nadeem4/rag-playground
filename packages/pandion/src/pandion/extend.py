@@ -8,12 +8,18 @@ built-in. `@register` also takes an `Embedder` subclass, which adds an
 embedder that `embed: {use: <its name>}` can pick. See docs/pandion.md,
 "Write your own strategy", and examples/pandion/own_strategies/ for one
 strategy per stage.
+
+A strategy, or a server, that calls a model endpoint the user named checks it
+with `guard_endpoint` and builds the OpenAI client's arguments with
+`openai_client_kwargs`.
 """
 
 from typing import Any
 
 from pandion.artifacts import ArtifactType
 from pandion.embeddings import Embedder, get_embedder, register_embedder
+from pandion.endpoints import EndpointRefused, guard_endpoint
+from pandion.llm import openai_client_kwargs
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register as _register_transform
@@ -21,9 +27,10 @@ from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
 __all__ = [
-    "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "Explanation", "Hit",
-    "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult", "RunContext", "Stage",
-    "Transform", "get_embedder", "raw_file", "register", "set_note",
+    "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "EndpointRefused",
+    "Explanation", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
+    "RunContext", "Stage", "Transform", "get_embedder", "guard_endpoint",
+    "openai_client_kwargs", "raw_file", "register", "set_note",
 ]
 
 

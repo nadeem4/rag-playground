@@ -509,7 +509,8 @@ anything runs, with a `QuestionSetError` naming the question:
 `pandion.evaluation.document_text(pandion.parse("report.pdf", use="pdfium"))` gives the
 text gold passages are looked for in, and
 `pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
-is really in that text.
+is really in that text. `pandion.evaluation.paragraph_spans(doc)` says where each
+paragraph starts and ends in that text, as (start, end) pairs in order.
 
 **How a question is scored.** By the `eval` step, the same one the playground's
 Evaluate page runs. A piece holds the answer when it contains a gold passage exactly,

@@ -24,7 +24,7 @@ describe("recipeSentence", () => {
   })
 
   it("falls back to Use and one sentence per field for a strategy with no template", () => {
-    expect(say(recipeSentence({ transform: "pdfium", config: { mode: "text", join_lines: true } }, schemaOf("parse", "pdfium"), "Fast text"))).toMatch(/^Use Fast text\. .*Join lines is on\.$/)
+    expect(say(recipeSentence({ transform: "pdfium", config: { mode: "text", join_lines: true } }, schemaOf("parse", "pdfium"), "Fast text"))).toMatch(/^Use Fast text\. .*Join lines is on\. Paragraph gap is 1\.5\.$/)
   })
 
   it("says a size of one in the singular, a search's pieces, and a query rewrite by its label", () => {

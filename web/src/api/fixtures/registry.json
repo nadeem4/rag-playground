@@ -33,245 +33,6 @@
       "learn": {}
     }
   },
-  "use_case": {
-    "chat": {
-      "name": "chat",
-      "version": "3",
-      "summary": "Sends the retrieved pieces and your question to a chat model (Claude, OpenAI, OpenRouter, or any OpenAI-compatible server), which answers using only those pieces. Every claim points at the passages it relied on, and each citation is checked against the parsed document.",
-      "stage": "use_case",
-      "output": "output",
-      "stackable": false,
-      "deterministic": false,
-      "cacheable": false,
-      "requires": {},
-      "provides": {},
-      "prefers": {},
-      "fallback": "",
-      "inputs": {
-        "result": {
-          "type": "retrieval_result",
-          "variadic": false,
-          "ambient": false,
-          "required": true
-        },
-        "query": {
-          "type": "query",
-          "variadic": false,
-          "ambient": true,
-          "required": true
-        },
-        "doc": {
-          "type": "parsed_doc",
-          "variadic": false,
-          "ambient": true,
-          "required": true
-        },
-        "index": {
-          "type": "index",
-          "variadic": false,
-          "ambient": true,
-          "required": true
-        }
-      },
-      "config_schema": {
-        "properties": {
-          "model": {
-            "default": "claude-opus-5",
-            "description": "The chat model that writes the answer. It needs a key.",
-            "enum": [
-              "claude-opus-5",
-              "claude-sonnet-5",
-              "claude-haiku-4-5",
-              "gpt-6-astra",
-              "gpt-5.6-sol",
-              "gpt-5.6-luna",
-              "openrouter",
-              "custom"
-            ],
-            "title": "Model",
-            "type": "string",
-            "x-labels": {
-              "claude-haiku-4-5": "Claude Haiku 4.5",
-              "claude-opus-5": "Claude Opus 5",
-              "claude-sonnet-5": "Claude Sonnet 5",
-              "custom": "Custom (OpenAI-compatible)",
-              "gpt-5.6-luna": "GPT-5.6 Luna",
-              "gpt-5.6-sol": "GPT-5.6 Sol",
-              "gpt-6-astra": "GPT-6 Astra",
-              "openrouter": "OpenRouter"
-            },
-            "x-providers": {
-              "claude-haiku-4-5": "anthropic",
-              "claude-opus-5": "anthropic",
-              "claude-sonnet-5": "anthropic",
-              "custom": "openai_compatible",
-              "gpt-5.6-luna": "openai",
-              "gpt-5.6-sol": "openai",
-              "gpt-6-astra": "openai",
-              "openrouter": "openrouter"
-            }
-          },
-          "custom_base_url": {
-            "default": "",
-            "description": "The address of an OpenAI-compatible server.",
-            "title": "Endpoint URL",
-            "type": "string",
-            "x-show-when": {
-              "model": "custom"
-            }
-          },
-          "custom_model": {
-            "default": "",
-            "description": "The model name that server expects.",
-            "title": "Model name",
-            "type": "string",
-            "x-show-when": {
-              "model": "custom"
-            }
-          },
-          "openrouter_model": {
-            "default": "",
-            "description": "The OpenRouter model id, for example anthropic/claude-sonnet-4, openai/gpt-4o-mini, meta-llama/llama-3.3-70b-instruct or google/gemini-2.5-flash.",
-            "title": "OpenRouter model",
-            "type": "string",
-            "x-show-when": {
-              "model": "openrouter"
-            }
-          },
-          "citation_method": {
-            "default": "auto",
-            "description": "Auto uses the model's own citations when it has them. Otherwise the model quotes numbered sentences.",
-            "enum": [
-              "auto",
-              "sentence_ids"
-            ],
-            "title": "Citations",
-            "type": "string",
-            "x-labels": {
-              "auto": "Auto",
-              "sentence_ids": "Numbered sentences"
-            }
-          },
-          "support_threshold": {
-            "default": 0.55,
-            "description": "From 0 to 1. How close a claim must be to the sentence it cites to count as supported.",
-            "maximum": 1,
-            "minimum": 0,
-            "title": "Support threshold",
-            "type": "number"
-          },
-          "max_chunks": {
-            "default": 5,
-            "description": "How many of the top pieces go to the model.",
-            "minimum": 1,
-            "title": "Pieces sent",
-            "type": "integer"
-          }
-        },
-        "title": "ChatConfig",
-        "type": "object"
-      },
-      "learn": {}
-    },
-    "search": {
-      "name": "search",
-      "version": "1",
-      "summary": "Shows the retrieved pieces as a ranked list with their scores and pages. No language model, no API key and no cost: you see exactly what retrieval found.",
-      "stage": "use_case",
-      "output": "output",
-      "stackable": false,
-      "deterministic": true,
-      "cacheable": true,
-      "requires": {},
-      "provides": {},
-      "prefers": {},
-      "fallback": "",
-      "inputs": {
-        "result": {
-          "type": "retrieval_result",
-          "variadic": false,
-          "ambient": false,
-          "required": true
-        }
-      },
-      "config_schema": {
-        "properties": {
-          "top_k": {
-            "default": 5,
-            "description": "How many pieces the answer shows.",
-            "title": "Results shown",
-            "type": "integer"
-          },
-          "max_snippet_chars": {
-            "default": 400,
-            "description": "The most characters shown from each piece.",
-            "title": "Snippet length",
-            "type": "integer"
-          }
-        },
-        "title": "SearchUseCaseConfig",
-        "type": "object"
-      },
-      "learn": {}
-    },
-    "eval": {
-      "name": "eval",
-      "version": "2",
-      "summary": "Checks whether the retrieved pieces contain the sentence that answers the question, and reports where it was found. No language model, no API key and no cost: it compares text with text.",
-      "stage": "use_case",
-      "output": "output",
-      "stackable": false,
-      "deterministic": true,
-      "cacheable": true,
-      "requires": {},
-      "provides": {},
-      "prefers": {},
-      "fallback": "",
-      "inputs": {
-        "result": {
-          "type": "retrieval_result",
-          "variadic": false,
-          "ambient": false,
-          "required": true
-        },
-        "query": {
-          "type": "query",
-          "variadic": false,
-          "ambient": true,
-          "required": true
-        }
-      },
-      "config_schema": {
-        "properties": {
-          "top_k": {
-            "default": 5,
-            "description": "How many of the top pieces count when looking for the answer.",
-            "title": "Pieces checked",
-            "type": "integer"
-          }
-        },
-        "title": "EvalConfig",
-        "type": "object"
-      },
-      "learn": {
-        "_strategy": {
-          "hint": "This step marks one question right or wrong by looking for its answer sentence in the retrieved pieces.",
-          "more": [
-            "Every question carries the sentence in the document that answers it. A piece that contains that sentence is a hit, and the rank of the first such piece says how far down the reader would have had to look.",
-            "The answer is a sentence rather than a piece number on purpose. Piece numbers change the moment you change how the document is cut, so a score built on them could never compare two settings. A sentence stays the same sentence.",
-            "The comparison is strict. The sentence has to be there, give or take spacing, a word broken across a line and capital letters. Something that merely looks close counts as a miss, which is what keeps the number honest."
-          ]
-        },
-        "top_k": {
-          "hint": "Only this many of the retrieved pieces are checked, because that is what the reader would have looked at.",
-          "more": [
-            "An answer that sits below this line is reported as a miss. That is the point: a piece nobody reads cannot help.",
-            "Raising it makes more questions count as hits, and makes the score say less about how well the pieces were ordered. Lowering it is a harder test of the ranking."
-          ]
-        }
-      }
-    }
-  },
   "query": {
     "text": {
       "name": "text",
@@ -427,6 +188,27 @@
             ],
             "title": "Style",
             "type": "string"
+          },
+          "doc_budget_chars": {
+            "default": 1500,
+            "description": "How much of the start of the document the model reads, in characters.",
+            "minimum": 0,
+            "title": "Document characters read",
+            "type": "integer"
+          },
+          "max_rewrite_chars": {
+            "default": 300,
+            "description": "A rewrite longer than this, in characters, is not used; the question is searched as asked.",
+            "minimum": 1,
+            "title": "Longest rewrite",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "default": 16000,
+            "description": "The most the model may write, thinking included.",
+            "minimum": 1,
+            "title": "Most output tokens",
+            "type": "integer"
           }
         },
         "title": "LlmRewriteConfig",
@@ -471,6 +253,13 @@
             "description": "When on, lines are joined back into paragraphs from the gaps between them. When off, each line is its own element.",
             "title": "Join lines into paragraphs",
             "type": "boolean"
+          },
+          "paragraph_gap_ratio": {
+            "default": 1.5,
+            "description": "With lines joined, a line starts a new paragraph when the gap above it is more than this many times the page's usual line spacing.",
+            "exclusiveMinimum": 0,
+            "title": "Paragraph gap",
+            "type": "number"
           }
         },
         "title": "PdfiumConfig",
@@ -598,6 +387,20 @@
             "description": "When on, headers and footers are removed. When off, they are only marked, so they stay visible but are left out of the text.",
             "title": "Remove them",
             "type": "boolean"
+          },
+          "max_running_chars": {
+            "default": 120,
+            "description": "The longest a header or footer can be, in characters. A longer repeated block is left to the duplicate cleaner.",
+            "minimum": 1,
+            "title": "Longest running text",
+            "type": "integer"
+          },
+          "min_pages": {
+            "default": 2,
+            "description": "The fewest pages a header or footer must repeat on, whatever the share says.",
+            "minimum": 2,
+            "title": "Fewest pages",
+            "type": "integer"
           }
         },
         "title": "HeaderFooterStripConfig",
@@ -1552,12 +1355,272 @@
             "description": "How many pieces the reranker keeps.",
             "title": "Pieces kept",
             "type": "integer"
+          },
+          "text_budget_chars": {
+            "default": 600,
+            "description": "How much of each candidate piece the model reads, in characters.",
+            "minimum": 1,
+            "title": "Characters read per piece",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "default": 16000,
+            "description": "The most the model may write, thinking included.",
+            "minimum": 1,
+            "title": "Most output tokens",
+            "type": "integer"
           }
         },
         "title": "LlmRerankConfig",
         "type": "object"
       },
       "learn": {}
+    }
+  },
+  "use_case": {
+    "search": {
+      "name": "search",
+      "version": "1",
+      "summary": "Shows the retrieved pieces as a ranked list with their scores and pages. No language model, no API key and no cost: you see exactly what retrieval found.",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "prefers": {},
+      "fallback": "",
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "top_k": {
+            "default": 5,
+            "description": "How many pieces the answer shows.",
+            "title": "Results shown",
+            "type": "integer"
+          },
+          "max_snippet_chars": {
+            "default": 400,
+            "description": "The most characters shown from each piece.",
+            "title": "Snippet length",
+            "type": "integer"
+          }
+        },
+        "title": "SearchUseCaseConfig",
+        "type": "object"
+      },
+      "learn": {}
+    },
+    "chat": {
+      "name": "chat",
+      "version": "3",
+      "summary": "Sends the retrieved pieces and your question to a chat model (Claude, OpenAI, OpenRouter, or any OpenAI-compatible server), which answers using only those pieces. Every claim points at the passages it relied on, and each citation is checked against the parsed document.",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": false,
+      "cacheable": false,
+      "requires": {},
+      "provides": {},
+      "prefers": {},
+      "fallback": "",
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        },
+        "doc": {
+          "type": "parsed_doc",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        },
+        "index": {
+          "type": "index",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "model": {
+            "default": "claude-opus-5",
+            "description": "The chat model that writes the answer. It needs a key.",
+            "enum": [
+              "claude-opus-5",
+              "claude-sonnet-5",
+              "claude-haiku-4-5",
+              "gpt-6-astra",
+              "gpt-5.6-sol",
+              "gpt-5.6-luna",
+              "openrouter",
+              "custom"
+            ],
+            "title": "Model",
+            "type": "string",
+            "x-labels": {
+              "claude-haiku-4-5": "Claude Haiku 4.5",
+              "claude-opus-5": "Claude Opus 5",
+              "claude-sonnet-5": "Claude Sonnet 5",
+              "custom": "Custom (OpenAI-compatible)",
+              "gpt-5.6-luna": "GPT-5.6 Luna",
+              "gpt-5.6-sol": "GPT-5.6 Sol",
+              "gpt-6-astra": "GPT-6 Astra",
+              "openrouter": "OpenRouter"
+            },
+            "x-providers": {
+              "claude-haiku-4-5": "anthropic",
+              "claude-opus-5": "anthropic",
+              "claude-sonnet-5": "anthropic",
+              "custom": "openai_compatible",
+              "gpt-5.6-luna": "openai",
+              "gpt-5.6-sol": "openai",
+              "gpt-6-astra": "openai",
+              "openrouter": "openrouter"
+            }
+          },
+          "custom_base_url": {
+            "default": "",
+            "description": "The address of an OpenAI-compatible server.",
+            "title": "Endpoint URL",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "custom_model": {
+            "default": "",
+            "description": "The model name that server expects.",
+            "title": "Model name",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "openrouter_model": {
+            "default": "",
+            "description": "The OpenRouter model id, for example anthropic/claude-sonnet-4, openai/gpt-4o-mini, meta-llama/llama-3.3-70b-instruct or google/gemini-2.5-flash.",
+            "title": "OpenRouter model",
+            "type": "string",
+            "x-show-when": {
+              "model": "openrouter"
+            }
+          },
+          "citation_method": {
+            "default": "auto",
+            "description": "Auto uses the model's own citations when it has them. Otherwise the model quotes numbered sentences.",
+            "enum": [
+              "auto",
+              "sentence_ids"
+            ],
+            "title": "Citations",
+            "type": "string",
+            "x-labels": {
+              "auto": "Auto",
+              "sentence_ids": "Numbered sentences"
+            }
+          },
+          "support_threshold": {
+            "default": 0.55,
+            "description": "From 0 to 1. How close a claim must be to the sentence it cites to count as supported.",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Support threshold",
+            "type": "number"
+          },
+          "max_chunks": {
+            "default": 5,
+            "description": "How many of the top pieces go to the model.",
+            "minimum": 1,
+            "title": "Pieces sent",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "default": 16000,
+            "description": "The most the model may write, thinking included.",
+            "minimum": 1,
+            "title": "Most output tokens",
+            "type": "integer"
+          }
+        },
+        "title": "ChatConfig",
+        "type": "object"
+      },
+      "learn": {}
+    },
+    "eval": {
+      "name": "eval",
+      "version": "4",
+      "summary": "Checks whether the retrieved pieces contain the sentence that answers the question, and reports where it was found. No language model, no API key and no cost: it compares text with text.",
+      "stage": "use_case",
+      "output": "output",
+      "stackable": false,
+      "deterministic": true,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "prefers": {},
+      "fallback": "",
+      "inputs": {
+        "result": {
+          "type": "retrieval_result",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        },
+        "query": {
+          "type": "query",
+          "variadic": false,
+          "ambient": true,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "top_k": {
+            "default": 5,
+            "description": "How many of the top pieces count when looking for the answer.",
+            "title": "Pieces checked",
+            "type": "integer"
+          }
+        },
+        "title": "EvalConfig",
+        "type": "object"
+      },
+      "learn": {
+        "_strategy": {
+          "hint": "This step marks one question right or wrong by looking for its answer sentence in the retrieved pieces.",
+          "more": [
+            "Every question carries the sentence in the document that answers it. A piece that contains that sentence is a hit, and the rank of the first such piece says how far down the reader would have had to look.",
+            "The answer is a sentence rather than a piece number on purpose. Piece numbers change the moment you change how the document is cut, so a score built on them could never compare two settings. A sentence stays the same sentence.",
+            "The comparison is strict. The sentence has to be there, give or take spacing, a word broken across a line, capital letters, curly against straight quotes and joined letters such as fi. Something that merely looks close counts as a miss, which is what keeps the number honest."
+          ]
+        },
+        "top_k": {
+          "hint": "Only this many of the retrieved pieces are checked, because that is what the reader would have looked at.",
+          "more": [
+            "An answer that sits below this line is reported as a miss. That is the point: a piece nobody reads cannot help.",
+            "Raising it makes more questions count as hits, and makes the score say less about how well the pieces were ordered. Lowering it is a harder test of the ranking."
+          ]
+        }
+      }
     }
   }
 }

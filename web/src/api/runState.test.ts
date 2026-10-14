@@ -68,21 +68,32 @@ describe("runReducer: sweeps", () => {
 })
 
 describe("runReducer: a plain run", () => {
-  it("reduces the real executor stream exported from the engine", () => {
+  it("reduces the real /api/v2 stream of a run through chunk", () => {
     const events = [
       ...(fixtureEvents as RunEvent[]),
       e({ event: "stream_end", status: "finished", ok: true }),
     ]
     const state = reduceEvents(events)
     expect(state.variants).toHaveLength(1)
-    const nodes = state.variants[0].nodes
-    expect(Object.keys(nodes)).toEqual(state.variants[0].order)
-    for (const node of Object.values(nodes)) {
-      expect(node.status).toBe("done")
-      expect(node.artifact_id).toMatch(/^[0-9a-f]{64}$/)
-      expect(typeof node.duration_ms).toBe("number")
+    const { nodes, order } = state.variants[0]
+    expect(Object.keys(nodes)).toEqual(order)
+    // The run stops after chunk, so the index step is never selected.
+    expect(nodes.index.status).toBe("pruned")
+    const ran = order.filter((id) => id !== "index")
+    // Each step lands on its card: clean.1 is the card clean_1.
+    expect(ran).toEqual(["source", "parse", "clean_1", "clean_2", "chunk"])
+    for (const id of ran) {
+      expect(nodes[id].status).toBe("done")
+      expect(nodes[id].artifact_id).toMatch(/^[0-9a-f]{64}$/)
+      expect(typeof nodes[id].duration_ms).toBe("number")
     }
     expect(state.closed).toBe(true)
+  })
+
+  it("names every step of the exported stream as /api/v2 sends it", () => {
+    const started = (fixtureEvents as Record<string, unknown>[]).filter((x) => x.event === "node_started")
+    expect(started.map((x) => x.step)).toEqual(["source", "parse", "clean.1", "clean.2", "chunk"])
+    expect(started.every((x) => x.document === "chunking-notes.pdf")).toBe(true)
   })
 
   it("marks the order as pending before any node starts", () => {

@@ -114,19 +114,19 @@ def test_summary_rounds_scores_so_a_rerun_diffs_cleanly():
     assert out["pool"][0]["score"] == 0.032787
 
 
-def test_the_graph_is_the_lesson_pipeline():
-    g = _script().build_graph("ab" * 32, "chunking-primer.pdf")
-    steps = [(n.stage.value, n.transform, n.config) for n in g.nodes]
-    assert steps[1:] == [
-        ("parse", "docling", {}),
-        ("clean", "dedupe_blocks", {}),
-        ("chunk", "recursive_character", {"chunk_size": 400, "chunk_overlap": 80}),
-        ("index", "lancedb", {"embedder": "qwen3-embedding-0.6b"}),
-        ("query", "text", {"text": "Why do chunk boundaries matter?"}),
-        ("retrieve", "hybrid_rrf", {}),
-        ("rerank", "mmr", {}),
-        ("use_case", "search", {}),
-    ]
+def test_the_pipeline_is_the_lesson_pipeline():
+    assert _script().PIPELINE == {
+        "index": {
+            "parse": {"use": "docling"},
+            "clean": [{"use": "dedupe_blocks"}],
+            "chunk": {"use": "recursive_character", "chunk_size": 400, "chunk_overlap": 80},
+            "embed": {"use": "qwen3-embedding-0.6b"},
+            "store": {"use": "lancedb"},
+        },
+        "retrieve": {"search": {"use": "hybrid_rrf"}, "rerank": [{"use": "mmr"}]},
+        "answer": {"use": "search"},
+    }
+    assert _script().QUESTION == "Why do chunk boundaries matter?"
 
 
 def _shape(value):

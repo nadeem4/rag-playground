@@ -52,6 +52,7 @@ __all__ = [
     "document_text",
     "evaluate",
     "load_questions",
+    "paragraph_spans",
     "parse_question_set",
     "trace",
 ]
@@ -64,6 +65,13 @@ def document_text(doc: Any) -> str:
     if isinstance(doc, StageResult):
         doc = doc.output
     return DocView.of(doc).text
+
+
+def paragraph_spans(doc: Any) -> list[tuple[int, int]]:
+    """Where each paragraph starts and ends in `document_text(doc)`, in order."""
+    if isinstance(doc, StageResult):
+        doc = doc.output
+    return [(e.md_start, e.md_end) for e in DocView.of(doc).rendered if e.type == "paragraph"]
 
 
 @dataclass

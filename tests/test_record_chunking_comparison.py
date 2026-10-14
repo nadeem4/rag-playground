@@ -104,25 +104,23 @@ def test_among_those_the_passage_is_the_one_whose_cuts_differ_most():
     assert _script().pick_passage(paragraphs, chunks) == {"start": 0, "end": 100}
 
 
-def test_the_graph_is_the_comparison_pipeline():
-    g = _script().build_graph("ab" * 32, "chunking-primer.pdf", "markdown_header")
-    steps = [(n.stage.value, n.transform, n.config) for n in g.nodes]
-    assert steps[1:] == [
-        ("parse", "docling", {}),
-        ("clean", "dedupe_blocks", {}),
-        ("chunk", "markdown_header", {}),
-        ("index", "lancedb", {"embedder": "qwen3-embedding-0.6b"}),
-        ("query", "text", {"text": "", "gold_answer": ""}),
-        ("retrieve", "hybrid_rrf", {}),
-        ("use_case", "eval", {}),
-    ]
+def test_the_pipeline_is_the_comparison_pipeline():
+    assert _script().pipeline("markdown_header") == {
+        "index": {
+            "parse": {"use": "docling"},
+            "clean": [{"use": "dedupe_blocks"}],
+            "chunk": {"use": "markdown_header"},
+            "embed": {"use": "qwen3-embedding-0.6b"},
+            "store": {"use": "lancedb"},
+        },
+        "retrieve": {"search": {"use": "hybrid_rrf"}},
+    }
 
 
 def test_every_strategy_runs_at_its_own_defaults():
     for strategy in _script().STRATEGIES:
-        chunk = [n for n in _script().build_graph("ab" * 32, "s.pdf", strategy).nodes
-                 if n.id == "chunk"][0]
-        assert chunk.config == {}, "a default is what a newcomer gets"
+        chunk = _script().pipeline(strategy)["index"]["chunk"]
+        assert chunk == {"use": strategy}, "a default is what a newcomer gets"
 
 
 def _shape(value):

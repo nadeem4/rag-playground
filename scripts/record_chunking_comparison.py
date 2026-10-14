@@ -2,11 +2,11 @@
 
     uv run python scripts/record_chunking_comparison.py
 
-Runs the bundled sample through the real pipeline, in-process, once per
-chunking strategy: Docling, the duplicate cleaner, the strategy at its own
-defaults, a LanceDB index on Qwen3, then every question in
-`samples/chunking-primer/questions.json` through hybrid search and the
-evaluation step. It writes what the lesson draws to
+Runs the bundled sample through the real pipeline, in-process, on Pandion's
+public API (`scripts/lesson_runs.py`), once per chunking strategy: Docling,
+the duplicate cleaner, the strategy at its own defaults, a LanceDB index on
+Qwen3, then every question in `samples/chunking-primer/questions.json` through
+hybrid search and `pandion.evaluate`. It writes what the lesson draws to
 `web/src/learn/chunking-strategies.json`.
 
 Every strategy runs at its defaults, because that is what a newcomer gets. The
@@ -19,7 +19,6 @@ in a temp directory; nothing is written to `sources/` or the artifact store.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 import tempfile
@@ -29,9 +28,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pandion.extend import ArtifactType, Stage  # noqa: E402
-from pandion.graph import Edge, Graph, Node  # noqa: E402
-
 SAMPLE = ROOT / "samples" / "chunking-primer" / "chunking-primer.pdf"
 QUESTIONS_FILE = ROOT / "samples" / "chunking-primer" / "questions.json"
 OUT = ROOT / "web" / "src" / "learn" / "chunking-strategies.json"
@@ -40,27 +36,18 @@ OUT = ROOT / "web" / "src" / "learn" / "chunking-strategies.json"
 STRATEGIES = ("recursive_character", "markdown_header", "token_based")
 
 
-def build_graph(sha: str, filename: str, strategy: str) -> Graph:
-    """One strategy's pipeline. The question reaches retrieval and eval ambiently."""
-    nodes = [
-        Node("src", Stage.SOURCE, "upload", {"sha": sha, "filename": filename}),
-        Node("parse", Stage.PARSE, "docling", {}),
-        Node("clean", Stage.CLEAN, "dedupe_blocks", {}),
-        Node("chunk", Stage.CHUNK, strategy, {}),
-        Node("index", Stage.INDEX, "lancedb", {"embedder": "qwen3-embedding-0.6b"}),
-        Node("ask", Stage.QUERY, "text", {"text": "", "gold_answer": ""}),
-        Node("retrieve", Stage.RETRIEVE, "hybrid_rrf", {}),
-        Node("score", Stage.USE_CASE, "eval", {}),
-    ]
-    edges = [
-        Edge("src", "parse", "file"),
-        Edge("parse", "clean", "doc"),
-        Edge("clean", "chunk", "doc"),
-        Edge("chunk", "index", "chunks"),
-        Edge("index", "retrieve", "index"),
-        Edge("retrieve", "score", "result"),
-    ]
-    return Graph(nodes=nodes, edges=edges)
+def pipeline(strategy: str) -> dict:
+    """One strategy's pipeline, the strategy at its own defaults."""
+    return {
+        "index": {
+            "parse": {"use": "docling"},
+            "clean": [{"use": "dedupe_blocks"}],
+            "chunk": {"use": strategy},
+            "embed": {"use": "qwen3-embedding-0.6b"},
+            "store": {"use": "lancedb"},
+        },
+        "retrieve": {"search": {"use": "hybrid_rrf"}},
+    }
 
 
 def summarize(chunk_payload: dict, evals: list[dict], questions: list[dict]) -> dict:
@@ -141,91 +128,38 @@ def pick_passage(
 
 def record() -> dict:
     """Run every strategy over every question and return the lesson's summary."""
-    import api.steps
-    from pandion.executor import run
-    from pandion.registry import registry
-    from pandion.storage import Store
-    from pandion.plugins.chunk import DocView
-    from api.deps import build_deps
-    from pandion.sources import Sources
+    from pandion.evaluation import paragraph_spans
+    from scripts.lesson_runs import evaluate_pipeline, run_pipeline
 
-    api.steps.discover()
     questions = json.loads(QUESTIONS_FILE.read_text(encoding="utf-8"))
-    pdf = SAMPLE.read_bytes()
-    sha = hashlib.sha256(pdf).hexdigest()
-
+    strategies: dict[str, dict] = {}
+    index: dict[str, dict] = {}
+    chunks_by_strategy: dict[str, list[dict]] = {}
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        sources = root / "sources"
-        sources.mkdir()
-        (sources / f"{sha}.pdf").write_bytes(pdf)
-        extras = {**build_deps().run_extras(), "sources": Sources(sources)}
-        # One store for every run, so the parse and the clean are done once
+        # One root for every run, so the parse and the clean are done once
         # and all three strategies cut exactly the same text.
-        store = Store(root / "store")
-        strategies: dict[str, dict] = {}
-        index: dict[str, dict] = {}
-        chunks_by_strategy: dict[str, list[dict]] = {}
-        doc_text = ""
-        clean_payload: dict | None = None
-
+        root = Path(tmp)
         for strategy in STRATEGIES:
-            graph = build_graph(sha, SAMPLE.name, strategy)
-            chunk_payload: dict | None = None
-            descriptor: dict | None = None
-            evals: list[dict] = []
-            for question in questions:
-                result = run(
-                    graph,
-                    registry,
-                    store,
-                    context_extras=extras,
-                    overrides={
-                        "ask": {
-                            "text": question["question"],
-                            "gold_answer": question["gold_answer"],
-                        }
-                    },
-                )
-                if not result.ok:
-                    failures = {
-                        n: r.error for n, r in result.nodes.items() if r.error
-                    }
-                    raise SystemExit(f"{strategy} failed: {failures}")
-
-                def load(nid: str, t: ArtifactType, res=result):
-                    return store.load(res.nodes[nid].artifact.id, t)
-
-                if chunk_payload is None:
-                    clean_payload = load("clean", ArtifactType.PARSED_DOC)
-                    chunk_payload = load("chunk", ArtifactType.CHUNK_SET)
-                    doc_text = chunk_payload["source_text"]
-                    index_dir = Path(load("index", ArtifactType.INDEX))
-                    descriptor = json.loads(
-                        (index_dir / "descriptor.json").read_text(encoding="utf-8")
-                    )
-                evals.append(load("score", ArtifactType.OUTPUT)["payload"])
-
-            assert chunk_payload is not None and descriptor is not None
-            strategies[strategy] = summarize(chunk_payload, evals, questions)
+            out = run_pipeline(pipeline(strategy), SAMPLE, root)
+            report = evaluate_pipeline(pipeline(strategy), SAMPLE, root, questions)
+            failed = {q["id"]: q["error"] for q in report["questions"] if q["error"]}
+            if failed:
+                raise SystemExit(f"{strategy} failed: {failed}")
+            evals = [q["score"] for q in report["questions"]]
+            strategies[strategy] = summarize(out["chunk"], evals, questions)
             chunks_by_strategy[strategy] = strategies[strategy]["chunks"]
             index[strategy] = {
-                "embedder": descriptor["embedding_model"],
-                "dim": descriptor["dim"],
-                "doc_count": descriptor["doc_count"],
+                "embedder": out["index"]["embedding_model"],
+                "dim": out["index"]["dim"],
+                "doc_count": out["index"]["doc_count"],
             }
-
-        view = DocView.of(clean_payload)
-        paragraphs = [
-            (e.md_start, e.md_end) for e in view.rendered if e.type == "paragraph"
-        ]
-        return {
-            "doc_text": doc_text,
-            "passage": pick_passage(paragraphs, chunks_by_strategy),
-            "questions": questions,
-            "index": index,
-            "strategies": strategies,
-        }
+    return {
+        "doc_text": out["chunk"]["source_text"],
+        "passage": pick_passage(paragraph_spans(out["clean.1"]), chunks_by_strategy),
+        "questions": questions,
+        "index": index,
+        "strategies": strategies,
+    }
 
 
 def main() -> None:

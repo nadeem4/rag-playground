@@ -63,10 +63,21 @@ def test_the_excerpt_tries_every_gold_passage_in_order():
     assert first_excerpt(text, ["Nothing like this sentence is here."]) is None
 
 
-def test_the_query_node_carries_every_gold_passage():
-    graph = _script().build_graph("sha", "f.pdf", "pdfium", {}, "q?", ["| A | 1 |", "A 1"])
-    ask = next(n for n in graph.nodes if n.id == "ask")
-    assert ask.config == {"text": "q?", "gold_answer": "| A | 1 |", "gold_answers": ["| A | 1 |", "A 1"]}
+def test_the_pipeline_is_the_lab_pipeline():
+    assert _script().pipeline("docling", {"do_ocr": True}) == {
+        "index": {
+            "parse": {"use": "docling", "do_ocr": True},
+            "chunk": {"use": "recursive_character", "chunk_size": 400, "chunk_overlap": 80},
+            "embed": {"use": "qwen3-embedding-0.6b"},
+            "store": {"use": "lancedb"},
+        },
+        "retrieve": {"search": {"use": "hybrid_rrf"}},
+    }
+
+
+def test_each_question_carries_every_gold_passage():
+    asked = _script().question_set([{"question": "q?", "gold_answer": "| A | 1 |", "gold_answers": ["A 1"]}])
+    assert asked == [{"id": "1", "question": "q?", "gold_answers": ["| A | 1 |", "A 1"]}]
 
 
 def test_excerpt_window():

@@ -1,135 +1,176 @@
 [
   {
     "event": "run_started",
-    "ts": 1791077952.924,
+    "ts": 0,
     "nodes": [
-      "src",
-      "parse",
-      "clean_strip",
-      "clean_dedupe",
-      "chunk_recursive",
-      "chunk_markdown_header",
-      "chunk_token"
+      "chunking-notes.pdf::source",
+      "chunking-notes.pdf::parse",
+      "chunking-notes.pdf::clean.1",
+      "chunking-notes.pdf::clean.2",
+      "chunking-notes.pdf::chunk",
+      "index"
     ],
     "selected": [
-      "chunk_markdown_header",
-      "chunk_recursive",
-      "chunk_token",
-      "clean_dedupe",
-      "clean_strip",
-      "parse",
-      "src"
+      "chunking-notes.pdf::chunk",
+      "chunking-notes.pdf::clean.1",
+      "chunking-notes.pdf::clean.2",
+      "chunking-notes.pdf::parse",
+      "chunking-notes.pdf::source"
+    ],
+    "steps": [
+      {
+        "document": "chunking-notes.pdf",
+        "step": "source"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "parse"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "clean.1"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "clean.2"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "chunk"
+      },
+      {
+        "document": null,
+        "step": "index"
+      }
+    ],
+    "selected_steps": [
+      {
+        "document": "chunking-notes.pdf",
+        "step": "chunk"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "clean.1"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "clean.2"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "parse"
+      },
+      {
+        "document": "chunking-notes.pdf",
+        "step": "source"
+      }
     ]
   },
   {
     "event": "node_started",
-    "ts": 1791077952.926,
-    "node_id": "src",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::source",
     "transform": "upload",
-    "artifact_id": "c4069eb4ac07ff45d4e7b9050876df669d40a4f61687ab3f661e978a0fb43aa6"
+    "artifact_id": "c4069eb4ac07ff45d4e7b9050876df669d40a4f61687ab3f661e978a0fb43aa6",
+    "document": "chunking-notes.pdf",
+    "step": "source"
   },
   {
     "event": "node_finished",
-    "ts": 1791077952.982,
-    "node_id": "src",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::source",
     "artifact_id": "c4069eb4ac07ff45d4e7b9050876df669d40a4f61687ab3f661e978a0fb43aa6",
     "cache_hit": false,
-    "duration_ms": 56.368
+    "duration_ms": 46.08519998146221,
+    "document": "chunking-notes.pdf",
+    "step": "source"
   },
   {
     "event": "node_started",
-    "ts": 1791077952.982,
-    "node_id": "parse",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::parse",
     "transform": "pdfium",
-    "artifact_id": "506ee6169f12af73d0f9dd90e3d6a557e695dd58c7b0f4b3da28574f16da2132"
+    "artifact_id": "506ee6169f12af73d0f9dd90e3d6a557e695dd58c7b0f4b3da28574f16da2132",
+    "document": "chunking-notes.pdf",
+    "step": "parse"
   },
   {
     "event": "node_finished",
-    "ts": 1791077953.037,
-    "node_id": "parse",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::parse",
     "artifact_id": "506ee6169f12af73d0f9dd90e3d6a557e695dd58c7b0f4b3da28574f16da2132",
     "cache_hit": false,
-    "duration_ms": 55.121
+    "duration_ms": 8.43170000007376,
+    "document": "chunking-notes.pdf",
+    "step": "parse"
   },
   {
     "event": "node_started",
-    "ts": 1791077953.037,
-    "node_id": "clean_strip",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::clean.1",
     "transform": "header_footer_strip",
-    "artifact_id": "907dd7de2d0debd0e322d4b79bf2870ed25db3fda6b32fa2dc6b9fa5a07e286c"
+    "artifact_id": "907dd7de2d0debd0e322d4b79bf2870ed25db3fda6b32fa2dc6b9fa5a07e286c",
+    "document": "chunking-notes.pdf",
+    "step": "clean.1"
   },
   {
     "event": "node_finished",
-    "ts": 1791077953.044,
-    "node_id": "clean_strip",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::clean.1",
     "artifact_id": "907dd7de2d0debd0e322d4b79bf2870ed25db3fda6b32fa2dc6b9fa5a07e286c",
     "cache_hit": false,
-    "duration_ms": 6.429
+    "duration_ms": 4.203399992547929,
+    "document": "chunking-notes.pdf",
+    "step": "clean.1"
   },
   {
     "event": "node_started",
-    "ts": 1791077953.044,
-    "node_id": "clean_dedupe",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::clean.2",
     "transform": "dedupe_blocks",
-    "artifact_id": "d5d15bc9e799d57645037c6f5558c2b6dc70f52193d4c63a06a6adcaa40ada05"
+    "artifact_id": "d5d15bc9e799d57645037c6f5558c2b6dc70f52193d4c63a06a6adcaa40ada05",
+    "document": "chunking-notes.pdf",
+    "step": "clean.2"
   },
   {
     "event": "node_finished",
-    "ts": 1791077953.088,
-    "node_id": "clean_dedupe",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::clean.2",
     "artifact_id": "d5d15bc9e799d57645037c6f5558c2b6dc70f52193d4c63a06a6adcaa40ada05",
     "cache_hit": false,
-    "duration_ms": 44.031
+    "duration_ms": 3.886900027282536,
+    "document": "chunking-notes.pdf",
+    "step": "clean.2"
   },
   {
     "event": "node_started",
-    "ts": 1791077953.088,
-    "node_id": "chunk_recursive",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::chunk",
     "transform": "recursive_character",
-    "artifact_id": "b5af00fb871ecee5b59d54cc92342ccd4fef1926cba7f0673d725303a13347f1"
+    "artifact_id": "ee60259011f9300f619ff8aca78353f9964db88db009dd3638df08d47bb40f94",
+    "document": "chunking-notes.pdf",
+    "step": "chunk"
   },
   {
     "event": "node_finished",
-    "ts": 1791077953.111,
-    "node_id": "chunk_recursive",
-    "artifact_id": "b5af00fb871ecee5b59d54cc92342ccd4fef1926cba7f0673d725303a13347f1",
+    "ts": 0,
+    "node_id": "chunking-notes.pdf::chunk",
+    "artifact_id": "ee60259011f9300f619ff8aca78353f9964db88db009dd3638df08d47bb40f94",
     "cache_hit": false,
-    "duration_ms": 22.904
-  },
-  {
-    "event": "node_started",
-    "ts": 1791077953.111,
-    "node_id": "chunk_markdown_header",
-    "transform": "markdown_header",
-    "artifact_id": "f6ac394ef11e788d318e7a5b97db23a8d5c1c1b7fb3db832fcd16fdb074ffab8"
-  },
-  {
-    "event": "node_finished",
-    "ts": 1791077953.133,
-    "node_id": "chunk_markdown_header",
-    "artifact_id": "f6ac394ef11e788d318e7a5b97db23a8d5c1c1b7fb3db832fcd16fdb074ffab8",
-    "cache_hit": false,
-    "duration_ms": 22.215
-  },
-  {
-    "event": "node_started",
-    "ts": 1791077953.133,
-    "node_id": "chunk_token",
-    "transform": "token_based",
-    "artifact_id": "3a700f7085cd4ae6b26f80a36d39cd544f3cfc019feb8dc52f395c043c516ac0"
-  },
-  {
-    "event": "node_finished",
-    "ts": 1791077953.138,
-    "node_id": "chunk_token",
-    "artifact_id": "3a700f7085cd4ae6b26f80a36d39cd544f3cfc019feb8dc52f395c043c516ac0",
-    "cache_hit": false,
-    "duration_ms": 4.54
+    "duration_ms": 3.6392000038176775,
+    "document": "chunking-notes.pdf",
+    "step": "chunk"
   },
   {
     "event": "run_finished",
-    "ts": 1791077953.138,
+    "ts": 0,
     "ok": true,
     "cancelled": false
+  },
+  {
+    "event": "stream_end",
+    "ts": 0,
+    "status": "finished",
+    "ok": true
   }
 ]

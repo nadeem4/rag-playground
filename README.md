@@ -45,7 +45,7 @@ Open the [live demo](https://rag.codewithnk.com). There is no sign in.
   up to 10 MB and 20 pages, a browser can keep 3 uploads at a time, and each upload is
   deleted 24 hours after it was made. Your uploads are private to your browser.
 - The demo is shared, so one browser can have two runs going at once, an evaluation
-  scores at most 50 questions, and a comparison at most 100 recipe-questions (recipes
+  scores at most 50 questions, and a comparison at most 120 recipe-questions (recipes
   times questions). Run the playground locally for more.
 - Everything works without a key except chat answers, the LLM reranker and the LLM
   rewrite. For those, add your own Anthropic, OpenAI or OpenRouter key with the key button

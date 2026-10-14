@@ -284,7 +284,7 @@ class PlaygroundPolicy(Policy):
         return MAX_VARIANTS
 
     def check_question_count(self, kind: str, count: int, request: Request) -> None:
-        """On the demo, at most 50 questions an evaluation and 100 recipe-questions
+        """On the demo, at most 50 questions an evaluation and 120 recipe-questions
         a comparison, so one run cannot hold a shared slot for long. Locally,
         only pandion-api's own cap of 500 questions a set."""
         if not demo.enabled():

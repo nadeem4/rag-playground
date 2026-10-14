@@ -279,21 +279,22 @@ def test_on_the_demo_an_evaluation_asks_at_most_50_questions(client, monkeypatch
     policy.check_question_count("evaluation", 500, None)
 
 
-def test_on_the_demo_a_comparison_asks_at_most_100_recipe_questions(client, monkeypatch):
+def test_on_the_demo_a_comparison_asks_at_most_120_recipe_questions(client, monkeypatch):
     from api.policy import too_many_questions
 
     demo_on(monkeypatch)
     sample = client.post("/api/sources/sample").json()
     variants = [{"use": "recursive_character", "chunk_size": 100 + n} for n in range(3)]
-    body = {"config": PIPELINE, "stage": "chunk", "variants": variants, "documents": [sample["sha"]], "questions": QUESTIONS * 34}
+    body = {"config": PIPELINE, "stage": "chunk", "variants": variants, "documents": [sample["sha"]], "questions": QUESTIONS * 41}
     r = client.post("/api/v2/comparisons", json=body)
-    assert r.status_code == 413 and r.json()["detail"] == too_many_questions("comparison", 102)
+    assert r.status_code == 413 and r.json()["detail"] == too_many_questions("comparison", 123)
     assert r.json()["detail"] == (
-        "The demo scores at most 100 recipe-questions in one comparison (recipes times questions), "
-        "and this one asks for 102. Use fewer recipes or questions, or run the playground locally for more."
+        "The demo scores at most 120 recipe-questions in one comparison (recipes times questions), "
+        "and this one asks for 123. Use fewer recipes or questions, or run the playground locally for more."
     )
     policy = PlaygroundPolicy()
-    policy.check_question_count("comparison", 100, None)
+    # Ten recipes on a bundled sample (12 questions) still fit.
+    policy.check_question_count("comparison", 120, None)
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
     policy.check_question_count("comparison", 5000, None)
 

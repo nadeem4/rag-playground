@@ -262,7 +262,7 @@ limits and the visitor cookie) and `GET /api/questions/template`.
 | `public_endpoints_only` | yes | no |
 | `max_active_runs` | 2 | no limit |
 | `max_variants` | 10 | 10 |
-| `check_question_count` | at most 50 questions an evaluation, and 100 recipe-questions (recipes times questions) a comparison: a 413 naming the cap | only the 500 a set |
+| `check_question_count` | at most 50 questions an evaluation, and 120 recipe-questions (recipes times questions) a comparison: a 413 naming the cap | only the 500 a set |
 | `max_runs_per_owner` | 2 a visitor | no limit |
 | `run_owner` | the visitor: to anyone else the run is a 404 | no one |
 | `scrub` | a server path keeps only its last part (`[server]/x.py`) | the same |

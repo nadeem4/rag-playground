@@ -32,7 +32,7 @@ MAX_RUNS_PER_VISITOR = 2
 #: The most questions one evaluation scores on the demo.
 MAX_EVALUATION_QUESTIONS = 50
 #: The most recipe-questions (recipes times questions) one comparison scores on the demo.
-MAX_COMPARISON_QUESTIONS = 100
+MAX_COMPARISON_QUESTIONS = 120
 #: All live uploads together, so a client that keeps getting new visitor ids
 #: still cannot fill the shared disk.
 MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024

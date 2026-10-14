@@ -35,7 +35,7 @@ from pandion.results import ResultStore, StageResult
 from pandion.strategy_catalog import catalog, defaults, explain
 from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Answer",

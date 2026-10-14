@@ -1,10 +1,13 @@
 """A document's file and pages: sizes, renders and text search."""
 
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from apihelpers import make_client, upload
 from pandion_api import Policy
-from pandion_api.pages import MAX_FIND_CHARS
+from pandion_api import pages
+from pandion_api.pages import MAX_FIND_CHARS, MAX_PIXELS, MIN_SCALE, clamp
+from pandion_api.routes.documents import NO_SUCH_DOCUMENT
 from pdfs import SAMPLE_PAGES, build_pdf
 
 
@@ -42,7 +45,22 @@ def test_find_gives_the_rects_of_a_sentence(client):
 def test_an_unknown_or_malformed_id_is_404(client):
     for sha in ("0" * 64, "nope"):
         assert client.get(f"/documents/{sha}/file").status_code == 404
-        assert client.get(f"/documents/{sha}/pages").status_code == 404
+        r = client.get(f"/documents/{sha}/pages")
+        assert r.status_code == 404 and r.json()["detail"] == NO_SUCH_DOCUMENT
+
+
+def test_the_bitmap_cap_wins_even_below_the_smallest_scale():
+    side = 100_000.0  # points: a page this big is over the cap even at MIN_SCALE
+    scale = clamp(8, side, side)
+    assert scale < MIN_SCALE and (scale * side) ** 2 <= MAX_PIXELS
+    assert clamp(0.1, 100, 100) == MIN_SCALE
+    assert clamp(2, 100, 100) == 2
+
+
+def test_the_soft_hyphen_set_is_written_in_escapes():
+    source = Path(pages.__file__).read_text(encoding="utf-8")
+    assert r'_SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}' in source
+    assert pages._SOFT_HYPHENS == {chr(2), chr(0xFFFE), chr(0xAD)}
 
 
 def test_a_file_that_is_not_a_pdf_is_415(client):
@@ -87,7 +105,7 @@ def test_an_unreadable_document_is_answered_exactly_like_a_missing_one(tmp_path)
             hidden = c.get(f"/documents/{sha}/{tail}")
             absent = c.get(f"/documents/{missing}/{tail}")
             assert hidden.status_code == absent.status_code == 404
-            assert hidden.json()["detail"].replace(sha, missing) == absent.json()["detail"]
+            assert hidden.json()["detail"] == absent.json()["detail"] == NO_SUCH_DOCUMENT
 
 
 def test_a_page_number_out_of_range_is_a_plain_4xx(client):

@@ -40,7 +40,7 @@ MAX_FIND_CHARS = 2000
 PDFIUM_LOCK = threading.Lock()
 
 #: Characters pdfium reports for a hyphen it decided was a soft line-end break.
-_SOFT_HYPHENS = {"\x02", "￾", "­"}
+_SOFT_HYPHENS = {"\x02", "\ufffe", "\u00ad"}
 
 
 @contextmanager
@@ -85,11 +85,13 @@ def render_png(doc: pdfium.PdfDocument, n: int, scale: float) -> bytes:
 def clamp(scale: float, width: float, height: float) -> float:
     """Lower the scale so the bitmap stays within MAX_PIXELS: an uploaded PDF
     can declare a page of any size, and scale 8 on a huge page would ask for
-    gigabytes. Never below MIN_SCALE."""
+    gigabytes. Never below MIN_SCALE, unless even MIN_SCALE would break the
+    cap: the cap always wins."""
     area = width * height
     if area <= 0:
         return scale
-    return max(MIN_SCALE, min(scale, math.sqrt(MAX_PIXELS / area)))
+    cap = math.sqrt(MAX_PIXELS / area)
+    return min(cap, max(MIN_SCALE, min(scale, cap)))
 
 
 def normalize(chars: list[str]) -> tuple[str, list[int]]:

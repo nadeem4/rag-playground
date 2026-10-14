@@ -132,8 +132,12 @@ class RunManager:
         for q in state.subscribers:
             q.put_nowait((seq, e))
 
-    def start(self, kind: str, job: Job, owner: str | None = None) -> RunState:
-        """Schedule `job` on a worker thread. Must be called on the event loop."""
+    def start(
+        self, kind: str, job: Job, owner: str | None = None, scrub: Callable[[str], str] | None = None
+    ) -> RunState:
+        """Schedule `job` on a worker thread. Must be called on the event loop.
+        `scrub` takes what may not leave the server out of a crash's traceback
+        before it is logged as `run_error`."""
         loop = asyncio.get_running_loop()
         state = RunState(run_id=uuid.uuid4().hex, kind=kind, owner=owner)
         self.runs[state.run_id] = state
@@ -154,7 +158,8 @@ class RunManager:
                 status = "cancelled" if was_cancelled else "finished"
                 error = None
             except Exception:
-                ok, status, error = False, "error", traceback.format_exc()
+                error = traceback.format_exc()
+                ok, status, error = False, "error", scrub(error) if scrub else error
                 self._publish(state, event("run_error", error=error))
             finally:
                 self._end_turn()

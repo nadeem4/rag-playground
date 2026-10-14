@@ -19,7 +19,6 @@ the function /api/v2 uses (`api.policy.step_over_limit`).
 from __future__ import annotations
 
 import json
-import traceback
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
@@ -28,6 +27,8 @@ from pydantic import BaseModel, Field, ValidationError
 from api import demo
 from api.credentials import redact, resolve_all
 from api.routes.registry import read_only_settings
+from pandion_api.credentials import guarded as _guarded
+from pandion_api.routes.runs import find_run
 from pandion_api.runs import RunState, cancel_response, events_response, start_at
 from pandion.executor import run, sweep
 from pandion.extend import Stage
@@ -37,6 +38,13 @@ from pandion.registry import Registry, UnknownTransformError
 router = APIRouter()
 
 PROMPTS_FIXED = "The prompts and the model revision are fixed in the playground. Set them in a pipeline file or in code."
+
+#: The 403 for a document this browser may not read, on both stacks
+#: (`PlaygroundPolicy.not_readable`).
+NOT_AVAILABLE = (
+    "This document is not available to this browser. It may be an upload that has "
+    "expired, or one made from another browser. Load a sample or upload the file again."
+)
 
 DEMO_NO_CUSTOM = (
     "custom endpoints are disabled in this hosted demo: the server would send "
@@ -115,13 +123,7 @@ def _check(
     for nd in graph.nodes:
         cfg = overrides.get(nd.id, nd.config)
         if nd.stage == Stage.SOURCE and cfg.get("sha") and not demo.readable(cfg["sha"], request):
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "This document is not available to this browser. It may be an upload that has "
-                    "expired, or one made from another browser. Load a sample or upload the file again."
-                ),
-            )
+            raise HTTPException(status_code=403, detail=NOT_AVAILABLE)
         cls = registry.get(nd.stage, nd.transform)
         try:
             cls.config_model(**cfg)
@@ -174,16 +176,6 @@ def _credentials(
     if not creds:
         return [], None
     return list(creds.values()), {"credentials": creds}
-
-
-def _guarded(keys: list[str], fn):
-    """Run `fn`, re-raising any crash with the keys scrubbed from its traceback."""
-    try:
-        return fn()
-    except Exception:
-        if not keys:
-            raise
-        raise RuntimeError(redact(traceback.format_exc(), keys)) from None
 
 
 def _unknown(graph: Graph, ids: list[str], what: str) -> None:
@@ -326,10 +318,8 @@ async def create_sweep(
 
 
 def _state(request: Request, run_id: str) -> RunState:
-    state = request.app.state.runs.get(run_id)
-    if state is None:
-        raise HTTPException(status_code=404, detail=f"unknown run {run_id}")
-    return state
+    """The run, or 404: also for a run on /api/v2 that is another visitor's."""
+    return find_run(request, run_id)
 
 
 @router.get("/runs/{run_id}")

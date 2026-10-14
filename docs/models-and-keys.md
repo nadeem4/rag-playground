@@ -101,6 +101,9 @@ The server looks for each provider's key in three places and uses the first it f
 In demo mode only the first counts: the server ignores its own environment and `.env`, so
 visitors can never spend the host's keys. See [deploy.md](deploy.md#demo-mode).
 
+The same order holds on pandion-api's routes (`/api/v2`): the header, then the server's
+variable, then `.env`, and on the demo only the header.
+
 Do not set a key as a system-wide or user-wide environment variable. Every program you
 start would inherit it, including AI coding tools that could then read and use it.
 

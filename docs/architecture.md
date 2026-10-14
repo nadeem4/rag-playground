@@ -260,7 +260,10 @@ across both. A run is stopped through its `cancel`, a `threading.Event` that Pan
 as it is.
 
 The keys live only in the run's worker for its duration, and every event passes through a
-filter that replaces a key with `[redacted]`.
+filter that replaces a key with `[redacted]` (`pandion_api.credentials.redact`, one for
+both stacks). On `/api/v2` an index run is `POST /api/v2/runs` with a pipeline and
+document ids; its result gives each step's result id. On the demo a run started there is
+its visitor's own: to anyone else it is a 404 on both stacks.
 
 ## How the web app talks to the API
 

@@ -131,7 +131,9 @@ print(p.ask("What does the report recommend?").text)
 ```
 
 The [Pandion guide](docs/pandion.md) covers every step, setting and error, and
-[examples/pandion/](examples/pandion) has scripts that index, sync, search and ask.
+[examples/pandion/](examples/pandion) has scripts that index, sync, search and ask, and
+[examples/pandion-api/](examples/pandion-api) does the same over HTTP with pandion-api.
+[examples/](examples) says which folder to pick.
 To write your own strategy for any step, start from
 [examples/pandion/own_strategies/](examples/pandion/own_strategies): it writes one for
 every stage (source, parse, clean, chunk, store, rewrite, search, rerank and

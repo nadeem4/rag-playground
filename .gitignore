@@ -53,3 +53,5 @@ skills-lock.json
 examples/pandion/own_strategies/work/
 # The pandion command examples write their index here
 examples/pandion/cli-index/
+# The pandion-api example server keeps its files here
+examples/pandion-api/pandion-data/

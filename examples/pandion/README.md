@@ -34,6 +34,9 @@ question; and one builds the same pipeline three ways.
   with built-in steps in code (`run_mixed.py`). Nothing is downloaded. Its README walks
   through it stage by stage.
 
+To use Pandion from another language, a web app or several clients at once, serve it
+over HTTP with pandion-api: see [`../pandion-api/`](../pandion-api).
+
 From the root of the repo:
 
 ```bash

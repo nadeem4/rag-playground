@@ -735,6 +735,23 @@ describe("First run (plan I-15)", () => {
     expect(window.localStorage.getItem("rag-playground:graph:v1")).toBe(old)
   })
 
+  it("a stored pipeline this server cannot draw is kept as it was when Build opens the Starter, and Build says why", async () => {
+    storeGraph(sampleGraph(liveRegistry as never, SOURCE))
+    const p = JSON.parse(window.localStorage.getItem("rag-playground:pipeline:v2")!)
+    p.config.index.chunk = { use: "no_such_chunker" }
+    const raw = JSON.stringify(p)
+    window.localStorage.setItem("rag-playground:pipeline:v2", raw)
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    // The Starter is drawn and stored in place of it.
+    await waitFor(() => expect(storedColumn()!.nodes.find((n) => n.stage === "chunk")!.transform).not.toBe("no_such_chunker"))
+    const kept = JSON.parse(window.localStorage.getItem("rag-playground:pipeline:v2:kept")!) as { json: string }[]
+    expect(kept.map((k) => k.json)).toEqual([raw])
+    const notice = screen.getByText(/could not be opened/)
+    expect(notice.textContent).toContain("One of its steps uses no_such_chunker, which this server does not have.")
+    expect(notice.textContent).toContain("still kept in this browser")
+  })
+
   it("arriving fresh opens the Starter: the sample graph on the default sample, without running anything", async () => {
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())

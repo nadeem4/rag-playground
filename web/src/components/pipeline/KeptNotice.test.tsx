@@ -12,7 +12,7 @@ beforeEach(() => {
 
 describe("KeptNotice", () => {
   it("says once why the old pipeline did not open, and that it is kept", () => {
-    window.localStorage.setItem(KEPT_KEY, JSON.stringify({ problem: "It has a enrich step, and a pipeline in this version has no place for one.", seen: false }))
+    window.localStorage.setItem(KEPT_KEY, JSON.stringify({ problem: "It has an enrich step, and a pipeline in this version has no place for one.", seen: false }))
     render(<KeptNotice />)
     expect(screen.getByText(/could not be opened here/)).toBeTruthy()
     expect(screen.getByText(/still kept in this browser/)).toBeTruthy()

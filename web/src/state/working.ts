@@ -10,11 +10,16 @@ import { graphToConfig, type WorkingPipeline } from "./config"
  * once, the first time nothing is stored here. One that cannot be converted
  * is marked under KEPT_KEY with the reason. The old key is never written or
  * removed, so the old pipeline is kept either way.
+ *
+ * A stored pipeline this server cannot draw (a step uses a strategy it does
+ * not have) is copied, as it was, under UNDRAWN_KEY before a page replaces it
+ * with a Starter. Each such pipeline is kept once, beside any kept before.
  */
 
 export const WORKING_KEY = "rag-playground:pipeline:v2"
 export const OLD_GRAPH_KEY = "rag-playground:graph:v1"
 export const KEPT_KEY = "rag-playground:graph:v1:kept"
+export const UNDRAWN_KEY = "rag-playground:pipeline:v2:kept"
 
 let memory: string | null = null
 let storageFailed = false
@@ -85,6 +90,8 @@ export function storedWorkingJson(): string | null {
     // Reading is blocked: what this page stored lives in memory.
     return memory
   }
+  // Migrating in a snapshot read is safe when storage will not write: migrate
+  // sets storageFailed and keeps the result in memory, so it runs once per page.
   return stored ?? migrate()
 }
 
@@ -118,9 +125,36 @@ export function keptOldPipeline(): { problem: string; seen: boolean } | null {
   }
 }
 
+type Undrawn = { problem: string; seen: boolean; json: string }
+
+function undrawnList(): Undrawn[] {
+  try {
+    const v = JSON.parse(get(UNDRAWN_KEY) ?? "[]") as unknown
+    return Array.isArray(v) ? v.filter((x): x is Undrawn => isRecord(x) && typeof x.problem === "string" && typeof x.json === "string") : []
+  } catch {
+    return []
+  }
+}
+
+/** Keep a stored pipeline this server cannot draw, as it was. One already kept is not kept twice. */
+export function keepUndrawn(json: string, problem: string): void {
+  const list = undrawnList()
+  if (list.some((k) => k.json === json)) return
+  set(UNDRAWN_KEY, JSON.stringify([...list, { problem, seen: false, json }]))
+}
+
+/** Why the last kept pipeline could not be drawn, and whether Build has said so. */
+export function keptUndrawn(): { problem: string; seen: boolean } | null {
+  const last = undrawnList().at(-1)
+  return last ? { problem: last.problem, seen: last.seen === true } : null
+}
+
+/** Build has said why: mark every kept pipeline as seen. */
 export function markKeptSeen(): void {
   const kept = keptOldPipeline()
   if (kept) set(KEPT_KEY, JSON.stringify({ ...kept, seen: true }))
+  const list = undrawnList()
+  if (list.some((k) => !k.seen)) set(UNDRAWN_KEY, JSON.stringify(list.map((k) => ({ ...k, seen: true }))))
 }
 
 /** Tests only: forget the in-memory copy. */

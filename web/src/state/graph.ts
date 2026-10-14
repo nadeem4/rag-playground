@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
 import type { Graph, GraphEdge, GraphNode, PortSchema, Registry, Stage, TransformInfo } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
 
-import { columnOf, graphToConfig, knownSteps } from "./config"
-import { parseWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
+import { columnOf, graphToConfig, unknownStrategy } from "./config"
+import { keepUndrawn, parseWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
 
 /**
  * The pipeline as a graph: nodes and port-typed edges, exactly what
@@ -576,10 +576,18 @@ export function subscribeGraph(listener: () => void): () => void {
   return subscribeWorking(listener)
 }
 
-/** Null when nothing is stored or a step names a strategy this server lacks (Build then opens the Starter). */
+/**
+ * Null when nothing is stored or a step names a strategy this server lacks.
+ * Every page then stores a Starter in its place, so such a pipeline is kept
+ * first (`keepUndrawn`), as it was, and Build says why.
+ */
 const columnFrom = (json: string | null, registry: Registry): PipelineGraph | null => {
   const p = parseWorking(json)
-  return p && knownSteps(p.config, registry) ? columnOf(p, registry) : null
+  if (!p || !json) return null
+  const odd = unknownStrategy(p.config, registry)
+  if (odd === null) return columnOf(p, registry)
+  keepUndrawn(json, `One of its steps uses ${odd}, which this server does not have.`)
+  return null
 }
 
 export function readStoredGraph(registry: Registry): PipelineGraph | null {

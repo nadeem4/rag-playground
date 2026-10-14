@@ -111,7 +111,7 @@ export function Privacy() {
     [
       "The pipeline you are working on",
       "In this browser's storage",
-      "Until you change it. It is how Build, Compare and Evaluate share one pipeline. A pipeline from an older version stays where it was; it is converted once, and if it cannot be, it is kept as it was and Build says why.",
+      "Until you change it. It is how Build, Compare and Evaluate share one pipeline. A pipeline from an older version stays where it was; it is converted once, and if it cannot be, it is kept as it was and Build says why. A pipeline that uses a strategy this server does not have is kept the same way before Build opens the Starter.",
     ],
     ["Theme and contrast", "In this browser's storage", "Until you change them."],
     ["Where the Ask panel sits on Build", "In this browser's storage", "Its side, its width and whether it is open, until you change them."],

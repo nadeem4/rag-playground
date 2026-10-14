@@ -4,9 +4,26 @@ import { graphToConfig } from "./config"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph } from "./graph"
 import { sameGraph } from "./pipelines"
 import { TEST_REGISTRY as R } from "./testRegistry"
-import { KEPT_KEY, keptOldPipeline, markKeptSeen, OLD_GRAPH_KEY, readWorking, resetWorkingForTests, storeWorking, WORKING_KEY } from "./working"
+import {
+  KEPT_KEY,
+  keptOldPipeline,
+  keptUndrawn,
+  markKeptSeen,
+  OLD_GRAPH_KEY,
+  readWorking,
+  resetWorkingForTests,
+  storeWorking,
+  UNDRAWN_KEY,
+  WORKING_KEY,
+} from "./working"
 
 const DOC = { sha: "b".repeat(64), filename: "notes.pdf" }
+
+function withChunker(use: string) {
+  const c = graphToConfig(sampleGraph(R, DOC))
+  if (!c.ok) throw new Error(c.problem)
+  return { ...c.pipeline, config: { ...c.pipeline.config, index: { ...c.pipeline.config.index, chunk: { use } } } }
+}
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -25,6 +42,15 @@ describe("the working pipeline", () => {
     expect(p.question.text).toBe("Why?")
     expect(JSON.parse(window.localStorage.getItem(WORKING_KEY)!)).toEqual(p)
     expect(window.localStorage.getItem(OLD_GRAPH_KEY)).toBe(old)
+  })
+
+  it("the old graph is converted once: a later change to the old key is never read", () => {
+    window.localStorage.setItem(OLD_GRAPH_KEY, JSON.stringify(sampleGraph(R, DOC, "Why?")))
+    const first = readWorking()
+    const stored = window.localStorage.getItem(WORKING_KEY)
+    window.localStorage.setItem(OLD_GRAPH_KEY, JSON.stringify(setConfig(sampleGraph(R, DOC, "Other?"), "chunk", { chunk_size: 900, chunk_overlap: 0 })))
+    expect(readWorking()).toEqual(first)
+    expect(window.localStorage.getItem(WORKING_KEY)).toBe(stored)
   })
 
   it("one that cannot be converted is kept and build opens the starter", () => {
@@ -59,13 +85,32 @@ describe("the working pipeline", () => {
     expect(sameGraph(readStoredGraph(R)!, g)).toBe(true)
   })
 
-  it("a stored pipeline naming a strategy this server lacks does not open, and is not removed", () => {
-    const c = graphToConfig(sampleGraph(R, DOC))
-    if (!c.ok) throw new Error(c.problem)
-    const p = { ...c.pipeline, config: { ...c.pipeline.config, index: { ...c.pipeline.config.index, chunk: { use: "no_such_chunker" } } } }
+  it("a stored pipeline naming a strategy this server lacks does not open, and is kept before anything replaces it", () => {
+    const p = withChunker("no_such_chunker")
     storeWorking(p)
+    const raw = window.localStorage.getItem(WORKING_KEY)
     expect(readStoredGraph(R)).toBeNull()
-    expect(readWorking()).toEqual(p)
+    expect(keptUndrawn()).toEqual({ problem: "One of its steps uses no_such_chunker, which this server does not have.", seen: false })
+    // The Starter replaces it, and the kept copy still holds it as it was.
+    storeGraph(sampleGraph(R, DOC))
+    expect(readStoredGraph(R)).not.toBeNull()
+    const kept = JSON.parse(window.localStorage.getItem(UNDRAWN_KEY)!) as { json: string }[]
+    expect(kept.map((k) => k.json)).toEqual([raw])
+    markKeptSeen()
+    expect(keptUndrawn()?.seen).toBe(true)
+  })
+
+  it("a second pipeline that cannot be drawn is kept beside the first, and the same one is kept once", () => {
+    storeWorking(withChunker("no_such_chunker"))
+    const first = window.localStorage.getItem(WORKING_KEY)
+    readStoredGraph(R)
+    readStoredGraph(R)
+    storeWorking(withChunker("other_chunker"))
+    const second = window.localStorage.getItem(WORKING_KEY)
+    readStoredGraph(R)
+    const kept = JSON.parse(window.localStorage.getItem(UNDRAWN_KEY)!) as { json: string; seen: boolean }[]
+    expect(kept.map((k) => k.json)).toEqual([first, second])
+    expect(keptUndrawn()).toEqual({ problem: "One of its steps uses other_chunker, which this server does not have.", seen: false })
   })
 
   it("a graph that is not a column is not stored", () => {

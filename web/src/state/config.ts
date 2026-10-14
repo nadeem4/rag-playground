@@ -97,7 +97,7 @@ export function graphToConfig(graph: unknown): Converted {
   }
   const order = columnOrder(g)
   const odd = order.find((n) => !COLUMN_STAGES.includes(n.stage))
-  if (odd) return no(`It has a ${odd.stage} step, and a pipeline in this version has no place for one.`)
+  if (odd) return no(`It has ${/^[aeiou]/i.test(odd.stage) ? "an" : "a"} ${odd.stage} step, and a pipeline in this version has no place for one.`)
   for (const stage of ONE_EACH) {
     const count = order.filter((n) => n.stage === stage).length
     if (count > 1) return no(`It has ${count} ${STAGE_VERB[stage] ?? stage} steps, and a pipeline has one.`)
@@ -191,6 +191,11 @@ export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph 
 
 /** Every step names a strategy this server has. A pipeline from another server is listed but not opened (M7). */
 export function knownSteps(config: PipelineConfig, registry: Registry): boolean {
+  return unknownStrategy(config, registry) === null
+}
+
+/** The first strategy a step uses that this server does not have, or null when it has them all. */
+export function unknownStrategy(config: PipelineConfig, registry: Registry): string | null {
   const { index, retrieve, answer } = config
   const steps: [Stage, Step | undefined][] = [
     ["parse", index.parse],
@@ -202,7 +207,8 @@ export function knownSteps(config: PipelineConfig, registry: Registry): boolean 
     ...(retrieve?.rerank ?? []).map((s): [Stage, Step] => ["rerank", s]),
     ["use_case", answer],
   ]
-  return steps.every(([stage, s]) => !s || Boolean(registry[stage]?.[s.use]))
+  const odd = steps.find(([stage, s]) => s && !registry[stage]?.[s.use])
+  return odd?.[1]?.use ?? null
 }
 
 const sorted = (v: unknown): unknown =>

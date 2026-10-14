@@ -1,27 +1,35 @@
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import { keptOldPipeline, markKeptSeen } from "@/state/working"
+import { keptOldPipeline, keptUndrawn, markKeptSeen } from "@/state/working"
 
 /**
  * One line on Build, once: the pipeline this browser had open was made by an
- * older version and could not be converted. It is kept, never deleted.
+ * older version and could not be converted, or uses a strategy this server
+ * does not have. It is kept, never deleted.
  */
+function unseen(): { problem: string; older: boolean } | null {
+  const undrawn = keptUndrawn()
+  if (undrawn && !undrawn.seen) return { problem: undrawn.problem, older: false }
+  const old = keptOldPipeline()
+  return old && !old.seen ? { problem: old.problem, older: true } : null
+}
+
 export function KeptNotice({ onDismiss }: { onDismiss?: () => void }) {
-  const [kept, setKept] = useState(() => keptOldPipeline())
-  if (!kept || kept.seen) return null
+  const [kept, setKept] = useState(unseen)
+  if (!kept) return null
   return (
     <p role="status" className="flex flex-wrap items-center gap-2 border-b border-hairline px-3 py-2 text-sm text-fg-muted">
       <span>
-        The pipeline you had open was made by an older version and could not be opened here. {kept.problem} It is still kept in this browser, and
-        Build opened on the Starter.
+        {kept.older ? "The pipeline you had open was made by an older version and could not be opened here." : "The pipeline you had open could not be opened on this server."}{" "}
+        {kept.problem} It is still kept in this browser, and Build opened on the Starter.
       </span>
       <Button
         variant="outline"
         size="sm"
         onClick={() => {
           markKeptSeen()
-          setKept(keptOldPipeline())
+          setKept(unseen())
           onDismiss?.()
         }}
       >

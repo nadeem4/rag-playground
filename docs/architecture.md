@@ -355,7 +355,10 @@ column from the stored config and store a column as a config. A column that is n
 is converted once. If it cannot be, the reason is written under
 `rag-playground:graph:v1:kept`, Build opens on the Starter and says why once, and the old
 graph is never tried again. The old key is never written or removed, so the old pipeline is
-kept either way. Build's per-tab results moved to `rag-playground:build-session:v2`,
+kept either way. A stored pipeline that uses a strategy this server does not have cannot be
+drawn, and every page would store a Starter in its place. Before that, it is copied as it was
+to `rag-playground:pipeline:v2:kept` with the reason, beside any kept before, and Build says
+why once. Build's per-tab results moved to `rag-playground:build-session:v2`,
 because the old ones were keyed by the old graph's card ids.
 
 Saved pipelines, share links and export files still hold a graph; they move to the config

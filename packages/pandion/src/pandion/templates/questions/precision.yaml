@@ -1,6 +1,6 @@
 template:
   name: Best precision
-  summary: Hybrid search, then the strongest cross-encoder reads each candidate with the question. It is slower, and it reads longer pieces in full. No key needed.
+  summary: Hybrid search, then the strongest cross-encoder reads each candidate with the question. It is slower, and it reads much longer pieces than the small reranker. No key needed.
   good_for: It suits single-fact questions, where the one right piece must come first and a slower search is fine.
 retrieve:
   rewrite: none                 # searches with the question as typed
@@ -11,7 +11,7 @@ retrieve:
     query_expansion: none       # adds no words to the question
   rerank:
     - use: cross_encoder        # reads the question and each piece together and scores the pair
-      model: BAAI/bge-reranker-v2-m3   # the strongest reranker in the catalog; slower on a CPU, but it reads long pieces whole
+      model: BAAI/bge-reranker-v2-m3   # the strongest reranker in the catalog; slower on a CPU, and it reads far more of a long piece
       top_k: 5                  # the five pieces shown
 answer:
   use: search                   # shows the pieces as they are: no model and no key

@@ -931,8 +931,8 @@ keyword index, which the hybrid search in every question template needs.
   `cross-encoder/ms-marco-MiniLM-L-6-v2` cross-encoder. Best precision uses the stronger,
   slower reranker.
 - **Best precision** runs hybrid search (30 candidates), then `BAAI/bge-reranker-v2-m3`,
-  the strongest cross-encoder in the catalog. It is slower on a CPU, and it reads long
-  pieces in full. MiniLM reads only about the first 512 tokens of the question and a
+  the strongest cross-encoder in the catalog. It is slower on a CPU, and it reads far
+  more of a long piece. MiniLM reads only about the first 512 tokens of the question and a
   piece together, so with Balanced the end of a long piece, such as the lower rows of a
   big table, does not count.
 - **Vague questions** asks Claude Haiku 4.5 to restate the question in the document's

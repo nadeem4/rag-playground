@@ -13,7 +13,7 @@ retrieve:
     query_expansion: none       # PRF would add words the user did not type, which dilutes an exact name or code
   rerank:
     - use: cross_encoder        # reads the question and each piece together, so it sees the term in context
-      model: cross-encoder/ms-marco-MiniLM-L-6-v2   # small and fast; the keyword weight already brings the exact term up
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2   # small and fast; the keyword weight helps the exact term reach the 30 candidates, then this reorders them
       top_k: 5                  # the five pieces shown
 answer:
   use: search                   # shows the pieces as they are: no model and no key

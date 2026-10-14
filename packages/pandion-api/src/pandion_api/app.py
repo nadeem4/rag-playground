@@ -8,13 +8,13 @@ from fastapi import FastAPI
 
 from pandion_api.documents import DocumentStore
 from pandion_api.policy import Policy
-from pandion_api.routes import documents, health, strategies
+from pandion_api.routes import ask, documents, health, strategies
 from pandion_api.routes import runs as run_routes
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
 
 #: Every router, in the order docs/pandion-api.md lists them.
-ROUTERS = (health.router, strategies.router, documents.router, run_routes.router)
+ROUTERS = (health.router, strategies.router, documents.router, run_routes.router, ask.router)
 
 
 def create_app(settings: ApiSettings, policy: Policy | None = None) -> FastAPI:

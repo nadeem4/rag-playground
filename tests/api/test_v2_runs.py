@@ -178,3 +178,27 @@ def test_the_playgrounds_scrub_takes_out_server_paths_but_not_web_addresses():
     for kept in ("x.py", "y.py", "abc.pdf", "z.txt", "https://api.example.com/v1/messages", "line 1"):
         assert kept in out
 
+
+
+# --- questions (Task 10) --------------------------------------------------------------
+
+
+def test_on_the_demo_a_question_with_a_custom_endpoint_is_refused(client, monkeypatch):
+    demo_on(monkeypatch)
+    sample = client.post("/api/sources/sample").json()
+    for config in CUSTOM_CONFIGS.values():
+        body = {"config": config, "documents": [sample["sha"]], "question": "What is chunking?"}
+        r = client.post("/api/v2/ask", json=body)
+        assert r.status_code == 403 and r.json()["detail"] == DEMO_NO_CUSTOM
+
+
+def test_on_the_demo_a_question_is_its_visitors_own(client, monkeypatch):
+    demo_on(monkeypatch)
+    as_visitor(client, "ann-" + "a" * 20)
+    sample = client.post("/api/sources/sample").json()
+    body = {"config": PIPELINE, "documents": [sample["sha"]], "question": "What is chunking?", "answer": False}
+    run_id = client.post("/api/v2/ask", json=body).json()["run_id"]
+    read_sse(client, run_id, prefix="/api/v2")
+    assert client.get(f"/api/v2/runs/{run_id}").json()["kind"] == "retrieve"
+    as_visitor(client, "bob-" + "b" * 20)
+    assert client.get(f"/api/v2/runs/{run_id}").status_code == 404

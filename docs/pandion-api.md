@@ -70,6 +70,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /runs/{run_id}` | the run's status, its whole event log, and once it ended its `result` |
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
+| `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question, and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
 
 A document this caller may not read is answered exactly like one that does not exist: 404,
 with the same fixed sentence, which never repeats the id the request sent. A page number past the last page is 404, and a `scale` or `text`
@@ -87,6 +88,13 @@ with the step's `document` and `step`, `node_failed`, `run_finished`), plus `que
 `unqueued` when the Policy limits how many runs work at once, and a last `stream_end`. An
 index run's `result` gives, per document and step, its `status` (`executed`, `cached`,
 `failed` or `skipped`), its `strategy` and its `result_id`.
+
+A question's `result` gives the index it read, each retrieval step (`rewrite`, `search`, and
+`rerank`, a list) with its `result_id`, the `hits`, and when answered the `answer` step, its
+`text` and its `output`. The documents are indexed first, through the cache, when they were
+not yet. Its kind is `ask`, or `retrieve` when `answer` is false. A pipeline with no
+`retrieve` section, or with no `answer` section when `answer` is true, is a 422 before
+anything runs.
 
 A document in a run is named by the filename it was uploaded under, so the same bytes
 under the same name give the same result ids however often they are uploaded. Two

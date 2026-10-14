@@ -49,4 +49,36 @@ describe("CopyYaml", () => {
     expect(await screen.findByText(/could not copy/i)).toBeTruthy()
     expect(screen.queryByText(/pandion index pipeline.yaml/)).toBeNull()
   })
+
+  it("says a site rule's sentence when the server refuses", async () => {
+    const writeText = vi.fn(async (_s: string) => undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "The demo does not allow this." }), { status: 403 })))
+    render(<CopyYaml graph={sampleGraph(R, DOC)} />)
+    fireEvent.click(screen.getByRole("button", { name: "Copy as YAML" }))
+    expect(await screen.findByText("The demo does not allow this.")).toBeTruthy()
+    expect(writeText).not.toHaveBeenCalled()
+  })
+
+  it("says it could not check on a server error, with no raw text", async () => {
+    const writeText = vi.fn(async (_s: string) => undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })))
+    render(<CopyYaml graph={sampleGraph(R, DOC)} />)
+    fireEvent.click(screen.getByRole("button", { name: "Copy as YAML" }))
+    expect(await screen.findByText("Could not check the pipeline just now. Nothing was copied.")).toBeTruthy()
+    expect(screen.queryByText(/boom|500/)).toBeNull()
+    expect(writeText).not.toHaveBeenCalled()
+  })
+
+  it("says it could not check when the network fails", async () => {
+    const writeText = vi.fn(async (_s: string) => undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))))
+    render(<CopyYaml graph={sampleGraph(R, DOC)} />)
+    fireEvent.click(screen.getByRole("button", { name: "Copy as YAML" }))
+    expect(await screen.findByText("Could not check the pipeline just now. Nothing was copied.")).toBeTruthy()
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull()
+    expect(writeText).not.toHaveBeenCalled()
+  })
 })

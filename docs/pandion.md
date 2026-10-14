@@ -1151,6 +1151,14 @@ The same checks apply to `pandion.parse`, `pandion.clean`, `pandion.chunk` and
 query step" instead of the place in the file. A
 pipeline file problem is a `pandion.ConfigError`, a `ValueError`.
 
+Every problem in a pipeline file or dict is a `ConfigError` whose message is one line: an
+unknown strategy names the strategies there are, and a value a setting does not accept
+names the step, the strategy and the setting, for example
+`index.chunk (recursive_character): chunk_size: Input should be a valid integer.` An app can
+show the message as it is. Calling one stage with a bad value (`pandion.chunk(doc,
+use="recursive_character", chunk_size="big")`) raises a `ValueError` with the same kind of
+sentence.
+
 A missing extra says which one to install:
 
 ```text

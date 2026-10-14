@@ -15,6 +15,8 @@ import types
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from pandion.payloads import ChunkSet, ParsedDoc, Query
 from pandion.plugins import discover
 from pandion.ports import RunContext, Stage
@@ -188,4 +190,15 @@ def _strategy(stage: Stage, use: str, settings: dict[str, Any], *, where: str):
         raise ValueError(
             f"{where} ({use}) has no setting {names}. Its settings are: {known}."
         )
-    return cls, cls.config_model(**settings)
+    try:
+        return cls, cls.config_model(**settings)
+    except ValidationError as exc:
+        raise ValueError(f"{where} ({use}): {_problems(exc)}.") from None
+
+
+def _problems(exc: ValidationError) -> str:
+    """Pydantic's errors on one line: each setting, and what is wrong with it."""
+    return "; ".join(
+        f"{'.'.join(map(str, e['loc'])) or 'settings'}: {e['msg'].rstrip('.')}"
+        for e in exc.errors()
+    )

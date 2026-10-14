@@ -143,7 +143,10 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
             "The pipeline file has no path: the folder where Pandion keeps the "
             "sources, the artifacts and the embedding cache."
         )
-    models = dict(data.get("models") or {})
+    models = data.get("models") or {}
+    if not isinstance(models, dict):
+        raise ConfigError("models must be a mapping of settings.")
+    models = dict(models)
     if models.get("cache_dir"):
         models["cache_dir"] = _resolve(models["cache_dir"], base)
     try:
@@ -464,7 +467,8 @@ def _step(stage: Stage, step: Any, where: str) -> tuple[str, dict[str, Any]]:
     try:
         _strategy(stage, use, settings, where=where)
     except (UnknownTransformError, ValueError) as exc:
-        raise ConfigError(str(exc)) from None
+        # A KeyError's str() is its message in quotes; args[0] is the sentence.
+        raise ConfigError(exc.args[0] if isinstance(exc, KeyError) else str(exc)) from None
     return use, settings
 
 

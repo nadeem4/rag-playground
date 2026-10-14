@@ -963,9 +963,10 @@ RAG Playground serves the same list at `GET /api/templates`.
 [`examples/pandion/run_template.py`](../examples/pandion/run_template.py) runs a pair with
 Pandion, and `examples/pandion-api/run_pipeline.py --template` runs one through
 pandion-api. `tests/integration/test_template_parity.py` checks that every pair is valid
-for Pandion and pandion-api, and its `models` test runs each pair that needs no key
-through both and checks they make the same pieces, the same hits in the same order and
-the same result ids.
+for Pandion and pandion-api. Its `models` test runs pairs that need no key through both
+and checks they make the same pieces, the same hits in the same order and the same result
+ids: three representative pairs on every Release check, and every such pair in the weekly
+Template parity workflow (see CONTRIBUTING.md).
 
 The playground's Starter (`samples/starter.yaml`) is Docling, `dedupe_blocks`, the
 `recursive_character` chunker and hybrid search with no reranker. It is closest to

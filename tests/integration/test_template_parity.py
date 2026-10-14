@@ -3,17 +3,20 @@
 The fast tests check that every document and question pair composes, that
 Pandion accepts it, and that pandion-api's validate route accepts it.
 
-The `models` test runs each pair that needs no key for real: it indexes the
+The `models` test runs pairs that need no key for real: it indexes the
 document template's sample and asks the sample's first question, once with
 Pandion directly and once through pandion-api (in-process, TestClient), each
 in its own folder. Both must make the same pieces, the same hits in the same
 order, and the same result ids. It downloads models on first use, so it runs
-in Release checks (`pytest -m models`), not in normal CI.
+in Release checks (`pytest -m models`), not in normal CI. Release checks run
+three representative pairs; with TEMPLATE_PARITY=all it runs every pair that
+needs no key, as the weekly Template parity workflow does.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from itertools import product
 from pathlib import Path
 
@@ -32,6 +35,14 @@ SAMPLES = {t["id"]: t["sample"] for t in LISTED["documents"]}
 KEYED = {t["id"] for t in LISTED["questions"] if t["needs_key"]}
 PAIRS = list(product(sorted(SAMPLES), sorted(t["id"] for t in LISTED["questions"])))
 NO_KEY_PAIRS = [(d, q) for d, q in PAIRS if q not in KEYED]
+#: One pair per kind of parse, and each no-key question template once.
+REPRESENTATIVE = [("text", "balanced"), ("tables", "precision"), ("scanned", "exact")]
+
+
+def parity_pairs(env) -> list[tuple[str, str]]:
+    """The pairs the full parity test runs: every no-key pair when
+    TEMPLATE_PARITY is "all", else the three representative ones."""
+    return NO_KEY_PAIRS if env.get("TEMPLATE_PARITY") == "all" else REPRESENTATIVE
 
 
 def _api(folder: Path) -> TestClient:
@@ -116,7 +127,7 @@ def _through_api(config: dict, pdf: Path, question: str, folder: Path) -> dict:
 
 
 @pytest.mark.models
-@pytest.mark.parametrize(("document", "question"), NO_KEY_PAIRS)
+@pytest.mark.parametrize(("document", "question"), parity_pairs(os.environ))
 def test_a_template_gives_the_same_result_through_pandion_and_pandion_api(document, question, tmp_path):
     pdf, asked = _sample(document)
     direct = _with_pandion(compose_template(document, question, path=str(tmp_path / "direct")), pdf, asked)
@@ -128,3 +139,12 @@ def test_a_template_gives_the_same_result_through_pandion_and_pandion_api(docume
     assert served["document_ids"] == direct["document_ids"]
     assert served["index_id"] == direct["index_id"]
     assert served["ask_ids"] == direct["ask_ids"]
+
+
+def test_release_checks_run_three_representative_pairs():
+    assert parity_pairs({}) == [("text", "balanced"), ("tables", "precision"), ("scanned", "exact")]
+    assert set(parity_pairs({})) <= set(NO_KEY_PAIRS)
+
+
+def test_template_parity_all_runs_every_pair_that_needs_no_key():
+    assert parity_pairs({"TEMPLATE_PARITY": "all"}) == NO_KEY_PAIRS

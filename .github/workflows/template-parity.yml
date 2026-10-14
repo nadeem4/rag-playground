@@ -1,0 +1,45 @@
+name: Template parity
+
+# Every pipeline template pair that needs no key, run through Pandion directly
+# and through pandion-api, which must give the same pieces, hits and result ids
+# (tests/integration/test_template_parity.py). Release checks run only three
+# representative pairs; this runs them all, every Monday and by hand:
+#   gh workflow run "Template parity" -f ref=feat/some-branch
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to check"
+        required: true
+        default: main
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # The same model cache as Release checks.
+      HF_HOME: ${{ github.workspace }}/.hf-home
+      TEMPLATE_PARITY: all
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || 'main' }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Cache the models
+        uses: actions/cache@v4
+        with:
+          path: .hf-home
+          key: hf-models-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: hf-models-${{ runner.os }}-
+      - name: Install
+        run: |
+          uv sync --frozen --extra dev
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+      - name: Template parity, every pair that needs no key
+        run: uv run --frozen pytest -m models tests/integration/test_template_parity.py -q

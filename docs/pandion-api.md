@@ -139,6 +139,13 @@ A model's key comes from the request's header for its provider (`X-Anthropic-Api
 environment variable, as the Policy's `key` decides. It is never stored or logged, and it
 is scrubbed from every event and result.
 
+A finished run (finished, cancelled or failed) is kept in memory for one hour after it
+ended, with its events and its result, and the server keeps at most the 200 most recent
+finished runs: past that the oldest finished run goes first. A run that works or waits
+its turn is never dropped. A dropped run's state, events and cancel are a 404, the same
+as a run that does not exist. A step's results stay in the cache, readable by id
+(`GET /results/{id}`), after its run is dropped.
+
 A run belongs to whoever the Policy's `run_owner` names when it starts. To anyone else
 its state, its events and its cancel are a 404, the same as a run that does not exist.
 The default Policy names no one, so anyone with the `run_id` may follow it. Every error a
@@ -162,12 +169,12 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `keeps_question_sets(request)` | `True` | `POST /documents/{id}/questions`: False checks the set and keeps nothing |
 | `max_active_runs()` | None (no limit) | when a run starts: past the limit it waits its turn and logs `queued` |
 | `strategies(catalog, request)` | the catalog as it is | `GET /strategies`; return a changed copy to hide a strategy or a choice |
-| `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models |
+| `check_run(config, request)` | allows | before any pipeline runs or validates; `config` is the file's shape with the server's path and models, and holds each value as the request sent it (see below) |
 | `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
 | `check_clear_cache(request)` | allows | `DELETE /cache` |
 | `max_variants(request)` | 10 | `POST /comparisons`: more variants than this is a 422 |
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
-| `scrub(text)` | the text as it is | on every problem sentence and every 404 sentence before it leaves the server (`POST /explain`, `POST /pipelines/validate`), and on every error a run shows |
+| `scrub(text)` | the text as it is | on a `ConfigError`'s problem sentence, on the problem and 404 sentences of `POST /explain`, and on every error a run shows (see [Errors](#errors)) |
 | `not_readable` (attribute) | "This document is not available." | the 403 a run gets for a document `can_read` refuses |
 | `not_keeping_note` (attribute) | "This server checked your questions but did not keep them." | the report's note when a set was not kept |
 | `server_key(provider)` | the environment variable, else `(None, "none")` | a run's keys, and `GET /settings/models` |
@@ -203,10 +210,19 @@ set to call a model at an address the request chose, and
 `changed_read_only_settings(config)` names every setting marked read-only (the prompts,
 the cross-encoder's revision) that is not at its default.
 
+The `config` a Policy is given holds each value as the request sent it, not yet
+validated. Pandion's settings are pydantic models, which later make the string `"16001"`
+and the float `16001.0` the int `16001`. So a site that compares numbers must coerce them
+first, for example with `pydantic.TypeAdapter(int).validate_python(value)`, or a string
+or a float passes a cap that an int would not. A value that does not coerce can be left
+alone: Pandion's own check refuses it as a problem (a 422, or `ok: false` from
+`POST /pipelines/validate`).
+
 The default Policy allows every setting. RAG Playground's Policy refuses with a 403 a
 custom model endpoint on its hosted demo, a changed prompt or model revision in every
 mode, `max_tokens` above 16,000 on a step that calls a model, and a text budget (a
-setting named `..._budget_chars`) above four times its default. Its old `/api/runs` and
+setting named `..._budget_chars`) above four times its default. A cap reads the value as
+pydantic will, so `"999999"` and `999999.0` are refused like `999999`. Its old `/api/runs` and
 `/api/sweeps` routes refuse the same caps on each graph node with the same function
 (`api.policy.step_over_limit`).
 
@@ -279,6 +295,17 @@ Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left 
 - **Two embedding caches.** The old routes cache embeddings in `artifacts/.embcache` (or
   `RAG_PLAYGROUND_EMBED_CACHE`), `/api/v2` in `embeddings/`. Deleting the old routes
   deletes the variable and the old cache.
+- **The allow-list cannot just be deleted.** `ENGINE_IMPORTS` in
+  `tests/integration/test_package_boundary.py` lists engine names the app still imports.
+  Deleting the old routes is not enough to empty it: these playground parts use engine
+  internals too, and each needs porting to Pandion's public API or removing:
+  `api/routes/learn.py` (the lessons), `api/warmup.py` (the model warm-up), `api/deps.py`
+  (the store, the sources and the embedding cache), `POST /api/sources/sample`, and the
+  recording scripts `scripts/record_*.py`.
+- **Runs do not hold the pdfium lock.** A page request and a question-set check hold
+  `pandion_api.pages.PDFIUM_LOCK`, but a run's pdfium parse step does not. pdfium is not
+  thread-safe, so a run that parses with pdfium can still meet a page request on another
+  thread. Part 5 decides whether Pandion's pdfium step takes a lock of its own.
 - **Compare's per-card `through`.** `POST /comparisons` now takes `through`, so Compare's
   Build view can stop each variant after one card without embedding every variant, as the
   old `/api/sweeps` does. Part 5 checks it covers what Build needs.
@@ -291,5 +318,10 @@ Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left 
   mapping is refused the same way, before Pandion reads it.
 - A site rule's refusal is the status and sentence the Policy raised, usually 403.
 - An unknown stage or strategy in `POST /explain` is a 404 naming the ones there are.
-- Every problem and 404 sentence passes through `Policy.scrub` before it leaves the
-  server. A `ConfigError` names settings and strategies, never a server folder.
+- `Policy.scrub` runs over the sentences that could carry a server path: a `ConfigError`'s
+  problem (on every route that reads a pipeline, and on `POST /pipelines/validate`), the
+  problem and the 404 of `POST /explain`, and every error a run shows (a failed step's
+  `error` and a crash's `run_error`, after the keys are taken out).
+- Every other sentence is returned as Pandion or the route wrote it, unscrubbed: Pandion's
+  own refusals (such as a `through` that names no step), the question-set 400s and 413,
+  and the route's fixed sentences. None of them holds a server path.

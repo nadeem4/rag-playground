@@ -283,9 +283,13 @@ says why.
 Part 5 moves the web onto `/api/v2`: it keeps a pipeline as the pipeline file's shape
 instead of a graph, runs one card with `POST /api/v2/runs` and `through`, asks with
 `POST /api/v2/ask`, and evaluates and compares with `POST /api/v2/evaluations` and
-`/comparisons`. Then the old routes and their tests go, and the allow-list in
-`tests/integration/test_package_boundary.py` with them. What part 5 must still decide is
-listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
+`/comparisons`. Then the old routes and their tests go. The allow-list in
+`tests/integration/test_package_boundary.py` cannot simply go with them: other playground
+parts still use engine internals and need porting to the public API or removing first.
+They are `api/routes/learn.py`, `api/warmup.py`, `api/deps.py`, `POST /api/sources/sample`
+and the recording scripts `scripts/record_*.py`. Runs also do not hold the pdfium lock
+today: a run's pdfium parse step can meet a page request on another thread. What part 5
+must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-decide).
 
 - **Registry.** The app reads `GET /api/registry` to build the step cards and their forms.
 - **Runs.** It posts the pipeline graph to `/api/runs` and opens an `EventSource` on the

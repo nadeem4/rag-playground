@@ -274,7 +274,9 @@ def evaluate(
             miss = None
             if not score["hit"]:
                 if index is None:
-                    index = p.index._index(resolved if resolved is not None else p.index.indexed())
+                    index = p.index._index(
+                        resolved if resolved is not None else p.index.indexed(), remember=False
+                    )
                 miss = _trace(index, retrieval, q, top_k)
             result = QuestionResult(
                 **common, found=score["hit"], rank=score["rank"],

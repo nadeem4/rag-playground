@@ -21,11 +21,12 @@ The SDK it needs is an extra: `pandion[anthropic]` for Claude models, and
 
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping
+from typing import Any, ClassVar, Literal, Mapping
 
 from pydantic import Field
 
 from pandion.artifacts import ArtifactType
+from pandion.ids import AddedSettings
 from pandion.payloads import ParsedDoc, Query
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -60,6 +61,9 @@ _ASK = {
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
 _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
+#: A prompt is shown read-only in the playground's forms (owner, 2026-10-13).
+_READ_ONLY = {"readOnly": True}
+
 
 def system_prompt(style: str) -> str:
     return (
@@ -70,7 +74,11 @@ def system_prompt(style: str) -> str:
     )
 
 
-class LlmRewriteConfig(TextQueryConfig):
+class LlmRewriteConfig(TextQueryConfig, AddedSettings):
+    added: ClassVar[tuple[str, ...]] = (
+        "prompt", "doc_budget_chars", "max_rewrite_chars", "max_tokens"
+    )
+
     text: str = Field(
         title="Question",
         default="",
@@ -113,6 +121,37 @@ class LlmRewriteConfig(TextQueryConfig):
             "'document words' restates the question in the document's words; "
             "'keywords' turns it into six to ten search words."
         ),
+    )
+    #: Added after version 2's results were stored; see pandion.ids.AddedSettings.
+    prompt: str = Field(
+        default="",
+        title="Prompt",
+        description=(
+            "The instructions the model is given. Empty, or spaces only, uses "
+            "the built-in ones for the style."
+        ),
+        json_schema_extra=_READ_ONLY,
+    )
+    doc_budget_chars: int = Field(
+        default=DOC_BUDGET,
+        ge=0,
+        title="Document characters read",
+        description="How much of the start of the document the model reads, in characters.",
+    )
+    max_rewrite_chars: int = Field(
+        default=MAX_REWRITE,
+        ge=1,
+        title="Longest rewrite",
+        description=(
+            "A rewrite longer than this, in characters, is not used; the question "
+            "is searched as asked."
+        ),
+    )
+    max_tokens: int = Field(
+        default=MAX_TOKENS,
+        ge=1,
+        title="Most output tokens",
+        description="The most the model may write, thinking included.",
     )
 
 
@@ -161,10 +200,19 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
         )
         settings = (
             f"It asks {_model_name(config)} (model) to {how} (style is "
-            f"{config.style}), reading the first {DOC_BUDGET} characters of the "
+            f"{config.style}), reading the first {config.doc_budget_chars} characters of the "
             "parsed document when there is one. Retrieval searches with the "
             "rewrite; the original question still goes to the answer."
         )
+        if config.prompt.strip():
+            settings += " It gives the model your own prompt, not the built-in one."
+        if config.max_rewrite_chars != MAX_REWRITE:
+            settings += (
+                f" A rewrite longer than {config.max_rewrite_chars} characters is "
+                "not used."
+            )
+        if config.max_tokens != MAX_TOKENS:
+            settings += f" The model may write up to {config.max_tokens} tokens."
         tradeoff = (
             "A rewrite in the document's words lets keyword search match a "
             "question that shares no word with it, but it costs one model call "
@@ -212,18 +260,18 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
 
         completion = llm.complete(
             model,
-            system=system_prompt(config.style),
-            user=_prompt(question, inputs.get("doc")),
+            system=config.prompt.strip() or system_prompt(config.style),
+            user=_prompt(question, inputs.get("doc"), config.doc_budget_chars),
             api_key=api_key,
             base_url=config.custom_base_url.strip() if custom else None,
             model_name=llm.model_name_for(
                 model, config.custom_model, config.openrouter_model
             ),
-            max_tokens=MAX_TOKENS,
+            max_tokens=config.max_tokens,
             public_only=public_only,
         )
         reply = "" if completion.stop_reason == "refusal" else completion.text.strip()
-        if not reply or len(reply) > MAX_REWRITE or "\n" in reply:
+        if not reply or len(reply) > config.max_rewrite_chars or "\n" in reply:
             set_note(ctx, UNUSABLE_NOTE)
             return query.model_dump(mode="json")
 
@@ -234,8 +282,8 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
         return query.model_dump(mode="json")
 
 
-def _prompt(question: str, doc: Any) -> str:
+def _prompt(question: str, doc: Any, budget: int = DOC_BUDGET) -> str:
     if doc is None:
         return f"Question: {question}"
-    start = ParsedDoc.model_validate(doc).render_markdown()[0][:DOC_BUDGET]
+    start = ParsedDoc.model_validate(doc).render_markdown()[0][:budget]
     return f"The document begins:\n\n{start}\n\nQuestion: {question}"

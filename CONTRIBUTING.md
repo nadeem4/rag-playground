@@ -141,6 +141,8 @@ field would move every id of that step and rebuild every cache. Give the setting
 `pandion.ids.AddedSettings` as its base and name the field in `added`, with today's
 behaviour as its default: it is then left out of the hash while it holds that default.
 Changing that default later changes what the step does, so bump the step's `version`.
+A subclass keeps its parents' `added` names. The default must be a plain value, not a
+`default_factory`, and a name that is not a setting is refused when the class is defined.
 `packages/pandion/tests/test_recipe_hash.py` must pass unchanged.
 
 ## The samples

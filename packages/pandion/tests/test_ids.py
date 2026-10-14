@@ -1,7 +1,9 @@
+from typing import ClassVar
+
 import pytest
 
 from pandion.artifacts import ArtifactType
-from pandion.ids import canonical_json, compute_artifact_id, shard_path, short_id
+from pandion.ids import AddedSettings, canonical_json, compute_artifact_id, shard_path, short_id
 
 
 def base(**over):
@@ -102,11 +104,6 @@ def test_short_id_and_shard_path():
     assert shard_path(aid) == ("ab", "cd", aid[:16])
 
 
-from typing import ClassVar
-
-from pandion.ids import AddedSettings
-
-
 class _Before(AddedSettings):
     size: int = 1
 
@@ -129,3 +126,44 @@ def test_an_added_setting_that_was_changed_is_dumped():
 def test_an_added_setting_is_still_in_the_schema_and_readable():
     assert _After.model_json_schema()["properties"]["ratio"]["default"] == 1.5
     assert _After().ratio == 1.5
+
+
+class _Child(_After):
+    added: ClassVar[tuple[str, ...]] = ("depth",)
+    depth: int = 3
+
+
+def test_a_subclass_keeps_its_parents_added_settings_out_of_the_dump():
+    assert _Child().model_dump(mode="json") == {"size": 1}
+    assert _Child(ratio=2.0, depth=4).model_dump(mode="json") == {
+        "size": 1, "ratio": 2.0, "depth": 4,
+    }
+
+
+def test_an_added_name_that_is_not_a_setting_is_refused_when_the_class_is_defined():
+    with pytest.raises(TypeError, match=r"_Typo.*'ratoi'"):
+
+        class _Typo(AddedSettings):
+            added: ClassVar[tuple[str, ...]] = ("ratoi",)
+            ratio: float = 1.5
+
+
+def test_an_added_setting_without_a_plain_default_is_refused():
+    from pydantic import Field
+
+    with pytest.raises(TypeError, match=r"_Factory.*'tags'"):
+
+        class _Factory(AddedSettings):
+            added: ClassVar[tuple[str, ...]] = ("tags",)
+            tags: list[str] = Field(default_factory=list)
+
+    with pytest.raises(TypeError, match=r"_Required.*'size'"):
+
+        class _Required(AddedSettings):
+            added: ClassVar[tuple[str, ...]] = ("size",)
+            size: int
+
+
+def test_the_added_names_are_worked_out_once_when_the_class_is_defined():
+    assert _Child.__added_names__ == ("ratio", "depth")
+    assert _Before.__added_names__ == ()

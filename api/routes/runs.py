@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from api import demo
 from api.credentials import redact, resolve_all
+from api.routes.registry import read_only_settings
 from api.runs import RunState
 from pandion.executor import run, sweep
 from pandion.extend import Stage
@@ -34,6 +35,8 @@ from pandion.graph import Edge, Graph, GraphValidationError, Node
 from pandion.registry import Registry, UnknownTransformError
 
 router = APIRouter()
+
+PROMPTS_FIXED = "The prompts and the model revision are fixed in the playground. Set them in a pipeline file or in code."
 
 DEMO_NO_CUSTOM = (
     "custom endpoints are disabled in this hosted demo: the server would send "
@@ -104,6 +107,9 @@ def _check(
             cfg = overrides.get(nd.id, nd.config)
             if _is_custom_endpoint(nd.stage, nd.transform, cfg):
                 raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
+    for nd in graph.nodes:
+        if _changes_a_read_only_setting(registry, nd, overrides.get(nd.id, nd.config)):
+            raise HTTPException(status_code=403, detail=PROMPTS_FIXED)
     try:
         graph.validate(registry)
     except GraphValidationError as exc:
@@ -134,6 +140,23 @@ _MODEL_CALLERS = {
     (Stage.RERANK, "llm_rerank"),
     (Stage.QUERY, "llm_rewrite"),
 }
+
+
+def _changes_a_read_only_setting(registry: Registry, nd: Node, cfg: dict[str, Any]) -> bool:
+    """Whether `cfg` sets a readOnly setting (a prompt, a model revision) to anything but its default.
+
+    In every mode: the app has no control that sets a prompt, so a changed one
+    can only come from a crafted request, a share link or an imported pipeline,
+    and it would then run with another visitor's key."""
+    try:
+        model = registry.get(nd.stage, nd.transform).config_model
+    except UnknownTransformError:
+        return False  # graph.validate reports it
+    fields = model.model_fields
+    props = model.model_json_schema().get("properties", {})
+    return any(
+        key in cfg and cfg[key] != fields[key].default for key in read_only_settings(props)
+    )
 
 
 def _is_custom_endpoint(stage: Stage, transform: str, cfg: dict[str, Any]) -> bool:
@@ -238,6 +261,13 @@ async def create_sweep(
         _is_custom_endpoint(target.stage, v.transform, v.config) for v in body.variants
     ):
         raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
+    if any(
+        _changes_a_read_only_setting(
+            deps.registry, Node(target.id, target.stage, v.transform, v.config), v.config
+        )
+        for v in body.variants
+    ):
+        raise HTTPException(status_code=403, detail=PROMPTS_FIXED)
     for v in body.variants:
         try:
             deps.registry.get(target.stage, v.transform)

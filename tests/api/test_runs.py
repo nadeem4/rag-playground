@@ -393,3 +393,56 @@ def test_idle_stream_sends_heartbeat(dirs, gates, monkeypatch):
             lines = list(r.iter_lines())
         assert ": ping" in lines
         assert '"stream_end"' in lines[-2] or '"stream_end"' in lines[-1]
+
+
+# ---------------------------------------------------------------------------
+# prompts are fixed in the playground (read-only settings)
+# ---------------------------------------------------------------------------
+
+PROMPTS_FIXED = "The prompts and the model revision are fixed in the playground. Set them in a pipeline file or in code."
+
+
+def lone_node(stage: str, transform: str, config: dict) -> dict:
+    return {"nodes": [{"id": "n", "stage": stage, "transform": transform, "config": config}], "edges": []}
+
+
+def test_a_run_that_changes_a_prompt_is_refused(client):
+    r = client.post("/api/runs", json={"graph": lone_node("use_case", "chat", {"prompt": "x"})})
+    assert r.status_code == 403
+    assert r.json()["detail"] == PROMPTS_FIXED
+
+
+def test_an_override_that_changes_a_prompt_is_refused(client):
+    r = client.post(
+        "/api/runs",
+        json={"graph": lone_node("use_case", "chat", {}), "overrides": {"n": {"sentence_prompt": "x"}}},
+    )
+    assert r.status_code == 403
+
+
+def test_the_default_prompt_sent_explicitly_is_not_refused(client):
+    from pandion.plugins.answer.chat import SYSTEM_PROMPT
+
+    r = client.post("/api/runs", json={"graph": lone_node("use_case", "chat", {"prompt": SYSTEM_PROMPT})})
+    # The lone node is not a runnable graph (400), but it got past the prompt check.
+    assert r.status_code == 400, r.text
+
+
+def test_a_sweep_variant_that_changes_a_prompt_is_refused(client):
+    from pandion.plugins.rerank.llm_rerank import SYSTEM_PROMPT
+
+    r = client.post(
+        "/api/sweeps",
+        json={"graph": lone_node("rerank", "llm_rerank", {}), "node_id": "n",
+              "variants": [{"transform": "llm_rerank", "config": {"prompt": SYSTEM_PROMPT}},
+                           {"transform": "llm_rerank", "config": {"prompt": "Order them."}}]},
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == PROMPTS_FIXED
+
+
+def test_a_run_that_sets_a_cross_encoder_revision_is_refused(client):
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    r = client.post("/api/runs", json={"graph": lone_node("rerank", "cross_encoder", {"revision": revision})})
+    assert r.status_code == 403
+    assert r.json()["detail"] == PROMPTS_FIXED

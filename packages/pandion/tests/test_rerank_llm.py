@@ -7,13 +7,14 @@ records the prompt and returns whatever reply the test names.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 import pandion.plugins.rerank.llm_rerank as lr
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from pandion.plugins.rerank.llm_rerank import LlmRerank, LlmRerankConfig
+from pandion.plugins.rerank.llm_rerank import SYSTEM_PROMPT, LlmRerank, LlmRerankConfig
 from pandion import llm
 from pandion.llm import CHAT_MODELS, Completion
 
@@ -400,3 +401,35 @@ def test_the_explanation_never_names_the_server_variable():
             LlmRerankConfig(model=model, openrouter_model="m/x")
         ).settings
         assert "_API_KEY" not in settings and "key button" in settings
+
+
+def test_the_prompt_and_budgets_are_settings(reply, tmp_path):
+    fake = reply("2, 1")
+    rerank(["a" * 100, "b" * 100], tmp_path, prompt="Order them.", text_budget_chars=10, max_tokens=300)
+    call = fake.calls[0]
+    assert call["system"] == "Order them." and call["max_tokens"] == 300
+    assert "[1] " + "a" * 10 + "\n" in call["user"] and "a" * 11 not in call["user"]
+
+
+def test_the_default_prompt_and_limit_are_todays(reply, tmp_path):
+    fake = reply("1")
+    rerank(["a"], tmp_path)
+    assert fake.calls[0]["system"] == SYSTEM_PROMPT and fake.calls[0]["max_tokens"] == 16000
+
+
+def test_the_new_rerank_settings_are_left_out_of_the_id_at_their_defaults():
+    assert set(LlmRerankConfig().model_dump(mode="json")) == {
+        "model", "custom_base_url", "custom_model", "openrouter_model", "top_k",
+    }
+
+
+@pytest.mark.parametrize(
+    "key, value", [("prompt", "Order them."), ("text_budget_chars", 10), ("max_tokens", 300)]
+)
+def test_a_new_rerank_setting_moves_the_id_when_changed(key, value):
+    assert LlmRerankConfig(**{key: value}).model_dump(mode="json")[key] == value
+
+
+def test_an_empty_prompt_is_refused():
+    with pytest.raises(ValidationError):
+        LlmRerankConfig(prompt="")

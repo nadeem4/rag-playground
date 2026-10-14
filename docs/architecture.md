@@ -104,6 +104,11 @@ when `RAG_PLAYGROUND_DEMO` is `1`, read by `api.demo.public_endpoints_only()`. T
 refuse a custom endpoint on the demo with a 403 first, and the second line reads the
 switch on its own, so it holds even if the first is lifted. API keys reach a run only as
 `context_extras["credentials"]`, never in a config or a hash.
+The prompts of `llm_rewrite`, `llm_rerank` and `chat` are settings marked `readOnly` in
+their schema. `GET /api/registry` leaves them out of the forms, and the run routes
+(`POST /api/runs` and each variant of `POST /api/sweeps`) refuse with a 403 a run that sets
+one to anything but its default, in every mode. Both read the marker through
+`read_only_settings` in `api/routes/registry.py`. A pipeline file or code can set them.
 The app imports Pandion through its public API: `pandion`, the stage namespaces
 (`pandion.parse` to `pandion.answer`) and `pandion.extend`, each a name in the module's
 `__all__`. It never imports a private name (one starting with an underscore), and the

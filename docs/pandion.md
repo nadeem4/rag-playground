@@ -670,7 +670,9 @@ so results keep the names people gave their files.
   this run asked for), and `run_cancelled` has `skipped_steps`. The raw ids in
   `node_id`, `nodes`, `selected` and `skipped` are internal and may change; use the
   named fields. If the callback raises, the run stops and the exception reaches your
-  code.
+  code. The one exception is an event a strategy emits itself through `ctx.emit` inside
+  `apply`: an error the callback raises there is caught like any other step error, so
+  that step fails instead of the whole run stopping.
 - `cancel` is checked between steps: a step that is running finishes, the rest are
   reported with status `skipped`, and `report.ok` is False.
 - `credentials` are the model keys for this call, as for `p.retrieve`.

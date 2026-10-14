@@ -51,11 +51,12 @@ Opus 5 and Fable 5.1, so Sonnet 5 and Haiku 4.5 are sent without. No
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Literal, Mapping
+from typing import Any, ClassVar, Literal, Mapping
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from pandion.artifacts import ArtifactType
+from pandion.ids import AddedSettings
 from pandion.payloads import Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
@@ -95,8 +96,13 @@ LABELS = ("cited", "weak", "similarity", "none")
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
 _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
+#: A prompt is shown read-only in the playground's forms (owner, 2026-10-13).
+_READ_ONLY = {"readOnly": True}
 
-class ChatConfig(BaseModel):
+
+class ChatConfig(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("prompt", "sentence_prompt", "max_tokens")
+
     model: Literal[tuple(CHAT_MODELS)] = Field(  # type: ignore[valid-type]
         title="Model",
         description="The chat model that writes the answer. It needs a key.",
@@ -148,6 +154,30 @@ class ChatConfig(BaseModel):
         description="How many of the top pieces go to the model.",
         default=5,
         ge=1,
+    )
+    #: Added after version 3's results were stored; see pandion.ids.AddedSettings.
+    prompt: str = Field(
+        default=SYSTEM_PROMPT,
+        min_length=1,
+        title="Prompt",
+        description=(
+            "The instructions the model is given when it cites with its own "
+            "citations."
+        ),
+        json_schema_extra=_READ_ONLY,
+    )
+    sentence_prompt: str = Field(
+        default=SENTENCE_PROMPT,
+        min_length=1,
+        title="Numbered sentence prompt",
+        description="The instructions the model is given when it cites numbered sentences.",
+        json_schema_extra=_READ_ONLY,
+    )
+    max_tokens: int = Field(
+        default=MAX_TOKENS,
+        ge=1,
+        title="Most output tokens",
+        description="The most the model may write, thinking included.",
     )
 
 
@@ -287,8 +317,13 @@ class ChatUseCase(Transform[ChatConfig]):
             )
         elif model.provider == "openrouter" and not config.openrouter_model.strip():
             warning, blocking = llm.OPENROUTER_NEEDS_MODEL, True
+        settings = f"{who} It reads {pieces}. {method} {_key_words(model.provider)}"
+        if (config.prompt, config.sentence_prompt) != (SYSTEM_PROMPT, SENTENCE_PROMPT):
+            settings += " It gives the model your own prompt, not the built-in one."
+        if config.max_tokens != MAX_TOKENS:
+            settings += f" The model may write up to {config.max_tokens} tokens."
         return Explanation(
-            settings=f"{who} It reads {pieces}. {method} {_key_words(model.provider)}",
+            settings=settings,
             tradeoff=tradeoff,
             warning=warning,
             blocking=blocking,
@@ -327,8 +362,8 @@ def _native(
 
     request: dict[str, Any] = {
         "model": config.model,
-        "max_tokens": MAX_TOKENS,
-        "system": SYSTEM_PROMPT,
+        "max_tokens": config.max_tokens,
+        "system": config.prompt,
         "messages": [
             {
                 "role": "user",
@@ -462,12 +497,12 @@ def _sentence_ids(
 
     completion = llm.complete(
         model,
-        system=SENTENCE_PROMPT,
+        system=config.sentence_prompt,
         user=f"{block}\n\nQuestion: {question}",
         api_key=api_key,
         base_url=config.custom_base_url.strip() if custom else None,
         model_name=llm.model_name_for(model, config.custom_model, config.openrouter_model),
-        max_tokens=MAX_TOKENS,
+        max_tokens=config.max_tokens,
         public_only=public_only,
     )
 

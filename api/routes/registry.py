@@ -21,8 +21,9 @@ router = APIRouter()
 def get_registry(request: Request) -> dict[str, Any]:
     """The catalogue. On the demo, the custom endpoint is left out of every
     model choice, with its two fields: a run that picks it is refused with 403
-    anyway. The test-only embedder is left out too."""
-    schema = request.app.state.deps.registry.export_schema()
+    anyway. The test-only embedder is left out too. Read-only settings (the
+    prompts) are left out everywhere until the forms can show them read-only."""
+    schema = _without_read_only(request.app.state.deps.registry.export_schema())
     return _without_test_options(_without_custom_models(schema)) if demo.enabled() else schema
 
 
@@ -59,6 +60,26 @@ def _without_custom_models(schema: dict[str, Any]) -> dict[str, Any]:
             field["enum"] = [m for m in field.get("enum", []) if m not in custom]
             for key in ("x-labels", "x-providers"):
                 field[key] = {m: v for m, v in field[key].items() if m not in custom}
+    return out
+
+
+def read_only_settings(properties: dict[str, Any]) -> list[str]:
+    """The settings a config schema's `properties` mark `readOnly` (the prompts).
+
+    The registry leaves them out of the forms and the run routes refuse a
+    changed one, both through this function, so the two cannot drift."""
+    return [key for key, prop in properties.items() if prop.get("readOnly")]
+
+
+def _without_read_only(schema: dict[str, Any]) -> dict[str, Any]:
+    """A copy without the settings marked readOnly (the prompts): the forms
+    cannot show a setting read-only yet, and a visitor must not edit them."""
+    out = copy.deepcopy(schema)
+    for transforms in out.values():
+        for info in transforms.values():
+            props = info["config_schema"].get("properties", {})
+            for key in read_only_settings(props):
+                del props[key]
     return out
 
 

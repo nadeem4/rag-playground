@@ -26,11 +26,12 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any, Literal, Mapping
+from typing import Any, ClassVar, Literal, Mapping
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from pandion.artifacts import ArtifactType
+from pandion.ids import AddedSettings
 from pandion.payloads import Hit, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -54,6 +55,9 @@ SYSTEM_PROMPT = (
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
 _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
 
+#: A prompt is shown read-only in the playground's forms (owner, 2026-10-13).
+_READ_ONLY = {"readOnly": True}
+
 
 def _key_words(provider: str) -> str:
     """How this step says it needs a key. It never names the server variable:
@@ -67,7 +71,9 @@ def _key_words(provider: str) -> str:
     return llm.key_sentence(provider, public_only=True)
 
 
-class LlmRerankConfig(BaseModel):
+class LlmRerankConfig(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("prompt", "text_budget_chars", "max_tokens")
+
     model: Literal[tuple(CHAT_MODELS)] = Field(  # type: ignore[valid-type]
         title="Model",
         description=(
@@ -100,6 +106,26 @@ class LlmRerankConfig(BaseModel):
         default=5,
         title="Pieces kept",
         description="How many pieces the reranker keeps.",
+    )
+    #: Added after version 3's results were stored; see pandion.ids.AddedSettings.
+    prompt: str = Field(
+        default=SYSTEM_PROMPT,
+        min_length=1,
+        title="Prompt",
+        description="The instructions the model is given.",
+        json_schema_extra=_READ_ONLY,
+    )
+    text_budget_chars: int = Field(
+        default=TEXT_BUDGET,
+        ge=1,
+        title="Characters read per piece",
+        description="How much of each candidate piece the model reads, in characters.",
+    )
+    max_tokens: int = Field(
+        default=MAX_TOKENS,
+        ge=1,
+        title="Most output tokens",
+        description="The most the model may write, thinking included.",
     )
 
 
@@ -146,11 +172,15 @@ class LlmRerank(Transform[LlmRerankConfig]):
         settings = (
             f"It asks {_model_name(config)} to put the candidates from the "
             "retriever (20 by default) in order of relevance, reading the first "
-            f"{TEXT_BUDGET} characters of each, and keeps the {config.top_k} "
+            f"{config.text_budget_chars} characters of each, and keeps the {config.top_k} "
             f"best. It judges each piece against the question as you typed it, "
             "even when the question was rewritten for retrieval. "
             f"{_key_words(model.provider)}"
         )
+        if config.prompt != SYSTEM_PROMPT:
+            settings += " It gives the model your own prompt, not the built-in one."
+        if config.max_tokens != MAX_TOKENS:
+            settings += f" The model may write up to {config.max_tokens} tokens."
         tradeoff = (
             "A model can judge relevance well, but it costs one model call per "
             "question and takes seconds. Its order can change between runs, "
@@ -204,14 +234,14 @@ class LlmRerank(Transform[LlmRerankConfig]):
         started = time.perf_counter()
         completion = llm.complete(
             model,
-            system=SYSTEM_PROMPT,
-            user=_prompt(question, hits),
+            system=config.prompt,
+            user=_prompt(question, hits, config.text_budget_chars),
             api_key=api_key,
             base_url=config.custom_base_url.strip() if custom else None,
             model_name=llm.model_name_for(
                 model, config.custom_model, config.openrouter_model
             ),
-            max_tokens=MAX_TOKENS,
+            max_tokens=config.max_tokens,
             public_only=public_only,
         )
         elapsed = time.perf_counter() - started
@@ -239,9 +269,9 @@ class LlmRerank(Transform[LlmRerankConfig]):
         return result.model_dump(mode="json")
 
 
-def _prompt(question: str, hits: list[Hit]) -> str:
+def _prompt(question: str, hits: list[Hit], budget: int = TEXT_BUDGET) -> str:
     candidates = "\n\n".join(
-        f"[{n}] {hit.chunk.text[:TEXT_BUDGET]}" for n, hit in enumerate(hits, 1)
+        f"[{n}] {hit.chunk.text[:budget]}" for n, hit in enumerate(hits, 1)
     )
     return (
         f"Question: {question}\n\nPassages:\n\n{candidates}\n\n"

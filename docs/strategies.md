@@ -250,6 +250,29 @@ question.
 - `model`: the same choices as the chat answer. Claude Haiku 4.5 by default.
 - `style`: `document words` restates the question in the document's words; `keywords`
   turns it into six to ten search words.
+- `prompt` (empty): the instructions the model is given. Empty, or spaces only, uses the
+  built-in ones for the style (below). Read-only in the playground; set it in a pipeline
+  file or in code.
+- `doc_budget_chars` (1500): how much of the start of the document the model reads.
+- `max_rewrite_chars` (300): a longer rewrite is not used, and the question is searched as
+  asked.
+- `max_tokens` (16000): the most the model may write, thinking included.
+
+The built-in prompt for `document words`:
+
+> You rewrite a question for a search over one document. Restate the question in the
+> words the document would use, so a keyword search finds the passage that answers it.
+> Prefer the document's section and date words (such as Experience, Present, years) over
+> general words. Never use a person's name. Reply with one line only. Do not answer the
+> question.
+
+The built-in prompt for `keywords`:
+
+> You rewrite a question for a search over one document. Turn the question into six to
+> ten search words that the passage answering it would contain, separated by spaces.
+> Prefer the document's section and date words (such as Experience, Present, years) over
+> general words. Never use a person's name. Reply with one line only. Do not answer the
+> question.
 
 **Use it** when the question and the document use different words for the same thing.
 
@@ -296,7 +319,9 @@ the small pool of candidates the search found.
   `BAAI/bge-reranker-v2-m3` is strongest and slow on a CPU.
 - `revision` (empty): the model's commit on Hugging Face. Empty uses the commit Pandion
   pins for each model, its main branch on 2026-10-13, so scores stay the same when a model
-  is updated.
+  is updated. Any other value must be a full commit id, 40 lowercase hex characters; a
+  branch name, a short id or a pull request ref is refused. Set it in a pipeline file or
+  in code. It is fixed in the playground, which hides it and refuses a run that sets it.
 
 **Use it** for single-fact questions. It needs no key.
 
@@ -320,6 +345,15 @@ order of relevance. It reads the first 600 characters of each piece. It needs an
 makes one model call per question, and its order can change between runs.
 
 - `model`: the same choices as the chat answer. Claude Haiku 4.5 by default.
+- `prompt`: the instructions, by default:
+
+  > You rank passages by how well they answer a question. Answer with the passage
+  > numbers in order of relevance, most relevant first, separated by commas, and nothing
+  > else.
+
+  It cannot be empty. Read-only in the playground.
+- `text_budget_chars` (600): how much of each piece the model reads.
+- `max_tokens` (16000).
 
 ## Answer
 
@@ -348,6 +382,20 @@ checked against the parsed document; one that does not match is marked unverifie
   weak. A claim that cites nothing but matches a shown sentence is marked matched by
   similarity, and one with no match is not grounded.
 - `max_chunks` (5): how many pieces the model reads.
+- `prompt`: the instructions with the model's own citations, by default:
+
+  > Answer the user's question using only the provided documents. If the documents do
+  > not contain the answer, say so plainly instead of guessing or drawing on outside
+  > knowledge. Be concise.
+
+- `sentence_prompt`: the instructions with numbered sentences, by default:
+
+  > Answer using only the sources below. After each claim, put the ids of the sentences
+  > that support it in brackets, like [2.2] or [2.2][4.1]. If the sources do not support
+  > a claim, do not make it.
+
+  Neither can be empty. Both are read-only in the playground.
+- `max_tokens` (16000).
 
 It needs a key for the chosen provider. A custom endpoint's key is optional.
 
@@ -443,8 +491,8 @@ Pandion's default `table_mode` is `fast`.
 - Sets in `CrossEncoder(...)`: the model id, the model's `revision`, pinned per model (see
   `revision` above), the `device`, `cache_folder` and `local_files_only` from the model
   settings. In `predict(...)`: one (question, piece) pair per candidate.
-- Leaves at the default: the longest pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
-  the scores are the ones the model gives.
+- Leaves at the default: the longest pair it reads (`max_length`, the model's own),
+  `batch_size` (32), and the activation, so the scores are the ones the model gives.
 
 ### mmr (numpy)
 
@@ -462,10 +510,10 @@ MMR needs the `local` extra, which brings numpy.
 
 ### llm_rewrite, llm_rerank and chat (Anthropic and OpenAI SDKs)
 
-- Sets: the model, a system prompt, one user message, and a limit of 16,000 output
-  tokens (`max_tokens`, or `max_completion_tokens` for OpenAI). For Claude Opus 5 and
-  Sonnet 5, adaptive thinking is on. `chat` with a Claude model and `citation_method:
-  auto` sends each piece as a document with citations on, through
+- Sets: the model, the system prompt from its `prompt` setting, one user message, and its
+  `max_tokens` setting (16,000 by default; sent as `max_completion_tokens` for OpenAI).
+  For Claude Opus 5 and Sonnet 5, adaptive thinking is on. `chat` with a Claude model and
+  `citation_method: auto` sends each piece as a document with citations on, through
   `client.beta.messages.create`.
 - Leaves at the default: `temperature`, `top_p` and the other sampling settings, so the
   provider's defaults apply and two runs can give different text.

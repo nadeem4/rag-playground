@@ -12,13 +12,19 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Output, ParsedDoc
 from pandion.ports import RunContext
 from pandion.plugins.answer import chat as chat_module
 from pandion.plugins.answer._grounding import number_sources
-from pandion.plugins.answer.chat import SENTENCE_PROMPT, ChatConfig, ChatUseCase
+from pandion.plugins.answer.chat import (
+    SENTENCE_PROMPT,
+    SYSTEM_PROMPT,
+    ChatConfig,
+    ChatUseCase,
+)
 from pandion import llm
 from tests.steps.rerank_fakes import write_index
 from tests.steps.test_use_case_chat import (  # noqa: F401  (fixtures)
@@ -414,3 +420,39 @@ def test_no_key_ever_reaches_the_payload(openai_fake, pipeline, index):
 
 def test_the_plugin_module_still_imports_no_sdk():
     assert not hasattr(chat_module, "openai") and not hasattr(chat_module, "anthropic")
+
+
+def test_the_prompt_and_max_tokens_are_settings(fake, pipeline):
+    fake.reply = response(text_block("An answer."))
+    ask(pipeline, prompt="Answer in one word.", max_tokens=2000)
+    req = fake.client.requests[0]
+    assert req["system"] == "Answer in one word." and req["max_tokens"] == 2000
+
+
+def test_the_sentence_prompt_is_a_setting(openai_fake, pipeline, index):
+    ask(pipeline, index=index, model="gpt-6-astra", sentence_prompt="Cite the ids.")
+    [req] = openai_fake.client.requests
+    assert req["messages"][0] == {"role": "system", "content": "Cite the ids."}
+
+
+def test_the_new_chat_settings_are_left_out_of_the_id_at_their_defaults():
+    cfg = ChatConfig()
+    assert (cfg.prompt, cfg.sentence_prompt, cfg.max_tokens) == (SYSTEM_PROMPT, SENTENCE_PROMPT, 16000)
+    assert set(cfg.model_dump(mode="json")) == {
+        "model", "custom_base_url", "custom_model", "openrouter_model",
+        "citation_method", "support_threshold", "max_chunks",
+    }
+
+
+@pytest.mark.parametrize(
+    "key, value",
+    [("prompt", "Answer in one word."), ("sentence_prompt", "Cite the ids."), ("max_tokens", 2000)],
+)
+def test_a_new_chat_setting_moves_the_id_when_changed(key, value):
+    assert ChatConfig(**{key: value}).model_dump(mode="json")[key] == value
+
+
+@pytest.mark.parametrize("key", ["prompt", "sentence_prompt"])
+def test_an_empty_chat_prompt_is_refused(key):
+    with pytest.raises(ValidationError):
+        ChatConfig(**{key: ""})

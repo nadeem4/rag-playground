@@ -80,3 +80,26 @@ def test_choices_named_in_code_get_plain_names(client):
         assert set(prop.get("x-labels", {})) == set(prop["enum"]), f"{name}.{key}"
     labels = schema["index"]["lancedb"]["config_schema"]["properties"]["metric"]["x-labels"]
     assert labels == {"cosine": "Cosine: the angle between vectors", "l2": "L2: the straight-line distance"}
+
+
+def test_the_prompts_stay_out_of_the_forms_until_they_can_be_shown_read_only(client):
+    import pandion
+
+    body = client.get("/api/registry").json()
+    for stage, name, key in (
+        ("use_case", "chat", "prompt"),
+        ("use_case", "chat", "sentence_prompt"),
+        ("rerank", "llm_rerank", "prompt"),
+        ("query", "llm_rewrite", "prompt"),
+    ):
+        assert key not in body[stage][name]["config_schema"]["properties"], f"{name}.{key}"
+        assert pandion.catalog()[stage][name]["config_schema"]["properties"][key]["readOnly"] is True
+    assert "max_tokens" in body["use_case"]["chat"]["config_schema"]["properties"]
+
+
+def test_the_cross_encoder_revision_stays_out_of_the_forms(client):
+    import pandion
+
+    body = client.get("/api/registry").json()
+    assert "revision" not in body["rerank"]["cross_encoder"]["config_schema"]["properties"]
+    assert pandion.catalog()["rerank"]["cross_encoder"]["config_schema"]["properties"]["revision"]["readOnly"] is True

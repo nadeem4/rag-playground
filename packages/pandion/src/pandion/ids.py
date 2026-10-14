@@ -11,7 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from typing import Any
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, SerializerFunctionWrapHandler, model_serializer
 
 from pandion.artifacts import ArtifactType
 
@@ -84,3 +86,26 @@ def shard_path(artifact_id: str) -> tuple[str, str, str]:
     """Two levels of sharding, so no directory holds tens of thousands of entries."""
     sid = short_id(artifact_id)
     return sid[0:2], sid[2:4], sid
+
+
+class AddedSettings(BaseModel):
+    """The settings model of a step that gained settings after its results were first stored.
+
+    A setting named in `added` is left out of `model_dump()` while it holds
+    its default. An artifact id hashes that dump, so every result stored
+    before the setting existed keeps its id, and nobody's cache rebuilds;
+    set to anything else, the setting is dumped and the id moves, as it must.
+    Changing such a default later is a change to what the step does, so it
+    needs a `version` bump, like any other.
+    """
+
+    added: ClassVar[tuple[str, ...]] = ()
+
+    @model_serializer(mode="wrap")
+    def _added_left_out_at_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = handler(self)
+        fields = type(self).model_fields
+        for name in type(self).added:
+            if name in data and getattr(self, name) == fields[name].default:
+                del data[name]
+        return data

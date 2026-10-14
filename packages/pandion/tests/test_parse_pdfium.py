@@ -287,3 +287,24 @@ def test_without_pypdfium2_the_error_names_the_extra(sample_pdf: Path, monkeypat
     monkeypatch.setitem(sys.modules, "pypdfium2", None)
     with pytest.raises(MissingExtra, match=r'pip install "pandion\[pdfium\]"'):
         parse(sample_pdf)
+
+
+from pydantic import ValidationError
+
+
+def test_the_paragraph_gap_is_a_setting_left_out_of_the_id_at_its_default():
+    cls = registry.get(Stage.PARSE, "pdfium")
+    assert cls.config_model().paragraph_gap_ratio == 1.5
+    assert cls.config_model().model_dump(mode="json") == {"mode": "text", "join_lines": True}
+    assert cls.config_model(paragraph_gap_ratio=2.0).model_dump(mode="json")["paragraph_gap_ratio"] == 2.0
+
+
+def test_a_larger_paragraph_gap_joins_paragraphs_set_closer_than_it(paragraph_pdf: Path):
+    page_one = [e for e in parse(paragraph_pdf, paragraph_gap_ratio=2.0).elements if e.page == 1]
+    assert len(page_one) == 1
+    assert page_one[0].text.startswith("Chunking notes A retriever never sees a document.")
+
+
+def test_a_paragraph_gap_of_zero_is_refused():
+    with pytest.raises(ValidationError):
+        registry.get(Stage.PARSE, "pdfium").config_model(paragraph_gap_ratio=0)

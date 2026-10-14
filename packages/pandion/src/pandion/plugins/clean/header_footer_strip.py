@@ -7,7 +7,7 @@ and answer questions about page 7 with the words "page 7".
 Two detectors, both anchored to the first or last block of a page:
 
 * **repetition** — the same short text at the same page edge on at least
-  `min_page_ratio` of pages, and never fewer than two pages (`MIN_PAGES`). Compared on normalized text with the digits left
+  `min_page_ratio` of pages, and never fewer than `min_pages` pages (two by default). Compared on normalized text with the digits left
   in, so `Section 1` … `Section 4` are four headings, not one running head.
 * **page-number shape** — a block matching `3`, `Page 3`, `Page 3 of 9`, `- 3 -`
   at the same page edge on at least `min_page_ratio` of pages (and at least
@@ -37,11 +37,12 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import Any, Mapping
+from typing import Any, ClassVar, Mapping
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from pandion.artifacts import ArtifactType
+from pandion.ids import AddedSettings
 from pandion.payloads import EXCLUDED_FROM_MARKDOWN, Element
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -61,6 +62,7 @@ from pandion.plugins.clean import (
 #: A running head is short by definition. A repeated *paragraph* is boilerplate,
 #: which is `dedupe_blocks`' job — conflating the two would let this plugin
 #: delete a whole recurring licence clause on positional evidence alone.
+#: The default of `max_running_chars`.
 MAX_RUNNING_CHARS = 120
 
 #: `3`, `Page 3`, `Page 3 of 9`, `3 / 9`, `- 3 -`, `[3]`.
@@ -85,7 +87,9 @@ KIND_NAMES = {
 }
 
 
-class HeaderFooterStripConfig(BaseModel):
+class HeaderFooterStripConfig(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("max_running_chars", "min_pages")
+
     min_page_ratio: float = Field(
         title="Share of pages",
         default=0.5,
@@ -104,6 +108,22 @@ class HeaderFooterStripConfig(BaseModel):
             "marked, so they stay visible but are left out of the text."
         ),
     )
+    #: Added after the first results were stored; see pandion.ids.AddedSettings.
+    max_running_chars: int = Field(
+        default=MAX_RUNNING_CHARS,
+        ge=1,
+        title="Longest running text",
+        description=(
+            "The longest a header or footer can be, in characters. A longer "
+            "repeated block is left to the duplicate cleaner."
+        ),
+    )
+    min_pages: int = Field(
+        default=MIN_PAGES,
+        ge=2,
+        title="Fewest pages",
+        description="The fewest pages a header or footer must repeat on, whatever the share says.",
+    )
 
 
 def _is_page_number(text: str) -> bool:
@@ -111,7 +131,10 @@ def _is_page_number(text: str) -> bool:
 
 
 def _detect(
-    elements: list[Element], min_page_ratio: float
+    elements: list[Element],
+    min_page_ratio: float,
+    min_pages: int = MIN_PAGES,
+    max_running_chars: int = MAX_RUNNING_CHARS,
 ) -> dict[str, tuple[str, str]]:
     """One pass: `{element_id: (new_type, reason)}` for this round's verdicts."""
     by_page: dict[int, list[Element]] = defaultdict(list)
@@ -130,7 +153,7 @@ def _detect(
     # a short document one page is already half of them, so without this floor
     # every first and last block would qualify, pass after pass, until the
     # document was empty.
-    threshold = max(MIN_PAGES, min_page_ratio * n_pages - 1e-9)
+    threshold = max(min_pages, min_page_ratio * n_pages - 1e-9)
     verdicts: dict[str, tuple[str, str]] = {}
 
     for position, repeat_type in POSITIONS:
@@ -151,7 +174,7 @@ def _detect(
         repeats: dict[str, list[Element]] = defaultdict(list)
         for element in edge.values():
             key = normalize(element.text)
-            if key and len(key) <= MAX_RUNNING_CHARS:
+            if key and len(key) <= max_running_chars:
                 repeats[key].append(element)
         for group in repeats.values():
             if len(group) < threshold:
@@ -189,9 +212,12 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
             else "Detected blocks are only relabelled: they stay out of the text "
             "but remain visible in the element list, so you can check them."
         )
+        pages = "two" if config.min_pages == 2 else str(config.min_pages)
         settings = (
-            "A block counts as running when it sits at the same page edge on at "
-            f"least {pct} of pages, and never on fewer than two pages. {action}"
+            "A block counts as running when it is at most "
+            f"{config.max_running_chars} characters long and sits at the same page "
+            f"edge on at least {pct} of pages, and never on fewer than "
+            f"{pages} pages. {action}"
         )
         tradeoff = (
             "A lower ratio catches heads that appear on only some pages but risks "
@@ -244,7 +270,7 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
                 for e in doc.elements
                 if e.id not in verdicts and e.type not in EXCLUDED_FROM_MARKDOWN
             ]
-            found = _detect(live, config.min_page_ratio)
+            found = _detect(live, config.min_page_ratio, config.min_pages, config.max_running_chars)
             if not found:
                 break
             verdicts.update(found)

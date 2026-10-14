@@ -926,3 +926,20 @@ def test_strip_note_says_was_for_a_single_relabelled_block():
         "Removed 0 blocks. Removal is off, so 1 block was relabelled instead: "
         "1 running header."
     )
+
+
+def test_header_footer_strip_settings_are_left_out_of_the_id_at_their_defaults():
+    config = HeaderFooterStrip.config_model()
+    assert (config.max_running_chars, config.min_pages) == (120, 2)
+    assert config.model_dump(mode="json") == {"min_page_ratio": 0.5, "drop": True}
+
+
+def test_a_running_head_longer_than_max_running_chars_is_kept(tmp_path):
+    out = run(HeaderFooterStrip, paged_doc(), tmp_path, drop=False, max_running_chars=10)
+    assert {e.type for e in out.elements if e.id.startswith("h")} == {"paragraph"}
+    assert {e.type for e in out.elements if e.id.startswith("p")} == {"page_number"}
+
+
+def test_min_pages_above_the_page_count_finds_nothing(tmp_path):
+    out = run(HeaderFooterStrip, paged_doc(), tmp_path, drop=False, min_pages=5)
+    assert {e.type for e in out.elements} == {"paragraph"}

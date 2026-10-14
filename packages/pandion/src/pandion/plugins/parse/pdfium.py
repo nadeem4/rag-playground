@@ -18,7 +18,7 @@ never a paragraph break, so its text alone has no paragraphs in it.
   why `recursive_character`'s paragraph-first separator finds nothing to do.
 - `join_lines=True` (the default) rebuilds paragraphs from LAYOUT, not text:
   within a page, a line starts a new paragraph when its top sits more than
-  `PARAGRAPH_GAP_RATIO` times the page's median line pitch below the previous
+  `paragraph_gap_ratio` (1.5 by default) times the page's median line pitch below the previous
   line's top, or above it (a jump to a new column or region). Lines are
   measured with pdfium's loose char boxes, which span the font's full ascent
   and descent, so a line of `x`s and a line of `g`s have the same height.
@@ -36,12 +36,13 @@ import re
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Mapping
+from typing import Any, ClassVar, Literal, Mapping
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from pandion.artifacts import ArtifactType
 from pandion.errors import require
+from pandion.ids import AddedSettings
 from pandion.payloads import Element, ParsedDoc
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
@@ -59,7 +60,9 @@ _SOFT_HYPHEN = re.compile("￾(.?)")
 PARAGRAPH_GAP_RATIO = 1.5
 
 
-class PdfiumConfig(BaseModel):
+class PdfiumConfig(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("paragraph_gap_ratio",)
+
     mode: Literal["text"] = Field(
         default="text",
         title="Mode",
@@ -76,6 +79,16 @@ class PdfiumConfig(BaseModel):
         description=(
             "When on, lines are joined back into paragraphs from the gaps "
             "between them. When off, each line is its own element."
+        ),
+    )
+    #: Added after version 2's results were stored; see pandion.ids.AddedSettings.
+    paragraph_gap_ratio: float = Field(
+        default=PARAGRAPH_GAP_RATIO,
+        gt=0,
+        title="Paragraph gap",
+        description=(
+            "With lines joined, a line starts a new paragraph when the gap above "
+            "it is more than this many times the page's usual line spacing."
         ),
     )
 
@@ -112,7 +125,7 @@ class PdfiumParse(Transform[PdfiumConfig]):
                 settings=(
                     "Lines are joined back into paragraphs using the layout: a "
                     "line starts a new paragraph when the gap above it is more "
-                    f"than {PARAGRAPH_GAP_RATIO:g} times the page's usual line "
+                    f"than {config.paragraph_gap_ratio:g} times the page's usual line "
                     "spacing, or when it jumps up to a new column. A page with "
                     "even spacing throughout becomes a single paragraph."
                 ),
@@ -153,7 +166,7 @@ class PdfiumParse(Transform[PdfiumConfig]):
                 textpage = page.get_textpage()
                 try:
                     if config.join_lines:
-                        blocks = _paragraphs(_measured_lines(textpage))
+                        blocks = _paragraphs(_measured_lines(textpage), config.paragraph_gap_ratio)
                     else:
                         blocks = [
                             _Line(line.strip(), None)
@@ -235,7 +248,7 @@ def _resolve_soft_hyphens(text: str) -> str:
     return _SOFT_HYPHEN.sub(repair, text)
 
 
-def _paragraphs(lines: list[_Line]) -> list[_Line]:
+def _paragraphs(lines: list[_Line], ratio: float = PARAGRAPH_GAP_RATIO) -> list[_Line]:
     """Merge consecutive lines unless the layout puts a paragraph gap between."""
     if any(line.bbox is None for line in lines):
         return lines
@@ -245,7 +258,7 @@ def _paragraphs(lines: list[_Line]) -> list[_Line]:
 
     paragraphs: list[_Line] = []
     for n, line in enumerate(lines):
-        if n == 0 or _is_boundary(pitches[n - 1], median):
+        if n == 0 or _is_boundary(pitches[n - 1], median, ratio):
             paragraphs.append(_Line(line.text, line.bbox))
             continue
         current = paragraphs[-1]
@@ -259,9 +272,9 @@ def _paragraphs(lines: list[_Line]) -> list[_Line]:
     return paragraphs
 
 
-def _is_boundary(pitch: float, median: float) -> bool:
+def _is_boundary(pitch: float, median: float, ratio: float = PARAGRAPH_GAP_RATIO) -> bool:
     # A line at or above the previous one is a new column or region.
-    return pitch <= 0 or pitch > PARAGRAPH_GAP_RATIO * median
+    return pitch <= 0 or pitch > ratio * median
 
 
 def _join(head: str, tail: str) -> str:

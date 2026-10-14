@@ -51,6 +51,9 @@ no stored text comes out empty. Fast, with no model to load.
 
 - `join_lines` (on by default): rebuilds paragraphs from the page layout. Off, it keeps
   one element per extracted line.
+- `paragraph_gap_ratio` (1.5): with lines joined, a line starts a new paragraph when the
+  gap above it is more than this many times the page's usual line spacing. Raise it when
+  paragraphs come out split; lower it when they run together.
 
 **Use it** as a fast baseline, or to see what a parser without a layout model misses.
 
@@ -92,6 +95,10 @@ pass, because removing a page number can expose another footer behind it.
   edge, to count as a running head or foot.
 - `drop` (on): removes the blocks found. Off, they are only retyped, which keeps them out
   of the text that is chunked while leaving them visible for inspection.
+- `max_running_chars` (120): the longest a header or footer can be, in characters. A
+  longer repeated block is the duplicate cleaner's job.
+- `min_pages` (2): the fewest pages a header or footer must repeat on, whatever
+  `min_page_ratio` says.
 
 ### Remove duplicate blocks (`dedupe_blocks`)
 

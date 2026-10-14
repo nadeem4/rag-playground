@@ -60,7 +60,7 @@ import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { RunStrip, stripSegments } from "@/components/pipeline/RunStrip"
 import { FieldHelp } from "@/components/fields/FieldHelp"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
-import { savePipeline, setCurrentId, usePipelines } from "@/state/pipelines"
+import { FULL_OF_KEPT, fullOfKept, keptReason, savePipeline, setCurrentId, usePipelines } from "@/state/pipelines"
 import { BUILD_YOUR_OWN, defaultChoice, ON_BUILD, pipelineChoices, type PipelineChoice } from "@/state/pipelineChoice"
 import { plantedLine, useStarter } from "@/state/starter"
 import { DocumentControl } from "@/components/DocumentControl"
@@ -143,7 +143,6 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
     if (id === BUILD_YOUR_OWN) setBuilding(true)
     else setChoice(id)
   }
-  const unusable = "This server does not have every step this pipeline uses."
   const line = (c: PipelineChoice) => [c.graph ? pipelineLine(c.graph) : "", c.documents.length ? `On ${names(c.documents)}.` : ""].filter(Boolean).join(". ")
   // Ready to use, your pipelines, the unsaved one on Build, then the action.
   const pipelineOptions: PickerOption[] = [
@@ -153,7 +152,7 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
       help: line(c),
       group: c.kind === "ready" ? "Ready to use" : c.kind === "saved" ? "Your pipelines" : "On Build",
       tags: c.kind === "ready" ? [READY_TAG] : c.kind === "build" ? [NOT_SAVED_TAG] : undefined,
-      lock: c.graph ? undefined : { kind: "hard" as const, reason: unusable },
+      lock: c.graph ? undefined : { kind: "hard" as const, reason: keptReason(c.problem) },
     })),
     { value: BUILD_YOUR_OWN, name: "Build your own…", help: "Pick a setting for each step, starting from the one selected.", action: true },
   ]
@@ -165,7 +164,7 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
 
   function saveOwn(name: string, g: PipelineGraph): string | null {
     const result = savePipeline(name, g, { documents, select: false })
-    if (!result) return "The pipeline could not be saved in this browser."
+    if (!result) return fullOfKept() ? FULL_OF_KEPT : "The pipeline could not be saved in this browser."
     setChoice(result.saved.id)
     setTrial(null)
     setBuilding(false)

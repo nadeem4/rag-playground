@@ -414,6 +414,9 @@ it owns. Exported files carry that list, and a file exported before the list exi
 read as a pipeline with its one document.
 
 - **Open** sends a pipeline to Build as the working pipeline, or an experiment to Compare.
+- An item an older version saved that cannot be opened here is listed with the reason.
+  Export keeps a copy; nothing removes it but Delete. Saving a new pipeline when twenty are
+  kept removes the oldest one that can be opened, never one of these.
 - When an upload that a saved item uses has under 6 hours left on the demo, an amber
   notice offers to export those items with the document.
 

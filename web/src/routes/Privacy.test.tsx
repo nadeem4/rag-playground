@@ -80,6 +80,18 @@ describe("Your data and privacy", () => {
     expect(screen.queryByRole("link", { name: "privacy policy" })).toBeNull()
   })
 
+  it("offers to delete a list an older version saved, even when nothing else is saved, and removes it", async () => {
+    window.localStorage.setItem("rag-playground:pipelines:v2", "[]")
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([{ id: "p1", name: "One", graph: { nodes: [], edges: [] }, savedAt: "2026-10-01T00:00:00Z" }]))
+    render(<Privacy />)
+    fireEvent.click(screen.getByRole("button", { name: "Delete saved pipelines and experiments" }))
+    const ask = screen.getByRole("group", { name: "Confirm deleting saved items" })
+    expect(ask.textContent).toContain("the list of pipelines an older version saved")
+    fireEvent.click(within(ask).getByRole("button", { name: "Delete them" }))
+    expect(window.localStorage.getItem("rag-playground:pipelines:v1")).toBeNull()
+    expect(readPipelines()).toEqual([])
+  })
+
   it("asks on the page before deleting saved pipelines and experiments, then clears both", async () => {
     window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([{ id: "p1", name: "One", graph: { nodes: [], edges: [] }, savedAt: "2026-10-01T00:00:00Z" }]))
     window.localStorage.setItem(EXPERIMENTS_KEY, JSON.stringify([{ id: "e1", name: "E", stage: "chunk", recipes: [{ transform: "recursive_character", config: {} }], doc: null, savedAt: "2026-10-01T00:00:00Z" }]))

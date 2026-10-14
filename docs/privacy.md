@@ -12,7 +12,7 @@ with a run, and a question set while it is checked.
 
 | What | Where | How long |
 |---|---|---|
-| Saved pipelines and experiments | In this browser's storage | Until you delete them on the privacy page or clear this site's data. They never leave this browser unless you export them or share a link. |
+| Saved pipelines and experiments | In this browser's storage | Until you delete them on the privacy page or clear this site's data. They never leave this browser unless you export them or share a link. Saved pipelines are kept as pipeline file settings with their documents and question, under `rag-playground:pipelines:v2`. A list saved by an older version stays under `rag-playground:pipelines:v1`; it is converted once, and an item that cannot be converted is listed in Library as it was, with the reason, until you delete it. The conversion never removes the old list; Delete saved pipelines and experiments on the privacy page does. |
 | The pipeline you are working on | In this browser's storage | Until you change it. It is how Build, Compare and Evaluate share one pipeline. The pipeline on Build is kept as a pipeline file's settings, under `rag-playground:pipeline:v2`. A pipeline from an older version stays where it was (`rag-playground:graph:v1`); it is converted once, and if it cannot be, it is kept as it was and Build says why. A pipeline that uses a strategy this server does not have is kept the same way, under `rag-playground:pipeline:v2:kept`, before Build opens the Starter. |
 | Theme and contrast | In this browser's storage | Until you change them. |
 | Where the Ask panel sits on Build | In this browser's storage | Its side, its width and whether it is open, until you change them. |
@@ -68,7 +68,9 @@ See [models-and-keys.md](models-and-keys.md#what-happens-to-a-key).
 The privacy page in the app has three buttons:
 
 - **Delete saved pipelines and experiments** deletes them in this browser. It cannot be
-  undone, so export them first in Library if you may want them later.
+  undone, so export them first in Library if you may want them later. It also deletes the
+  list an older version saved, under `rag-playground:pipelines:v1`. This is the one time the
+  app removes an older version's key, because you asked for it.
 - **Delete my uploads from the demo** (on the demo only) deletes your uploads now, instead
   of after 24 hours. Saved items that use them stay, and ask for the PDF again when opened.
 - **Export first, in Library** opens the Library.

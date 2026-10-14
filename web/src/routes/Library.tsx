@@ -2,6 +2,7 @@ import { useRef, useState, type DragEvent } from "react"
 
 import { api, ApiError } from "@/api/client"
 import { useAppSettings } from "@/api/useDemo"
+import { useRegistry } from "@/api/useRegistry"
 import { DocumentItem } from "@/components/DocumentItem"
 import { SiteFooter } from "@/components/SiteFooter"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,7 @@ import {
   exportFileName,
   importResultLine,
   isSoon,
+  keptLine,
   libraryItems,
   listWords,
   parseImport,
@@ -110,6 +112,8 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
   const { samples, uploads } = useDocument()
   const { pipelines } = usePipelines()
   const experiments = useExperiments()
+  const reg = useRegistry()
+  const registry = reg.kind === "ready" ? reg.registry : null
   const items = libraryItems(pipelines, experiments)
   const now = Date.now()
   const ctx = { demo, ttlHours, now, samples, sources: settings ? uploads : null }
@@ -383,6 +387,12 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
               const state = stateOf(item)
               // A pipeline owns a list of documents; an experiment has one.
               const docs = item.kind === "pipeline" ? item.documents : item.doc ? [item.doc] : []
+              // A kept item, saved by an older version, is listed with the reason and never opened.
+              const kept = item.kind === "pipeline" ? keptLine(item.pipeline) : null
+              const summary =
+                item.kind === "experiment"
+                  ? experimentSummary(item.experiment)
+                  : (kept ?? pipelineSummary(registry ? usableGraph(item.pipeline, registry) : null))
               return (
                 <li key={k} className="grid grid-cols-[44px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-b border-hairline px-1 py-3 md:grid-cols-[44px_minmax(0,1fr)_auto]">
                   <label className="grid min-h-[44px] cursor-pointer place-items-center self-start">
@@ -410,7 +420,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-fg-muted">
-                      <span className="min-w-0 break-words">{item.kind === "pipeline" ? pipelineSummary(item.pipeline.graph) : experimentSummary(item.experiment)}</span>
+                      {summary ? <span className="min-w-0 break-words">{summary}</span> : null}
                       <span>{savedWhen(item.savedAt, now)}</span>
                     </div>
                     {docs.length ? (
@@ -423,7 +433,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
                     <DocLine item={item} state={state} demo={demo} />
                   </div>
                   <div className="col-start-2 flex flex-wrap gap-2 md:col-start-3 md:justify-end">
-                    <Button onClick={() => void open(item)}>Open in {item.kind === "experiment" ? "Compare" : "Build"}</Button>
+                    {kept ? null : <Button onClick={() => void open(item)}>Open in {item.kind === "experiment" ? "Compare" : "Build"}</Button>}
                     <Button variant="outline" onClick={() => startExport([k])}>
                       Export
                     </Button>

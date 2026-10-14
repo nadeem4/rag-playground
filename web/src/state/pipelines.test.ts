@@ -2,9 +2,16 @@ import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { withDocument } from "./document"
-import { initialGraph, setConfig, setTransform } from "./graph"
+import { initialGraph, sampleGraph, setConfig, setTransform } from "./graph"
 import {
+  LIST_KEY,
   MAX_PIPELINES,
+  OLD_LIST_KEY,
+  fromOld,
+  FULL_OF_KEPT,
+  fullOfKept,
+  keptReason,
+  usableGraph,
   clearPipelines,
   importPipelines,
   isEdited,
@@ -41,7 +48,7 @@ describe("saved pipelines", () => {
     expect(a.name).toBe("First")
     expect(a.id).toMatch(/^[A-Za-z0-9_-]{8}$/)
     expect(readCurrentId()).toBe(b.id)
-    expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("token_based")
+    expect(readPipelines()[0].config?.index.chunk.use).toBe("token_based")
   })
 
   it("refuses an empty name and a name over 60 characters", () => {
@@ -62,7 +69,7 @@ describe("saved pipelines", () => {
   it("updates, renames and deletes by id, and deleting the current one clears the selection", () => {
     const p = savePipeline("Mine", g())!.saved
     expect(updatePipeline(p.id, setTransform(g(), "chunk", "markdown_header", R))).toBe(true)
-    expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("markdown_header")
+    expect(readPipelines()[0].config?.index.chunk.use).toBe("markdown_header")
     expect(renamePipeline(p.id, "Renamed")).toBe(true)
     expect(renamePipeline(p.id, "")).toBe(false)
     expect(readPipelines()[0].name).toBe("Renamed")
@@ -80,18 +87,29 @@ describe("saved pipelines", () => {
     expect(() => setCurrentId("x")).not.toThrow()
   })
 
-  it("ignores junk in storage", () => {
-    window.localStorage.setItem("rag-playground:pipelines:v1", "{not json")
+  it("ignores junk in the list, and keeps junk in an old list marked rather than drop it", () => {
+    window.localStorage.setItem(LIST_KEY, "{not json")
+    expect(readPipelines()).toEqual([])
+    resetPipelinesForTests()
+    const mine = fromOld({ id: "ok123456", name: "Mine", graph: g(), savedAt: "2026-09-30T00:00:00Z" }, 0)
+    window.localStorage.setItem(LIST_KEY, JSON.stringify([{ id: 1, name: null }, mine]))
+    expect(readPipelines().map((p) => p.name)).toEqual(["Mine"])
+    window.localStorage.clear()
+    resetPipelinesForTests()
+    window.localStorage.setItem(OLD_LIST_KEY, "{not json")
     expect(readPipelines()).toEqual([])
     resetPipelinesForTests()
     window.localStorage.setItem(
-      "rag-playground:pipelines:v1",
+      OLD_LIST_KEY,
       JSON.stringify([
         { id: 1, name: null },
         { id: "ok123456", name: "Kept", graph: { nodes: [], edges: [] }, savedAt: "2026-09-30T00:00:00Z" },
       ]),
     )
-    expect(readPipelines().map((p) => p.name)).toEqual(["Kept"])
+    expect(readPipelines().map((p) => [p.name, p.config === null])).toEqual([
+      ["A pipeline from an older version", true],
+      ["Kept", true],
+    ])
   })
 
   it("notifies subscribers", () => {
@@ -108,8 +126,8 @@ describe("saved pipelines", () => {
     const { result } = renderHook(() => usePipelines())
     act(() => { savePipeline("Here", g()) })
     // Another tab saves a pipeline: it writes storage and the browser fires a storage event here.
-    const theirs = { id: "other123", name: "Theirs", graph: g(), savedAt: "2026-09-30T00:00:00Z" }
-    const key = "rag-playground:pipelines:v1"
+    const theirs = fromOld({ id: "other123", name: "Theirs", graph: g(), savedAt: "2026-09-30T00:00:00Z" }, 0)
+    const key = LIST_KEY
     const value = JSON.stringify([theirs, ...readPipelines()])
     window.localStorage.setItem(key, value)
     act(() => { window.dispatchEvent(new StorageEvent("storage", { key, newValue: value })) })
@@ -120,8 +138,8 @@ describe("saved pipelines", () => {
 
   it("re-reads storage before writing, so a stale list here never overwrites another tab", () => {
     savePipeline("Here", g())
-    const key = "rag-playground:pipelines:v1"
-    const theirs = { id: "other123", name: "Theirs", graph: g(), savedAt: "2026-09-30T00:00:00Z" }
+    const key = LIST_KEY
+    const theirs = fromOld({ id: "other123", name: "Theirs", graph: g(), savedAt: "2026-09-30T00:00:00Z" }, 0)
     // No storage event: the in-memory list is stale when this tab saves.
     window.localStorage.setItem(key, JSON.stringify([theirs, ...readPipelines()]))
     savePipeline("Mine too", g())
@@ -174,7 +192,7 @@ describe("importing and clearing for the Library", () => {
   it("never removes a saved pipeline: 4 kept, the 16 newest of 25 incoming added, the other 9 named", () => {
     // The four already here are older than every incoming one, so a newest-first cut would drop them.
     const mine = Array.from({ length: 4 }, (_, i) => saved(`m${i}`, `2026-01-0${i + 1}T00:00:00.000Z`))
-    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(mine))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify(mine))
     resetPipelinesForTests()
     const incoming = Array.from({ length: 25 }, (_, i) => saved(`n${String(i).padStart(2, "0")}`, `2026-09-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`))
     const r = importPipelines(incoming)!
@@ -190,7 +208,7 @@ describe("importing and clearing for the Library", () => {
 
   it("adds nothing when the list is already full, and says so", () => {
     const full = Array.from({ length: MAX_PIPELINES }, (_, i) => saved(`m${i}`, "2026-01-01T00:00:00.000Z"))
-    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(full))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify(full))
     resetPipelinesForTests()
     const r = importPipelines([saved("new", "2026-12-01T00:00:00.000Z")])!
     expect(r.added).toBe(0)
@@ -217,10 +235,10 @@ describe("a pipeline owns its documents, as a list", () => {
     expect(readPipelines()[0].documents).toEqual([primer])
   })
 
-  it("saves the documents it is given, and points the graph at the first", () => {
+  it("saves the documents it is given, and opens on the first", () => {
     const p = savePipeline("Mine", on(primer), { documents: [table] })!.saved
     expect(p.documents).toEqual([table])
-    expect(p.graph.nodes.find((n) => n.stage === "source")?.config.sha).toBe(table.sha)
+    expect(usableGraph(p, R)!.nodes.find((n) => n.stage === "source")?.config.sha).toBe(table.sha)
   })
 
   it("can save without changing which pipeline Build has selected", () => {
@@ -231,21 +249,21 @@ describe("a pipeline owns its documents, as a list", () => {
 
   it("migrates old saved data with one document in the graph to a list of one, on read", () => {
     const old = { id: "old12345", name: "Old", graph: on(primer), savedAt: "2026-09-30T00:00:00Z" }
-    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([old]))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([old]))
     resetPipelinesForTests()
     expect(readPipelines()[0].documents).toEqual([primer])
   })
 
   it("trusts the graph's document when a stored list disagrees with it", () => {
     const odd = { id: "odd12345", name: "Odd", graph: on(primer), documents: [table], savedAt: "2026-09-30T00:00:00Z" }
-    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([odd]))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([odd]))
     resetPipelinesForTests()
     expect(readPipelines()[0].documents).toEqual([primer])
   })
 
   it("migrates an old pipeline with no document to an empty list", () => {
     const old = { id: "old12345", name: "Old", graph: g(), savedAt: "2026-09-30T00:00:00Z" }
-    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify([old]))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([old]))
     resetPipelinesForTests()
     expect(readPipelines()[0].documents).toEqual([])
   })
@@ -284,11 +302,113 @@ describe("sameSteps and isEdited", () => {
 
   it("a saved pipeline is edited by a step or by another document; the Starter only by a step", () => {
     const graph = withDocument(g(), primer)
-    const saved = { id: "mine1234", graph, documents: [primer] }
-    const starter = { id: STARTER_ID, graph, documents: [primer] }
+    const config = fromOld({ graph }, 0).config
+    const saved = { id: "mine1234", config, documents: [primer] }
+    const starter = { id: STARTER_ID, config, documents: [primer] }
     expect(isEdited(saved, graph)).toBe(false)
     expect(isEdited(saved, withDocument(graph, table))).toBe(true)
     expect(isEdited(starter, withDocument(graph, table))).toBe(false)
     expect(isEdited(starter, setTransform(graph, "chunk", "token_based", R))).toBe(true)
+  })
+})
+
+const DOC = { sha: "e".repeat(64), filename: "old.pdf" }
+const oldItem = (id: string, graph: unknown, savedAt = "2026-10-01T00:00:00.000Z") => ({ id, name: `Old ${id}`, graph, documents: [DOC], savedAt })
+const BROKEN = { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }
+
+describe("the Library list as configs", () => {
+  it("converts an old list once into the new key and leaves the old key alone", () => {
+    const old = JSON.stringify([oldItem("aaaaaaaa", sampleGraph(R, DOC))])
+    window.localStorage.setItem(OLD_LIST_KEY, old)
+    const [p] = readPipelines()
+    expect(p.config?.index.chunk).toEqual({ use: "recursive_character", chunk_size: 400, chunk_overlap: 80 })
+    expect(p.documents).toEqual([DOC])
+    expect(p.kept).toBeUndefined()
+    expect(JSON.parse(window.localStorage.getItem(LIST_KEY)!)[0].config.index.parse.use).toBe("pdfium")
+    expect(window.localStorage.getItem(OLD_LIST_KEY)).toBe(old)
+  })
+
+  it("keeps an item it cannot convert, marked, listed and never opened", () => {
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("bbbbbbbb", BROKEN), "not even an object"]))
+    const list = readPipelines()
+    expect(list).toHaveLength(2)
+    expect(list[0]).toMatchObject({ id: "bbbbbbbb", config: null, kept: { graph: BROKEN, problem: expect.stringContaining("enrich") } })
+    expect(list[1]).toMatchObject({ name: "A pipeline from an older version", config: null, kept: { graph: "not even an object" } })
+    expect(usableGraph(list[0], R)).toBeNull()
+    // Saving another pipeline and reading again keeps both.
+    savePipeline("New", g())
+    resetPipelinesForTests()
+    expect(readPipelines().filter((p) => p.kept)).toHaveLength(2)
+  })
+
+  it("never drops a kept item to make room", () => {
+    const kept = Array.from({ length: MAX_PIPELINES - 1 }, (_, i) => oldItem(`k${String(i).padStart(7, "0")}`, BROKEN, `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([...kept, oldItem("oldest00", sampleGraph(R, DOC), "2025-01-01T00:00:00.000Z")]))
+    expect(readPipelines()).toHaveLength(MAX_PIPELINES)
+    expect(savePipeline("Newest", g())!.dropped?.id).toBe("oldest00")
+    expect(savePipeline("One more", g())!.dropped?.name).toBe("Newest")
+    expect(readPipelines().filter((p) => p.kept)).toHaveLength(MAX_PIPELINES - 1)
+  })
+
+  it("refuses a save rather than drop a kept item when every other item is kept", () => {
+    const kept = Array.from({ length: MAX_PIPELINES }, (_, i) => oldItem(`k${String(i).padStart(7, "0")}`, BROKEN))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify(kept))
+    expect(savePipeline("New", g())).toBeNull()
+    expect(readPipelines()).toHaveLength(MAX_PIPELINES)
+  })
+
+  it("saves a config, never a graph", () => {
+    savePipeline("Mine", g())
+    const stored = JSON.parse(window.localStorage.getItem(LIST_KEY)!)[0]
+    expect(stored.config.index.parse.use).toBe("pdfium")
+    expect(stored).not.toHaveProperty("graph")
+  })
+
+  it("fromOld keeps the old documents list only when it agrees with the graph's document", () => {
+    const other = { sha: "f".repeat(64), filename: "other.pdf" }
+    expect(fromOld({ ...oldItem("cccccccc", sampleGraph(R, DOC)), documents: [other] }, 0).documents).toEqual([DOC])
+  })
+})
+
+describe("fix round 1", () => {
+  it("converts once: a later change to the old list is not read again", () => {
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("aaaaaaaa", sampleGraph(R, DOC))]))
+    readPipelines()
+    const v2 = window.localStorage.getItem(LIST_KEY)
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("zzzzzzzz", BROKEN), oldItem("yyyyyyyy", BROKEN)]))
+    resetPipelinesForTests()
+    expect(readPipelines().map((p) => p.id)).toEqual(["aaaaaaaa"])
+    expect(window.localStorage.getItem(LIST_KEY)).toBe(v2)
+  })
+
+  it("Delete on the privacy page removes the old list too, and nothing converts again", () => {
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("aaaaaaaa", sampleGraph(R, DOC)), oldItem("bbbbbbbb", BROKEN)]))
+    expect(readPipelines()).toHaveLength(2)
+    clearPipelines()
+    expect(window.localStorage.getItem(OLD_LIST_KEY)).toBeNull()
+    expect(window.localStorage.getItem(LIST_KEY)).toBe("[]")
+    resetPipelinesForTests()
+    expect(readPipelines()).toEqual([])
+  })
+
+  it("gives an old item without an id a random one, so two imports do not collide", () => {
+    const a = fromOld({ name: "No id", graph: BROKEN }, 0)
+    const b = fromOld({ name: "No id", graph: BROKEN }, 0)
+    expect(a.id).toMatch(/^kept-1-[A-Za-z0-9_-]{8}$/)
+    expect(a.id).not.toBe(b.id)
+  })
+
+  it("says why a save is refused when the list is full of kept items", () => {
+    expect(fullOfKept()).toBe(false)
+    const kept = Array.from({ length: MAX_PIPELINES }, (_, i) => oldItem(`k${String(i).padStart(7, "0")}`, BROKEN))
+    window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify(kept))
+    expect(savePipeline("New", g())).toBeNull()
+    expect(fullOfKept()).toBe(true)
+    expect(FULL_OF_KEPT).toBe("The list is full of older pipelines that could not be converted. Delete one in the Library to save this.")
+  })
+
+  it("names a kept item's own problem as the reason it cannot be opened", () => {
+    expect(keptReason("It has an enrich step.")).toBe("Saved by an older version, and it cannot be opened here: It has an enrich step.")
+    expect(keptReason(undefined)).toBe("This server does not have every step this pipeline uses.")
   })
 })

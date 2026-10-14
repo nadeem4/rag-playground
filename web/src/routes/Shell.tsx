@@ -60,11 +60,12 @@ import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } 
 import {
   decodePipeline,
   droppedText,
+  FULL_OF_KEPT,
+  fullOfKept,
   isEdited,
   isUnsaved,
   readCurrentId,
   readPipelines,
-  sameGraph,
   savePipeline,
   setCurrentId,
   STARTER_ID,
@@ -293,7 +294,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     } else {
       // A link can carry any name; clamp it to what Save as accepts (M2).
       const name = decoded.name.trim().slice(0, 60).trim() || "Shared pipeline"
-      const existing = readPipelines().find((p) => p.name === name && sameGraph(p.graph, decoded.graph))
+      const existing = readPipelines().find((p) => p.name === name && !isUnsaved(p, decoded.graph))
       if (existing) {
         setCurrentId(existing.id)
       } else {
@@ -302,7 +303,11 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         if (!result) {
           // Keeping the old selection would let "Save changes" overwrite it with this graph.
           setCurrentId(null)
-          setBarNotice("The shared pipeline could not be saved in this browser. It is loaded as the working copy.")
+          setBarNotice(
+            fullOfKept()
+              ? `${FULL_OF_KEPT} The shared pipeline is loaded as the working copy.`
+              : "The shared pipeline could not be saved in this browser. It is loaded as the working copy.",
+          )
         }
       }
       edit(decoded.graph)

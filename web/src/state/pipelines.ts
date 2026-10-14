@@ -2,35 +2,51 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
+import { columnOf, graphToConfig, knownSteps, sameConfig, type AskQuestion, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import { loadGraph, type PipelineGraph } from "./graph"
 
 /**
- * Saved pipelines: named copies of the Build graph, kept in this browser.
- * The working copy the Build page edits stays in its own key; choosing a saved
- * pipeline copies it into the working copy, and "Save" copies it back.
- * Results are cached by recipe on the server, so switching costs nothing.
+ * Form 2 of the owner's two: saved pipelines, named copies of the pipeline on
+ * Build, kept in this browser as pipeline file settings (a config) with their
+ * documents and question. The working pipeline Build edits stays in its own
+ * key; choosing a saved pipeline copies it into the working pipeline, and
+ * "Save" copies it back. Results are cached by recipe on the server, so
+ * switching costs nothing.
  *
- * A pipeline owns its documents, as a list. Today the list holds one document
- * and the graph's source node points at it, so the run request and every
- * cache key keep their shape. Pipelines saved before the list existed get it
- * on read, from their source node.
+ * Versions before part 5 kept the list as graphs under OLD_LIST_KEY. The first
+ * read that finds no list under LIST_KEY converts every old item with
+ * `graphToConfig` and writes the result to LIST_KEY once. An item that cannot
+ * be converted is kept as it was, with the reason, and listed but never
+ * opened. The conversion never writes or removes the old key. The one thing
+ * that removes it is the privacy page's Delete saved pipelines, which the
+ * visitor asks for (clearPipelines). Nothing but its owner's Delete removes a
+ * kept item: the cap of twenty never drops one.
  */
 
 export interface SavedPipeline {
   id: string
   name: string
-  graph: PipelineGraph
-  /** The documents the pipeline runs on. One today; the graph's source node is the first. */
-  documents: DocRef[]
   savedAt: string
+  /** Null when an older version saved it and it could not be converted. */
+  config: PipelineConfig | null
+  /** The documents the pipeline runs on. One today. */
+  documents: DocRef[]
+  question: AskQuestion
+  /** An item kept as an older version saved it, with why it cannot be opened. Never deleted but by its owner. */
+  kept?: { graph: unknown; problem: string }
 }
 
 /** The ready-made Starter pipeline's id. Never a saved one's: those are eight characters. */
 export const STARTER_ID = "starter"
 
 export const MAX_PIPELINES = 20
-const LIST_KEY = "rag-playground:pipelines:v1"
+export const LIST_KEY = "rag-playground:pipelines:v2"
+/**
+ * Where versions before part 5 kept the list, as graphs. Read once and never
+ * written. Removed only when the visitor deletes every saved pipeline (clearPipelines).
+ */
+export const OLD_LIST_KEY = "rag-playground:pipelines:v1"
 const CURRENT_KEY = "rag-playground:pipelines:current"
 const MAX_NAME = 60
 
@@ -58,11 +74,10 @@ function write(key: string, value: string | null): boolean {
   }
 }
 
-export const isPipeline = (p: unknown): p is SavedPipeline =>
-  typeof p === "object" && p !== null &&
-  typeof (p as SavedPipeline).id === "string" && typeof (p as SavedPipeline).name === "string" &&
-  typeof (p as SavedPipeline).savedAt === "string" &&
-  Array.isArray((p as SavedPipeline).graph?.nodes) && Array.isArray((p as SavedPipeline).graph?.edges)
+const NO_QUESTION: AskQuestion = { text: "", gold_answers: [] }
+const OLD_NAME = "A pipeline from an older version"
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
 
 const isDocRef = (d: unknown): d is DocRef =>
   typeof d === "object" && d !== null && typeof (d as DocRef).sha === "string" && (d as DocRef).sha !== "" && typeof (d as DocRef).filename === "string"
@@ -70,25 +85,58 @@ const isDocRef = (d: unknown): d is DocRef =>
 const docList = (listed: unknown): DocRef[] | null =>
   Array.isArray(listed) && listed.every(isDocRef) ? listed.map(({ sha, filename }) => ({ sha, filename })) : null
 
+/** One item of the old list or of an old export file, converted, or kept with the reason. Never null. */
+export function fromOld(raw: unknown, place: number): SavedPipeline {
+  const r = isRecord(raw) ? raw : {}
+  // A random suffix, so items without an id from two imports never share one.
+  const id = typeof r.id === "string" && r.id ? r.id : `kept-${place + 1}-${newId()}`
+  const name = typeof r.name === "string" && r.name.trim() ? r.name : OLD_NAME
+  const savedAt = typeof r.savedAt === "string" ? r.savedAt : new Date(0).toISOString()
+  const listed = docList(r.documents)
+  const c = graphToConfig(r.graph)
+  if (c.ok) {
+    const own = c.pipeline.documents
+    // The graph's source node is what ran: a list that disagrees with it is not trusted.
+    const documents = listed && (!own[0] || listed[0]?.sha === own[0].sha) ? listed : own
+    return { id, name, savedAt, config: c.pipeline.config, documents, question: c.pipeline.question }
+  }
+  const problem = isRecord(raw) ? c.problem : "It is not a saved pipeline."
+  return { id, name, savedAt, config: null, documents: listed ?? [], question: NO_QUESTION, kept: { graph: isRecord(raw) ? (r.graph ?? raw) : raw, problem } }
+}
+
+/** One item of the new list, or of a file that holds configs; null when it is not one. */
+export function asSaved(raw: unknown): SavedPipeline | null {
+  if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.name !== "string" || typeof raw.savedAt !== "string") return null
+  const documents = docList(raw.documents)
+  const q = isRecord(raw.question) && typeof raw.question.text === "string" && Array.isArray(raw.question.gold_answers) ? (raw.question as unknown as AskQuestion) : NO_QUESTION
+  if (raw.config === null && isRecord(raw.kept) && typeof raw.kept.problem === "string") {
+    return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: null, documents: documents ?? [], question: q, kept: { graph: raw.kept.graph, problem: raw.kept.problem } }
+  }
+  if (!isRecord(raw.config) || !isRecord(raw.config.index) || !documents) return null
+  return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: raw.config as unknown as PipelineConfig, documents, question: q }
+}
+
 /**
- * A stored or imported pipeline in today's shape, or null when it is not one.
- * One saved before documents were a list gets them from its source node.
+ * An incoming item of either shape: a config (asSaved), or a graph an older
+ * version saved (fromOld, converted or kept). Null when it is neither.
  */
-export function asPipeline(raw: unknown): SavedPipeline | null {
-  if (!isPipeline(raw)) return null
-  const { id, name, graph, savedAt } = raw
-  const own = documentsOf(graph)
-  const listed = docList((raw as { documents?: unknown }).documents)
-  // The graph's source node is what runs: a list that disagrees with it is not trusted.
-  const documents = listed && (!own[0] || listed[0]?.sha === own[0].sha) ? listed : own
-  return { id, name, graph, documents, savedAt }
+export function asIncoming(raw: unknown, place: number): SavedPipeline | null {
+  const saved = asSaved(raw)
+  if (saved) return saved
+  return isRecord(raw) && "graph" in raw ? fromOld(raw, place) : null
 }
 
 export function readPipelines(): SavedPipeline[] {
-  if (cache === null) {
-    const parsed = read(LIST_KEY, (raw) => JSON.parse(raw) as unknown)
-    cache = Array.isArray(parsed) ? parsed.map(asPipeline).filter((p): p is SavedPipeline => p !== null) : []
+  if (cache !== null) return cache
+  const current = read(LIST_KEY, (raw) => JSON.parse(raw) as unknown)
+  if (Array.isArray(current)) {
+    cache = current.map(asSaved).filter((p): p is SavedPipeline => p !== null)
+    return cache
   }
+  const old = read(OLD_LIST_KEY, (raw) => JSON.parse(raw) as unknown)
+  cache = Array.isArray(old) ? old.map(fromOld) : []
+  // Converted once: from now on the new key is read. When the write fails, the next read converts again.
+  if (Array.isArray(old)) write(LIST_KEY, JSON.stringify(cache))
   return cache
 }
 
@@ -135,17 +183,41 @@ export function savePipeline(
   const clean = cleanName(name)
   if (!clean) return null
   const documents = opts.documents ?? documentsOf(graph)
+  const c = graphToConfig(withDocuments(graph, documents))
+  if (!c.ok) return null
   const p: SavedPipeline = {
     id: newId(),
     name: clean,
-    graph: structuredClone(withDocuments(graph, documents)),
-    documents: structuredClone(documents),
     savedAt: new Date().toISOString(),
+    config: structuredClone(c.pipeline.config),
+    documents: structuredClone(documents),
+    question: structuredClone(c.pipeline.question),
   }
   const next = [p, ...freshPipelines()]
-  if (!persist(next.slice(0, MAX_PIPELINES))) return null
+  let dropped: SavedPipeline | null = null
+  if (next.length > MAX_PIPELINES) {
+    // The oldest item that is not kept goes; a kept item is never dropped (I3).
+    const at = next.map((x) => !x.kept).lastIndexOf(true)
+    if (at <= 0) return null
+    dropped = next.splice(at, 1)[0]
+  }
+  if (!persist(next)) return null
   if (opts.select !== false) setCurrentId(p.id)
-  return { saved: p, dropped: next[MAX_PIPELINES] ?? null }
+  return { saved: p, dropped }
+}
+
+/** Why a save was refused when every item in a full list is kept. */
+export const FULL_OF_KEPT = "The list is full of older pipelines that could not be converted. Delete one in the Library to save this."
+
+/** The list is full and every item is kept, so a save is refused rather than drop one. */
+export function fullOfKept(): boolean {
+  const list = freshPipelines()
+  return list.length >= MAX_PIPELINES && list.every((p) => p.kept)
+}
+
+/** Why a saved pipeline cannot be opened: a kept item's own problem, else steps this server lacks. */
+export function keptReason(problem: string | undefined): string {
+  return problem ? `Saved by an older version, and it cannot be opened here: ${problem}` : "This server does not have every step this pipeline uses."
 }
 
 /** The line that says a save pushed the oldest pipeline out (I3). */
@@ -153,18 +225,25 @@ export const droppedText = (dropped: SavedPipeline) =>
   `Saved. ${dropped.name}, the oldest pipeline, was removed to keep ${MAX_PIPELINES}.`
 
 /**
- * A saved graph as this server can run it, or null. Storage is per browser but
- * the registry is per server, so a pipeline saved against another server's
- * transforms (M7) is listed but never loaded.
+ * A saved pipeline as this server can run it, or null. Storage is per browser
+ * but the registry is per server, so a pipeline saved against another server's
+ * strategies (M7) is listed but never opened, and so is a kept item.
  */
-export function usableGraph(p: SavedPipeline, registry: Registry): PipelineGraph | null {
-  return loadGraph(JSON.stringify(p.graph), registry)
+export function usableGraph(p: Pick<SavedPipeline, "config" | "documents" | "question">, registry: Registry): PipelineGraph | null {
+  if (!p.config || !knownSteps(p.config, registry)) return null
+  return columnOf({ config: p.config, documents: p.documents, question: p.question }, registry)
 }
 
 export function updatePipeline(id: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): boolean {
   const list = freshPipelines()
-  if (!list.some((p) => p.id === id)) return false
-  const next = { graph: structuredClone(withDocuments(graph, documents)), documents: structuredClone(documents), savedAt: new Date().toISOString() }
+  const c = graphToConfig(withDocuments(graph, documents))
+  if (!c.ok || !list.some((p) => p.id === id && !p.kept)) return false
+  const next = {
+    config: structuredClone(c.pipeline.config),
+    question: structuredClone(c.pipeline.question),
+    documents: structuredClone(documents),
+    savedAt: new Date().toISOString(),
+  }
   return persist(list.map((p) => (p.id === id ? { ...p, ...next } : p)))
 }
 
@@ -219,16 +298,26 @@ export function mergeById<T extends { id: string; savedAt: string }>(
 /** Library import: add saved pipelines from a file (I3 cap, I4 fresh read). Null when storage refused the write. */
 export function importPipelines(incoming: readonly unknown[]): ImportResult<SavedPipeline> | null {
   const current = freshPipelines()
-  const valid = incoming.map(asPipeline).filter((p): p is SavedPipeline => p !== null)
+  const valid = incoming.map(asIncoming).filter((p): p is SavedPipeline => p !== null)
   const { add, result } = mergeById(new Set(current.map((p) => p.id)), current.length, valid, MAX_PIPELINES)
   const next = [...current, ...add].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
   return persist(next) ? result : null
 }
 
-/** Delete every saved pipeline, and the selection with them. The working copy on Build stays. */
+/**
+ * Delete every saved pipeline, and the selection with them. The working copy on
+ * Build stays. The visitor asked for this, so the list an older version saved
+ * goes too; the new list stays as an empty one, so nothing converts again.
+ */
 export function clearPipelines(): void {
   persist([])
+  write(OLD_LIST_KEY, null)
   setCurrentId(null)
+}
+
+/** Whether the list an older version saved is still in this browser. */
+export function oldListStored(): boolean {
+  return read(OLD_LIST_KEY, (raw) => raw) !== null
 }
 
 export function readCurrentId(): string | null {
@@ -278,12 +367,15 @@ export function sameGraph(a: PipelineGraph, b: PipelineGraph): boolean {
   return JSON.stringify(byId(a.nodes)) === JSON.stringify(byId(b.nodes)) && JSON.stringify(edges(a)) === JSON.stringify(edges(b))
 }
 
+/** What a saved pipeline or the Starter is compared by: its settings and its documents. */
+type Comparable = { id: string; documents: DocRef[]; config: PipelineConfig | null }
+
 /**
  * Whether the working copy is work no saved pipeline holds: a new pipeline, a
  * changed step, or another document, the Starter included. Evaluate lists such
  * a copy as the pipeline on Build, and nothing replaces it without a word.
  */
-export function isUnsaved(p: Pick<SavedPipeline, "id" | "graph" | "documents"> | null, working: PipelineGraph): boolean {
+export function isUnsaved(p: Comparable | null, working: PipelineGraph): boolean {
   return !p || isEdited(p, working) || !sameDocuments(p.documents, documentsOf(working))
 }
 
@@ -313,23 +405,11 @@ export function decodePipeline(code: string, registry: Registry): { name: string
   }
 }
 
-/** A graph without what a pipeline is run on or asked: the source's document and the question. */
-function stepsOnly(g: PipelineGraph): PipelineGraph {
-  return {
-    ...g,
-    nodes: g.nodes.map((n) => {
-      if (n.stage === "source") return { ...n, config: {} }
-      if (n.stage !== "query") return n
-      const rest = { ...n.config }
-      for (const k of ["text", "gold_answer", "gold_answers"]) delete rest[k]
-      return { ...n, config: rest }
-    }),
-  }
-}
-
 /** The same steps and settings, whatever document they run on and whatever question is typed. */
 export function sameSteps(a: PipelineGraph, b: PipelineGraph): boolean {
-  return sameGraph(stepsOnly(a), stepsOnly(b))
+  const x = graphToConfig(a)
+  const y = graphToConfig(b)
+  return x.ok && y.ok && sameConfig(x.pipeline.config, y.pipeline.config)
 }
 
 /**
@@ -338,9 +418,10 @@ export function sameSteps(a: PipelineGraph, b: PipelineGraph): boolean {
  * because it owns its documents and Save keeps the new ones. The Starter is
  * ready-made and runs on any sample, so only its steps count.
  */
-export function isEdited(p: Pick<SavedPipeline, "id" | "graph" | "documents">, working: PipelineGraph): boolean {
-  if (!sameSteps(p.graph, working)) return true
-  return p.id !== STARTER_ID && !sameDocuments(p.documents, documentsOf(working))
+export function isEdited(p: Comparable, working: PipelineGraph): boolean {
+  const c = graphToConfig(working)
+  if (!p.config || !c.ok || !sameConfig(p.config, c.pipeline.config)) return true
+  return p.id !== STARTER_ID && !sameDocuments(p.documents, c.pipeline.documents)
 }
 
 export function resetPipelinesForTests(): void {

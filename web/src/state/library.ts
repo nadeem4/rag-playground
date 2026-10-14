@@ -3,7 +3,7 @@ import type { SampleCard, Source } from "@/api/types"
 import { STAGE_VERB, type PipelineGraph } from "./graph"
 import { pipelineSteps } from "./evaluate"
 import { asIncomingExperiment, MAX_EXPERIMENTS, rawExperiment, type SavedExperiment } from "./libraryExperiments"
-import { asPipeline, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
+import { asIncoming, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
 
 /**
  * The Library page's arithmetic, kept pure so it is testable without a
@@ -35,12 +35,19 @@ export function libraryItems(pipelines: readonly SavedPipeline[], experiments: r
   return items.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
 }
 
-/** A pipeline's steps by their plain names, in column order: "Docling, Recursive (natural breaks), Hybrid (RRF)". */
-export function pipelineSummary(graph: PipelineGraph): string {
+/** A pipeline's steps by their plain names, in column order: "Docling, Recursive (natural breaks), Hybrid (RRF)". "" for none. */
+export function pipelineSummary(graph: PipelineGraph | null): string {
+  if (!graph) return ""
   return pipelineSteps(graph)
     .filter((s) => s.label !== "Index")
     .map((s) => s.name)
     .join(", ")
+}
+
+/** Why a kept item does not open, in one line; null for every other item. */
+export function keptLine(p: SavedPipeline): string | null {
+  if (!p.kept) return null
+  return `Saved by an older version. It cannot be opened here: ${p.kept.problem} It is kept in this browser, and Export keeps a copy.`
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
@@ -182,9 +189,10 @@ export function parseImport(text: string): ParsedImport {
   const pipelines: SavedPipeline[] = []
   const experiments: SavedExperiment[] = []
   let skipped = 0
-  for (const raw of file.items as unknown[]) {
+  for (const [place, raw] of (file.items as unknown[]).entries()) {
     const item = raw as { kind?: unknown } | null
-    const pipeline = item?.kind === "pipeline" ? asPipeline(item) : null
+    // A file holds configs, or graphs when an older version made it: those are converted or kept.
+    const pipeline = item?.kind === "pipeline" ? asIncoming(item, place) : null
     if (pipeline) {
       pipelines.push(pipeline)
       continue

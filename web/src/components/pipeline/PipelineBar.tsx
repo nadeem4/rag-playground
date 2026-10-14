@@ -12,7 +12,10 @@ import {
   deletePipeline,
   droppedText,
   encodePipeline,
+  FULL_OF_KEPT,
+  fullOfKept,
   isEdited,
+  keptReason,
   renamePipeline,
   savePipeline,
   setCurrentId,
@@ -82,7 +85,8 @@ export function PipelineBar({
     const made = naming === "rename" && saved ? null : savePipeline(name, graph)
     const ok = naming === "rename" && saved ? renamePipeline(saved.id, name) : made !== null
     if (!ok) {
-      setNameError(name.trim() ? "The pipeline could not be saved in this browser." : "Give the pipeline a name.")
+      const full = naming !== "rename" && name.trim() !== "" && fullOfKept()
+      setNameError(full ? FULL_OF_KEPT : name.trim() ? "The pipeline could not be saved in this browser." : "Give the pipeline a name.")
       return
     }
     if (made?.dropped) setFlash(droppedText(made.dropped))
@@ -101,7 +105,9 @@ export function PipelineBar({
 
   async function copyLink() {
     if (!saved) return
-    const url = `${window.location.origin}/build?pipeline=${encodePipeline(saved.name, saved.graph, saved.documents)}`
+    const drawn = usableGraph(saved, registry)
+    if (!drawn) return
+    const url = `${window.location.origin}/build?pipeline=${encodePipeline(saved.name, drawn, saved.documents)}`
     try {
       await navigator.clipboard.writeText(url)
       setFlash("Link copied")
@@ -128,9 +134,11 @@ export function PipelineBar({
       return {
         value: p.id,
         name: p.name,
-        help: pipelineLine(usable ?? p.graph),
+        help: usable ? pipelineLine(usable) : "",
         group: "Your pipelines",
-        lock: usable ? undefined : { kind: "hard" as const, reason: "This server does not have every step this pipeline uses." },
+        lock: usable
+          ? undefined
+          : { kind: "hard" as const, reason: keptReason(p.kept?.problem) },
         tags: p.id === saved?.id && edited ? editedTag : undefined,
       }
     }),

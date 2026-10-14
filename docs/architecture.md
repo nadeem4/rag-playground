@@ -321,11 +321,11 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
 - **Keys.** A key typed in the app is sent as a header on runs, sweeps and key checks.
 - **State.** Saved pipelines, experiments and the working pipeline live in the browser's
   storage; see [privacy.md](privacy.md).
-- **Pipelines and documents.** A saved pipeline is a name, a graph and a list of documents
-  (`web/src/state/pipelines.ts`). The graph's source node points at the first document, so
-  the run request, recipe hashes and cache keys are what they were. Pipelines stored, shared
-  or exported before the list existed get it on read, from the source node; share links are
-  version 2 and still read version 1. The ready-made Starter pipeline
+- **Pipelines and documents.** A saved pipeline is a name, a config (a pipeline file's
+  settings), a list of documents and the question Ask asks (`web/src/state/pipelines.ts`).
+  It is drawn as a column with `columnOf` when it opens, so the run request, recipe hashes
+  and cache keys are what they were. Pipelines exported before the list existed get it on
+  read, from the graph's source node; share links are version 2 and still read version 1. The ready-made Starter pipeline
   (`web/src/state/starter.ts`) is the default recipe `sampleGraph` builds, on the default
   sample, and is never stored as a saved pipeline. `web/src/state/pipelineChoice.ts` lists
   what Evaluate can score and picks the one it opens on. A question in a question set may
@@ -371,8 +371,16 @@ to `rag-playground:pipeline:v2:kept` with the reason, beside any kept before, an
 why once. Build's per-tab results moved to `rag-playground:build-session:v2`,
 because the old ones were keyed by the old graph's card ids.
 
-Saved pipelines, share links and export files still hold a graph; they move to the config
-in later changes. The fixture
+Saved pipelines (form 2, the Library list) are kept as configs under
+`rag-playground:pipelines:v2`. The first read that finds no list there converts the old list
+under `rag-playground:pipelines:v1` once, item by item. An item that cannot be converted is
+kept in the new list as it was, with `config: null` and the reason, listed in Library and
+never opened. The conversion never writes or removes the old key; the one exception is the
+privacy page's Delete saved pipelines and experiments, which removes it because the visitor
+asked, and leaves the new list empty so nothing converts again. The cap of twenty never drops
+a kept item: a save drops the oldest item that is not kept, and is refused when every other
+item is kept, with a line that says the list is full of older pipelines. An export file still reads either shape. Share links still hold a graph; they move to
+the config in a later change. The fixture
 `web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the browser holds
 it, and two tests pin that converting the app's Starter gives that file, so a visitor's
 Starter keeps its result ids.

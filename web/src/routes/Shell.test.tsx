@@ -9,7 +9,7 @@ import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/state/document"
 import { addCleaner, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
-import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID } from "@/state/pipelines"
+import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID, usableGraph } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
 
@@ -962,7 +962,7 @@ describe("Build is pipeline first", () => {
 
   it("a saved pipeline, once edited, offers Save and Save as new; Save writes the steps back", async () => {
     const saved = savePipeline("Token chunks", setTransform(sampleGraph(TEST_REGISTRY, PRIMER), "chunk", "token_based", TEST_REGISTRY))!.saved
-    storeGraph(saved.graph)
+    storeGraph(usableGraph(saved, TEST_REGISTRY)!)
     render(<Shell />)
     await waitFor(() => expect(picked()).toBe(saved.id))
     expect((within(bar()).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true)
@@ -970,13 +970,13 @@ describe("Build is pipeline first", () => {
     expect(within(bar()).getByText("edited")).toBeTruthy()
     expect(within(bar()).getByRole("button", { name: "Save as new" })).toBeTruthy()
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
-    expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("markdown_header")
+    expect(readPipelines()[0].config?.index.chunk.use).toBe("markdown_header")
     expect(within(bar()).queryByText("edited")).toBeNull()
   })
 
   it("New starts an unsaved pipeline from the Starter's settings on the document in use", async () => {
     const saved = savePipeline("Token chunks", setTransform(sampleGraph(TEST_REGISTRY, TABLE), "chunk", "token_based", TEST_REGISTRY))!.saved
-    storeGraph(saved.graph)
+    storeGraph(usableGraph(saved, TEST_REGISTRY)!)
     render(<Shell />)
     await waitFor(() => expect(picked()).toBe(saved.id))
     choose(picker(), "New pipeline")
@@ -1082,10 +1082,10 @@ describe("saved pipelines on Build", () => {
     expect(within(bar()).getByText("edited")).toBeTruthy()
     expect(optionOf(picker(), "Token chunks").textContent).toContain("Edited since saved")
     fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" })
-    expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("token_based")
+    expect(readPipelines()[0].config?.index.chunk.use).toBe("token_based")
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
     expect(within(bar()).queryByText("edited")).toBeNull()
-    expect(readPipelines()[0].graph.nodes.find((n) => n.stage === "chunk")?.transform).toBe("markdown_header")
+    expect(readPipelines()[0].config?.index.chunk.use).toBe("markdown_header")
   })
 
   it("Delete returns to the working copy and keeps the graph on screen", async () => {
@@ -1120,7 +1120,7 @@ describe("saved pipelines on Build", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     const url = new URL(writeText.mock.calls[0][0] as string)
     expect(url.pathname).toBe("/build")
-    expect(decodePipeline(url.searchParams.get("pipeline")!, TEST_REGISTRY)).toEqual({ name: "Token chunks", graph: saved.graph, documents: saved.documents })
+    expect(decodePipeline(url.searchParams.get("pipeline")!, TEST_REGISTRY)).toEqual({ name: "Token chunks", graph: usableGraph(saved, TEST_REGISTRY), documents: saved.documents })
     expect(await within(bar()).findByText("Link copied")).toBeTruthy()
   })
 
@@ -1217,6 +1217,21 @@ describe("saved pipelines on Build", () => {
     expect(within(bar()).getByText("The shared pipeline could not be saved in this browser. It is loaded as the working copy.")).toBeTruthy()
     expect(picked()).toBe("")
     expect(chunkTransform()).toBe("token_based")
+  })
+
+  it("says the list is full of older pipelines when Save as new or a share link cannot make room", async () => {
+    const enrich = { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }
+    const kept = Array.from({ length: 20 }, (_, i) => ({ id: `k${String(i).padStart(7, "0")}`, name: `Old ${i}`, graph: enrich, savedAt: "2026-01-01T00:00:00Z" }))
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(kept))
+    const full = "The list is full of older pipelines that could not be converted. Delete one in the Library to save this."
+    window.history.replaceState(null, "", `/build?pipeline=${encodePipeline("From a friend", withFile())}`)
+    setup()
+    await screen.findByRole("group", { name: "Pipeline" })
+    expect(within(bar()).getByText(`${full} The shared pipeline is loaded as the working copy.`)).toBeTruthy()
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save as new" }))
+    fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "Another" } })
+    fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
+    expect(within(bar()).getByText(full)).toBeTruthy()
   })
 
   it("says so when storage refuses Save as or Save changes (M3)", async () => {

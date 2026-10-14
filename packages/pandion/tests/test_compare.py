@@ -319,3 +319,25 @@ def test_a_question_whose_retrieval_fails_carries_the_error_and_is_left_out_of_t
     assert (q.found, q.lost_at, q.trace, q.result_id) == (False, None, None, None)
     t = report.totals()
     assert (t["total"], t["scored"], t["hit_rate"], t["mrr"]) == (1, 0, None, None)
+
+
+import threading
+
+
+def test_compare_reports_progress_by_variant(tmp_path, docs):
+    events = []
+    pandion.compare(pipeline(tmp_path), "chunk", [V70, V30], docs, [FOUND], on_event=events.append)
+    assert {e["variant"] for e in events} == {1, 2}
+    assert [e["question"] for e in events if e["event"] == "question_finished"] == ["capital", "capital"]
+
+
+def test_a_cancel_starts_no_further_variant(tmp_path, docs):
+    stop = threading.Event()
+
+    def on_event(e):
+        if e["variant"] == 1 and e["event"] == "run_finished":
+            stop.set()
+
+    results = pandion.compare(pipeline(tmp_path), "chunk", [V70, V30], docs, on_event=on_event, cancel=stop)
+    assert len(results) == 1 and results.cancelled
+    assert results.to_dict()["cancelled"] is True

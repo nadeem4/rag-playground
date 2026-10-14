@@ -311,6 +311,7 @@ def test_a_cancelled_search_finds_nothing_and_says_so(tmp_path, pdf):
     result = Pipeline.from_dict(SEARCH, base=tmp_path).retrieve("capital", documents=pdf, cancel=stop)
     assert not result.ok and result.hits == []
     assert result.stages["search"].status == "skipped"
+    assert result.stages["rewrite"].status == "skipped"
 
 
 @pytest.mark.parametrize("on", [True, False])
@@ -334,3 +335,19 @@ def test_the_switch_is_written_back_only_when_on(tmp_path):
         "device": "cpu", "public_endpoints_only": True,
     }
     assert "public_endpoints_only" not in Pipeline.from_dict(CONFIG, base=tmp_path).to_dict()["models"]
+
+
+def test_the_public_endpoint_switch_reaches_the_search_steps(tmp_path, pdf, monkeypatch):
+    config = {**SEARCH, "models": {"device": "cpu", "public_endpoints_only": True}}
+    p = Pipeline.from_dict(config, base=tmp_path)
+    p.index.run(pdf)
+    seen = []
+    real = pipeline_module.run
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs["context_extras"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline_module, "run", spy)
+    assert p.retrieve("capital").ok
+    assert seen and all(extras["public_endpoints_only"] is True for extras in seen)

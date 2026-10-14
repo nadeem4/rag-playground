@@ -9,6 +9,7 @@ import {
   hasRetriever,
   percent,
   piecesWarning,
+  plainTrace,
   pipelineLine,
   pipelineSteps,
   readPreviousEvaluation,
@@ -471,4 +472,38 @@ it("the browser no longer adds up scores", async () => {
   for (const name of ["metrics", "summarize", "metricsByTag", "batches", "questionVariants", "evalGraph", "traceRequest"]) {
     expect(mod).not.toHaveProperty(name)
   }
+})
+
+describe("plainTrace", () => {
+  const g = e2eSampleGraph(LIVE, SRC)
+  const step = (stage: TraceStep["stage"], sentence: string): TraceStep => ({ stage, name: stage, status: "pass", sentence, evidence: null })
+
+  it("names each parse, clean and rerank step as Build does, in the finding, the fix and every sentence", () => {
+    const trace: Trace = {
+      finding: "Lost at Clean. dedupe_blocks removed the answer sentence.",
+      lost_at: "clean",
+      fix: "Try a parser other than docling, or drop dedupe_blocks.",
+      golds: ["x"],
+      steps: [
+        step("parse", "The answer sentence is in the text docling read."),
+        step("clean", "Still there after dedupe_blocks."),
+        step("rerank", "mmr put it 4th."),
+      ],
+    }
+    const plain = plainTrace(trace, g)
+    expect(plain.finding).toBe("Lost at Clean. Remove duplicate blocks removed the answer sentence.")
+    expect(plain.fix).toBe("Try a parser other than Docling, or drop Remove duplicate blocks.")
+    expect(plain.steps.map((s) => s.sentence)).toEqual([
+      "The answer sentence is in the text Docling read.",
+      "Still there after Remove duplicate blocks.",
+      "MMR (variety) put it 4th.",
+    ])
+    // The trace it was given is left as it was.
+    expect(trace.steps[1].sentence).toBe("Still there after dedupe_blocks.")
+  })
+
+  it("matches whole words only, and leaves a trace with no fix alone", () => {
+    const trace: Trace = { finding: "my_docling_x and mmrs stay; docling goes.", lost_at: null, fix: null, golds: [], steps: [] }
+    expect(plainTrace(trace, g)).toEqual({ ...trace, finding: "my_docling_x and mmrs stay; Docling goes." })
+  })
 })

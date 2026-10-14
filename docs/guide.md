@@ -386,10 +386,12 @@ Changing Pieces checked after a run does not relabel the numbers: the page says 
 pieces. Evaluate again to use 3."
 
 **Cancel** stops the run before its next question. The questions that finished keep their
-rows and the score counts only them, with a line such as "Stopped after 4 of 10
-questions." The questions it never reached read Not run. A stopped run is not kept as the last run to compare against. If the scores
-cannot be read once the run ends, the page tries once more, then says "The scores could
-not be read. Run it again." instead of showing an empty score.
+rows and the score counts only them: "Stopped after 4 of 10 questions. 3 of the 4
+questions scored before the stop found the answer." The questions it never reached read
+Not run. A stopped run is compared with no last run, and it is not kept as the last run
+to compare against. If the scores cannot be read once the run ends, the page tries once
+more, then says "The scores could not be read. Run it again." instead of showing an empty
+score.
 
 One mark per question sits under the score; pressing a mark brings its row into view. Each
 row gives its verdict in a word and why in a sentence, such as "Found in the 1st piece, word

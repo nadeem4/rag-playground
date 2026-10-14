@@ -22,6 +22,7 @@ import { MissTrace } from "@/components/evaluate/MissTrace"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { CONTROL } from "@/components/fields/types"
 import { EvidenceSlip, LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
+// Two modules export rowsFromResult: the hits of one search here, the report's verdicts by id from state/evaluate.
 import { ordinal, rowsFromResult as hitRows, scoreKey, type FindingPart } from "@/components/inspectors/hits"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { Button } from "@/components/ui/button"
@@ -35,11 +36,13 @@ import {
   hasRetriever,
   piecesWarning,
   pipelineLine,
+  plainTrace,
   pipelineSteps,
   readPreviousEvaluation,
   reasonText,
   rerankEffect,
   rerankLine,
+  // Renamed beside hitRows: this one reads the report's verdicts by question id.
   rowsFromResult as verdictsById,
   storePreviousEvaluation,
   scoreFinding,
@@ -571,8 +574,11 @@ function Evaluation({
   // Every number is the server's: the totals, and the same per tag.
   const totals: Totals | null = result
   const byTag = result?.by_tag ?? {}
+  // A stopped run scored only part of the set, so it is compared with no last run.
+  const cancelled = result?.cancelled === true
+  const compared = cancelled ? null : previous
   // A number is compared only with a last run scored at the same Pieces checked.
-  const beforeTotals = previous && (previous.k === undefined || previous.k === shownK) ? previous.totals : null
+  const beforeTotals = compared && (compared.k === undefined || compared.k === shownK) ? compared.totals : null
   const scoredRows = ran ? rows : []
   const effect = graph.nodes.some((n) => n.stage === "rerank")
     ? rerankEffect(scoredRows.map((r) => ({ payload: r.payload, rows: r.result ? hitRows(r.result) : undefined })))
@@ -584,24 +590,32 @@ function Evaluation({
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
   const misses = scoredRows.flatMap((r) => (r.payload && !r.payload.hit ? [r.payload] : []))
   const warning = piecesWarning(pieces, shownK, misses)
-  // A run stopped before any question was scored has no score to word, only the stop.
-  const score = totals && totals.total > 0
-    ? scoreFinding(
-        totals,
-        previous,
-        scoredRows.filter((r) => r.payload).map((r) => ({ now: r.payload, before: previous?.byId[r.question.id] })),
-        steps,
-        shownK,
-      )
-    : null
-  const stale = ran && !busy ? staleLine(scoredK, topK) : null
-  // The run has ended: a question it never got to is not run, not still waiting.
-  const over = ran && run.closed
   const stopped = !result?.cancelled
     ? null
     : result.total === 0
       ? "Stopped before any question was scored."
       : `Stopped after ${result.total} of ${asked.length} ${asked.length === 1 ? "question" : "questions"}.`
+  // Every row goes in, a failed one with no score, so a failed search keeps "every answer
+  // came back first" from being said. A stopped run words only the questions it scored.
+  const found = totals
+    ? scoreFinding(
+        totals,
+        compared,
+        (cancelled ? scoredRows.filter((r) => r.payload) : scoredRows).map((r) => ({ now: r.payload, before: compared?.byId[r.question.id] })),
+        steps,
+        shownK,
+      )
+    : null
+  // A run stopped before any question was scored has no score to word, only the stop.
+  const score =
+    found && totals && totals.total > 0
+      ? cancelled
+        ? { ...found, finding: `${stopped} ${totals.found} of the ${totals.total} ${totals.total === 1 ? "question" : "questions"} scored before the stop found the answer.` }
+        : found
+      : null
+  const stale = ran && !busy ? staleLine(scoredK, topK) : null
+  // The run has ended: a question it never got to is not run, not still waiting.
+  const over = ran && run.closed
 
   // While a run goes: is the index from the cache, and how far through the questions.
   const indexIds = columnOrder(graph)
@@ -872,11 +886,6 @@ function Evaluation({
                 <MonoNumbers text={score.note} />
               </p>
             ) : null}
-            {stopped ? (
-              <p data-testid="stopped" className="max-w-[70ch] text-fg-muted">
-                <MonoNumbers text={stopped} />
-              </p>
-            ) : null}
           </div>
         ) : stopped ? (
           <p data-testid="stopped" className="max-w-[70ch] text-fg-muted">
@@ -947,7 +956,7 @@ function Evaluation({
                 row={row}
                 ran={ran}
                 over={over}
-                before={previous?.byId[row.question.id]}
+                before={compared?.byId[row.question.id]}
                 topK={shownK}
                 onDetail={() => setDetail(row.question.id)}
                 rowRef={(el) => {
@@ -1203,9 +1212,9 @@ function QuestionDetail({ row, graph }: { row: Row; graph: PipelineGraph }) {
         <section data-testid="detail-trace" className="flex flex-col gap-2">
           <h3 className="text-base font-semibold">Why did this miss?</h3>
           {row.trace ? (
-            <MissTrace trace={row.trace} fixHref={fixHref(graph, row.trace)} />
+            <MissTrace trace={plainTrace(row.trace, graph)} fixHref={fixHref(graph, row.trace)} />
           ) : (
-            <p className="text-sm text-fg-muted">The server sent no trace for this question.</p>
+            <p className="text-sm text-fg-muted">No trace came with this miss.</p>
           )}
         </section>
       ) : null}

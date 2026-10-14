@@ -1024,6 +1024,21 @@ describe("while and after scoring", () => {
     expect(screen.getByRole("button", { name: "Evaluate again" })).toBeTruthy()
   })
 
+  it("never says every answer came back first when a question's search failed", async () => {
+    const { es } = await start({
+      result: report([verdict("a"), verdict("b", { found: false, rank: null, score: {} as EvalPayload, error: "The search step failed." })], {
+        ...totalsOf(1, 2),
+        scored: 1,
+        hit_rate: 1,
+      }),
+    })
+    es.emit(1, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+    expect(screen.queryByTestId("score-note")).toBeNull()
+    expect(document.body.textContent).not.toContain("Every answer came back as the top piece.")
+    expect(document.querySelector('[data-question="b"] [data-verdict]')!.textContent).toBe("Failed")
+  })
+
   it("shows Build's run strip while the index builds, and keeps a summary of what came from the cache after the run", async () => {
     const { es } = await start({ result: report([verdict("a"), verdict("b")]) })
     const index = graph.nodes.filter((n) => ["parse", "clean", "chunk", "index"].includes(n.stage))
@@ -1096,7 +1111,7 @@ describe("while and after scoring", () => {
     await finishTwo()
     const marks = within(await screen.findByRole("list", { name: "One mark per question" })).getAllByRole("button")
     expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(["Question 1, found", "Question 2, missed"])
-    expect(marks.map((m) => m.textContent)).toEqual(["✓", "✕"])
+    expect(marks.map((m) => m.textContent)).toEqual(["\u2713", "\u2715"])
     expect(marks[0].className).toContain("bg-kept")
     expect(marks[1].className).toContain("bg-removed")
     expect(marks[1].className).toContain("--removed-mark")
@@ -1117,7 +1132,7 @@ describe("while and after scoring", () => {
   it("says the verdict in a word and the reason in a sentence, with no hash id", async () => {
     await finishTwo()
     const row = document.querySelector<HTMLElement>('[data-question="b"]')!
-    expect(row.textContent).toContain("✕ Missed")
+    expect(row.textContent).toContain("\u2715 Missed")
     expect(row.querySelector("[data-verdict]")!.className).toContain("text-removed-mark")
     expect(row.textContent).toContain("Not in any of the 3 pieces that came back")
     expect(row.textContent).not.toMatch(/[0-9a-f]{8}/)
@@ -1125,7 +1140,7 @@ describe("while and after scoring", () => {
     expect(row.querySelector(".font-mono")!.textContent).toBe("b")
     expect(row.textContent).not.toMatch(/checked$/)
     expect(row.querySelector("[data-question-text]")!.className).toContain("text-base")
-    expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("✓ Found")
+    expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("\u2713 Found")
     expect(document.querySelector<HTMLElement>('[data-question="a"]')!.textContent).toContain("Found in the 1st piece, word for word.")
     // After a run the evidence folds away on a phone, since Details shows it.
     expect(document.querySelector<HTMLElement>('[data-question="a"] [data-evidence]')!.className).toContain("hidden md:grid")
@@ -1320,26 +1335,40 @@ describe("a large question set", () => {
     expect(served.evaluations).toHaveLength(1)
   })
 
-  it("stops the run on Cancel, and says how far it got", async () => {
-    const { es, served } = await start(report([verdict("q0")], { cancelled: true }))
+  it("stops the run on Cancel, leads with how far it got, and compares the part with nothing", async () => {
+    // A full last run in this tab: a stopped run must not be measured against it.
+    const last = { sourceSha: SOURCE.sha, pipelineKey: "working", byId: { q0: score({ hit: false, rank: null }) }, totals: totalsOf(12, 12) }
+    storePreviousEvaluation(last)
+    const missed = score({ hit: false, rank: null, matched_chunk_id: "", match: "none", returned: 3 })
+    const { es, served } = await start(report([verdict("q0"), verdict("q1", { score: missed })], { cancelled: true }))
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
     await waitFor(() => expect(served.cancelled).toEqual(["e1"]))
     es.emit(1, step("q0", "retrieve", "node_finished", { artifact_id: "r0", cache_hit: false, duration_ms: 1 }))
     es.emit(2, { event: "question_finished", question: "q0", number: 1, total: 12, found: true, error: null })
-    // The second question had started its search when the cancel landed.
-    es.emit(3, step("q1", "retrieve", "node_started", { transform: "x", artifact_id: "r1" }))
-    es.emit(4, { event: "stream_end", status: "cancelled", ok: false })
+    es.emit(3, step("q1", "retrieve", "node_finished", { artifact_id: "r1", cache_hit: false, duration_ms: 1 }))
+    es.emit(4, { event: "question_finished", question: "q1", number: 2, total: 12, found: false, error: null })
+    // The third question had started its search when the cancel landed.
+    es.emit(5, step("q2", "retrieve", "node_started", { transform: "x", artifact_id: "r2" }))
+    es.emit(6, { event: "stream_end", status: "cancelled", ok: false })
     await waitFor(() => expect(screen.getByRole("button", { name: "Evaluate again" })).toBeTruthy())
-    expect((await screen.findByTestId("stopped")).textContent).toBe("Stopped after 1 of 12 questions.")
-    expect(screen.getByTestId("summary").textContent).toBe("1 of 1 question found the answer.")
+    expect((await screen.findByTestId("summary")).textContent).toBe(
+      "Stopped after 2 of 12 questions. 1 of the 2 questions scored before the stop found the answer.",
+    )
+    expect(screen.queryByTestId("score-note")).toBeNull()
+    expect(screen.getByTestId("numbers").textContent).not.toContain("was")
+    expect(document.querySelector('[data-question="q0"] [data-row-change]')).toBeNull()
     // The questions it never scored read Not run, not running or waiting.
     const marks = within(screen.getByRole("list", { name: "One mark per question" })).getAllByRole("button")
-    expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual(["Question 1, found", ...twelve.slice(1).map((_, i) => `Question ${i + 2}, not run`)])
-    // One search ran before the stop.
-    expect(screen.getByTestId("run-summary").textContent).toContain("1 search, ran now.")
+    expect(marks.map((m) => m.getAttribute("aria-label"))).toEqual([
+      "Question 1, found",
+      "Question 2, missed",
+      ...twelve.slice(2).map((_, i) => `Question ${i + 3}, not run`),
+    ])
+    // Two searches ran before the stop.
+    expect(screen.getByTestId("run-summary").textContent).toContain("2 searches, ran now.")
     expect(served.evaluations).toHaveLength(1)
     // A stopped run is not kept as the last run to compare against.
-    expect(readPreviousEvaluation(SOURCE.sha, "working")).toBeNull()
+    expect(readPreviousEvaluation(SOURCE.sha, "working")).toEqual(last)
   })
 
   it("says it stopped before any question was scored, with no score and no numbers", async () => {

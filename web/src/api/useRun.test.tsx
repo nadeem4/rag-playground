@@ -1,5 +1,5 @@
 import { StrictMode, type ReactNode } from "react"
-import { act, renderHook, waitFor } from "@testing-library/react"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { RunEvent, RunSnapshot } from "./types"
@@ -53,6 +53,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Unmount every hook, so no run of one test is still reading in the next.
+  cleanup()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -186,9 +188,7 @@ describe("useRun", () => {
     FakeEventSource.instances[0].emit(0, { event: "stream_end", status: "finished", ok: true })
 
     await waitFor(() => expect(result.current.result).toEqual({ hit_rate: 1 }))
-    // Only this run's reads: an earlier test's run may still be retrying its own.
-    const reads = (id: string) => fetchMock.mock.calls.filter((c) => (c as unknown[])[0] === `/api/v2/runs/${id}`).length
-    expect(reads("r6")).toBe(2)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(result.current.resultFailed).toBe(false)
   })
 
@@ -205,7 +205,7 @@ describe("useRun", () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 400))
     })
-    expect(fetchMock.mock.calls.filter((c) => (c as unknown[])[0] === "/api/v2/runs/r7")).toHaveLength(2)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it("closes the stream on unmount", async () => {

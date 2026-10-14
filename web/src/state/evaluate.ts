@@ -102,6 +102,33 @@ export function fixHref(g: PipelineGraph, trace: Trace): string | null {
   return node ? `/build?step=${encodeURIComponent(node.id)}` : null
 }
 
+/** The steps a trace names by their code name, which the page shows by Build's name. */
+const TRACE_NAMED: Stage[] = ["parse", "clean", "rerank"]
+
+const escapeRegExp = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/**
+ * The server's trace with each parse, clean and rerank step's code name
+ * (`dedupe_blocks`) swapped for the name Build shows (`Remove duplicate
+ * blocks`), in the finding, the fix and every step's sentence. Only whole
+ * words are swapped. The trace it is given is left as it was.
+ */
+export function plainTrace(trace: Trace, g: PipelineGraph): Trace {
+  const names = [...new Set(columnOrder(g).filter((n) => TRACE_NAMED.includes(n.stage)).map((n) => n.transform))]
+    .filter((t) => strategyLabel(t) !== t)
+    // Longer names first, so one name inside another is never half swapped.
+    .sort((a, b) => b.length - a.length)
+  if (!names.length) return trace
+  const pattern = new RegExp(`\\b(${names.map(escapeRegExp).join("|")})\\b`, "g")
+  const plain = (text: string) => text.replace(pattern, (t) => strategyLabel(t))
+  return {
+    ...trace,
+    finding: plain(trace.finding),
+    fix: trace.fix === null ? null : plain(trace.fix),
+    steps: trace.steps.map((s) => ({ ...s, sentence: plain(s.sentence) })),
+  }
+}
+
 /** A pipeline's steps in one line, by their plain names: a pipeline picker's help line. */
 export function pipelineLine(g: PipelineGraph): string {
   return pipelineSteps(g)

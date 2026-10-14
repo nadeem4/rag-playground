@@ -320,7 +320,8 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
 - **Artifacts.** The inspectors read results with `GET /api/artifacts/{id}/payload`.
 - **Miss trace.** Each missed question in an evaluation's result carries its trace, the
   first step that lost the answer, worked out by `pandion.evaluate` with the eval step's own
-  matching. Evaluate shows it as it comes; the web no longer calls `POST /api/trace`.
+  matching. Evaluate shows it with each step's code name swapped for Build's name
+  (`plainTrace`); the web no longer calls `POST /api/trace`.
 - **Sources.** Uploads, page images and the PDF itself come from `/api/sources`.
 - **Settings.** `GET /api/settings/app` says whether demo mode is on and gives its limits.
 - **Keys.** A key typed in the app is sent as a header on runs, evaluations, sweeps and key checks.

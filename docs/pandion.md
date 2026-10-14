@@ -322,6 +322,12 @@ The `retrieve` section of the file says what runs, in this order:
    [Rewrite a question](#rewrite-a-question).
 2. **search**, required. One retriever: `dense` (by meaning), `bm25` (by words) or
    `hybrid_rrf` (both, fused). Its `top_k` is how many pieces it hands on.
+   `hybrid_rrf` scores each piece `1 / (rrf_k + place)` in each list it appears in, and
+   adds the two. `dense_weight` and `bm25_weight` (both 1 by default) multiply each
+   list's term, so `bm25_weight: 2` makes the keyword search count twice as much as the
+   meaning search. Use that for questions that name exact codes, names or part numbers.
+   A weight must be 0 or more, and they cannot both be 0. Weights left at 1 do not
+   change a result's id.
 3. **rerank**, optional. None, one step, or a list that runs in order. Each step
    reorders the pieces the step before it handed on:
    - `mmr` trades some relevance for variety. It needs no extra model.

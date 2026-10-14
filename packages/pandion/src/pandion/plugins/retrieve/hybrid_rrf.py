@@ -5,16 +5,18 @@ a weighted sum here. A cosine similarity lives in [-1, 1] and a BM25 score is
 unbounded and corpus-dependent; adding them requires a normalization that has to
 be re-tuned for every corpus and every embedder. Ranks are already commensurable,
 so `1 / (rrf_k + rank)` needs no tuning at all, and `rrf_k` only controls how
-sharply the top of each list dominates.
+sharply the top of each list dominates. `dense_weight` and `bm25_weight`
+multiply each list's term, so one search can count for more than the other.
 """
 
 from __future__ import annotations
 
 from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel, Field
+from pydantic import Field, model_validator
 
 from pandion.artifacts import ArtifactType
+from pandion.ids import AddedSettings
 from pandion.payloads import Query
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -32,7 +34,9 @@ def filtered_out_note(docs: int) -> str:
     )
 
 
-class HybridRrfConfig(BaseModel):
+class HybridRrfConfig(AddedSettings):
+    added = ("dense_weight", "bm25_weight")
+
     #: The candidate pool handed on, and also how deep each search goes before
     #: fusion. A document has to appear in at least one list to be fusable at
     #: all, so this is what decides recall. The next step narrows the pool.
@@ -93,6 +97,36 @@ class HybridRrfConfig(BaseModel):
             "document)."
         ),
     )
+    #: Added after version 2's results were stored; see pandion.ids.AddedSettings.
+    dense_weight: float = Field(
+        default=1.0,
+        ge=0,
+        title="Meaning weight",
+        description=(
+            "How much the vector (meaning) search counts in the fusion. Each "
+            "list's 1/(rrf_k + place) is multiplied by its weight. 1 and 1 "
+            "count both searches the same."
+        ),
+    )
+    bm25_weight: float = Field(
+        default=1.0,
+        ge=0,
+        title="Keyword weight",
+        description=(
+            "How much the keyword search counts in the fusion. Set it above "
+            "the meaning weight, for example 2, to favour exact names, codes "
+            "and part numbers."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _one_search_counts(self) -> "HybridRrfConfig":
+        if self.dense_weight == 0 and self.bm25_weight == 0:
+            raise ValueError(
+                "dense_weight and bm25_weight are both 0, so no search would "
+                "count. Give at least one of them a weight above 0."
+            )
+        return self
 
 
 @register
@@ -127,7 +161,7 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
             f"Takes the top {top} from each search, merges them, and keeps the "
             f"best {top}. Each piece scores 1/({k} + its place) in every list it "
             f"appears in (rrf_k = {k}), so first place is worth 1/{k + 1} and "
-            f"tenth place 1/{k + 10}. {_base.pool_words(top)} "
+            f"tenth place 1/{k + 10}. " + _weight_words(config) + f"{_base.pool_words(top)} "
             + _expansion_words(config)
         )
         tradeoff = (
@@ -229,14 +263,14 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         best_rank: dict[str, int] = {}
 
         lists = (
-            ("dense", dense, lambda r: _base.similarity(r["_distance"], descriptor["metric"])),
-            ("bm25", lexical, lambda r: float(r["_score"])),
+            ("dense", dense, config.dense_weight, lambda r: _base.similarity(r["_distance"], descriptor["metric"])),
+            ("bm25", lexical, config.bm25_weight, lambda r: float(r["_score"])),
         )
-        for label, ranked, raw_score in lists:
+        for label, ranked, weight, raw_score in lists:
             for rank, row in enumerate(ranked, start=1):
                 doc = row["id"]
                 rows.setdefault(doc, row)
-                scores[doc] = scores.get(doc, 0.0) + 1.0 / (config.rrf_k + rank)
+                scores[doc] = scores.get(doc, 0.0) + weight / (config.rrf_k + rank)
                 # Only the lists a document actually appeared in get a component.
                 # A zero would read as "scored zero" rather than "not retrieved".
                 components.setdefault(doc, {})[label] = raw_score(row)
@@ -256,6 +290,17 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
             )
             for rank, doc in enumerate(order[: config.top_k], start=1)
         ]
+
+
+def _weight_words(config: HybridRrfConfig) -> str:
+    """What the list weights do, when they are not both 1."""
+    if config.dense_weight == 1 and config.bm25_weight == 1:
+        return ""
+    return (
+        f"The meaning search's term is multiplied by {config.dense_weight:g} "
+        f"(dense_weight) and the keyword search's by {config.bm25_weight:g} "
+        "(bm25_weight). "
+    )
 
 
 def _expansion_words(config: HybridRrfConfig) -> str:

@@ -566,6 +566,13 @@ describe("settingProblems", () => {
     })
   })
 
+  it("never doubles the full stop when a setting's sentence already has one", () => {
+    expect(settingProblems("index.chunk (recursive_character): chunk_size: Too small.; chunk_overlap: Too big.")?.settings).toEqual([
+      { field: "chunk_size", message: "Too small." },
+      { field: "chunk_overlap", message: "Too big." },
+    ])
+  })
+
   it("reads a problem with the whole step as no one setting's", () => {
     expect(settingProblems("index.chunk (sentence_window): settings: Value error, overlap must be smaller.")).toBeNull()
   })

@@ -277,7 +277,7 @@ results are shown unscored.
 - The page says "the answer" only when Pandion scored the run: the question is one of the
   sample's own, or it carries its gold passages, and the run stops at the search. Each
   recipe's rank of the answer is Pandion's, and the recipe Pandion names best says **Best**
-  beside its name. Before the run, the line under the title says "Its answer is known, so
+  beside its name. Before the run, the line under the title says "This question's answer is known, so
   Pandion scores each recipe." When every recipe ties for best, none is marked, since the
   finding already says so. With any other question, or through a chat answer, the Answer
   column is hidden and no recipe is marked. A stopped run names no best, and when the

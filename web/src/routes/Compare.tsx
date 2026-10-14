@@ -662,7 +662,7 @@ function Sweep({
       } else {
         // Anything else is said above the cards, in the server's own words.
         const routed = routeRunError(err, graph)
-        setError("message" in routed ? routed.message : Object.values(routed.errors).flat().join(" "))
+        setError(("message" in routed ? routed.message : Object.values(routed.errors).flat().join(" ")) || "The comparison could not start. Try again.")
       }
     } finally {
       setSubmitting(false)
@@ -1002,8 +1002,9 @@ function Sweep({
                 <a href="/build" className="text-fg underline pointer-coarse:inline-flex pointer-coarse:min-h-[44px] pointer-coarse:items-center">
                   Change the question on Build
                 </a>
+                .
                 {willScore ? (
-                  <span data-testid="scored-note"> Its answer is known, so Pandion scores each recipe.</span>
+                  <span data-testid="scored-note"> This question's answer is known, so Pandion scores each recipe.</span>
                 ) : null}
               </>
             ) : null}

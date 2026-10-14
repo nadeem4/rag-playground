@@ -64,7 +64,8 @@ const scored = (ranks: (number | null)[], best: number[]) => ({
 
 /** Wait until the page says the question's answer is known, so Run sends its gold passages. */
 async function questionsRead() {
-  await screen.findByTestId("scored-note")
+  const note = await screen.findByTestId("scored-note")
+  expect(note.parentElement?.textContent).toContain("Change the question on Build. This question's answer is known, so Pandion scores each recipe.")
 }
 
 /** The body of the comparison the page sent. */

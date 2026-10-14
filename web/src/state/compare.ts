@@ -189,7 +189,7 @@ export function rejectedRecipe(variants: Variant[], previous: Variant[], fields:
 export function settingProblems(sentence: string): { transform: string; settings: { field: string; message: string }[] } | null {
   const m = /^[\w.]+(?: step \d+)? \(([\w-]+)\): (.+?)\.?$/.exec(sentence)
   if (!m) return null
-  const settings = m[2].split("; ").map((part) => /^([\w.]+): (.+)$/.exec(part))
+  const settings = m[2].split("; ").map((part) => /^([\w.]+): (.+?)\.?$/.exec(part))
   if (settings.some((x) => !x || x[1] === "settings")) return null
   return { transform: m[1], settings: settings.map((x) => ({ field: x![1], message: `${x![2]}.` })) }
 }

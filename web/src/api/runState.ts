@@ -10,7 +10,13 @@
  * - Node ids repeat across sweep variants, so node state is grouped under the
  *   most recent `variant_started`. A plain run is a single variant with
  *   `index: null`.
+ * - A /api/v2 event names Pandion's step, and `cardEvent` turns it into the
+ *   card's id first. A comparison's event carries `variant` (from 1) and goes
+ *   in that variant's group; an evaluation's carries `question` and goes in
+ *   that question's group, in order of first appearance.
  */
+
+import { cardOfStep } from "@/state/config"
 
 import type { RunEvent, RunSnapshot, RunStatus, Variant } from "./types"
 
@@ -39,6 +45,8 @@ export interface VariantState {
   /** Sweep variant index; `null` for a plain run. */
   index: number | null
   variant?: Variant
+  /** The evaluation question this group's steps answered (/api/v2 only). */
+  question?: string
   /** Topological order from `run_started`. */
   order: string[]
   nodes: Record<string, NodeState>
@@ -58,6 +66,10 @@ export interface RunState {
   queued: boolean
   /** Highest SSE `id` applied, so a replayed stream can be de-duplicated. */
   lastSeq: number
+  /** Each evaluation question's outcome, by id, from `question_finished`. */
+  questions: Record<string, { found: boolean; error: string | null; number: number }>
+  /** What the run returned, from `GET /api/v2/runs/{id}` once the stream ended. */
+  result: unknown
 }
 
 /** What a page says while its run waits its turn on the busy demo. */
@@ -72,12 +84,15 @@ export const initialRunState: RunState = {
   closed: false,
   queued: false,
   lastSeq: -1,
+  questions: {},
+  result: null,
 }
 
 export type RunAction =
   | { type: "event"; event: RunEvent; seq?: number }
   | { type: "snapshot"; snapshot: RunSnapshot }
   | { type: "reset" }
+  | { type: "result"; result: unknown }
 
 function withCurrent(state: RunState, update: (v: VariantState) => VariantState): RunState {
   const variants = state.variants.length
@@ -94,6 +109,44 @@ function patchNode(state: RunState, id: string, patch: Partial<NodeState>): RunS
   }))
 }
 
+type Named = { step?: unknown; steps?: unknown; selected_steps?: unknown; skipped_steps?: unknown }
+
+const cards = (xs: unknown): string[] | undefined =>
+  Array.isArray(xs) ? xs.map((s) => cardOfStep(String((s as { step?: unknown } | null)?.step ?? ""))) : undefined
+
+/**
+ * A /api/v2 event names Pandion's step (`clean.1`, `search`); the column names
+ * cards (`clean_1`, `retrieve`). An event from an old route has no `step` and
+ * comes back as it is.
+ */
+export function cardEvent(e: RunEvent): RunEvent {
+  const n = e as RunEvent & Named
+  if (n.event === "run_started" && Array.isArray(n.steps)) {
+    const nodes = cards(n.steps)!
+    return { ...n, nodes, selected: cards(n.selected_steps) ?? nodes } as RunEvent
+  }
+  if (n.event === "run_cancelled" && Array.isArray(n.skipped_steps)) return { ...n, skipped: cards(n.skipped_steps)! } as RunEvent
+  if (typeof n.step === "string" && "node_id" in n) return { ...n, node_id: cardOfStep(n.step) } as RunEvent
+  return e
+}
+
+/** A comparison's event goes in its variant's group, an evaluation's in its question's. */
+function inGroup(state: RunState, e: RunEvent): RunState {
+  const tagged = e as RunEvent & { variant?: unknown; question?: unknown }
+  const last = state.variants[state.variants.length - 1]
+  if (typeof tagged.variant === "number") {
+    const index = tagged.variant - 1
+    if (last?.index === index) return state
+    return { ...state, variants: [...state.variants, { index, order: [], nodes: {} }] }
+  }
+  if (typeof tagged.question === "string" && e.event !== "question_finished") {
+    if (last?.question === tagged.question) return state
+    const index = state.variants.filter((v) => v.question !== undefined).length
+    return { ...state, variants: [...state.variants, { index, question: tagged.question, order: [], nodes: {} }] }
+  }
+  return state
+}
+
 function applyEvent(prev: RunState, e: RunEvent): RunState {
   const state: RunState = prev.status === "idle" ? { ...prev, status: "running" } : prev
 
@@ -107,24 +160,28 @@ function applyEvent(prev: RunState, e: RunEvent): RunState {
       return withCurrent(state, (v) => ({ ...v, ok: e.ok }))
     case "run_started": {
       const selected = new Set(e.selected ?? e.nodes)
-      // A plain run has no `variant_started`; a second `run_started` without
-      // one (should never happen) still gets its own group rather than
-      // overwriting the first.
-      const needsGroup =
-        state.variants.length === 0 ||
-        (state.variants[state.variants.length - 1].order.length > 0 &&
-          state.variants[state.variants.length - 1].index === null)
-      const base = needsGroup
-        ? { ...state, variants: [...state.variants, { index: null, order: [], nodes: {} }] }
-        : state
+      // A plain run on an old route has no `variant_started`; a second
+      // `run_started` without one (should never happen) still gets its own
+      // group rather than overwriting the first. A /api/v2 run may start twice
+      // in one group: Pandion's ask runs the index, then the search, so its
+      // second `run_started` merges into the group.
+      const fromV2 = Array.isArray((e as { steps?: unknown }).steps)
+      const last = state.variants[state.variants.length - 1]
+      const needsGroup = state.variants.length === 0 || (!fromV2 && last.order.length > 0 && last.index === null)
+      const base = needsGroup ? { ...state, variants: [...state.variants, { index: null, order: [], nodes: {} }] } : state
       return withCurrent(base, (v) => ({
         ...v,
-        order: [...e.nodes],
-        nodes: Object.fromEntries(
-          e.nodes.map((id) => [id, { id, status: selected.has(id) ? "pending" : "pruned" }]),
-        ),
+        order: [...v.order, ...e.nodes.filter((id) => !v.order.includes(id))],
+        nodes: {
+          ...v.nodes,
+          ...Object.fromEntries(
+            e.nodes.filter((id) => !(id in v.nodes)).map((id) => [id, { id, status: selected.has(id) ? "pending" : "pruned" } as NodeState]),
+          ),
+        },
       }))
     }
+    case "question_finished":
+      return { ...state, questions: { ...state.questions, [e.question]: { found: e.found, error: e.error, number: e.number } } }
     case "node_started":
       return patchNode(state, e.node_id, {
         status: "running",
@@ -175,13 +232,17 @@ export function runReducer(state: RunState, action: RunAction): RunState {
         ok: action.snapshot.ok,
         lastSeq: action.snapshot.last_event_id,
         closed: rebuilt.closed || action.snapshot.status !== "running",
+        result: action.snapshot.result ?? null,
       }
     }
     case "event": {
       if (action.seq !== undefined && action.seq <= state.lastSeq) return state
-      const next = applyEvent(state, action.event)
+      const event = cardEvent(action.event)
+      const next = applyEvent(inGroup(state, event), event)
       return action.seq === undefined ? next : { ...next, lastSeq: action.seq }
     }
+    case "result":
+      return { ...state, result: action.result }
   }
 }
 

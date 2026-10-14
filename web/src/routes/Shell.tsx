@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 
 import { keyMissing, keyNeedFor, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
@@ -451,7 +452,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           <h1 className="text-xl font-semibold">Index pipeline</h1>
           <div className="flex items-center gap-2">
             {busy && runId ? (
-              <Button variant="outline" size="sm" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+              <Button variant="outline" size="sm" onClick={() => void v2.cancelRun(runId).catch(() => undefined)}>
                 Cancel
               </Button>
             ) : null}

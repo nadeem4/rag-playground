@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import fixtureEvents from "./fixtures/run_events.json"
-import { initialRunState, reduceEvents, runReducer } from "./runState"
+import { cardEvent, initialRunState, reduceEvents, runReducer } from "./runState"
 import type { RunEvent } from "./types"
 
 const ts = 1789956625
@@ -131,5 +131,52 @@ describe("runReducer: waiting for a turn on the demo", () => {
     expect(reduceEvents([e({ event: "queued", ahead: 0 }), e({ event: "unqueued" })]).queued).toBe(false)
     // Cancelled while waiting: the stream ends with no unqueued.
     expect(reduceEvents([e({ event: "queued", ahead: 0 }), e({ event: "stream_end", status: "cancelled", ok: false })]).queued).toBe(false)
+  })
+})
+
+describe("/api/v2 events", () => {
+  const ts = 1
+  it("names each step by its card", () => {
+    const s = reduceEvents([
+      {
+        event: "run_started", ts, nodes: ["doc::parse", "doc::clean.1"], selected: ["doc::parse", "doc::clean.1"],
+        steps: [{ document: "doc", step: "parse" }, { document: "doc", step: "clean.1" }],
+        selected_steps: [{ document: "doc", step: "parse" }, { document: "doc", step: "clean.1" }],
+      },
+      { event: "node_finished", ts, node_id: "doc::clean.1", document: "doc", step: "clean.1", artifact_id: "x", cache_hit: false, duration_ms: 3 },
+    ] as never)
+    expect(s.variants[0].order).toEqual(["parse", "clean_1"])
+    expect(s.variants[0].nodes.clean_1).toMatchObject({ status: "done", artifact_id: "x" })
+  })
+
+  it("merges the search's run_started into the index's, as Pandion's ask runs both", () => {
+    const s = reduceEvents([
+      { event: "run_started", ts, nodes: ["d::chunk"], selected: ["d::chunk"], steps: [{ document: "d", step: "chunk" }] },
+      { event: "run_finished", ts, ok: true },
+      { event: "run_started", ts, nodes: ["search"], selected: ["search"], steps: [{ document: null, step: "search" }] },
+      { event: "node_finished", ts, node_id: "search", step: "search", document: null, artifact_id: "h", cache_hit: true, duration_ms: 1 },
+    ] as never)
+    expect(s.variants).toHaveLength(1)
+    expect(Object.keys(s.variants[0].nodes).sort()).toEqual(["chunk", "retrieve"])
+  })
+
+  it("groups a comparison's events by variant and an evaluation's by question", () => {
+    const cmp = reduceEvents([
+      { event: "node_finished", ts, node_id: "d::chunk", step: "chunk", document: "d", artifact_id: "a", cache_hit: false, duration_ms: 1, variant: 1, variants: 2 },
+      { event: "node_finished", ts, node_id: "d::chunk", step: "chunk", document: "d", artifact_id: "b", cache_hit: false, duration_ms: 1, variant: 2, variants: 2 },
+    ] as never)
+    expect(cmp.variants.map((v) => [v.index, v.nodes.chunk.artifact_id])).toEqual([[0, "a"], [1, "b"]])
+    const ev = reduceEvents([
+      { event: "node_finished", ts, node_id: "search", step: "search", document: null, artifact_id: "s1", cache_hit: false, duration_ms: 1, question: "q1" },
+      { event: "question_finished", ts, question: "q1", number: 1, total: 2, found: true, error: null },
+      { event: "question_finished", ts, question: "q2", number: 2, total: 2, found: false, error: null },
+    ] as never)
+    expect(ev.variants[0].question).toBe("q1")
+    expect(ev.questions).toEqual({ q1: { found: true, error: null, number: 1 }, q2: { found: false, error: null, number: 2 } })
+  })
+
+  it("leaves an old route's event as it is", () => {
+    const e = { event: "node_finished", ts, node_id: "chunk", artifact_id: "a", cache_hit: false, duration_ms: 1 }
+    expect(cardEvent(e as never)).toBe(e)
   })
 })

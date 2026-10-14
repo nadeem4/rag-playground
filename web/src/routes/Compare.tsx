@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 
 
 import { useApiKey } from "@/api/apiKey"
 import { api } from "@/api/client"
+import { v2 } from "@/api/v2"
 import { useSampleQuestions, useSamples } from "@/api/samples"
 import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
 import type { ChunkSet, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
@@ -717,7 +718,7 @@ function Sweep({
   }
   /** From a failed column: stop what is left of the run, and open that recipe's card on its strategy. */
   const changeThis = (i: number) => {
-    if (busy && runId) void api.cancelRun(runId).catch(() => undefined)
+    if (busy && runId) void v2.cancelRun(runId).catch(() => undefined)
     changeRecipes()
     if (items[i]) setEditing({ key: items[i].key, field: "transform" })
   }
@@ -1041,7 +1042,7 @@ function Sweep({
               </div>
             )}
             {phase === "results" && busy && runId ? (
-              <Button variant="ghost" size="sm" className="min-w-fit flex-1 md:flex-none" onClick={() => void api.cancelRun(runId).catch(() => undefined)}>
+              <Button variant="ghost" size="sm" className="min-w-fit flex-1 md:flex-none" onClick={() => void v2.cancelRun(runId).catch(() => undefined)}>
                 Stop the run
               </Button>
             ) : phase === "results" ? (

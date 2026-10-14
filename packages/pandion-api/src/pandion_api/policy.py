@@ -8,14 +8,19 @@ and the sentence the caller should see. See docs/pandion-api.md, "Site rules".
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 
+from pandion_api.credentials import PROVIDERS
 from pandion_api.documents import Document
 
 
 class Policy:
+    #: The 403 a run gets for a document can_read refuses.
+    not_readable = "This document is not available."
+
     def dependencies(self) -> list[Any]:
         """FastAPI dependencies (`fastapi.Depends(...)`) run on every route,
         for example one that sets a visitor cookie."""
@@ -76,6 +81,30 @@ class Policy:
         cookie. A run with an owner is for that owner only. None: anyone may
         follow or cancel it."""
         return None
+
+    # --- keys ---------------------------------------------------------------------
+
+    def server_key(self, provider: str) -> tuple[str | None, str]:
+        """(key, source) the server itself has for `provider`: its environment
+        variable ("env"), else (None, "none")."""
+        key = (os.environ.get(PROVIDERS[provider].env_var) or "").strip()
+        return (key, "env") if key else (None, "none")
+
+    def key(self, provider: str, request: Request) -> tuple[str | None, str]:
+        """(key, source) for this request: its header ("header"), else the server's."""
+        header = (request.headers.get(PROVIDERS[provider].header) or "").strip()
+        return (header, "header") if header else self.server_key(provider)
+
+    def credentials(self, request: Request) -> dict[str, str]:
+        """The keys a run gets, as Pandion's `credentials=` names them."""
+        out: dict[str, str] = {}
+        for provider, spec in PROVIDERS.items():
+            key, _ = self.key(provider, request)
+            if key:
+                out[spec.extra] = key
+        return out
+
+    # --- what leaves the server -----------------------------------------------------
 
     def scrub(self, text: str) -> str:
         """An error message as it may leave the server, for example with the

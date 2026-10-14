@@ -18,7 +18,15 @@ from fastapi.testclient import TestClient
 
 from api.deps import build_deps
 from api.main import create_app
-from tests.api import conftest, test_delete_source, test_demo, test_pages, test_source_file, test_sources
+from tests.api import (
+    conftest,
+    test_delete_source,
+    test_demo,
+    test_pages,
+    test_runs,
+    test_source_file,
+    test_sources,
+)
 
 #: (pattern, replacement): the first that matches wins; None keeps the path.
 REWRITES: tuple[tuple[re.Pattern[str], str | None], ...] = (
@@ -29,6 +37,9 @@ REWRITES: tuple[tuple[re.Pattern[str], str | None], ...] = (
     (re.compile(r"^/api/cache$"), "/api/v2/cache"),
     (re.compile(r"^/api/artifacts(?=/|$)"), "/api/v2/results"),
     (re.compile(r"^/api/trace$"), "/api/v2/trace"),
+    # A run is started on the old route (it takes a graph); its state, events
+    # and cancel are read on the twin, from the one shared run manager.
+    (re.compile(r"^/api/runs/(?=[^/?]+)"), "/api/v2/runs/"),
 )
 
 
@@ -65,7 +76,7 @@ def make_v2_client(dirs, registry=None) -> TestClient:
 
 
 #: The modules whose tests run here: each looks up `make_client` at call time.
-MODULES = (conftest, test_delete_source, test_demo, test_pages, test_source_file, test_sources)
+MODULES = (conftest, test_delete_source, test_demo, test_pages, test_runs, test_source_file, test_sources)
 
 
 @pytest.fixture(autouse=True)
@@ -92,6 +103,10 @@ def test_each_old_path_has_its_twin():
     assert to_v2("/api/settings/app") == "/api/settings/app"
     assert to_v2(f"/api/artifacts/{sha}/payload") == f"/api/v2/results/{sha}/payload"
     assert to_v2("/api/runs") == "/api/runs"
+    assert to_v2("/api/runs/abc") == "/api/v2/runs/abc"
+    assert to_v2("/api/runs/abc/events?last_event_id=2") == "/api/v2/runs/abc/events?last_event_id=2"
+    assert to_v2("/api/runs/abc/cancel") == "/api/v2/runs/abc/cancel"
+    assert to_v2("/api/sweeps") == "/api/sweeps"
 
 
 def test_the_client_really_sends_requests_to_v2(client):
@@ -236,3 +251,33 @@ from tests.api.test_demo import (  # noqa: E402
     test_pages_serve_only_the_sample,
     test_the_demo_refuses_uploads_past_its_total_budget,
 )
+
+
+# --- a run's state, events and cancel (Task 9) --------------------------------------
+# Each test starts its run on the old POST /api/runs (a graph has no /api/v2 twin;
+# test_v2_runs.py covers POST /api/v2/runs) and reads it on /api/v2.
+
+from tests.api.test_runs import (  # noqa: E402
+    gates,
+    test_cancel_after_finish_is_409,
+    test_cancel_stops_subsequent_nodes,
+    test_idle_stream_sends_heartbeat,
+    test_last_event_id_header_wins_over_query_param,
+    test_last_event_id_query_param_resumes_like_the_header,
+    test_last_event_id_resumes_after_that_event,
+    test_real_run_reaches_run_finished,
+    test_snapshot,
+    test_sse_headers,
+    test_subscribe_after_completion_replays_full_log,
+    test_two_concurrent_runs_do_not_interleave,
+    test_unknown_run_is_404,
+)
+
+
+def test_a_run_is_read_on_v2(client):
+    from tests.api.test_runs import start
+
+    src = conftest.upload_pdf(client)
+    run_id = start(client, conftest.ingest_graph(src["sha"], src["filename"]))
+    r = client.get(f"/api/runs/{run_id}")
+    assert r.request.url.path == f"/api/v2/runs/{run_id}" and "result" in r.json()

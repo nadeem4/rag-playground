@@ -8,8 +8,10 @@ from fastapi import HTTPException
 
 from apihelpers import make_client, upload
 from pandion_api import Policy
-from pandion_api.documents import DocumentStore
+from pandion_api.documents import SHA, DocumentStore
 from pdfs import SAMPLE_PAGES, build_pdf
+
+NEWLINE = chr(10)
 
 
 def test_an_upload_is_kept_by_its_fingerprint(client, tmp_path):
@@ -150,3 +152,11 @@ def test_a_name_ending_in_part_is_refused(client, tmp_path, name):
     assert r.status_code == 400
     assert r.json()["detail"] == "A file name ending in .part cannot be uploaded; rename it and try again."
     assert not (tmp_path / "data" / "sources").exists() or not any((tmp_path / "data" / "sources").iterdir())
+
+
+def test_a_document_id_is_exactly_64_hex_characters():
+    good = "a" * 64
+    assert SHA.match(good)
+    for bad in (good + NEWLINE, good + "0", good[:-1], good.upper(), NEWLINE + good):
+        assert not SHA.match(bad)
+    assert DocumentStore("x").file(good + NEWLINE) is None

@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
+from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
@@ -20,10 +22,10 @@ from pandion_api import Policy
 from pandion_api.checks import changed_read_only_settings, custom_endpoint_steps, steps
 from pandion_api.documents import META_DIR, Document
 
-from api import demo, expiry, sample_set, visitor
+from api import credentials, demo, expiry, sample_set, visitor
 from api.routes import sources
 from api.routes.registry import served_catalog
-from api.routes.runs import DEMO_NO_CUSTOM, PROMPTS_FIXED
+from api.routes.runs import DEMO_NO_CUSTOM, NOT_AVAILABLE, PROMPTS_FIXED
 
 #: The most a model step may write, in tokens (`max_tokens` on a step that calls a model).
 MAX_OUTPUT_TOKENS = 16000
@@ -78,9 +80,43 @@ def _visitor(request: Request) -> str | None:
     return visitor.visitor_id(request) or getattr(request.state, "visitor", None)
 
 
+#: What a server path is replaced with; its last part is kept after it.
+SERVER_PATH = "[server]"
+
+#: An absolute path: quoted (it may hold spaces), or bare up to a space or a
+#: quote. Windows (`C:\...`, `C:/...`), a share (`\\host\...`), or POSIX with at
+#: least two parts (`/usr/lib`), not inside a web address (`https://host/v1`).
+_PATH = re.compile(
+    r"""(?P<q>["'])(?P<quoted>(?:[A-Za-z]:[\\/]|\\\\|/)[^"'\n]*?)(?P=q)"""
+    r"""|(?P<bare>(?:\b[A-Za-z]:[\\/]|\\\\)[^\s"'<>|]+|(?<![\w:/.~-])/[^\s"'<>|:/]+(?:/[^\s"'<>|:]*)+)"""
+)
+
+
+def scrub_paths(text: str, data_dir: Path | None = None) -> str:
+    """`text` with the data folder and every absolute path replaced by
+    SERVER_PATH and the path's last part (`[server]/x.py`)."""
+    if data_dir is not None:
+        # First, whole: the folder's name may hold a space, where a bare match stops.
+        folder = Path(data_dir).resolve()
+        for form in sorted({str(folder), folder.as_posix()}, key=len, reverse=True):
+            text = text.replace(form, SERVER_PATH)
+
+    def short(match: re.Match[str]) -> str:
+        path = match.group("quoted") or match.group("bare")
+        last = re.split(r"[\\/]", path.rstrip("\\/"))[-1]
+        shown = f"{SERVER_PATH}/{last}" if last else SERVER_PATH
+        quote = match.group("q") or ""
+        return f"{quote}{shown}{quote}"
+
+    return _PATH.sub(short, text)
+
+
 class PlaygroundPolicy(Policy):
+    not_readable = NOT_AVAILABLE
+
     def __init__(self) -> None:
         self._sweeper: asyncio.Task | None = None
+        self._data_dir: Path | None = None
 
     def dependencies(self) -> list[Any]:
         return [Depends(_mint_visitor)]
@@ -176,8 +212,29 @@ class PlaygroundPolicy(Policy):
     def public_endpoints_only(self, request: Request) -> bool:
         return demo.public_endpoints_only()
 
+    def run_owner(self, request: Request) -> str | None:
+        """On the demo a run is its visitor's own: to anyone else it is a 404.
+        Locally anyone may follow or cancel it."""
+        return _visitor(request) if demo.enabled() else None
+
+    # --- keys ---------------------------------------------------------------------
+
+    def server_key(self, provider: str) -> tuple[str | None, str]:
+        """The environment, then `.env` at the repo root; on the demo, nothing:
+        only a key the visitor typed is ever used."""
+        return credentials.resolve_key(None, provider)
+
+    # --- what leaves the server -----------------------------------------------------
+
+    def scrub(self, text: str) -> str:
+        """No server path leaves the server: the data folder, and any absolute
+        path, keep only their last part. A run's keys are taken out before this
+        (`pandion_api.credentials.redact`)."""
+        return scrub_paths(text, self._data_dir)
+
     async def on_startup(self, app: FastAPI) -> None:
         """Put every sample's file in the store; on the demo, start expiring uploads."""
+        self._data_dir = app.state.settings.data_dir
         folder = app.state.deps.sources_dir
         sources.seed_sample_files(folder)
         if demo.enabled():

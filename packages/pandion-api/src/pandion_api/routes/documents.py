@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
 
 from pandion_api.deps import get_documents, get_policy
-from pandion_api.documents import PART_REFUSED, SHA, DocumentStore, is_part
+from pandion_api.documents import NO_SUCH_DOCUMENT, PART_REFUSED, SHA, DocumentStore, is_part
 from pandion_api.pages import (
     CACHE_CONTROL,
     MAX_FIND_CHARS,
@@ -23,8 +23,6 @@ from pandion_api.pages import (
 from pandion_api.policy import Policy
 
 router = APIRouter()
-
-NO_SUCH_DOCUMENT = "There is no document with that fingerprint."
 
 
 @router.get("/documents")
@@ -96,7 +94,7 @@ def document_file(request: Request, sha: str) -> Path:
         path = store.file(sha)
         if path is not None:
             return path
-    raise HTTPException(status_code=404, detail=f"unknown document {sha}")
+    raise HTTPException(status_code=404, detail=NO_SUCH_DOCUMENT)
 
 
 @router.get("/documents/{sha}/file")

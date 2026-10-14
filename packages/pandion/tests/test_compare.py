@@ -373,3 +373,28 @@ def test_a_variant_stopped_during_its_evaluation_is_not_best(tmp_path, docs):
     assert results.best == [] and results.to_dict()["best"] == []
     assert "Best" not in str(results)
     assert str(results).splitlines()[-1] == "Stopped before every variant had finished."
+
+
+def test_through_stops_each_variant_after_that_step(tmp_path, docs):
+    results = pandion.compare(pipeline(tmp_path), "chunk", [V70, V30], docs, through="chunk")
+    assert [r.index.index for r in results] == [None, None]
+    assert [len(r.outputs["sample.pdf"].output.chunks) for r in results] == [5, 10]
+    assert all(r.to_dict()["ok"] for r in results)
+
+
+def test_through_is_only_for_a_comparison_without_questions(tmp_path, docs):
+    p = pipeline(tmp_path)
+    with pytest.raises(ValueError, match="through"):
+        pandion.compare(p, "chunk", [V70], docs, [FOUND], through="chunk")
+    assert p.index.documents is None
+
+
+def test_through_must_name_a_step_at_or_after_the_varied_one(tmp_path, docs):
+    p = pipeline(tmp_path)
+    with pytest.raises(ValueError, match="through names the step to stop after"):
+        pandion.compare(p, "chunk", [V70], docs, through="embed")
+    with pytest.raises(ValueError, match="before the chunk step"):
+        pandion.compare(p, "chunk", [V70], docs, through="parse")
+    with pytest.raises(ValueError, match="before the embed step"):
+        pandion.compare(p, "embed", ["fake-deterministic"], docs, through="chunk")
+    assert p.index.documents is None

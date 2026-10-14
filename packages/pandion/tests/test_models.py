@@ -101,3 +101,10 @@ def test_download_never_names_the_model_the_revision_and_the_folder(tmp_path):
     assert BGE.revision in message
     assert str(tmp_path) in message
     assert "download: never" in message
+
+
+def test_public_endpoints_only_is_off_by_default_and_can_be_set():
+    from pandion import ModelSettings
+
+    assert ModelSettings().public_endpoints_only is False
+    assert ModelSettings(public_endpoints_only=True).public_endpoints_only is True

@@ -170,6 +170,7 @@ models:
   cache_dir: ./models   # where models are kept; default is the Hugging Face folder
   download: auto        # auto downloads a model on first use; never only loads one on disk
   device: auto          # auto, cpu, cuda or mps
+  public_endpoints_only: false   # true on a server strangers share: a custom endpoint must be a public https address
 
 index:
   # source:             # optional; upload (the files given to index.run) when left out.
@@ -659,6 +660,20 @@ so results keep the names people gave their files.
 - `credentials` are the model keys for this call, as for `p.retrieve`.
 - `force` runs every step that was asked for again, even when its result is stored.
 
+### Search the files a question is about
+
+On a server many people share, one store holds everyone's results, so a search must say
+which files it covers. `p.retrieve` and `p.ask` take `documents=`, the same argument
+`index.run` takes, and search the index built from exactly those files. Files not yet
+indexed with these settings are indexed first; files that were are read from the cache.
+It does not change what `p.index` holds. `on_event`, `cancel`, `credentials` and `force`
+work as for `index.run`.
+
+```python
+answer = p.ask("What does chapter 2 say?", documents={"report.pdf": "/uploads/0f3a.pdf"},
+               on_event=send_to_browser, cancel=stop)
+```
+
 ## Three ways to write a pipeline
 
 A pipeline can be written as a YAML file, as a dict for each stage, or as classes in
@@ -812,6 +827,11 @@ The local embedders (`qwen3-embedding-0.6b` and `bge-small-en-v1.5`) and the
 `models.cache_dir` is the folder models are kept in. When it is empty, the Hugging Face
 default is used, and the `HF_HOME` variable moves that. `models.device` picks where a
 model runs: `auto` tries cuda, then mps, then cpu.
+
+`models.public_endpoints_only` is for a server that strangers share. When it is true, a
+step that calls a custom OpenAI-compatible endpoint accepts only a public https address
+and follows no redirects, so a visitor cannot make the server call an address on its own
+network. It changes no result.
 
 To load the default embedder before the first run, so that run does not wait, call
 `pandion.preload_embedder("qwen3-embedding-0.6b")`. It takes the same settings as

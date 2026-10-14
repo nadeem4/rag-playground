@@ -59,7 +59,8 @@ Claude Haiku 4.5.
 - **A custom endpoint** can be a local server such as Ollama (`http://localhost:11434/v1`),
   vLLM or LM Studio, and usually needs no key. Custom endpoints work only when you run the
   app yourself with demo mode off. On the demo, Custom is left out of every model choice and
-  the key panel, and the server refuses a run that uses one.
+  the key panel, and the server refuses a run that uses one. A Pandion pipeline turns the
+  same check on with `models: {public_endpoints_only: true}`; the hosted demo has it on.
 - An endpoint other than OpenAI's never gets the `OpenAI-Organization` or
   `OpenAI-Project` header, even when `OPENAI_ORG_ID` or `OPENAI_PROJECT_ID` is set.
 

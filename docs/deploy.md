@@ -156,7 +156,7 @@ Locally, put them in the environment or in `.env`; see
 [models-and-keys.md](models-and-keys.md#adding-a-key). On a Space, add them as secrets.
 
 `sources/`, `artifacts/` and `.env` are gitignored. `DELETE /api/v2/cache` clears the cached
-run results.
+run results and the embedding cache, and keeps the uploads.
 
 ## Your own Hugging Face Space
 

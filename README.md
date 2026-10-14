@@ -130,8 +130,10 @@ print(p.ask("What does the report recommend?").text)
 The [Pandion guide](docs/pandion.md) covers every step, setting and error, and
 [examples/pandion/](examples/pandion) has scripts that index, sync, search and ask.
 To write your own strategy for any step, start from
-[examples/pandion/own_strategies/](examples/pandion/own_strategies), which replaces the
-strategy at every step and runs with no download.
+[examples/pandion/own_strategies/](examples/pandion/own_strategies): it writes one for
+every stage (source, parse, clean, chunk, store, rewrite, search, rerank and
+answer), plus an embedder, and runs with no download. See
+[Write your own strategy](docs/pandion.md#write-your-own-strategy).
 Evaluate a pipeline on your own questions, and compare settings at one stage: see
 [Evaluate a pipeline](docs/pandion.md#evaluate-a-pipeline) and
 [Compare settings](docs/pandion.md#compare-settings).
@@ -139,7 +141,21 @@ Evaluate a pipeline on your own questions, and compare settings at one stage: se
 ### Use Pandion from the command line
 
 `pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`:
-the same pipeline, from the command line. See [the pandion command](docs/pandion.md#the-pandion-command).
+the same pipeline, from the command line. `--plugins my_strategies` loads your own
+strategies first. See [the pandion command](docs/pandion.md#the-pandion-command).
+
+### How the pieces fit
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
+flowchart TB
+    CLI["The pandion command"] --> CORE["Pandion"]
+    WEB["The web app"] --> API["pandion-api"]
+    API --> CORE
+```
+
+The `pandion` command uses Pandion. The web app uses pandion-api, Pandion's REST layer.
+pandion-api uses Pandion.
 
 ## What's inside
 
@@ -163,6 +179,9 @@ the strategy's id in the API and in exported files.
 Every pipeline you build can be copied as a Pandion YAML file and run outside the playground.
 
 The server is [pandion-api](docs/pandion-api.md), Pandion's REST layer, with the playground's own rules for the hosted demo.
+The browser keeps your pipeline as a Pandion config: one working copy on Build, and named
+copies in the Library. [Architecture](docs/architecture.md#how-the-web-app-holds-a-pipeline)
+explains how.
 
 ## Learn more
 
@@ -176,8 +195,8 @@ The server is [pandion-api](docs/pandion-api.md), Pandion's REST layer, with the
 - [Pandion](docs/pandion.md): the package. Run a step on its own, or build a pipeline in a
   file or in code, then index, search and ask.
 - [pandion-api](docs/pandion-api.md): Pandion over HTTP, with one Policy object for a site's rules. The playground's server is built on it.
-- [Architecture](docs/architecture.md): the pipeline graph, plugins, the cache and the
-  run stream.
+- [Architecture](docs/architecture.md): the three layers, the pipeline and its stages,
+  plugins, the cache, the run stream and how the browser holds a pipeline.
 - [Lessons learned](docs/lessons-learned.md): real problems we hit building the pipeline,
   why each happened, what fixed it and what we learned.
 - [Contributing](CONTRIBUTING.md): development setup, tests, adding a strategy and

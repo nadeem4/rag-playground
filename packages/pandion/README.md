@@ -67,6 +67,14 @@ same file finds every step already stored and reuses it.
   each step's result as well as the hits.
 - **Ask**: `p.ask(question)` returns the pieces found, or an answer from a chat model
   that cites them.
+- **Evaluate and compare**: `pandion.evaluate(p, "questions.json")` scores a pipeline on
+  a question set and says where each miss was lost, and `pandion.compare` runs one stage
+  with several settings and names the best.
+- **Write your own strategy** for any stage, register it with `@register` from
+  `pandion.extend`, and use it by name, from code, from `plugins:` in a pipeline file, or
+  with `--plugins` on the command line.
+  [The worked example](https://github.com/nadeem4/rag-playground/tree/main/examples/pandion/own_strategies)
+  writes one for every stage.
 
 ## Use Pandion from the command line
 
@@ -79,7 +87,8 @@ the same pipeline, from the command line. See
 - [The guide](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md): every
   step, setting and error.
 - [Examples](https://github.com/nadeem4/rag-playground/tree/main/examples/pandion): index,
-  sync, search, ask, and the three ways to write a pipeline.
+  sync, search, ask, the three ways to write a pipeline, and your own strategy for every
+  stage.
 - [RAG Playground](https://rag.codewithnk.com): try the same pipelines in the browser.
 
 ## License

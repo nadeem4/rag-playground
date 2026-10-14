@@ -117,8 +117,8 @@ storage, a cookie, the URL, a saved pipeline or an exported file. Reloading or c
 tab clears it, and nothing brings it back.
 
 The app sends it as a request header (`X-Anthropic-Api-Key`, `X-OpenAI-Api-Key`,
-`X-OpenRouter-Api-Key` or `X-Custom-Api-Key`) with each run, each Compare run and each key
-check, and with nothing else.
+`X-OpenRouter-Api-Key` or `X-Custom-Api-Key`) with each index run, each question on Ask,
+each evaluation, each comparison and each key check, and with nothing else.
 
 The server uses a key only for the run that sent it. It never stores, logs or returns a
 key, and it puts `[redacted]` in its place in any error a run reports.

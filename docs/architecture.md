@@ -1,15 +1,16 @@
 # Architecture
 
-How RAG Playground is put together: a FastAPI server that runs pipeline graphs, plugins
-for every strategy, a content-addressed cache, a stream of run events, and a React app
-that talks to the API.
+How RAG Playground is put together, in three layers. Pandion, the engine, runs a pipeline
+written as a config, with a plugin for every strategy, a content-addressed cache and a
+stream of run events. pandion-api serves Pandion over HTTP. The `pandion` command uses
+Pandion directly, and the React web app talks only to pandion-api.
 
 ## Contents
 
 - [The layout of the repo](#the-layout-of-the-repo)
 - [Using the package on its own](#using-the-package-on-its-own)
-- [The REST layer: pandion-api](#the-rest-layer-pandion-api)
-- [The pipeline graph and its stages](#the-pipeline-graph-and-its-stages)
+- [The three layers](#the-three-layers)
+- [The pipeline and its stages](#the-pipeline-and-its-stages)
 - [Plugins](#plugins)
 - [Artifacts and the cache](#artifacts-and-the-cache)
 - [The run stream](#the-run-stream)
@@ -34,8 +35,8 @@ tests/       pytest: unit, plugin contract, API and integration tests
 ```
 
 The app depends on `pandion` through a uv workspace, so `uv sync` installs it from
-`packages/pandion/` and an edit there is live at once. The engine is moving into the
-package one stage at a time. The upload step (`pandion/plugins/source/`), the parsers
+`packages/pandion/` and an edit there is live at once. Every step lives in the package.
+The upload step (`pandion/plugins/source/`), the parsers
 (`pandion/plugins/parse/`), the cleaners (`pandion/plugins/clean/`), the chunkers
 (`pandion/plugins/chunk/`), the lancedb index (`pandion/plugins/index/`), the query
 steps, `text` and `llm_rewrite` (`pandion/plugins/query/`), the retrievers, `dense`,
@@ -121,15 +122,19 @@ allow-list. The public API is `pandion`, the stage namespaces (`pandion.parse` t
 
 See the [pandion guide](pandion.md).
 
-## The REST layer: pandion-api
+## The three layers
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
 flowchart TB
-    WEB["Web app"] --> APP["api/: the playground's server"]
+    CLI["The pandion command"] --> CORE
+    WEB["Web app: /api/v2 and the teaching routes"] --> APP["api/: the playground's server"]
     APP --> API["pandion-api: create_app(settings, policy)"]
     API --> CORE["Pandion: its public API only"]
 ```
+
+Each layer uses only the public API of the one below. The `pandion` command uses Pandion,
+the web app uses pandion-api, and pandion-api uses Pandion.
 
 `packages/pandion-api` serves Pandion over HTTP. It imports only Pandion's public API,
 which `packages/pandion-api/tests/test_api_boundary.py` checks with no allow-list, and it
@@ -139,17 +144,21 @@ name plugins to import (`pandion_api.pipelines.prepare`). The playground's Polic
 a custom model endpoint on the demo and a changed prompt or model revision everywhere. It also caps a model step's output at 16,000 tokens
 and each text budget at four times its default. See [pandion-api](pandion-api.md).
 
-## The pipeline graph and its stages
+## The pipeline and its stages
 
-The engine has two ideas and no `Pipeline` class:
+A pipeline is written one way everywhere: as a config, the pipeline file's shape, in a
+YAML file, in code, in a request and in the browser. Under `Pipeline`, the engine has two
+ideas:
 
 - **Artifact.** An immutable result, such as a parsed document, a chunk set, an index or a
   set of retrieval hits.
 - **Transform.** A strategy that turns typed input artifacts into one output artifact.
 
-A pipeline is a graph of transforms. Each node is one transform in one stage, with its
-config, and each edge joins an output to an input port of the right type. The graph is
-validated before it runs: an invalid graph is a 400 and an invalid node config a 422.
+When a pipeline runs, Pandion turns its config into a graph of transforms inside the
+engine: each step is one transform, joined to the steps it reads from by named input
+ports. Nobody outside the engine writes that graph. The config is checked when it is read:
+a wrong step or setting is a `ConfigError` with one sentence, which pandion-api returns
+as a 422.
 
 ```mermaid
 flowchart TB
@@ -202,11 +211,18 @@ what these settings will do.
   and what it requires, provides and prefers. The web app builds every settings form from
   that schema, so a new strategy needs no frontend change.
 - **Requires** is a hard lock: a retriever that needs a keyword index cannot run on an
-  index built without one, the graph is rejected, and the app greys the option out.
+  index built without one. The pipeline is refused when it is read, with a sentence that
+  names both steps, and the app greys the option out.
 - **Prefers** is a soft lock: the strategy still runs but falls back, with a sentence
   saying what happens instead, and the app tags it "Falls back".
 
-[CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-strategy) walks through adding one.
+[CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-strategy) walks through adding one to
+Pandion. A strategy that lives outside Pandion is registered the same way, with
+`@register` from `pandion.extend`, and loaded by an import in code, a `plugins:` list in
+the pipeline file, `--plugins` on the `pandion` command, or a `pandion.strategies` entry
+point. [examples/pandion/own_strategies/](../examples/pandion/own_strategies) writes one
+for every stage. pandion-api never imports a module a request names, so a server loads
+its own strategies.
 
 ## Artifacts and the cache
 
@@ -293,7 +309,7 @@ run's pdfium parse step can meet a page request on another thread.
 The web calls only pandion-api's routes under `/api/v2` and the teaching routes. A test,
 `web/src/api/oldRoutes.test.ts`, reads every non-test file under `web/src` (but the
 `/api/v2` client) and fails if one names an old route in a string, written relative to the
-old client (`"/runs"`), in full (`"/api/runs"`) or after `${API_BASE}`, or calls a deleted
+old client (`"/runs"`), in full with the `/api` prefix, or after `${API_BASE}`, or calls a deleted
 function on the old client (`api.createRun`). It cannot see a path built up from pieces.
 
 - **Strategies.** The app reads `stages` from `GET /api/v2/strategies` to build the step
@@ -331,11 +347,8 @@ function on the old client (`api.createRun`). It cannot see a path built up from
   settings), a list of documents and the question Ask asks (`web/src/state/pipelines.ts`).
   It is drawn as a column with `columnOf` when it opens, so the run request, recipe hashes
   and cache keys are what they were. Pipelines exported before the list existed get it on
-  read, from the graph's source node. Share links are version 3, a config with its documents
-  and question; versions 1 and 2 held a graph and still open, converted once by `graphToConfig`.
-  A link that cannot be converted, or that names a strategy this server lacks, is left in the
-  address bar and Build says why. Export files are version 2 (configs, and kept items as they
-  were); a version 1 file still imports, each pipeline converted or kept, never skipped. The ready-made Starter pipeline
+  read, from the graph's source node. Share links, export files and old versions are in
+  [How the web app holds a pipeline](#how-the-web-app-holds-a-pipeline). The ready-made Starter pipeline
   (`web/src/state/starter.ts`) is the default recipe `sampleGraph` builds, on the default
   sample, and is never stored as a saved pipeline. `web/src/state/pipelineChoice.ts` lists
   what Evaluate can score and picks the one it opens on. A question in a question set may
@@ -356,41 +369,73 @@ The app also has lessons, a guided walk through each step, but they are switched
 
 ## How the web app holds a pipeline
 
-The browser holds a pipeline as the pipeline file's shape (`PipelineConfig` in
-`web/src/state/config.ts`), with the documents it runs on and the question Ask asks beside
-it, never `path`, `models` or `plugins`. Pipelines saved by older versions held a graph of
-steps; `graphToConfig` converts each one once, and one it cannot convert is kept with the
-reason and never deleted. Build draws its column from the config (`columnOf`); each card
-maps to the step name runs report (`retrieve` is `search`). A Clean or Rerank card maps by
-its place in the column, not its id: the second Clean card is `clean.2` in `through`, in
-run events and in problem sentences, even when a cleaner removed and another added left
-its id as `clean_1` (`stepOfCardIn`, `cardOfStepIn`).
+The browser holds a pipeline as a Pandion config, the pipeline file's shape
+(`PipelineConfig` in `web/src/state/config.ts`), with the documents it runs on and the
+question Ask asks beside it. It never holds `path`, `models` or `plugins`: the server sets
+the first two and refuses the third. There are two kinds of pipeline in the browser.
 
-Build's working pipeline is kept this way (`web/src/state/working.ts`), in localStorage
-under `rag-playground:pipeline:v2`, so Build, Compare and Evaluate share it. `graph.ts`
-keeps the names every page already used (`useStoredGraph`, `storeGraph`): they draw the
-column from the stored config and store a column as a config. A column that is not one
-(no Parse step, say) is not stored. Versions before this one kept a graph under
-`rag-playground:graph:v1`. The first time nothing is stored under the new key, that graph
-is converted once. If it cannot be, the reason is written under
-`rag-playground:graph:v1:kept`, Build opens on the Starter and says why once, and the old
-graph is never tried again. The old key is never written or removed, so the old pipeline is
-kept either way. A stored pipeline that uses a strategy this server does not have cannot be
-drawn, and every page would store a Starter in its place. Before that, it is copied as it was
-to `rag-playground:pipeline:v2:kept` with the reason, beside any kept before, and Build says
-why once. Build's per-tab results moved to `rag-playground:build-session:v2`,
+- **The working pipeline.** Build keeps one pipeline, the copy you edit, in localStorage
+  under `rag-playground:pipeline:v2` (`web/src/state/working.ts`). Every change on Build is
+  written there at once. Compare and Evaluate read the same copy.
+- **Saved pipelines.** The Library keeps saved pipelines under
+  `rag-playground:pipelines:v2` (`web/src/state/pipelines.ts`), up to twenty. Each one is a
+  named copy. **Save** copies the working pipeline into the list. Opening a saved
+  pipeline, from Build's Pipeline picker or from Library, copies it back into the working
+  pipeline. Editing on Build never changes a saved pipeline until you save again; until
+  then Build marks the pipeline edited.
+
+Share links (version 3) and export files (version 2) carry the same config, with its
+documents and question. Opening a link saves it as a pipeline and puts it on Build.
+Importing a file adds its pipelines to the list.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
+flowchart LR
+    W["Build: the working pipeline<br/>pipeline:v2"] -- "Save: a copy" --> L["Library: saved pipelines<br/>pipelines:v2"]
+    L -- "Open: a copy" --> W
+    L -- "Copy link (version 3)" --> K["Share link"]
+    K -- "Open the link" --> L
+    L -- "Export (version 2)" --> F["Export file"]
+    F -- "Import" --> L
+```
+
+**Old keys are converted once.** Before part 5 the browser kept graphs: the working
+pipeline under `rag-playground:graph:v1` and the list under `rag-playground:pipelines:v1`.
+The first read that finds nothing under the new key converts the old one with
+`graphToConfig`, the one converter. The conversion never writes or removes an old key, so
+the old copy is always still there. What cannot be converted is kept with its reason:
+
+- An old working graph that does not convert: the reason is written under
+  `rag-playground:graph:v1:kept`, Build opens on the Starter and says why once, and the
+  old graph is never tried again.
+- An old saved item that does not convert: it stays in the new list as it was, with
+  `config: null` and the reason. Library lists it and never opens it. The cap of twenty
+  never drops it: a save drops the oldest item that is not kept, and is refused when every
+  other item is kept.
+- An old link (version 1 or 2) or an old export file (version 1) is converted on the way
+  in. A link that cannot be converted, or that names a strategy this server does not have,
+  stays in the address bar and Build says why. An item
+  in a file that cannot be converted is imported as a kept item, never skipped.
+
+One more key keeps what a page would otherwise lose. A working pipeline that uses a
+strategy this server does not have cannot be drawn, and every page would store a Starter
+in its place. Before that, it is copied as it was to `rag-playground:pipeline:v2:kept`
+with the reason, beside any kept before, and Build says why once.
+
+The privacy page's Delete saved pipelines and experiments is the one thing that removes
+`rag-playground:pipelines:v1`, because the visitor asked. It leaves the new list empty, so
+nothing converts again.
+
+**How Build draws it.** Build draws its column from the config (`columnOf`), and stores a
+column back as a config. `graph.ts` keeps the names every page already used
+(`useStoredGraph`, `storeGraph`). A column that is not a pipeline (no Parse step, say) is
+not stored. Each card maps to the step name runs report (`retrieve` is `search`). A Clean
+or Rerank card maps by its place in the column, not its id: the second Clean card is
+`clean.2` in `through`, in run events and in problem sentences, even when a cleaner
+removed and another added left its id as `clean_1` (`stepOfCardIn`, `cardOfStepIn`).
+Build's per-tab results are in sessionStorage under `rag-playground:build-session:v2`,
 because the old ones were keyed by the old graph's card ids.
 
-Saved pipelines (form 2, the Library list) are kept as configs under
-`rag-playground:pipelines:v2`. The first read that finds no list there converts the old list
-under `rag-playground:pipelines:v1` once, item by item. An item that cannot be converted is
-kept in the new list as it was, with `config: null` and the reason, listed in Library and
-never opened. The conversion never writes or removes the old key; the one exception is the
-privacy page's Delete saved pipelines and experiments, which removes it because the visitor
-asked, and leaves the new list empty so nothing converts again. The cap of twenty never drops
-a kept item: a save drops the oldest item that is not kept, and is refused when every other
-item is kept, with a line that says the list is full of older pipelines. Share links and export files carry configs too; an old link or an old file is converted
-once on the way in, and what cannot be converted is kept with the reason. The fixture
-`web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the browser holds
-it, and two tests pin that converting the app's Starter gives that file, so a visitor's
-Starter keeps its result ids.
+The fixture `web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the
+browser holds it, and two tests pin that converting the app's Starter gives that file, so
+a visitor's Starter keeps its result ids.

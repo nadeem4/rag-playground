@@ -141,11 +141,11 @@ A key is never a setting. It goes in `credentials`, so it is never part of a rec
 an artifact or a note, and every error message has it removed. Pandion does not read keys
 from the environment; read the key yourself and pass it in.
 
-If you serve pandion to people you do not trust, run the graph with
-`pandion.executor.run(..., context_extras={"public_endpoints_only": True})`, or call
-`pandion.llm.complete(..., public_only=True)`. A custom endpoint must then be a public
-https address, so a stranger cannot point the server at its own network. The playground's
-hosted demo does this. `pandion.rewrite` is for trying a step yourself and leaves it off.
+If you serve pandion to people you do not trust, set `public_endpoints_only: true` under
+`models` in the pipeline (or `pandion.ModelSettings(public_endpoints_only=True)` in code).
+A custom endpoint must then be a public https address, so a stranger cannot point the
+server at its own network. The playground's hosted demo does this, through pandion-api's
+Policy. `pandion.rewrite` is for trying a step yourself and leaves it off.
 
 ## The pipeline file
 
@@ -1001,6 +1001,8 @@ every step in its `my_strategies` folder. From that folder:
 ```bash
 pandion strategies --plugins my_strategies --stage chunk   # per_block is in the list
 pandion validate copy.yaml --plugins my_strategies         # copy.yaml: pipeline.yaml without its plugins: line
+pandion index copy.yaml notes/bees.md notes/bread.md notes/tides.md --plugins my_strategies
+pandion ask copy.yaml "What causes the tides?" --documents notes/bees.md notes/bread.md notes/tides.md --plugins my_strategies
 ```
 
 Without `--plugins`, the second command fails, because `per_block` and the others are not
@@ -1051,17 +1053,21 @@ default, is a `TypeError` when the module is imported, so it never reaches a pip
 
 The ports each stage reads:
 
-| Stage | `stage =` | Reads (port: what) | Returns |
-|---|---|---|---|
-| source | `Stage.SOURCE` | nothing; the document is the `location` setting | `raw_file(ctx, data, filename)` |
-| parse | `Stage.PARSE` | `file`: a dict with `sha`, `filename`, `path` and `mime` | `ParsedDoc` |
-| clean | `Stage.CLEAN` | `doc`: a `ParsedDoc` | `ParsedDoc` |
-| chunk | `Stage.CHUNK` | `doc`: a `ParsedDoc` | `ChunkSet` |
-| store | `Stage.INDEX` | `chunks`: a list of `ChunkSet`, one per document (`variadic=True`) | a function that writes into a folder |
-| rewrite | `Stage.QUERY` | nothing; the question is the `text` setting; `doc` if declared | `Query` |
-| search | `Stage.RETRIEVE` | `index`: the store's folder; `query`: a `Query` (`ambient=True`) | `RetrievalResult` |
-| rerank | `Stage.RERANK` | `result`: a `RetrievalResult` | `RetrievalResult` |
-| answer | `Stage.USE_CASE` | `result`: a `RetrievalResult`; `doc` if declared | `Output` |
+| Stage | `stage =` | Reads (port: what) | Returns | Example in `my_strategies/` |
+|---|---|---|---|---|
+| source | `Stage.SOURCE` | nothing; the document is the `location` setting | `raw_file(ctx, data, filename)` | `source.py`: `text_file` |
+| parse | `Stage.PARSE` | `file`: a dict with `sha`, `filename`, `path` and `mime` | `ParsedDoc` | `parse.py`: `markdown` |
+| clean | `Stage.CLEAN` | `doc`: a `ParsedDoc` | `ParsedDoc` | `clean.py`: `drop_short` |
+| chunk | `Stage.CHUNK` | `doc`: a `ParsedDoc` | `ChunkSet` | `chunk.py`: `per_block` |
+| store | `Stage.INDEX` | `chunks`: a list of `ChunkSet`, one per document (`variadic=True`) | a function that writes into a folder | `store.py`: `jsonl_store` |
+| rewrite | `Stage.QUERY` | nothing; the question is the `text` setting; `doc` if declared | `Query` | `rewrite.py`: `lowercase` |
+| search | `Stage.RETRIEVE` | `index`: the store's folder; `query`: a `Query` (`ambient=True`) | `RetrievalResult` | `retrieve.py`: `jsonl_search` |
+| rerank | `Stage.RERANK` | `result`: a `RetrievalResult` | `RetrievalResult` | `rerank.py`: `shortest_first` |
+| answer | `Stage.USE_CASE` | `result`: a `RetrievalResult`; `doc` if declared | `Output` | `answer.py`: `bullets` |
+
+The embedder is not a stage, so it is not in the table: `embed.py` (`letter_counts`) is its
+example, under [Your own embedder](#your-own-embedder). These are every stage
+`pandion.catalog()` lists, so the example covers each one.
 
 `Stage.ENRICH` and `Stage.QUERY_TRANSFORM` are reserved: no strategy uses them yet, and they are kept so result ids stay stable.
 
@@ -1258,8 +1264,10 @@ three ways to make that happen.
    Each module is imported from the folder the pipeline file is in first, the same way a
    relative path is read from it, so a module next to the file works from any folder,
    including with `pandion install`. A module that cannot be imported is a `ConfigError`
-   that names the module and the error. `build(..., plugins=[...])` takes the same list in
-   code, and then the current folder is searched.
+   that names the module and the error. `Pipeline.from_dict(data, base=...)` reads the
+   same `plugins` key, and looks for the modules in `base` first.
+   The `pandion` command also takes `--plugins a,b` for a file that does not list them; see
+   [--plugins](#--plugins).
 
    `pandion install` imports the modules to read the file, before it installs anything.
    So import a heavy library, such as one that loads a model, inside `apply()` and not at

@@ -325,7 +325,11 @@ must still decide is listed in [pandion-api](pandion-api.md#what-part-5-must-dec
   settings), a list of documents and the question Ask asks (`web/src/state/pipelines.ts`).
   It is drawn as a column with `columnOf` when it opens, so the run request, recipe hashes
   and cache keys are what they were. Pipelines exported before the list existed get it on
-  read, from the graph's source node; share links are version 2 and still read version 1. The ready-made Starter pipeline
+  read, from the graph's source node. Share links are version 3, a config with its documents
+  and question; versions 1 and 2 held a graph and still open, converted once by `graphToConfig`.
+  A link that cannot be converted, or that names a strategy this server lacks, is left in the
+  address bar and Build says why. Export files are version 2 (configs, and kept items as they
+  were); a version 1 file still imports, each pipeline converted or kept, never skipped. The ready-made Starter pipeline
   (`web/src/state/starter.ts`) is the default recipe `sampleGraph` builds, on the default
   sample, and is never stored as a saved pipeline. `web/src/state/pipelineChoice.ts` lists
   what Evaluate can score and picks the one it opens on. A question in a question set may
@@ -379,8 +383,8 @@ never opened. The conversion never writes or removes the old key; the one except
 privacy page's Delete saved pipelines and experiments, which removes it because the visitor
 asked, and leaves the new list empty so nothing converts again. The cap of twenty never drops
 a kept item: a save drops the oldest item that is not kept, and is refused when every other
-item is kept, with a line that says the list is full of older pipelines. An export file still reads either shape. Share links still hold a graph; they move to
-the config in a later change. The fixture
+item is kept, with a line that says the list is full of older pipelines. Share links and export files carry configs too; an old link or an old file is converted
+once on the way in, and what cannot be converted is kept with the reason. The fixture
 `web/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the browser holds
 it, and two tests pin that converting the app's Starter gives that file, so a visitor's
 Starter keeps its result ids.

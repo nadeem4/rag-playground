@@ -1120,7 +1120,7 @@ describe("saved pipelines on Build", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     const url = new URL(writeText.mock.calls[0][0] as string)
     expect(url.pathname).toBe("/build")
-    expect(decodePipeline(url.searchParams.get("pipeline")!, TEST_REGISTRY)).toEqual({ name: "Token chunks", graph: usableGraph(saved, TEST_REGISTRY), documents: saved.documents })
+    expect(decodePipeline(url.searchParams.get("pipeline")!, TEST_REGISTRY)).toEqual({ ok: true, name: "Token chunks", graph: usableGraph(saved, TEST_REGISTRY), documents: saved.documents })
     expect(await within(bar()).findByText("Link copied")).toBeTruthy()
   })
 
@@ -1232,6 +1232,26 @@ describe("saved pipelines on Build", () => {
     fireEvent.change(within(bar()).getByRole("textbox", { name: "Pipeline name" }), { target: { value: "Another" } })
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
     expect(within(bar()).getByText(full)).toBeTruthy()
+  })
+
+  it("leaves an old link it cannot open in the address bar and says why", async () => {
+    const code = btoa(JSON.stringify({ v: 2, name: "Odd", graph: { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }, documents: [] }))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+    window.history.replaceState(null, "", `/build?pipeline=${code}`)
+    setup()
+    expect(await screen.findByText(/cannot be opened here: .* Build still shows the pipeline you had before\.$/)).toBeTruthy()
+    expect(window.location.search).toBe(`?pipeline=${code}`)
+    expect(readPipelines()).toHaveLength(0)
+  })
+
+  it("a crafted link does not crash the page and saves nothing", async () => {
+    const code = btoa(JSON.stringify({ v: 3, name: "x", config: { index: { clean: "a" } }, documents: [] }))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+    window.history.replaceState(null, "", `/build?pipeline=${code}`)
+    setup()
+    expect(await screen.findByText("This pipeline link could not be read.")).toBeTruthy()
+    expect(screen.getByRole("group", { name: "Pipeline" })).toBeTruthy()
+    expect(readPipelines()).toHaveLength(0)
   })
 
   it("says so when storage refuses Save as or Save changes (M3)", async () => {

@@ -120,7 +120,8 @@ export function uploadsOf(items: readonly LibraryItem[], samples: readonly Pick<
 // ------------------------------------------------------- export, import --
 
 export const FORMAT = "rag-playground-library"
-export const VERSION = 1
+/** Version 2 holds each pipeline as its settings (a config); version 1 held a graph, and still imports. */
+export const VERSION = 2
 
 export interface ExportedDocument {
   sha: string
@@ -181,25 +182,25 @@ export function parseImport(text: string): ParsedImport {
     return { ok: false, error: NOT_OURS }
   }
   if (typeof data !== "object" || data === null || (data as LibraryFile).format !== FORMAT) return { ok: false, error: NOT_OURS }
-  const file = data as Partial<LibraryFile> & { version?: unknown }
+  const file = data as Omit<Partial<LibraryFile>, "version"> & { version?: unknown }
   if (typeof file.version === "number" && file.version > VERSION) {
     return { ok: false, error: "This file was made by a newer RAG Playground. Update this copy to import it." }
   }
-  if (file.version !== VERSION || !Array.isArray(file.items)) return { ok: false, error: NOT_OURS }
+  if ((file.version !== 1 && file.version !== VERSION) || !Array.isArray(file.items)) return { ok: false, error: NOT_OURS }
   const pipelines: SavedPipeline[] = []
   const experiments: SavedExperiment[] = []
   let skipped = 0
   for (const [place, raw] of (file.items as unknown[]).entries()) {
     const item = raw as { kind?: unknown } | null
-    // A file holds configs, or graphs when an older version made it: those are converted or kept.
-    const pipeline = item?.kind === "pipeline" ? asIncoming(item, place) : null
+    // Version 2 holds configs. Version 1 held graphs: each is converted or kept with the reason, never skipped.
+    const { kind: _kind, ...rest } = (item ?? {}) as Record<string, unknown>
+    const pipeline = item?.kind === "pipeline" ? asIncoming(rest, place, file.version) : null
     if (pipeline) {
       pipelines.push(pipeline)
       continue
     }
     if (item?.kind === "experiment" && asIncomingExperiment(item)) {
       // Kept as it came, so fields Compare added survive the round trip.
-      const { kind: _kind, ...rest } = item as Record<string, unknown>
       experiments.push(rest as unknown as SavedExperiment)
     } else skipped += 1
   }
@@ -238,6 +239,8 @@ export interface ImportOutcome {
   /** Incoming names each kind's cap left out. Nothing saved is ever removed. */
   leftOutPipelines: string[]
   leftOutExperiments: string[]
+  /** Imported pipelines an older version made that cannot be opened here. */
+  kept?: number
   /** Items in the file that are not a pipeline or an experiment this copy can read. */
   unreadable: number
   /** Documents uploaded back to the server. */
@@ -261,6 +264,7 @@ export function importResultLine(o: ImportOutcome): string {
   const parts: string[] = []
   if (added.length) {
     parts.push(`Imported ${listWords(added)} from ${o.fileName}.`)
+    if (o.kept) parts.push(`${o.kept} ${o.kept === 1 ? "was" : "were"} made by an older version and cannot be opened here; the Library shows why.`)
     if (o.already) parts.push(o.already === 1 ? "1 item was already here." : `${o.already} items were already here.`)
   } else if (o.already) {
     parts.push(`Nothing new in ${o.fileName}. You already have ${o.already === 1 ? "the 1 item" : `all ${o.already} items`} in it.`)

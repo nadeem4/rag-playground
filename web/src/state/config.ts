@@ -1,7 +1,7 @@
 import type { GraphNode, Registry, Stage } from "@/api/types"
 
 import { documentsOf, type DocRef } from "./document"
-import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, titleFor, wire, type PipelineGraph } from "./graph"
+import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, strategyIn, titleFor, wire, type PipelineGraph } from "./graph"
 
 /**
  * A pipeline as the browser holds it: the pipeline file's shape (spec rule 2),
@@ -47,6 +47,8 @@ const no = (problem: string): Converted => ({ ok: false, problem })
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
 const without = (o: Record<string, unknown>, keys: readonly string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)))
 const only = (o: Record<string, unknown>, keys: readonly string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => keys.includes(k)))
+/** A name from outside, cut to about 40 characters so a sentence that quotes it stays short. */
+const clip = (name: string) => (name.length > 40 ? `${name.slice(0, 40)}...` : name)
 const step = (n: GraphNode, drop: readonly string[] = []): Step => ({ use: n.transform, ...without(n.config ?? {}, ["use", ...drop]) })
 
 /** The card a step name is drawn as: `clean.2` is `clean_2`, `search` is `retrieve`. */
@@ -112,6 +114,35 @@ export function cardNamedIn(sentence: string, graph?: PipelineGraph): string | n
   return graph ? cardOfStepIn(graph, step) : cardOfStep(step)
 }
 
+/** The gold answers that are text; anything else in a stored or shared list is dropped. */
+export const goldsOf = (list: unknown[]): string[] => list.filter((x): x is string => typeof x === "string" && x !== "")
+
+/** Why a pipeline whose documents do not come from uploads cannot open here. */
+export const otherSource = (use: string) => `Its documents come from ${clip(use)}, and this version reads uploaded files only.`
+
+/** A step names its strategy; a name that is an Object.prototype key ("constructor", "__proto__") is not one. */
+const isStep = (v: unknown): v is Step => isRecord(v) && typeof v.use === "string" && v.use !== "" && !(v.use in Object.prototype)
+const isStepList = (v: unknown): v is Step[] => Array.isArray(v) && v.every(isStep)
+const optional = (v: unknown, check: (x: unknown) => boolean) => v === undefined || check(v)
+
+/**
+ * Whether a config from outside (a share link, an export file, storage) has a
+ * pipeline file's shape: every step a record with a string `use`, Clean and
+ * Rerank lists of steps, and nothing beside `index`, `retrieve` and `answer`.
+ * Everything that draws or checks a config relies on this, so a config that
+ * fails it is never held.
+ */
+export function isConfigShape(v: unknown): v is PipelineConfig {
+  if (!isRecord(v) || !Object.keys(v).every((k) => k === "index" || k === "retrieve" || k === "answer")) return false
+  const { index, retrieve, answer } = v
+  if (!isRecord(index) || !isStep(index.parse) || !isStep(index.chunk) || !isStep(index.store)) return false
+  if (!optional(index.source, isStep) || !optional(index.embed, isStep) || !optional(index.clean, isStepList)) return false
+  if (retrieve !== undefined) {
+    if (!isRecord(retrieve) || !isStep(retrieve.search) || !optional(retrieve.rewrite, isStep) || !optional(retrieve.rerank, isStepList)) return false
+  }
+  return optional(answer, isStep)
+}
+
 /**
  * The old graph as a config, or why it cannot be one. Structural: it needs no
  * registry, so it gives the same answer on any server. A graph converts when
@@ -130,7 +161,7 @@ export function graphToConfig(graph: unknown): Converted {
   }
   const order = columnOrder(g)
   const odd = order.find((n) => !COLUMN_STAGES.includes(n.stage))
-  if (odd) return no(`It has ${/^[aeiou]/i.test(odd.stage) ? "an" : "a"} ${odd.stage} step, and a pipeline in this version has no place for one.`)
+  if (odd) return no(`It has ${/^[aeiou]/i.test(odd.stage) ? "an" : "a"} ${clip(odd.stage)} step, and a pipeline in this version has no place for one.`)
   for (const stage of ONE_EACH) {
     const count = order.filter((n) => n.stage === stage).length
     if (count > 1) return no(`It has ${count} ${STAGE_VERB[stage] ?? stage} steps, and a pipeline has one.`)
@@ -146,7 +177,7 @@ export function graphToConfig(graph: unknown): Converted {
   const cleans = of("clean")
   const reranks = of("rerank")
   if (!parse || !chunk || !index) return no("It has no Parse, Chunk or Index step, so it cannot build an index.")
-  if (source && source.transform !== "upload") return no(`Its documents come from ${source.transform}, and this version reads uploaded files only.`)
+  if (source && source.transform !== "upload") return no(otherSource(source.transform))
   const rewrites = query !== undefined && query.transform !== "text"
   if (!retrieve && (rewrites || reranks.length || useCase)) return no("It rewrites, reranks or answers without a search step.")
   const fed = (a: GraphNode, b: GraphNode) => g.edges.some((e) => e.src === a.id && e.dst === b.id)
@@ -156,7 +187,7 @@ export function graphToConfig(graph: unknown): Converted {
   ]
   for (const chain of chains) {
     const broken = chain.slice(1).find((n, i) => !fed(chain[i], n))
-    if (broken) return no(`Its ${titleFor(broken)} step is not fed by the step above it, so it is not a column of steps.`)
+    if (broken) return no(`Its ${clip(titleFor(broken))} step is not fed by the step above it, so it is not a column of steps.`)
   }
 
   const { embedder, ...storeSettings } = index.config ?? {}
@@ -180,7 +211,7 @@ export function graphToConfig(graph: unknown): Converted {
   }
   const q = query?.config ?? {}
   const golds = Array.isArray(q.gold_answers)
-    ? q.gold_answers.filter((x): x is string => typeof x === "string" && x !== "")
+    ? goldsOf(q.gold_answers)
     : typeof q.gold_answer === "string" && q.gold_answer
       ? [q.gold_answer]
       : []
@@ -202,7 +233,7 @@ export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph 
   const add = (id: string, stage: Stage, s: Step | undefined, extra: Record<string, unknown> = {}) => {
     if (!s) return
     const { use, ...settings } = s
-    const info = registry[stage]?.[use]
+    const info = strategyIn(registry, stage, use)
     nodes.push({ id, stage, transform: use, config: { ...(info ? defaultConfig(info) : {}), ...settings, ...extra } })
   }
   const doc = p.documents[0]
@@ -240,8 +271,10 @@ export function unknownStrategy(config: PipelineConfig, registry: Registry): str
     ...(retrieve?.rerank ?? []).map((s): [Stage, Step] => ["rerank", s]),
     ["use_case", answer],
   ]
-  const odd = steps.find(([stage, s]) => s && !registry[stage]?.[s.use])
-  return odd?.[1]?.use ?? null
+  // A step whose `use` is not a name is unknown, never taken as known.
+  const odd = steps.find(([stage, s]) => s && !strategyIn(registry, stage, s.use))
+  if (!odd) return null
+  return typeof odd[1]?.use === "string" ? odd[1].use : "a step with no name"
 }
 
 const sorted = (v: unknown): unknown =>

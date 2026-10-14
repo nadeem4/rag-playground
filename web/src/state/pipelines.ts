@@ -2,9 +2,9 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
-import { columnOf, graphToConfig, knownSteps, sameConfig, type AskQuestion, type PipelineConfig } from "./config"
+import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
-import { loadGraph, type PipelineGraph } from "./graph"
+import type { PipelineGraph } from "./graph"
 
 /**
  * Form 2 of the owner's two: saved pipelines, named copies of the pipeline on
@@ -108,19 +108,25 @@ export function fromOld(raw: unknown, place: number): SavedPipeline {
 export function asSaved(raw: unknown): SavedPipeline | null {
   if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.name !== "string" || typeof raw.savedAt !== "string") return null
   const documents = docList(raw.documents)
-  const q = isRecord(raw.question) && typeof raw.question.text === "string" && Array.isArray(raw.question.gold_answers) ? (raw.question as unknown as AskQuestion) : NO_QUESTION
+  const q: AskQuestion =
+    isRecord(raw.question) && typeof raw.question.text === "string" && Array.isArray(raw.question.gold_answers)
+      ? { text: raw.question.text, gold_answers: goldsOf(raw.question.gold_answers) }
+      : NO_QUESTION
   if (raw.config === null && isRecord(raw.kept) && typeof raw.kept.problem === "string") {
     return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: null, documents: documents ?? [], question: q, kept: { graph: raw.kept.graph, problem: raw.kept.problem } }
   }
-  if (!isRecord(raw.config) || !isRecord(raw.config.index) || !documents) return null
-  return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: raw.config as unknown as PipelineConfig, documents, question: q }
+  if (!isConfigShape(raw.config) || !documents) return null
+  return { id: raw.id, name: raw.name, savedAt: raw.savedAt, config: raw.config, documents, question: q }
 }
 
 /**
  * An incoming item of either shape: a config (asSaved), or a graph an older
  * version saved (fromOld, converted or kept). Null when it is neither.
+ * `fileVersion` 1 is an export file an older version wrote: every pipeline in
+ * it held a graph, so each one is converted or kept, never skipped.
  */
-export function asIncoming(raw: unknown, place: number): SavedPipeline | null {
+export function asIncoming(raw: unknown, place: number, fileVersion?: number): SavedPipeline | null {
+  if (fileVersion === 1) return fromOld(raw, place)
   const saved = asSaved(raw)
   if (saved) return saved
   return isRecord(raw) && "graph" in raw ? fromOld(raw, place) : null
@@ -230,8 +236,16 @@ export const droppedText = (dropped: SavedPipeline) =>
  * strategies (M7) is listed but never opened, and so is a kept item.
  */
 export function usableGraph(p: Pick<SavedPipeline, "config" | "documents" | "question">, registry: Registry): PipelineGraph | null {
-  if (!p.config || !knownSteps(p.config, registry)) return null
+  if (!p.config || notHere(p.config, registry)) return null
   return columnOf({ config: p.config, documents: p.documents, question: p.question }, registry)
+}
+
+/** Why a config cannot open on this server: documents that are not uploads, or a strategy it lacks. Null when it can. */
+function notHere(config: PipelineConfig, registry: Registry): string | null {
+  const source = config.index.source?.use
+  if (source !== undefined && source !== "upload") return otherSource(source)
+  const missing = unknownStrategy(config, registry)
+  return missing === null ? null : `It uses a step this server does not have: ${missing}.`
 }
 
 export function updatePipeline(id: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): boolean {
@@ -296,12 +310,13 @@ export function mergeById<T extends { id: string; savedAt: string }>(
 }
 
 /** Library import: add saved pipelines from a file (I3 cap, I4 fresh read). Null when storage refused the write. */
-export function importPipelines(incoming: readonly unknown[]): ImportResult<SavedPipeline> | null {
+export function importPipelines(incoming: readonly unknown[]): (ImportResult<SavedPipeline> & { kept: number }) | null {
   const current = freshPipelines()
-  const valid = incoming.map(asIncoming).filter((p): p is SavedPipeline => p !== null)
+  const valid = incoming.map((raw, place) => asIncoming(raw, place)).filter((p): p is SavedPipeline => p !== null)
   const { add, result } = mergeById(new Set(current.map((p) => p.id)), current.length, valid, MAX_PIPELINES)
   const next = [...current, ...add].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
-  return persist(next) ? result : null
+  // How many of the added ones are kept, so the import can say they cannot be opened.
+  return persist(next) ? { ...result, kept: add.filter((p) => p.kept).length } : null
 }
 
 /**
@@ -386,21 +401,45 @@ const fromBase64Url = (s: string) => {
   return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))
 }
 
-/** Version 2 carries the documents; a version 1 link had them only in the graph. */
+/**
+ * Version 3 carries the config, the documents and the question. Versions 1 and
+ * 2 carried a graph and still open: they are converted once on the way in.
+ * Throws for a graph that is not a column, which the app never makes.
+ */
 export function encodePipeline(name: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): string {
-  return toBase64Url(JSON.stringify({ v: 2, name, graph, documents }))
+  const c = graphToConfig(withDocuments(graph, documents))
+  if (!c.ok) throw new Error(c.problem)
+  return toBase64Url(JSON.stringify({ v: 3, name, config: c.pipeline.config, documents, question: c.pipeline.question }))
 }
 
-/** null unless the code is well formed, version 1 or 2, and every node names a transform this registry has. */
-export function decodePipeline(code: string, registry: Registry): { name: string; graph: PipelineGraph; documents: DocRef[] } | null {
+export type Decoded = { ok: true; name: string; graph: PipelineGraph; documents: DocRef[] } | { ok: false; problem: string }
+
+
+/** Null when the code is not a pipeline link; otherwise the pipeline, or why it cannot open here. */
+export function decodePipeline(code: string, registry: Registry): Decoded | null {
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(fromBase64Url(code)) as { v?: unknown; name?: unknown; graph?: unknown; documents?: unknown }
-    if ((parsed.v !== 1 && parsed.v !== 2) || typeof parsed.name !== "string") return null
-    const loaded = loadGraph(JSON.stringify(parsed.graph), registry)
-    if (!loaded) return null
-    const documents = (parsed.v === 2 ? docList(parsed.documents) : null) ?? documentsOf(loaded)
-    return { name: parsed.name, graph: withDocuments(loaded, documents), documents }
+    parsed = JSON.parse(fromBase64Url(code))
   } catch {
+    return null
+  }
+  if (!isRecord(parsed) || typeof parsed.name !== "string" || ![1, 2, 3].includes(parsed.v as number)) return null
+  // A version 3 link is a config, never a kept item: it cannot carry a problem sentence of its own.
+  if (parsed.v === 3 && (!isRecord(parsed.config) || "kept" in parsed)) return null
+  try {
+    const p =
+      parsed.v === 3
+        ? asSaved({ id: "link", name: parsed.name, savedAt: "", config: parsed.config, documents: parsed.documents, question: parsed.question })
+        : fromOld({ id: "link", name: parsed.name, savedAt: "", graph: parsed.graph, documents: parsed.v === 2 ? parsed.documents : undefined }, 0)
+    if (!p) return null
+    if (p.kept) return { ok: false, problem: p.kept.problem }
+    const why = p.config && notHere(p.config, registry)
+    if (why) return { ok: false, problem: why }
+    const graph = usableGraph(p, registry)
+    if (!graph) return null
+    return { ok: true, name: parsed.name, graph, documents: p.documents }
+  } catch {
+    // A backstop: whatever a crafted link holds, it is not a link, never a crash.
     return null
   }
 }

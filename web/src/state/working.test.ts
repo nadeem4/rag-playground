@@ -10,6 +10,7 @@ import {
   keptUndrawn,
   markKeptSeen,
   OLD_GRAPH_KEY,
+  parseWorking,
   readWorking,
   resetWorkingForTests,
   storeWorking,
@@ -124,5 +125,14 @@ describe("the working pipeline", () => {
     })
     expect(storeGraph(sampleGraph(R, DOC))).toBe(true)
     expect(readWorking()?.documents).toEqual([DOC])
+  })
+})
+
+describe("reading a stored working pipeline", () => {
+  it("keeps only the string gold answers", () => {
+    const c = graphToConfig(sampleGraph(R, DOC))
+    if (!c.ok) throw new Error(c.problem)
+    const json = JSON.stringify({ ...c.pipeline, question: { text: "Q?", gold_answers: ["yes", 5, null] } })
+    expect(parseWorking(json)?.question).toEqual({ text: "Q?", gold_answers: ["yes"] })
   })
 })

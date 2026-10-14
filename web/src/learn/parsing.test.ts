@@ -154,7 +154,8 @@ describe("runLink", () => {
     const c = byName(name)
     const link = runLink(registry, c, parser)
     expect(link.startsWith("/build?pipeline=")).toBe(true)
-    const decoded = decodePipeline(link.slice("/build?pipeline=".length), registry)!
+    const decoded = decodePipeline(link.slice("/build?pipeline=".length), registry)
+    if (!decoded?.ok) throw new Error("the link does not open")
     expect(decoded.name).toBe(`Parsing lab: ${c.title}, ${PARSER_LABEL[parser]}`)
     const source = decoded.graph.nodes.find((n) => n.stage === "source")!
     expect(source.config).toMatchObject({ sha: c.sha, filename: c.filename })
@@ -168,7 +169,8 @@ describe("runLink", () => {
   it("turns OCR on from the recording, not from the case's name", () => {
     const c = made({ ms: 20, hits: 0 }, { ms: 2000, hits: 0 }, "two-column-report")
     c.parsers.docling.ocr = true
-    const decoded = decodePipeline(runLink(registry, c, "docling").slice("/build?pipeline=".length), registry)!
+    const decoded = decodePipeline(runLink(registry, c, "docling").slice("/build?pipeline=".length), registry)
+    if (!decoded?.ok) throw new Error("the link does not open")
     expect(decoded.graph.nodes.find((n) => n.stage === "parse")!.config.do_ocr).toBe(true)
   })
 })

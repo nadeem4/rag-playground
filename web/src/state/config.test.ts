@@ -8,8 +8,10 @@ import {
   cardOfStepIn,
   columnOf,
   graphToConfig,
+  isConfigShape,
   knownSteps,
   sameConfig,
+  unknownStrategy,
   stepOfCard,
   stepOfCardIn,
   type WorkingPipeline,
@@ -204,5 +206,69 @@ describe("knownSteps and sameConfig", () => {
         { index: { store: { use: "s" }, chunk: { b: 2, a: 1, use: "c" }, parse: { use: "pdfium" } } },
       ),
     ).toBe(true)
+  })
+})
+
+describe("the shape of a config from outside", () => {
+  const good = () => {
+    const c = graphToConfig(sampleGraph(R, { sha: "e".repeat(64), filename: "x.pdf" }))
+    if (!c.ok) throw new Error(c.problem)
+    return c.pipeline.config as unknown as Record<string, any>
+  }
+
+  it("accepts a config the converter makes", () => {
+    expect(isConfigShape(good())).toBe(true)
+  })
+
+  it.each([
+    ["clean is a string", (c: Record<string, any>) => ({ ...c, index: { ...c.index, clean: "a" } })],
+    ["clean holds a number", (c: Record<string, any>) => ({ ...c, index: { ...c.index, clean: [5] } })],
+    ["parse is a string", (c: Record<string, any>) => ({ ...c, index: { ...c.index, parse: "x" } })],
+    ["a step's use is not a string", (c: Record<string, any>) => ({ ...c, index: { ...c.index, chunk: { use: 5 } } })],
+    ["rerank is a record", (c: Record<string, any>) => ({ ...c, retrieve: { ...c.retrieve, rerank: { use: "mmr" } } })],
+    ["retrieve has no search", (c: Record<string, any>) => ({ ...c, retrieve: {} })],
+    ["answer is a string", (c: Record<string, any>) => ({ ...c, answer: "chat" })],
+    ["it names plugins", (c: Record<string, any>) => ({ ...c, plugins: ["x"] })],
+  ])("refuses a config where %s", (_why, bend) => {
+    expect(isConfigShape(bend(good()))).toBe(false)
+  })
+
+  it("counts a step whose use is not a string as unknown", () => {
+    const c = good()
+    expect(unknownStrategy({ ...c, index: { ...c.index, chunk: { use: 5 } } } as never, R)).not.toBeNull()
+  })
+
+  it("keeps a long made-up step name short in its problem sentence", () => {
+    const r = graphToConfig({ nodes: [{ id: "x", stage: "z".repeat(500), transform: "y", config: {} }], edges: [] })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.problem.length).toBeLessThan(140)
+  })
+})
+
+describe("strategy names that are Object.prototype keys", () => {
+  const good = () => {
+    const c = graphToConfig(sampleGraph(R, { sha: "e".repeat(64), filename: "x.pdf" }))
+    if (!c.ok) throw new Error(c.problem)
+    return c.pipeline.config
+  }
+
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])("a step that uses %s is unknown, refused by the shape check, and draws without throwing", (use) => {
+    const c = good()
+    const bent = { ...c, index: { ...c.index, chunk: { use } } }
+    expect(unknownStrategy(bent, R)).toBe(use)
+    expect(isConfigShape(bent)).toBe(false)
+    expect(() => columnOf({ config: bent, documents: [], question: { text: "", gold_answers: [] } }, R)).not.toThrow()
+  })
+
+  it("keeps a long made-up answer name short when its step is not fed", () => {
+    const g = sampleGraph(R, { sha: "e".repeat(64), filename: "x.pdf" })
+    const use = g.nodes.find((n) => n.stage === "use_case")!
+    const odd = { nodes: g.nodes.map((n) => (n.id === use.id ? { ...n, transform: "z".repeat(500) } : n)), edges: g.edges.filter((e) => e.dst !== use.id) }
+    const r = graphToConfig(odd)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.problem).toContain("not fed")
+      expect(r.problem.length).toBeLessThan(140)
+    }
   })
 })

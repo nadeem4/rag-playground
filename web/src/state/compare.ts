@@ -5,7 +5,7 @@ import { compareLists, ordinal, type ListChange } from "@/components/inspectors/
 import type { ChunkStats } from "@/components/inspectors/spans"
 import { strategyLabel } from "@/learn/challenges"
 
-import { defaultConfig } from "./graph"
+import { defaultConfig, strategyIn } from "./graph"
 import { errorHeadline } from "./pipeline"
 import { variantLabels } from "./sweep"
 
@@ -128,7 +128,7 @@ export function recipeNames(variants: Variant[], stage: Stage, registry: Registr
   return variants.map((v, i) => {
     const plain = plainOf(v)
     const { field, size } = sizeOf(i)
-    const info = registry[stage]?.[v.transform]
+    const info = strategyIn(registry, stage, v.transform)
     const defaults = info ? defaultConfig(info) : {}
     // The recipes the plain name and the size do not yet tell apart from this one.
     const peers = variants.filter((_, j) => heads[j] === heads[i])
@@ -165,7 +165,7 @@ export function recipeNames(variants: Variant[], stage: Stage, registry: Registr
  */
 export function rejectedRecipe(variants: Variant[], previous: Variant[], fields: string[], stage: Stage, registry: Registry): number | null {
   const has = (v: Variant) => {
-    const props = registry[stage]?.[v.transform]?.config_schema.properties ?? {}
+    const props = strategyIn(registry, stage, v.transform)?.config_schema.properties ?? {}
     return fields.length > 0 && fields.every((f) => f.split(".")[0] in props)
   }
   let found = variants.map((_, i) => i).filter((i) => has(variants[i]))

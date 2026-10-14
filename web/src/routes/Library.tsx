@@ -184,7 +184,8 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
       return
     }
     try {
-      const graph = usableGraph(item.pipeline, await api.registry())
+      // The registry the page holds; asked for only if it has not arrived yet.
+      const graph = usableGraph(item.pipeline, registry ?? (await api.registry()))
       if (!graph) {
         setNotice(`${item.name} uses steps this server does not have, so it cannot open here.`)
         return
@@ -251,6 +252,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
           fileName: file.name,
           pipelines: p.added,
           experiments: e.added,
+          kept: p.kept,
           already: p.skipped + e.skipped,
           leftOutPipelines: p.leftOut.map((x) => x.name),
           leftOutExperiments: e.leftOut.map((x) => x.name),

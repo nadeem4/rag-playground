@@ -4,6 +4,7 @@ import type { Registry, Stage, Variant } from "@/api/types"
 
 import { MAX_RECIPES } from "./compare"
 import type { DocRef } from "./document"
+import { strategyIn } from "./graph"
 
 /**
  * Saved Compare experiments: a step, its recipes and the document, by name,
@@ -157,8 +158,7 @@ export function deleteExperiment(id: string): void {
  * server's strategies is listed but cannot be opened.
  */
 export function usableExperiment(e: SavedExperiment, registry: Registry): SavedExperiment | null {
-  const strategies = registry[e.stage]
-  return strategies && e.recipes.every((r) => r.transform in strategies) ? e : null
+  return e.recipes.every((r) => strategyIn(registry, e.stage, r.transform)) ? e : null
 }
 
 /**

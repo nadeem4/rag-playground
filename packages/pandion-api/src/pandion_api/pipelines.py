@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import yaml
 from fastapi import HTTPException, Request
 
 from pandion import ConfigError, Pipeline
@@ -21,6 +22,14 @@ PLUGINS_REFUSED = (
     "own code or from installed packages. Leave plugins out."
 )
 MODELS_NOT_A_MAPPING = "models must be a mapping of settings."
+
+#: The folder a copied pipeline file names: relative, so it works wherever the file is saved.
+YAML_PATH = "./pandion-index"
+
+
+def as_yaml(config: dict[str, Any]) -> str:
+    """`config` (the file's shape, without the server's folder) as a pipeline file."""
+    return yaml.safe_dump({"path": YAML_PATH, **config}, sort_keys=False, allow_unicode=True)
 
 
 def problems(*sentences: str) -> HTTPException:

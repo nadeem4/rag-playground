@@ -162,8 +162,11 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
         raise problems(f"A comparison runs at most {most} variants; this one has {len(body.variants)}.")
     if not isinstance(body.config, dict):
         raise problems(NOT_A_MAPPING)
-    p = prepare(body.config, request)
-    prepared = [prepare(variant_config(body.config, body.stage, v), request) for v in body.variants]
+    # Reading and checking every variant's pipeline is Pandion's work: off the loop.
+    p, *prepared = await run_in_threadpool(
+        lambda: [prepare(body.config, request)]
+        + [prepare(variant_config(body.config, body.stage, v), request) for v in body.variants]
+    )
     if COMPARE_STAGES[body.stage] == "retrieve" and body.questions is None:
         raise HTTPException(
             status_code=400,
@@ -174,7 +177,7 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
     documents = documents_of(body.documents, request)
     questions = await run_in_threadpool(_checked, body.questions) if body.questions is not None else None
     if body.through is not None:
-        _check_through(p, body, documents, questions)
+        await run_in_threadpool(_check_through, p, body, documents, questions)
 
     def work(on_event, cancel, credentials):
         results = compare(

@@ -636,6 +636,21 @@ store later, for example when a page asks for one card's output: a dict for ever
 but an index, whose result is its folder. An id that is not a result id, or that has no
 stored result, is a `KeyError`.
 
+A server that keeps many pipelines under one folder does not need a pipeline to read a
+result. `ResultStore` reads, describes and clears what is stored under a `path`:
+
+```python
+from pandion import ResultStore
+
+results = ResultStore("./my-index")
+results.info(result_id)    # {"id": ..., "type": "chunk_set", "meta": {...}}
+results.get(result_id)     # the result, as p.result(result_id) gives it
+results.clear()            # {"results": 12, "bytes": 48210, "complete": True}
+```
+
+An id that is not 64 lowercase hex characters, or that nothing is stored under, is a
+`KeyError`. `clear()` removes `artifacts/` and `embeddings/` and keeps `sources/`.
+
 ### One step, progress, stop, keys and re-runs
 
 `index.run` takes five optional keywords. Without them it runs exactly as before.
@@ -829,7 +844,7 @@ the same files with the same pipeline file again and every step is read from the
 Change one setting and only the steps from that point on run again. Changing
 `chunk_size`, for example, reuses the parse and the clean, and builds new pieces and a
 new index. The embedding cache also keeps each embedding by the model and the text, so a
-text is embedded once.
+text is embedded once. `pandion.ResultStore(path).clear()` empties it.
 
 [Architecture](architecture.md#artifacts-and-the-cache) explains the hash in detail.
 

@@ -37,7 +37,6 @@ keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store),
 
 from __future__ import annotations
 
-import re
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
@@ -54,7 +53,7 @@ from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalR
 from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import registry
-from pandion.results import StageResult
+from pandion.results import ResultStore, StageResult
 from pandion.sources import SourceFile, Sources
 from pandion.storage import Store
 
@@ -81,10 +80,6 @@ OnEvent = Callable[[dict[str, Any]], None]
 
 #: Events that list several node ids, and the field that names their steps.
 _NAMED_LISTS = (("nodes", "steps"), ("selected", "selected_steps"), ("skipped", "skipped_steps"))
-
-#: What a result id looks like: a sha256 in lowercase hex.
-_RESULT_ID = re.compile(r"[0-9a-f]{64}")
-
 
 @dataclass
 class DocumentReport:
@@ -294,12 +289,7 @@ class Pipeline:
         The id is checked before any path is built from it, so an app may pass
         one it was sent.
         """
-        if not isinstance(artifact_id, str) or not _RESULT_ID.fullmatch(artifact_id):
-            raise KeyError(f"{artifact_id!r} is not a result id: one is 64 lowercase hex characters.")
-        store = self.index.store
-        if not store.has(artifact_id):
-            raise KeyError(f"No stored result has the id {artifact_id} under {self.config.path}.")
-        return store.load(artifact_id, store.get_meta(artifact_id).type)
+        return ResultStore(self.config.path).get(artifact_id)
 
     def retrieve(
         self,

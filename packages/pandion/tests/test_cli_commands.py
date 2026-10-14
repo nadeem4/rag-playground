@@ -76,10 +76,17 @@ def test_index_through_a_step_stops_there(folder):
     assert "\nindex" not in out.stdout
 
 
-def test_retrieve_without_documents_says_how_to_name_them(folder):
-    pandion("index", "pipeline.yaml", "report.pdf", cwd=folder)
+def test_retrieve_after_a_plain_index_searches_what_it_indexed(folder):
+    index = pandion("index", "pipeline.yaml", "report.pdf", cwd=folder)
+    assert index.returncode == 0, index.stderr
+    assert "added:" not in index.stdout
     out = pandion("retrieve", "pipeline.yaml", "What is the capital of France?", cwd=folder)
-    assert out.returncode == 2 and "--documents" in out.stderr and "--sync" in out.stderr
+    assert out.returncode == 0 and out.stdout.startswith("1. ")
+
+
+def test_retrieve_before_any_index_says_how_to_name_the_documents(folder):
+    out = pandion("retrieve", "pipeline.yaml", "What is the capital of France?", cwd=folder)
+    assert out.returncode == 2 and "--documents" in out.stderr and "pandion index" in out.stderr
 
 
 def test_retrieve_after_a_sync_searches_what_it_indexed(folder):

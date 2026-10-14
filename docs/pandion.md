@@ -928,8 +928,10 @@ pandion install pipeline.yaml --print
 **`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
 its summary. `--stage chunk` shows one stage. `--json` prints only the names, as JSON.
 
-**`pandion index FILE DOC... [--sync] [--through STEP]`** indexes files and folders, the
-same as `p.index.run`. It prints one line per document and step, then the index:
+**`pandion index FILE DOC... [--sync] [--through STEP]`** indexes files and folders. With
+local files (the `upload` source, the default) it runs `p.index.sync`, so it remembers the
+documents it indexed for the next command; with any other source it runs `p.index.run`. It
+prints one line per document and step, then the index:
 
 ```text
 report.pdf  source  executed  2 ms
@@ -939,8 +941,8 @@ index  lancedb  executed  310 ms
 ```
 
 `--through chunk` stops every document after that step (`parse`, `clean`, `clean.2`,
-`chunk` or `index`), so there is no index line. `--sync` runs `p.index.sync` instead and
-then says, per document, `added`, `changed`, `removed` or `unchanged`.
+`chunk` or `index`), so there is no index line, and nothing is remembered. `--sync` also
+says, per document, `added`, `changed`, `removed` or `unchanged` since the last index.
 
 **`pandion retrieve FILE QUESTION [--k K] [--documents DOC...]`** searches the index and
 prints the hits, one per line, as the rank, the score and the start of the piece:
@@ -955,9 +957,9 @@ prints the hits, one per line, as the rank, the score and the start of the piece
 answer, or the pieces found when the answer step is `search`.
 
 `--documents` names the documents to search, indexing them first through the cache when
-needed. Each command is a new process, so only a sync is remembered from one command to
-the next: after `pandion index ... --sync`, `retrieve` and `ask` work without
-`--documents`; after a plain `pandion index`, name the documents again.
+needed. Without it, `retrieve` and `ask` search the documents the last `pandion index`
+indexed, so name every document each time you index. A pipeline whose source is not local
+files remembers nothing from one command to the next, so name the documents again.
 
 **`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json]`** runs
 `pandion.evaluate` on a question set (JSON or CSV, as in

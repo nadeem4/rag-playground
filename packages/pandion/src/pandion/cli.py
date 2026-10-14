@@ -126,12 +126,15 @@ def cmd_strategies(args: argparse.Namespace) -> int:
 
 def cmd_index(args: argparse.Namespace) -> int:
     p = _load(args)
-    if args.sync:
+    # With local files, a whole run is a sync, so the next command remembers
+    # which documents to search. --sync also says what changed.
+    if args.sync or (args.through is None and _can_sync(p)):
         report = p.index.sync(args.documents)
         _print_index(report)
-        for word in ("added", "changed", "removed", "unchanged"):
-            for document in getattr(report, word):
-                print(f"{word}: {document}")
+        if args.sync:
+            for word in ("added", "changed", "removed", "unchanged"):
+                for document in getattr(report, word):
+                    print(f"{word}: {document}")
     else:
         report = p.index.run(args.documents, through=args.through, credentials=credentials_from_env())
         _print_index(report)
@@ -150,12 +153,11 @@ def _can_sync(p: Pipeline) -> bool:
 
 def _no_index(p: Pipeline) -> str:
     """What to do when a search names no documents and nothing remembers an index:
-    only a sync is remembered from one command to the next."""
+    with local files, pandion index remembers the documents it indexed."""
     if _can_sync(p):
         return (
-            "There is no index to search yet. Name the documents with --documents, or index "
-            "them with pandion index FILE DOC... --sync first: a sync is remembered, a plain "
-            "index run is not."
+            "There is no index to search yet. Index the documents first with "
+            "pandion index FILE DOC..., or name them with --documents."
         )
     return (
         "There is no index to search yet. Name the documents with --documents: this "
@@ -293,7 +295,7 @@ def parser() -> argparse.ArgumentParser:
     sub = command("index", "index documents with a pipeline file", cmd_index)
     sub.add_argument("config")
     sub.add_argument("documents", nargs="+", help="files or folders to index")
-    sub.add_argument("--sync", action="store_true", help="index what changed since the last sync, and drop what is gone")
+    sub.add_argument("--sync", action="store_true", help="also say which documents were added, changed, removed or unchanged since the last index")
     sub.add_argument("--through", help="stop after this step: parse, clean, clean.2, chunk or index")
 
     for name, help, fn in (("retrieve", "search the index for a question", cmd_retrieve), ("ask", "answer a question", cmd_ask)):

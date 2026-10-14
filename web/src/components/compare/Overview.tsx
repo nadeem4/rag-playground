@@ -26,6 +26,8 @@ export interface OverviewRow {
   set?: unknown
   /** The top 5, for the swatches. */
   pieces?: SwatchPiece[]
+  /** The server names this recipe best (pandion's Comparisons.best). */
+  best?: boolean
 }
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
@@ -147,7 +149,12 @@ export function Overview({
     )
   }
   const tag = (r: OverviewRow) =>
-    r.own ? <span className="inline-block self-start rounded-swatch bg-accent-wash px-2 py-px text-xs font-semibold text-primary">Your pipeline</span> : null
+    r.own || r.best ? (
+      <span className="flex flex-wrap items-baseline gap-2">
+        {r.own ? <span className="inline-block self-start rounded-swatch bg-accent-wash px-2 py-px text-xs font-semibold text-primary">Your pipeline</span> : null}
+        {r.best ? <span className="text-xs font-medium text-fg">Best</span> : null}
+      </span>
+    ) : null
   const status = (r: OverviewRow) => <RecipeStatus status={r.status} seconds={r.seconds} onChange={() => onChange(r.i)} />
   const numberWords = (r: OverviewRow) => {
     const v = r.values

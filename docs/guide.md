@@ -259,6 +259,11 @@ to the same cap.
    finished, and **Stop the run** ends it. A recipe that fails says at which step and why,
    with **Change this recipe**, while the others finish.
 
+Compare sends one comparison to `POST /api/v2/comparisons`. Through the step itself, each
+recipe's result comes back by id. Through the search, the question's own gold passages,
+when known, let Pandion score each recipe and name the best; without them, each recipe's
+results are shown unscored.
+
 ### Reading the results
 
 - **Three recipes or fewer** open as columns side by side (one at a time below 820 px),
@@ -269,8 +274,13 @@ to the same cap.
   open one recipe beside your pipeline, or tick up to three to read side by side, then step
   through the rest with **Previous** and **Next**. The browser's Back button returns to the
   table.
-- The page says "the answer" only when the question is one of the sample's own. With any
-  other question, the Answer column is hidden.
+- The page says "the answer" only when Pandion scored the run: the question is one of the
+  sample's own, or it carries its gold passages, and the run stops at the search. Each
+  recipe's rank of the answer is Pandion's, and the recipe Pandion names best says **Best**
+  beside its name. With any other question, or through a chat answer, the Answer column is
+  hidden and no recipe is marked. A stopped run names no best.
+- A setting the server refuses is said under the recipe it belongs to, with that value's
+  editor open.
 
 ### Experiments
 

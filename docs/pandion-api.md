@@ -307,9 +307,10 @@ Part 5 moves the web onto `/api/v2` and deletes the old routes. These were left 
   `pandion_api.pages.PDFIUM_LOCK`, but a run's pdfium parse step does not. pdfium is not
   thread-safe, so a run that parses with pdfium can still meet a page request on another
   thread. Part 5 decides whether Pandion's pdfium step takes a lock of its own.
-- **Compare's per-card `through`.** `POST /comparisons` now takes `through`, so Compare's
-  Build view can stop each variant after one card without embedding every variant, as the
-  old `/api/sweeps` does. Part 5 checks it covers what Build needs.
+- **Compare's per-card `through`.** `POST /comparisons` takes `through`, so Compare stops
+  each variant after the card it shows without embedding every variant, as the old
+  `/api/sweeps` did. The web's Compare page sends it for every comparison through an index
+  step.
 
 ## Errors
 

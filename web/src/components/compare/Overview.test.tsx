@@ -80,4 +80,15 @@ describe("Overview", () => {
     render(<Overview {...props} stage="chunk" goldKnown={false} narrow rows={[row(0, 1), row(1, 3), row(2, 2), row(3, 2)]} />)
     expect(screen.getByRole("list").textContent).toMatch(/1 piece \(fewest\), 9 tokens/)
   })
+
+  it("marks the recipes the server names best, in the table and in the narrow list", () => {
+    const rows = props.rows.map((r) => ({ ...r, best: r.i === 1 }))
+    const { rerender } = render(<Overview {...props} rows={rows} />)
+    const row = (i: number) => document.querySelector<HTMLElement>(`[data-recipe="${i}"]`)!
+    expect(within(row(1)).getByText("Best")).toBeTruthy()
+    expect(within(row(0)).queryByText("Best")).toBeNull()
+    rerender(<Overview {...props} rows={rows} narrow />)
+    expect(within(row(1)).getByText("Best")).toBeTruthy()
+    expect(screen.getAllByText("Best")).toHaveLength(1)
+  })
 })

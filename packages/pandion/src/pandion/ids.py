@@ -14,6 +14,7 @@ import math
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, SerializerFunctionWrapHandler, model_serializer
+from pydantic_core import PydanticUndefined
 
 from pandion.artifacts import ArtifactType
 
@@ -97,15 +98,45 @@ class AddedSettings(BaseModel):
     set to anything else, the setting is dumped and the id moves, as it must.
     Changing such a default later is a change to what the step does, so it
     needs a `version` bump, like any other.
+
+    A subclass that sets `added` keeps its parents' names too. Each name must
+    be a setting with a plain default; anything else is refused when the class
+    is defined.
     """
 
     added: ClassVar[tuple[str, ...]] = ()
+
+    @classmethod
+    def _added_names(cls) -> tuple[str, ...]:
+        """Every name in `added` across the class and its parents."""
+        names: dict[str, None] = {}
+        for klass in reversed(cls.__mro__):
+            for name in klass.__dict__.get("added", ()):
+                names[name] = None
+        return tuple(names)
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        super().__pydantic_init_subclass__(**kwargs)
+        for name in cls._added_names():
+            field = cls.model_fields.get(name)
+            if field is None:
+                raise TypeError(
+                    f"{cls.__name__} names {name!r} in added, but it has no setting "
+                    "of that name. Name only settings the class defines."
+                )
+            if field.default_factory is not None or field.default is PydanticUndefined:
+                raise TypeError(
+                    f"{cls.__name__} names {name!r} in added, but that setting has no "
+                    "plain default. An added setting needs a default value, not a "
+                    "default_factory, so it can be left out of the dump at its default."
+                )
 
     @model_serializer(mode="wrap")
     def _added_left_out_at_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data = handler(self)
         fields = type(self).model_fields
-        for name in type(self).added:
+        for name in type(self)._added_names():
             if name in data and getattr(self, name) == fields[name].default:
                 del data[name]
         return data

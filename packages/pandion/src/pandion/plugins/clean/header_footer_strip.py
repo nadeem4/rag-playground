@@ -126,6 +126,11 @@ class HeaderFooterStripConfig(AddedSettings):
     )
 
 
+def _pages(n: int) -> str:
+    """The page count as a note says it: "two" for the default, digits otherwise."""
+    return "two" if n == 2 else str(n)
+
+
 def _is_page_number(text: str) -> bool:
     return bool(PAGE_NUMBER.match(text.strip()))
 
@@ -212,7 +217,7 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
             else "Detected blocks are only relabelled: they stay out of the text "
             "but remain visible in the element list, so you can check them."
         )
-        pages = "two" if config.min_pages == 2 else str(config.min_pages)
+        pages = _pages(config.min_pages)
         settings = (
             "A block counts as running when it is at most "
             f"{config.max_running_chars} characters long and sits at the same page "
@@ -228,12 +233,14 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
         if ratio == 0:
             warning = (
                 "At 0% the ratio adds nothing: any short text at the same page "
-                "edge on just two pages is stripped, however long the document."
+                f"edge on just {pages} pages is stripped, however long the document."
             )
         return Explanation(settings=settings, tradeoff=tradeoff, warning=warning)
 
     @staticmethod
-    def _note(rows: list[tuple[Element, str, str]], drop: bool, total: int) -> str:
+    def _note(
+        rows: list[tuple[Element, str, str]], drop: bool, total: int, min_pages: int = MIN_PAGES
+    ) -> str:
         kinds = [new_type for _, new_type, _ in rows]
         if drop:
             note = removed_note([{"type": k} for k in kinds], names=KIND_NAMES)
@@ -247,7 +254,7 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
             note += (
                 " Every block was marked as a running head, foot or page number: "
                 "each one repeated, or looked like a page number, at the same "
-                "page edge on at least two pages."
+                f"page edge on at least {_pages(min_pages)} pages."
             )
         return note
 
@@ -311,7 +318,7 @@ class HeaderFooterStrip(Transform[HeaderFooterStripConfig]):
                 for element, new_type, reason in rows
             ]
 
-        set_note(ctx, self._note(rows, config.drop, len(doc.elements)))
+        set_note(ctx, self._note(rows, config.drop, len(doc.elements), config.min_pages))
 
         report = make_report(
             self.name,

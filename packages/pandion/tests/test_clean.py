@@ -880,6 +880,12 @@ def test_strip_note_when_every_block_is_marked(tmp_path):
     )
 
 
+def test_strip_note_names_the_min_pages_setting(tmp_path):
+    parsed = doc([el(c, "ACME", i, page=i + 1) for i, c in enumerate("abc")])
+    note = note_of(HeaderFooterStrip, parsed, tmp_path, min_pages=3)
+    assert note.endswith("at the same page edge on at least 3 pages.")
+
+
 def test_strip_note_when_removal_is_off(tmp_path):
     assert note_of(HeaderFooterStrip, paged_doc(), tmp_path, drop=False) == (
         "Removed 0 blocks. Removal is off, so 8 blocks were relabelled instead: "

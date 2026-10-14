@@ -446,3 +446,10 @@ def test_a_model_loads_at_its_pinned_revision(built):
 def test_a_revision_that_was_set_is_the_one_loaded(built):
     ce._model_for(CrossEncoderConfig(revision="abc123"), CPU)
     assert built[0]["revision"] == "abc123"
+
+
+def test_explain_names_a_set_revision():
+    pinned = CrossEncoderRerank().explain(CrossEncoderConfig()).settings
+    assert "at commit" not in pinned
+    text = CrossEncoderRerank().explain(CrossEncoderConfig(revision="abc123")).settings
+    assert "MiniLM at commit abc123," in text

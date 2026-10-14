@@ -443,8 +443,8 @@ Pandion's default `table_mode` is `fast`.
 - Sets in `CrossEncoder(...)`: the model id, the model's `revision`, pinned per model (see
   `revision` above), the `device`, `cache_folder` and `local_files_only` from the model
   settings. In `predict(...)`: one (question, piece) pair per candidate.
-- Leaves at the default: the longest pair it reads (`max_length`, the model's own), `batch_size` (32), and the activation, so
-  the scores are the ones the model gives.
+- Leaves at the default: the longest pair it reads (`max_length`, the model's own),
+  `batch_size` (32), and the activation, so the scores are the ones the model gives.
 
 ### mmr (numpy)
 

@@ -161,8 +161,9 @@ class CrossEncoderRerank(Transform[CrossEncoderConfig]):
 
     def explain(self, config: CrossEncoderConfig) -> Explanation:
         top = config.top_k
+        at = f" at commit {config.revision}" if config.revision else ""
         settings = (
-            f"It scores every candidate with {_SHORT_NAMES[config.model]}, "
+            f"It scores every candidate with {_SHORT_NAMES[config.model]}{at}, "
             f"{_SIZES[config.model]}, and keeps the {top} best from the pool the "
             "retriever hands on (20 by default). It judges each piece against "
             "the question as you typed it, even when the question was rewritten "

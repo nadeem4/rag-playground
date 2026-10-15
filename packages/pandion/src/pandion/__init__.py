@@ -32,6 +32,7 @@ from pandion.evaluation import (
     compare,
     evaluate,
 )
+from pandion.cost import total_cost
 from pandion.results import ResultStore, StageResult
 from pandion.strategy_catalog import catalog, defaults, explain
 from pandion.pipeline_templates import compose_template, list_templates
@@ -72,5 +73,6 @@ __all__ = [
     "rerank",
     "retrieve",
     "rewrite",
+    "total_cost",
     "__version__",
 ]

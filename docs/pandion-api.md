@@ -80,7 +80,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
 | `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
 | `POST /evaluations` | `{"config", "documents", "questions"?, "top_k"?}`: search for every question and say whether its answer came back, and for a miss the step that lost it (`pandion.evaluate`). Without `questions`, the sets kept against the documents. A run; its result is the report's `to_dict()` plus its `cost`. |
-| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?, "question"?, "answer"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. `question` (one question, no gold passage, at most 2,000 characters) instead of `questions` runs each variant's search (or, with `answer: true`, its answer) and returns the results unscored, as `{"comparisons": [{"stage", "variant", "ok", "cancelled", "retrieval" or "answer", "cost"}], "best": [], "cancelled", "cost"}`; `best` is then empty. Sending both `question` and `questions` is a 400, and so is `through` with `question` (a comparison on one question searches, so it cannot stop after an index step) or `answer: true` without `question`. |
+| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?, "question"?, "answer"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. `question` (one question, no gold passage, at most 2,000 characters) instead of `questions` runs each variant's search (or, with `answer: true`, its answer) and returns the results unscored, as `{"comparisons": [{"stage", "variant", "ok", "cancelled", "retrieval" or "answer", "cost", "varied_cost"}], "best": [], "cancelled", "varied_from", "shared_cost", "cost"}`; `best` is then empty. Both kinds carry `varied_from`, `varied_cost` and `shared_cost` (see [Speed and cost](#speed-and-cost)). Sending both `question` and `questions` is a 400, and so is `through` with `question` (a comparison on one question searches, so it cannot stop after an index step) or `answer: true` without `question`. |
 | `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
 | `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
 | `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
@@ -128,10 +128,25 @@ ids, never a key or a path:
 Every report has `cost`, which is Pandion's `cost()` with its own price table (see
 "Speed and cost" in [pandion.md](pandion.md#speed-and-cost)). An index run, a question
 (searched or answered) and an evaluation have one `cost` for the whole result. A
-comparison has one on each variant and one for all of them together, on the list. On a
-comparison on one question, the list's `cost` adds up the variants' own, so a cached step
-that several variants read counts once for each of them; it is null when no variant ran.
-A request cannot send its own prices.
+request cannot send its own prices.
+
+A comparison splits its cost so that the order the variants ran in does not change it.
+The first variant runs the steps that every variant shares, and the later ones read them
+from the cache, so each variant's whole `cost` depends on its place in the list. Both
+kinds of comparison, with questions and on one question, return the same fields:
+
+- `varied_from`, on the list, is the stage the comparison varies, such as `"chunk"`.
+- `varied_cost`, on each variant, counts only the varied step and the steps after it.
+  It is the number to compare variants by.
+- `shared_cost`, on the list, counts the steps before the varied one, each once, whichever
+  variant ran it. On a comparison on one question it includes the document steps
+  (source, parse, clean) that the search ran on the way to the index.
+- `cost`, on the list, is every variant together, with each step counted once. Each
+  variant also keeps its whole `cost`.
+
+When every shared step came from the cache, `shared_cost` has `steps_run` 0, `seconds` 0
+and `steps_cached` above 0. A page should then say that the shared steps came from the
+cache, not that they took no time.
 
 ```json
 "cost": {"seconds": 1.84, "input_tokens": 2310, "output_tokens": 412, "dollars": 0.0041,

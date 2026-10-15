@@ -2,13 +2,15 @@
 
 Each step carries `usage`: what its model call used (token counts and model
 ids only), or null for a step that calls no model or came from the cache.
-Each report carries `cost`: its `cost()` with the default price table."""
+Each report carries `cost`: its `cost()` with the default price table. A
+comparison also splits it: each variant's `varied_cost`, and the shared
+steps once in `shared_cost`."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from pandion import Answer, Retrieval, StageResult
+from pandion import Answer, Retrieval, StageResult, total_cost
 
 
 def step(s: StageResult | None) -> dict[str, Any] | None:
@@ -75,34 +77,22 @@ def evaluation(report: Any) -> dict[str, Any]:
 
 def comparisons(results: Any) -> dict[str, Any]:
     """A comparison (what `pandion.compare` returns): its `to_dict()`, each
-    variant's cost, and the cost of every variant together."""
+    variant's cost, and the cost of every variant together; see `split`."""
     out = results.to_dict()
-    for item, c in zip(out["comparisons"], results):
-        item["cost"] = c.cost()
-    return {**out, "cost": results.cost()}
+    return {**out, **split(list(results), out["comparisons"], results.varied_from)}
 
 
-def _add(values: list[Any]) -> Any:
-    """The sum of the values that are not None, or None when every one is."""
-    present = [v for v in values if v is not None]
-    return sum(present) if present else None
-
-
-def total(costs: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Several reports' `cost()` added up, for a comparison on one question.
-
-    Unlike `Comparisons.cost()`, a cached step that several variants read is
-    counted once per variant in `steps_cached`."""
-    if not costs:
-        return None
+def split(variants: list[Any], items: list[dict[str, Any]], varied_from: str) -> dict[str, Any]:
+    """Each variant's `cost` and `varied_cost` (the varied step and after) on
+    its item, and the list's `varied_from`, `shared_cost` (the steps before
+    the varied one, counted once) and `cost` (every variant together, each
+    step once). `variants` are the reports, one per item."""
+    for item, report in zip(items, variants):
+        item["cost"] = report.cost()
+        item["varied_cost"] = report.cost(since=varied_from)
     return {
-        "seconds": sum(c["seconds"] for c in costs),
-        "input_tokens": _add([c["input_tokens"] for c in costs]),
-        "output_tokens": _add([c["output_tokens"] for c in costs]),
-        "dollars": _add([c["dollars"] for c in costs]),
-        "unpriced_models": sorted({m for c in costs for m in c["unpriced_models"]}),
-        "uncounted_models": sorted({m for c in costs for m in c["uncounted_models"]}),
-        "steps_run": sum(c["steps_run"] for c in costs),
-        "steps_cached": sum(c["steps_cached"] for c in costs),
-        "prices_as_of": costs[0]["prices_as_of"],
+        "comparisons": items,
+        "varied_from": varied_from,
+        "shared_cost": total_cost(variants, before=varied_from),
+        "cost": total_cost(variants),
     }

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from pandion.config import ConfigError, _block, from_dict, to_dict
+from pandion.cost import STAGE_ORDER, total_cost
 from pandion.cost import cost as _cost
 from pandion.events import event
 from pandion.payloads import ChunkSet, Query
@@ -147,11 +148,20 @@ class EvaluationReport:
     def _steps(self) -> list[StageResult]:
         return [s for q in self.questions if q.retrieval is not None for s in q.retrieval._costed()]
 
-    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+    def cost(
+        self,
+        prices: dict[str, tuple[float, float]] | None = None,
+        *,
+        since: str | None = None,
+        before: str | None = None,
+    ) -> dict[str, Any]:
         """Seconds, tokens, estimated dollars and the cache share of every
         question's search; see `pandion.cost.cost`. `prices` replaces
-        `pandion.llm.PRICES`."""
-        return _cost(self._steps(), prices)
+        `pandion.llm.PRICES`; `since` and `before` keep part of each run."""
+        return _cost(self._costed(), prices, since=since, before=before)
+
+    def _costed(self) -> list[StageResult]:
+        return self._steps()
 
     def totals(self) -> dict[str, Any]:
         """The numbers for the whole set; see `_totals`."""
@@ -386,16 +396,12 @@ COMPARE_STAGES: dict[str, str] = {
 }
 
 
-#: Where each index step falls in a run, for `compare`'s `through`.
-_STEP_ORDER = {"parse": 0, "clean": 1, "chunk": 2, "embed": 3, "store": 3, "index": 3}
-
-
 def _check_through(pipeline: Pipeline, stage: str, through: str) -> None:
     """A ValueError when `through` names no step of `pipeline` (as `index.run`
     says it) or stops before the varied `stage`, which would leave nothing to compare."""
     pipeline.index._last_step(through)
-    stop = _STEP_ORDER[through.split(".")[0]]
-    if stop < _STEP_ORDER[stage]:
+    stop = STAGE_ORDER[through.split(".")[0]]
+    if stop < STAGE_ORDER[stage]:
         raise ValueError(
             f"through='{through}' stops before the {stage} step, so there would be nothing "
             f"to compare. Stop at the {stage} step or after it."
@@ -432,10 +438,21 @@ class Comparison:
     def _steps(self) -> list[StageResult]:
         return [*self.index._steps(), *(self.report._steps() if self.report is not None else [])]
 
-    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+    def cost(
+        self,
+        prices: dict[str, tuple[float, float]] | None = None,
+        *,
+        since: str | None = None,
+        before: str | None = None,
+    ) -> dict[str, Any]:
         """Seconds, tokens, estimated dollars and the cache share of this
-        variant's index run and evaluation; see `pandion.cost.cost`."""
-        return _cost(self._steps(), prices)
+        variant's index run and evaluation; see `pandion.cost.cost`.
+        `cost(since=results.varied_from)` is this variant's own cost: the
+        varied step and the steps after it."""
+        return _cost(self._costed(), prices, since=since, before=before)
+
+    def _costed(self) -> list[StageResult]:
+        return self._steps()
 
     @property
     def settings(self) -> str:
@@ -507,6 +524,9 @@ class Comparisons(list[Comparison]):
 
     #: A cancel stopped compare before every variant ran.
     cancelled: bool = False
+    #: The stage `compare` was told to vary, such as "rerank" or "chunk";
+    #: None for a list built by hand.
+    varied_from: str | None = None
 
     def _scored(self) -> list[Comparison]:
         return [
@@ -529,9 +549,17 @@ class Comparisons(list[Comparison]):
         top = key(max(scored, key=key))
         return [c for c in scored if key(c) == top]
 
-    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
-        """The cost of every variant together; see `Comparison.cost`."""
-        return _cost([s for c in self for s in c._steps()], prices)
+    def cost(
+        self,
+        prices: dict[str, tuple[float, float]] | None = None,
+        *,
+        since: str | None = None,
+        before: str | None = None,
+    ) -> dict[str, Any]:
+        """The cost of every variant together, each step counted once; see
+        `pandion.total_cost`. `before=self.varied_from` is the cost of the
+        shared steps, measured once."""
+        return total_cost(self, prices=prices, since=since, before=before)
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON: every comparison's `to_dict()`, and the best as their
@@ -628,6 +656,7 @@ def compare(
         for pipeline in pipelines:
             _check_through(pipeline, stage, through)
     results = Comparisons()
+    results.varied_from = stage
     for n, (variant, pipeline) in enumerate(zip(variants, pipelines), start=1):
         if cancel is not None and cancel.is_set():
             results.cancelled = True

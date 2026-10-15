@@ -111,12 +111,23 @@ class IndexReport:
         """Every step that was asked for ran or came from the cache."""
         return all(s.status in ("executed", "cached") for s in self._steps())
 
-    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+    def cost(
+        self,
+        prices: dict[str, tuple[float, float]] | None = None,
+        *,
+        since: str | None = None,
+        before: str | None = None,
+    ) -> dict[str, Any]:
         """Seconds, tokens, estimated dollars and the cache share of this
         run's steps; see `pandion.cost.cost`. `prices` replaces
         `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
-        per million output tokens)}."""
-        return _cost(self._steps(), prices)
+        per million output tokens)}. `since` and `before` keep part of the
+        run, in pipeline order (see `pandion.cost.cost`)."""
+        return _cost(self._costed(), prices, since=since, before=before)
+
+    def _costed(self) -> list[StageResult]:
+        """Every step that `cost()` counts."""
+        return self._steps()
 
 
 @dataclass
@@ -160,12 +171,19 @@ class Retrieval:
     def ok(self) -> bool:
         return all(s.status in ("executed", "cached") for s in self._steps())
 
-    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+    def cost(
+        self,
+        prices: dict[str, tuple[float, float]] | None = None,
+        *,
+        since: str | None = None,
+        before: str | None = None,
+    ) -> dict[str, Any]:
         """Seconds, tokens, estimated dollars and the cache share of this
         run's steps; see `pandion.cost.cost`. `prices` replaces
         `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
-        per million output tokens)}."""
-        return _cost(self._costed(), prices)
+        per million output tokens)}. `since` and `before` keep part of the
+        run, in pipeline order (see `pandion.cost.cost`)."""
+        return _cost(self._costed(), prices, since=since, before=before)
 
     @property
     def result(self) -> RetrievalResult | None:
@@ -202,12 +220,23 @@ class Answer:
     def ok(self) -> bool:
         return self.retrieval.ok and self.answer.status in ("executed", "cached")
 
-    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+    def cost(
+        self,
+        prices: dict[str, tuple[float, float]] | None = None,
+        *,
+        since: str | None = None,
+        before: str | None = None,
+    ) -> dict[str, Any]:
         """Seconds, tokens, estimated dollars and the cache share of this
         run's steps; see `pandion.cost.cost`. `prices` replaces
         `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
-        per million output tokens)}."""
-        return _cost([*self.retrieval._costed(), self.answer], prices)
+        per million output tokens)}. `since` and `before` keep part of the
+        run, in pipeline order (see `pandion.cost.cost`)."""
+        return _cost(self._costed(), prices, since=since, before=before)
+
+    def _costed(self) -> list[StageResult]:
+        """Every step that `cost()` counts: the retrieval's and the answer step."""
+        return [*self.retrieval._costed(), self.answer]
 
     @property
     def hits(self) -> list[Hit]:

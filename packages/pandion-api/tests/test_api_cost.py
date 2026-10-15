@@ -128,17 +128,40 @@ def test_a_comparison_on_one_question_has_each_cost_and_the_lists(client, answer
     assert result["cost"]["input_tokens"] == 18 and result["cost"]["dollars"] is None
 
 
-def test_the_total_of_several_costs_keeps_none_apart_from_zero():
-    from pandion_api.reports import total
+def split(result: dict, stage: str) -> None:
+    """The varied stage, each variant's own cost, and the shared steps once."""
+    assert result["varied_from"] == stage
+    for c in result["comparisons"]:
+        assert set(c["varied_cost"]) == COST_KEYS
+        # The rerank step after the varied chunk step is the variant's own.
+        assert c["varied_cost"]["input_tokens"] == 9
+    shared = result["shared_cost"]
+    assert set(shared) == COST_KEYS
+    assert shared["steps_run"] > 0 and shared["input_tokens"] is None
+    # Every variant's own steps plus the shared steps once make the list's cost.
+    assert result["cost"]["steps_run"] == shared["steps_run"] + sum(
+        c["varied_cost"]["steps_run"] for c in result["comparisons"]
+    )
 
-    priced = {
-        "seconds": 1.0, "input_tokens": 10, "output_tokens": 2, "dollars": 0.5,
-        "unpriced_models": [], "uncounted_models": [], "steps_run": 3, "steps_cached": 1,
-        "prices_as_of": "2026-10-15",
+
+def test_a_comparison_splits_each_variants_cost_from_the_shared_steps(client):
+    sha = upload(client)["sha"]
+    body = {"config": WITH_MODEL, "stage": "chunk", "variants": VARIANTS, "documents": [sha], "questions": QUESTIONS}
+    state, _ = finish(client, client.post("/comparisons", json=body))
+    split(state["result"], "chunk")
+
+    again, _ = finish(client, client.post("/comparisons", json=body))
+    shared = again["result"]["shared_cost"]
+    # Every shared step came from the cache this time.
+    assert shared["steps_run"] == 0 and shared["seconds"] == 0 and shared["steps_cached"] > 0
+
+
+@pytest.mark.parametrize("answer", [False, True])
+def test_a_comparison_on_one_question_splits_its_cost_too(client, answer):
+    sha = upload(client)["sha"]
+    body = {
+        "config": WITH_MODEL, "stage": "chunk", "variants": VARIANTS, "documents": [sha],
+        "question": QUESTION, "answer": answer,
     }
-    local = {**priced, "input_tokens": None, "output_tokens": None, "dollars": None, "unpriced_models": ["b", "a"]}
-    assert total([priced, local]) == {
-        **priced, "seconds": 2.0, "unpriced_models": ["a", "b"], "steps_run": 6, "steps_cached": 2,
-    }
-    assert total([local])["dollars"] is None
-    assert total([]) is None
+    state, _ = finish(client, client.post("/comparisons", json=body))
+    split(state["result"], "chunk")

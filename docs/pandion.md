@@ -684,6 +684,34 @@ your own, pass them in the same shape:
 answer.cost(prices={"claude-sonnet-5": (2.0, 10.0), "openai/gpt-4o-mini": (0.15, 0.6)})
 ```
 
+### Part of a run, and several runs together
+
+`cost()` takes `since` and `before`, each a stage name. `since="rerank"` counts only the
+steps at that stage or after it, and `before="rerank"` only the steps before it, so the
+two split a run in two. The order is the pipeline's: source, parse, clean, chunk, the index
+(`embed`, `store` and `index` all name it), rewrite, search, rerank, answer. A name that
+is not a stage raises `ValueError`.
+
+`pandion.total_cost(reports)` is the cost of several reports together, with each step
+counted once across all of them. A cached read of a result that another of the reports
+ran is not counted, and a cached step that several reports read counts once. It takes
+`prices`, `since` and `before` too. `Comparisons.cost()` is `total_cost` of its variants.
+
+This is how to compare variants fairly. `compare` runs the shared steps for the first
+variant only, and the later variants read them from the cache, so each variant's whole
+`cost()` depends on its place in the list. `Comparisons.varied_from` is the stage that
+`compare` was told to vary. Count each variant from there, and the shared steps once:
+
+```python
+results = pandion.compare(p, "rerank", ["mmr", "cross_encoder"], docs, questions)
+for c in results:
+    print(c.settings, c.cost(since=results.varied_from))
+print("shared", pandion.total_cost(results, before=results.varied_from))
+```
+
+When every shared step came from the cache, the shared cost has `steps_run` 0 and
+`seconds` 0. Say that the shared steps came from the cache rather than that they were free.
+
 `pandion eval` and `pandion compare` print the cost as one line (see
 [The pandion command](#the-pandion-command)).
 pandion-api returns each step's `usage` and each report's `cost` in its JSON (see

@@ -1,10 +1,10 @@
 """The pipeline templates give the same result through Pandion and through pandion-api.
 
-The fast tests check that every document and question pair composes, that
+The fast tests check that every index and query pair composes, that
 Pandion accepts it, and that pandion-api's validate route accepts it.
 
 The `models` test runs pairs that need no key for real: it indexes the
-document template's sample and asks the sample's first question, once with
+index template's sample and asks the sample's first question, once with
 Pandion directly and once through pandion-api (in-process, TestClient), each
 in its own folder. Both must make the same pieces, the same hits in the same
 order, and the same result ids. It downloads models on first use, so it runs
@@ -31,11 +31,11 @@ API = "/api/v2"
 DEVICE = {"device": "cpu"}
 
 LISTED = list_templates()
-SAMPLES = {t["id"]: t["sample"] for t in LISTED["documents"]}
-KEYED = {t["id"] for t in LISTED["questions"] if t["needs_key"]}
-PAIRS = list(product(sorted(SAMPLES), sorted(t["id"] for t in LISTED["questions"])))
+SAMPLES = {t["id"]: t["sample"] for t in LISTED["index"]}
+KEYED = {t["id"] for t in LISTED["query"] if t["needs_key"]}
+PAIRS = list(product(sorted(SAMPLES), sorted(t["id"] for t in LISTED["query"])))
 NO_KEY_PAIRS = [(d, q) for d, q in PAIRS if q not in KEYED]
-#: One pair per kind of parse, and each no-key question template once.
+#: One pair per kind of parse, and each no-key query template once.
 REPRESENTATIVE = [("text", "balanced"), ("tables", "precision"), ("scanned", "exact")]
 
 
@@ -49,26 +49,26 @@ def _api(folder: Path) -> TestClient:
     return TestClient(create_app(ApiSettings(data_dir=folder, models=ModelSettings(**DEVICE), prefix=API)))
 
 
-@pytest.mark.parametrize(("document", "question"), PAIRS)
-def test_every_pair_is_a_pipeline_pandion_accepts(document, question, tmp_path):
-    p = Pipeline.from_dict(compose_template(document, question, path=str(tmp_path)))
+@pytest.mark.parametrize(("index", "query"), PAIRS)
+def test_every_pair_is_a_pipeline_pandion_accepts(index, query, tmp_path):
+    p = Pipeline.from_dict(compose_template(index, query, path=str(tmp_path)))
     assert p.retrieval is not None and p.query is not None
 
 
 def test_pandion_api_validates_every_pair(tmp_path):
     with _api(tmp_path / "data") as client:
-        for document, question in PAIRS:
-            config = compose_template(document, question)
+        for index, query in PAIRS:
+            config = compose_template(index, query)
             checked = client.post(f"{API}/pipelines/validate", json={"config": config}).json()
-            assert checked["ok"] is True, (document, question, checked["problems"])
+            assert checked["ok"] is True, (index, query, checked["problems"])
 
 
 # --- the full run ---------------------------------------------------------------
 
 
-def _sample(document: str) -> tuple[Path, str]:
-    """The document template's sample PDF and its first question."""
-    name = SAMPLES[document]
+def _sample(index: str) -> tuple[Path, str]:
+    """The index template's sample PDF and its first question."""
+    name = SAMPLES[index]
     folder = ROOT / "samples" / name
     first = json.loads((folder / "questions.json").read_text(encoding="utf-8"))[0]
     return folder / f"{name}.pdf", first["question"]
@@ -127,11 +127,11 @@ def _through_api(config: dict, pdf: Path, question: str, folder: Path) -> dict:
 
 
 @pytest.mark.models
-@pytest.mark.parametrize(("document", "question"), parity_pairs(os.environ))
-def test_a_template_gives_the_same_result_through_pandion_and_pandion_api(document, question, tmp_path):
-    pdf, asked = _sample(document)
-    direct = _with_pandion(compose_template(document, question, path=str(tmp_path / "direct")), pdf, asked)
-    served = _through_api(compose_template(document, question), pdf, asked, tmp_path / "api")
+@pytest.mark.parametrize(("index", "query"), parity_pairs(os.environ))
+def test_a_template_gives_the_same_result_through_pandion_and_pandion_api(index, query, tmp_path):
+    pdf, asked = _sample(index)
+    direct = _with_pandion(compose_template(index, query, path=str(tmp_path / "direct")), pdf, asked)
+    served = _through_api(compose_template(index, query), pdf, asked, tmp_path / "api")
 
     assert direct["pieces"] and direct["hits"], "the run found nothing"
     assert served["pieces"] == direct["pieces"]

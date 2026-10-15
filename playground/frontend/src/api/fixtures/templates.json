@@ -1,5 +1,5 @@
 {
-  "documents": [
+  "index": [
     {
       "id": "manuals",
       "name": "Manuals and guides",
@@ -159,7 +159,7 @@
       }
     }
   ],
-  "questions": [
+  "query": [
     {
       "id": "balanced",
       "name": "Balanced",

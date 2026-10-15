@@ -11,8 +11,8 @@ The app has two halves:
   [frontend/](frontend/README.md).
 - **The backend** is the Python server in [backend/](backend/README.md).
 
-The backend also serves Pandion's pipeline templates at `GET /api/templates`: document
-templates that set how a kind of document is indexed, and question templates that set how
+The backend also serves Pandion's pipeline templates at `GET /api/templates`: index
+templates that set how a kind of document is indexed, and query templates that set how
 a kind of question is searched and answered. See
 [Templates](../docs/pandion.md#templates). Build's **Start from a template** shows them as
 cards and puts the pipeline they make on Build, with Undo.

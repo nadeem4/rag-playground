@@ -740,8 +740,8 @@ code. All three give the same pipeline: the same settings give the same artifact
 the same results whichever way they are written, so they share one cache. The playground's Starter
 pipeline is [`samples/starter.yaml`](../samples/starter.yaml): a good first file to copy.
 For a pipeline chosen for your documents and your questions, start from the
-[templates](#templates): pick a document template, such as Reports with tables, and a
-question template, such as Best precision, and `pandion.compose_template` joins them into
+[templates](#templates): pick an index template, such as Reports with tables, and a
+query template, such as Best precision, and `pandion.compose_template` joins them into
 one pipeline dict for `Pipeline.from_dict`.
 
 As a file, read with `Pipeline.from_yaml`:
@@ -867,11 +867,11 @@ missing stage, such as `chunk`, is an error that names it.
 ## Templates
 
 A template is a real starting point for a pipeline, chosen for a kind of document or a
-kind of question. Pandion ships two families, and you pick one of each:
+kind of question. Pandion ships two families, `index` and `query`, and you pick one of each:
 
-- A **document template** sets the index side: how the document is parsed, cleaned, cut
+- An **index template** sets the index side: how the document is parsed, cleaned, cut
   into pieces, embedded and stored.
-- A **question template** sets the retrieval side and the answer: how the question is
+- A **query template** sets the retrieval side and the answer: how the question is
   rewritten, how the index is searched, how the hits are reranked, and what the answer
   step does.
 
@@ -885,16 +885,16 @@ p = pandion.Pipeline.from_dict(pandion.compose_template("tables", "precision", p
 p.index.run("report.pdf")
 print(p.ask("What was the revenue in 2024?").text)
 
-for t in pandion.list_templates()["questions"]:
+for t in pandion.list_templates()["query"]:
     print(t["id"], t["name"], "needs a key" if t["needs_key"] else "")
 ```
 
 Each template in the list has its `id`, `name`, `summary`, `good_for` and `pipeline` (the
-part it sets). A document template also names the RAG Playground `sample` that suits it,
-and a question template says whether it `needs_key`. The first run downloads the models
+part it sets). An index template also names the RAG Playground `sample` that suits it,
+and a query template says whether it `needs_key`. The first run downloads the models
 a pair uses.
 
-### Document templates
+### Index templates
 
 | Template | Id | Good for |
 | --- | --- | --- |
@@ -916,10 +916,10 @@ a pair uses.
   headings four levels deep, and each piece holds one subsection such as 2.2.1, with a
   heading like 2.2.1.1 kept inside it.
 
-Every document template embeds with `qwen3-embedding-0.6b` and stores in lancedb with its
-keyword index, which the hybrid search in every question template needs.
+Every index template embeds with `qwen3-embedding-0.6b` and stores in lancedb with its
+keyword index, which the hybrid search in every query template needs.
 
-### Question templates
+### Query templates
 
 | Template | Id | Good for | Key |
 | --- | --- | --- | --- |
@@ -949,10 +949,10 @@ keyword index, which the hybrid search in every question template needs.
 
 ### The template files
 
-The files are in the package, under `pandion/templates/documents/` and
-`pandion/templates/questions/`. Each is part of a pipeline file plus a `template:` block,
-and most settings have a short comment that says why they were chosen. A document
-template holds `index`; a question template holds `retrieve` and `answer`:
+The files are in the package, under `pandion/templates/index/` and
+`pandion/templates/query/`. Each is part of a pipeline file plus a `template:` block,
+and most settings have a short comment that says why they were chosen. An index
+template holds `index`; a query template holds `retrieve` and `answer`:
 
 ```yaml
 template:

@@ -111,7 +111,7 @@ export const api = {
   /** Plan I-31: a filled-in example set to start from. */
   questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,
 
-  /** The pipeline templates, document and question, as Pandion lists them. */
+  /** The pipeline templates, index and query, as Pandion lists them. */
   templates: () => request<PipelineTemplates>("/templates"),
 
   /** `demo`: hosted demo mode, uploads private to the browser and bounded, key from the UI only. */

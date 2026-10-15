@@ -13,9 +13,9 @@ import {
   COMING_NEXT,
   composeConfig,
   composedRows,
-  DOCUMENT_ORDER,
+  INDEX_ORDER,
   orderTemplates,
-  QUESTION_ORDER,
+  QUERY_ORDER,
   stepsLine,
   templatePipeline,
   type PipelineTemplates,
@@ -46,8 +46,8 @@ export function TemplatePicker({
   const { samples } = useDocument()
   const [templates, setTemplates] = useState<PipelineTemplates | null>(null)
   const [failed, setFailed] = useState(false)
-  const [docId, setDocId] = useState<string | null>(null)
-  const [questionId, setQuestionId] = useState<string | null>(null)
+  const [indexId, setIndexId] = useState<string | null>(null)
+  const [queryId, setQueryId] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -60,13 +60,13 @@ export function TemplatePicker({
     }
   }, [])
 
-  const docs = useMemo(() => orderTemplates(templates?.documents ?? [], DOCUMENT_ORDER), [templates])
-  const questions = useMemo(() => orderTemplates(templates?.questions ?? [], QUESTION_ORDER), [templates])
-  const doc = docs.find((t) => t.id === docId) ?? docs[0]
-  const question = questions.find((t) => t.id === questionId) ?? questions[0]
-  const rows = doc && question ? composedRows(composeConfig(doc, question)) : []
-  const made = doc && question ? templatePipeline(doc, question, current, registry) : null
-  const sample = doc ? (samples?.find((s) => s.name === doc.sample)?.title ?? null) : null
+  const indexes = useMemo(() => orderTemplates(templates?.index ?? [], INDEX_ORDER), [templates])
+  const queries = useMemo(() => orderTemplates(templates?.query ?? [], QUERY_ORDER), [templates])
+  const index = indexes.find((t) => t.id === indexId) ?? indexes[0]
+  const query = queries.find((t) => t.id === queryId) ?? queries[0]
+  const rows = index && query ? composedRows(composeConfig(index, query)) : []
+  const made = index && query ? templatePipeline(index, query, current, registry) : null
+  const sample = index ? (samples?.find((s) => s.name === index.sample)?.title ?? null) : null
 
   const footer = (
     <>
@@ -76,8 +76,8 @@ export function TemplatePicker({
       <Button
         disabled={!made?.ok}
         onClick={() => {
-          if (!made?.ok || !doc || !question) return
-          onUse({ graph: made.graph, note: made.note, line: appliedLine(doc.name, question.name, rows.length) })
+          if (!made?.ok || !index || !query) return
+          onUse({ graph: made.graph, note: made.note, line: appliedLine(index.name, query.name, rows.length) })
         }}
       >
         Use this pipeline
@@ -101,8 +101,8 @@ export function TemplatePicker({
       ) : (
         <div className="flex flex-wrap items-start gap-6">
           <div className="flex min-w-0 flex-[999_1_36rem] flex-col gap-6">
-            <CardSet title="1. What are your documents like?" hint="Sets parse, clean, chunk, embed and store" id={`${id}-docs`}>
-              {docs.map((t, i) => (
+            <CardSet title="1. What are your documents like?" hint="Sets parse, clean, chunk, embed and store" id={`${id}-index`}>
+              {indexes.map((t, i) => (
                 <Fragment key={t.id}>
                   {/* Coming next sits third, after Reports with tables, as in the approved design. */}
                   {i === 2 ? <TemplateCard name={COMING_NEXT.name} summary={COMING_NEXT.summary} goodFor={COMING_NEXT.good_for} soon /> : null}
@@ -111,28 +111,28 @@ export function TemplatePicker({
                     summary={t.summary}
                     goodFor={t.good_for}
                     steps={stepsLine(t.pipeline)}
-                    picked={t.id === doc?.id}
-                    onPick={() => setDocId(t.id)}
+                    picked={t.id === index?.id}
+                    onPick={() => setIndexId(t.id)}
                   />
                 </Fragment>
               ))}
             </CardSet>
-            <CardSet title="2. What will you ask?" hint="Sets rewrite, search, rerank and the answer" id={`${id}-questions`}>
-              {questions.map((t) => (
+            <CardSet title="2. What will you ask?" hint="Sets rewrite, search, rerank and the answer" id={`${id}-query`}>
+              {queries.map((t) => (
                 <TemplateCard
                   key={t.id}
                   name={t.name}
                   summary={t.summary}
                   goodFor={t.good_for}
                   steps={stepsLine(t.pipeline)}
-                  picked={t.id === question?.id}
+                  picked={t.id === query?.id}
                   needsKey={t.needs_key}
-                  onPick={() => setQuestionId(t.id)}
+                  onPick={() => setQueryId(t.id)}
                 />
               ))}
             </CardSet>
           </div>
-          {doc && question ? (
+          {index && query ? (
             <section
               aria-labelledby={`${id}-yours`}
               className="flex min-w-0 flex-[1_1_18rem] flex-col gap-3 rounded-control border border-hairline bg-surface p-4"
@@ -141,7 +141,7 @@ export function TemplatePicker({
                 Your pipeline
               </h3>
               <p className="text-sm text-fg">
-                <strong>{doc.name}</strong> with <strong>{question.name}</strong>
+                <strong>{index.name}</strong> with <strong>{query.name}</strong>
               </p>
               <ol className="flex flex-col border-t border-hairline">
                 {rows.map((r) => (
@@ -151,13 +151,13 @@ export function TemplatePicker({
                   </li>
                 ))}
               </ol>
-              {question.needs_key ? (
+              {query.needs_key ? (
                 <p className="rounded-control bg-warn px-3 py-2 text-sm text-warn-text">
                   This pipeline calls a language model. Add your key in Settings before you Ask.
                 </p>
               ) : null}
               <p className="text-sm text-fg-muted">
-                Try it on the sample {sample ? <span className="text-fg">{sample}</span> : <span className="font-mono text-xs text-fg">{doc.sample}</span>}, or add your own document.
+                Try it on the sample {sample ? <span className="text-fg">{sample}</span> : <span className="font-mono text-xs text-fg">{index.sample}</span>}, or add your own document.
               </p>
               {made && !made.ok ? (
                 <p role="alert" className="text-sm text-danger">

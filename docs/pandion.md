@@ -68,8 +68,9 @@ uses, and `uv run` then finds it.
 ## Try one stage at a time
 
 These calls run one strategy directly. They use no pipeline and keep no cache. Each one
-returns a `StageResult` with `.output`, `.note` (one sentence about what the stage did)
-and `.duration_ms`.
+returns a `StageResult` with `.output`, `.note` (one sentence about what the stage did),
+`.duration_ms` and `.usage` (the tokens a step that calls a model recorded, or None).
+For `pandion.clean`, `.usage` is that of the last cleaner that recorded one.
 
 ```python
 import pandion

@@ -231,6 +231,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
             hit.prior_rank = hit.rank
             hit.prior_score = hit.score
 
+        model_name = llm.model_name_for(model, config.custom_model, config.openrouter_model)
         started = time.perf_counter()
         completion = llm.complete(
             model,
@@ -238,9 +239,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
             user=_prompt(question, hits, config.text_budget_chars),
             api_key=api_key,
             base_url=config.custom_base_url.strip() if custom else None,
-            model_name=llm.model_name_for(
-                model, config.custom_model, config.openrouter_model
-            ),
+            model_name=model_name,
             max_tokens=config.max_tokens,
             public_only=public_only,
         )
@@ -248,7 +247,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
         set_usage(
             ctx,
             completion.usage,
-            llm.model_name_for(model, config.custom_model, config.openrouter_model) or model.id,
+            model_name or model.id,
         )
 
         reply = "" if completion.stop_reason == "refusal" else completion.text

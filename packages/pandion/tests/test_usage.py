@@ -249,3 +249,85 @@ def test_node_finished_carries_usage_and_none_for_a_cached_or_model_free_step(tm
     assert finished(first)["s"]["usage"] is None
     assert finished(second)["p"]["cache_hit"] is True
     assert finished(second)["p"]["usage"] is None
+
+
+# -- the single-stage functions ------------------------------------------------------------
+
+
+@pytest.fixture
+def usage_steps():
+    """A parse, a clean and a chunk step that each record usage; removed after the test."""
+    from pandion.extend import ChunkSet, Element, ParsedDoc
+
+    @register
+    class UsageParse(Transform[EmptyCfg]):
+        name = "test_usage_parse"
+        stage = Stage.PARSE
+        inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
+        output = ArtifactType.PARSED_DOC
+        config_model = EmptyCfg
+        summary = "One block, and made-up usage."
+
+        def apply(self, inputs, config, ctx):
+            set_usage(ctx, {"input_tokens": 11, "output_tokens": 5}, "vlm")
+            return ParsedDoc(elements=[Element(id="e1", type="paragraph", text="one", order=0)])
+
+    @register
+    class UsageClean(Transform[EmptyCfg]):
+        name = "test_usage_clean"
+        stage = Stage.CLEAN
+        inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+        output = ArtifactType.PARSED_DOC
+        config_model = EmptyCfg
+        summary = "Keeps the document, and made-up usage."
+
+        def apply(self, inputs, config, ctx):
+            set_usage(ctx, {"input_tokens": 12, "output_tokens": 6}, "cleaner")
+            return inputs["doc"]
+
+    @register
+    class UsageChunk(Transform[EmptyCfg]):
+        name = "test_usage_chunk"
+        stage = Stage.CHUNK
+        inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
+        output = ArtifactType.CHUNK_SET
+        config_model = EmptyCfg
+        summary = "No pieces, and made-up usage."
+
+        def apply(self, inputs, config, ctx):
+            set_usage(ctx, {"input_tokens": 13, "output_tokens": None}, "chunker")
+            return ChunkSet()
+
+    yield
+    from pandion.registry import registry
+
+    registry._by_stage[Stage.PARSE].pop("test_usage_parse", None)
+    registry._by_stage[Stage.CLEAN].pop("test_usage_clean", None)
+    registry._by_stage[Stage.CHUNK].pop("test_usage_chunk", None)
+
+
+def test_parse_clean_and_chunk_on_their_own_report_usage(tmp_path, usage_steps):
+    import pandion
+
+    f = tmp_path / "a.txt"
+    f.write_text("one\n", encoding="utf-8")
+
+    parsed = pandion.parse(f, use="test_usage_parse")
+    cleaned = pandion.clean(parsed, steps=[{"use": "test_usage_clean"}])
+    chunked = pandion.chunk(cleaned, use="test_usage_chunk")
+
+    assert parsed.usage == {"input_tokens": 11, "output_tokens": 5, "model": "vlm"}
+    assert cleaned.usage == {"input_tokens": 12, "output_tokens": 6, "model": "cleaner"}
+    assert chunked.usage == {"input_tokens": 13, "output_tokens": None, "model": "chunker"}
+
+
+def test_a_refusal_still_records_usage(monkeypatch):
+    import pandion
+
+    monkeypatch.setattr(
+        llm, "complete",
+        lambda model, **kw: Completion(text="I can't help.", usage={"input_tokens": 8, "output_tokens": 4}, stop_reason="refusal"),
+    )
+    result = pandion.rewrite(QUESTION, use="llm_rewrite", model="gpt-6-astra", credentials=CREDS)
+    assert result.output.text == QUESTION
+    assert result.usage == {"input_tokens": 8, "output_tokens": 4, "model": "gpt-6-astra"}

@@ -9,7 +9,7 @@ import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { documentsOf, withDocuments } from "@/state/document"
 import { pipelineLine } from "@/state/evaluate"
 import { initialGraph, type PipelineGraph } from "@/state/graph"
-import { graphToConfig, removedText } from "@/state/config"
+import { graphToConfig, removedText, sameConfig, type WorkingPipeline } from "@/state/config"
 import {
   cleanSavedPipeline,
   deletePipeline,
@@ -29,6 +29,11 @@ import {
 } from "@/state/pipelines"
 import type { StarterPipeline } from "@/state/starter"
 
+/** The same config, documents and question, whatever the order of their keys. */
+function samePipeline(a: WorkingPipeline, b: WorkingPipeline): boolean {
+  return sameConfig(a.config, b.config) && JSON.stringify([a.documents, a.question]) === JSON.stringify([b.documents, b.question])
+}
+
 /**
  * Build's top line, pipeline first: the Pipeline picker (the ready-made
  * Starter, your saved pipelines, and New), then the pipeline's documents with
@@ -41,7 +46,8 @@ import type { StarterPipeline } from "@/state/starter"
  *
  * Start from a template opens the template picker. Using a template replaces
  * the pipeline with an unsaved one and shows a status line whose Undo puts
- * back the pipeline, and the picker's selection, exactly as they were.
+ * back the pipeline, and the picker's selection, exactly as they were. Any
+ * later change to the pipeline removes the line, so Undo never drops an edit.
  */
 export function PipelineBar({
   graph,
@@ -75,8 +81,14 @@ export function PipelineBar({
   const [flash, setFlash] = useState<string | null>(null)
   const [linkText, setLinkText] = useState<string | null>(null)
   const [choosing, setChoosing] = useState(false)
-  const [applied, setApplied] = useState<{ line: string; graph: PipelineGraph; id: string | null } | null>(null)
+  const [applied, setApplied] = useState<{ line: string; graph: PipelineGraph; id: string | null; used: WorkingPipeline | null } | null>(null)
   const working = graphToConfig(graph)
+
+  // The pipeline is no longer the one the template made: the visitor changed it, so Undo goes.
+  const now = working.ok ? working.pipeline : null
+  useEffect(() => {
+    if (applied && !(applied.used && now && samePipeline(applied.used, now))) setApplied(null)
+  }, [applied, now])
 
   // A half-typed name or a share link belongs to the pipeline it was for (M5).
   useEffect(() => {
@@ -160,7 +172,8 @@ export function PipelineBar({
   ]
 
   function applyTemplate(used: UsedTemplate) {
-    setApplied({ line: used.line, graph, id: currentId })
+    const made = graphToConfig(used.graph)
+    setApplied({ line: used.line, graph, id: currentId, used: made.ok ? made.pipeline : null })
     setChoosing(false)
     setCurrentId(null)
     onLoad(used.graph, used.note)

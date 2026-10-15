@@ -79,8 +79,8 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
 | `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
 | `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. A run: 202 `{"run_id"}`. |
-| `POST /evaluations` | `{"config", "documents", "questions"?, "top_k"?}`: search for every question and say whether its answer came back, and for a miss the step that lost it (`pandion.evaluate`). Without `questions`, the sets kept against the documents. A run; its result is the report's `to_dict()`. |
-| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?, "question"?, "answer"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. `question` (one question, no gold passage, at most 2,000 characters) instead of `questions` runs each variant's search (or, with `answer: true`, its answer) and returns the results unscored, as `{"comparisons": [{"stage", "variant", "ok", "cancelled", "retrieval" or "answer"}], "best": [], "cancelled"}`; `best` is then empty. Sending both `question` and `questions` is a 400, and so is `through` with `question` (a comparison on one question searches, so it cannot stop after an index step) or `answer: true` without `question`. |
+| `POST /evaluations` | `{"config", "documents", "questions"?, "top_k"?}`: search for every question and say whether its answer came back, and for a miss the step that lost it (`pandion.evaluate`). Without `questions`, the sets kept against the documents. A run; its result is the report's `to_dict()` plus its `cost`. |
+| `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?, "question"?, "answer"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. `question` (one question, no gold passage, at most 2,000 characters) instead of `questions` runs each variant's search (or, with `answer: true`, its answer) and returns the results unscored, as `{"comparisons": [{"stage", "variant", "ok", "cancelled", "retrieval" or "answer", "cost"}], "best": [], "cancelled", "cost"}`; `best` is then empty. Sending both `question` and `questions` is a 400, and so is `through` with `question` (a comparison on one question searches, so it cannot stop after an index step) or `answer: true` without `question`. |
 | `GET /results/{id}` | a stored result's `id`, `type` and `meta` (a `result_id` from a run) |
 | `GET /results/{id}/payload` | the result itself; for an index, the description its store left (LanceDB's backends and counts) |
 | `DELETE /cache` | remove every stored result and the embedding cache, keep the documents: `{"results", "bytes", "complete"}`. 409 while a run works. |
@@ -112,6 +112,37 @@ A question's `result` gives the index it read, each retrieval step (`rewrite`, `
 not yet. Its kind is `ask`, or `retrieve` when `answer` is false. A pipeline with no
 `retrieve` section, or with no `answer` section when `answer` is true, is a 422 before
 anything runs.
+
+### Speed and cost
+
+Every step in a result has `usage`: what its model call used, or null. A step that calls
+no model (a parser, an embedder, a search) has null, and so does a step that came from
+the cache, because it used nothing in this run. `usage` holds only token counts and model
+ids, never a key or a path:
+
+```json
+"rerank": [{"stage": "rerank", "strategy": "llm_rerank", "status": "executed",
+  "usage": {"input_tokens": 1840, "output_tokens": 12, "model": "claude-haiku-4-5"}, ...}]
+```
+
+Every report has `cost`, which is Pandion's `cost()` with its own price table (see
+"Speed and cost" in [pandion.md](pandion.md#speed-and-cost)). An index run, a question
+(searched or answered) and an evaluation have one `cost` for the whole result. A
+comparison has one on each variant and one for all of them together, on the list. On a
+comparison on one question, the list's `cost` adds up the variants' own, so a cached step
+that several variants read counts once for each of them; it is null when no variant ran.
+A request cannot send its own prices.
+
+```json
+"cost": {"seconds": 1.84, "input_tokens": 2310, "output_tokens": 412, "dollars": 0.0041,
+  "unpriced_models": [], "uncounted_models": [], "steps_run": 5, "steps_cached": 2,
+  "prices_as_of": "2026-10-15"}
+```
+
+A model with no price in the table, such as a custom endpoint's, is listed in
+`unpriced_models`, and its tokens are counted but not priced. When nothing in the result
+was priced, `dollars` is null. A priced model whose server sent no token count is listed
+in `uncounted_models`.
 
 An evaluation's events carry the question's id under `question`, with a `question_finished`
 event after each. A comparison's carry the variant's number under `variant`. A comparison on one question

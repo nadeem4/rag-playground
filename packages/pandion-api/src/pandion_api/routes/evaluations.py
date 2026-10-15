@@ -129,7 +129,7 @@ async def create_evaluation(body: EvaluationIn, request: Request) -> dict[str, s
             credentials=credentials, on_event=on_event, cancel=cancel,
         )
         ok = not report.cancelled and all(q.error is None for q in report.questions)
-        return ok, report.cancelled, report.to_dict()
+        return ok, report.cancelled, reports.evaluation(report)
 
     return start(request, "evaluation", work)
 
@@ -220,7 +220,7 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
             credentials=credentials, on_event=on_event, cancel=cancel, through=body.through,
         )
         stopped = len(results) < len(body.variants)
-        return not stopped and all(c.index.ok for c in results), stopped, results.to_dict()
+        return not stopped and all(c.index.ok for c in results), stopped, reports.comparisons(results)
 
     return start(request, "comparison", work)
 
@@ -243,13 +243,16 @@ def _compare_on_one_question(body: ComparisonIn, pipelines: list, documents: dic
             kwargs = dict(documents=documents, credentials=credentials, on_event=emit, cancel=cancel)
             if body.answer:
                 a = p.ask(body.question, **kwargs)
-                item, ok = {"answer": reports.answer(a)}, a.ok
+                item, ok, cost = {"answer": reports.answer(a)}, a.ok, a.cost()
             else:
                 r = p.retrieve(body.question, **kwargs)
-                item, ok = {"retrieval": reports.retrieval(r)}, r.ok
-            out.append({"stage": body.stage, "variant": variant, "ok": ok, "cancelled": cancel.is_set(), **item})
+                item, ok, cost = {"retrieval": reports.retrieval(r)}, r.ok, r.cost()
+            out.append({
+                "stage": body.stage, "variant": variant, "ok": ok, "cancelled": cancel.is_set(),
+                **item, "cost": cost,
+            })
         stopped = stopped or cancel.is_set()
         ok = not stopped and all(c["ok"] for c in out)
-        return ok, stopped, {"comparisons": out, "best": [], "cancelled": stopped}
+        return ok, stopped, {"comparisons": out, "best": [], "cancelled": stopped, "cost": reports.total([c["cost"] for c in out])}
 
     return work

@@ -50,7 +50,7 @@ def test_the_cache_is_not_cleared_while_a_run_works(client, monkeypatch):
     def slow_run(self, documents, **kwargs):
         started.set()
         release.wait(5)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", slow_run)
     sha = upload(client)["sha"]

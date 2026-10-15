@@ -98,6 +98,7 @@ import { firstSentence } from "@/lib/sentence"
 import { compatibility } from "@/state/compat"
 import { recipeSentence } from "@/state/recipeSentence"
 import { cardNamedIn, cardOfStepIn, goldsOf, graphToConfig, stepOfCardIn } from "@/state/config"
+import { costValues, estimateLine, sharedLine, sharedStages } from "@/state/cost"
 import { errorHeadline, routeRunError, settingProblems } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
@@ -572,6 +573,16 @@ function Sweep({
   const best = new Set(serverBest(result))
   // Only scores that arrived say where the answer is: with none, no recipe is said to miss it.
   const goldKnown = submitted.scored && result !== null
+  // Time, Tokens and Cost come with the result; one saved before speed and cost has none, and shows none.
+  const variedFrom = result?.varied_from && result.comparisons.some((c) => c.varied_cost) ? result.varied_from : null
+  const variedCost = (i: number) => (variedFrom ? (result?.comparisons[i]?.varied_cost ?? null) : null)
+  const sharedConfig = useMemo(() => graphToConfig(graph), [graph])
+  const costNote = (() => {
+    const total = result?.cost ?? result?.shared_cost
+    if (!variedFrom || !total) return null
+    const shared = result?.shared_cost ? sharedLine(result.shared_cost, sharedConfig.ok ? sharedStages(sharedConfig.pipeline.config, variedFrom) : []) : null
+    return [shared, estimateLine(total)].filter(Boolean).join(" ")
+  })()
   // A scored run's sentences wait for its result, so no rank reads as a miss before the scores arrive.
   const scoresReady = !submitted.scored || result !== null || run.resultFailed
   const submittedNames = recipeNames(submitted.variants, target.stage, registry)
@@ -784,10 +795,13 @@ function Sweep({
       status: st,
       seconds: clock(i),
       done: ready,
-      values:
-        target.stage === "chunk"
+      cost: variedCost(i),
+      values: {
+        ...(target.stage === "chunk"
           ? { pieces: stats?.pieces ?? null, tokens: stats?.tokens ?? null, median: stats?.median ?? null, p95: stats?.p95 ?? null, uncovered: stats?.uncovered ?? null }
-          : { rank: ranks[i] ?? null, shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? []), returned: hits?.length ?? null },
+          : { rank: ranks[i] ?? null, shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? []), returned: hits?.length ?? null }),
+        ...costValues(variedCost(i)),
+      },
       set,
       pieces: hits?.slice(0, 5).flatMap((h) => {
         const at = h.ordinal ?? searchedSet?.findIndex((c) => c.id === h.chunk_id) ?? -1
@@ -932,6 +946,7 @@ function Sweep({
           onUse={statuses[i].kind === "done" && i !== submitted.base ? () => putOnBuild(i) : undefined}
           used={i !== submitted.base && own(submitted.variants[i])}
           best={best.has(i)}
+          cost={variedCost(i)}
         />
       {delta && target.stage !== "retrieve" && statuses[i].kind === "done" ? <p className="m-0 text-sm font-medium text-fg">{delta}</p> : null}
         {statuses[i].kind !== "done" ? (
@@ -1267,6 +1282,7 @@ function Sweep({
                 top={top}
                 baseAt={baseAt}
                 baseName={runBase}
+                variedFrom={variedFrom}
               />
               </div>
             ) : null}
@@ -1286,6 +1302,11 @@ function Sweep({
               {visible.map((i) => renderColumn(i, null))}
             </div>
             )}
+            {costNote ? (
+              <p data-testid="shared-cost" className="m-0 max-w-[80ch] px-3 pt-3 text-sm text-fg-muted">
+                {costNote}
+              </p>
+            ) : null}
             {note ? <p className="px-3 py-3 text-sm text-fg-muted">{note}</p> : null}
           </>
         )}

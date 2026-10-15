@@ -457,11 +457,13 @@ export function runningFinding(total: number, finishedCount: number, overview: b
 
 // ---------------------------------------------------------------- overview --
 
-/** What the overview sorts by: recipe order, a chunk number, or a search number. */
-export type SortKey = "order" | "pieces" | "tokens" | "median" | "p95" | "uncovered" | "rank" | "shared" | "returned"
+/** What the overview sorts by: recipe order, a chunk number, a search number, or the time, model tokens and cost of the varied step and after. */
+export type SortKey = "order" | "pieces" | "tokens" | "median" | "p95" | "uncovered" | "rank" | "shared" | "returned" | "time" | "modelTokens" | "cost"
 
-/** Pressing a header that is not sorted: Answer from the best rank, recipe order from the first, every other number from the most. */
-export const firstDirection = (key: SortKey): 1 | -1 => (key === "order" || key === "rank" ? 1 : -1)
+const LOWEST_FIRST: SortKey[] = ["order", "rank", "time", "modelTokens", "cost"]
+
+/** Pressing a header that is not sorted: Answer from the best rank, recipe order from the first, time, tokens and cost from the least, every other number from the most. */
+export const firstDirection = (key: SortKey): 1 | -1 => (LOWEST_FIRST.includes(key) ? 1 : -1)
 
 /**
  * The overview's rows in the order asked for. Recipe order by default. A

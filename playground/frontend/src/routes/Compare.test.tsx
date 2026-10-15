@@ -62,6 +62,28 @@ const scored = (ranks: (number | null)[], best: number[]) => ({
   cancelled: false,
 })
 
+/** A comparison's cost, as pandion-api sends it: Time, Tokens and Cost read `varied_cost`. */
+const costOf = (seconds: number, over: Record<string, unknown> = {}) => ({
+  seconds,
+  input_tokens: null,
+  output_tokens: null,
+  dollars: null,
+  unpriced_models: [],
+  uncounted_models: [],
+  steps_run: 1,
+  steps_cached: 0,
+  prices_as_of: "2026-10-15",
+  ...over,
+})
+const costed = (stage: string, n: number, shared: Record<string, unknown>) => ({
+  comparisons: Array.from({ length: n }, (_, i) => ({ stage, variant: { use: "x" }, ok: true, cancelled: false, cost: costOf(i + 1), varied_cost: costOf(i + 0.5) })),
+  best: [],
+  cancelled: false,
+  varied_from: stage,
+  shared_cost: costOf(41.62, shared),
+  cost: costOf(50),
+})
+
 /** Wait until the page says the question's answer is known, so Run sends its gold passages. */
 async function questionsRead() {
   const note = await screen.findByTestId("scored-note")
@@ -515,6 +537,26 @@ describe("after a run", () => {
     expect(text()).not.toMatch(/The colours are piece numbers/)
   })
 
+  it("says each recipe's time, tokens and cost under its head, and that the shared steps came from the cache", async () => {
+    serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson }, { "/api/v2/runs/r1": snapshot(costed("chunk", 3, { seconds: 0, steps_run: 0, steps_cached: 2 })) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    await runWith({ chunk: ["a0", "a1", "a2"] })
+    await waitFor(() => expect(screen.getAllByTestId("recipe-cost").map((p) => p.textContent)).toEqual(["0.50 s · no tokens · local", "1.5 s · no tokens · local", "2.5 s · no tokens · local"]))
+    expect(screen.getByTestId("shared-cost").textContent).toBe("The shared steps came from the cache this time. Cost is an estimate, prices as of 2026-10-15.")
+  })
+
+  it("adds no cost line to an older result with no varied cost", async () => {
+    serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    await runWith({ chunk: ["a0", "a1", "a2"] })
+    await screen.findByTestId("compare-finding")
+    await waitFor(() => expect(screen.getAllByTestId("chunk-numbers")).toHaveLength(3))
+    expect(screen.queryByTestId("recipe-cost")).toBeNull()
+    expect(screen.queryByTestId("shared-cost")).toBeNull()
+  })
+
   it("opens a Retrieve run with what each search did, and never says the answer for a question the sample does not have", async () => {
     serve({ c: recursiveJson, i: indexJson, h: hybridJson, d: denseJson, b: bm25Json })
     openAt("?node=retrieve")
@@ -686,6 +728,15 @@ describe("four recipes or more", () => {
     expect(heads).toEqual(["Select", "Recipe", "Shared", "Returned", "Top 5, by piece"])
     expect(screen.getAllByRole("img", { name: /^Top \d+: piece \d+/ }).length).toBeGreaterThan(0)
     expect(text()).not.toMatch(/The colours are piece numbers/)
+  })
+
+  it("adds Time, Tokens and Cost to the table, and says once what the shared steps took", async () => {
+    FakeResizeObserver.width = 1409
+    await runFive("retrieve", 5, () => serve({ c: recursiveJson, i: indexJson, h0: hybridJson, h1: denseJson, h2: bm25Json, h3: hybridJson, h4: denseJson }, { "/api/v2/runs/r1": snapshot(costed("search", 5, { steps_run: 5 })) }))
+    await waitFor(() => expect(within(screen.getByRole("table")).getAllByRole("columnheader").map((h) => h.textContent).slice(-3)).toEqual(["Time, search and after", "Tokens", "Cost"]))
+    expect(screen.getByTestId("shared-cost").textContent).toMatch(
+      /^Shared steps \(parse, [a-z, ]+\) took 41\.6 s once, before the recipes split\. They are the same for every recipe, so they are left out of Time\. Cost is an estimate, prices as of 2026-10-15\.$/,
+    )
   })
 
   it("lets a finished row be opened while the run goes on", async () => {

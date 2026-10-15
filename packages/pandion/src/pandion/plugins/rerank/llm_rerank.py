@@ -33,7 +33,7 @@ from pydantic import Field
 from pandion.artifacts import ArtifactType
 from pandion.ids import AddedSettings
 from pandion.payloads import Hit, Query, RetrievalResult
-from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion import llm
@@ -231,6 +231,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
             hit.prior_rank = hit.rank
             hit.prior_score = hit.score
 
+        model_name = llm.model_name_for(model, config.custom_model, config.openrouter_model)
         started = time.perf_counter()
         completion = llm.complete(
             model,
@@ -238,13 +239,16 @@ class LlmRerank(Transform[LlmRerankConfig]):
             user=_prompt(question, hits, config.text_budget_chars),
             api_key=api_key,
             base_url=config.custom_base_url.strip() if custom else None,
-            model_name=llm.model_name_for(
-                model, config.custom_model, config.openrouter_model
-            ),
+            model_name=model_name,
             max_tokens=config.max_tokens,
             public_only=public_only,
         )
         elapsed = time.perf_counter() - started
+        set_usage(
+            ctx,
+            completion.usage,
+            model_name or model.id,
+        )
 
         reply = "" if completion.stop_reason == "refusal" else completion.text
         usable = _numbers(reply, len(hits))

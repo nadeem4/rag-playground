@@ -157,12 +157,12 @@ def test_openai_refusal_is_reported_as_text(fake_openai):
     assert out.text == "I can't help with that."
 
 
-def test_missing_usage_counts_as_zero(fake_openai):
+def test_missing_usage_is_none_never_zero(fake_openai):
     reply = openai_reply()
     reply.usage = None
     fake_openai.reply = reply
     out = complete(CHAT_MODELS["gpt-6-astra"], system="s", user="u", api_key=KEY)
-    assert out.usage == {"input_tokens": 0, "output_tokens": 0}
+    assert out.usage == {"input_tokens": None, "output_tokens": None}
 
 
 # --- OpenAI-compatible --------------------------------------------------------

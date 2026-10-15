@@ -20,7 +20,10 @@ class StageResult:
     `status` is "executed", "cached" or "failed". `artifact_id` is the recipe
     hash the output is stored under; it is None when the stage ran on its own,
     without a store. `note` is the one sentence the stage left about this run,
-    such as what a cleaner removed.
+    such as what a cleaner removed. `usage` is what a model step's call used in
+    this run, `{"input_tokens", "output_tokens", "model"}`, where a count the
+    server did not send is None. It is None for a step that calls no model and
+    for a cached step, which used nothing this time.
     """
 
     stage: str
@@ -31,6 +34,7 @@ class StageResult:
     duration_ms: float = 0.0
     note: str | None = None
     error: str | None = None
+    usage: dict[str, Any] | None = None
 
 
 #: What a result id looks like: a sha256 in lowercase hex.

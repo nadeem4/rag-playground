@@ -86,7 +86,7 @@ MODEL_SCHEMA_EXTRA: dict[str, Any] = {
 @dataclass
 class Completion:
     text: str
-    usage: dict[str, int]  # {"input_tokens", "output_tokens"}
+    usage: dict[str, int | None]  # {"input_tokens", "output_tokens"}; None when not sent
     stop_reason: str
 
 
@@ -345,8 +345,10 @@ def complete(
     return Completion(
         text=refusal if refusal else (message.content or ""),
         usage={
-            "input_tokens": usage.prompt_tokens if usage else 0,
-            "output_tokens": usage.completion_tokens if usage else 0,
+            # A server may send no usage, or only part of it: a missing count
+            # is None, never 0, so it is never read as a free call.
+            "input_tokens": getattr(usage, "prompt_tokens", None),
+            "output_tokens": getattr(usage, "completion_tokens", None),
         },
         stop_reason="refusal" if refusal else (choice.finish_reason or "stop"),
     )

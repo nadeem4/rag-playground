@@ -58,7 +58,7 @@ from pydantic import Field
 from pandion.artifacts import ArtifactType
 from pandion.ids import AddedSettings
 from pandion.payloads import Hit, Output, ParsedDoc, Query, RetrievalResult
-from pandion.ports import PortSpec, RunContext, Stage
+from pandion.ports import PortSpec, RunContext, Stage, set_usage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.answer._grounding import (
@@ -338,11 +338,15 @@ class ChatUseCase(Transform[ChatConfig]):
         creds = ctx.extras.get("credentials") or {}
         public_only = bool(ctx.extras.get(PUBLIC_ONLY_EXTRA, False))
         if uses_native(config):
-            return _native(inputs, config, creds.get("anthropic_api_key"), public_only)
-        model = CHAT_MODELS[config.model]
-        return _sentence_ids(
-            inputs, config, model, llm.key_for(model, creds), ctx.extras, public_only
-        )
+            out = _native(inputs, config, creds.get("anthropic_api_key"), public_only)
+        else:
+            model = CHAT_MODELS[config.model]
+            out = _sentence_ids(
+                inputs, config, model, llm.key_for(model, creds), ctx.extras, public_only
+            )
+        # Both paths put the usage and the model id they used in the payload.
+        set_usage(ctx, out["payload"]["usage"], out["payload"]["model"])
+        return out
 
 
 # --------------------------------------------------------------------------

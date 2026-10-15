@@ -50,6 +50,7 @@ def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
         output=ParsedDoc.model_validate(payload),
         duration_ms=duration_ms,
         note=ctx.extras.get("meta", {}).get("note"),
+        usage=ctx.extras.get("meta", {}).get("usage"),
     )
 
 
@@ -59,12 +60,14 @@ def clean(doc: ParsedDoc | StageResult, *, steps: list[dict[str, Any]]) -> Stage
     Each step names its cleaner with `use` and holds its settings by name, for
     example `pandion.clean(doc, steps=[{"use": "drop_matching", "pattern": "Draft"}])`.
     `doc` may be a `ParsedDoc` or the result of `pandion.parse`. The note has one
-    line per step, `name: what it removed`, in the order the steps ran.
+    line per step, `name: what it removed`, in the order the steps ran. `usage`
+    is that of the last step that recorded one.
     """
     discover()
     current = doc.output if isinstance(doc, StageResult) else doc
     planned = [_clean_step(n, step) for n, step in enumerate(steps, start=1)]
     notes: list[str] = []
+    usage = None
     started = time.perf_counter()
     with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
         for cls, settings in planned:
@@ -74,12 +77,14 @@ def clean(doc: ParsedDoc | StageResult, *, steps: list[dict[str, Any]]) -> Stage
             note = ctx.extras.get("meta", {}).get("note")
             if note:
                 notes.append(f"{cls.name}: {note}")
+            usage = ctx.extras.get("meta", {}).get("usage") or usage
     return StageResult(
         stage=str(Stage.CLEAN),
         transform=", ".join(cls.name for cls, _ in planned),
         output=current,
         duration_ms=(time.perf_counter() - started) * 1000,
         note="\n".join(notes) or None,
+        usage=usage,
     )
 
 
@@ -103,6 +108,7 @@ def chunk(doc: ParsedDoc | StageResult, *, use: str, **config: Any) -> StageResu
         output=out if isinstance(out, ChunkSet) else ChunkSet.model_validate(out),
         duration_ms=(time.perf_counter() - started) * 1000,
         note=ctx.extras.get("meta", {}).get("note"),
+        usage=ctx.extras.get("meta", {}).get("usage"),
     )
 
 
@@ -143,6 +149,7 @@ def rewrite(
         output=Query.model_validate(out),
         duration_ms=(time.perf_counter() - started) * 1000,
         note=ctx.extras.get("meta", {}).get("note"),
+        usage=ctx.extras.get("meta", {}).get("usage"),
     )
 
 

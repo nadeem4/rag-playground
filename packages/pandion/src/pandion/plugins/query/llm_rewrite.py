@@ -28,7 +28,7 @@ from pydantic import Field
 from pandion.artifacts import ArtifactType
 from pandion.ids import AddedSettings
 from pandion.payloads import ParsedDoc, Query
-from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion import llm
@@ -258,17 +258,21 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
         if not custom and not api_key:
             raise ValueError(llm.no_key_message(model.provider, public_only=public_only))
 
+        model_name = llm.model_name_for(model, config.custom_model, config.openrouter_model)
         completion = llm.complete(
             model,
             system=config.prompt.strip() or system_prompt(config.style),
             user=_prompt(question, inputs.get("doc"), config.doc_budget_chars),
             api_key=api_key,
             base_url=config.custom_base_url.strip() if custom else None,
-            model_name=llm.model_name_for(
-                model, config.custom_model, config.openrouter_model
-            ),
+            model_name=model_name,
             max_tokens=config.max_tokens,
             public_only=public_only,
+        )
+        set_usage(
+            ctx,
+            completion.usage,
+            model_name or model.id,
         )
         reply = "" if completion.stop_reason == "refusal" else completion.text.strip()
         if not reply or len(reply) > config.max_rewrite_chars or "\n" in reply:

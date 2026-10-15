@@ -123,3 +123,40 @@ def test_content_hash_follows_the_payload_and_ignores_meta(store):
     assert store.content_hash(aid) == first
     store.put(Artifact(id=aid, type=ArtifactType.QUERY, meta={"note": "two"}), {"text": "b"})
     assert store.content_hash(aid) != first
+
+
+def test_put_returns_the_content_hash_of_what_it_wrote(store):
+    aid = "e" * 64
+    written = store.put(Artifact(id=aid, type=ArtifactType.QUERY), {"text": "a"})
+    assert written == store.content_hash(aid)
+
+
+def test_content_hash_of_a_missing_entry_is_an_error_not_an_empty_hash(store):
+    with pytest.raises(FileNotFoundError):
+        store.content_hash("e" * 64)
+
+
+def _folder(files: dict[str, bytes]):
+    def write(d):
+        for name, data in files.items():
+            (d / name).write_bytes(data)
+
+    return write
+
+
+def test_content_hash_frames_each_file_by_its_length(store):
+    one, two = "1" * 64, "2" * 64
+    store.put(Artifact(id=one, type=ArtifactType.INDEX), _folder({"a": b"x\x00b\x00y"}))
+    store.put(Artifact(id=two, type=ArtifactType.INDEX), _folder({"a": b"x", "b": b"y"}))
+    assert store.content_hash(one) != store.content_hash(two)
+
+
+def test_content_hash_orders_files_by_their_posix_path(store):
+    import hashlib
+
+    aid = "3" * 64
+    store.put(Artifact(id=aid, type=ArtifactType.INDEX), _folder({"a": b"1", "B": b"2"}))
+    h = hashlib.sha256()
+    for rel, data in (("B", b"2"), ("a", b"1")):
+        h.update(rel.encode() + b"\x00" + str(len(data)).encode() + b"\x00" + data)
+    assert store.content_hash(aid) == h.hexdigest()

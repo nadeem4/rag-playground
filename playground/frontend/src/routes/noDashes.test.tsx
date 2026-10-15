@@ -8,6 +8,7 @@ import indexDescriptor from "@/api/fixtures/index.lancedb.json"
 import chat from "@/api/fixtures/output.chat.json"
 import chatSentenceIds from "@/api/fixtures/output.chat.sentence_ids.json"
 import search from "@/api/fixtures/output.search.json"
+import templates from "@/api/fixtures/templates.json"
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
 import retrieval from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Registry, Source } from "@/api/types"
@@ -60,6 +61,7 @@ function serve(sources: Source[]) {
       if (url === "/api/v2/documents") return ok(sources)
       if (url === "/api/v2/explain") return ok({ settings: "Splits on paragraphs first.", blocking: false })
       if (url === "/api/samples") return ok([SAMPLE_CARD])
+      if (url === "/api/templates") return ok(templates)
       if (url === "/api/samples/chunking-primer/questions") return ok([{ id: "a", question: "How big is a chunk?", gold_answer: "One question well." }])
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
@@ -113,6 +115,19 @@ describe("no em-dashes or en-dashes in visible text", () => {
     await waitFor(() => expect(visibleText()).toMatch(/What this step does/))
     // The stage lesson is the explanation's last part.
     await waitFor(() => expect(visibleText()).toMatch(/What is chunking\?/))
+    expect(visibleText()).not.toMatch(DASH)
+  })
+
+  it("Build, with the template picker open and then a template used", async () => {
+    storeGraph(sampleGraph(registry, SOURCE))
+    serve([SOURCE])
+    render(<Shell />)
+    fireEvent.click(await screen.findByRole("button", { name: "Start from a template" }))
+    fireEvent.click(within(await screen.findByRole("group", { name: "2. What will you ask?" })).getByRole("button", { name: /Chat answer/ }))
+    expect(visibleText()).toMatch(/Add your key in Settings/)
+    expect(visibleText()).not.toMatch(DASH)
+    fireEvent.click(screen.getByRole("button", { name: "Use this pipeline" }))
+    await waitFor(() => expect(visibleText()).toMatch(/Build now holds Text documents with Chat answer/))
     expect(visibleText()).not.toMatch(DASH)
   })
 

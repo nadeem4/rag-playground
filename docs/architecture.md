@@ -95,7 +95,9 @@ The package takes every folder as an argument. The app keeps only where its file
 `RAG_PLAYGROUND_ARTIFACTS`, and the web build. pandion-api runs every pipeline under the
 one folder that holds them, with the embedding cache in `embeddings/` beside them, and
 loads models with the app's model settings (`APP_MODELS`, on the CPU). The warm-up loads
-Docling, the default embedder and the default cross-encoder with the public
+Docling, the default embedder, the default cross-encoder and `BAAI/bge-reranker-v2-m3`
+(the cross-encoder the Best precision, Vague questions and Chat answer templates use),
+each cross-encoder in its own try, with the public
 `pandion.preload_parser`, `pandion.preload_embedder` and `pandion.preload_reranker`. The
 lessons parse their sample with `pandion.parse` and read its text with
 `pandion.evaluation.document_text`.
@@ -368,7 +370,13 @@ function on the old client (`api.createRun`). It cannot see a path built up from
   read, from the graph's source node. Share links, export files and old versions are in
   [How the web app holds a pipeline](#how-the-web-app-holds-a-pipeline). The ready-made Starter pipeline
   (`playground/frontend/src/state/starter.ts`) is the default recipe `sampleGraph` builds, on the default
-  sample, and is never stored as a saved pipeline. `playground/frontend/src/state/pipelineChoice.ts` lists
+  sample, and is never stored as a saved pipeline. **Start from a template** on Build
+  (`playground/frontend/src/components/pipeline/TemplatePicker.tsx`) reads `GET /api/templates`
+  and composes a document template with a question template in the browser
+  (`playground/frontend/src/state/templates.ts`): the document template gives `index`, the
+  question template `retrieve` and `answer`, which is already the shape Build holds, so
+  `columnOf` draws it with no server call. Using it replaces the working pipeline with an
+  unsaved one, keeps the documents and question in use, and offers Undo. `playground/frontend/src/state/pipelineChoice.ts` lists
   what Evaluate can score and picks the one it opens on. A question in a question set may
   name its `document`; the server fills in the set's one document and refuses a set that
   names two, so scoring several documents later needs no new file format.

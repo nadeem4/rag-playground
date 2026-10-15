@@ -159,6 +159,22 @@ visit with no document, the first-visit card offers the samples, **Upload a PDF*
 - The **Sweep** button on a card opens Compare on that step.
 - Any chunk or search hit can open its PDF page with its source paragraphs outlined.
 
+### Start from a template
+
+**Start from a template**, beside the Pipeline picker, opens two sets of cards. The first,
+**What are your documents like?**, sets how the document is read and cut: text documents,
+reports with tables, scanned PDFs, or manuals and guides. The second, **What will you ask?**,
+sets how the search and the answer work: balanced, exact terms, best precision, vague
+questions, or a chat answer. Each card says what it does, what it is good for and the steps
+it uses. A card marked **Needs a key** calls a language model, so add your key in Settings
+before you Ask. **Your pipeline** lists the steps the two cards make and names a sample to
+try them on.
+
+**Use this pipeline** puts that pipeline on Build as a new, unsaved pipeline, on the
+document and question you already have. A line then says what Build holds, with **Undo**,
+which puts your previous pipeline back exactly. **Keep my current pipeline** closes the
+cards and changes nothing.
+
 ### Saved pipelines
 
 Changing a step marks the pipeline **edited**. A saved pipeline then offers **Save**, which

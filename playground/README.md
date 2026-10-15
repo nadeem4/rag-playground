@@ -14,7 +14,8 @@ The app has two halves:
 The backend also serves Pandion's pipeline templates at `GET /api/templates`: document
 templates that set how a kind of document is indexed, and question templates that set how
 a kind of question is searched and answered. See
-[Templates](../docs/pandion.md#templates).
+[Templates](../docs/pandion.md#templates). Build's **Start from a template** shows them as
+cards and puts the pipeline they make on Build, with Undo.
 
 ## How the two halves fit
 

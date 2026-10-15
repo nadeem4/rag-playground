@@ -1,0 +1,316 @@
+{
+  "documents": [
+    {
+      "id": "manuals",
+      "name": "Manuals and guides",
+      "summary": "Reads the heading levels, starts a new piece at each section, and searches every piece with its heading path.",
+      "good_for": "It suits manuals, handbooks, guides and specifications with numbered or clearly styled headings.",
+      "sample": "station-manual",
+      "pipeline": {
+        "index": {
+          "parse": {
+            "use": "docling",
+            "heading_hierarchy": true,
+            "do_table_structure": true,
+            "table_mode": "fast",
+            "do_ocr": false,
+            "content_layers": [
+              "body"
+            ]
+          },
+          "clean": [
+            {
+              "use": "dedupe_blocks"
+            }
+          ],
+          "chunk": {
+            "use": "layout_blocks",
+            "section_level": 4,
+            "max_tokens": 512,
+            "keep_tables_whole": true,
+            "heading_context": true
+          },
+          "embed": {
+            "use": "qwen3-embedding-0.6b"
+          },
+          "store": {
+            "use": "lancedb",
+            "metric": "cosine",
+            "build_fts": true
+          }
+        }
+      }
+    },
+    {
+      "id": "scanned",
+      "name": "Scanned PDFs",
+      "summary": "Reads the text from page images with OCR, then cuts along the page layout. Slower, but a scan has no other text.",
+      "good_for": "It suits scanned paper, photographed pages and any PDF whose text cannot be selected.",
+      "sample": "scanned-notes",
+      "pipeline": {
+        "index": {
+          "parse": {
+            "use": "docling",
+            "do_ocr": true,
+            "do_table_structure": true,
+            "table_mode": "fast",
+            "content_layers": [
+              "body"
+            ]
+          },
+          "clean": [
+            {
+              "use": "dedupe_blocks",
+              "scope": "near",
+              "similarity": 0.95
+            }
+          ],
+          "chunk": {
+            "use": "layout_blocks",
+            "max_tokens": 400,
+            "keep_tables_whole": true,
+            "heading_context": true
+          },
+          "embed": {
+            "use": "qwen3-embedding-0.6b"
+          },
+          "store": {
+            "use": "lancedb",
+            "metric": "cosine",
+            "build_fts": true
+          }
+        }
+      }
+    },
+    {
+      "id": "tables",
+      "name": "Reports with tables",
+      "summary": "Reads the page layout, rebuilds each table's rows and columns, and keeps every table whole in one piece.",
+      "good_for": "It suits financial reports, data sheets and studies whose answers sit in table rows.",
+      "sample": "table-of-figures",
+      "pipeline": {
+        "index": {
+          "parse": {
+            "use": "docling",
+            "do_table_structure": true,
+            "table_mode": "accurate",
+            "do_ocr": false,
+            "content_layers": [
+              "body"
+            ]
+          },
+          "clean": [
+            {
+              "use": "dedupe_blocks"
+            }
+          ],
+          "chunk": {
+            "use": "layout_blocks",
+            "max_tokens": 400,
+            "keep_tables_whole": true,
+            "heading_context": true
+          },
+          "embed": {
+            "use": "qwen3-embedding-0.6b"
+          },
+          "store": {
+            "use": "lancedb",
+            "metric": "cosine",
+            "build_fts": true
+          }
+        }
+      }
+    },
+    {
+      "id": "text",
+      "name": "Text documents",
+      "summary": "Reads the PDF's own text, removes running headers, footers and repeats, and cuts at sentence ends.",
+      "good_for": "It suits articles, policies and plain reports set in one column, with few tables.",
+      "sample": "chunking-primer",
+      "pipeline": {
+        "index": {
+          "parse": {
+            "use": "pdfium",
+            "join_lines": true
+          },
+          "clean": [
+            {
+              "use": "header_footer_strip",
+              "min_page_ratio": 0.5
+            },
+            {
+              "use": "dedupe_blocks"
+            }
+          ],
+          "chunk": {
+            "use": "sentence_window",
+            "sentences_per_chunk": 5,
+            "overlap_sentences": 1
+          },
+          "embed": {
+            "use": "qwen3-embedding-0.6b"
+          },
+          "store": {
+            "use": "lancedb",
+            "metric": "cosine",
+            "build_fts": true
+          }
+        }
+      }
+    }
+  ],
+  "questions": [
+    {
+      "id": "balanced",
+      "name": "Balanced",
+      "summary": "Keyword and meaning search together, then a small, fast cross-encoder picks the top five. No key needed.",
+      "good_for": "It suits everyday questions, when you want good results quickly.",
+      "pipeline": {
+        "retrieve": {
+          "rewrite": "none",
+          "search": {
+            "use": "hybrid_rrf",
+            "top_k": 20,
+            "rrf_k": 60,
+            "query_expansion": "none"
+          },
+          "rerank": [
+            {
+              "use": "cross_encoder",
+              "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+              "top_k": 5
+            }
+          ]
+        },
+        "answer": {
+          "use": "search",
+          "top_k": 5
+        }
+      },
+      "needs_key": false
+    },
+    {
+      "id": "chat",
+      "name": "Chat answer",
+      "summary": "Best precision, then a chat model writes the answer from the top pieces and cites them. Needs an API key.",
+      "good_for": "It suits questions you want answered in a sentence or two, with each claim pointing at its source.",
+      "pipeline": {
+        "retrieve": {
+          "rewrite": "none",
+          "search": {
+            "use": "hybrid_rrf",
+            "top_k": 30,
+            "rrf_k": 60,
+            "query_expansion": "none"
+          },
+          "rerank": [
+            {
+              "use": "cross_encoder",
+              "model": "BAAI/bge-reranker-v2-m3",
+              "top_k": 5
+            }
+          ]
+        },
+        "answer": {
+          "use": "chat",
+          "model": "claude-sonnet-5",
+          "max_chunks": 5
+        }
+      },
+      "needs_key": true
+    },
+    {
+      "id": "exact",
+      "name": "Exact terms",
+      "summary": "Hybrid search that counts the keyword search twice as much as the meaning search, then a small, fast cross-encoder. No key needed.",
+      "good_for": "It suits questions that name a part number, a product, a person, a code or a clause.",
+      "pipeline": {
+        "retrieve": {
+          "rewrite": "none",
+          "search": {
+            "use": "hybrid_rrf",
+            "top_k": 30,
+            "rrf_k": 60,
+            "dense_weight": 1.0,
+            "bm25_weight": 2.0,
+            "query_expansion": "none"
+          },
+          "rerank": [
+            {
+              "use": "cross_encoder",
+              "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+              "top_k": 5
+            }
+          ]
+        },
+        "answer": {
+          "use": "search",
+          "top_k": 5
+        }
+      },
+      "needs_key": false
+    },
+    {
+      "id": "precision",
+      "name": "Best precision",
+      "summary": "Hybrid search, then the strongest cross-encoder reads each candidate with the question. It is slower, and it reads much longer pieces than the small reranker. No key needed.",
+      "good_for": "It suits single-fact questions, where the one right piece must come first and a slower search is fine.",
+      "pipeline": {
+        "retrieve": {
+          "rewrite": "none",
+          "search": {
+            "use": "hybrid_rrf",
+            "top_k": 30,
+            "rrf_k": 60,
+            "query_expansion": "none"
+          },
+          "rerank": [
+            {
+              "use": "cross_encoder",
+              "model": "BAAI/bge-reranker-v2-m3",
+              "top_k": 5
+            }
+          ]
+        },
+        "answer": {
+          "use": "search",
+          "top_k": 5
+        }
+      },
+      "needs_key": false
+    },
+    {
+      "id": "vague",
+      "name": "Vague questions",
+      "summary": "A chat model restates the question in the document's words for the search, then the cross-encoder scores the pieces against the question as typed. Needs an API key.",
+      "good_for": "It suits short or loosely worded questions that use different words from the document.",
+      "pipeline": {
+        "retrieve": {
+          "rewrite": {
+            "use": "llm_rewrite",
+            "model": "claude-haiku-4-5",
+            "style": "document words"
+          },
+          "search": {
+            "use": "hybrid_rrf",
+            "top_k": 30,
+            "rrf_k": 60,
+            "query_expansion": "none"
+          },
+          "rerank": [
+            {
+              "use": "cross_encoder",
+              "model": "BAAI/bge-reranker-v2-m3",
+              "top_k": 5
+            }
+          ]
+        },
+        "answer": {
+          "use": "search",
+          "top_k": 5
+        }
+      },
+      "needs_key": true
+    }
+  ]
+}

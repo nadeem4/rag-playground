@@ -87,6 +87,7 @@ describe("PipelineBar: Start from a template", () => {
     expect(back.ok && was.ok && back.pipeline.documents).toEqual(was.ok ? was.pipeline.documents : null)
     expect(readCurrentId()).toBe(made.saved.id)
     expect(screen.queryByText(/Build now holds/)).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Start from a template" }))
   })
 
   it("Keep my current pipeline leaves it as it was", async () => {

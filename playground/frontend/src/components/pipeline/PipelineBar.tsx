@@ -184,6 +184,8 @@ export function PipelineBar({
     setCurrentId(applied.id)
     onLoad(applied.graph)
     setApplied(null)
+    // The Undo button goes away with its line, so focus moves to the button that started it.
+    document.getElementById(`${id}-template`)?.focus()
   }
 
   function pick(value: string) {
@@ -223,7 +225,7 @@ export function PipelineBar({
         <Picker id={`${id}-pick`} labelledBy={`${id}-label`} className="w-[min(320px,100%)]" options={options} value={currentId && current ? currentId : ""} onChange={pick} />
         {edited ? <span className="meta">edited</span> : null}
         {working.ok ? (
-          <Button size="sm" variant="outline" onClick={() => setChoosing(true)}>
+          <Button id={`${id}-template`} size="sm" variant="outline" onClick={() => setChoosing(true)}>
             Start from a template
           </Button>
         ) : null}

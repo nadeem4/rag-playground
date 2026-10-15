@@ -161,7 +161,7 @@ visit with no document, the first-visit card offers the samples, **Upload a PDF*
 
 ### Start from a template
 
-**Start from a template**, under the Pipeline picker, opens two sets of cards. The first,
+**Start from a template**, beside the Pipeline picker, opens two sets of cards. The first,
 **What are your documents like?**, sets how the document is read and cut: text documents,
 reports with tables, scanned PDFs, or manuals and guides. The second, **What will you ask?**,
 sets how the search and the answer work: balanced, exact terms, best precision, vague

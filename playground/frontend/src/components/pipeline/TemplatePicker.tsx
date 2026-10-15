@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react"
+import { Fragment, useEffect, useId, useMemo, useState } from "react"
 
 import { api } from "@/api/client"
 import type { Registry } from "@/api/types"
@@ -96,24 +96,26 @@ export function TemplatePicker({
         </p>
       ) : !templates ? (
         <p role="status" className="text-sm text-fg-muted">
-          Getting the templates
+          Getting the templates ready.
         </p>
       ) : (
         <div className="flex flex-wrap items-start gap-6">
           <div className="flex min-w-0 flex-[999_1_36rem] flex-col gap-6">
-            <CardSet title="1. What are your documents like?" hint="Sets parse, clean, chunk and embed" id={`${id}-docs`}>
-              {docs.map((t) => (
-                <TemplateCard
-                  key={t.id}
-                  name={t.name}
-                  summary={t.summary}
-                  goodFor={t.good_for}
-                  steps={stepsLine(t.pipeline)}
-                  picked={t.id === doc?.id}
-                  onPick={() => setDocId(t.id)}
-                />
+            <CardSet title="1. What are your documents like?" hint="Sets parse, clean, chunk, embed and store" id={`${id}-docs`}>
+              {docs.map((t, i) => (
+                <Fragment key={t.id}>
+                  {/* Coming next sits third, after Reports with tables, as in the approved design. */}
+                  {i === 2 ? <TemplateCard name={COMING_NEXT.name} summary={COMING_NEXT.summary} goodFor={COMING_NEXT.good_for} soon /> : null}
+                  <TemplateCard
+                    name={t.name}
+                    summary={t.summary}
+                    goodFor={t.good_for}
+                    steps={stepsLine(t.pipeline)}
+                    picked={t.id === doc?.id}
+                    onPick={() => setDocId(t.id)}
+                  />
+                </Fragment>
               ))}
-              <TemplateCard name={COMING_NEXT.name} summary={COMING_NEXT.summary} goodFor={COMING_NEXT.good_for} soon />
             </CardSet>
             <CardSet title="2. What will you ask?" hint="Sets rewrite, search, rerank and the answer" id={`${id}-questions`}>
               {questions.map((t) => (

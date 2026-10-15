@@ -116,10 +116,11 @@ def _cap(key: str, props: dict[str, Any]) -> int | None:
 
 
 def demo_limited(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """The settings in `config` the hosted demo held back: each one set to its
-    cap exactly, where the cap is not the setting's default (a value over it is refused, not held back), as `{setting, value, cap}`.
-    A visitor who wanted more could not have it, so a project taken home says
-    so. Empty locally, and when nothing reached a cap."""
+    """The settings in `config` the hosted demo held back, as `{setting, value, cap}`:
+    each one set to its cap exactly, where the cap is not the setting's default.
+    A value over a cap is refused, not held back. A visitor who wanted more
+    could not have it, so a project taken home says so. Empty locally, and
+    when nothing reached a cap."""
     if not demo.enabled():
         return []
     catalog = pandion.catalog()

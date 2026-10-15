@@ -129,8 +129,10 @@ function TakeHomeSheet({
   const [done, setDone] = useState<string | null>(null)
 
   // The server says how many questions a project may hold (the demo's cap); over it the set stays out.
+  // A 413 for the questions also means over the cap, even when it does not say the number.
   const [maxQuestions, setMaxQuestions] = useState<number | null>(null)
-  const overCap = questions !== null && maxQuestions !== null && questions.count > maxQuestions
+  const [refused, setRefused] = useState(false)
+  const overCap = questions !== null && (refused || (maxQuestions !== null && questions.count > maxQuestions))
   const bodyJson = JSON.stringify({
     config,
     name,
@@ -145,11 +147,20 @@ function TakeHomeSheet({
     setError(null)
     api.projectPreview(body).then(
       (p) => {
-        if (!live) return
-        setPreview(p)
-        setMaxQuestions(p.max_questions)
+        // The cap holds for every request, so it is kept even from an answer that came too late to show.
+        if (p.max_questions !== null) setMaxQuestions(p.max_questions)
+        if (live) setPreview(p)
       },
-      (err: unknown) => live && setError(sayError(err)),
+      (err: unknown) => {
+        if (err instanceof ApiError && err.status === 413 && body.questions !== undefined) {
+          // Over the cap: the box unticks itself and the body changes, so the preview runs again without the set.
+          const most = typeof err.detail === "string" ? /at most (\d+) questions/.exec(err.detail)?.[1] : undefined
+          if (most) setMaxQuestions(Number(most))
+          else setRefused(true)
+          return
+        }
+        if (live) setError(sayError(err))
+      },
     )
     return () => {
       live = false
@@ -283,7 +294,9 @@ function TakeHomeSheet({
                 <strong>Your {questions.count} questions</strong>
                 <span className="block text-fg-muted">
                   {overCap
-                    ? `The demo packs at most ${maxQuestions} questions.`
+                    ? maxQuestions !== null
+                      ? `The demo packs at most ${maxQuestions} questions.`
+                      : "The demo packs fewer questions than this set has."
                     : `${questions.from} run.py checks each one and prints how many it found.`}
                 </span>
               </span>

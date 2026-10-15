@@ -40,6 +40,8 @@ let zipStatus: number
 let calls: { url: string; body: Body }[]
 let samples: unknown[]
 let maxQuestions: number | null
+let serverCap: number | null
+let previewDelay: number
 
 /** The server's preview: questions.json only when questions were sent, the scores in the README only when sent. */
 function preview(body: Body) {
@@ -64,6 +66,8 @@ beforeEach(() => {
   calls = []
   samples = []
   maxQuestions = null
+  serverCap = null
+  previewDelay = 0
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -71,7 +75,13 @@ beforeEach(() => {
       if (u.startsWith("/api/project.zip")) {
         const body = JSON.parse(String(init?.body)) as Body
         calls.push({ url: u, body })
-        if (u.endsWith("?preview=1")) return new Response(JSON.stringify(preview(body)))
+        const sent = (body.questions as { questions?: unknown[] } | undefined)?.questions?.length ?? 0
+        if (serverCap !== null && sent > serverCap)
+          return new Response(JSON.stringify({ detail: `The demo packs at most ${serverCap} questions into a project, and this set has ${sent}.` }), { status: 413 })
+        if (u.endsWith("?preview=1")) {
+          if (previewDelay) await new Promise((r) => setTimeout(r, previewDelay))
+          return new Response(JSON.stringify(preview(body)))
+        }
         if (zipStatus !== 200) return new Response(JSON.stringify({ detail: "The pipeline loads plugins (x)." }), { status: zipStatus })
         return new Response("PK", { headers: { "content-type": "application/zip" } })
       }
@@ -230,6 +240,34 @@ describe("TakeHome", () => {
     expect((box as HTMLInputElement).disabled).toBe(true)
     expect(sheet.textContent).toContain("The demo packs at most 2 questions.")
     expect(calls.every((c) => c.body.questions === undefined)).toBe(true)
+    expect(within(sheet).getByRole("button", { name: "Download my-pipeline.zip" }).hasAttribute("disabled")).toBe(false)
+  })
+
+  it("keeps the cap from a preview that answers after the question set arrived", async () => {
+    maxQuestions = 2
+    serverCap = 2
+    previewDelay = 50
+    const sheet = await open()
+
+    const box = await within(sheet).findByRole("checkbox", { name: /Your 3 questions/ })
+    await waitFor(() => expect((box as HTMLInputElement).disabled).toBe(true))
+    expect((box as HTMLInputElement).checked).toBe(false)
+    expect(sheet.textContent).toContain("The demo packs at most 2 questions.")
+    expect(within(sheet).queryByRole("alert")).toBeNull()
+    await waitFor(() => expect(calls.at(-1)!.body.questions).toBeUndefined())
+    expect(within(sheet).getByRole("button", { name: "Download my-pipeline.zip" }).hasAttribute("disabled")).toBe(false)
+  })
+
+  it("takes a 413 for the questions as over the cap, and previews again without them", async () => {
+    serverCap = 2 // the preview never says its cap: only the 413 does
+    const sheet = await open()
+
+    const box = await within(sheet).findByRole("checkbox", { name: /Your 3 questions/ })
+    await waitFor(() => expect((box as HTMLInputElement).disabled).toBe(true))
+    expect((box as HTMLInputElement).checked).toBe(false)
+    expect(sheet.textContent).toContain("The demo packs at most 2 questions.")
+    expect(within(sheet).queryByRole("alert")).toBeNull()
+    await waitFor(() => expect(calls.at(-1)!.body.questions).toBeUndefined())
     expect(within(sheet).getByRole("button", { name: "Download my-pipeline.zip" }).hasAttribute("disabled")).toBe(false)
   })
 

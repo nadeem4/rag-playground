@@ -106,7 +106,7 @@ This is a working document. We keep it up to date as we build RAG Playground. Ea
 
 ### The Manuals template cut one level too high
 
-2026-10-14, commit `026ce48` (the `station-manual` sample) and the commit after it
+2026-10-14, the `station-manual` sample and the template fix that followed it
 
 **The problem.** The Manuals and guides template was meant to start a new piece at each heading numbered down to three parts, such as 1.2.3. On the new `station-manual` sample it cut only at headings such as 2.2. So two look-alike subsections, the frost alarm's and the wind alarm's "Choosing the threshold", which both say "set this threshold to 4", landed in one piece under the heading path "2 Setting up > 2.2 Setting the alarms". The two battery subsections, which both start "This part takes", shared a piece too.
 

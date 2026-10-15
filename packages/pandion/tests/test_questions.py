@@ -62,7 +62,7 @@ def test_a_csv_file(tmp_path):
 
 
 @pytest.mark.skipif(not SAMPLES.is_dir(), reason="runs inside the repo, where the samples are")
-@pytest.mark.parametrize("name", ["chunking-primer", "two-column-report", "table-of-figures", "scanned-notes"])
+@pytest.mark.parametrize("name", ["chunking-primer", "two-column-report", "table-of-figures", "scanned-notes", "station-manual"])
 def test_every_bundled_sample_set_loads(name):
     assert load_questions(SAMPLES / name / "questions.json")["questions"]
 

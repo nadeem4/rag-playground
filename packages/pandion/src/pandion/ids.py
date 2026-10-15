@@ -3,7 +3,9 @@
 Every artifact's identity is derived from how it was made, never from what it
 contains. That single rule buys caching, reproducibility, and stage independence
 at once: running three chunkers against one parse is automatically three cache
-misses downstream of one cache hit upstream.
+misses downstream of one cache hit upstream. The executor makes one exception:
+an input from a non-cacheable step is hashed with that step's output, because
+its recipe alone does not say what it gave this time.
 """
 
 from __future__ import annotations

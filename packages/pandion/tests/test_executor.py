@@ -12,7 +12,7 @@ import json
 import pytest
 from pydantic import BaseModel
 
-from pandion.artifacts import ArtifactType
+from pandion.artifacts import Artifact, ArtifactType
 from pandion.executor import NodeStatus, run
 from pandion.graph import Edge, Graph, Node
 from pandion.ports import PortSpec, Stage
@@ -499,6 +499,119 @@ def test_non_cacheable_recomputes_and_replaces_the_stored_payload(store):
     assert store.load(aid, ArtifactType.RAW_FILE) == {"call": 2}
 
 
+# The step after a non-cacheable one: its id follows what the parent produced
+
+
+VOLATILE_OUTPUT = {"text": "first"}
+
+
+def volatile_with_child_registry() -> Registry:
+    CALLS.clear()
+    r = Registry()
+
+    class Volatile(Transform[Cfg]):
+        summary = "A test transform."
+        name = "volatile"
+        stage = Stage.SOURCE
+        inputs = {}
+        output = ArtifactType.RAW_FILE
+        config_model = Cfg
+        cacheable = False
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("volatile")
+            return dict(VOLATILE_OUTPUT)
+
+    class Child(Transform[Cfg]):
+        summary = "A test transform."
+        name = "fake_parse"
+        stage = Stage.PARSE
+        inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
+        output = ArtifactType.PARSED_DOC
+        config_model = Cfg
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("child")
+            return {"from": inputs["file"]["text"]}
+
+    r.register(Volatile)
+    r.register(Child)
+    return r
+
+
+def g_volatile_child() -> Graph:
+    return Graph(
+        nodes=[
+            Node("s", Stage.SOURCE, "volatile", {}),
+            Node("p", Stage.PARSE, "fake_parse", {}),
+        ],
+        edges=[Edge("s", "p", "file")],
+    )
+
+
+def test_a_child_reruns_with_a_new_id_when_a_non_cacheable_parent_changes(store):
+    reg = volatile_with_child_registry()
+    VOLATILE_OUTPUT["text"] = "first"
+    first = run(g_volatile_child(), reg, store)
+    VOLATILE_OUTPUT["text"] = "second"
+    second = run(g_volatile_child(), reg, store)
+
+    assert CALLS == ["volatile", "child", "volatile", "child"]
+    assert second.nodes["p"].status is NodeStatus.EXECUTED
+    assert second.nodes["p"].artifact.id != first.nodes["p"].artifact.id
+    assert store.load(second.nodes["p"].artifact.id, ArtifactType.PARSED_DOC) == {"from": "second"}
+    # The first child's result is still there under its own id.
+    assert store.load(first.nodes["p"].artifact.id, ArtifactType.PARSED_DOC) == {"from": "first"}
+    # The non-cacheable step itself keeps one id.
+    assert second.nodes["s"].artifact.id == first.nodes["s"].artifact.id
+
+
+def test_a_child_hits_the_cache_when_a_non_cacheable_parent_gives_the_same_output(store):
+    reg = volatile_with_child_registry()
+    VOLATILE_OUTPUT["text"] = "same"
+    first = run(g_volatile_child(), reg, store)
+    second = run(g_volatile_child(), reg, store)
+
+    assert CALLS == ["volatile", "child", "volatile"]
+    assert second.nodes["p"].status is NodeStatus.CACHED
+    assert second.nodes["p"].artifact.id == first.nodes["p"].artifact.id
+
+
+def _another_run_writes_the_parent(store, change):
+    """After `s` is stored, another run replaces or removes the same entry."""
+
+    def on_event(e):
+        if e["event"] == "node_finished" and e["node_id"] == "s":
+            change(e["artifact_id"])
+
+    return on_event
+
+
+@pytest.mark.parametrize("other_run", ["replaces", "removes"])
+def test_a_child_id_follows_this_runs_output_when_another_run_rewrites_the_parent(
+    tmp_path, other_run
+):
+    reg = volatile_with_child_registry()
+    VOLATILE_OUTPUT["text"] = "mine"
+    expected = run(g_volatile_child(), reg, Store(tmp_path / "clean")).nodes["p"].artifact.id
+
+    store = Store(tmp_path / "shared")
+
+    def change(aid):
+        if other_run == "replaces":
+            store.put(Artifact(id=aid, type=ArtifactType.RAW_FILE), {"text": "theirs"})
+        else:
+            store.delete(aid)
+
+    res = run(
+        g_volatile_child(), reg, store, on_event=_another_run_writes_the_parent(store, change)
+    )
+
+    assert res.nodes["p"].status is NodeStatus.EXECUTED
+    assert res.nodes["p"].artifact.id == expected
+    assert store.load(expected, ArtifactType.PARSED_DOC) == {"from": "mine"}
+
+
 # ---------------------------------------------------------------------------
 # Cancellation: checked between nodes, never mid-node
 # ---------------------------------------------------------------------------
@@ -573,3 +686,20 @@ def test_sweep_threads_cancel_and_stops_later_variants(store):
     )
     assert len(res.runs) == 1
     assert CALLS == ["upload", "parse", "chunk"]
+
+
+def test_a_non_cacheable_parent_without_a_hash_fails_the_child_not_the_run(store, monkeypatch):
+    reg = volatile_with_child_registry()
+    real_put = Store.put
+
+    def put_without_a_hash(self, artifact, payload):
+        real_put(self, artifact, payload)
+        return None
+
+    monkeypatch.setattr(Store, "put", put_without_a_hash)
+    res = run(g_volatile_child(), reg, store)
+
+    assert res.nodes["s"].status is NodeStatus.EXECUTED
+    assert res.nodes["p"].status is NodeStatus.FAILED
+    assert "no hash of its output" in res.nodes["p"].error
+    assert CALLS == ["volatile"]

@@ -180,6 +180,20 @@ This is a working document. We keep it up to date as we build RAG Playground. Ea
 
 **What we learned.** A cache key must include everything the result depends on, read from the step's real settings, never from defaults. When a step's behaviour changes, change its key too; we bump a plugin's `version` for that, as `d698ef4` did for both rerankers. Test plugins the way the engine calls them.
 
+### A new rewrite was searched with the old results
+
+2026-10-14
+
+**The problem.** With the LLM rewrite on, asking the same question twice ran the rewrite again, but the search after it did not run. It handed back the search results of the first rewrite, even when the model had rewritten the question in different words. The same thing happened after the LLM reranker, and it would happen after any step marked `cacheable = False`, such as a source whose content can change.
+
+**Why it was broken.** A step's cache key is a hash of its recipe: its settings and the keys of the steps above it, not their results. A step marked `cacheable = False` runs every time, but its key stays the same, because its settings do not change. So the search below it saw the same key as last time, found a stored result under that key and reused it, without looking at what the rewrite had just returned.
+
+**What fixed it.** When a step reads from a step marked `cacheable = False`, its key now also includes a hash of what that step actually returned this time. `Store.put` in `packages/pandion/src/pandion/storage.py` takes the hash on the run's own temp folder before it moves it into place, and `packages/pandion/src/pandion/executor.py` keeps it for the rest of the run. Reading the shared folder later would not be safe: two runs of the same question write the rewrite to the same place, so the second could change the hash under the first. The non-cacheable step keeps its own key, so it can still be fetched by it. A pipeline with no such step keeps exactly the keys it had before.
+
+**Why the fix worked.** A different rewrite now gives the search a different key, so the search runs on the new words. The same rewrite gives the same key, so the search is still read from the cache. Everything below the search follows, because each key includes the key above it.
+
+**What we learned.** A key built from how a result was made is only safe if every input to it is either fixed by its recipe or part of its key. A step that may return something new each time breaks that, so the steps after it must hash what it returned, not just how it was asked.
+
 ## Evaluation
 
 ### Too few pieces make every question pass

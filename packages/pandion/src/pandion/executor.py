@@ -5,7 +5,9 @@ Two rules explain almost everything here.
 *The artifact id is computed before the transform runs.* It is a recipe hash, so
 it is knowable from the transform, its config, and its inputs' ids alone — which
 is what makes a cache hit free: no upstream payload is loaded to decide that a
-node can be skipped, it just is not re-executed.
+node can be skipped, it just is not re-executed. The one exception is an input
+from a non-cacheable node: that node keeps one id however its output changes,
+so the hash of the output this run wrote stands in for it (see `input_id`).
 
 *A failure is data, not an exception.* One bad node must not take a run down,
 because the whole point of a bench is comparing strategies and one of them
@@ -16,6 +18,7 @@ reports the verdict.
 
 from __future__ import annotations
 
+import hashlib
 import time
 import traceback
 from copy import deepcopy
@@ -123,6 +126,38 @@ def run(
     payloads: dict[str, Any] = {}
     broken: set[str] = set()
     skipped_by_cancel: list[str] = []
+    # The content hash `put` returned for each node executed in this run, taken
+    # on this run's own write, never read back from the shared store.
+    content_hashes: dict[str, str] = {}
+
+    def input_id(src: str) -> str:
+        # A non-cacheable step runs every time under one id, so its id says
+        # nothing about what it gave this time. Hash what it gave into the id
+        # this step sees: a new output means a new id here and a fresh run, the
+        # same output means a cache hit. A pipeline with no non-cacheable step
+        # keeps exactly the ids it always had.
+        aid = result.nodes[src].artifact.id
+        parent = by_id[src]
+        if registry.get(parent.stage, parent.transform).cacheable:
+            return aid
+        written = content_hashes.get(src)
+        if written is None:
+            raise RuntimeError(
+                f"step '{src}' is not cacheable, but this run has no hash of its "
+                "output, so the steps after it cannot be given a safe id"
+            )
+        return hashlib.sha256(f"{aid}\x00{written}".encode("utf-8")).hexdigest()
+
+    def failed(nid: str, started: float) -> None:
+        broken.add(nid)
+        err = traceback.format_exc()
+        result.nodes[nid] = NodeResult(
+            nid,
+            NodeStatus.FAILED,
+            error=err,
+            duration_ms=(time.perf_counter() - started) * 1000,
+        )
+        emit(event("node_failed", node_id=nid, error=err))
 
     for nid in resolved.order:
         if nid not in selected:
@@ -151,13 +186,17 @@ def run(
 
         input_ids: dict[str, Any] = {}
         call_inputs: dict[str, Any] = {}
-        for pname, src in resolved.bindings[nid].items():
-            if isinstance(src, list):
-                input_ids[pname] = [result.nodes[s].artifact.id for s in src]
-                call_inputs[pname] = [payloads[s] for s in src]
-            else:
-                input_ids[pname] = result.nodes[src].artifact.id
-                call_inputs[pname] = payloads[src]
+        try:
+            for pname, src in resolved.bindings[nid].items():
+                if isinstance(src, list):
+                    input_ids[pname] = [input_id(s) for s in src]
+                    call_inputs[pname] = [payloads[s] for s in src]
+                else:
+                    input_ids[pname] = input_id(src)
+                    call_inputs[pname] = payloads[src]
+        except Exception:
+            failed(nid, time.perf_counter())
+            continue
 
         aid = compute_artifact_id(
             transform_name=cls.name,
@@ -205,15 +244,7 @@ def run(
         try:
             payload = instance.apply(call_inputs, config, ctx)
         except Exception:
-            broken.add(nid)
-            err = traceback.format_exc()
-            result.nodes[nid] = NodeResult(
-                nid,
-                NodeStatus.FAILED,
-                error=err,
-                duration_ms=(time.perf_counter() - started) * 1000,
-            )
-            emit(event("node_failed", node_id=nid, error=err))
+            failed(nid, started)
             continue
 
         # Transform-supplied meta is merged *under* the built-ins: the spread
@@ -231,7 +262,7 @@ def run(
         # Always persisted, cacheable or not: `cacheable = False` only means the
         # stored result is never *reused* (above). Writing it anyway lets the UI
         # fetch it by artifact id; a re-run replaces it, so the latest run wins.
-        store.put(artifact, payload)
+        content_hashes[nid] = store.put(artifact, payload)
         # Read back, so a downstream node sees exactly what it would see on a
         # cache hit. An index payload is a *writer callable* going in and a
         # directory coming out; without this, "executed" and "cached" would

@@ -242,6 +242,15 @@ in the store is not run again.
 That is what makes changing one setting cheap. Sweeping three chunkers over one parse is
 one cached parse and three new chunk sets.
 
+A transform with `cacheable = False` (`llm_rewrite`, `llm_rerank`, `chat`) runs every time
+and keeps its recipe id, so its id says nothing about what it returned this run. A node
+that reads from one therefore hashes that input as its id plus a hash of the files it
+wrote, every file but `meta.json`. `Store.put` takes that hash on its private temp folder
+before the move and returns it, and the run keeps it for each node, so another run that
+rewrites the same entry at the same time cannot change it. A new output gives new ids from
+there on; the same output is a cache hit. Ids in a pipeline with no such transform do not
+change.
+
 - **The store** (`pandion/storage.py`) keeps each artifact in its own folder under the
   artifacts folder. A write goes to a temp folder and is moved into place, and its
   `meta.json` is written last, so a crash never leaves an entry that looks finished.

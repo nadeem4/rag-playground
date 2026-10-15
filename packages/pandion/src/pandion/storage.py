@@ -13,6 +13,7 @@ no code path that produces a cache hit for an entry that was not finished.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import uuid
@@ -71,6 +72,31 @@ def register_serializer(t: ArtifactType, ser: Serializer) -> None:
     SERIALIZERS[t] = ser
 
 
+def _hash_folder(root: Path) -> str:
+    """A hash of every file in an entry's folder but `meta.json`.
+
+    `meta.json` is left out because it holds the note and other words about the
+    run, not the result. Each file is framed by its path and its length, and
+    files go in the order of their `as_posix()` path, so the hash is the same
+    on every platform.
+
+    Anything that changes from run to run inside the payload itself, such as a
+    wall-clock `timings_ms`, changes this hash, so the steps after a
+    non-cacheable step would miss the cache every time. That is why
+    non-cacheable steps keep their timings and notes in meta.
+    """
+    files = sorted(
+        (p.relative_to(root).as_posix(), p) for p in root.rglob("*") if p.is_file()
+    )
+    h = hashlib.sha256()
+    for rel, f in files:
+        if rel == META:
+            continue
+        data = f.read_bytes()
+        h.update(rel.encode("utf-8") + b"\x00" + str(len(data)).encode() + b"\x00" + data)
+    return h.hexdigest()
+
+
 class Store:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -107,10 +133,17 @@ class Store:
                 raise OSError(f"could not replace artifact {artifact_id}: in use")
         shutil.move(str(tmp), str(dest))
 
-    def put(self, artifact: Artifact, payload: Any) -> Artifact:
+    def put(self, artifact: Artifact, payload: Any) -> str:
+        """Commit one entry and return the content hash of what was written.
+
+        The hash is taken on the private temp folder, before the move, so it is
+        this write's own content even if another run replaces or removes the
+        same id a moment later.
+        """
         ser = SERIALIZERS[artifact.type]
         with self.open_writer(artifact.id) as d:
             ser.write(payload, d)
+            written = _hash_folder(d)
             # meta.json LAST — it is the commit marker.
             (d / META).write_text(
                 json.dumps(
@@ -123,7 +156,7 @@ class Store:
                 ),
                 encoding="utf-8",
             )
-        return artifact
+        return written
 
     def get_meta(self, artifact_id: str) -> Artifact:
         raw = json.loads(
@@ -132,6 +165,18 @@ class Store:
         return Artifact(
             id=raw["id"], type=ArtifactType(raw["type"]), meta=raw["meta"]
         )
+
+    def content_hash(self, artifact_id: str) -> str:
+        """The hash `put` returned for a committed entry, read back from disk.
+
+        A missing entry is an error, never the hash of an empty folder. The
+        executor does not call this: it keeps the hash `put` returned, because
+        another run may rewrite the shared entry in between.
+        """
+        root = self.path_for(artifact_id)
+        if not (root / META).is_file():
+            raise FileNotFoundError(f"no stored result has the id {artifact_id}")
+        return _hash_folder(root)
 
     def load(self, artifact_id: str, t: ArtifactType) -> Any:
         return SERIALIZERS[t].read(self.path_for(artifact_id))

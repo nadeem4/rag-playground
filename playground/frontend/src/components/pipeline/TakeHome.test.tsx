@@ -101,7 +101,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const CONFIG = (graphToConfig(graph) as { ok: true; pipeline: { config: Record<string, unknown> } }).pipeline.config
+const CONFIG = (graphToConfig(graph) as unknown as { ok: true; pipeline: { config: Record<string, unknown> } }).pipeline.config
 
 /** An Evaluate result for this pipeline and set, at Pandion's default top k, unless `change` says otherwise. */
 function scored(change: Partial<PreviousEvaluation> = {}) {

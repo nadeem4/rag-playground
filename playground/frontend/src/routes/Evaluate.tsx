@@ -658,7 +658,7 @@ function Evaluation({
   }, [done, startedAt])
   // The pipeline and the set it was scored with, so Take it home offers these scores only for the same pair.
   const scoredMade = graphToConfig(graph)
-  const scoredConfig = scoredMade.ok ? (scoredMade.pipeline.config as Record<string, unknown>) : null
+  const scoredConfig = scoredMade.ok ? (scoredMade.pipeline.config as unknown as Record<string, unknown>) : null
   const finishedRun: PreviousEvaluation | null =
     done && result && !result.cancelled
       ? {

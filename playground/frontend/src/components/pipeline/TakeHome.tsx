@@ -95,7 +95,7 @@ function scoresToBeat(
   for (const key of new Set([pipelineKey ?? "working", "working"])) {
     const p = readPreviousEvaluation(doc.sha, key)
     if (!p || p.k !== HOME_TOP_K || !p.config || p.questions !== questions.key) continue
-    if (!sameConfig(p.config as PipelineConfig, config)) continue
+    if (!sameConfig(p.config as unknown as PipelineConfig, config)) continue
     const mrr = p.totals.mrr === null ? "" : `, MRR ${p.totals.mrr.toFixed(2)}`
     return `${p.totals.found} of ${p.totals.total} found${mrr}`
   }

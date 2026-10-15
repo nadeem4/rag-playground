@@ -29,6 +29,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Running a pipeline from an app](#running-a-pipeline-from-an-app)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [Templates](#templates)
+- [Start a project](#start-a-project)
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
@@ -1089,6 +1090,61 @@ The playground's Starter (`samples/starter.yaml`) is Docling, `dedupe_blocks`, t
 `recursive_character` chunker and hybrid search with no reranker. It is closest to
 Reports with tables and Balanced, but it is not one of the pairs.
 
+## Start a project
+
+`pandion.new_project` writes a folder that runs a pipeline on your own documents, with
+nothing else to set up. `pandion init` does the same from the command line.
+
+```python
+import pandion
+
+config = pandion.compose_template("text", "balanced")
+written = pandion.new_project("my-project", config, "questions.json")
+```
+
+It takes a `Pipeline` or a pipeline dict, an optional question set (a path, or a list or
+dict, as `pandion.evaluate` takes), and returns the paths it wrote:
+
+- `pipeline.yaml`: the pipeline. Its `path` and `models.cache_dir` are relative and use
+  forward slashes, such as `./pandion-index`. A path that could lead out of the project
+  (absolute, a drive, a URL, `~` or `..`) keeps only its last part, so no folder of the
+  computer that wrote it ends up in the file. Every other setting is copied as it is.
+  `models.public_endpoints_only` is left out, so the default applies at home.
+- `run.py`: indexes the files in `docs/` that the parse step reads (`.pdf` for pdfium
+  and docling), says which other files it skipped, then evaluates the questions in
+  `questions.json`, or asks one example question when there is no question set. It
+  warns about a question that names a document not in `docs/`, and prints the results
+  and the cost of the run. Subfolders of `docs/` are not read.
+- `questions.json`: only when you give a question set.
+- `README.md`: how to set it up with Python 3.13 and run it, and the environment variable
+  that holds the key when a step calls a model, such as `ANTHROPIC_API_KEY`. A key value
+  is never written to any file. For a custom model, the README says the variable is
+  needed only if the server asks for a key. When the questions name their documents, the
+  README says that the files in `docs/` must match those names exactly, extension included.
+- `requirements.txt`: `pandion[...]` with the extras the pipeline needs (`p.extras()`),
+  pinned to this minor version, such as `~=0.2.0`, and a commented line that installs
+  the much smaller CPU-only torch.
+- `docs/`: an empty folder for your documents.
+
+`readme_extra="..."` adds your own text at the end of the README. A folder that already
+has files in it is refused with `FileExistsError`; `overwrite=True` writes the project
+files into it and leaves your other files alone; without questions it also removes an old
+`questions.json`. A pipeline that loads plugins is refused with a `ValueError`, because
+plugin modules cannot be packed into a project, and so is a `custom_base_url` with a user
+name or password in it.
+
+From the command line, `pandion init` picks the two templates by number:
+
+```bash
+pandion init my-project
+pandion init my-project --index text --query balanced --questions questions.json
+```
+
+Without `--index` and `--query`, it lists each family's templates with their summaries
+and asks for a number. When nothing can be typed in, as in a script, it needs both flags
+and says so. `--overwrite` writes into a folder that has files in it. Ctrl+C at the
+prompt stops it with exit code 130.
+
 ## The cache
 
 An artifact's id is a hash of its recipe: the strategy, its settings and its inputs. Run
@@ -1162,6 +1218,7 @@ pandion ask pipeline.yaml "What is chunking?" --documents report.pdf
 pandion eval pipeline.yaml questions.json --documents report.pdf
 pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 report.pdf --questions questions.json
 pandion install pipeline.yaml --print
+pandion init my-project --index text --query balanced
 ```
 
 **`pandion validate FILE`** reads the file and checks every step, with no run. It prints
@@ -1244,6 +1301,10 @@ cannot compare a search, rewrite or rerank step that way, because nothing is sea
 
 **`pandion install FILE [--print]`** installs the extras the file needs, as described in
 [Install what a file needs](#install-what-a-file-needs).
+
+**`pandion init FOLDER [--index NAME] [--query NAME] [--questions FILE] [--overwrite]`**
+writes a project folder from an index and a query template, as described in
+[Start a project](#start-a-project), then prints the files it wrote and the next steps.
 
 ### --plugins
 

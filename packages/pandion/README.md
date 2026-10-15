@@ -81,6 +81,14 @@ same file finds every step already stored and reuses it.
   [The worked example](https://github.com/nadeem4/rag-playground/tree/main/examples/pandion/own_strategies)
   writes one for every stage.
 
+## Start a project
+
+`pandion init my-project` asks which index and query template to use, then writes a
+folder you can run straight away: `pipeline.yaml`, `run.py`, `requirements.txt`, a
+README and an empty `docs/` for your documents. In code, `pandion.new_project(folder, pipeline)`
+writes the same folder for any pipeline. See
+[Start a project](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#start-a-project).
+
 ## Use Pandion from the command line
 
 `pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`:

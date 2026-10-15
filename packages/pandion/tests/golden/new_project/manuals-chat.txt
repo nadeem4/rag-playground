@@ -1,0 +1,51 @@
+=== requirements.txt
+pandion[anthropic,docling,lancedb,local]~=<pin>
+
+# Uncomment the next line to install the much smaller CPU-only build of torch.
+# --extra-index-url https://download.pytorch.org/whl/cpu
+=== README.md (head)
+# project
+
+This folder runs a Pandion retrieval pipeline on your own documents. The pipeline is in `pipeline.yaml`.
+
+A step in this pipeline calls a model through an API, so it needs a key. Set ANTHROPIC_API_KEY in your environment before you run it. Never write a key into a file in this folder.
+
+=== pipeline.yaml
+path: ./pandion-index
+index:
+  parse:
+    use: docling
+    heading_hierarchy: true
+    do_table_structure: true
+    table_mode: fast
+    do_ocr: false
+    content_layers:
+    - body
+  clean:
+  - use: dedupe_blocks
+  chunk:
+    use: layout_blocks
+    section_level: 4
+    max_tokens: 512
+    keep_tables_whole: true
+    heading_context: true
+  embed:
+    use: qwen3-embedding-0.6b
+  store:
+    use: lancedb
+    metric: cosine
+    build_fts: true
+retrieve:
+  search:
+    use: hybrid_rrf
+    top_k: 30
+    rrf_k: 60
+    query_expansion: none
+  rerank:
+  - use: cross_encoder
+    model: BAAI/bge-reranker-v2-m3
+    top_k: 5
+answer:
+  use: chat
+  model: claude-sonnet-5
+  max_chunks: 5

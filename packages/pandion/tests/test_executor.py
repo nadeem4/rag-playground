@@ -499,6 +499,84 @@ def test_non_cacheable_recomputes_and_replaces_the_stored_payload(store):
     assert store.load(aid, ArtifactType.RAW_FILE) == {"call": 2}
 
 
+# The step after a non-cacheable one: its id follows what the parent produced
+
+
+VOLATILE_OUTPUT = {"text": "first"}
+
+
+def volatile_with_child_registry() -> Registry:
+    CALLS.clear()
+    r = Registry()
+
+    class Volatile(Transform[Cfg]):
+        summary = "A test transform."
+        name = "volatile"
+        stage = Stage.SOURCE
+        inputs = {}
+        output = ArtifactType.RAW_FILE
+        config_model = Cfg
+        cacheable = False
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("volatile")
+            return dict(VOLATILE_OUTPUT)
+
+    class Child(Transform[Cfg]):
+        summary = "A test transform."
+        name = "fake_parse"
+        stage = Stage.PARSE
+        inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
+        output = ArtifactType.PARSED_DOC
+        config_model = Cfg
+
+        def apply(self, inputs, config, ctx):
+            CALLS.append("child")
+            return {"from": inputs["file"]["text"]}
+
+    r.register(Volatile)
+    r.register(Child)
+    return r
+
+
+def g_volatile_child() -> Graph:
+    return Graph(
+        nodes=[
+            Node("s", Stage.SOURCE, "volatile", {}),
+            Node("p", Stage.PARSE, "fake_parse", {}),
+        ],
+        edges=[Edge("s", "p", "file")],
+    )
+
+
+def test_a_child_reruns_with_a_new_id_when_a_non_cacheable_parent_changes(store):
+    reg = volatile_with_child_registry()
+    VOLATILE_OUTPUT["text"] = "first"
+    first = run(g_volatile_child(), reg, store)
+    VOLATILE_OUTPUT["text"] = "second"
+    second = run(g_volatile_child(), reg, store)
+
+    assert CALLS == ["volatile", "child", "volatile", "child"]
+    assert second.nodes["p"].status is NodeStatus.EXECUTED
+    assert second.nodes["p"].artifact.id != first.nodes["p"].artifact.id
+    assert store.load(second.nodes["p"].artifact.id, ArtifactType.PARSED_DOC) == {"from": "second"}
+    # The first child's result is still there under its own id.
+    assert store.load(first.nodes["p"].artifact.id, ArtifactType.PARSED_DOC) == {"from": "first"}
+    # The non-cacheable step itself keeps one id.
+    assert second.nodes["s"].artifact.id == first.nodes["s"].artifact.id
+
+
+def test_a_child_hits_the_cache_when_a_non_cacheable_parent_gives_the_same_output(store):
+    reg = volatile_with_child_registry()
+    VOLATILE_OUTPUT["text"] = "same"
+    first = run(g_volatile_child(), reg, store)
+    second = run(g_volatile_child(), reg, store)
+
+    assert CALLS == ["volatile", "child", "volatile"]
+    assert second.nodes["p"].status is NodeStatus.CACHED
+    assert second.nodes["p"].artifact.id == first.nodes["p"].artifact.id
+
+
 # ---------------------------------------------------------------------------
 # Cancellation: checked between nodes, never mid-node
 # ---------------------------------------------------------------------------

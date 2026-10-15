@@ -13,6 +13,7 @@ no code path that produces a cache hit for an entry that was not finished.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import uuid
@@ -132,6 +133,21 @@ class Store:
         return Artifact(
             id=raw["id"], type=ArtifactType(raw["type"]), meta=raw["meta"]
         )
+
+    def content_hash(self, artifact_id: str) -> str:
+        """A hash of what is stored for one entry: every file but `meta.json`.
+
+        `meta.json` is left out because it holds the note and other words about
+        the run, not the result itself.
+        """
+        root = self.path_for(artifact_id)
+        h = hashlib.sha256()
+        for f in sorted(p for p in root.rglob("*") if p.is_file()):
+            rel = f.relative_to(root).as_posix()
+            if rel == META:
+                continue
+            h.update(rel.encode("utf-8") + b"\x00" + f.read_bytes() + b"\x00")
+        return h.hexdigest()
 
     def load(self, artifact_id: str, t: ArtifactType) -> Any:
         return SERIALIZERS[t].read(self.path_for(artifact_id))

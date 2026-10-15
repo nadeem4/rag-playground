@@ -5,7 +5,9 @@ Two rules explain almost everything here.
 *The artifact id is computed before the transform runs.* It is a recipe hash, so
 it is knowable from the transform, its config, and its inputs' ids alone — which
 is what makes a cache hit free: no upstream payload is loaded to decide that a
-node can be skipped, it just is not re-executed.
+node can be skipped, it just is not re-executed. The one exception is an input
+from a non-cacheable node: that node keeps one id however its output changes,
+so the hash of its stored output stands in for it in the id (see `input_id`).
 
 *A failure is data, not an exception.* One bad node must not take a run down,
 because the whole point of a bench is comparing strategies and one of them
@@ -16,6 +18,7 @@ reports the verdict.
 
 from __future__ import annotations
 
+import hashlib
 import time
 import traceback
 from copy import deepcopy
@@ -149,14 +152,28 @@ def run(
         # are one recipe rather than two.
         canonical_config = config.model_dump(mode="json")
 
+        def input_id(src: str) -> str:
+            # A non-cacheable step runs every time under one id, so its id says
+            # nothing about what it gave this time. Hash what it gave into the
+            # id this step sees: a new output means a new id here and a fresh
+            # run, the same output means a cache hit. A pipeline with no
+            # non-cacheable step keeps exactly the ids it always had.
+            aid = result.nodes[src].artifact.id
+            parent = by_id[src]
+            if registry.get(parent.stage, parent.transform).cacheable:
+                return aid
+            return hashlib.sha256(
+                f"{aid}\x00{store.content_hash(aid)}".encode("utf-8")
+            ).hexdigest()
+
         input_ids: dict[str, Any] = {}
         call_inputs: dict[str, Any] = {}
         for pname, src in resolved.bindings[nid].items():
             if isinstance(src, list):
-                input_ids[pname] = [result.nodes[s].artifact.id for s in src]
+                input_ids[pname] = [input_id(s) for s in src]
                 call_inputs[pname] = [payloads[s] for s in src]
             else:
-                input_ids[pname] = result.nodes[src].artifact.id
+                input_ids[pname] = input_id(src)
                 call_inputs[pname] = payloads[src]
 
         aid = compute_artifact_id(

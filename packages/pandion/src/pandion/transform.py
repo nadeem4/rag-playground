@@ -86,6 +86,7 @@ class Transform(ABC, Generic[C]):
 
     #: False for transforms whose output should never be reused — chat answers,
     #: chiefly. Otherwise asking the same question twice replays the old answer.
+    #: The step keeps one id, so a step reading from it hashes its output too.
     cacheable: bool = True
 
     #: Capability predicates on input ports, keyed by *port name*, checked at

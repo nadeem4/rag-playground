@@ -380,7 +380,8 @@ result.stages["rerank"][0].note         # what the first reranker did
 ```
 
 Ask the same question again and every step is `cached`, except `llm_rewrite` and
-`llm_rerank`, whose model answers can change.
+`llm_rerank`, whose model answers can change. When one of them answers differently, the
+steps after it run again on the new answer; when it answers the same, they are `cached`.
 
 To load the default cross-encoder before the first search, call
 `pandion.preload_reranker()`. It takes a model name and `pandion.ModelSettings`, like
@@ -984,6 +985,12 @@ Change one setting and only the steps from that point on run again. Changing
 new index. The embedding cache also keeps each embedding by the model and the text, so a
 text is embedded once. `pandion.ResultStore(path).clear()` empties it.
 
+A step marked `cacheable = False`, such as `llm_rewrite`, `llm_rerank` or the `chat`
+answer, runs on every run and keeps one id, and the latest run's result is stored under
+it. A step that reads from such a step adds a hash of what it actually returned to its
+own recipe. So when the rewrite comes back in new words the search runs again under a new
+id, and when it comes back the same the stored search is reused.
+
 [Architecture](architecture.md#artifacts-and-the-cache) explains the hash in detail.
 
 ## Models
@@ -1306,7 +1313,9 @@ any source.
 
 A source's result is cached by its settings, so by `location`: the same location is read
 once and reused. If the content at a location can change, set `cacheable = False` on the
-class, and it is read again on every run.
+class, and it is read again on every run. The parse after it runs again only when what the
+source read has changed; when it is the same, the stored parse and everything after it are
+reused.
 
 To search after a run with your own source, call `p.retrieve` or `p.ask` in the same process
 as `p.index.run`. Only `upload` has a manifest, written by `p.index.sync`, that a later

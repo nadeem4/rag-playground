@@ -198,6 +198,37 @@ def test_llm_rewrite_and_llm_rerank_take_the_key_from_credentials(tmp_path, monk
     assert len(result.hits) == 2
 
 
+def test_a_new_rewrite_is_searched_again_and_the_same_rewrite_is_not(tmp_path, monkeypatch):
+    replies = iter(["capital France Paris", "report pages", "report pages"])
+
+    def complete(model, **kwargs):
+        return Completion(text=next(replies), usage={}, stop_reason="end_turn")
+
+    monkeypatch.setattr(llm, "complete", complete)
+    p = built(
+        tmp_path,
+        "retrieve:\n"
+        "  rewrite: {use: llm_rewrite, style: keywords}\n"
+        "  search: {use: bm25, top_k: 4}\n",
+    )
+    creds = {"anthropic_api_key": "sk-ant-test"}
+
+    first = p.retrieve(QUESTION, credentials=creds)
+    second = p.retrieve(QUESTION, credentials=creds)
+    third = p.retrieve(QUESTION, credentials=creds)
+
+    assert first.ok and second.ok and third.ok
+    # The rewrite changed, so the search ran again on the new words.
+    assert second.stages["search"].status == "executed"
+    assert second.stages["search"].artifact_id != first.stages["search"].artifact_id
+    assert second.stages["rewrite"].output.text == "report pages"
+    # The rewrite came back the same, so the stored search is reused.
+    assert third.stages["search"].status == "cached"
+    assert third.stages["search"].artifact_id == second.stages["search"].artifact_id
+    # The rewrite step keeps one id, so it can still be fetched by it.
+    assert len({r.stages["rewrite"].artifact_id for r in (first, second, third)}) == 1
+
+
 def test_a_missing_key_is_reported_on_its_stage(tmp_path):
     p = built(tmp_path, "retrieve:\n  search: {use: bm25}\n  rerank: {use: llm_rerank}\n")
 

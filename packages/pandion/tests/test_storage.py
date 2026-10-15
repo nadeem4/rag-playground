@@ -113,3 +113,13 @@ def test_clear_removes_everything(store):
     store.put(Artifact(id=AID, type=ArtifactType.CHUNK_SET, meta={}), {"a": 1})
     store.clear()
     assert store.has(AID) is False
+
+
+def test_content_hash_follows_the_payload_and_ignores_meta(store):
+    aid = "e" * 64
+    store.put(Artifact(id=aid, type=ArtifactType.QUERY, meta={"note": "one"}), {"text": "a"})
+    first = store.content_hash(aid)
+    store.put(Artifact(id=aid, type=ArtifactType.QUERY, meta={"note": "two"}), {"text": "a"})
+    assert store.content_hash(aid) == first
+    store.put(Artifact(id=aid, type=ArtifactType.QUERY, meta={"note": "two"}), {"text": "b"})
+    assert store.content_hash(aid) != first

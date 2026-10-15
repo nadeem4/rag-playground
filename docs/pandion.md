@@ -88,7 +88,7 @@ print(chunks.output.chunks[0].text)
 ```
 
 The sample PDFs live in `samples/`, one folder each: `chunking-primer`,
-`two-column-report`, `table-of-figures` and `scanned-notes`.
+`two-column-report`, `table-of-figures`, `scanned-notes` and `station-manual`.
 
 A strategy's settings are keyword arguments, with the same names as in the app's
 settings forms. `clean` takes a list of steps and runs them in the order given. Each step
@@ -910,7 +910,11 @@ a pair uses.
 - **Scanned PDFs** reads the page images with Docling's OCR, removes near repeats, and
   cuts along the layout.
 - **Manuals and guides** reads heading levels with Docling's heading hierarchy, starts a
-  new piece at each heading down to level 3, and searches each piece with its heading path.
+  new piece at each heading numbered down to three parts, such as 1.2.3, and searches each
+  piece with its heading path. Docling puts the title and headings numbered like 1 at level
+  2, so the template sets `section_level: 4`. Its sample, `station-manual`, has numbered
+  headings four levels deep, and each piece holds one subsection such as 2.2.1, with a
+  heading like 2.2.1.1 kept inside it.
 
 Every document template embeds with `qwen3-embedding-0.6b` and stores in lancedb with its
 keyword index, which the hybrid search in every question template needs.

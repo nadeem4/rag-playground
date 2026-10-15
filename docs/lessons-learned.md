@@ -104,6 +104,20 @@ This is a working document. We keep it up to date as we build RAG Playground. Ea
 
 **What we learned.** Pick where pieces may end, not only how big they are. A size limit is easy to set, but the cut points decide whether an answer survives chunking.
 
+### The Manuals template cut one level too high
+
+2026-10-14, the `station-manual` sample and the template fix that followed it
+
+**The problem.** The Manuals and guides template was meant to start a new piece at each heading numbered down to three parts, such as 1.2.3. On the new `station-manual` sample it cut only at headings such as 2.2. So two look-alike subsections, the frost alarm's and the wind alarm's "Choosing the threshold", which both say "set this threshold to 4", landed in one piece under the heading path "2 Setting up > 2.2 Setting the alarms". The two battery subsections, which both start "This part takes", shared a piece too.
+
+**Why it was broken.** Docling's heading levels are offset by one. With `heading_hierarchy` on, it puts the document title and headings numbered like 1 at level 2, so 1.2 is level 3 and 1.2.3 is level 4. The template set `section_level: 3`, which counted levels as if 1 were level 1.
+
+**What fixed it.** `section_level: 4` in the template, with a comment that says why. A fast test now pins the value, and a test that runs the real template on the sample checks that each look-alike subsection gets its own piece and its own heading path.
+
+**Why the fix worked.** With 4, each subsection such as 2.2.1 Frost alarm starts its own piece, and its heading path names it. On the sample the pieces went from 14 to 26, each look-alike pair split into two pieces, and all 12 questions still ranked 1st.
+
+**What we learned.** Read the levels the parser actually gives before you set a depth from them. Every question hit before and after the fix, so the hit rate hid the problem. Only looking at the pieces and their heading paths showed it, and a sample built with look-alike sections made it easy to see.
+
 ## Retrieval
 
 ### Retrieve handed on only the final top results

@@ -1,0 +1,276 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 2272 >>
+stream
+BT /F2 22 Tf 72 720 Td (Skylark WS-3 Home Weather Station) Tj ET
+BT /F1 11 Tf 72 683 Td (This manual explains how to set up, use and look after the Skylark WS-3. The station has) Tj ET
+BT /F1 11 Tf 72 668 Td (an outdoor sensor that measures temperature, humidity, wind and rain, and an indoor) Tj ET
+BT /F1 11 Tf 72 653 Td (display that shows the readings and sounds the alarms. Read each section before you) Tj ET
+BT /F1 11 Tf 72 638 Td (start, and keep the manual near the display.) Tj ET
+BT /F2 17 Tf 72 606 Td (1 Getting started) Tj ET
+BT /F2 14 Tf 72 567 Td (1.1 What is in the box) Tj ET
+BT /F1 11 Tf 72 539 Td (The box holds the outdoor sensor, the indoor display, a mounting pole in two parts, four) Tj ET
+BT /F1 11 Tf 72 524 Td (screws with wall plugs, a set of bird spikes, a USB cable and a small brush for the rain) Tj ET
+BT /F1 11 Tf 72 509 Td (funnel. Batteries are not included.) Tj ET
+BT /F2 14 Tf 72 477 Td (1.2 Choosing a place) Tj ET
+BT /F1 11 Tf 72 449 Td (Where you put the two parts decides how good the readings are and how well they talk to) Tj ET
+BT /F1 11 Tf 72 434 Td (each other. Choose both places before you drill any holes.) Tj ET
+BT /F2 13 Tf 72 402 Td (1.2.1 Outdoor sensor) Tj ET
+BT /F1 11 Tf 72 376 Td (Mount the outdoor sensor at least 1.5 metres above the ground, on a pole or post away) Tj ET
+BT /F1 11 Tf 72 361 Td (from walls and trees. A wall that faces the sun warms the air around it and makes the) Tj ET
+BT /F1 11 Tf 72 346 Td (temperature read high, and a tree shelters the wind cups.) Tj ET
+BT /F2 13 Tf 72 314 Td (1.2.2 Indoor display) Tj ET
+BT /F1 11 Tf 72 288 Td (Place the indoor display within 100 metres of the sensor in open air, or within 30) Tj ET
+BT /F1 11 Tf 72 273 Td (metres when there are walls between them. Keep it at least one metre away from a) Tj ET
+BT /F1 11 Tf 72 258 Td (television, a microwave oven or a wireless router, which can block the signal.) Tj ET
+BT /F1 10 Tf 72 224 Td (WARNING: Never mount the outdoor sensor during a storm, and never climb a ladder in high wind.) Tj ET
+BT /F1 10 Tf 72 211 Td (Keep the mounting pole at least 3 metres away from overhead power lines.) Tj ET
+BT /F1 9 Tf 72 760 Td (Skylark WS-3 Home Weather Station: User Manual) Tj ET
+BT /F1 9 Tf 72 40 Td (Page 1 of 7) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Length 1956 >>
+stream
+BT /F2 17 Tf 72 720 Td (2 Setting up) Tj ET
+BT /F2 14 Tf 72 681 Td (2.1 Pairing the sensor) Tj ET
+BT /F2 13 Tf 72 645 Td (2.1.1 First pairing) Tj ET
+BT /F1 11 Tf 72 619 Td (Put the batteries in the outdoor sensor first and in the display second. The display) Tj ET
+BT /F1 11 Tf 72 604 Td (searches for three minutes and shows a steady aerial symbol when it has found the) Tj ET
+BT /F1 11 Tf 72 589 Td (sensor.) Tj ET
+BT /F2 13 Tf 72 557 Td (2.1.2 Adding a second sensor) Tj ET
+BT /F1 11 Tf 72 531 Td (Press and hold the CHANNEL button on the display for five seconds until the channel) Tj ET
+BT /F1 11 Tf 72 516 Td (number flashes, then press the small RESET button inside the battery cover of the new) Tj ET
+BT /F1 11 Tf 72 501 Td (sensor. The display gives it the next free channel, up to channel 3.) Tj ET
+BT /F2 14 Tf 72 469 Td (2.2 Setting the alarms) Tj ET
+BT /F1 11 Tf 72 441 Td (Each alarm watches one reading and sounds when that reading crosses its threshold. Press) Tj ET
+BT /F1 11 Tf 72 426 Td (ALARM to choose an alarm, then press the up and down buttons to change its threshold.) Tj ET
+BT /F2 13 Tf 72 394 Td (2.2.1 Frost alarm) Tj ET
+BT /F1 11 Tf 72 368 Td (This alarm sounds when the outdoor temperature falls to the threshold or below.) Tj ET
+BT /F2 12 Tf 72 336 Td (2.2.1.1 Choosing the threshold) Tj ET
+BT /F1 11 Tf 72 311 Td (For most gardens, set this threshold to 4, which leaves you time to cover young plants) Tj ET
+BT /F1 11 Tf 72 296 Td (before the night gets any colder. A higher value sounds the alarm on many nights that) Tj ET
+BT /F1 11 Tf 72 281 Td (turn out to be mild.) Tj ET
+BT /F1 10 Tf 72 247 Td (WARNING: Never mount the outdoor sensor during a storm, and never climb a ladder in high wind.) Tj ET
+BT /F1 10 Tf 72 234 Td (Keep the mounting pole at least 3 metres away from overhead power lines.) Tj ET
+BT /F1 9 Tf 72 760 Td (Skylark WS-3 Home Weather Station: User Manual) Tj ET
+BT /F1 9 Tf 72 40 Td (Page 2 of 7) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Length 2700 >>
+stream
+BT /F2 13 Tf 72 720 Td (2.2.2 Wind alarm) Tj ET
+BT /F1 11 Tf 72 694 Td (This alarm watches the strongest gust in the last ten minutes, counted on the Beaufort) Tj ET
+BT /F1 11 Tf 72 679 Td (scale from 0 to 12. A flag symbol shows while it is on.) Tj ET
+BT /F2 12 Tf 72 647 Td (2.2.2.1 Choosing the threshold) Tj ET
+BT /F1 11 Tf 72 622 Td (For most homes, set this threshold to 4, which leaves you time to bring in light garden) Tj ET
+BT /F1 11 Tf 72 607 Td (furniture before the weather gets any worse. A lower value sounds the alarm on most) Tj ET
+BT /F1 11 Tf 72 592 Td (breezy afternoons.) Tj ET
+BT /F2 17 Tf 72 560 Td (3 Display settings) Tj ET
+BT /F1 11 Tf 72 529 Td (The table below lists the settings you can change from the display. Hold the SET button) Tj ET
+BT /F1 11 Tf 72 514 Td (for three seconds to open the settings, then press SET again to move to the next one.) Tj ET
+BT /F2 10 Tf 76 475 Td (Setting) Tj ET
+BT /F2 10 Tf 226 475 Td (Choices) Tj ET
+BT /F2 10 Tf 406 475 Td (Default) Tj ET
+BT /F1 10 Tf 76 455 Td (Temperature unit) Tj ET
+BT /F1 10 Tf 226 455 Td (Celsius, Fahrenheit) Tj ET
+BT /F1 10 Tf 406 455 Td (Celsius) Tj ET
+BT /F1 10 Tf 76 435 Td (Wind speed unit) Tj ET
+BT /F1 10 Tf 226 435 Td (km/h, m/s, mph, knots) Tj ET
+BT /F1 10 Tf 406 435 Td (km/h) Tj ET
+BT /F1 10 Tf 76 415 Td (Rain unit) Tj ET
+BT /F1 10 Tf 226 415 Td (mm, inches) Tj ET
+BT /F1 10 Tf 406 415 Td (mm) Tj ET
+BT /F1 10 Tf 76 395 Td (Pressure unit) Tj ET
+BT /F1 10 Tf 226 395 Td (hPa, inHg) Tj ET
+BT /F1 10 Tf 406 395 Td (hPa) Tj ET
+BT /F1 10 Tf 76 375 Td (Backlight) Tj ET
+BT /F1 10 Tf 226 375 Td (Off, Low, High) Tj ET
+BT /F1 10 Tf 406 375 Td (Low) Tj ET
+BT /F1 10 Tf 76 355 Td (Time format) Tj ET
+BT /F1 10 Tf 226 355 Td (12 hour, 24 hour) Tj ET
+BT /F1 10 Tf 406 355 Td (24 hour) Tj ET
+q 0.75 w 72 490 m 512 490 l S Q
+q 0.75 w 72 470 m 512 470 l S Q
+q 0.75 w 72 450 m 512 450 l S Q
+q 0.75 w 72 430 m 512 430 l S Q
+q 0.75 w 72 410 m 512 410 l S Q
+q 0.75 w 72 390 m 512 390 l S Q
+q 0.75 w 72 370 m 512 370 l S Q
+q 0.75 w 72 350 m 512 350 l S Q
+q 0.75 w 72 490 m 72 350 l S Q
+q 0.75 w 222 490 m 222 350 l S Q
+q 0.75 w 402 490 m 402 350 l S Q
+q 0.75 w 512 490 m 512 350 l S Q
+BT /F1 11 Tf 72 336 Td (Your choices are kept when you change the batteries in the display, but a reset brings) Tj ET
+BT /F1 11 Tf 72 321 Td (back the defaults shown in the table.) Tj ET
+BT /F1 10 Tf 72 287 Td (WARNING: Never mount the outdoor sensor during a storm, and never climb a ladder in high wind.) Tj ET
+BT /F1 10 Tf 72 274 Td (Keep the mounting pole at least 3 metres away from overhead power lines.) Tj ET
+BT /F1 9 Tf 72 760 Td (Skylark WS-3 Home Weather Station: User Manual) Tj ET
+BT /F1 9 Tf 72 40 Td (Page 3 of 7) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Length 2033 >>
+stream
+BT /F2 14 Tf 72 720 Td (3.1 Calibrating the readings) Tj ET
+BT /F1 11 Tf 72 692 Td (The station is checked before it leaves the factory, but your site may still differ a) Tj ET
+BT /F1 11 Tf 72 677 Td (little from a nearby weather report. Two readings can be adjusted.) Tj ET
+BT /F2 13 Tf 72 645 Td (3.1.1 Pressure) Tj ET
+BT /F1 11 Tf 72 619 Td (To match your local weather report, open the settings, go to Pressure offset, and add or) Tj ET
+BT /F1 11 Tf 72 604 Td (take away up to 20 hPa. The station then adds the same offset to every pressure reading) Tj ET
+BT /F1 11 Tf 72 589 Td (it shows.) Tj ET
+BT /F2 13 Tf 72 557 Td (3.1.2 Rain) Tj ET
+BT /F1 11 Tf 72 531 Td (If the rain total reads too low next to a standard rain gauge, first check that the) Tj ET
+BT /F1 11 Tf 72 516 Td (funnel is level. The rain factor can be set from 0.8 to 1.2 in steps of 0.05, and every) Tj ET
+BT /F1 11 Tf 72 501 Td (rain reading is multiplied by it.) Tj ET
+BT /F2 17 Tf 72 469 Td (4 Care and maintenance) Tj ET
+BT /F2 14 Tf 72 430 Td (4.1 Cleaning) Tj ET
+BT /F2 13 Tf 72 394 Td (4.1.1 Rain funnel) Tj ET
+BT /F1 11 Tf 72 368 Td (Clean it once a month in autumn, when falling leaves can block it. Lift it off, brush) Tj ET
+BT /F1 11 Tf 72 353 Td (out the mesh with the brush from the box, and rinse it in clean water before you put it) Tj ET
+BT /F1 11 Tf 72 338 Td (back.) Tj ET
+BT /F2 13 Tf 72 306 Td (4.1.2 Solar panel) Tj ET
+BT /F1 11 Tf 72 280 Td (Wipe it with a damp cloth every three months. It powers a small fan that keeps air) Tj ET
+BT /F1 11 Tf 72 265 Td (moving past the temperature probe, so a dirty panel makes the temperature read high on) Tj ET
+BT /F1 11 Tf 72 250 Td (sunny days.) Tj ET
+BT /F1 10 Tf 72 216 Td (WARNING: Never mount the outdoor sensor during a storm, and never climb a ladder in high wind.) Tj ET
+BT /F1 10 Tf 72 203 Td (Keep the mounting pole at least 3 metres away from overhead power lines.) Tj ET
+BT /F1 9 Tf 72 760 Td (Skylark WS-3 Home Weather Station: User Manual) Tj ET
+BT /F1 9 Tf 72 40 Td (Page 4 of 7) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Length 1267 >>
+stream
+BT /F2 14 Tf 72 720 Td (4.2 Batteries) Tj ET
+BT /F2 13 Tf 72 684 Td (4.2.1 Outdoor sensor) Tj ET
+BT /F1 11 Tf 72 658 Td (This part takes two AA lithium batteries, which keep working down to minus 20 degrees) Tj ET
+BT /F1 11 Tf 72 643 Td (Celsius. Ordinary alkaline batteries stop working well below freezing.) Tj ET
+BT /F2 12 Tf 72 611 Td (4.2.1.1 Changing them in winter) Tj ET
+BT /F1 11 Tf 72 586 Td (Bring the sensor indoors for an hour before you open it, so that no damp, cold air is) Tj ET
+BT /F1 11 Tf 72 571 Td (sealed inside with the new batteries. Close the cover firmly before you take it back) Tj ET
+BT /F1 11 Tf 72 556 Td (outside.) Tj ET
+BT /F2 13 Tf 72 524 Td (4.2.2 Indoor display) Tj ET
+BT /F1 11 Tf 72 498 Td (This part takes three AAA alkaline batteries, or it can run from the USB cable in the) Tj ET
+BT /F1 11 Tf 72 483 Td (box. A battery symbol shows when about two weeks of power are left.) Tj ET
+BT /F1 10 Tf 72 449 Td (WARNING: Never mount the outdoor sensor during a storm, and never climb a ladder in high wind.) Tj ET
+BT /F1 10 Tf 72 436 Td (Keep the mounting pole at least 3 metres away from overhead power lines.) Tj ET
+BT /F1 9 Tf 72 760 Td (Skylark WS-3 Home Weather Station: User Manual) Tj ET
+BT /F1 9 Tf 72 40 Td (Page 5 of 7) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Length 2246 >>
+stream
+BT /F2 17 Tf 72 720 Td (5 Troubleshooting) Tj ET
+BT /F2 14 Tf 72 681 Td (5.1 No reading from the sensor) Tj ET
+BT /F2 13 Tf 72 645 Td (5.1.1 Dashes on the display) Tj ET
+BT /F1 11 Tf 72 619 Td (Dashes in place of a reading mean the display has lost the sensor for more than fifteen) Tj ET
+BT /F1 11 Tf 72 604 Td (minutes. Move the display closer to the sensor, then hold the down button for three) Tj ET
+BT /F1 11 Tf 72 589 Td (seconds to search again.) Tj ET
+BT /F2 13 Tf 72 557 Td (5.1.2 Readings stop on cold nights) Tj ET
+BT /F1 11 Tf 72 531 Td (If the readings stop on the coldest nights and come back in the morning, the sensor) Tj ET
+BT /F1 11 Tf 72 516 Td (probably holds alkaline batteries. Replace them with lithium batteries, as section 4.2.1) Tj ET
+BT /F1 11 Tf 72 501 Td (describes.) Tj ET
+BT /F2 14 Tf 72 469 Td (5.2 Wrong readings) Tj ET
+BT /F2 13 Tf 72 433 Td (5.2.1 Temperature too high) Tj ET
+BT /F1 11 Tf 72 407 Td (A temperature that reads several degrees too high on sunny afternoons usually means the) Tj ET
+BT /F1 11 Tf 72 392 Td (sensor gets direct sun or heat from a wall. Move it into open air, and check that the) Tj ET
+BT /F1 11 Tf 72 377 Td (solar fan turns.) Tj ET
+BT /F2 13 Tf 72 345 Td (5.2.2 Rain total too high) Tj ET
+BT /F1 11 Tf 72 319 Td (A rain total that grows on dry days usually comes from birds landing on the funnel or) Tj ET
+BT /F1 11 Tf 72 304 Td (from wind shaking the post. Fit the bird spikes from the box, and make sure the post) Tj ET
+BT /F1 11 Tf 72 289 Td (does not move.) Tj ET
+BT /F2 14 Tf 72 257 Td (5.3 Resetting the station) Tj ET
+BT /F1 11 Tf 72 229 Td (Take the batteries out of both parts, wait one minute, then put them back in the sensor) Tj ET
+BT /F1 11 Tf 72 214 Td (first. A reset clears the rain total and the highest and lowest readings, and it brings) Tj ET
+BT /F1 11 Tf 72 199 Td (back every default in the settings table.) Tj ET
+BT /F1 10 Tf 72 165 Td (WARNING: Never mount the outdoor sensor during a storm, and never climb a ladder in high wind.) Tj ET
+BT /F1 10 Tf 72 152 Td (Keep the mounting pole at least 3 metres away from overhead power lines.) Tj ET
+BT /F1 9 Tf 72 760 Td (Skylark WS-3 Home Weather Station: User Manual) Tj ET
+BT /F1 9 Tf 72 40 Td (Page 6 of 7) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Length 1456 >>
+stream
+BT /F2 17 Tf 72 720 Td (6 Specifications and warranty) Tj ET
+BT /F2 14 Tf 72 681 Td (6.1 Specifications) Tj ET
+BT /F2 13 Tf 72 645 Td (6.1.1 Measuring ranges) Tj ET
+BT /F1 11 Tf 72 619 Td (The outdoor sensor measures temperature from minus 40 to 60 degrees Celsius, humidity) Tj ET
+BT /F1 11 Tf 72 604 Td (from 1 to 99 percent, and wind speed up to 180 kilometres an hour.) Tj ET
+BT /F2 13 Tf 72 572 Td (6.1.2 Radio) Tj ET
+BT /F1 11 Tf 72 546 Td (The sensor sends a new set of readings every 48 seconds on the 868 MHz band, which) Tj ET
+BT /F1 11 Tf 72 531 Td (passes through walls better than the 2.4 GHz band used by most routers.) Tj ET
+BT /F2 14 Tf 72 499 Td (6.2 Warranty) Tj ET
+BT /F1 11 Tf 72 471 Td (The Skylark WS-3 has a two-year warranty from the date of purchase. Keep your receipt,) Tj ET
+BT /F1 11 Tf 72 456 Td (because the warranty does not cover a station without proof of when it was bought.) Tj ET
+BT /F1 11 Tf 72 432 Td (The warranty does not cover damage from lightning, from a fall, or from water that got) Tj ET
+BT /F1 11 Tf 72 417 Td (in because the battery cover was left open.) Tj ET
+BT /F1 10 Tf 72 383 Td (WARNING: Never mount the outdoor sensor during a storm, and never climb a ladder in high wind.) Tj ET
+BT /F1 10 Tf 72 370 Td (Keep the mounting pole at least 3 metres away from overhead power lines.) Tj ET
+BT /F1 9 Tf 72 760 Td (Skylark WS-3 Home Weather Station: User Manual) Tj ET
+BT /F1 9 Tf 72 40 Td (Page 7 of 7) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+11 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+12 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+endobj
+13 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 6 0 R >>
+endobj
+14 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 7 0 R >>
+endobj
+15 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 8 0 R >>
+endobj
+16 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 9 0 R >>
+endobj
+17 0 obj
+<< /Type /Pages /Kids [10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R] /Count 7 >>
+endobj
+18 0 obj
+<< /Type /Catalog /Pages 17 0 R >>
+endobj
+xref
+0 19
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000000154 00000 n 
+0000002478 00000 n 
+0000004486 00000 n 
+0000007238 00000 n 
+0000009323 00000 n 
+0000010642 00000 n 
+0000012940 00000 n 
+0000014448 00000 n 
+0000014586 00000 n 
+0000014724 00000 n 
+0000014862 00000 n 
+0000015000 00000 n 
+0000015138 00000 n 
+0000015276 00000 n 
+0000015414 00000 n 
+0000015515 00000 n 
+trailer
+<< /Size 19 /Root 18 0 R >>
+startxref
+15566
+%%EOF

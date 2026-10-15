@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_the_committed_set_lists_the_primer_first_then_by_name():
     names = [s.name for s in sample_set.all_samples()]
-    assert names == ["chunking-primer", "scanned-notes", "table-of-figures", "two-column-report"]
+    assert names == ["chunking-primer", "scanned-notes", "station-manual", "table-of-figures", "two-column-report"]
     assert sample_set.default_sample().name == "chunking-primer"
 
 

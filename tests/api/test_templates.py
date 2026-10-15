@@ -21,6 +21,8 @@ def test_templates_serves_pandions_templates(client):
     assert r.json() == LISTED
     tables = next(t for t in r.json()["documents"] if t["id"] == "tables")
     assert tables["name"] == "Reports with tables" and tables["sample"] == "table-of-figures"
+    manuals = next(t for t in r.json()["documents"] if t["id"] == "manuals")
+    assert manuals["sample"] == "station-manual"
 
 
 def test_every_document_template_names_a_bundled_sample():

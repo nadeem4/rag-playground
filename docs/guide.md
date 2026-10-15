@@ -49,7 +49,7 @@ the top jumps to a page, and the page in view is marked as you scroll. Each page
 captioned, such as Page 3 of 6. Escape or the close button closes it, and you are back
 where you were.
 
-The four samples were written for the playground, and each one shows a problem:
+The five samples were written for the playground, and each one shows a problem:
 
 | Sample | Pages | What it shows |
 |---|---|---|
@@ -57,6 +57,7 @@ The four samples were written for the playground, and each one shows a problem:
 | Scanned notes | 4 | Pictures of text with no text layer. Without OCR the parse is empty. |
 | Two-column report | 5 | Rows drawn across both columns. A plain parser joins halves of different sentences. |
 | Table of figures | 6 | Two ruled tables, a bar chart with a caption, one scanned page and notes. A layout parser keeps each row together. |
+| A weather station manual | 7 | Numbered headings four levels deep, a settings table, a running header and footer, and a warning on every page. Some answers only make sense with their heading path. It is the sample of the Manuals and guides template. |
 
 Each sample has its own question set, so Evaluate scores the sample you loaded. Every
 question carries an expected answer and tags, and some are **planted to miss** on the
@@ -68,6 +69,7 @@ default pipeline so that Evaluate has something to explain:
 | Two-column report | 12 | One fact is only in a page footer (lost at Parse; read headers and footers in Parse). One answer is ranked below the pieces checked (the cross-encoder reranker finds it). Six more miss if you switch Parse to Fast text. |
 | Table of figures | 12 | One answer is on the scanned page (lost at Parse; turn on OCR). One question uses words the document never does (ranked far below the pieces checked; the cross-encoder reranker finds it). |
 | Scanned notes | 8 | Every question misses without OCR and is found with it. |
+| A weather station manual | 12 | None. Every question is found by the Manuals and guides template, which searches each piece with its heading path. |
 
 The tags say which questions are planted ("designed to miss: ...") and which miss only after
 a change ("misses if you change: ..."), so a planted miss is never mistaken for a broken

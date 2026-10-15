@@ -105,3 +105,9 @@ def test_vague_questions_says_the_reranker_reads_the_question_as_typed():
 def test_good_for_is_a_full_sentence(family):
     for t in pandion.list_templates()[family]:
         assert t["good_for"].startswith("It suits ") and t["good_for"].endswith("."), t["id"]
+
+
+def test_manuals_starts_a_piece_at_headings_numbered_like_1_2_3():
+    """Docling puts the title and "1" headings at level 2, so 1.2.3 is level 4."""
+    chunk = _by_id("documents")["manuals"]["pipeline"]["index"]["chunk"]
+    assert chunk["use"] == "layout_blocks" and chunk["section_level"] == 4

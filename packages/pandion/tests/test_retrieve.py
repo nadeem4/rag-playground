@@ -284,6 +284,59 @@ def test_rrf_k_changes_the_fusion(tmp_path):
     assert low.score == pytest.approx(2 / 2)
 
 
+# hybrid rrf: list weights
+
+#: The code is found only by the keyword search; the fruit pieces by both.
+CODE_CORPUS = [
+    "Ripe yellow fruit such as bananas",
+    "Yellow fruit keeps well in a cool room",
+    "Yellow fruit is sold by weight",
+    "Order code ZX4410 for the hinge",
+]
+CODE = "Order code ZX4410 for the hinge"
+
+
+def _ranked(tmp_path, **weights) -> list[str]:
+    index_dir = build_index(tmp_path / "w", *CODE_CORPUS)
+    query = Query(text="yellow fruit ZX4410")
+    return texts(retrieve(HybridRrfRetriever(), index_dir, query, tmp_path, top_k=2, **weights))
+
+
+def test_the_code_is_found_only_by_the_keyword_search(tmp_path):
+    index_dir = build_index(tmp_path, *CODE_CORPUS)
+    query = Query(text="yellow fruit ZX4410")
+    assert CODE not in texts(retrieve(DenseRetriever(), index_dir, query, tmp_path, top_k=2))
+    assert texts(retrieve(Bm25Retriever(), index_dir, query, tmp_path, top_k=2))[0] == CODE
+
+
+def test_a_higher_keyword_weight_moves_a_keyword_only_match_up(tmp_path):
+    assert CODE not in _ranked(tmp_path, bm25_weight=0.5)
+    assert _ranked(tmp_path).index(CODE) == 1
+    assert _ranked(tmp_path, dense_weight=0.0, bm25_weight=1.0)[0] == CODE
+
+
+def test_each_lists_term_is_multiplied_by_its_weight(tmp_path):
+    index_dir = build_index(tmp_path, *CORPUS)
+    result = retrieve(
+        HybridRrfRetriever(), index_dir, Query(text="bananas"), tmp_path, dense_weight=0.5, bm25_weight=2.0
+    )
+    # Rank 1 in dense and rank 1 in bm25.
+    assert result.hits[0].score == pytest.approx(0.5 / 61 + 2.0 / 61)
+
+
+def test_the_default_weights_give_the_same_ranking_and_leave_the_id_alone(tmp_path):
+    assert _ranked(tmp_path) == _ranked(tmp_path, dense_weight=1.0, bm25_weight=1.0)
+    dumped = HybridRrfConfig(dense_weight=1.0, bm25_weight=1.0).model_dump()
+    assert "dense_weight" not in dumped and "bm25_weight" not in dumped
+    assert HybridRrfConfig(bm25_weight=2.0).model_dump()["bm25_weight"] == 2.0
+
+
+@pytest.mark.parametrize("weights", [{"bm25_weight": -1.0}, {"dense_weight": -0.1}, {"dense_weight": 0, "bm25_weight": 0}, {"bm25_weight": float("inf")}, {"dense_weight": float("nan")}])
+def test_a_negative_weight_or_two_zero_weights_are_refused(weights):
+    with pytest.raises(ValueError):
+        HybridRrfConfig(**weights)
+
+
 # --------------------------------------------------------------------------
 # the load-bearing rule: the index says which embedder and which width
 # --------------------------------------------------------------------------
@@ -298,6 +351,8 @@ def test_no_config_field_names_an_embedder(transform):
         "query_expansion",
         "prf_docs",
         "prf_terms",
+        "dense_weight",
+        "bm25_weight",
     }
 
 

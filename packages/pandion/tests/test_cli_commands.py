@@ -130,6 +130,10 @@ def test_eval_prints_each_question_and_the_totals(with_questions):
     assert "capital found at rank" in out.stdout and "Found 1 of 1" in out.stdout
     data = json.loads(pandion("eval", "pipeline.yaml", "questions.json", "--documents", "report.pdf", "--json", cwd=with_questions).stdout)
     assert data["total"] == 1 and data["questions"][0]["id"] == "capital"
+    # No step calls a model: the cost line has time and the cache share, no tokens or dollars.
+    [line] = [l for l in out.stdout.splitlines() if l.startswith("Cost: ")]
+    assert " s; " in line and "steps cached" in line and "tokens" not in line and "$" not in line
+    assert data["cost"]["dollars"] is None and data["cost"]["steps_run"] + data["cost"]["steps_cached"] > 0
 
 
 def test_compare_varies_one_setting_and_names_the_best(with_questions):
@@ -138,6 +142,8 @@ def test_compare_varies_one_setting_and_names_the_best(with_questions):
     assert "chunk recursive_character chunk_size=70" in out.stdout
     assert "chunk recursive_character chunk_size=200" in out.stdout
     assert "Best:" in out.stdout or "No variant found an answer." in out.stdout
+    cost_lines = [l for l in out.stdout.splitlines() if l.startswith("  Cost: ")]
+    assert len(cost_lines) == 2 and all("steps cached" in l for l in cost_lines)
 
 
 def test_compare_without_questions_shows_each_variants_step(with_questions):

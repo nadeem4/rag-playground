@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from pandion.config import ConfigError, _block, from_dict, to_dict
+from pandion.cost import cost as _cost
 from pandion.events import event
 from pandion.payloads import ChunkSet, Query
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
@@ -142,6 +143,15 @@ class EvaluationReport:
     @property
     def found(self) -> int:
         return sum(q.found for q in self.questions)
+
+    def _steps(self) -> list[StageResult]:
+        return [s for q in self.questions if q.retrieval is not None for s in q.retrieval._costed()]
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of every
+        question's search; see `pandion.cost.cost`. `prices` replaces
+        `pandion.llm.PRICES`."""
+        return _cost(self._steps(), prices)
 
     def totals(self) -> dict[str, Any]:
         """The numbers for the whole set; see `_totals`."""
@@ -419,6 +429,14 @@ class Comparison:
                 out[doc_id] = document.stages[max(keys, key=lambda k: int(k.split(".")[1]) if "." in k else 0)]
         return out
 
+    def _steps(self) -> list[StageResult]:
+        return [*self.index._steps(), *(self.report._steps() if self.report is not None else [])]
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of this
+        variant's index run and evaluation; see `pandion.cost.cost`."""
+        return _cost(self._steps(), prices)
+
     @property
     def settings(self) -> str:
         """The variant in short: each step's name and the settings it was given."""
@@ -510,6 +528,10 @@ class Comparisons(list[Comparison]):
 
         top = key(max(scored, key=key))
         return [c for c in scored if key(c) == top]
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """The cost of every variant together; see `Comparison.cost`."""
+        return _cost([s for c in self for s in c._steps()], prices)
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON: every comparison's `to_dict()`, and the best as their

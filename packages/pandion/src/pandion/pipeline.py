@@ -45,8 +45,9 @@ from typing import Any, Callable
 import yaml
 
 from pandion.config import ConfigError, PipelineConfig, build, from_dict as _from_dict, load, to_dict
+from pandion.cost import cost as _cost
 from pandion.embedding_cache import EmbeddingCache
-from pandion.executor import NodeResult, NodeStatus, RunResult, run
+from pandion.executor import NodeResult, RunResult, run
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -99,13 +100,23 @@ class IndexReport:
     documents: dict[str, DocumentReport]
     index: StageResult | None
 
-    @property
-    def ok(self) -> bool:
-        """Every step that was asked for ran or came from the cache."""
+    def _steps(self) -> list[StageResult]:
         steps = [s for d in self.documents.values() for s in d.stages.values()]
         if self.index is not None:
             steps.append(self.index)
-        return all(s.status in ("executed", "cached") for s in steps)
+        return steps
+
+    @property
+    def ok(self) -> bool:
+        """Every step that was asked for ran or came from the cache."""
+        return all(s.status in ("executed", "cached") for s in self._steps())
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of this
+        run's steps; see `pandion.cost.cost`. `prices` replaces
+        `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
+        per million output tokens)}."""
+        return _cost(self._steps(), prices)
 
 
 @dataclass
@@ -129,17 +140,32 @@ class Retrieval:
     rewrite), "search", and "rerank", a list with one entry per reranker in
     order. `index` is the index step the search read. A step that fails is
     reported, not raised; the steps after it are skipped and `hits` is empty.
+    `upstream` holds the document steps (source, parse, clean, chunk) that
+    ran or came from the cache on the way to the index, without their
+    outputs. It is only read by `cost()`.
     """
 
     stages: dict[str, Any]
     index: StageResult
+    upstream: list[StageResult] = field(default_factory=list, repr=False)
 
     def _steps(self) -> list[StageResult]:
         return [self.index, self.stages["rewrite"], self.stages["search"], *self.stages["rerank"]]
 
+    def _costed(self) -> list[StageResult]:
+        """Every step that `cost()` counts: the report's own and the upstream ones."""
+        return [*self.upstream, *self._steps()]
+
     @property
     def ok(self) -> bool:
         return all(s.status in ("executed", "cached") for s in self._steps())
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of this
+        run's steps; see `pandion.cost.cost`. `prices` replaces
+        `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
+        per million output tokens)}."""
+        return _cost(self._costed(), prices)
 
     @property
     def result(self) -> RetrievalResult | None:
@@ -175,6 +201,13 @@ class Answer:
     @property
     def ok(self) -> bool:
         return self.retrieval.ok and self.answer.status in ("executed", "cached")
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of this
+        run's steps; see `pandion.cost.cost`. `prices` replaces
+        `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
+        per million output tokens)}."""
+        return _cost([*self.retrieval._costed(), self.answer], prices)
 
     @property
     def hits(self) -> list[Hit]:
@@ -755,9 +788,10 @@ class IndexPipeline:
             duration_ms=done.duration_ms,
             note=artifact.meta.get("note") if artifact else None,
             error=done.error,
-            # Only a step that ran now used tokens now: a cached step's stored
-            # meta holds the usage of the run that made it.
-            usage=artifact.meta.get("usage") if done.status is NodeStatus.EXECUTED else None,
+            # What the step used in this run: kept for a failed step too, and
+            # None for a cached one, whose stored meta holds the usage of the
+            # run that made it.
+            usage=done.usage,
         )
 
 
@@ -903,7 +937,32 @@ class RetrievalPipeline:
                 ],
             },
             index=stage_result("index"),
+            upstream=_upstream(graph, result),
         )
+
+
+#: The node ids a retrieval or an answer reports on its own.
+_REPORTED = ("index", "rewrite", "search", "answer")
+
+
+def _upstream(graph: Graph, result: RunResult) -> list[StageResult]:
+    """The other steps that ran or came from the cache, for `cost()` only:
+    status, time, usage and id, with no output read back from the store."""
+    out = []
+    for node in graph.nodes:
+        done = result.nodes[node.id]
+        if node.id in _REPORTED or node.id.startswith("rerank.") or done.status not in ("executed", "cached", "failed"):
+            continue
+        out.append(StageResult(
+            stage=node.id.split("::")[-1].split(".")[0],
+            transform=node.transform,
+            output=None,
+            status=str(done.status),
+            artifact_id=done.artifact.id if done.artifact else None,
+            duration_ms=done.duration_ms,
+            usage=done.usage,
+        ))
+    return out
 
 
 class QueryPipeline:

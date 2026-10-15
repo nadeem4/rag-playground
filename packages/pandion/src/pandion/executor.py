@@ -58,6 +58,10 @@ class NodeResult:
     artifact: Artifact | None = None
     error: str | None = None
     duration_ms: float = 0.0
+    #: What the node's model call used in this run, from `set_usage`: kept for
+    #: an executed node and for a failed one, so a failed run never looks free.
+    #: None for a cached node, which called nothing this time.
+    usage: dict[str, Any] | None = None
 
 
 @dataclass
@@ -148,7 +152,7 @@ def run(
             )
         return hashlib.sha256(f"{aid}\x00{written}".encode("utf-8")).hexdigest()
 
-    def failed(nid: str, started: float) -> None:
+    def failed(nid: str, started: float, usage: dict[str, Any] | None = None) -> None:
         broken.add(nid)
         err = traceback.format_exc()
         result.nodes[nid] = NodeResult(
@@ -156,8 +160,10 @@ def run(
             NodeStatus.FAILED,
             error=err,
             duration_ms=(time.perf_counter() - started) * 1000,
+            usage=usage,
         )
-        emit(event("node_failed", node_id=nid, error=err))
+        # A step that fails after its model call was still billed for it.
+        emit(event("node_failed", node_id=nid, error=err, usage=usage))
 
     for nid in resolved.order:
         if nid not in selected:
@@ -246,7 +252,7 @@ def run(
         try:
             payload = instance.apply(call_inputs, config, ctx)
         except Exception:
-            failed(nid, started)
+            failed(nid, started, ctx.extras.get("meta", {}).get("usage"))
             continue
 
         # Transform-supplied meta is merged *under* the built-ins: the spread
@@ -276,6 +282,7 @@ def run(
             NodeStatus.EXECUTED,
             artifact,
             duration_ms=(time.perf_counter() - started) * 1000,
+            usage=artifact.meta.get("usage"),
         )
         emit(
             event(
@@ -284,7 +291,7 @@ def run(
                 artifact_id=aid,
                 cache_hit=False,
                 duration_ms=result.nodes[nid].duration_ms,
-                usage=artifact.meta.get("usage"),
+                usage=result.nodes[nid].usage,
             )
         )
 

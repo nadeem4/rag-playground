@@ -248,10 +248,39 @@ def parse_vary(text: str, config: dict[str, Any]) -> tuple[str, list[Any]]:
     return stage, variants
 
 
+def cost_line(cost: dict[str, Any]) -> str:
+    """A report's `cost()` as one line. A part that is unknown is left out, never shown as 0."""
+    head = [f"{cost['seconds']:.2f} s"]
+    counts = [
+        f"{cost[key]:,} {word}"
+        for key, word in (("input_tokens", "in"), ("output_tokens", "out"))
+        if cost[key] is not None
+    ]
+    if counts:
+        head.append(" / ".join(counts) + " tokens")
+    dollars = cost["dollars"]
+    if dollars is not None:
+        amount = f"about ${dollars:.4f}" if dollars >= 0.0001 or dollars == 0 else "under $0.0001"
+        when = "your prices" if cost["prices_as_of"] == "custom" else f"prices as of {cost['prices_as_of']}"
+        head.append(f"{amount} (estimate, {when})")
+    parts = [", ".join(head)]
+    total = cost["steps_run"] + cost["steps_cached"]
+    parts.append(f"{cost['steps_cached']} of {total} steps cached")
+    if cost["unpriced_models"]:
+        parts.append("no price for " + ", ".join(cost["unpriced_models"]))
+    if cost.get("uncounted_models"):
+        parts.append("no token count for " + ", ".join(cost["uncounted_models"]))
+    return "Cost: " + "; ".join(parts)
+
+
 def cmd_eval(args: argparse.Namespace) -> int:
     p = _load(args)
     report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
-    print(json.dumps(report.to_dict(), indent=2) if args.json else report)
+    if args.json:
+        print(json.dumps({**report.to_dict(), "cost": report.cost()}, indent=2))
+    else:
+        print(report)
+        print(cost_line(report.cost()))
     return 0 if all(q.error is None for q in report.questions) else 1
 
 
@@ -262,7 +291,20 @@ def cmd_compare(args: argparse.Namespace) -> int:
         p, stage, variants, args.documents, args.questions,
         top_k=args.top_k, credentials=credentials_from_env(),
     )
-    print(json.dumps(results.to_dict(), indent=2) if args.json else results)
+    if args.json:
+        data = results.to_dict()
+        for entry, comparison in zip(data["comparisons"], results):
+            entry["cost"] = comparison.cost()
+        print(json.dumps(data, indent=2))
+    else:
+        # Each variant, followed by its cost, then the verdict.
+        for comparison in results:
+            print(comparison)
+            print("  " + cost_line(comparison.cost()))
+        whole, variants = str(results), "\n".join(str(c) for c in results)
+        verdict = whole[len(variants):].lstrip("\n") if whole.startswith(variants) else ""
+        if verdict:
+            print(verdict)
     return 0 if all(c.index.ok for c in results) else 1
 
 

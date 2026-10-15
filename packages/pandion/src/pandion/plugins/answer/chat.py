@@ -345,7 +345,10 @@ class ChatUseCase(Transform[ChatConfig]):
                 inputs, config, model, llm.key_for(model, creds), ctx.extras, public_only
             )
         # Both paths put the usage and the model id they used in the payload.
-        set_usage(ctx, out["payload"]["usage"], out["payload"]["model"])
+        requested = llm.model_name_for(
+            CHAT_MODELS[config.model], config.custom_model, config.openrouter_model
+        ) or config.model
+        set_usage(ctx, out["payload"]["usage"], out["payload"]["model"], requested)
         return out
 
 
@@ -512,7 +515,9 @@ def _sentence_ids(
 
     payload: dict[str, Any] = {
         "question": question,
-        "model": llm.model_name_for(model, config.custom_model, config.openrouter_model)
+        # The id the server says it used, else the one sent.
+        "model": completion.model
+        or llm.model_name_for(model, config.custom_model, config.openrouter_model)
         or model.id,
         "provider": model.provider,
         "citation_method": "sentence_ids",

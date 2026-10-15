@@ -268,6 +268,8 @@ def cost_line(cost: dict[str, Any]) -> str:
     parts.append(f"{cost['steps_cached']} of {total} steps cached")
     if cost["unpriced_models"]:
         parts.append("no price for " + ", ".join(cost["unpriced_models"]))
+    if cost.get("uncounted_models"):
+        parts.append("no token count for " + ", ".join(cost["uncounted_models"]))
     return "Cost: " + "; ".join(parts)
 
 
@@ -295,13 +297,14 @@ def cmd_compare(args: argparse.Namespace) -> int:
             entry["cost"] = comparison.cost()
         print(json.dumps(data, indent=2))
     else:
-        # One line per variant, each followed by its cost, then the verdict.
-        lines = str(results).splitlines()
-        for line, comparison in zip(lines, results):
-            print(line)
+        # Each variant, followed by its cost, then the verdict.
+        for comparison in results:
+            print(comparison)
             print("  " + cost_line(comparison.cost()))
-        for line in lines[len(results):]:
-            print(line)
+        whole, variants = str(results), "\n".join(str(c) for c in results)
+        verdict = whole[len(variants):].lstrip("\n") if whole.startswith(variants) else ""
+        if verdict:
+            print(verdict)
     return 0 if all(c.index.ok for c in results) else 1
 
 

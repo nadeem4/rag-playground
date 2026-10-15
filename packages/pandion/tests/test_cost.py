@@ -77,6 +77,7 @@ def test_a_fixed_price_table_gives_exact_dollars():
         # 1000 * 2 + 200 * 10 + 2000 * 1 + 100 * 5, per million
         "dollars": pytest.approx(0.0065),
         "unpriced_models": [],
+        "uncounted_models": [],
         "steps_run": 3,
         "steps_cached": 2,
         "prices_as_of": "custom",
@@ -303,3 +304,85 @@ def test_without_a_served_model_the_requested_id_is_recorded(tmp_path, monkeypat
 
     result = pandion.rewrite(QUESTION, use="llm_rewrite", model="gpt-6-astra", credentials=CREDS)
     assert result.usage["model"] == "gpt-6-astra"
+
+
+# -- review fixes -------------------------------------------------------------------------------
+
+
+def test_set_usage_records_the_requested_id_when_the_server_used_another(tmp_path):
+    from test_usage import ctx
+
+    run_ctx = ctx(tmp_path)
+    set_usage(run_ctx, {"input_tokens": 1, "output_tokens": 1}, "claude-haiku-4-5-20251001",
+              requested_model="claude-haiku-4-5")
+    assert run_ctx.extras["meta"]["usage"]["requested_model"] == "claude-haiku-4-5"
+    same = ctx(tmp_path)
+    set_usage(same, {"input_tokens": 1, "output_tokens": 1}, "m", requested_model="m")
+    assert "requested_model" not in same.extras["meta"]["usage"]
+
+
+@pytest.mark.parametrize(
+    ("served", "requested", "priced_as"),
+    [
+        ("claude-haiku-4-5-20251001", None, "claude-haiku-4-5"),
+        ("gpt-5.6-sol-2026-08-06", None, "gpt-5.6-sol"),
+        ("some-snapshot-name", "gpt-5.6-luna", "gpt-5.6-luna"),
+    ],
+)
+def test_a_dated_or_renamed_served_id_is_priced_as_the_model_asked_for(served, requested, priced_as):
+    usage = {**use(served, 1_000_000, 0), **({"requested_model": requested} if requested else {})}
+    cost = retrieval(step(usage=usage)).cost()
+    assert cost["unpriced_models"] == []
+    assert cost["dollars"] == pytest.approx(PRICES[priced_as][0])
+
+
+def test_the_model_steps_record_the_requested_id_beside_the_served_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        llm, "complete",
+        lambda model, **kw: Completion(text="capital France", usage={"input_tokens": 5, "output_tokens": 2},
+                                       stop_reason="stop", model="gpt-6-astra-2026-09-01"),
+    )
+    import pandion
+
+    result = pandion.rewrite(QUESTION, use="llm_rewrite", model="gpt-6-astra", credentials=CREDS)
+    assert result.usage["model"] == "gpt-6-astra-2026-09-01"
+    assert result.usage["requested_model"] == "gpt-6-astra"
+
+
+def test_a_priced_model_with_a_missing_count_is_uncounted_not_unpriced():
+    r = retrieval(
+        step(usage=use("model-a", 100, None)),
+        step(usage={"input_tokens": 5, "output_tokens": 5, "model": None}),
+    )
+    cost = r.cost(prices=TABLE)
+    assert cost["uncounted_models"] == ["model-a"]
+    assert cost["unpriced_models"] == []
+    assert cost["dollars"] is None
+
+
+def test_a_cold_retrieval_counts_the_indexing_it_did_on_the_way(tmp_path):
+    p = built(tmp_path, "retrieve:\n  search: {use: bm25}\n")
+    docs = tmp_path / "docs"
+    cold = p.retrieve(QUESTION, documents=docs, force=True)
+    cost = cold.cost()
+    upstream = [s for s in cold.upstream if s.stage in ("parse", "chunk")]
+    assert upstream and all(s.status == "executed" for s in upstream)
+    assert cost["steps_run"] >= len(cold._steps()) + len(upstream)
+    assert cost["seconds"] >= sum(s.duration_ms for s in upstream) / 1000
+    warm = p.retrieve(QUESTION, documents=docs)
+    assert warm.cost()["steps_cached"] >= len(upstream)
+    assert warm.ok and "upstream" not in repr(warm)
+
+
+def test_each_cached_step_counts_once_across_a_report():
+    index = step("cached", stage="index")
+    index.artifact_id = "a" * 64
+    rerank = step(ms=100, usage=use("model-a", 10, 1))
+    question = QuestionResult(
+        id="q", question="?", golds=[], tags=[], found=True, rank=1, lost_at=None,
+        trace=None, score={}, retrieval=retrieval(rerank, index=index),
+    )
+    cost = EvaluationReport(top_k=5, questions=[question, question, question]).cost(prices=TABLE)
+    # rewrite and search have no artifact id, so they count each time; the index once.
+    assert cost["steps_cached"] == 2 * 3 + 1
+    assert cost["steps_run"] == 3

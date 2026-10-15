@@ -248,6 +248,7 @@ class LlmRerank(Transform[LlmRerankConfig]):
             ctx,
             completion.usage,
             completion.model or model_name or model.id,
+            requested_model=model_name or model.id,
         )
 
         reply = "" if completion.stop_reason == "refusal" else completion.text

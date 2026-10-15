@@ -140,13 +140,21 @@ class Retrieval:
     rewrite), "search", and "rerank", a list with one entry per reranker in
     order. `index` is the index step the search read. A step that fails is
     reported, not raised; the steps after it are skipped and `hits` is empty.
+    `upstream` holds the document steps (source, parse, clean, chunk) that
+    ran or came from the cache on the way to the index, without their
+    outputs. It is only read by `cost()`.
     """
 
     stages: dict[str, Any]
     index: StageResult
+    upstream: list[StageResult] = field(default_factory=list, repr=False)
 
     def _steps(self) -> list[StageResult]:
         return [self.index, self.stages["rewrite"], self.stages["search"], *self.stages["rerank"]]
+
+    def _costed(self) -> list[StageResult]:
+        """Every step that `cost()` counts: the report's own and the upstream ones."""
+        return [*self.upstream, *self._steps()]
 
     @property
     def ok(self) -> bool:
@@ -157,7 +165,7 @@ class Retrieval:
         run's steps; see `pandion.cost.cost`. `prices` replaces
         `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
         per million output tokens)}."""
-        return _cost(self._steps(), prices)
+        return _cost(self._costed(), prices)
 
     @property
     def result(self) -> RetrievalResult | None:
@@ -199,7 +207,7 @@ class Answer:
         run's steps; see `pandion.cost.cost`. `prices` replaces
         `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
         per million output tokens)}."""
-        return _cost([*self.retrieval._steps(), self.answer], prices)
+        return _cost([*self.retrieval._costed(), self.answer], prices)
 
     @property
     def hits(self) -> list[Hit]:
@@ -929,7 +937,32 @@ class RetrievalPipeline:
                 ],
             },
             index=stage_result("index"),
+            upstream=_upstream(graph, result),
         )
+
+
+#: The node ids a retrieval or an answer reports on its own.
+_REPORTED = ("index", "rewrite", "search", "answer")
+
+
+def _upstream(graph: Graph, result: RunResult) -> list[StageResult]:
+    """The other steps that ran or came from the cache, for `cost()` only:
+    status, time, usage and id, with no output read back from the store."""
+    out = []
+    for node in graph.nodes:
+        done = result.nodes[node.id]
+        if node.id in _REPORTED or node.id.startswith("rerank.") or done.status not in ("executed", "cached", "failed"):
+            continue
+        out.append(StageResult(
+            stage=node.id.split("::")[-1].split(".")[0],
+            transform=node.transform,
+            output=None,
+            status=str(done.status),
+            artifact_id=done.artifact.id if done.artifact else None,
+            duration_ms=done.duration_ms,
+            usage=done.usage,
+        ))
+    return out
 
 
 class QueryPipeline:

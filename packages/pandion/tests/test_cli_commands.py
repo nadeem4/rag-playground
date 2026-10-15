@@ -142,6 +142,8 @@ def test_compare_varies_one_setting_and_names_the_best(with_questions):
     assert "chunk recursive_character chunk_size=70" in out.stdout
     assert "chunk recursive_character chunk_size=200" in out.stdout
     assert "Best:" in out.stdout or "No variant found an answer." in out.stdout
+    cost_lines = [l for l in out.stdout.splitlines() if l.startswith("  Cost: ")]
+    assert len(cost_lines) == 2 and all("steps cached" in l for l in cost_lines)
 
 
 def test_compare_without_questions_shows_each_variants_step(with_questions):

@@ -26,6 +26,7 @@ FULL = {
     "output_tokens": 412,
     "dollars": 0.00412,
     "unpriced_models": ["openrouter/auto"],
+    "uncounted_models": [],
     "steps_run": 5,
     "steps_cached": 2,
     "prices_as_of": "2026-10-15",
@@ -37,6 +38,7 @@ LOCAL = {
     "output_tokens": None,
     "dollars": None,
     "unpriced_models": [],
+    "uncounted_models": [],
     "steps_run": 3,
     "steps_cached": 4,
     "prices_as_of": "2026-10-15",
@@ -99,6 +101,11 @@ def config(tmp_path: Path) -> str:
     return str(path)
 
 
+def test_a_missing_count_is_said_as_such():
+    cost = {**LOCAL, "input_tokens": 12, "uncounted_models": ["gpt-6-astra"]}
+    assert cli.cost_line(cost) == "Cost: 0.50 s, 12 in tokens; 4 of 7 steps cached; no token count for gpt-6-astra"
+
+
 def test_eval_prints_the_cost_line_after_the_report(config, monkeypatch, capsys):
     monkeypatch.setattr(cli.pandion, "evaluate", lambda *a, **kw: FakeReport())
     assert cli.main(["eval", config, "q.json"]) == 0
@@ -136,3 +143,17 @@ def test_compare_json_holds_each_variants_cost(config, monkeypatch, capsys):
     cli.main(["compare", config, "--vary", "chunk.chunk_size=70,200", "docs", "--json"])
     data = json.loads(capsys.readouterr().out)
     assert [c["cost"] for c in data["comparisons"]] == [FULL, LOCAL]
+
+
+def test_compare_keeps_each_cost_line_under_a_variant_that_prints_two_lines(config, monkeypatch, capsys):
+    two = FakeComparison("a\nb", FULL)
+    results = FakeComparisons([two, FakeComparison("200", LOCAL)])
+    monkeypatch.setattr(cli.pandion, "compare", lambda *a, **kw: results)
+    cli.main(["compare", config, "--vary", "chunk.chunk_size=70,200", "docs"])
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "chunk recursive_character chunk_size=a"
+    assert out[1] == "b: found 1 of 1"
+    assert out[2].startswith("  Cost: 1.84 s")
+    assert out[3] == "chunk recursive_character chunk_size=200: found 1 of 1"
+    assert out[4].startswith("  Cost: 0.50 s")
+    assert out[5] == "Best: chunk_size=70, found 1 of 1."

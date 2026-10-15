@@ -345,7 +345,10 @@ class ChatUseCase(Transform[ChatConfig]):
                 inputs, config, model, llm.key_for(model, creds), ctx.extras, public_only
             )
         # Both paths put the usage and the model id they used in the payload.
-        set_usage(ctx, out["payload"]["usage"], out["payload"]["model"])
+        requested = llm.model_name_for(
+            CHAT_MODELS[config.model], config.custom_model, config.openrouter_model
+        ) or config.model
+        set_usage(ctx, out["payload"]["usage"], out["payload"]["model"], requested)
         return out
 
 

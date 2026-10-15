@@ -145,7 +145,7 @@ class EvaluationReport:
         return sum(q.found for q in self.questions)
 
     def _steps(self) -> list[StageResult]:
-        return [s for q in self.questions if q.retrieval is not None for s in q.retrieval._steps()]
+        return [s for q in self.questions if q.retrieval is not None for s in q.retrieval._costed()]
 
     def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
         """Seconds, tokens, estimated dollars and the cache share of every

@@ -110,18 +110,28 @@ def set_note(ctx: RunContext | None, text: str) -> None:
     ctx.extras.setdefault("meta", {})["note"] = text
 
 
-def set_usage(ctx: RunContext | None, usage: Mapping[str, int | None], model: str) -> None:
+def set_usage(
+    ctx: RunContext | None,
+    usage: Mapping[str, int | None],
+    model: str,
+    requested_model: str | None = None,
+) -> None:
     """Record the tokens one model call used, and the model id it went to.
 
     It lands in `ctx.extras["meta"]["usage"]` as `{"input_tokens",
     "output_tokens", "model"}`. A count the server did not send stays None,
-    never 0, so a missing count is never read as a free call. A `None` ctx is
-    tolerated, as with `set_note`.
+    never 0, so a missing count is never read as a free call. When the id
+    that was sent (`requested_model`) differs from the one the server says
+    it used (`model`), it is kept as `requested_model`, so a dated or routed
+    id can still be priced. A `None` ctx is tolerated, as with `set_note`.
     """
     if ctx is None:
         return
-    ctx.extras.setdefault("meta", {})["usage"] = {
+    recorded: dict[str, Any] = {
         "input_tokens": usage.get("input_tokens"),
         "output_tokens": usage.get("output_tokens"),
         "model": model,
     }
+    if requested_model and requested_model != model:
+        recorded["requested_model"] = requested_model
+    ctx.extras.setdefault("meta", {})["usage"] = recorded

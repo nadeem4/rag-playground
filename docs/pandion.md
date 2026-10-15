@@ -643,7 +643,7 @@ about what that cost.
 answer = p.ask("How big should a chunk be?", credentials=keys)
 answer.cost()
 # {"seconds": 1.84, "input_tokens": 2310, "output_tokens": 412, "dollars": 0.0041,
-#  "unpriced_models": [], "steps_run": 5, "steps_cached": 2, "prices_as_of": "2026-10-15"}
+#  "unpriced_models": [], "uncounted_models": [], "steps_run": 5, "steps_cached": 2, "prices_as_of": "2026-10-15"}
 ```
 
 - `seconds` is the time of the steps that ran in this run, including a step that failed.
@@ -654,14 +654,22 @@ answer.cost()
   could be priced.
 - `unpriced_models` lists the model ids that used tokens but have no price, such as an
   OpenRouter model or a custom endpoint. Their cost is unknown, so it is never counted
-  as 0.
+  as 0. A model is found in the table by the id the server reported, then by that id
+  without a date at the end (`claude-haiku-4-5-20251001` is priced as
+  `claude-haiku-4-5`), then by the id that was sent.
+- `uncounted_models` lists priced models whose server did not report both token counts,
+  so their calls could not be priced either.
 - `steps_run` counts the steps that ran in this run, and `steps_cached` the steps that
-  came from the cache. A cached step takes almost no time and uses no tokens, so a run
+  came from the cache. Each cached step is counted once per report, even when every
+  question of an evaluation read the same stored index. A cached step takes almost no time and uses no tokens, so a run
   that reused the cache looks fast and cheap. The two counts show how much of it did.
 - `prices_as_of` is the date of the price table, or `"custom"` when you passed your own.
 
 Only steps that ran in this run count. A step that failed after its model call still
-counts, with the tokens it recorded, so a failed run never looks free.
+counts, with the tokens it recorded, so a failed run never looks free. A search or an
+answer also counts the document steps (parse, clean, chunk) it ran or read from the cache
+on the way to the index. They are kept in `Retrieval.upstream`, without their outputs,
+and only `cost()` reads them.
 
 The prices are in `pandion.llm.PRICES`: US dollars per million input tokens and per
 million output tokens, for each Anthropic and OpenAI model Pandion offers, taken from
@@ -1163,7 +1171,8 @@ Cost: 1.84 s, 2,310 in / 412 out tokens, about $0.0041 (estimate, prices as of 2
 ```
 
 A part that is unknown is left out rather than shown as 0: a pipeline with no model step
-shows only the time and the cached steps. `--json` prints the report's `to_dict()`
+shows only the time and the cached steps. A priced model whose server sent no token count
+is named as "no token count for ...". `--json` prints the report's `to_dict()`
 instead, with the `cost()` dict under `"cost"`. It exits with 1 when a question could not
 be scored.
 
@@ -1450,10 +1459,12 @@ example a cleaner saying how many blocks it removed. The note is shown with the 
 result, as `StageResult.note`.
 
 A step that calls a model can record what the call used with
-`set_usage(ctx, usage, model)`. `usage` is `{"input_tokens": ..., "output_tokens": ...}`
-and `model` is the model id the call went to. Leave a count as None when the server did
-not send it. Pass the model id the server reports when it gives one
-(`pandion.llm.complete` returns it as `Completion.model`). The usage is shown with the
+`set_usage(ctx, usage, model, requested_model=None)`. `usage` is
+`{"input_tokens": ..., "output_tokens": ...}` and `model` is the model id the call went
+to. Leave a count as None when the server did not send it. Pass the model id the server
+reports when it gives one (`pandion.llm.complete` returns it as `Completion.model`), and
+the id you sent as `requested_model`. When the two differ, the usage keeps both, so
+`cost()` can still find a price. The usage is shown with the
 step's result, as `StageResult.usage`, and in its `node_finished` event, or its
 `node_failed` event when the step raises after recording it. A cached run of the step
 shows None, since it called no model.

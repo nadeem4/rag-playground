@@ -21,6 +21,7 @@ from pandion.registry import registry
 
 RERANKERS = ["mmr", "cross_encoder", "llm_rerank"]
 MINILM = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+BGE = "BAAI/bge-reranker-v2-m3"
 
 
 @pytest.mark.parametrize("name", RERANKERS)
@@ -45,14 +46,31 @@ def test_the_old_module_is_gone(module):
 # -- warm-up ---------------------------------------------------------------------
 
 
-def test_warm_up_loads_the_default_cross_encoder_on_the_cpu(monkeypatch):
+def test_warm_up_loads_the_default_cross_encoder_then_bge_on_the_cpu(monkeypatch):
     import pandion.plugins.rerank.cross_encoder as ce
 
     loaded: list = []
     monkeypatch.setattr(ce, "_load", lambda model_id, settings=None: loaded.append((model_id, settings)))
     warmup._warm_reranker()
-    assert loaded == [(MINILM, APP_MODELS)]
+    assert loaded == [(MINILM, APP_MODELS), (BGE, APP_MODELS)]
     assert APP_MODELS.device == "cpu"
+
+
+def test_a_failed_default_cross_encoder_still_warms_bge(monkeypatch, caplog):
+    import pandion.plugins.rerank.cross_encoder as ce
+
+    loaded: list = []
+
+    def load(model_id, settings=None):
+        if model_id == MINILM:
+            raise OSError("no network")
+        loaded.append(model_id)
+
+    monkeypatch.setattr(ce, "_load", load)
+    with caplog.at_level(logging.ERROR):
+        warmup._warm_reranker()
+    assert loaded == [BGE]
+    assert "no network" in caplog.text
 
 
 def test_a_failed_cross_encoder_download_is_logged_not_raised(monkeypatch, caplog):

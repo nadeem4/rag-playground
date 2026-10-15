@@ -117,7 +117,7 @@ def _cap(key: str, props: dict[str, Any]) -> int | None:
 
 def demo_limited(config: dict[str, Any]) -> list[dict[str, Any]]:
     """The settings in `config` the hosted demo held back: each one set to its
-    cap where the cap is not the setting's default, as `{setting, value, cap}`.
+    cap exactly, where the cap is not the setting's default (a value over it is refused, not held back), as `{setting, value, cap}`.
     A visitor who wanted more could not have it, so a project taken home says
     so. Empty locally, and when nothing reached a cap."""
     if not demo.enabled():
@@ -129,7 +129,7 @@ def demo_limited(config: dict[str, Any]) -> list[dict[str, Any]]:
         for key, value in settings.items():
             cap = _cap(key, props)
             number = _as_int(value) if cap is not None else None
-            if number is not None and number >= cap and number != props[key].get("default"):
+            if number is not None and number == cap and number != props[key].get("default"):
                 found.append({"setting": f"{where}.{key}", "value": number, "cap": cap})
     return found
 

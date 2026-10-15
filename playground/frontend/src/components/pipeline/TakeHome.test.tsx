@@ -5,7 +5,7 @@ import registryFixture from "@/api/fixtures/registry.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry } from "@/api/types"
 import { graphToConfig } from "@/state/config"
-import { pipelineSteps, storePreviousEvaluation } from "@/state/evaluate"
+import { questionsKey, storePreviousEvaluation, type PreviousEvaluation } from "@/state/evaluate"
 import { sampleGraph } from "@/state/graph"
 
 import { TakeHome } from "./TakeHome"
@@ -39,6 +39,7 @@ let storedSet: unknown
 let zipStatus: number
 let calls: { url: string; body: Body }[]
 let samples: unknown[]
+let maxQuestions: number | null
 
 /** The server's preview: questions.json only when questions were sent, the scores in the README only when sent. */
 function preview(body: Body) {
@@ -50,7 +51,7 @@ function preview(body: Body) {
     "docs/.gitkeep": "",
   }
   if (body.questions) files["questions.json"] = "{}"
-  return { filename: "my-pipeline.zip", files, limited, keys }
+  return { filename: "my-pipeline.zip", files, limited, keys, max_questions: maxQuestions }
 }
 
 beforeEach(() => {
@@ -62,6 +63,7 @@ beforeEach(() => {
   zipStatus = 200
   calls = []
   samples = []
+  maxQuestions = null
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -89,14 +91,19 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function scored() {
+const CONFIG = (graphToConfig(graph) as { ok: true; pipeline: { config: Record<string, unknown> } }).pipeline.config
+
+/** An Evaluate result for this pipeline and set, at Pandion's default top k, unless `change` says otherwise. */
+function scored(change: Partial<PreviousEvaluation> = {}) {
   storePreviousEvaluation({
     sourceSha: SHA,
     pipelineKey: "working",
     byId: {},
     totals: { total: 3, scored: 3, found: 2, hit_rate: 0.67, mrr: 0.5, recall: null, mean_rank: null, median_rank: null },
-    steps: pipelineSteps(graph),
+    config: CONFIG,
+    questions: questionsKey(STORED.set.questions),
     k: 5,
+    ...change,
   })
 }
 
@@ -139,7 +146,9 @@ describe("TakeHome", () => {
 
     expect(within(out).getByText("report.pdf")).toBeTruthy()
     expect(within(out).getByText("Anthropic key")).toBeTruthy()
+    expect(out.textContent).toContain("Keys are never written to a file, so the zip only names the variable to set.")
     expect(out.textContent).toContain("ANTHROPIC_API_KEY")
+    expect(out.textContent).not.toContain("never leave")
     expect(within(out).getByText("Saved index")).toBeTruthy()
   })
 
@@ -150,6 +159,7 @@ describe("TakeHome", () => {
 
     expect(out.textContent).toContain("This pipeline needs no key.")
     expect(out.textContent).not.toContain("_API_KEY")
+    expect(within(out).queryByText("API key")).toBeNull()
   })
 
   it("offers the questions and the scores, and unticking either changes the files", async () => {
@@ -196,26 +206,38 @@ describe("TakeHome", () => {
     ])
   })
 
-  it("shows no scores for a result of another pipeline", async () => {
-    storePreviousEvaluation({
-      sourceSha: SHA,
-      pipelineKey: "working",
-      byId: {},
-      totals: { total: 3, scored: 3, found: 3, hit_rate: 1, mrr: 1, recall: null, mean_rank: null, median_rank: null },
-      steps: [{ label: "Parse", transform: "docling", name: "Docling", config: "{}" }],
-      k: 5,
-    })
+  it.each([
+    ["another top k", { k: 10 }],
+    ["no top k", { k: undefined }],
+    ["another pipeline", { config: { ...CONFIG, retrieve: { ...(CONFIG.retrieve as object), rewrite: { use: "llm_rewrite" } } } }],
+    ["an older entry with no pipeline", { config: undefined }],
+    ["another question text", { questions: questionsKey(STORED.set.questions.map((q, i) => (i ? q : { ...q, question: "Changed?" }))) }],
+    ["another gold passage", { questions: questionsKey(STORED.set.questions.map((q, i) => (i ? q : { ...q, gold_answers: ["y"] }))) }],
+  ] as [string, Partial<PreviousEvaluation>][])("shows no scores for a result with %s", async (_, change) => {
+    scored(change)
     const sheet = await open()
 
     await within(sheet).findByRole("checkbox", { name: /Your 3 questions/ })
     expect(within(sheet).queryByRole("checkbox", { name: /Scores to beat/ })).toBeNull()
   })
 
+  it("over the demo's question cap, offers the questions unticked and disabled, and packs none", async () => {
+    maxQuestions = 2
+    const sheet = await open()
+
+    const box = await within(sheet).findByRole("checkbox", { name: /Your 3 questions/ })
+    expect((box as HTMLInputElement).checked).toBe(false)
+    expect((box as HTMLInputElement).disabled).toBe(true)
+    expect(sheet.textContent).toContain("The demo packs at most 2 questions.")
+    expect(calls.every((c) => c.body.questions === undefined)).toBe(true)
+    expect(within(sheet).getByRole("button", { name: "Download my-pipeline.zip" }).hasAttribute("disabled")).toBe(false)
+  })
+
   it("shows the server's demo-limited note", async () => {
     limited = [{ setting: "retrieve.rerank.1.text_budget_chars", value: 2400, cap: 2400 }]
     const sheet = await open()
 
-    expect(sheet.textContent).toContain("Settings this demo limited.")
+    expect(sheet.textContent).toContain("Settings at the demo's cap.")
     expect(sheet.textContent).toContain("retrieve.rerank.1.text_budget_chars")
   })
 

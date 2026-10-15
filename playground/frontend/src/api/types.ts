@@ -894,4 +894,6 @@ export interface ProjectPreview {
   limited: { setting: string; value: number; cap: number }[]
   /** The environment variable of each key the pipeline reads; optional for a custom endpoint. */
   keys: { variable: string; optional: boolean }[]
+  /** The most questions a project may hold (the demo's cap); null for no cap. */
+  max_questions: number | null
 }

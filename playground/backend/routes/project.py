@@ -29,6 +29,7 @@ from pandion_api.credentials import PROVIDERS
 from pandion_api.pipelines import NOT_A_MAPPING, YAML_PATH
 from pandion_api.routes.questions import MAX_GOLDS, MAX_QUESTIONS, MAX_SET_BYTES
 
+from playground.backend import demo
 from playground.backend.policy import demo_limited, scrub_paths
 
 router = APIRouter()
@@ -36,6 +37,8 @@ router = APIRouter()
 #: The most a request may be: a question set at its own cap, with room for the pipeline.
 MAX_BODY_BYTES = 2 * MAX_SET_BYTES
 TOO_BIG = "The request is larger than 2 MB. Take home a smaller question set."
+#: The 400 for a pipeline whose parts are not in the file's shape, such as a list where a mapping goes.
+MALFORMED = "The pipeline is not in the pipeline file's shape, so it cannot be packed. Check it with Copy as YAML."
 #: The scores line is display text: it is cut to this many characters.
 MAX_SCORES_CHARS = 200
 #: The zip's name when the pipeline has none that makes a file name.
@@ -117,8 +120,27 @@ def _questions(questions: list[dict[str, Any]] | dict[str, Any], request: Reques
         )
     except QuestionSetError as exc:
         raise HTTPException(status_code=400, detail=f"The question set cannot be used: {str(exc).rstrip('.')}.") from None
-    request.app.state.policy.check_question_count("evaluation", len(parsed["questions"]), request)
+    count = len(parsed["questions"])
+    try:
+        request.app.state.policy.check_question_count("evaluation", count, request)
+    except HTTPException as exc:
+        if exc.status_code != 413:
+            raise
+        raise HTTPException(status_code=413, detail=too_many(count)) from None
     return {"version": parsed["version"], "document": parsed["document"], "questions": parsed["questions"]}
+
+
+def max_questions() -> int | None:
+    """The most questions a project may hold: the demo's cap on one evaluation, none locally."""
+    return demo.MAX_EVALUATION_QUESTIONS if demo.enabled() else None
+
+
+def too_many(count: int) -> str:
+    """The 413 for a set over the demo's cap, said as a take-home sentence."""
+    return (
+        f"The demo packs at most {demo.MAX_EVALUATION_QUESTIONS} questions into a project, and this set has {count}. "
+        "Leave the questions out, or run the playground locally to take them all."
+    )
 
 
 def _build(name: str, pipeline: dict[str, Any], questions: dict[str, Any] | None, extra: str) -> dict[str, str]:
@@ -168,15 +190,18 @@ async def project_zip(request: Request, preview: bool = False) -> Response:
     pipeline["path"] = YAML_PATH
     questions = await run_in_threadpool(_questions, body.questions, request) if body.questions is not None else None
     scores = " ".join(body.scores.split())[:MAX_SCORES_CHARS]
-    limited = demo_limited(pipeline)
     name = slug(body.name)
     try:
+        limited = demo_limited(pipeline)
         files = await run_in_threadpool(_build, name, pipeline, questions, _extra(limited, scores))
+        keys = _keys(pipeline) if preview else []
     except ValueError as exc:  # ConfigError is a ValueError, and so is new_project's own refusal
         raise HTTPException(status_code=400, detail=scrub_paths(str(exc), data_dir)) from None
+    except (TypeError, AttributeError):  # a part of the pipeline that is not in the file's shape
+        raise HTTPException(status_code=400, detail=MALFORMED) from None
     filename = f"{name}.zip"
     if preview:
-        body_json = {"filename": filename, "files": files, "limited": limited, "keys": _keys(pipeline)}
+        body_json = {"filename": filename, "files": files, "limited": limited, "keys": keys, "max_questions": max_questions()}
         return Response(json.dumps(body_json), media_type="application/json")
     return Response(
         _zip(name, files),

@@ -12,6 +12,7 @@ import {
   plainTrace,
   pipelineLine,
   pipelineSteps,
+  questionsKey,
   readPreviousEvaluation,
   reasonText,
   rerankEffect,
@@ -312,6 +313,22 @@ describe("the previous evaluation of the session", () => {
       }),
     )
     expect(readPreviousEvaluation("s", "working")).toBeNull()
+  })
+
+  it("keeps the pipeline config and the question set it was scored with", () => {
+    const config = { index: { parse: { use: "pdfium" } } }
+    const questions = questionsKey([{ id: "q1", question: "One?", gold_answers: ["one"] }])
+    storePreviousEvaluation({ sourceSha: "s", pipelineKey: "working", byId: {}, totals: T(1, 2), config, questions })
+    expect(readPreviousEvaluation("s", "working")?.config).toEqual(config)
+    expect(readPreviousEvaluation("s", "working")?.questions).toBe(questions)
+  })
+
+  it("keys a question set by each question's id, text and gold passages", () => {
+    const q = { id: "q1", question: "One?", gold_answers: ["one"] }
+    expect(questionsKey([q])).toBe(questionsKey([{ ...q, tags: ["x"] } as typeof q]))
+    expect(questionsKey([q])).not.toBe(questionsKey([{ ...q, question: "Two?" }]))
+    expect(questionsKey([q])).not.toBe(questionsKey([{ ...q, gold_answers: ["two"] }]))
+    expect(questionsKey([q])).not.toBe(questionsKey([{ ...q, id: "q2" }]))
   })
 
   it("keeps the recipe it was scored with", () => {

@@ -255,7 +255,37 @@ def test_the_question_caps_hold(client, monkeypatch):
     monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
     r = client.post(ROUTE, json={"config": config(), "questions": questions(51)})
     assert r.status_code == 413
-    assert "50 questions" in r.json()["detail"]
+    assert r.json()["detail"] == (
+        "The demo packs at most 50 questions into a project, and this set has 51. "
+        "Leave the questions out, or run the playground locally to take them all."
+    )
+
+
+def test_the_preview_says_how_many_questions_a_project_may_hold(client, monkeypatch):
+    assert client.post(f"{ROUTE}?preview=1", json={"config": config()}).json()["max_questions"] is None
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    assert client.post(f"{ROUTE}?preview=1", json={"config": config()}).json()["max_questions"] == 50
+
+
+def test_an_over_cap_setting_is_not_listed_as_limited(monkeypatch):
+    from playground.backend.policy import demo_limited
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    c = demo_config()
+    c["retrieve"]["rerank"][0]["text_budget_chars"] = 2401
+
+    assert demo_limited(c) == []
+
+
+def test_a_malformed_pipeline_is_a_plain_400(client):
+    r = client.post(ROUTE, json={"config": {**config(), "retrieve": [1]}, "name": "x"})
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"] == project.MALFORMED
+
+    r = client.post(ROUTE, json={"config": {**config(), "answer": [1]}, "name": "x"})
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"].startswith("answer must")
 
 
 def test_the_temporary_folder_is_removed(client, temp_root):

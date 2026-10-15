@@ -7,10 +7,10 @@ import type { ProjectPreview, ProjectRequest } from "@/api/types"
 import { useQuestionSet } from "@/api/useQuestionSet"
 import { SideSheet } from "@/components/SideSheet"
 import { Button } from "@/components/ui/button"
-import { graphToConfig } from "@/state/config"
+import { graphToConfig, sameConfig, type PipelineConfig } from "@/state/config"
 import { documentsOf, type DocRef } from "@/state/document"
-import { pipelineSteps, readPreviousEvaluation } from "@/state/evaluate"
-import { questionsFromSample, sampleFor } from "@/state/goldSet"
+import { questionsKey, readPreviousEvaluation } from "@/state/evaluate"
+import { questionsFromSample, questionsFromSet, sampleFor } from "@/state/goldSet"
 import type { PipelineGraph } from "@/state/graph"
 
 /** What each file in the project is for, in the order the list shows them. */
@@ -57,7 +57,7 @@ export function TakeHome({ graph, name, pipelineKey }: { graph: PipelineGraph; n
 }
 
 /** The question set Evaluate uses for this one document: an uploaded set first, else the sample's own. */
-function useHomeQuestions(doc: DocRef | null): { set: unknown; count: number; ids: string[]; from: string } | null {
+function useHomeQuestions(doc: DocRef | null): { set: unknown; count: number; key: string; from: string } | null {
   const uploaded = useQuestionSet(doc?.sha ?? "")
   const { samples } = useSamples()
   const sample = doc ? sampleFor(doc.sha, samples) : undefined
@@ -65,27 +65,37 @@ function useHomeQuestions(doc: DocRef | null): { set: unknown; count: number; id
   if (!doc || uploaded.loading) return null
   if (uploaded.set) {
     const questions = uploaded.set.set.questions
-    return { set: uploaded.set.set, count: questions.length, ids: questions.map((q) => q.id), from: `From "${uploaded.set.filename}".` }
+    return { set: uploaded.set.set, count: questions.length, key: questionsKey(questionsFromSet(uploaded.set)), from: `From "${uploaded.set.filename}".` }
   }
   if (!sample || !sampleQuestions.length) return null
   const questions = questionsFromSample(sampleQuestions).map((q) => ({ ...q, document: doc.filename }))
   return {
     set: { version: 1, document: doc.filename, questions },
     count: questions.length,
-    ids: questions.map((q) => q.id),
+    key: questionsKey(questions),
     from: "From the sample's own question set.",
   }
 }
 
-/** The Evaluate result for this exact pipeline and question set, as one line, or null. */
-function scoresToBeat(doc: DocRef | null, graph: PipelineGraph, pipelineKey: string | null, ids: string[] | null): string | null {
-  if (!doc || !ids) return null
-  const steps = JSON.stringify(pipelineSteps(graph))
-  const known = new Set(ids)
+/** The pieces run.py checks: `pandion.evaluate`'s default top k. The registry has no evaluation step to read it from. */
+export const HOME_TOP_K = 5
+
+/**
+ * The Evaluate result for this exact pipeline and question set, as one line,
+ * or null. It must be scored at the top k run.py uses, with the same pipeline
+ * config and the same questions (id, text and gold passages).
+ */
+function scoresToBeat(
+  doc: DocRef | null,
+  config: PipelineConfig | null,
+  pipelineKey: string | null,
+  questions: { key: string } | null,
+): string | null {
+  if (!doc || !config || !questions) return null
   for (const key of new Set([pipelineKey ?? "working", "working"])) {
     const p = readPreviousEvaluation(doc.sha, key)
-    if (!p || JSON.stringify(p.steps) !== steps || p.totals.total !== ids.length) continue
-    if (!Object.keys(p.byId).every((id) => known.has(id))) continue
+    if (!p || p.k !== HOME_TOP_K || !p.config || p.questions !== questions.key) continue
+    if (!sameConfig(p.config as PipelineConfig, config)) continue
     const mrr = p.totals.mrr === null ? "" : `, MRR ${p.totals.mrr.toFixed(2)}`
     return `${p.totals.found} of ${p.totals.total} found${mrr}`
   }
@@ -108,7 +118,8 @@ function TakeHomeSheet({
   // Evaluate scores one document's questions, so only a pipeline on one document takes a set home.
   const doc = documents.length === 1 ? documents[0] : null
   const questions = useHomeQuestions(doc)
-  const scores = scoresToBeat(doc, graph, pipelineKey, questions?.ids ?? null)
+  const config = made.ok ? made.pipeline.config : null
+  const scores = scoresToBeat(doc, config, pipelineKey, questions)
   const [withQuestions, setWithQuestions] = useState(true)
   const [withScores, setWithScores] = useState(true)
   const [preview, setPreview] = useState<ProjectPreview | null>(null)
@@ -117,11 +128,13 @@ function TakeHomeSheet({
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<string | null>(null)
 
-  const config = made.ok ? made.pipeline.config : null
+  // The server says how many questions a project may hold (the demo's cap); over it the set stays out.
+  const [maxQuestions, setMaxQuestions] = useState<number | null>(null)
+  const overCap = questions !== null && maxQuestions !== null && questions.count > maxQuestions
   const bodyJson = JSON.stringify({
     config,
     name,
-    ...(questions && withQuestions ? { questions: questions.set } : {}),
+    ...(questions && withQuestions && !overCap ? { questions: questions.set } : {}),
     scores: scores && withScores ? scores : "",
   })
   const body = useMemo(() => JSON.parse(bodyJson) as ProjectRequest, [bodyJson])
@@ -131,7 +144,11 @@ function TakeHomeSheet({
     let live = true
     setError(null)
     api.projectPreview(body).then(
-      (p) => live && setPreview(p),
+      (p) => {
+        if (!live) return
+        setPreview(p)
+        setMaxQuestions(p.max_questions)
+      },
       (err: unknown) => live && setError(sayError(err)),
     )
     return () => {
@@ -230,12 +247,15 @@ function TakeHomeSheet({
                 Your documents stay here. Put your own copies in <code className="font-mono">docs/</code>.
               </OutRow>
             ))}
-            {preview && preview.keys.length === 0 ? <OutRow what="API key">This pipeline needs no key.</OutRow> : null}
+            {preview && preview.keys.length === 0 ? (
+              <li className="border-b border-hairline px-2 py-2 text-xs text-fg-muted">This pipeline needs no key.</li>
+            ) : null}
             {preview?.keys.map((k) => {
               const provider = Object.values(PROVIDER_INFO).find((p) => p.env === k.variable)
               return (
                 <OutRow key={k.variable} what={`${provider?.name ?? "API"} key`}>
-                  Keys never leave this browser. Set <code className="font-mono">{k.variable}</code> on your computer
+                  Keys are never written to a file, so the zip only names the variable to set. Set{" "}
+                  <code className="font-mono">{k.variable}</code> on your computer
                   {k.optional ? " only if your server asks for a key." : "."}
                 </OutRow>
               )
@@ -252,11 +272,19 @@ function TakeHomeSheet({
           </h3>
           {questions ? (
             <label className="flex items-start gap-3 text-sm">
-              <input type="checkbox" className="mt-1 size-[14px] shrink-0 [accent-color:var(--text-primary)]" checked={withQuestions} onChange={(e) => setWithQuestions(e.target.checked)} />
+              <input
+                type="checkbox"
+                className="mt-1 size-[14px] shrink-0 [accent-color:var(--text-primary)]"
+                checked={withQuestions && !overCap}
+                disabled={overCap}
+                onChange={(e) => setWithQuestions(e.target.checked)}
+              />
               <span>
                 <strong>Your {questions.count} questions</strong>
                 <span className="block text-fg-muted">
-                  {questions.from} run.py checks each one and prints how many it found.
+                  {overCap
+                    ? `The demo packs at most ${maxQuestions} questions.`
+                    : `${questions.from} run.py checks each one and prints how many it found.`}
                 </span>
               </span>
             </label>
@@ -289,7 +317,7 @@ function TakeHomeSheet({
       {limited.length ? (
         <div className="rounded-control bg-surface-elevated px-3 py-2 text-sm">
           <p>
-            <strong>Settings this demo limited.</strong> The hosted demo caps some settings. The project uses them as you set them here, and the
+            <strong>Settings at the demo's cap.</strong> The hosted demo caps some settings. The project uses them as you set them here, and the
             README lists {limited.length === 1 ? "the one that was" : `the ${limited.length} that were`} capped:{" "}
             {limited.map((x, i) => (
               <span key={x.setting}>

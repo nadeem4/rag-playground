@@ -560,14 +560,16 @@ Click a file to see its text. The server writes every file with `pandion.new_pro
 (see [pandion.md](pandion.md)), so what you see is what you get.
 
 The sheet also says what stays behind: your documents, your key and the saved index.
-Keys never leave the browser, so the zip only names the variable to set. run.py builds
+Keys are never written to a file, so the zip only names the variable to set. run.py builds
 a fresh index the first time it runs.
 
 When Evaluate has a question set for the pipeline's document, the sheet offers **Your N
 questions**. When Evaluate also has a result for this exact pipeline and question set,
-it offers **Scores to beat**, which adds that result to the README. Untick either to
-leave it out. On the hosted demo, the README also lists any setting you set to the
-demo's cap, so you can raise it at home.
+scored at 5 pieces checked as run.py scores, it offers **Scores to beat**, which adds
+that result to the README. Untick either to leave it out. The hosted demo packs at most
+50 questions; a larger set is shown unticked, and the zip goes without it. On the
+demo, the README also lists any setting you set to the demo's cap, so you can raise it
+at home.
 
 **Download** saves the zip. Unzip it and follow the README. The project needs Python
 3.13. If the pipeline cannot be packed, such as one that loads plugins, the sheet says

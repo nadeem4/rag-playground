@@ -1235,6 +1235,9 @@ describe("while and after scoring", () => {
     expect(typeof readPreviousEvaluation(SOURCE.sha, "working")?.steps?.[0].config).toBe("string")
     expect(readPreviousEvaluation(SOURCE.sha, "working")?.k).toBe(5)
     expect(readPreviousEvaluation(SOURCE.sha, "working")?.totals).toMatchObject({ total: 2, found: 1, hit_rate: 0.5 })
+    // Take it home offers these scores only for the same pipeline and the same questions.
+    expect(readPreviousEvaluation(SOURCE.sha, "working")?.config).toMatchObject({ index: { parse: { use: "docling" } } })
+    expect(JSON.parse(readPreviousEvaluation(SOURCE.sha, "working")!.questions!).map((q: string[]) => q[0])).toEqual(["a", "b"])
   })
 
   it("compares the numbers only with a last run scored at the same Pieces checked", async () => {

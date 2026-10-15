@@ -136,17 +136,21 @@ from the cache, so each variant's whole `cost` depends on its place in the list.
 kinds of comparison, with questions and on one question, return the same fields:
 
 - `varied_from`, on the list, is the stage the comparison varies, such as `"chunk"`.
-- `varied_cost`, on each variant, counts only the varied step and the steps after it.
-  It is the number to compare variants by.
-- `shared_cost`, on the list, counts the steps before the varied one, each once, whichever
-  variant ran it. On a comparison on one question it includes the document steps
-  (source, parse, clean) that the search ran on the way to the index.
+- `varied_cost`, on each variant, counts only the varied step and the steps after it,
+  as if that variant had run on its own (`pandion.varied_costs`). A step there that
+  another variant ran, and this one read from the cache, is charged to this one too. It
+  is the number to compare variants by.
+- `shared_cost`, on the list, counts the steps before the varied one that the run used,
+  each once, whichever variant ran it. On a comparison on one question that includes the
+  document steps the search ran on the way to the index.
 - `cost`, on the list, is every variant together, with each step counted once. Each
   variant also keeps its whole `cost`.
 
 When every shared step came from the cache, `shared_cost` has `steps_run` 0, `seconds` 0
 and `steps_cached` above 0. A page should then say that the shared steps came from the
-cache, not that they took no time.
+cache, not that they took no time. A step that no variant ran this time, because an
+earlier run had already stored it, counts only as cached. Loading a model the first time
+it is used is timed in the step that loads it; preloading the model avoids that.
 
 ```json
 "cost": {"seconds": 1.84, "input_tokens": 2310, "output_tokens": 412, "dollars": 0.0041,

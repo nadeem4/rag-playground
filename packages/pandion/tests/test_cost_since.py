@@ -214,3 +214,65 @@ def test_compare_names_the_varied_stage_and_splits_its_cost(tmp_path, tagged_rer
 
 def test_comparisons_built_by_hand_have_no_varied_stage():
     assert Comparisons().varied_from is None
+
+
+# -- varied_costs: each variant priced as if it ran alone -------------------------------
+
+
+def _docs(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "sample.pdf").write_bytes(build_pdf(SAMPLE_PAGES))
+    return docs
+
+
+def _pipeline(path):
+    return Pipeline(
+        path=path, parse="pdfium",
+        chunk={"use": "recursive_character", "chunk_size": 70, "chunk_overlap": 10},
+        embed="fake-deterministic", store="lancedb", search={"use": "bm25", "top_k": 5},
+    )
+
+
+def _varied(results):
+    """Each variant's settings and its varied cost, without the seconds (they vary run to run)."""
+    out = {}
+    for c, cost in zip(results, pandion.varied_costs(results, since=results.varied_from, prices=TABLE)):
+        out[c.settings] = {k: cost[k] for k in ("input_tokens", "output_tokens", "dollars", "steps_run")}
+    return out
+
+
+def test_a_shared_leading_rerank_is_charged_to_every_variant_whatever_the_order(tmp_path, tagged_rerank):
+    docs = _docs(tmp_path)
+    a = [{"use": "test_tagged_rerank", "tag": "a"}]
+    b = [{"use": "test_tagged_rerank", "tag": "a"}, {"use": "test_tagged_rerank", "tag": "b"}]
+    forward = pandion.compare(_pipeline(tmp_path / "one"), "rerank", [a, b], docs, [FOUND])
+    backward = pandion.compare(_pipeline(tmp_path / "two"), "rerank", [b, a], docs, [FOUND])
+    assert _varied(forward) == _varied(backward)
+    costs = _varied(forward)
+    assert sorted(c["steps_run"] for c in costs.values()) == [1, 2]
+    assert sorted(c["input_tokens"] for c in costs.values()) == [9, 18]
+
+    # The charged step costs what the step that made it took.
+    first, second = backward
+    made = next(s for s in first._steps() if s.stage == "rerank" and s.transform == "test_tagged_rerank"
+                and s.status == "executed" and s.artifact_id in {x.artifact_id for x in second._steps()})
+    alone = pandion.varied_costs(backward, since="rerank")[1]
+    assert alone["seconds"] == pytest.approx(made.duration_ms / 1000)
+    # The real spend is unchanged: each step once.
+    assert pandion.total_cost(backward, since="rerank")["steps_run"] == 2
+
+
+def test_a_shared_leading_cleaner_is_charged_to_every_variant_whatever_the_order(tmp_path):
+    docs = _docs(tmp_path)
+    variants = [[], [{"use": "dedupe_blocks"}], [{"use": "dedupe_blocks"}, {"use": "header_footer_strip"}]]
+    forward = pandion.compare(_pipeline(tmp_path / "one"), "clean", variants, docs)
+    backward = pandion.compare(_pipeline(tmp_path / "two"), "clean", variants[::-1], docs)
+    assert _varied(forward) == _varied(backward)
+    runs = sorted(c["steps_run"] for c in _varied(forward).values())
+    assert runs[0] < runs[1] < runs[2]
+
+
+def test_varied_costs_needs_a_known_stage():
+    with pytest.raises(ValueError, match="nope"):
+        pandion.varied_costs([answer()], since="nope")

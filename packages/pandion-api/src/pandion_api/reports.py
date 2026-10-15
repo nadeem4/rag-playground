@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pandion import Answer, Retrieval, StageResult, total_cost
+from pandion import Answer, Retrieval, StageResult, total_cost, varied_costs
 
 
 def step(s: StageResult | None) -> dict[str, Any] | None:
@@ -83,13 +83,14 @@ def comparisons(results: Any) -> dict[str, Any]:
 
 
 def split(variants: list[Any], items: list[dict[str, Any]], varied_from: str) -> dict[str, Any]:
-    """Each variant's `cost` and `varied_cost` (the varied step and after) on
-    its item, and the list's `varied_from`, `shared_cost` (the steps before
-    the varied one, counted once) and `cost` (every variant together, each
-    step once). `variants` are the reports, one per item."""
-    for item, report in zip(items, variants):
+    """Each variant's `cost` and `varied_cost` (the varied step and after, as
+    if that variant ran on its own; see `pandion.varied_costs`) on its item,
+    and the list's `varied_from`, `shared_cost` (the steps before the varied
+    one, counted once) and `cost` (every variant together, each step once).
+    `variants` are the reports, one per item."""
+    for item, report, varied in zip(items, variants, varied_costs(variants, since=varied_from)):
         item["cost"] = report.cost()
-        item["varied_cost"] = report.cost(since=varied_from)
+        item["varied_cost"] = varied
     return {
         "comparisons": items,
         "varied_from": varied_from,

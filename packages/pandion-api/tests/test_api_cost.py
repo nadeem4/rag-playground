@@ -138,8 +138,8 @@ def split(result: dict, stage: str) -> None:
     shared = result["shared_cost"]
     assert set(shared) == COST_KEYS
     assert shared["steps_run"] > 0 and shared["input_tokens"] is None
-    # Every variant's own steps plus the shared steps once make the list's cost.
-    assert result["cost"]["steps_run"] == shared["steps_run"] + sum(
+    # A step two variants share after the varied one is charged to both, but really ran once.
+    assert result["cost"]["steps_run"] <= shared["steps_run"] + sum(
         c["varied_cost"]["steps_run"] for c in result["comparisons"]
     )
 
@@ -165,3 +165,17 @@ def test_a_comparison_on_one_question_splits_its_cost_too(client, answer):
     }
     state, _ = finish(client, client.post("/comparisons", json=body))
     split(state["result"], "chunk")
+
+
+@pytest.mark.parametrize("one_question", [False, True])
+def test_a_variant_that_reads_another_variants_step_from_the_cache_is_still_charged(client, one_question):
+    sha = upload(client)["sha"]
+    rerank = {"use": "test_api_usage_rerank"}
+    body = {"config": WITH_MODEL, "stage": "rerank", "variants": [[rerank, rerank], [rerank]], "documents": [sha]}
+    body.update({"question": QUESTION, "answer": False} if one_question else {"questions": QUESTIONS})
+    state, _ = finish(client, client.post("/comparisons", json=body))
+    longer, shorter = state["result"]["comparisons"]
+    assert longer["varied_cost"]["input_tokens"] == 18
+    # The shorter one read its rerank from the cache, and is charged for it all the same.
+    assert shorter["varied_cost"]["input_tokens"] == 9 and shorter["varied_cost"]["steps_run"] == 1
+    assert state["result"]["cost"]["input_tokens"] == 18

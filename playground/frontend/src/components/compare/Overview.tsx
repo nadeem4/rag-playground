@@ -1,12 +1,13 @@
 import { useId } from "react"
 import { ArrowDown, ArrowUp } from "lucide-react"
 
-import type { Stage } from "@/api/types"
+import type { Cost, Stage } from "@/api/types"
 import { ordinal } from "@/components/inspectors/hits"
 import { CONTROL } from "@/components/fields/types"
 import { ChunkBar } from "@/components/pipeline/NodeCard"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { cachedOnly, costCell, costLine, partlyCached, seconds as secondsText, stageTitle, tokenCounts, unpricedTitle } from "@/state/cost"
 import { firstDirection, sortRecipes, type RecipeStatus as Status, type SortKey } from "@/state/compare"
 
 import { RecipeStatus } from "./RecipeStatus"
@@ -28,6 +29,8 @@ export interface OverviewRow {
   pieces?: SwatchPiece[]
   /** The server names this recipe best (pandion's Comparisons.best). */
   best?: boolean
+  /** Its varied step and after (pandion-api's `varied_cost`); absent on older results. */
+  cost?: Cost | null
 }
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
@@ -67,6 +70,86 @@ const COLUMNS: Partial<Record<Stage, [SortKey, string][]>> = {
   ],
 }
 
+const TAG = "inline-block rounded-swatch px-2 py-px text-xs whitespace-nowrap"
+
+/** A dash that a screen reader hears as `words`. */
+function Dash({ words }: { words: string }) {
+  return (
+    <>
+      <span aria-hidden className="text-fg-muted">
+        -
+      </span>
+      <span className="sr-only">{words}</span>
+    </>
+  )
+}
+
+const NOT_MEASURED = "From cache, not measured"
+
+/** The Time cell: the seconds, with a bar scaled to the slowest row; "from cache" when an earlier run stored it all. */
+function TimeCell({ cost, slowest }: { cost: Cost; slowest: number }) {
+  if (cachedOnly(cost)) return <span className="font-sans text-xs whitespace-nowrap text-fg-muted">from cache</span>
+  const width = Math.max(3, Math.round((56 * cost.seconds) / (slowest || 1)))
+  return (
+    <span className="inline-flex flex-col items-end">
+      <span className="inline-flex items-center justify-end gap-2">
+        <span className="whitespace-nowrap">{secondsText(cost.seconds)}</span>
+        <span aria-hidden className="inline-block h-[6px] shrink-0 rounded-full bg-primary opacity-55" style={{ width }} />
+      </span>
+      {partlyCached(cost) ? <small className="font-sans text-2xs whitespace-nowrap text-fg-muted">partly from cache</small> : null}
+    </span>
+  )
+}
+
+/** The Tokens cell: input in mono, output under it; a dash when no model counted any, never 0. */
+function TokensCell({ cost }: { cost: Cost }) {
+  if (cachedOnly(cost)) return <Dash words={NOT_MEASURED} />
+  const t = tokenCounts(cost)
+  if (!t) return <Dash words="No model tokens" />
+  return (
+    <span className="inline-flex flex-col items-end">
+      <span>{t.input}</span>
+      <small className="font-sans text-2xs text-fg-muted">in, {t.output} out</small>
+    </span>
+  )
+}
+
+/** A small tag whose models are read out but not shown; the title shows them on hover. */
+function Tag({ words, models, joiner, title, tone }: { words: string; models: string[]; joiner: string; title: string; tone: string }) {
+  return (
+    <span title={title} className={cn(TAG, "font-sans", tone)}>
+      <span>{words}</span>
+      <span className="sr-only">
+        {" "}
+        {joiner} {models.join(", ")}
+      </span>
+    </span>
+  )
+}
+
+/** The Cost cell: dollars when priced, else a tag that says why not. Never $0 for something unknown. */
+function CostCell({ cost }: { cost: Cost }) {
+  if (cachedOnly(cost)) return <Dash words={NOT_MEASURED} />
+  const cell = costCell(cost)
+  const noPrice = (models: string[]) => <Tag words="no price" joiner="for" models={models} title={unpricedTitle(models)} tone="bg-warn text-warn-text" />
+  const noCount = (models: string[]) => (
+    <Tag words="no token count" joiner="from" models={models} title={`${models.join(", ")} sent no token count`} tone="px-0 text-fg-muted" />
+  )
+  if (cell.kind === "dollars")
+    return cell.unpriced.length || cell.uncounted.length ? (
+      <span className="inline-flex flex-col items-end gap-px">
+        {cell.text}
+        {cell.unpriced.length ? noPrice(cell.unpriced) : null}
+        {cell.uncounted.length ? noCount(cell.uncounted) : null}
+      </span>
+    ) : (
+      <>{cell.text}</>
+    )
+  if (cell.kind === "unpriced") return noPrice(cell.models)
+  if (cell.kind === "uncounted") return noCount(cell.models)
+  return <span className={cn(TAG, "bg-surface-elevated font-sans text-fg-muted")}>local</span>
+}
+
 const CHECK_BOX = "inline-flex items-center justify-center pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px]"
 
 /**
@@ -93,6 +176,7 @@ export function Overview({
   top,
   baseAt = 0,
   baseName = "Your pipeline",
+  variedFrom = null,
 }: {
   stage: Stage
   /** In recipe order. */
@@ -116,11 +200,24 @@ export function Overview({
   baseAt?: number
   /** Its name in sentences: Your pipeline, or its phrase when no recipe was the pipeline's own. */
   baseName?: string
+  /** The stage the comparison varies, from its result; null for a result saved before speed and cost. */
+  variedFrom?: string | null
 }) {
   const sortId = useId()
-  const sorts = (SORTS[stage] ?? []).filter(([k]) => k !== "rank" || goldKnown)
+  // Time, Tokens and Cost, when the result carries each recipe's varied cost. On Chunk, Tokens are already the pieces'.
+  const costShown = !!variedFrom && rows.some((r) => r.cost)
+  const tokensName = stage === "chunk" ? "Model tokens" : "Tokens"
+  const costSorts: [SortKey, string, string][] = costShown
+    ? [
+        ["time", "Time", "time"],
+        ["modelTokens", tokensName, tokensName.toLowerCase()],
+        ["cost", "Cost", "cost"],
+      ]
+    : []
+  const plain = (SORTS[stage] ?? []).length === 0
+  const sorts = plain ? [] : [...(SORTS[stage] ?? []), ...costSorts].filter(([k]) => k !== "rank" || goldKnown)
   const columns = (COLUMNS[stage] ?? []).filter(([k]) => k !== "rank" || goldKnown)
-  const plain = sorts.length === 0
+  const slowest = Math.max(0, ...rows.map((r) => r.cost?.seconds ?? 0))
   const list = sortRecipes(rows, sort.key, sort.dir)
   const finished = rows.filter((r) => r.done)
   const pieces = finished.map((r) => r.values.pieces).filter((x): x is number => typeof x === "number")
@@ -169,10 +266,10 @@ export function Overview({
 
   let body
   if (!narrow && !plain) {
-    const th = (key: SortKey, label: string, numeric: boolean) => {
+    const th = (key: SortKey, label: string, numeric: boolean, extra?: string) => {
       const on = sort.key === key
       return (
-        <th key={key} scope="col" aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn("px-2 py-1 font-medium", numeric ? "text-right" : "text-left")}>
+        <th key={key} scope="col" aria-sort={on ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn("px-2 py-1 font-medium", numeric ? "text-right" : "text-left", extra)}>
           <button
             type="button"
             onClick={() => onSort(key, on ? (sort.dir === 1 ? -1 : 1) : firstDirection(key))}
@@ -185,7 +282,7 @@ export function Overview({
       )
     }
     body = (
-      <table className="w-full table-fixed border-collapse text-sm">
+      <table className={cn("w-full table-fixed border-collapse text-sm", costShown && "min-w-[880px]")}>
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="border-b border-hairline">
@@ -197,6 +294,13 @@ export function Overview({
             <th scope="col" className={cn("px-2 py-1 text-left text-xs font-medium text-fg-muted", stage === "chunk" ? "w-[30%]" : "w-[180px]")}>
               {stage === "chunk" ? "The document, to scale" : "Top 5, by piece"}
             </th>
+            {costShown ? (
+              <>
+                {th("time", `Time, ${stageTitle(variedFrom ?? "")} and after`, true, "w-[132px] border-l border-hairline")}
+                {th("modelTokens", tokensName, true, "w-[104px]")}
+                {th("cost", "Cost", true, "w-[96px]")}
+              </>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -250,9 +354,26 @@ export function Overview({
                     </td>
                   ))}
                   <td className="px-2 py-2">{picture(r)}</td>
+                  {costShown ? (
+                    r.cost ? (
+                      <>
+                        <td className="border-l border-hairline px-2 py-2 text-right font-mono tabular-nums">
+                          <TimeCell cost={r.cost} slowest={slowest} />
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono tabular-nums">
+                          <TokensCell cost={r.cost} />
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono tabular-nums">
+                          <CostCell cost={r.cost} />
+                        </td>
+                      </>
+                    ) : (
+                      <td colSpan={3} className="border-l border-hairline px-2 py-2" />
+                    )
+                  ) : null}
                 </>
               ) : (
-                <td colSpan={columns.length + 1} className="px-2 py-2">
+                <td colSpan={columns.length + 1 + (costShown ? 3 : 0)} className="px-2 py-2">
                   {status(r)}
                 </td>
               )}
@@ -316,6 +437,7 @@ export function Overview({
                 {r.done ? (
                   <>
                     {plain ? null : <p className="m-0 text-sm text-fg-muted">{numberWords(r)}</p>}
+                    {costShown && r.cost ? <p className="m-0 font-mono text-xs text-fg-muted tabular-nums">{costLine(r.cost)}</p> : null}
                     {plain ? null : picture(r)}
                   </>
                 ) : (
@@ -332,7 +454,14 @@ export function Overview({
   return (
     <div className="flex min-w-0 flex-col gap-3 px-3 py-3">
       <p className="m-0 text-sm text-fg-muted">{helper}</p>
-      {body}
+      {costShown && !narrow && !plain ? (
+        // Focusable, so a keyboard can scroll the wider table sideways.
+        <div role="region" aria-label="Results table, scrolls sideways" tabIndex={0} className="min-w-0 overflow-x-auto focus-visible:outline-2 focus-visible:outline-(--focus-ring)">
+          {body}
+        </div>
+      ) : (
+        body
+      )}
       {ticks && ticked.length ? (
         <section aria-label="Selection" className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-panel border border-hairline bg-surface-raised p-3 shadow-sheet">
           <span className="text-sm">

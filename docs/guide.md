@@ -315,6 +315,17 @@ results are shown unscored.
   open one recipe beside your pipeline, or tick up to three to read side by side, then step
   through the rest with **Previous** and **Next**. The browser's Back button returns to the
   table.
+- Each recipe also says how long it took, how many model tokens it used and what that
+  cost: three more columns in the table (**Time**, **Tokens** and **Cost**, each sortable),
+  or one line under each recipe's name with three or fewer. They count only the step being
+  compared and the steps after it, so the order the recipes ran in does not change them.
+  Tokens show a dash when no model was called, and Cost says "local" when no paid model
+  ran, "no price" when a model is not in Pandion's price table, and never $0 for something
+  unknown. A recipe that an earlier run had already stored says "from cache", because its
+  time and cost were not measured this time, and it sorts last.
+- A line under the recipes says how long the shared steps before the compared one took,
+  once, or that they came from the cache this time. Cost is an estimate, with the date of
+  the prices. Results from an older server show none of these.
 - The page says "the answer" only when Pandion scored the run: the question is one of the
   sample's own, or it carries its gold passages, and the run stops at the search. Each
   recipe's rank of the answer is Pandion's, and the recipe Pandion names best says **Best**

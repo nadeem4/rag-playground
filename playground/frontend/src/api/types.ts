@@ -806,6 +806,25 @@ export interface EvaluationResult extends Totals {
   by_tag: Record<string, Totals>
   questions: EvalQuestionResult[]
 }
+/** What one step's model call used (pandion-api, "Speed and cost"); a count is null when the server sent none. */
+export interface StepUsage {
+  input_tokens: number | null
+  output_tokens: number | null
+  model: string | null
+}
+/** Pandion's `cost()`: seconds, tokens, an estimate in dollars, and the cache share. */
+export interface Cost {
+  seconds: number
+  input_tokens: number | null
+  output_tokens: number | null
+  /** Null when nothing was priced. */
+  dollars: number | null
+  unpriced_models: string[]
+  uncounted_models: string[]
+  steps_run: number
+  steps_cached: number
+  prices_as_of: string
+}
 export interface StepReport {
   stage: string
   strategy: string
@@ -814,6 +833,8 @@ export interface StepReport {
   duration_ms: number | null
   note: string | null
   error: string | null
+  /** Absent on results saved before speed and cost. */
+  usage?: StepUsage | null
 }
 export interface RetrievalReport {
   ok: boolean
@@ -835,9 +856,19 @@ export interface ComparisonItem {
   report?: EvaluationResult | null
   retrieval?: RetrievalReport
   answer?: AnswerReport
+  /** This recipe's whole cost, which depends on its place in the run. */
+  cost?: Cost
+  /** The varied step and after, as if this recipe had run on its own: the number to compare by. */
+  varied_cost?: Cost
 }
 export interface ComparisonResult {
   comparisons: ComparisonItem[]
   best: number[]
   cancelled: boolean
+  /** The stage the comparison varies. Absent, like the costs, on results saved before speed and cost. */
+  varied_from?: string
+  /** The steps before the varied one, each counted once. */
+  shared_cost?: Cost
+  /** Every recipe together, each step counted once. */
+  cost?: Cost
 }

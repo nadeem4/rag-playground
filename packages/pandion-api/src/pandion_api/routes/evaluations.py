@@ -231,6 +231,7 @@ def _compare_on_one_question(body: ComparisonIn, pipelines: list, documents: dic
 
     def work(on_event, cancel, credentials):
         out: list[dict[str, Any]] = []
+        ran: list[Any] = []
         stopped = False
         for n, (variant, p) in enumerate(zip(body.variants, pipelines), start=1):
             if cancel.is_set():
@@ -242,17 +243,18 @@ def _compare_on_one_question(body: ComparisonIn, pipelines: list, documents: dic
 
             kwargs = dict(documents=documents, credentials=credentials, on_event=emit, cancel=cancel)
             if body.answer:
-                a = p.ask(body.question, **kwargs)
-                item, ok, cost = {"answer": reports.answer(a)}, a.ok, a.cost()
+                report = p.ask(body.question, **kwargs)
+                item = {"answer": reports.answer(report)}
             else:
-                r = p.retrieve(body.question, **kwargs)
-                item, ok, cost = {"retrieval": reports.retrieval(r)}, r.ok, r.cost()
+                report = p.retrieve(body.question, **kwargs)
+                item = {"retrieval": reports.retrieval(report)}
+            ran.append(report)
             out.append({
-                "stage": body.stage, "variant": variant, "ok": ok, "cancelled": cancel.is_set(),
-                **item, "cost": cost,
+                "stage": body.stage, "variant": variant, "ok": report.ok, "cancelled": cancel.is_set(),
+                **item,
             })
         stopped = stopped or cancel.is_set()
         ok = not stopped and all(c["ok"] for c in out)
-        return ok, stopped, {"comparisons": out, "best": [], "cancelled": stopped, "cost": reports.total([c["cost"] for c in out])}
+        return ok, stopped, {"best": [], "cancelled": stopped, **reports.split(ran, out, body.stage)}
 
     return work

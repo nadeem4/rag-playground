@@ -16,6 +16,22 @@ from typing import Any, Iterable
 from pandion.llm import AS_OF, PRICES
 from pandion.results import StageResult
 
+#: Where each stage falls in a run, in pipeline order. `embed` and `store` are
+#: the settings of the one index step, so they share its place.
+STAGE_ORDER: dict[str, int] = {
+    "source": 0,
+    "parse": 1,
+    "clean": 2,
+    "chunk": 3,
+    "embed": 4,
+    "store": 4,
+    "index": 4,
+    "rewrite": 5,
+    "search": 6,
+    "rerank": 7,
+    "answer": 8,
+}
+
 #: The statuses of a step that ran in this run.
 _RAN = ("executed", "failed")
 
@@ -32,8 +48,85 @@ def _price(usage: dict[str, Any], table: dict[str, tuple[float, float]]) -> tupl
     return None
 
 
-def cost(steps: Iterable[StageResult], prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+def _place(stage: str) -> int:
+    """Where `stage` falls in a run; a ValueError when it is no stage."""
+    if stage not in STAGE_ORDER:
+        raise ValueError(f"'{stage}' is not a stage. Use one of {', '.join(STAGE_ORDER)}.")
+    return STAGE_ORDER[stage]
+
+
+def _between(steps: list[StageResult], since: str | None, before: str | None) -> list[StageResult]:
+    """The steps at `since` or after it and before `before`, in pipeline order."""
+    low = _place(since) if since is not None else None
+    high = _place(before) if before is not None else None
+    if low is None and high is None:
+        return steps
+    kept = []
+    for s in steps:
+        place = _place(s.stage)
+        if (low is None or place >= low) and (high is None or place < high):
+            kept.append(s)
+    return kept
+
+
+def total_cost(
+    reports: Iterable[Any],
+    *,
+    prices: dict[str, tuple[float, float]] | None = None,
+    since: str | None = None,
+    before: str | None = None,
+) -> dict[str, Any]:
+    """The cost of several reports together, each step counted once across all of them.
+
+    A cached read of a result that another of the reports ran is not counted,
+    and a cached step that several of them read counts once. `prices`,
+    `since` and `before` work as in `cost`. `reports` are Pandion's reports:
+    `Retrieval`, `Answer`, `IndexReport` (or `SyncReport`), `EvaluationReport`
+    or `Comparison`.
+    """
+    return cost([s for r in reports for s in r._costed()], prices, since=since, before=before)
+
+
+def varied_costs(
+    reports: Iterable[Any],
+    *,
+    since: str,
+    prices: dict[str, tuple[float, float]] | None = None,
+) -> list[dict[str, Any]]:
+    """Each report's cost from `since` on, as if it had run on its own.
+
+    The variants of one comparison share steps: a list of cleaners or
+    rerankers that starts the same way makes the same first results. Whichever
+    variant runs first makes them, and the others read them from the cache.
+    Here a cached step at or after `since` that another of the reports ran is
+    charged to this report too, with the time and tokens of the step that made
+    it, and counted as run. So each variant's cost is the same whatever order
+    the variants ran in. `total_cost` still counts what was really spent.
+    """
+    reports = list(reports)
+    made: dict[str, StageResult] = {}
+    for r in reports:
+        for s in _between(r._costed(), since, None):
+            if s.status == "executed" and s.artifact_id is not None:
+                made.setdefault(s.artifact_id, s)
+    return [cost(r._costed(), prices, since=since, charge=made) for r in reports]
+
+
+def cost(
+    steps: Iterable[StageResult],
+    prices: dict[str, tuple[float, float]] | None = None,
+    *,
+    since: str | None = None,
+    before: str | None = None,
+    charge: dict[str, StageResult] | None = None,
+) -> dict[str, Any]:
     """Seconds, tokens, estimated dollars and the cache share of `steps`.
+
+    `since` keeps only the steps at that stage or after it, in pipeline order
+    (`STAGE_ORDER`), and `before` only the steps before it, so the two split a
+    run in two. An unknown stage name is a ValueError. `charge` maps a result
+    id to the step that made it in another run: a cached read of one of them
+    is counted as that step, once (see `varied_costs`).
 
     `prices` maps a model id to US dollars per million (input, output) tokens
     and replaces `pandion.llm.PRICES`. A step with usage is priced when its
@@ -45,7 +138,17 @@ def cost(steps: Iterable[StageResult], prices: dict[str, tuple[float, float]] | 
     all when the same report also ran it.
     """
     table = PRICES if prices is None else prices
-    steps = list(steps)
+    steps = _between(list(steps), since, before)
+    if charge:
+        # A cached step that another run made is charged as that run's step, once.
+        own = {s.artifact_id for s in steps if s.status in _RAN}
+        charged = []
+        for s in steps:
+            if s.status == "cached" and s.artifact_id in charge and s.artifact_id not in own:
+                own.add(s.artifact_id)
+                s = charge[s.artifact_id]
+            charged.append(s)
+        steps = charged
     ran = [s for s in steps if s.status in _RAN]
     seen: set[str] = {s.artifact_id for s in ran if s.artifact_id is not None}
     cached = 0

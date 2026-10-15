@@ -684,6 +684,47 @@ your own, pass them in the same shape:
 answer.cost(prices={"claude-sonnet-5": (2.0, 10.0), "openai/gpt-4o-mini": (0.15, 0.6)})
 ```
 
+### Part of a run, and several runs together
+
+`cost()` takes `since` and `before`, each a stage name. `since="rerank"` counts only the
+steps at that stage or after it, and `before="rerank"` only the steps before it, so the
+two split a run in two. The order is the pipeline's: source, parse, clean, chunk, the index
+(`embed`, `store` and `index` all name it), rewrite, search, rerank, answer. A name that
+is not a stage raises `ValueError`.
+
+`pandion.total_cost(reports)` is the cost of several reports together, with each step
+counted once across all of them. A cached read of a result that another of the reports
+ran is not counted, and a cached step that several reports read counts once. It takes
+`prices`, `since` and `before` too. `Comparisons.cost()` is `total_cost` of its variants.
+
+This is how to compare variants fairly. `compare` runs the shared steps for the first
+variant only, and the later variants read them from the cache, so each variant's whole
+`cost()` depends on its place in the list. `Comparisons.varied_from` is the stage that
+`compare` was told to vary. `pandion.varied_costs(reports, since=...)` gives each
+variant's cost from that stage on, as if the variant had run on its own:
+
+```python
+results = pandion.compare(p, "rerank", ["mmr", "cross_encoder"], docs, questions)
+for c, own in zip(results, pandion.varied_costs(results, since=results.varied_from)):
+    print(c.settings, own)
+print("shared", pandion.total_cost(results, before=results.varied_from))
+```
+
+Some steps from the varied stage on are the same in several variants. Two lists of
+rerankers or cleaners that start the same way make the same first results, and a step
+that does not read the varied one, such as the question's rewrite, is the same in every
+variant. One variant runs such a step and the others read it from the cache.
+`varied_costs` charges it to every variant that uses it, with the time and tokens of the
+run that made it, so a variant's cost does not depend on the order. `total_cost` still
+counts what was really spent, each step once.
+
+Two more rules. A step that no variant ran this time, because an earlier run had already
+stored it, is counted only as cached. When every shared step came from the cache, the
+shared cost has `steps_run` 0 and `seconds` 0: say that the shared steps came from the
+cache rather than that they were free. Loading a model the first time it is used is timed
+in the step that loads it, so the first variant to use a reranker or an embedder can look
+slower. `pandion.preload_reranker` and `pandion.preload_embedder` load them before the run.
+
 `pandion eval` and `pandion compare` print the cost as one line (see
 [The pandion command](#the-pandion-command)).
 pandion-api returns each step's `usage` and each report's `cost` in its JSON (see

@@ -17,6 +17,7 @@ export function SideSheet({
   footer,
   head,
   wide = false,
+  medium = false,
 }: {
   title: string
   onClose: () => void
@@ -26,6 +27,8 @@ export function SideSheet({
   head?: ReactNode
   /** Room for two sets of cards, such as the template picker: up to 72rem on a wide screen. */
   wide?: boolean
+  /** Room for two columns side by side, such as Take it home: up to 48rem on a wide screen. */
+  medium?: boolean
 }) {
   const id = useId()
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -60,7 +63,7 @@ export function SideSheet({
         aria-modal="true"
         aria-labelledby={id}
         data-testid="side-sheet"
-        className={`fixed inset-x-0 bottom-0 z-50 flex h-[92dvh] min-w-0 flex-col rounded-t-[16px] border border-hairline bg-surface-raised shadow-sheet md:inset-y-0 md:right-0 md:left-auto md:h-auto ${wide ? "md:w-[min(72rem,100vw)]" : "md:w-[min(30rem,100vw)]"} md:rounded-none md:border-y-0 md:border-r-0`}
+        className={`fixed inset-x-0 bottom-0 z-50 flex h-[92dvh] min-w-0 flex-col rounded-t-[16px] border border-hairline bg-surface-raised shadow-sheet md:inset-y-0 md:right-0 md:left-auto md:h-auto ${wide ? "md:w-[min(72rem,100vw)]" : medium ? "md:w-[min(48rem,100vw)]" : "md:w-[min(30rem,100vw)]"} md:rounded-none md:border-y-0 md:border-r-0`}
       >
         <div className="flex shrink-0 flex-col gap-1 border-b border-hairline py-2 pr-2 pl-4">
           <div className="flex items-center justify-between gap-3">

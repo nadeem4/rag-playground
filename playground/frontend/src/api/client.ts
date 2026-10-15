@@ -6,6 +6,8 @@
 
 import type {
   AppSettings,
+  ProjectPreview,
+  ProjectRequest,
   LearnChunking,
   LearnDocument,
   LlmProvider,
@@ -113,6 +115,23 @@ export const api = {
 
   /** The pipeline templates, index and query, as Pandion lists them. */
   templates: () => request<PipelineTemplates>("/templates"),
+
+  /** Take it home: the files the project zip would hold, as text, and what the page says about them. */
+  projectPreview: (body: ProjectRequest) => request<ProjectPreview>("/project.zip?preview=1", jsonInit(body)),
+  /** Take it home: the project zip itself. Never sends a key: the project only names the variable. */
+  projectZip: async (body: ProjectRequest): Promise<Blob> => {
+    const res = await fetch(`${API_BASE}/project.zip`, jsonInit(body))
+    if (res.ok) return res.blob()
+    const text = await res.text()
+    let detail: unknown = text
+    try {
+      const parsed = JSON.parse(text) as unknown
+      detail = parsed !== null && typeof parsed === "object" && "detail" in parsed ? (parsed as { detail: unknown }).detail : parsed
+    } catch {
+      // Not JSON (a proxy error page, say). Keep the text as the detail.
+    }
+    throw new ApiError(res.status, detail, "/project.zip")
+  },
 
   /** `demo`: hosted demo mode, uploads private to the browser and bounded, key from the UI only. */
   appSettings: () => request<AppSettings>("/settings/app"),

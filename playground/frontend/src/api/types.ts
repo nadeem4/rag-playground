@@ -872,3 +872,28 @@ export interface ComparisonResult {
   /** Every recipe together, each step counted once. */
   cost?: Cost
 }
+
+/** `POST /api/project.zip`: the pipeline on Build, taken home as a project. */
+export interface ProjectRequest {
+  /** The pipeline in the file's shape, as runs send it. */
+  config: unknown
+  /** The pipeline's name; the zip is named after it. */
+  name: string
+  /** A question set, as Evaluate sends one. Left out, the project asks one example question. */
+  questions?: unknown
+  /** The Evaluate result to beat, one short line; empty for none. */
+  scores: string
+}
+
+/** `POST /api/project.zip?preview=1`: the same files as text. */
+export interface ProjectPreview {
+  filename: string
+  /** Each file by its path in the project, such as `docs/.gitkeep`. */
+  files: Record<string, string>
+  /** The settings the hosted demo held at its cap. */
+  limited: { setting: string; value: number; cap: number }[]
+  /** The environment variable of each key the pipeline reads; optional for a custom endpoint. */
+  keys: { variable: string; optional: boolean }[]
+  /** The most questions a project may hold (the demo's cap); null for no cap. */
+  max_questions: number | null
+}

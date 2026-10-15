@@ -23,6 +23,8 @@ TEACHING = {
     ("GET", "/api/settings/app"),
     ("GET", "/api/questions/template"),
     ("GET", "/api/templates"),
+    # Take it home: the pipeline as a project zip, written by pandion.new_project.
+    ("POST", "/api/project.zip"),
 }
 
 

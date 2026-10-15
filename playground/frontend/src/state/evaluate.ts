@@ -271,6 +271,15 @@ export interface PreviousEvaluation {
   steps?: RecipeStep[]
   /** The pieces checked it was scored at. Absent on older entries. */
   k?: number
+  /** The pipeline config it was scored with, in the file's shape. Absent on older entries. */
+  config?: Record<string, unknown>
+  /** The question set it was scored on (`questionsKey`). Absent on older entries. */
+  questions?: string
+}
+
+/** A question set as one string: each question's id, text and gold passages, in order. Two sets with the same key score alike. */
+export function questionsKey(questions: readonly Pick<Question, "id" | "question" | "gold_answers">[]): string {
+  return JSON.stringify(questions.map((q) => [q.id, q.question, q.gold_answers]))
 }
 
 const PREVIOUS_KEY = "rag-playground:evaluation:previous"
@@ -299,7 +308,9 @@ const isPrevious = (p: unknown): p is PreviousEvaluation => {
     !Array.isArray(e.byId) &&
     typeof e?.totals?.total === "number" &&
     (e.steps === undefined || (Array.isArray(e.steps) && e.steps.every((x) => typeof x?.label === "string" && typeof x?.transform === "string" && typeof x?.name === "string" && (x.config === undefined || typeof x.config === "string")))) &&
-    (e.k === undefined || typeof e.k === "number")
+    (e.k === undefined || typeof e.k === "number") &&
+    (e.config === undefined || (typeof e.config === "object" && e.config !== null && !Array.isArray(e.config))) &&
+    (e.questions === undefined || typeof e.questions === "string")
   )
 }
 

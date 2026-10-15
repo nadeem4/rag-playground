@@ -38,6 +38,7 @@ import {
   pipelineLine,
   plainTrace,
   pipelineSteps,
+  questionsKey,
   readPreviousEvaluation,
   reasonText,
   rerankEffect,
@@ -655,6 +656,9 @@ function Evaluation({
       setStartedAt(null)
     }
   }, [done, startedAt])
+  // The pipeline and the set it was scored with, so Take it home offers these scores only for the same pair.
+  const scoredMade = graphToConfig(graph)
+  const scoredConfig = scoredMade.ok ? (scoredMade.pipeline.config as unknown as Record<string, unknown>) : null
   const finishedRun: PreviousEvaluation | null =
     done && result && !result.cancelled
       ? {
@@ -664,6 +668,8 @@ function Evaluation({
           totals: totalsOf(result),
           steps,
           k: shownK,
+          ...(scoredConfig ? { config: scoredConfig } : {}),
+          ...(questions ? { questions: questionsKey(questions) } : {}),
         }
       : null
   const latest = useRef<PreviousEvaluation | null>(null)

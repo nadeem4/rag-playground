@@ -33,11 +33,14 @@ from pandion.sources import Sources
 from pandion.textmatch import normalise as _normalise
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLES = ["chunking-primer", "two-column-report", "table-of-figures", "scanned-notes"]
+SAMPLES = ["chunking-primer", "two-column-report", "table-of-figures", "scanned-notes", "station-manual"]
 #: The text samples: two designed misses each, one per side. Scanned notes is the
 #: exception: with no text layer every question misses until OCR is on.
 TEXT_SAMPLES = ["chunking-primer", "two-column-report", "table-of-figures"]
 SCANNED = "scanned-notes"
+#: The sample of Pandion's "Manuals and guides" template. It plants no misses:
+#: every question is meant to be found by that template's pipeline.
+MANUAL = "station-manual"
 #: The default pipeline's chunker (playground/frontend/src/state/graph.ts, sampleGraph).
 CHUNKER = ("recursive_character", {"chunk_size": 400, "chunk_overlap": 80})
 TOP_K = 5
@@ -212,7 +215,7 @@ def test_two_designed_misses_one_per_side_each_described_in_the_card(name):
 SHORT_LINE = 45
 
 
-@pytest.mark.parametrize("name", TEXT_SAMPLES)
+@pytest.mark.parametrize("name", [*TEXT_SAMPLES, MANUAL])
 def test_no_answer_to_be_found_ends_on_a_short_last_line(name):
     import pypdfium2 as pdfium
 

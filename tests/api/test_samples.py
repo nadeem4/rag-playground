@@ -125,7 +125,7 @@ def test_the_list_route_serves_every_card_default_first(client):
     assert r.status_code == 200
     names = [c["name"] for c in r.json()]
     assert names[0] == "chunking-primer"
-    assert set(names) == {"chunking-primer", "scanned-notes", "two-column-report", "table-of-figures"}
+    assert set(names) == {"chunking-primer", "scanned-notes", "station-manual", "two-column-report", "table-of-figures"}
     assert all({"title", "blurb", "shows", "stresses", "pages", "sha", "filename"} <= set(c) for c in r.json())
 
 

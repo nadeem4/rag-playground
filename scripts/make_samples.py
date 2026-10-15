@@ -18,11 +18,12 @@ if str(ROOT) not in sys.path:
 from scripts.samplegen import (  # noqa: E402
     chunking_primer,
     scanned_notes,
+    station_manual,
     table_of_figures,
     two_column_report,
 )
 
-GENERATORS = [chunking_primer, scanned_notes, two_column_report, table_of_figures]
+GENERATORS = [chunking_primer, scanned_notes, two_column_report, table_of_figures, station_manual]
 
 
 def main() -> None:

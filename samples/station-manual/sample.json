@@ -1,0 +1,9 @@
+{
+  "name": "station-manual",
+  "title": "A weather station manual",
+  "blurb": "Seven pages of a user manual for a home weather station, with numbered headings four levels deep.",
+  "shows": "Headings at four levels, a settings table, a running header and footer, and a warning printed on every page. Some answers only make sense with their heading path: two subsections are both called Choosing the threshold, and both say set it to 4.",
+  "stresses": "chunk",
+  "pages": 7,
+  "default": false
+}

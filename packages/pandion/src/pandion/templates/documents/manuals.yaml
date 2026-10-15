@@ -2,7 +2,7 @@ template:
   name: Manuals and guides
   summary: Reads the heading levels, starts a new piece at each section, and searches every piece with its heading path.
   good_for: It suits manuals, handbooks, guides and specifications with numbered or clearly styled headings.
-  sample: chunking-primer
+  sample: station-manual
 index:
   parse:
     use: docling                # a layout model labels headings, lists and tables

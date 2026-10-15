@@ -36,6 +36,7 @@ from pandion.questions import (
     load_questions,
     parse_question_set,
 )
+from pandion.question_writer import write_questions
 from pandion.registry import registry
 from pandion.results import StageResult
 from pandion.trace import StepInput, _holds, trace
@@ -57,6 +58,7 @@ __all__ = [
     "paragraph_spans",
     "parse_question_set",
     "trace",
+    "write_questions",
 ]
 
 

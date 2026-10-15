@@ -9,6 +9,7 @@
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
+    pandion questions report.pdf --model claude-haiku-4-5 [--count 15] [--out questions.json] [--parser pdfium]
 
 Every command takes --plugins a,b: modules imported before the file is read,
 from the current folder first, so their strategies can be named. Model keys
@@ -368,6 +369,48 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_questions(args: argparse.Namespace) -> int:
+    load_plugins(args.plugins)
+    doc = pandion.parse(args.document, use=args.parser)
+    try:
+        result = pandion.evaluation.write_questions(
+            doc, model=args.model, count=args.count, credentials=credentials_from_env(),
+            model_name=args.model_name, base_url=args.base_url,
+        )
+    except RuntimeError as exc:
+        print(f"pandion: {exc}", file=sys.stderr)
+        return 1
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    for line in questions_summary(result, args.count):
+        print(line)
+    print(f"Wrote {args.out}.")
+    return 0
+
+
+def questions_summary(result: dict[str, Any], count: int) -> list[str]:
+    """What `pandion questions` prints: kept, dropped and why, copied, tokens."""
+    kept = result["questions"]
+    lines = [f"Kept {len(kept)} of the {count} questions asked for, from {result['parts']} part(s) of the document."]
+    if result["parts"] < count:
+        lines.append(f"The document has only {result['parts']} paragraph(s), so it was split into fewer parts.")
+    lines.append(f"Dropped {len(result['dropped'])}.")
+    for drop in result["dropped"]:
+        lines.append(f"  {drop['question'] or '(no question)'}: {drop['reason']}")
+    copied = sum("copied" in q["tags"] for q in kept)
+    lines.append(f"Tagged copied: {copied} (most of their words come from the gold passage).")
+    usage = result["usage"]
+    counts = [
+        f"{usage[key]:,} {word}"
+        for key, word in (("input_tokens", "in"), ("output_tokens", "out"))
+        if usage[key] is not None
+    ]
+    tokens = " / ".join(counts) + " tokens" if counts else "tokens not reported"
+    lines.append(f"Model: {usage['model']}, {tokens}.")
+    return lines
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="pandion", description="Check, run, evaluate and compare a Pandion pipeline file.")
     commands = root.add_subparsers(dest="command", required=True)
@@ -424,6 +467,15 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--query", help="the query template, such as balanced; asked for when left out")
     sub.add_argument("--questions", help="a question set to add, JSON or CSV")
     sub.add_argument("--overwrite", action="store_true", help="write into a folder that already has files in it")
+
+    sub = command("questions", "have a model write a question set from a document", cmd_questions)
+    sub.add_argument("document", help="the document, such as report.pdf")
+    sub.add_argument("--model", required=True, help="a chat model id, such as claude-haiku-4-5, openrouter or custom")
+    sub.add_argument("--count", type=int, default=15, help="how many questions at most (default 15)")
+    sub.add_argument("--out", default="questions.json", help="the file to write the set to (default questions.json)")
+    sub.add_argument("--model-name", dest="model_name", help="the model id for openrouter or custom")
+    sub.add_argument("--base-url", dest="base_url", help="the endpoint for custom, such as http://localhost:11434/v1")
+    sub.add_argument("--parser", default="pdfium", help="the parser that reads the document (default pdfium)")
     return root
 
 

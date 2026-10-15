@@ -92,7 +92,7 @@ def test_cancel_stops_a_run_between_steps(client, monkeypatch):
         started.set()
         cancel.wait(5)
         on_event({"event": "run_cancelled", "ts": 0})
-        return SimpleNamespace(ok=False, documents={}, index=None)
+        return SimpleNamespace(ok=False, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", slow_run)
     sha = upload(client)["sha"]
@@ -123,7 +123,7 @@ def test_every_key_is_scrubbed_from_events_and_the_result(tmp_path, monkeypatch)
         seen["credentials"] = credentials
         on_event({"event": "node_failed", "ts": 0, "node_id": "x", "error": "Traceback: bad key sk-secret-123"})
         failed = StageResult(stage="parse", transform="pdfium", output=None, status="failed", error="bad key sk-secret-123")
-        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None)
+        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", leaky_run)
     with make_client(tmp_path, Keyed()) as c:
@@ -139,7 +139,7 @@ def test_a_run_is_given_each_document_by_its_name_and_stored_file(client, monkey
 
     def spy_run(self, documents, **kwargs):
         seen.append(documents)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", spy_run)
     sha = upload(client, "my report.pdf")["sha"]
@@ -180,7 +180,7 @@ class ByHeader(Policy):
 
 def test_a_run_with_an_owner_is_404_to_anyone_else(tmp_path, monkeypatch):
     def quick_run(self, documents, **kwargs):
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", quick_run)
     with make_client(tmp_path, ByHeader()) as c:
@@ -202,7 +202,7 @@ def test_a_run_with_an_owner_is_404_to_anyone_else(tmp_path, monkeypatch):
 
 def test_by_default_a_run_has_no_owner_and_anyone_may_follow_it(client, monkeypatch):
     def quick_run(self, documents, **kwargs):
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", quick_run)
     sha = upload(client)["sha"]
@@ -221,7 +221,7 @@ def test_every_error_a_run_shows_goes_through_the_policys_scrub(tmp_path, monkey
     def failing_run(self, documents, *, on_event=None, **kwargs):
         on_event({"event": "node_failed", "ts": 0, "node_id": "x", "error": "File /srv/secret/a.py, bad"})
         failed = StageResult(stage="parse", transform="pdfium", output=None, status="failed", error="at /srv/secret/b")
-        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None)
+        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", failing_run)
     with make_client(tmp_path, NoPaths()) as c:
@@ -287,7 +287,7 @@ def test_an_owner_past_their_runs_is_refused_with_429_until_one_ends(tmp_path, m
 
     def held_run(self, documents, **kwargs):
         gate.wait(5)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", held_run)
     with make_client(tmp_path, TwoEach()) as c:
@@ -314,7 +314,7 @@ def test_an_owner_past_their_runs_is_refused_with_429_until_one_ends(tmp_path, m
 
 
 def test_by_default_an_owner_may_have_any_number_of_runs(tmp_path, monkeypatch):
-    monkeypatch.setattr(IndexPipeline, "run", lambda self, documents, **kw: SimpleNamespace(ok=True, documents={}, index=None))
+    monkeypatch.setattr(IndexPipeline, "run", lambda self, documents, **kw: SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {}))
     with make_client(tmp_path, ByHeader()) as c:
         sha = upload(c)["sha"]
         ids = [

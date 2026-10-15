@@ -318,7 +318,7 @@ def spy_runs(monkeypatch, fail: bool = False) -> list:
         seen.append(credentials)
         if fail:
             raise RuntimeError(f"crashed with {credentials}")
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", spy_run)
     return seen

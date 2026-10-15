@@ -130,7 +130,7 @@ def test_a_key_in_the_query_string_is_not_read(client, monkeypatch):
 
     def spy_run(self, documents, *, credentials=None, **kwargs):
         seen.append(credentials)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", spy_run)
     sha = upload_pdf(client)["sha"]

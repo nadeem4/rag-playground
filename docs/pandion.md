@@ -686,6 +686,8 @@ answer.cost(prices={"claude-sonnet-5": (2.0, 10.0), "openai/gpt-4o-mini": (0.15,
 
 `pandion eval` and `pandion compare` print the cost as one line (see
 [The pandion command](#the-pandion-command)).
+pandion-api returns each step's `usage` and each report's `cost` in its JSON (see
+[pandion-api.md](pandion-api.md#speed-and-cost)).
 
 ## Running a pipeline from an app
 

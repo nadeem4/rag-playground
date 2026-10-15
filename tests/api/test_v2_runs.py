@@ -49,7 +49,7 @@ def test_on_the_demo_a_run_gets_only_the_visitors_own_key(client, monkeypatch):
 
     def spy_run(self, documents, *, credentials=None, **kwargs):
         seen.append(credentials)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", spy_run)
     demo_on(monkeypatch)
@@ -67,7 +67,7 @@ def test_locally_a_run_gets_the_servers_key(client, monkeypatch):
 
     def spy_run(self, documents, *, credentials=None, **kwargs):
         seen.append(credentials)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", spy_run)
     monkeypatch.setenv("ANTHROPIC_API_KEY", ENV_KEY)
@@ -82,7 +82,7 @@ def test_locally_a_run_gets_the_key_in_dotenv_when_there_is_no_other(client, mon
 
     def spy_run(self, documents, *, credentials=None, **kwargs):
         seen.append(credentials)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", spy_run)
     write_dotenv(credentials.DOTENV_PATH, DOTENV_KEY)
@@ -96,7 +96,7 @@ def test_locally_a_run_gets_the_key_in_dotenv_when_there_is_no_other(client, mon
 
 
 def quick_run(self, documents, **kwargs):
-    return SimpleNamespace(ok=True, documents={}, index=None)
+    return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
 
 def as_visitor(client, visitor: str) -> None:
@@ -142,7 +142,7 @@ def test_a_failed_step_names_no_server_folder_and_no_key(client, dirs, monkeypat
     def failing_run(self, documents, *, on_event=None, **kwargs):
         on_event({"event": "node_failed", "ts": 0, "node_id": "report.pdf::parse", "error": leak})
         failed = StageResult(stage="parse", transform="pdfium", output=None, status="failed", error=leak)
-        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None)
+        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", failing_run)
     for demo in (False, True):
@@ -306,7 +306,7 @@ def test_on_the_demo_a_visitor_has_at_most_two_runs_going(client, monkeypatch):
 
     def held_run(self, documents, **kwargs):
         gate.wait(5)
-        return SimpleNamespace(ok=True, documents={}, index=None)
+        return SimpleNamespace(ok=True, documents={}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", held_run)
     demo_on(monkeypatch)

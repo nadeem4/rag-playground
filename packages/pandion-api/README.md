@@ -68,6 +68,10 @@ Each path is under `prefix`.
 | `POST /settings/models/check` | Checks that the key a request would use works. |
 | `POST /trace` | Follows one missed question step by step through a finished run. |
 
+Every run's result carries `usage` on each step (the token counts and model ids of its
+model call, or null) and `cost` on each report (seconds, tokens and estimated dollars).
+[Speed and cost](../../docs/pandion-api.md#speed-and-cost) lists the fields.
+
 ## The Policy
 
 A site subclasses `pandion_api.Policy` and overrides only what it needs. A method refuses

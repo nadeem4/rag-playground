@@ -8,6 +8,7 @@
     pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json]
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
+    pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
 
 Every command takes --plugins a,b: modules imported before the file is read,
 from the current folder first, so their strategies can be named. Model keys
@@ -317,6 +318,51 @@ def cmd_install(args: argparse.Namespace) -> int:
     return subprocess.call([sys.executable, "-m", "pip", "install", package])
 
 
+def _choose(family: str, given: str | None) -> str:
+    """The template named by --index or --query, else the one picked by number at the prompt."""
+    if given:
+        return given
+    templates = pandion.list_templates()[family]
+    print(f"Pick the {family} template:")
+    for n, t in enumerate(templates, start=1):
+        print(f"  {n}. {t['name']} ({t['id']}): {t['summary']}")
+    while True:
+        try:
+            answer = input(f"Type a number from 1 to {len(templates)}: ").strip()
+        except EOFError:
+            raise ValueError(NO_PROMPT) from None
+        if answer.isdigit() and 1 <= int(answer) <= len(templates):
+            return templates[int(answer) - 1]["id"]
+
+
+NO_PROMPT = (
+    "pandion init needs --index and --query when it cannot ask you, as here, "
+    "where nothing is typed in. For example: pandion init my-project --index text --query balanced"
+)
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    if not (args.index and args.query) and not sys.stdin.isatty():
+        raise ValueError(NO_PROMPT)
+    index = _choose("index", args.index)
+    query = _choose("query", args.query)
+    config = pandion.compose_template(index, query)
+    written = pandion.new_project(args.folder, config, args.questions, overwrite=args.overwrite)
+    print(f"Wrote the project in {args.folder}:")
+    for path in written:
+        print(f"  {path.relative_to(args.folder).as_posix()}")
+    print(
+        "\nNext steps:\n"
+        f"  cd {args.folder}\n"
+        "  python -m venv .venv, then activate it\n"
+        "  pip install -r requirements.txt\n"
+        "  put your documents in docs/\n"
+        "  python run.py\n"
+        "README.md says the same, and which key the pipeline needs, if any."
+    )
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="pandion", description="Check, run, evaluate and compare a Pandion pipeline file.")
     commands = root.add_subparsers(dest="command", required=True)
@@ -366,6 +412,13 @@ def parser() -> argparse.ArgumentParser:
     sub = command("install", "install the extras a pipeline file needs", cmd_install)
     sub.add_argument("config")
     sub.add_argument("--print", action="store_true", help="only print the pip command")
+
+    sub = command("init", "start a project folder from an index and a query template", cmd_init)
+    sub.add_argument("folder", help="the folder to write the project in")
+    sub.add_argument("--index", help="the index template, such as text; asked for when left out")
+    sub.add_argument("--query", help="the query template, such as balanced; asked for when left out")
+    sub.add_argument("--questions", help="a question set to add, JSON or CSV")
+    sub.add_argument("--overwrite", action="store_true", help="write into a folder that already has files in it")
     return root
 
 

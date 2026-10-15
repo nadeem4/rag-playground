@@ -15,6 +15,8 @@ import type {
   StageInfo,
 } from "./types"
 
+import type { PipelineTemplates } from "@/state/templates"
+
 export const API_BASE = "/api"
 
 /** A non-2xx response. `detail` is FastAPI's `detail` field when present. */
@@ -108,6 +110,9 @@ export const api = {
 
   /** Plan I-31: a filled-in example set to start from. */
   questionTemplateUrl: (format: "json" | "csv") => `${API_BASE}/questions/template?format=${format}`,
+
+  /** The pipeline templates, document and question, as Pandion lists them. */
+  templates: () => request<PipelineTemplates>("/templates"),
 
   /** `demo`: hosted demo mode, uploads private to the browser and bounded, key from the UI only. */
   appSettings: () => request<AppSettings>("/settings/app"),

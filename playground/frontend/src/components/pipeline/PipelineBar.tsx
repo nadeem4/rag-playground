@@ -3,12 +3,13 @@ import { useEffect, useId, useState } from "react"
 import type { Registry } from "@/api/types"
 import { CONTROL } from "@/components/fields/types"
 import { CopyYaml } from "@/components/pipeline/CopyYaml"
+import { TemplatePicker, type UsedTemplate } from "@/components/pipeline/TemplatePicker"
 import { Button } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { documentsOf, withDocuments } from "@/state/document"
 import { pipelineLine } from "@/state/evaluate"
 import { initialGraph, type PipelineGraph } from "@/state/graph"
-import { removedText } from "@/state/config"
+import { graphToConfig, removedText } from "@/state/config"
 import {
   cleanSavedPipeline,
   deletePipeline,
@@ -37,6 +38,10 @@ import type { StarterPipeline } from "@/state/starter"
  * cannot run is listed, disabled, and never loaded (M7). Opened from
  * Evaluate's Build your own, it shows Back to Evaluate, and a save goes back
  * there with the pipeline selected (`onSaved`).
+ *
+ * Start from a template opens the template picker. Using a template replaces
+ * the pipeline with an unsaved one and shows a status line whose Undo puts
+ * back the pipeline, and the picker's selection, exactly as they were.
  */
 export function PipelineBar({
   graph,
@@ -69,6 +74,9 @@ export function PipelineBar({
   const [nameError, setNameError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [linkText, setLinkText] = useState<string | null>(null)
+  const [choosing, setChoosing] = useState(false)
+  const [applied, setApplied] = useState<{ line: string; graph: PipelineGraph; id: string | null } | null>(null)
+  const working = graphToConfig(graph)
 
   // A half-typed name or a share link belongs to the pipeline it was for (M5).
   useEffect(() => {
@@ -151,7 +159,22 @@ export function PipelineBar({
       : { value: "", name: "New pipeline", help: pipelineLine(graph), tags: [{ label: "Not saved", tone: "soft" as const }] },
   ]
 
+  function applyTemplate(used: UsedTemplate) {
+    setApplied({ line: used.line, graph, id: currentId })
+    setChoosing(false)
+    setCurrentId(null)
+    onLoad(used.graph, used.note)
+  }
+
+  function undoTemplate() {
+    if (!applied) return
+    setCurrentId(applied.id)
+    onLoad(applied.graph)
+    setApplied(null)
+  }
+
   function pick(value: string) {
+    setApplied(null)
     if (value === "") {
       // New: the Starter's settings on the documents in use, not saved yet.
       setCurrentId(null)
@@ -186,7 +209,28 @@ export function PipelineBar({
         </label>
         <Picker id={`${id}-pick`} labelledBy={`${id}-label`} className="w-[min(320px,100%)]" options={options} value={currentId && current ? currentId : ""} onChange={pick} />
         {edited ? <span className="meta">edited</span> : null}
+        {working.ok ? (
+          <Button size="sm" variant="outline" onClick={() => setChoosing(true)}>
+            Start from a template
+          </Button>
+        ) : null}
       </div>
+      {applied ? (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-control bg-accent-wash px-3 py-2">
+          <p className="text-sm text-fg">{applied.line}</p>
+          <Button size="sm" variant="outline" onClick={undoTemplate}>
+            Undo
+          </Button>
+        </div>
+      ) : null}
+      {choosing && working.ok ? (
+        <TemplatePicker
+          registry={registry}
+          current={{ documents: working.pipeline.documents, question: working.pipeline.question }}
+          onUse={applyTemplate}
+          onClose={() => setChoosing(false)}
+        />
+      ) : null}
       {naming ? (
         <form
           className="flex flex-wrap items-center gap-2"

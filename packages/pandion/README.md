@@ -70,6 +70,8 @@ same file finds every step already stored and reuses it.
 - **Evaluate and compare**: `pandion.evaluate(p, "questions.json")` scores a pipeline on
   a question set and says where each miss was lost, and `pandion.compare` runs one stage
   with several settings and names the best.
+- **Questions written for you**: `pandion.evaluation.write_questions(doc, model=...)`, or
+  `pandion questions report.pdf --model ...`, has a chat model write a checked question set.
 - **Start from a template**: `pandion.compose_template("tables", "precision")` joins an
   index template (how a kind of document is indexed) and a query template (how a
   kind of question is searched and answered) into a pipeline, and

@@ -11,7 +11,7 @@ from pandion.extend import ArtifactType, ParsedDoc, Element, PortSpec, Stage, Tr
 
 def test_extend_exports_the_authoring_names():
     for name in ("Transform", "register", "Stage", "PortSpec", "ArtifactType", "RunContext",
-                 "Explanation", "set_note", "ParsedDoc", "Element", "ChunkSet", "Chunk",
+                 "Explanation", "set_note", "set_usage", "ParsedDoc", "Element", "ChunkSet", "Chunk",
                  "Query", "Hit", "RetrievalResult", "Output"):
         assert name in ext.__all__ and hasattr(ext, name)
 

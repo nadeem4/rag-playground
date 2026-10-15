@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from pandion.artifacts import ArtifactType
 
@@ -108,3 +108,20 @@ def set_note(ctx: RunContext | None, text: str) -> None:
     if ctx is None:
         return
     ctx.extras.setdefault("meta", {})["note"] = text
+
+
+def set_usage(ctx: RunContext | None, usage: Mapping[str, int | None], model: str) -> None:
+    """Record the tokens one model call used, and the model id it went to.
+
+    It lands in `ctx.extras["meta"]["usage"]` as `{"input_tokens",
+    "output_tokens", "model"}`. A count the server did not send stays None,
+    never 0, so a missing count is never read as a free call. A `None` ctx is
+    tolerated, as with `set_note`.
+    """
+    if ctx is None:
+        return
+    ctx.extras.setdefault("meta", {})["usage"] = {
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "model": model,
+    }

@@ -228,6 +228,8 @@ def run(
                     artifact_id=aid,
                     cache_hit=True,
                     duration_ms=result.nodes[nid].duration_ms,
+                    # A cache hit called no model, whatever the stored meta says.
+                    usage=None,
                 )
             )
             continue
@@ -282,6 +284,7 @@ def run(
                 artifact_id=aid,
                 cache_hit=False,
                 duration_ms=result.nodes[nid].duration_ms,
+                usage=artifact.meta.get("usage"),
             )
         )
 

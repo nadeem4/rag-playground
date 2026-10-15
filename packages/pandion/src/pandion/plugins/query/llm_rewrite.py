@@ -28,7 +28,7 @@ from pydantic import Field
 from pandion.artifacts import ArtifactType
 from pandion.ids import AddedSettings
 from pandion.payloads import ParsedDoc, Query
-from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion import llm
@@ -269,6 +269,11 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
             ),
             max_tokens=config.max_tokens,
             public_only=public_only,
+        )
+        set_usage(
+            ctx,
+            completion.usage,
+            llm.model_name_for(model, config.custom_model, config.openrouter_model) or model.id,
         )
         reply = "" if completion.stop_reason == "refusal" else completion.text.strip()
         if not reply or len(reply) > config.max_rewrite_chars or "\n" in reply:

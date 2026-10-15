@@ -46,7 +46,7 @@ import yaml
 
 from pandion.config import ConfigError, PipelineConfig, build, from_dict as _from_dict, load, to_dict
 from pandion.embedding_cache import EmbeddingCache
-from pandion.executor import NodeResult, RunResult, run
+from pandion.executor import NodeResult, NodeStatus, RunResult, run
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -755,6 +755,9 @@ class IndexPipeline:
             duration_ms=done.duration_ms,
             note=artifact.meta.get("note") if artifact else None,
             error=done.error,
+            # Only a step that ran now used tokens now: a cached step's stored
+            # meta holds the usage of the run that made it.
+            usage=artifact.meta.get("usage") if done.status is NodeStatus.EXECUTED else None,
         )
 
 

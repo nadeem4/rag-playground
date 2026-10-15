@@ -143,6 +143,7 @@ def rewrite(
         output=Query.model_validate(out),
         duration_ms=(time.perf_counter() - started) * 1000,
         note=ctx.extras.get("meta", {}).get("note"),
+        usage=ctx.extras.get("meta", {}).get("usage"),
     )
 
 

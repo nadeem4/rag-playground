@@ -251,8 +251,14 @@ report.index.output                                              # the index fol
 ```
 
 Each `StageResult` also has `status` (`executed`, `cached`, `failed` or `skipped`), `artifact_id`
-(the recipe hash it is stored under), `duration_ms`, `note` and `error`. A step that
+(the recipe hash it is stored under), `duration_ms`, `note`, `error` and `usage`. A step that
 fails is reported, not raised, and the steps after it are skipped.
+
+`usage` says how many tokens a model step used in this run, as
+`{"input_tokens": ..., "output_tokens": ..., "model": ...}`, where `model` is the model id
+the call went to. A count the server did not send is None, never 0. The rewrite, rerank
+and answer steps that call a chat model fill it. It is None for a step that calls no
+model, and for a cached step, because a cached step used no tokens this time.
 
 ## Keep an index up to date
 
@@ -701,7 +707,8 @@ so results keep the names people gave their files.
   when there are none), `clean.1`, `clean.2` ..., or `chunk`. `index` is the whole run.
   The steps above it come from the cache when they ran before.
 - `on_event` is called with each event as a plain dict, ready for JSON: `run_started`,
-  `node_started`, `node_finished` (with `cache_hit` and the result's `artifact_id`),
+  `node_started`, `node_finished` (with `cache_hit`, the result's `artifact_id` and
+  `usage`, the same value as `StageResult.usage`),
   `node_failed` (with the error), `node_skipped` (a step after one that failed),
   `warning` (with a `message`), `run_cancelled` and `run_finished`. To an event about
   one step, Pandion adds `document` (the document id, or None for the index) and
@@ -1206,7 +1213,7 @@ example, under [Your own embedder](#your-own-embedder). These are every stage
 `Stage.ENRICH` and `Stage.QUERY_TRANSFORM` are reserved: no strategy uses them yet, and they are kept so result ids stay stable.
 
 An `ambient=True` port is found for you: the `query` port is filled by the rewrite step
-without any wiring. Everything in the table, and `register`, `set_note`, `get_embedder`
+without any wiring. Everything in the table, and `register`, `set_note`, `set_usage`, `get_embedder`
 and `raw_file`, comes from `pandion.extend`.
 
 A strategy that calls a model at an address its settings name checks the address with
@@ -1380,6 +1387,12 @@ several documents, it gets the first one by id.
 Any step can record one plain sentence about what it did with `set_note(ctx, "...")`, for
 example a cleaner saying how many blocks it removed. The note is shown with the step's
 result, as `StageResult.note`.
+
+A step that calls a model can record what the call used with
+`set_usage(ctx, usage, model)`. `usage` is `{"input_tokens": ..., "output_tokens": ...}`
+and `model` is the model id the call went to. Leave a count as None when the server did
+not send it. The usage is shown with the step's result, as `StageResult.usage`, and in
+its `node_finished` event. A cached run of the step shows None, since it called no model.
 
 ## Loading your strategies
 

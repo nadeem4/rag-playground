@@ -21,7 +21,7 @@ from pandion.embeddings import Embedder, get_embedder, register_embedder
 from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.llm import openai_client_kwargs
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
-from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
 from pandion.registry import register as _register_transform
 from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
@@ -30,7 +30,7 @@ __all__ = [
     "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "EndpointRefused",
     "Explanation", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
     "RunContext", "Stage", "Transform", "get_embedder", "guard_endpoint",
-    "openai_client_kwargs", "raw_file", "register", "set_note",
+    "openai_client_kwargs", "raw_file", "register", "set_note", "set_usage",
 ]
 
 

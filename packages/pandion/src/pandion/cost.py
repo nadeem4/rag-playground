@@ -2,9 +2,9 @@
 
 Only steps that ran in this run count: executed and failed ones. A cached step
 took about no time and used no tokens, so it is counted on its own, in
-`steps_cached`, and once per report even when several searches read it. Token
-counts are what the servers reported (see `pandion.ports.set_usage`); none are
-estimated. Dollars are an estimate from a price table, `pandion.llm.PRICES`
+`steps_cached`, once per report even when several searches read it, and not at
+all when the same report also ran it. Token counts are what the servers
+reported (see `pandion.ports.set_usage`); none are estimated. Dollars are an estimate from a price table, `pandion.llm.PRICES`
 unless the caller passes its own.
 """
 
@@ -41,16 +41,16 @@ def cost(steps: Iterable[StageResult], prices: dict[str, tuple[float, float]] | 
     listed in `unpriced_models`; a priced model with a missing count is
     listed in `uncounted_models`. `dollars` is None when nothing was priced,
     and the token counts are None when no step reported any. A cached step
-    with an artifact id is counted once, however often it was read.
+    with an artifact id is counted once, however often it was read, and not at
+    all when the same report also ran it.
     """
     table = PRICES if prices is None else prices
-    seen: set[str] = set()
-    ran: list[StageResult] = []
+    steps = list(steps)
+    ran = [s for s in steps if s.status in _RAN]
+    seen: set[str] = {s.artifact_id for s in ran if s.artifact_id is not None}
     cached = 0
     for s in steps:
-        if s.status in _RAN:
-            ran.append(s)
-        elif s.status == "cached":
+        if s.status == "cached":
             if s.artifact_id is not None:
                 if s.artifact_id in seen:
                     continue

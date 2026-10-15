@@ -661,7 +661,9 @@ answer.cost()
   so their calls could not be priced either.
 - `steps_run` counts the steps that ran in this run, and `steps_cached` the steps that
   came from the cache. Each cached step is counted once per report, even when every
-  question of an evaluation read the same stored index. A cached step takes almost no time and uses no tokens, so a run
+  question of an evaluation read the same stored index. A step the same report also ran,
+  such as a chunk step that a later question reads back, counts only as run.
+  A cached step takes almost no time and uses no tokens, so a run
   that reused the cache looks fast and cheap. The two counts show how much of it did.
 - `prices_as_of` is the date of the price table, or `"custom"` when you passed your own.
 

@@ -14,6 +14,7 @@ import pytest
 
 from pandion import llm
 from pandion.artifacts import ArtifactType
+from pandion.cost import cost
 from pandion.evaluation import Comparison, Comparisons, EvaluationReport, QuestionResult
 from pandion.executor import run
 from pandion.extend import PortSpec, Stage, Transform, register, set_usage
@@ -372,6 +373,16 @@ def test_a_cold_retrieval_counts_the_indexing_it_did_on_the_way(tmp_path):
     warm = p.retrieve(QUESTION, documents=docs)
     assert warm.cost()["steps_cached"] >= len(upstream)
     assert warm.ok and "upstream" not in repr(warm)
+
+
+def test_a_cached_read_of_a_step_that_ran_in_the_same_report_is_not_counted_again():
+    ran = step(ms=200, stage="chunk")
+    ran.artifact_id = "b" * 64
+    read = step("cached", stage="chunk")
+    read.artifact_id = "b" * 64
+    result = cost([read, ran, read], prices=TABLE)
+    assert result["steps_run"] == 1
+    assert result["steps_cached"] == 0
 
 
 def test_each_cached_step_counts_once_across_a_report():

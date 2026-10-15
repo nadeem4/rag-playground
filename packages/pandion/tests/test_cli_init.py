@@ -74,3 +74,30 @@ def test_init_asks_for_each_half_at_a_terminal(tmp_path, capsys, monkeypatch):
     written = yaml.safe_load((folder / "pipeline.yaml").read_text(encoding="utf-8"))
     expected = pandion.Pipeline.from_dict(pandion.compose_template("tables", "exact")).to_dict()
     assert written["index"] == expected["index"] and written["retrieve"] == expected["retrieve"]
+
+
+def test_init_on_a_file_says_so_plainly(tmp_path, capsys):
+    target = tmp_path / "project"
+    target.write_text("x", encoding="utf-8")
+    assert main(["init", str(target), "--index", "text", "--query", "balanced"]) == 2
+    assert "is a file, not a folder" in capsys.readouterr().err
+
+
+def test_the_cd_line_quotes_a_folder_with_spaces(tmp_path, capsys):
+    folder = tmp_path / "my project"
+    assert main(["init", str(folder), "--index", "text", "--query", "balanced"]) == 0
+    assert f'cd "{folder}"' in capsys.readouterr().out
+
+
+def test_ctrl_c_at_the_prompt_exits_quietly_with_130(tmp_path, capsys, monkeypatch):
+    stdin = io.StringIO("")
+    stdin.isatty = lambda: True
+    monkeypatch.setattr(sys, "stdin", stdin)
+
+    def interrupted(prompt=""):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("builtins.input", interrupted)
+    assert main(["init", str(tmp_path / "project")]) == 130
+    assert "Traceback" not in capsys.readouterr().err
+    assert not (tmp_path / "project").exists()

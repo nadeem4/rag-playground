@@ -254,3 +254,141 @@ def test_run_py_says_to_add_documents_when_docs_is_empty(tmp_path):
     out = _run(folder)
     assert out.returncode == 1
     assert "docs" in out.stdout
+
+
+# --- review fixes ------------------------------------------------------------
+
+
+def test_settings_that_only_look_like_paths_are_copied_unchanged(tmp_path):
+    config = {
+        **OFFLINE,
+        "index": {**OFFLINE["index"], "clean": [{"use": "drop_matching", "pattern": r"/\d+$", "mode": "regex"}]},
+        "answer": {
+            "use": "chat", "model": "custom", "custom_base_url": "https://llm.example.com/v1",
+            "custom_model": "/models/Qwen3-8B", "prompt": "/no_think Answer from the pieces only.",
+        },
+    }
+    folder = tmp_path / "project"
+    pandion.new_project(folder, config)
+
+    written = yaml.safe_load((folder / "pipeline.yaml").read_text(encoding="utf-8"))
+    assert written["index"]["clean"][0]["pattern"] == r"/\d+$"
+    assert written["answer"]["custom_model"] == "/models/Qwen3-8B"
+    assert written["answer"]["prompt"] == "/no_think Answer from the pieces only."
+
+
+@pytest.mark.parametrize(
+    "given, kept",
+    [
+        ("../../Users/nadee/secret-index", "./secret-index"),
+        ("..\\..\\Users\\nadee\\models", "./models"),
+        ("~/models", "./models"),
+        ("C:data\\idx", "./idx"),
+        ("file:///C:/srv/idx", "./idx"),
+        ("indexes/../idx", "./idx"),
+    ],
+)
+def test_a_path_that_leaves_the_folder_keeps_only_its_last_part(tmp_path, given, kept):
+    config = {**OFFLINE, "path": given, "models": {"cache_dir": given}}
+    folder = tmp_path / "project"
+    written = pandion.new_project(folder, config)
+
+    data = yaml.safe_load((folder / "pipeline.yaml").read_text(encoding="utf-8"))
+    assert data["path"] == kept
+    assert data["models"]["cache_dir"] == kept
+    for p in written:
+        text = p.read_text(encoding="utf-8")
+        assert "nadee" not in text and "srv" not in text, p.name
+
+
+def test_overwrite_without_questions_removes_the_old_question_set_only(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, OFFLINE, QUESTIONS)
+    (folder / "notes.txt").write_text("mine", encoding="utf-8")
+
+    pandion.new_project(folder, OFFLINE, overwrite=True)
+    assert not (folder / "questions.json").exists()
+    assert (folder / "notes.txt").is_file()
+
+
+def test_the_readme_names_the_file_types_and_says_subfolders_are_not_read(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, OFFLINE)
+    readme = (folder / "README.md").read_text(encoding="utf-8")
+    assert ".pdf" in readme and "subfolders" in readme
+
+
+def test_run_py_skips_files_the_parser_cannot_read_and_says_so(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, OFFLINE, QUESTIONS)
+    (folder / "docs" / "report.pdf").write_bytes(build_pdf(SAMPLE_PAGES))
+    (folder / "docs" / "notes.txt").write_text("not a pdf", encoding="utf-8")
+
+    out = _run(folder)
+    assert out.returncode == 0, out.stderr
+    assert "Skipped notes.txt" in out.stdout
+    assert "Found 1 of 1" in out.stdout
+
+
+def test_run_py_says_plainly_when_docs_is_missing(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, OFFLINE)
+    (folder / "docs" / ".gitkeep").unlink()
+    (folder / "docs").rmdir()
+
+    out = _run(folder)
+    assert out.returncode == 1
+    assert "Traceback" not in out.stderr
+    assert "docs" in out.stdout
+
+
+def test_the_readme_says_document_names_must_match_exactly(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, OFFLINE, [{**QUESTIONS[0], "document": "report.pdf"}])
+    readme = (folder / "README.md").read_text(encoding="utf-8")
+    assert "exactly" in readme and "extension" in readme
+
+
+def test_run_py_warns_when_a_question_names_a_document_not_in_docs(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, OFFLINE, [{**QUESTIONS[0], "document": "primer.pdf"}])
+    (folder / "docs" / "report.pdf").write_bytes(build_pdf(SAMPLE_PAGES))
+
+    out = _run(folder)
+    assert "primer.pdf" in out.stdout and "not in docs/" in out.stdout
+
+
+def test_a_custom_endpoint_with_a_user_and_token_is_refused(tmp_path):
+    config = {**OFFLINE, "answer": {"use": "chat", "model": "custom", "custom_model": "m",
+                                    "custom_base_url": "https://user:token@llm.example.com/v1"}}
+    with pytest.raises(ValueError, match="user name or password"):
+        pandion.new_project(tmp_path / "project", config)
+    assert not (tmp_path / "project").exists()
+
+
+def test_public_endpoints_only_is_not_carried_into_the_project(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, {**OFFLINE, "models": {"public_endpoints_only": True}})
+    assert "public_endpoints_only" not in (folder / "pipeline.yaml").read_text(encoding="utf-8")
+
+
+def test_a_custom_model_key_is_only_needed_if_the_server_asks(tmp_path):
+    config = {**OFFLINE, "answer": {"use": "chat", "model": "custom", "custom_model": "m",
+                                    "custom_base_url": "https://llm.example.com/v1"}}
+    folder = tmp_path / "project"
+    pandion.new_project(folder, config)
+    readme = (folder / "README.md").read_text(encoding="utf-8")
+    assert "OPENAI_COMPATIBLE_API_KEY" in readme and "only if your server asks for a key" in readme
+
+
+def test_a_pipeline_with_plugins_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="plugin modules cannot be packed"):
+        pandion.new_project(tmp_path / "project", {**OFFLINE, "plugins": ["my_steps"]})
+    assert not (tmp_path / "project").exists()
+
+
+def test_a_folder_that_is_a_file_is_refused_plainly(tmp_path):
+    target = tmp_path / "project"
+    target.write_text("x", encoding="utf-8")
+    with pytest.raises(NotADirectoryError, match="is a file, not a folder"):
+        pandion.new_project(target, OFFLINE)

@@ -344,16 +344,21 @@ NO_PROMPT = (
 def cmd_init(args: argparse.Namespace) -> int:
     if not (args.index and args.query) and not sys.stdin.isatty():
         raise ValueError(NO_PROMPT)
-    index = _choose("index", args.index)
-    query = _choose("query", args.query)
+    try:
+        index = _choose("index", args.index)
+        query = _choose("query", args.query)
+    except KeyboardInterrupt:
+        print()
+        return 130
     config = pandion.compose_template(index, query)
     written = pandion.new_project(args.folder, config, args.questions, overwrite=args.overwrite)
     print(f"Wrote the project in {args.folder}:")
     for path in written:
         print(f"  {path.relative_to(args.folder).as_posix()}")
+    folder = f'"{args.folder}"' if " " in args.folder else args.folder
     print(
         "\nNext steps:\n"
-        f"  cd {args.folder}\n"
+        f"  cd {folder}\n"
         "  python -m venv .venv, then activate it\n"
         "  pip install -r requirements.txt\n"
         "  put your documents in docs/\n"

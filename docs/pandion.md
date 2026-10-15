@@ -1122,7 +1122,7 @@ dict, as `pandion.evaluate` takes), and returns the paths it wrote:
   needed only if the server asks for a key. When the questions name their documents, the
   README says that the files in `docs/` must match those names exactly, extension included.
 - `requirements.txt`: `pandion[...]` with the extras the pipeline needs (`p.extras()`),
-  pinned to this minor version, such as `~=0.2.0`, and a commented line that installs
+  pinned to this minor version, such as `~=0.3.0`, and a commented line that installs
   the much smaller CPU-only torch.
 - `docs/`: an empty folder for your documents.
 

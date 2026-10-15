@@ -1,10 +1,10 @@
 """Pipeline templates: starting points for a kind of document and a kind of question.
 
-A document template (templates/documents/*.yaml) sets the index side of a
-pipeline: parse, clean, chunk, embed and store. A question template
-(templates/questions/*.yaml) sets the retrieve side and the answer. Each file
-also has a `template:` block with its name, a one-line summary and what it is
-good for; a document template names the RAG Playground sample that suits it.
+An index template (templates/index/*.yaml) sets the index side of a pipeline:
+parse, clean, chunk, embed and store. A query template (templates/query/*.yaml)
+sets the retrieve side and the answer. Each file also has a `template:` block
+with its name, a one-line summary and what it is good for; an index template
+names the RAG Playground sample that suits it.
 
 `list_templates` lists both families; `compose_template` joins one of each into
 a full pipeline in the pipeline file's shape, ready for `Pipeline.from_dict`.
@@ -20,7 +20,7 @@ from typing import Any
 import yaml
 
 FOLDER = Path(__file__).resolve().parent / "templates"
-FAMILIES = ("documents", "questions")
+FAMILIES = ("index", "query")
 
 #: Steps that call a chat model, so a pipeline with one needs an API key.
 KEYED = {"llm_rewrite", "llm_rerank", "chat"}
@@ -41,27 +41,26 @@ def _needs_key(part: dict[str, Any]) -> bool:
 def _entry(name: str, data: dict[str, Any], family: str) -> dict[str, Any]:
     part = {key: value for key, value in data.items() if key != "template"}
     entry = {"id": name, **data["template"], "pipeline": part}
-    if family == "questions":
+    if family == "query":
         entry["needs_key"] = _needs_key(part)
     return copy.deepcopy(entry)
 
 
 def list_templates() -> dict[str, list[dict[str, Any]]]:
-    """Both families, "documents" and "questions". Each template is its id (the
-    file name), its name, summary and good_for, a document template's sample, a
-    question template's needs_key, and `pipeline`, the part it sets."""
+    """Both families, "index" and "query". Each template is its id (the file
+    name), its name, summary and good_for, an index template's sample, a query
+    template's needs_key, and `pipeline`, the part it sets."""
     return {family: [_entry(n, d, family) for n, d in _files(family).items()] for family in FAMILIES}
 
 
 def _part(family: str, name: str) -> dict[str, Any]:
     found = _files(family)
     if name not in found:
-        kind = family[:-1]
-        raise ValueError(f"There is no {kind} template named '{name}'. The {kind} templates are: {', '.join(found)}.")
+        raise ValueError(f"There is no {family} template named '{name}'. The {family} templates are: {', '.join(found)}.")
     return _entry(name, found[name], family)["pipeline"]
 
 
-def compose_template(document: str, question: str, path: str = "./pandion-index") -> dict[str, Any]:
-    """The pipeline made of the `document` and `question` templates, by id, with
+def compose_template(index: str, query: str, path: str = "./pandion-index") -> dict[str, Any]:
+    """The pipeline made of the `index` and `query` templates, by id, with
     `path` as the folder its files go in: `Pipeline.from_dict(compose_template(...))`."""
-    return {"path": path, **_part("documents", document), **_part("questions", question)}
+    return {"path": path, **_part("index", index), **_part("query", query)}

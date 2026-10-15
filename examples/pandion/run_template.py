@@ -1,7 +1,7 @@
-"""Run a document template and a question template together with Pandion.
+"""Run an index template and a query template together with Pandion.
 
-The templates ship with Pandion (`pandion.list_templates`): a document template sets how a
-document is read and indexed, a question template how it is searched and
+The templates ship with Pandion (`pandion.list_templates`): an index template sets how a
+document is read and indexed, a query template how it is searched and
 answered. This script joins one of each into a pipeline, indexes a PDF with
 it and asks one question.
 
@@ -25,8 +25,8 @@ DEFAULT_QUESTION = "What is this document about?"
 
 
 def main(
-    document: str,
-    question: str,
+    index: str,
+    query: str,
     pdf: Path,
     question_text: str = DEFAULT_QUESTION,
     *,
@@ -34,21 +34,21 @@ def main(
     embedder: str | None = None,
 ):
     """Index `pdf` with the two templates, ask `question_text` and print the hits."""
-    config = pandion.compose_template(document, question, path=str(work))
+    config = pandion.compose_template(index, query, path=str(work))
     if embedder:
         config["index"]["embed"]["use"] = embedder
     listed = pandion.list_templates()
-    document_name = next(t["name"] for t in listed["documents"] if t["id"] == document)
-    asked = next(t for t in listed["questions"] if t["id"] == question)
-    question_name = asked["name"]
+    index_name = next(t["name"] for t in listed["index"] if t["id"] == index)
+    asked = next(t for t in listed["query"] if t["id"] == query)
+    query_name = asked["name"]
     credentials = None
     if asked["needs_key"]:
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
-            raise SystemExit(f"{question_name} needs an API key. Set ANTHROPIC_API_KEY.")
+            raise SystemExit(f"{query_name} needs an API key. Set ANTHROPIC_API_KEY.")
         credentials = {"anthropic_api_key": key}
 
-    print(f"Pipeline: {document_name} with {question_name}.")
+    print(f"Pipeline: {index_name} with {query_name}.")
     p = Pipeline.from_dict(config)
     indexed = p.index.run(pdf)
     print(f"Indexed {pdf.name}: {'ok' if indexed.ok else 'failed'}.")
@@ -65,10 +65,10 @@ def main(
 if __name__ == "__main__":
     listed = pandion.list_templates()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("document", choices=[t["id"] for t in listed["documents"]], help="the document template")
-    parser.add_argument("question", choices=[t["id"] for t in listed["questions"]], help="the question template")
+    parser.add_argument("index", choices=[t["id"] for t in listed["index"]], help="the index template")
+    parser.add_argument("query", choices=[t["id"] for t in listed["query"]], help="the query template")
     parser.add_argument("pdf", type=Path, help="the PDF to index")
     parser.add_argument("question_text", nargs="?", default=DEFAULT_QUESTION, help="the question to ask")
     parser.add_argument("--work", type=Path, default=Path("pandion-template-example"), help="where the index goes")
     args = parser.parse_args()
-    main(args.document, args.question, args.pdf, args.question_text, work=args.work)
+    main(args.index, args.query, args.pdf, args.question_text, work=args.work)

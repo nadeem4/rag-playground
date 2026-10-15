@@ -8,8 +8,8 @@ the pipeline on the sample's question set.
 
     uv run python examples/pandion-api/run_pipeline.py --template tables precision
 
-With --template it runs a document template and a question template from
-Pandion's pipeline templates instead, on the sample that suits the document template,
+With --template it runs an index template and a query template from
+Pandion's pipeline templates instead, on the sample that suits the index template,
 and asks that sample's first question. The first run downloads the models the
 templates use. A template that needs an API key is refused: this client sends none.
 """
@@ -55,16 +55,16 @@ def finish(client: httpx.Client, started: httpx.Response) -> dict:
 
 
 def choose(template: tuple[str, str]) -> tuple[dict, Path, Path, str]:
-    """The pipeline made of a (document, question) template pair, the PDF and
+    """The pipeline made of an (index, query) template pair, the PDF and
     question set of the sample that suits it, and that set's first question."""
-    document, question = template
-    config = pandion.compose_template(document, question)
+    index, query = template
+    config = pandion.compose_template(index, query)
     config.pop("path")  # the server decides where its files go
     listed = pandion.list_templates()
-    asked = next(t for t in listed["questions"] if t["id"] == question)
+    asked = next(t for t in listed["query"] if t["id"] == query)
     if asked["needs_key"]:
         raise SystemExit(f"{asked['name']} needs an API key, and this example sends none. Pick a template that needs no key.")
-    sample = ROOT / "samples" / next(t["sample"] for t in listed["documents"] if t["id"] == document)
+    sample = ROOT / "samples" / next(t["sample"] for t in listed["index"] if t["id"] == index)
     questions = sample / "questions.json"
     first = json.loads(questions.read_text(encoding="utf-8"))[0]["question"]
     return config, sample / f"{sample.name}.pdf", questions, first
@@ -113,8 +113,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument(
-        "--template", nargs=2, metavar=("DOCUMENT", "QUESTION"),
-        help="a document template and a question template from pandion.list_templates()",
+        "--template", nargs=2, metavar=("INDEX", "QUERY"),
+        help="an index template and a query template from pandion.list_templates()",
     )
     args = parser.parse_args()
     with httpx.Client(base_url=args.url, timeout=300) as client:

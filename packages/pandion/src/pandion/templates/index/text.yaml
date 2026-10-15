@@ -20,4 +20,4 @@ index:
   store:
     use: lancedb
     metric: cosine              # Qwen3's vectors are compared by direction
-    build_fts: true             # the keyword index, which the hybrid search in every question template needs
+    build_fts: true             # the keyword index, which the hybrid search in every query template needs

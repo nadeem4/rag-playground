@@ -1,7 +1,7 @@
 """The pipeline templates (`GET /api/templates`), as Pandion lists them.
 
 Each family is a list, one entry per template: its id, name, summary and
-good_for, a document template's sample, a question template's needs_key, and
+good_for, an index template's sample, a query template's needs_key, and
 `pipeline`, the part of a Pandion pipeline the template sets. See
 `pandion.list_templates`.
 """

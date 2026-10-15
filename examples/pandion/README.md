@@ -30,7 +30,7 @@ templates.
   stage and as classes, in one folder. The first indexes and asks; the other two find every
   step already stored. It prints that the artifact ids match, then the classes pipeline
   written back as YAML.
-- `run_template.py`: joins a document template and a question template from
+- `run_template.py`: joins an index template and a query template from
   [Pandion's templates](../../docs/pandion.md#templates) into one pipeline,
   indexes a PDF with it, asks one question and prints the hits. The Vague questions and
   Chat answer templates need `ANTHROPIC_API_KEY`.
@@ -74,7 +74,7 @@ uv run python examples/pandion/ask_samples.py "How big should a chunk be?" --emb
 uv run python examples/pandion/three_styles.py --embedder fake-deterministic
 ```
 
-To run a template pair, name the document template, the question template, the PDF and,
+To run a template pair, name the index template, the query template, the PDF and,
 if you like, the question. The first run downloads the models the templates use:
 
 ```bash

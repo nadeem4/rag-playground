@@ -6,10 +6,10 @@ import type { PipelineGraph } from "./graph"
 
 /**
  * The pipeline templates of `GET /api/templates` (`pandion.list_templates`), and
- * how Build turns a document template and a question template into its
+ * how Build turns an index template and a query template into its
  * working pipeline. The composed config is the pipeline file's shape, which is
  * what Build already holds, so no server call is needed to compose it: the
- * document template sets `index`, the question template `retrieve` and `answer`.
+ * index template sets `index`, the query template `retrieve` and `answer`.
  */
 
 interface TemplateBase {
@@ -19,7 +19,7 @@ interface TemplateBase {
   good_for: string
 }
 
-export interface DocumentTemplate extends TemplateBase {
+export interface IndexTemplate extends TemplateBase {
   sample: string
   pipeline: { index: PipelineConfig["index"] }
 }
@@ -27,19 +27,19 @@ export interface DocumentTemplate extends TemplateBase {
 /** `rewrite` is "none" or a step, as in a Pandion pipeline file. */
 type TemplateRetrieve = Omit<NonNullable<PipelineConfig["retrieve"]>, "rewrite"> & { rewrite?: Step | string }
 
-export interface QuestionTemplate extends TemplateBase {
+export interface QueryTemplate extends TemplateBase {
   needs_key: boolean
   pipeline: { retrieve: TemplateRetrieve; answer?: Step }
 }
 
 export interface PipelineTemplates {
-  documents: DocumentTemplate[]
-  questions: QuestionTemplate[]
+  index: IndexTemplate[]
+  query: QueryTemplate[]
 }
 
 /** The order the cards are shown in: the everyday case first. */
-export const DOCUMENT_ORDER = ["text", "tables", "scanned", "manuals"]
-export const QUESTION_ORDER = ["balanced", "exact", "precision", "vague", "chat"]
+export const INDEX_ORDER = ["text", "tables", "scanned", "manuals"]
+export const QUERY_ORDER = ["balanced", "exact", "precision", "vague", "chat"]
 
 /** The one card not from Pandion: shown disabled until it ships. */
 export const COMING_NEXT: TemplateBase = {
@@ -58,12 +58,12 @@ export function orderTemplates<T extends { id: string }>(list: readonly T[], ord
 const isStep = (v: unknown): v is Step => typeof v === "object" && v !== null && typeof (v as Step).use === "string"
 
 /** The pipeline the two templates make, as Build holds it. A rewrite of "none" is left out. */
-export function composeConfig(doc: DocumentTemplate, question: QuestionTemplate): PipelineConfig {
-  const { rewrite, ...retrieve } = question.pipeline.retrieve
+export function composeConfig(index: IndexTemplate, query: QueryTemplate): PipelineConfig {
+  const { rewrite, ...retrieve } = query.pipeline.retrieve
   return {
-    index: doc.pipeline.index,
+    index: index.pipeline.index,
     retrieve: { ...(isStep(rewrite) ? { rewrite } : {}), ...retrieve },
-    ...(question.pipeline.answer ? { answer: question.pipeline.answer } : {}),
+    ...(query.pipeline.answer ? { answer: query.pipeline.answer } : {}),
   }
 }
 
@@ -106,12 +106,12 @@ export type MadePipeline = { ok: true; graph: PipelineGraph; note?: string } | {
  * use. `note` names any setting this server does not allow, which is dropped.
  */
 export function templatePipeline(
-  doc: DocumentTemplate,
-  question: QuestionTemplate,
+  index: IndexTemplate,
+  query: QueryTemplate,
   current: { documents: DocRef[]; question: AskQuestion },
   registry: Registry,
 ): MadePipeline {
-  const config = composeConfig(doc, question)
+  const config = composeConfig(index, query)
   const odd = unknownStrategy(config, registry)
   if (odd !== null) return { ok: false, problem: `This pipeline uses ${odd}, which this server does not have.` }
   const note = removedText(servedConfig(config, registry).removed) ?? undefined
@@ -119,6 +119,6 @@ export function templatePipeline(
   return note ? { ok: true, graph, note } : { ok: true, graph }
 }
 
-export function appliedLine(docName: string, questionName: string, steps: number): string {
-  return `Build now holds ${docName} with ${questionName}: ${steps} steps.`
+export function appliedLine(indexName: string, queryName: string, steps: number): string {
+  return `Build now holds ${indexName} with ${queryName}: ${steps} steps.`
 }

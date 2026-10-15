@@ -70,8 +70,8 @@ same file finds every step already stored and reuses it.
 - **Evaluate and compare**: `pandion.evaluate(p, "questions.json")` scores a pipeline on
   a question set and says where each miss was lost, and `pandion.compare` runs one stage
   with several settings and names the best.
-- **Start from a template**: `pandion.compose_template("tables", "precision")` joins a
-  document template (how a kind of document is indexed) and a question template (how a
+- **Start from a template**: `pandion.compose_template("tables", "precision")` joins an
+  index template (how a kind of document is indexed) and a query template (how a
   kind of question is searched and answered) into a pipeline, and
   `pandion.list_templates()` lists them. See
   [Templates](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#templates).

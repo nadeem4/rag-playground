@@ -542,8 +542,21 @@ describe("after a run", () => {
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
     await runWith({ chunk: ["a0", "a1", "a2"] })
-    await waitFor(() => expect(screen.getAllByTestId("recipe-cost").map((p) => p.textContent)).toEqual(["0.50 s · no tokens · local", "1.5 s · no tokens · local", "2.5 s · no tokens · local"]))
+    await waitFor(() => expect(screen.getAllByTestId("recipe-cost").map((p) => p.textContent)).toEqual(["0.50 s · no model tokens · local", "1.5 s · no model tokens · local", "2.5 s · no model tokens · local"]))
     expect(screen.getByTestId("shared-cost").textContent).toBe("The shared steps came from the cache this time. Cost is an estimate, prices as of 2026-10-15.")
+  })
+
+  it("says from cache for a recipe an earlier run stored, and why under the shared line", async () => {
+    const result = costed("chunk", 3, { steps_run: 2 })
+    result.comparisons[1].varied_cost = costOf(0, { steps_run: 0, steps_cached: 1 })
+    serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson }, { "/api/v2/runs/r1": snapshot(result) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    await runWith({ chunk: ["a0", "a1", "a2"] })
+    await waitFor(() => expect(screen.getAllByTestId("recipe-cost").map((p) => p.textContent)).toEqual(["0.50 s · no model tokens · local", "from cache", "2.5 s · no model tokens · local"]))
+    expect(screen.getByTestId("shared-cost").textContent).toBe(
+      "Shared steps (Parse, Clean) took 41.6 s once, before the recipes split. They are the same for every recipe, so they are left out of Time. Recipes marked from cache were stored by an earlier run, so their time and cost were not measured this time. Cost is an estimate, prices as of 2026-10-15.",
+    )
   })
 
   it("adds no cost line to an older result with no varied cost", async () => {
@@ -733,9 +746,9 @@ describe("four recipes or more", () => {
   it("adds Time, Tokens and Cost to the table, and says once what the shared steps took", async () => {
     FakeResizeObserver.width = 1409
     await runFive("retrieve", 5, () => serve({ c: recursiveJson, i: indexJson, h0: hybridJson, h1: denseJson, h2: bm25Json, h3: hybridJson, h4: denseJson }, { "/api/v2/runs/r1": snapshot(costed("search", 5, { steps_run: 5 })) }))
-    await waitFor(() => expect(within(screen.getByRole("table")).getAllByRole("columnheader").map((h) => h.textContent).slice(-3)).toEqual(["Time, search and after", "Tokens", "Cost"]))
+    await waitFor(() => expect(within(screen.getByRole("table")).getAllByRole("columnheader").map((h) => h.textContent).slice(-3)).toEqual(["Time, Retrieve and after", "Tokens", "Cost"]))
     expect(screen.getByTestId("shared-cost").textContent).toMatch(
-      /^Shared steps \(parse, [a-z, ]+\) took 41\.6 s once, before the recipes split\. They are the same for every recipe, so they are left out of Time\. Cost is an estimate, prices as of 2026-10-15\.$/,
+      /^Shared steps \(Parse, Clean, Chunk, Index\) took 41\.6 s once, before the recipes split\. They are the same for every recipe, so they are left out of Time\. Cost is an estimate, prices as of 2026-10-15\.$/,
     )
   })
 

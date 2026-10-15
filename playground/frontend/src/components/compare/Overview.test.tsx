@@ -114,33 +114,36 @@ describe("Overview", () => {
       cost({ seconds: 3.8, input_tokens: 4300, output_tokens: 110, unpriced_models: ["openrouter/meta-llama-3.3-70b"] }),
       cost({ seconds: 5.41, uncounted_models: ["claude-sonnet-5"] }),
     ]
+    const cachedCost = cost({ seconds: 0, steps_run: 0, steps_cached: 2 })
     const rows = props.rows.map((r, i) => ({ ...r, done: true, status: { kind: "done" as const }, cost: costs[i], values: { ...r.values, ...costValues(costs[i]) } }))
     const row = (i: number) => document.querySelector<HTMLElement>(`[data-recipe="${i}"]`)!
 
     it("adds Time, Tokens and Cost after the existing columns, from each recipe's varied cost", () => {
       render(<Overview {...props} rows={rows} variedFrom="rerank" />)
       const table = screen.getByRole("table")
-      expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Select", "Recipe", "Answer", "Shared", "Returned", "Top 5, by piece", "Time, rerank and after", "Tokens", "Cost"])
+      expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Select", "Recipe", "Answer", "Shared", "Returned", "Top 5, by piece", "Time, Rerank and after", "Tokens", "Cost"])
       expect(within(row(0)).getByText("0.05 s")).toBeTruthy()
       expect(within(row(1)).getByText("2.7 s")).toBeTruthy()
       expect(within(row(1)).getByText("4,120")).toBeTruthy()
       expect(within(row(1)).getByText("in, 96 out")).toBeTruthy()
       expect(within(row(1)).getByText("$0.0046")).toBeTruthy()
       // No model counted tokens: a dash, never 0; nothing paid: local, never $0.
-      expect(within(row(0)).getByLabelText("No tokens").textContent).toBe("-")
+      expect(within(row(0)).getByText("-").getAttribute("aria-hidden")).toBe("true")
+      expect(within(row(0)).getByText("No model tokens").className).toContain("sr-only")
       expect(within(row(0)).getByText("local")).toBeTruthy()
       expect(row(0).textContent).not.toMatch(/\$0(?!\.)/)
       const noPrice = within(row(2)).getByText("no price")
-      expect(noPrice.getAttribute("title")).toBe("openrouter/meta-llama-3.3-70b has no entry in the price table")
-      expect(noPrice.className).toContain("bg-warn")
-      expect(within(row(3)).getByText("no token count")).toBeTruthy()
+      expect(noPrice.parentElement!.getAttribute("title")).toBe("openrouter/meta-llama-3.3-70b has no entry in the price table")
+      expect(noPrice.parentElement!.className).toContain("bg-warn")
+      expect(noPrice.parentElement!.textContent).toBe("no price for openrouter/meta-llama-3.3-70b")
+      expect(within(row(3)).getByText("no token count").parentElement!.textContent).toBe("no token count from claude-sonnet-5")
       expect(row(3).textContent).not.toContain("$")
     })
 
     it("sorts each new column, the unknowns last", () => {
       const onSort = vi.fn()
       const { rerender } = render(<Overview {...props} rows={rows} variedFrom="rerank" onSort={onSort} />)
-      fireEvent.click(screen.getByRole("button", { name: "Time, rerank and after" }))
+      fireEvent.click(screen.getByRole("button", { name: "Time, Rerank and after" }))
       expect(onSort).toHaveBeenLastCalledWith("time", 1)
       fireEvent.click(screen.getByRole("button", { name: "Cost" }))
       expect(onSort).toHaveBeenLastCalledWith("cost", 1)
@@ -159,14 +162,45 @@ describe("Overview", () => {
       render(<Overview {...props} rows={rows} variedFrom="rerank" narrow />)
       const options = Array.from(screen.getByLabelText<HTMLSelectElement>("Sort by").options).map((o) => o.textContent)
       expect(options.slice(-3)).toEqual(["Time", "Tokens", "Cost"])
-      expect(within(row(1)).getByText("2.7 s · 4,120 in / 96 out · $0.0046")).toBeTruthy()
+      expect(within(row(1)).getByText("2.7 s · 4,120 in / 96 out model tokens · $0.0046")).toBeTruthy()
     })
 
     it("calls the model's tokens Model tokens on Chunk, beside the pieces' own Tokens", () => {
       const chunkRows = rows.map((r) => ({ ...r, values: { ...r.values, pieces: 3, tokens: 9, median: 9, p95: 9, uncovered: 0 } }))
       render(<Overview {...props} stage="chunk" goldKnown={false} rows={chunkRows} variedFrom="chunk" />)
       const heads = within(screen.getByRole("table")).getAllByRole("columnheader").map((h) => h.textContent)
-      expect(heads.slice(-3)).toEqual(["Time, chunk and after", "Model tokens", "Cost"])
+      expect(heads.slice(-3)).toEqual(["Time, Chunk and after", "Model tokens", "Cost"])
+    })
+
+    it("says from cache for a recipe an earlier run stored, with dashes and nothing measured, sorted last", () => {
+      const withCache = rows.map((r, i) => (i === 1 ? { ...r, cost: cachedCost, values: { ...r.values, ...costValues(cachedCost) } } : r))
+      render(<Overview {...props} rows={withCache} variedFrom="rerank" sort={{ key: "time", dir: 1 }} />)
+      expect(within(row(1)).getByText("from cache").className).toContain("text-fg-muted")
+      expect(within(row(1)).getAllByText("From cache, not measured")).toHaveLength(2)
+      expect(row(1).textContent).not.toContain("$")
+      const order = Array.from(document.querySelectorAll("[data-recipe]")).map((r) => r.getAttribute("data-recipe"))
+      expect(order).toEqual(["0", "2", "3", "1"])
+    })
+
+    it("says partly from cache under the time when some steps were stored by an earlier run", () => {
+      const partly = rows.map((r, i) => (i === 1 ? { ...r, cost: { ...costs[1], steps_cached: 1 } } : r))
+      render(<Overview {...props} rows={partly} variedFrom="rerank" />)
+      expect(within(row(1)).getByText("partly from cache")).toBeTruthy()
+      expect(within(row(0)).queryByText("partly from cache")).toBeNull()
+    })
+
+    it("shows the no token count tag beside dollars when a priced model sent no count", () => {
+      const mixed = rows.map((r, i) => (i === 1 ? { ...r, cost: { ...costs[1], uncounted_models: ["claude-haiku-4-5"] } } : r))
+      render(<Overview {...props} rows={mixed} variedFrom="rerank" />)
+      expect(within(row(1)).getByText("$0.0046")).toBeTruthy()
+      expect(within(row(1)).getByText("no token count")).toBeTruthy()
+    })
+
+    it("lets the table box scroll sideways by keyboard, as a named region", () => {
+      render(<Overview {...props} rows={rows} variedFrom="rerank" />)
+      const box = screen.getByRole("region", { name: "Results table, scrolls sideways" })
+      expect(box.tabIndex).toBe(0)
+      expect(box.className).toContain("overflow-x-auto")
     })
 
     it("shows none of it for an older result with no varied cost", () => {

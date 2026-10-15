@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { Cost } from "@/api/types"
-import { costCell, costLine, costValues, estimateLine, seconds, sharedLine, sharedStages } from "./cost"
+import { CACHE_NOTE, cachedOnly, costCell, costLine, costValues, estimateLine, partlyCached, seconds, sharedLine, sharedStages, stageTitle } from "./cost"
 import type { PipelineConfig } from "./config"
 
 const cost =(over: Partial<Cost> = {}): Cost => ({
@@ -26,7 +26,7 @@ describe("seconds", () => {
 
 describe("costCell", () => {
   it("gives dollars to four places when they are set", () => {
-    expect(costCell(cost())).toEqual({ kind: "dollars", text: "$0.0046", unpriced: [] })
+    expect(costCell(cost())).toEqual({ kind: "dollars", text: "$0.0046", unpriced: [], uncounted: [] })
   })
   it("says local when nothing was priced and no model is missing a price or a count", () => {
     expect(costCell(cost({ dollars: null, input_tokens: null, output_tokens: null }))).toEqual({ kind: "local" })
@@ -48,13 +48,29 @@ describe("costValues", () => {
     expect(costValues(cost({ dollars: null, unpriced_models: ["m"] })).cost).toBeNull()
     expect(costValues(null)).toEqual({})
   })
+  it("treats dollars with an unpriced model as unknown, since part of it has no price", () => {
+    expect(costValues(cost({ unpriced_models: ["m"] })).cost).toBeNull()
+  })
+  it("leaves all three unknown for a recipe that came wholly from an earlier run's cache", () => {
+    expect(costValues(cost({ steps_run: 0, steps_cached: 3, seconds: 0 }))).toEqual({ time: null, modelTokens: null, cost: null })
+  })
 })
 
 describe("costLine", () => {
   it("puts the three values on one line", () => {
-    expect(costLine(cost())).toBe("2.7 s · 4,120 in / 96 out · $0.0046")
-    expect(costLine(cost({ dollars: null, input_tokens: null, output_tokens: null, seconds: 0.4 }))).toBe("0.40 s · no tokens · local")
-    expect(costLine(cost({ dollars: null, unpriced_models: ["m"] }))).toBe("2.7 s · 4,120 in / 96 out · no price")
+    expect(costLine(cost())).toBe("2.7 s · 4,120 in / 96 out model tokens · $0.0046")
+    expect(costLine(cost({ dollars: null, input_tokens: null, output_tokens: null, seconds: 0.4 }))).toBe("0.40 s · no model tokens · local")
+    expect(costLine(cost({ dollars: null, unpriced_models: ["m"] }))).toBe("2.7 s · 4,120 in / 96 out model tokens · no price for m")
+  })
+  it("says from cache when the recipe came wholly from an earlier run", () => {
+    expect(costLine(cost({ steps_run: 0, steps_cached: 2 }))).toBe("from cache")
+  })
+  it("tells wholly and partly cached recipes apart", () => {
+    expect(cachedOnly(cost({ steps_run: 0, steps_cached: 2 }))).toBe(true)
+    expect(cachedOnly(cost({ steps_run: 0, steps_cached: 0 }))).toBe(false)
+    expect(partlyCached(cost({ steps_run: 1, steps_cached: 2 }))).toBe(true)
+    expect(partlyCached(cost({ steps_run: 1, steps_cached: 0 }))).toBe(false)
+    expect(CACHE_NOTE).toBe("Recipes marked from cache were stored by an earlier run, so their time and cost were not measured this time.")
   })
 })
 
@@ -65,8 +81,13 @@ describe("the shared line", () => {
   } as PipelineConfig
 
   it("names the steps before the varied one, in pipeline order", () => {
-    expect(sharedStages(config, "rerank")).toEqual(["parse", "clean", "chunk", "embed", "store", "search"])
-    expect(sharedStages({ ...config, index: { ...config.index, clean: [] } }, "chunk")).toEqual(["parse"])
+    expect(sharedStages(config, "rerank")).toEqual(["Parse", "Clean", "Chunk", "Index", "Retrieve"])
+    expect(sharedStages({ ...config, index: { ...config.index, clean: [] } }, "chunk")).toEqual(["Parse"])
+    expect(sharedStages({ ...config, retrieve: { ...config.retrieve!, rewrite: { use: "llm_rewrite" } } }, "search")).toEqual(["Parse", "Clean", "Chunk", "Index", "Ask"])
+  })
+
+  it("names Pandion's steps by the page's card titles", () => {
+    expect(["parse", "clean", "chunk", "embed", "store", "rewrite", "search", "rerank"].map(stageTitle)).toEqual(["Parse", "Clean", "Chunk", "Index", "Index", "Ask", "Retrieve", "Rerank"])
     expect(sharedStages(config, "parse")).toEqual([])
   })
 

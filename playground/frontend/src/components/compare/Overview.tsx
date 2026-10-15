@@ -7,7 +7,7 @@ import { CONTROL } from "@/components/fields/types"
 import { ChunkBar } from "@/components/pipeline/NodeCard"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { cellWords, costCell, costLine, seconds as secondsText, tokenCounts, unpricedTitle } from "@/state/cost"
+import { cachedOnly, costCell, costLine, partlyCached, seconds as secondsText, stageTitle, tokenCounts, unpricedTitle } from "@/state/cost"
 import { firstDirection, sortRecipes, type RecipeStatus as Status, type SortKey } from "@/state/compare"
 
 import { RecipeStatus } from "./RecipeStatus"
@@ -72,26 +72,40 @@ const COLUMNS: Partial<Record<Stage, [SortKey, string][]>> = {
 
 const TAG = "inline-block rounded-swatch px-2 py-px text-xs whitespace-nowrap"
 
-/** The Time cell: the seconds, with a bar scaled to the slowest row. */
+/** A dash that a screen reader hears as `words`. */
+function Dash({ words }: { words: string }) {
+  return (
+    <>
+      <span aria-hidden className="text-fg-muted">
+        -
+      </span>
+      <span className="sr-only">{words}</span>
+    </>
+  )
+}
+
+const NOT_MEASURED = "From cache, not measured"
+
+/** The Time cell: the seconds, with a bar scaled to the slowest row; "from cache" when an earlier run stored it all. */
 function TimeCell({ cost, slowest }: { cost: Cost; slowest: number }) {
+  if (cachedOnly(cost)) return <span className="font-sans text-xs whitespace-nowrap text-fg-muted">from cache</span>
   const width = Math.max(3, Math.round((56 * cost.seconds) / (slowest || 1)))
   return (
-    <span className="inline-flex items-center justify-end gap-2">
-      <span className="whitespace-nowrap">{secondsText(cost.seconds)}</span>
-      <span aria-hidden className="inline-block h-[6px] shrink-0 rounded-full bg-primary opacity-55" style={{ width }} />
+    <span className="inline-flex flex-col items-end">
+      <span className="inline-flex items-center justify-end gap-2">
+        <span className="whitespace-nowrap">{secondsText(cost.seconds)}</span>
+        <span aria-hidden className="inline-block h-[6px] shrink-0 rounded-full bg-primary opacity-55" style={{ width }} />
+      </span>
+      {partlyCached(cost) ? <small className="font-sans text-2xs whitespace-nowrap text-fg-muted">partly from cache</small> : null}
     </span>
   )
 }
 
 /** The Tokens cell: input in mono, output under it; a dash when no model counted any, never 0. */
 function TokensCell({ cost }: { cost: Cost }) {
+  if (cachedOnly(cost)) return <Dash words={NOT_MEASURED} />
   const t = tokenCounts(cost)
-  if (!t)
-    return (
-      <span aria-label="No tokens" className="text-fg-muted">
-        -
-      </span>
-    )
+  if (!t) return <Dash words="No model tokens" />
   return (
     <span className="inline-flex flex-col items-end">
       <span>{t.input}</span>
@@ -100,30 +114,39 @@ function TokensCell({ cost }: { cost: Cost }) {
   )
 }
 
-/** The Cost cell: dollars when priced, else a tag that says why not. Never $0 for something unknown. */
-function CostCell({ cost }: { cost: Cost }) {
-  const cell = costCell(cost)
-  const noPrice = (models: string[]) => (
-    <span title={unpricedTitle(models)} className={cn(TAG, "bg-warn font-sans text-warn-text")}>
-      no price
+/** A small tag whose models are read out but not shown; the title shows them on hover. */
+function Tag({ words, models, joiner, title, tone }: { words: string; models: string[]; joiner: string; title: string; tone: string }) {
+  return (
+    <span title={title} className={cn(TAG, "font-sans", tone)}>
+      <span>{words}</span>
+      <span className="sr-only">
+        {" "}
+        {joiner} {models.join(", ")}
+      </span>
     </span>
   )
+}
+
+/** The Cost cell: dollars when priced, else a tag that says why not. Never $0 for something unknown. */
+function CostCell({ cost }: { cost: Cost }) {
+  if (cachedOnly(cost)) return <Dash words={NOT_MEASURED} />
+  const cell = costCell(cost)
+  const noPrice = (models: string[]) => <Tag words="no price" joiner="for" models={models} title={unpricedTitle(models)} tone="bg-warn text-warn-text" />
+  const noCount = (models: string[]) => (
+    <Tag words="no token count" joiner="from" models={models} title={`${models.join(", ")} sent no token count`} tone="px-0 text-fg-muted" />
+  )
   if (cell.kind === "dollars")
-    return cell.unpriced.length ? (
+    return cell.unpriced.length || cell.uncounted.length ? (
       <span className="inline-flex flex-col items-end gap-px">
         {cell.text}
-        {noPrice(cell.unpriced)}
+        {cell.unpriced.length ? noPrice(cell.unpriced) : null}
+        {cell.uncounted.length ? noCount(cell.uncounted) : null}
       </span>
     ) : (
       <>{cell.text}</>
     )
   if (cell.kind === "unpriced") return noPrice(cell.models)
-  if (cell.kind === "uncounted")
-    return (
-      <span title={`${cell.models.join(", ")} sent no token count`} className="font-sans text-xs text-fg-muted">
-        {cellWords(cell)}
-      </span>
-    )
+  if (cell.kind === "uncounted") return noCount(cell.models)
   return <span className={cn(TAG, "bg-surface-elevated font-sans text-fg-muted")}>local</span>
 }
 
@@ -273,7 +296,7 @@ export function Overview({
             </th>
             {costShown ? (
               <>
-                {th("time", `Time, ${variedFrom} and after`, true, "w-[132px] border-l border-hairline")}
+                {th("time", `Time, ${stageTitle(variedFrom ?? "")} and after`, true, "w-[132px] border-l border-hairline")}
                 {th("modelTokens", tokensName, true, "w-[104px]")}
                 {th("cost", "Cost", true, "w-[96px]")}
               </>
@@ -431,7 +454,14 @@ export function Overview({
   return (
     <div className="flex min-w-0 flex-col gap-3 px-3 py-3">
       <p className="m-0 text-sm text-fg-muted">{helper}</p>
-      {costShown && !narrow && !plain ? <div className="min-w-0 overflow-x-auto">{body}</div> : body}
+      {costShown && !narrow && !plain ? (
+        // Focusable, so a keyboard can scroll the wider table sideways.
+        <div role="region" aria-label="Results table, scrolls sideways" tabIndex={0} className="min-w-0 overflow-x-auto focus-visible:outline-2 focus-visible:outline-(--focus-ring)">
+          {body}
+        </div>
+      ) : (
+        body
+      )}
       {ticks && ticked.length ? (
         <section aria-label="Selection" className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-panel border border-hairline bg-surface-raised p-3 shadow-sheet">
           <span className="text-sm">

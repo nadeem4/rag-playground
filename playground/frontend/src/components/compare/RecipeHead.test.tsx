@@ -46,7 +46,7 @@ describe("RecipeHead", () => {
   it("says the recipe's time, tokens and cost on one line under its head, and nothing for an older result", () => {
     const cost = { seconds: 2.71, input_tokens: 4120, output_tokens: 96, dollars: 0.0046, unpriced_models: [], uncounted_models: [], steps_run: 1, steps_cached: 0, prices_as_of: "2026-10-15" }
     const { rerender } = render(<RecipeHead {...props} cost={cost} />)
-    expect(screen.getByTestId("recipe-cost").textContent).toBe("2.7 s · 4,120 in / 96 out · $0.0046")
+    expect(screen.getByTestId("recipe-cost").textContent).toBe("2.7 s · 4,120 in / 96 out model tokens · $0.0046")
     rerender(<RecipeHead {...props} />)
     expect(screen.queryByTestId("recipe-cost")).toBeNull()
   })

@@ -321,10 +321,11 @@ results are shown unscored.
   compared and the steps after it, so the order the recipes ran in does not change them.
   Tokens show a dash when no model was called, and Cost says "local" when no paid model
   ran, "no price" when a model is not in Pandion's price table, and never $0 for something
-  unknown.
+  unknown. A recipe that an earlier run had already stored says "from cache", because its
+  time and cost were not measured this time, and it sorts last.
 - A line under the recipes says how long the shared steps before the compared one took,
   once, or that they came from the cache this time. Cost is an estimate, with the date of
-  the prices. Results saved before this change show none of these.
+  the prices. Results from an older server show none of these.
 - The page says "the answer" only when Pandion scored the run: the question is one of the
   sample's own, or it carries its gold passages, and the run stops at the search. Each
   recipe's rank of the answer is Pandion's, and the recipe Pandion names best says **Best**

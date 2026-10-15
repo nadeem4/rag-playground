@@ -15,18 +15,25 @@ const count = (n: number | null) => (n ?? 0).toLocaleString("en-US")
 const dollars = (d: number) => `$${d.toFixed(4)}`
 const counted = (c: Cost) => c.input_tokens !== null || c.output_tokens !== null
 
+/** Every step came from an earlier run's cache: nothing was measured this time. */
+export const cachedOnly = (c: Cost) => c.steps_run === 0 && c.steps_cached > 0
+/** Some steps ran and some came from an earlier run's cache. */
+export const partlyCached = (c: Cost) => c.steps_run > 0 && c.steps_cached > 0
+
+export const CACHE_NOTE = "Recipes marked from cache were stored by an earlier run, so their time and cost were not measured this time."
+
 /** The token counts in words, or null when no model counted any. */
 export const tokenCounts = (c: Cost) => (counted(c) ? { input: count(c.input_tokens), output: count(c.output_tokens) } : null)
 
 /** What the Cost column shows. */
 export type CostCell =
-  | { kind: "dollars"; text: string; unpriced: string[] }
+  | { kind: "dollars"; text: string; unpriced: string[]; uncounted: string[] }
   | { kind: "local" }
   | { kind: "unpriced"; models: string[] }
   | { kind: "uncounted"; models: string[] }
 
 export function costCell(c: Cost): CostCell {
-  if (c.dollars !== null) return { kind: "dollars", text: dollars(c.dollars), unpriced: c.unpriced_models }
+  if (c.dollars !== null) return { kind: "dollars", text: dollars(c.dollars), unpriced: c.unpriced_models, uncounted: c.uncounted_models }
   if (c.unpriced_models.length) return { kind: "unpriced", models: c.unpriced_models }
   if (c.uncounted_models.length) return { kind: "uncounted", models: c.uncounted_models }
   return { kind: "local" }
@@ -35,30 +42,52 @@ export function costCell(c: Cost): CostCell {
 /** The no-price tag's title: which models the price table lacks. */
 export const unpricedTitle = (models: string[]) => `${models.join(", ")} ${models.length === 1 ? "has" : "have"} no entry in the price table`
 
-const CELL_WORDS = { local: "local", unpriced: "no price", uncounted: "no token count" } as const
-export const cellWords = (cell: CostCell) => (cell.kind === "dollars" ? cell.text : CELL_WORDS[cell.kind])
-
-/** The overview's sort values: nothing spent is 0, anything unknown is null and sorts last. */
-export function costValues(c: Cost | null | undefined): { time?: number; modelTokens?: number | null; cost?: number | null } {
+/** The overview's sort values: nothing spent is 0, anything unknown (or not measured this time) is null and sorts last. */
+export function costValues(c: Cost | null | undefined): { time?: number | null; modelTokens?: number | null; cost?: number | null } {
   if (!c) return {}
+  if (cachedOnly(c)) return { time: null, modelTokens: null, cost: null }
   const cell = costCell(c)
   return {
     time: c.seconds,
     modelTokens: counted(c) ? (c.input_tokens ?? 0) + (c.output_tokens ?? 0) : null,
-    cost: cell.kind === "dollars" ? c.dollars : cell.kind === "local" ? 0 : null,
+    // Dollars with an unpriced model are only part of the cost.
+    cost: cell.kind === "dollars" ? (cell.unpriced.length ? null : c.dollars) : cell.kind === "local" ? 0 : null,
   }
 }
 
-/** The three values on one line, for a recipe's head: `2.7 s · 4,120 in / 96 out · $0.0046`. */
+/** The three values on one line, for a recipe's head: `2.7 s · 4,120 in / 96 out model tokens · $0.0046`. */
 export function costLine(c: Cost): string {
+  if (cachedOnly(c)) return "from cache"
   const t = tokenCounts(c)
-  return [seconds(c.seconds), t ? `${t.input} in / ${t.output} out` : "no tokens", cellWords(costCell(c))].join(" · ")
+  const cell = costCell(c)
+  const price =
+    cell.kind === "dollars"
+      ? cell.text + (cell.unpriced.length ? `, no price for ${cell.unpriced.join(", ")}` : "")
+      : cell.kind === "unpriced"
+        ? `no price for ${cell.models.join(", ")}`
+        : cell.kind === "uncounted"
+          ? `no token count from ${cell.models.join(", ")}`
+          : "local"
+  return [seconds(c.seconds), t ? `${t.input} in / ${t.output} out model tokens` : "no model tokens", price].join(" · ")
 }
 
 /** Pandion's steps in pipeline order (`STAGE_ORDER`), as the comparison names them. */
 const ORDER = ["parse", "clean", "chunk", "embed", "store", "rewrite", "search", "rerank"] as const
 
-/** The steps this pipeline runs before `variedFrom`, in pipeline order. */
+/** Pandion's step names as the page's card titles: the embedder and the store are both the Index card. */
+const TITLES: Record<string, string> = {
+  parse: "Parse",
+  clean: "Clean",
+  chunk: "Chunk",
+  embed: "Index",
+  store: "Index",
+  rewrite: "Ask",
+  search: "Retrieve",
+  rerank: "Rerank",
+}
+export const stageTitle = (stage: string) => TITLES[stage] ?? stage
+
+/** The cards this pipeline runs before `variedFrom`, in pipeline order, by their titles. */
 export function sharedStages(config: PipelineConfig, variedFrom: string): string[] {
   const has: Record<(typeof ORDER)[number], boolean> = {
     parse: true,
@@ -71,7 +100,9 @@ export function sharedStages(config: PipelineConfig, variedFrom: string): string
     rerank: (config.retrieve?.rerank?.length ?? 0) > 0,
   }
   const at = ORDER.indexOf(variedFrom as (typeof ORDER)[number])
-  return at < 0 ? [] : ORDER.slice(0, at).filter((s) => has[s])
+  // Comparing the store leaves the embedder before it, which is the same Index card.
+  const titles = at < 0 ? [] : ORDER.slice(0, at).filter((s) => has[s]).map(stageTitle)
+  return [...new Set(titles)].filter((t) => t !== stageTitle(variedFrom))
 }
 
 /** The line under the recipes about the steps every recipe shares, or null when none is shared. */

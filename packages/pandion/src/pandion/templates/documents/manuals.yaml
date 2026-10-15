@@ -15,7 +15,8 @@ index:
     - use: dedupe_blocks        # removes a block repeated word for word, such as a warning printed on every page
   chunk:
     use: layout_blocks          # cuts along the page's blocks and starts a new piece at a heading
-    section_level: 3            # a heading down to level 3 starts a new piece; deeper ones stay inside their section
+    section_level: 4            # Docling puts the title and headings numbered like 1 at level 2, so 4 means
+                                # headings numbered down to 1.2.3 start a new piece; deeper ones, such as 1.2.3.4, stay inside it
     max_tokens: 512             # room for a whole procedure under one heading
     keep_tables_whole: true     # never splits a table across pieces
     heading_context: true       # searches each piece with its heading path, such as Installing > Windows

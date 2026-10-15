@@ -123,6 +123,23 @@ def test_the_manuals_template_finds_every_answer_and_keeps_heading_paths(tmp_pat
     # The warning is read on every page, then kept once.
     assert sum("WARNING" in c.text for c in pieces) == 1
     assert not any(sample.HEADER_TEXT in c.text for c in pieces)
+    # Look-alike subsections ("set this threshold to 4", "This part takes") land in
+    # separate pieces, each under its own numbered heading.
+    golds = {q["id"]: q["gold_answer"] for q in _questions()}
+
+    def piece_of(qid: str):
+        (piece,) = [c for c in pieces if normalise(golds[qid]) in normalise(c.text)]
+        return piece
+
+    for qid, heading in [
+        ("frost-threshold", "2.2.1 Frost alarm"),
+        ("wind-threshold", "2.2.2 Wind alarm"),
+        ("sensor-batteries", "4.2.1 Outdoor sensor"),
+        ("display-batteries", "4.2.2 Indoor display"),
+    ]:
+        assert piece_of(qid).heading_path[-1] == heading, (qid, piece_of(qid).heading_path)
+    assert piece_of("frost-threshold") is not piece_of("wind-threshold")
+    assert piece_of("sensor-batteries") is not piece_of("display-batteries")
     for q in _questions():
         hits = p.retrieve(q["question"]).hits
         ranks = [h.rank for h in hits if normalise(q["gold_answer"]) in normalise(h.chunk.text)]

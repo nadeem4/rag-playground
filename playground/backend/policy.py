@@ -97,18 +97,41 @@ def step_over_limit(
     catalog = catalog if catalog is not None else pandion.catalog()
     props = catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {})
     for key, value in settings.items():
-        if key not in props:
-            continue
-        if key == "max_tokens" and "model" in props:
-            cap = MAX_OUTPUT_TOKENS
-        elif key.endswith("_budget_chars") and isinstance(props[key].get("default"), int):
-            cap = BUDGET_TIMES * props[key]["default"]
-        else:
-            continue
-        number = _as_int(value)
+        cap = _cap(key, props)
+        number = _as_int(value) if cap is not None else None
         if number is not None and number > cap:
             return f"{where}.{key} is {number}; the playground allows at most {cap}."
     return None
+
+
+def _cap(key: str, props: dict[str, Any]) -> int | None:
+    """The playground's cap on setting `key` of a step whose schema has `props`, or None."""
+    if key not in props:
+        return None
+    if key == "max_tokens" and "model" in props:
+        return MAX_OUTPUT_TOKENS
+    if key.endswith("_budget_chars") and isinstance(props[key].get("default"), int):
+        return BUDGET_TIMES * props[key]["default"]
+    return None
+
+
+def demo_limited(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """The settings in `config` the hosted demo held back: each one set to its
+    cap where the cap is not the setting's default, as `{setting, value, cap}`.
+    A visitor who wanted more could not have it, so a project taken home says
+    so. Empty locally, and when nothing reached a cap."""
+    if not demo.enabled():
+        return []
+    catalog = pandion.catalog()
+    found = []
+    for where, stage, use, settings in steps(config):
+        props = catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {})
+        for key, value in settings.items():
+            cap = _cap(key, props)
+            number = _as_int(value) if cap is not None else None
+            if number is not None and number >= cap and number != props[key].get("default"):
+                found.append({"setting": f"{where}.{key}", "value": number, "cap": cap})
+    return found
 
 
 _INT = TypeAdapter(int)

@@ -43,6 +43,9 @@ how it fits with the frontend.
   - `templates.py`: `GET /api/templates`, Pandion's pipeline templates
     (`pandion.list_templates`), each with its metadata and pipeline part.
   - `settings.py`: whether demo mode is on, and its limits.
+  - `project.py`: `POST /api/project.zip`, Take it home. It writes the pipeline as a
+    project with `pandion.new_project` in a temporary folder and returns it as a zip;
+    `?preview=1` returns the same files as JSON. No key, document or server path goes in.
   - `health.py`: whether the app is up, and which commit and version it runs.
   - `registry.py`: `GET /api/stages`, what each step is for. Its `served_catalog` also hides read-only and test-only settings from the strategy list pandion-api serves.
   - `sources.py`: adds a sample to the store like an upload, and holds the helpers for

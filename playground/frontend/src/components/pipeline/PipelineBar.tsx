@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react"
 import type { Registry } from "@/api/types"
 import { CONTROL } from "@/components/fields/types"
 import { CopyYaml } from "@/components/pipeline/CopyYaml"
+import { TakeHome } from "@/components/pipeline/TakeHome"
 import { TemplatePicker, type UsedTemplate } from "@/components/pipeline/TemplatePicker"
 import { Button } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
@@ -43,6 +44,9 @@ function samePipeline(a: WorkingPipeline, b: WorkingPipeline): boolean {
  * cannot run is listed, disabled, and never loaded (M7). Opened from
  * Evaluate's Build your own, it shows Back to Evaluate, and a save goes back
  * there with the pipeline selected (`onSaved`).
+ *
+ * Take it home, next to Copy as YAML, opens a sheet that downloads the
+ * pipeline as a ready-to-run project zip (`TakeHome`).
  *
  * Start from a template opens the template picker. Using a template replaces
  * the pipeline with an unsaved one and shows a status line whose Undo puts
@@ -307,6 +311,7 @@ export function PipelineBar({
             </>
           ) : null}
           <CopyYaml graph={graph} />
+          {working.ok ? <TakeHome graph={graph} name={current?.name ?? ""} pipelineKey={current ? currentId : null} /> : null}
           {flash ? (
             <span role="status" className="text-xs text-fg-muted">
               {flash}

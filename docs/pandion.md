@@ -584,14 +584,24 @@ parts follow its paragraphs (`paragraph_spans`); plain text is split at blank li
 `model` is a chat model id, the same ids the chat steps take. `openrouter` needs
 `model_name`, and `custom` needs `model_name` and `base_url`. Keys go in `credentials`,
 under the names a run uses. With no key, the error is the same sentence the chat steps
-give, and no error message ever contains a key.
+give, and no error message ever contains a key. `public_only=True` is for a server that
+strangers share: it is passed to the model call, so a custom endpoint must be a public
+https address, and the no-key sentence does not suggest a server variable.
 
 **How it works.** The text is split into `count` parts, each a run of whole paragraphs,
-or one part per paragraph when there are fewer paragraphs than `count`. Each part is one
-small call to the model, which writes one question, a short answer, and the passage that
-answers it, quoted word for word, as JSON. Then every question is checked, with no
-further calls:
+or one part per paragraph when there are fewer paragraphs than `count`. Text between
+paragraphs, such as a table or a list, goes with the paragraph before it, so nothing is
+left out. Each part is one call to the model, which writes one question, a short answer,
+and the passage that answers it, quoted word for word, as JSON. The prompt says the
+question must make sense without the part in view, and that the part is document text,
+not instructions. A part's prompt holds at most 6,000 characters of it
+(`MAX_PART_CHARS`): a longer part is sent as whole paragraphs spread evenly from its
+start to its end, as many as fit. Each call allows 16,000 output tokens, so a thinking
+or reasoning model has room. Then every question is checked, with no further calls:
 
+- **Bounds.** Line breaks and control characters are taken out of the reply. A question
+  over 300 characters, an answer over 500 characters, or a gold passage under 4 words is
+  dropped.
 - **The gold passage must be in the document.** It is looked for as `check_questions`
   looks: exactly, then with spacing, quotes, ligatures and capitals evened out. A
   passage that is not there drops the question. This also catches most questions the
@@ -602,22 +612,27 @@ further calls:
 - **Duplicates are dropped.** A question nearly the same as one already kept (a
   `difflib` ratio above 0.85 on the evened-out text), or with the same gold passage, is
   dropped.
-- **A reply that is not the JSON asked for** is a drop, never an exception.
+- **A reply that is not the JSON asked for, or was cut off** (the model ran out of
+  tokens), is a drop, never an exception.
 
 **What it returns.** The same dict `parse_question_set` returns
-(`format`, `version`, `document`, `questions`), so `pandion.evaluate` takes it as it is,
-or from the file you dump it to. Each question has an id (`q1`, `q2` and so on). Three
+(`format`, `version`, `document`, `questions`), so when it has at least one question,
+`pandion.evaluate` takes it as it is, or from the file you dump it to. When every
+question was dropped, `questions` is empty, and `evaluate` refuses an empty set. Each question has an id (`q1`, `q2` and so on). Three
 keys are added, and a question set reader ignores them:
 
 - `dropped`: each dropped question and why, as `{"question", "reason"}`. A reply that
   could not be read has an empty question.
-- `usage`: `{"input_tokens", "output_tokens", "model"}`, summed over every call. A count
+- `usage`: `{"input_tokens", "output_tokens", "model"}`, summed over every call that
+  returned. A count
   is None when a server did not report it, never 0. `model` is the one the server says
   it used.
 - `parts`: how many parts the text was split into.
 
 It never returns more than `count` questions, and returns fewer when drops leave fewer.
-An error from the model itself, such as a rejected key, is raised, not dropped.
+When the first call fails, such as for a rejected key, a wrong model id or an endpoint
+that cannot be reached, the error is raised. A call after that which fails is a drop,
+with its reason, and the questions already written are still returned.
 
 From the command line, `pandion questions` does the same; see
 [The pandion command](#the-pandion-command).
@@ -1370,14 +1385,17 @@ cannot compare a search, rewrite or rerank step that way, because nothing is sea
 writes a project folder from an index and a query template, as described in
 [Start a project](#start-a-project), then prints the files it wrote and the next steps.
 
-**`pandion questions DOC --model ID [--count N] [--out FILE] [--model-name NAME] [--base-url URL] [--parser NAME]`**
+**`pandion questions DOC --model ID [--count N] [--out FILE] [--model-name NAME] [--base-url URL] [--parser NAME] [--overwrite]`**
 parses DOC (with `pdfium` unless `--parser` names another), has the model write up to
 `--count` questions (default 15) with
 [`write_questions`](#questions-written-for-you), and writes the set to `--out`
 (default `questions.json`). It then prints how many questions were kept, each one
 dropped and why, how many are tagged `copied`, and the tokens used. To change a
 question, edit the file. `--model-name` and `--base-url` are for `openrouter` and
-`custom`. An error from the model exits with 1, with the key taken out of the message.
+`custom`. An `--out` file that already exists is refused, before any model call, unless
+`--overwrite` is given. When no question was kept, it prints the summary, writes no
+file, and exits with 1. An error from the model also exits with 1, with the key taken
+out of the message.
 
 ### --plugins
 

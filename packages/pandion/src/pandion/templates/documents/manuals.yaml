@@ -1,0 +1,27 @@
+template:
+  name: Manuals and guides
+  summary: Reads the heading levels, starts a new piece at each section, and searches every piece with its heading path.
+  good_for: It suits manuals, handbooks, guides and specifications with numbered or clearly styled headings.
+  sample: chunking-primer
+index:
+  parse:
+    use: docling                # a layout model labels headings, lists and tables
+    heading_hierarchy: true     # infers heading levels from bookmarks, numbering such as 1.1 and font size
+    do_table_structure: true    # manuals often hold tables of settings or parts
+    table_mode: fast            # those tables are usually simple grids
+    do_ocr: false               # a manual exported from a word processor has a text layer
+    content_layers: [body]      # leaves page headers and footers out
+  clean:
+    - use: dedupe_blocks        # removes a block repeated word for word, such as a warning printed on every page
+  chunk:
+    use: layout_blocks          # cuts along the page's blocks and starts a new piece at a heading
+    section_level: 3            # a heading down to level 3 starts a new piece; deeper ones stay inside their section
+    max_tokens: 512             # room for a whole procedure under one heading
+    keep_tables_whole: true     # never splits a table across pieces
+    heading_context: true       # searches each piece with its heading path, such as Installing > Windows
+  embed:
+    use: qwen3-embedding-0.6b   # the strongest embedder in the catalog, and small enough to run on a CPU
+  store:
+    use: lancedb
+    metric: cosine              # Qwen3's vectors are compared by direction
+    build_fts: true             # the keyword index, which the hybrid search in every question template needs

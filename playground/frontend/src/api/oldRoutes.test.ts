@@ -62,6 +62,7 @@ describe("the web calls pandion-api's routes", () => {
       'fetch("/api/settings/app")',
       'fetch("/api/questions/template?format=csv")',
       'fetch("/api/health")',
+      'fetch("/api/templates")',
       "api.samples()",
     ])
       expect(flagged(text), text).toBe(false)

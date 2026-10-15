@@ -27,6 +27,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Compare settings](#compare-settings)
 - [Running a pipeline from an app](#running-a-pipeline-from-an-app)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
+- [Templates](#templates)
 - [The cache](#the-cache)
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
@@ -737,6 +738,10 @@ A pipeline can be written as a YAML file, as a dict for each stage, or as classe
 code. All three give the same pipeline: the same settings give the same artifact ids and
 the same results whichever way they are written, so they share one cache. The playground's Starter
 pipeline is [`samples/starter.yaml`](../samples/starter.yaml): a good first file to copy.
+For a pipeline chosen for your documents and your questions, start from the
+[templates](#templates): pick a document template, such as Reports with tables, and a
+question template, such as Best precision, and `pandion.compose_template` joins them into
+one pipeline dict for `Pipeline.from_dict`.
 
 As a file, read with `Pipeline.from_yaml`:
 
@@ -857,6 +862,116 @@ way, with a message that names the stage and lists its settings. A class says it
 as it is made: `Docling(do_ocrr=True)` raises
 `index.parse (docling) has no setting 'do_ocrr'. Its settings are: do_ocr, ...`. A
 missing stage, such as `chunk`, is an error that names it.
+
+## Templates
+
+A template is a real starting point for a pipeline, chosen for a kind of document or a
+kind of question. Pandion ships two families, and you pick one of each:
+
+- A **document template** sets the index side: how the document is parsed, cleaned, cut
+  into pieces, embedded and stored.
+- A **question template** sets the retrieval side and the answer: how the question is
+  rewritten, how the index is searched, how the hits are reranked, and what the answer
+  step does.
+
+`pandion.compose_template` joins one of each into a full pipeline, in the pipeline file's
+shape, and `pandion.list_templates()` lists both families:
+
+```python
+import pandion
+
+p = pandion.Pipeline.from_dict(pandion.compose_template("tables", "precision", path="./my-index"))
+p.index.run("report.pdf")
+print(p.ask("What was the revenue in 2024?").text)
+
+for t in pandion.list_templates()["questions"]:
+    print(t["id"], t["name"], "needs a key" if t["needs_key"] else "")
+```
+
+Each template in the list has its `id`, `name`, `summary`, `good_for` and `pipeline` (the
+part it sets). A document template also names the RAG Playground `sample` that suits it,
+and a question template says whether it `needs_key`. The first run downloads the models
+a pair uses.
+
+### Document templates
+
+| Template | Id | Good for |
+| --- | --- | --- |
+| Text documents | `text` | Articles, policies and plain reports set in one column, with few tables |
+| Reports with tables | `tables` | Financial reports, data sheets and studies whose answers sit in table rows |
+| Scanned PDFs | `scanned` | Scanned paper, photographed pages and any PDF whose text cannot be selected |
+| Manuals and guides | `manuals` | Manuals, handbooks, guides and specifications with numbered or clearly styled headings |
+
+- **Text documents** reads the PDF's text layer with pdfium, removes running headers,
+  footers and repeated blocks, and cuts pieces of five sentences that share one sentence.
+- **Reports with tables** reads the layout with Docling, rebuilds tables with the
+  accurate table model, and cuts along the layout so a table stays whole with its caption.
+- **Scanned PDFs** reads the page images with Docling's OCR, removes near repeats, and
+  cuts along the layout.
+- **Manuals and guides** reads heading levels with Docling's heading hierarchy, starts a
+  new piece at each heading down to level 3, and searches each piece with its heading path.
+
+Every document template embeds with `qwen3-embedding-0.6b` and stores in lancedb with its
+keyword index, which the hybrid search in every question template needs.
+
+### Question templates
+
+| Template | Id | Good for | Key |
+| --- | --- | --- | --- |
+| Balanced | `balanced` | Everyday questions, when you want good results quickly | No |
+| Exact terms | `exact` | Questions that name a part number, a product, a person, a code or a clause | No |
+| Best precision | `precision` | Single-fact questions, where the one right piece must come first and a slower search is fine | No |
+| Vague questions | `vague` | Short or loosely worded questions that use different words from the document | Yes |
+| Chat answer | `chat` | Questions you want answered in a sentence or two, with each claim pointing at its source | Yes |
+
+- **Balanced** runs hybrid search (`hybrid_rrf`, 20 candidates), then the small MiniLM
+  cross-encoder keeps the top five.
+- **Exact terms** runs hybrid search (30 candidates) with `bm25_weight: 2`, so the keyword
+  search counts twice as much as the meaning search, then the small, fast
+  `cross-encoder/ms-marco-MiniLM-L-6-v2` cross-encoder. Best precision uses the stronger,
+  slower reranker.
+- **Best precision** runs hybrid search (30 candidates), then `BAAI/bge-reranker-v2-m3`,
+  the strongest cross-encoder in the catalog. It is slower on a CPU, and it reads far
+  more of a long piece. MiniLM reads only about the first 512 tokens of the question and a
+  piece together, so with Balanced the end of a long piece, such as the lower rows of a
+  big table, does not count.
+- **Vague questions** asks Claude Haiku 4.5 to restate the question in the document's
+  words and searches with that, then reranks like Best precision. The reranker scores
+  the pieces against the question as typed, not the rewrite, so it can undo some of what
+  the rewrite gained. It needs an Anthropic key.
+- **Chat answer** is Best precision, then Claude Sonnet 5 answers from the top five pieces
+  and cites them. It needs an Anthropic key.
+
+### The template files
+
+The files are in the package, under `pandion/templates/documents/` and
+`pandion/templates/questions/`. Each is part of a pipeline file plus a `template:` block,
+and most settings have a short comment that says why they were chosen. A document
+template holds `index`; a question template holds `retrieve` and `answer`:
+
+```yaml
+template:
+  name: Best precision
+  summary: Hybrid search, then the strongest cross-encoder reads each candidate with the question. ...
+  good_for: It suits single-fact questions, where the one right piece must come first and a slower search is fine.
+retrieve:
+  search: {use: hybrid_rrf, top_k: 30}
+  rerank: [{use: cross_encoder, model: BAAI/bge-reranker-v2-m3, top_k: 5}]
+answer: {use: search, top_k: 5}
+```
+
+RAG Playground serves the same list at `GET /api/templates`.
+[`examples/pandion/run_template.py`](../examples/pandion/run_template.py) runs a pair with
+Pandion, and `examples/pandion-api/run_pipeline.py --template` runs one through
+pandion-api. `tests/integration/test_template_parity.py` checks that every pair is valid
+for Pandion and pandion-api. Its `models` test runs pairs that need no key through both
+and checks they make the same pieces, the same hits in the same order and the same result
+ids: three representative pairs on every Release check, and every such pair in the weekly
+Template parity workflow (see CONTRIBUTING.md).
+
+The playground's Starter (`samples/starter.yaml`) is Docling, `dedupe_blocks`, the
+`recursive_character` chunker and hybrid search with no reranker. It is closest to
+Reports with tables and Balanced, but it is not one of the pairs.
 
 ## The cache
 

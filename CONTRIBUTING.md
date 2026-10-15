@@ -84,6 +84,19 @@ before it tags a release. You can run it for any branch, tag or commit:
 gh workflow run "Release checks" -f ref=feat/some-branch
 ```
 
+The template parity test (`tests/integration/test_template_parity.py`) runs pipeline
+template pairs through Pandion and through pandion-api and checks they agree. Under
+`-m models` it runs three representative pairs: Text documents with Balanced, Reports with
+tables with Best precision, and Scanned PDFs with Exact terms. Set `TEMPLATE_PARITY=all`
+to run every pair that needs no key. The **Template parity** workflow
+(`.github/workflows/template-parity.yml`) does that every Monday, with the same model
+cache as Release checks, and you can start it by hand:
+
+```bash
+gh workflow run "Template parity" -f ref=feat/some-branch
+TEMPLATE_PARITY=all uv run pytest -m models tests/integration/test_template_parity.py
+```
+
 To check the `pandion` wheel the way a user would install it, run
 `uv run python checks/pandion-install/run_check.py`. It installs the built wheel in new
 environments, with and without extras, and tests it there. Add `--with-models` to also

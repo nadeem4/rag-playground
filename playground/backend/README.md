@@ -40,6 +40,8 @@ how it fits with the frontend.
   - `samples.py`: the sample list and each sample's questions.
   - `learn.py`: the data for the lessons.
   - `questions.py`: the question set template to fill in.
+  - `templates.py`: `GET /api/templates`, Pandion's pipeline templates
+    (`pandion.list_templates`), each with its metadata and pipeline part.
   - `settings.py`: whether demo mode is on, and its limits.
   - `health.py`: whether the app is up, and which commit and version it runs.
   - `registry.py`: `GET /api/stages`, what each step is for. Its `served_catalog` also hides read-only and test-only settings from the strategy list pandion-api serves.

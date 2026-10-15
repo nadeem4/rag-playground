@@ -1,0 +1,21 @@
+template:
+  name: Vague questions
+  summary: A chat model restates the question in the document's words for the search, then the cross-encoder scores the pieces against the question as typed. Needs an API key.
+  good_for: It suits short or loosely worded questions that use different words from the document.
+retrieve:
+  rewrite:
+    use: llm_rewrite            # one model call restates the question before the search
+    model: claude-haiku-4-5     # a small, fast model is enough to restate a question
+    style: document words       # uses the document's own words, which the keyword search needs to match
+  search:
+    use: hybrid_rrf             # keyword and meaning search fused by rank, on the rewritten question
+    top_k: 30                   # more candidates than usual, because the reranker decides the order
+    rrf_k: 60                   # the usual fusion constant
+    query_expansion: none       # the rewrite already brings in the document's words
+  rerank:
+    - use: cross_encoder        # scores each piece against the question as typed, not the rewrite
+      model: BAAI/bge-reranker-v2-m3   # the same strong reranker as Best precision
+      top_k: 5                  # the five pieces shown
+answer:
+  use: search                   # shows the pieces as they are: no answer model
+  top_k: 5                      # shows every piece the reranker kept

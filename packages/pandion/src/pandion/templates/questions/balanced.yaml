@@ -1,0 +1,18 @@
+template:
+  name: Balanced
+  summary: Keyword and meaning search together, then a small, fast cross-encoder picks the top five. No key needed.
+  good_for: It suits everyday questions, when you want good results quickly.
+retrieve:
+  rewrite: none                 # searches with the question as typed
+  search:
+    use: hybrid_rrf             # keyword and meaning search fused by rank, so neither one's blind spot decides
+    top_k: 20                   # enough candidates for the reranker to choose from
+    rrf_k: 60                   # the usual fusion constant
+    query_expansion: none       # adds no words to the question
+  rerank:
+    - use: cross_encoder        # reads the question and each piece together and scores the pair
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2   # small and fast on a CPU; it reads about 512 tokens of each pair
+      top_k: 5                  # the five pieces shown
+answer:
+  use: search                   # shows the pieces as they are: no model and no key
+  top_k: 5                      # shows every piece the reranker kept

@@ -27,8 +27,9 @@ packages/pandion-api/  pandion-api: Pandion's public API over HTTP, with a Polic
 playground/backend/  the playground's server: pandion-api with the playground's Policy
              (playground/backend/policy.py) under /api/v2, the teaching routes under /api
              (playground/backend/routes/: health, samples, lessons, stage copy, app settings,
-             the question template), demo mode, and the web build. It has no steps of its
-             own: Pandion loads its plugins itself. See playground/README.md
+             the question template, the pipeline templates from Pandion), demo mode, and
+             the web build. It has no steps of its own: Pandion loads its plugins itself.
+             See playground/README.md
 playground/frontend/  the React app: Home, Build, Compare, Evaluate, Library, Read,
              inspectors. See playground/frontend/README.md
 samples/     the bundled sample PDFs, each with its question set
@@ -306,8 +307,9 @@ question, evaluation, comparison, document, result and key check goes through th
 holds only the playground's own teaching routes: `GET /api/health`, `GET /api/samples`,
 `GET /api/samples/questions`, `GET /api/samples/{name}/questions`,
 `POST /api/sources/sample`, `GET /api/learn/chunking`, `GET /api/learn/document`,
-`GET /api/stages`, `GET /api/settings/app` and `GET /api/questions/template`.
-`tests/api/test_routes.py` pins that list, and checks that every path the web's two
+`GET /api/stages`, `GET /api/settings/app`, `GET /api/questions/template` and
+`GET /api/templates` (Pandion's pipeline templates, from `pandion.list_templates`;
+`tests/api/test_templates.py` checks that every pair passes the demo's run check). `tests/api/test_routes.py` pins that list, and checks that every path the web's two
 clients (`playground/frontend/src/api/client.ts` and `playground/frontend/src/api/v2.ts`) name is served. The demo's
 rule tests (`tests/api/test_demo.py` and the rest) call `/api/v2` directly. Runs do not
 hold the pdfium lock (`pandion_api.pages.PDFIUM_LOCK`, which the page routes hold): a

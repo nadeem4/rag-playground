@@ -11,6 +11,11 @@ The app has two halves:
   [frontend/](frontend/README.md).
 - **The backend** is the Python server in [backend/](backend/README.md).
 
+The backend also serves Pandion's pipeline templates at `GET /api/templates`: document
+templates that set how a kind of document is indexed, and question templates that set how
+a kind of question is searched and answered. See
+[Templates](../docs/pandion.md#templates).
+
 ## How the two halves fit
 
 The frontend talks to the backend only over HTTP. Almost everything it does goes through

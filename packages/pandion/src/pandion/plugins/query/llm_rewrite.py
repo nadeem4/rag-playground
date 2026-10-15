@@ -272,7 +272,7 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
         set_usage(
             ctx,
             completion.usage,
-            model_name or model.id,
+            completion.model or model_name or model.id,
         )
         reply = "" if completion.stop_reason == "refusal" else completion.text.strip()
         if not reply or len(reply) > config.max_rewrite_chars or "\n" in reply:

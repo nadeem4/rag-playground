@@ -130,6 +130,10 @@ def test_eval_prints_each_question_and_the_totals(with_questions):
     assert "capital found at rank" in out.stdout and "Found 1 of 1" in out.stdout
     data = json.loads(pandion("eval", "pipeline.yaml", "questions.json", "--documents", "report.pdf", "--json", cwd=with_questions).stdout)
     assert data["total"] == 1 and data["questions"][0]["id"] == "capital"
+    # No step calls a model: the cost line has time and the cache share, no tokens or dollars.
+    [line] = [l for l in out.stdout.splitlines() if l.startswith("Cost: ")]
+    assert " s; " in line and "steps cached" in line and "tokens" not in line and "$" not in line
+    assert data["cost"]["dollars"] is None and data["cost"]["steps_run"] + data["cost"]["steps_cached"] > 0
 
 
 def test_compare_varies_one_setting_and_names_the_best(with_questions):

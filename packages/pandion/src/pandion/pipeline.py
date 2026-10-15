@@ -45,8 +45,9 @@ from typing import Any, Callable
 import yaml
 
 from pandion.config import ConfigError, PipelineConfig, build, from_dict as _from_dict, load, to_dict
+from pandion.cost import cost as _cost
 from pandion.embedding_cache import EmbeddingCache
-from pandion.executor import NodeResult, NodeStatus, RunResult, run
+from pandion.executor import NodeResult, RunResult, run
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -99,13 +100,23 @@ class IndexReport:
     documents: dict[str, DocumentReport]
     index: StageResult | None
 
-    @property
-    def ok(self) -> bool:
-        """Every step that was asked for ran or came from the cache."""
+    def _steps(self) -> list[StageResult]:
         steps = [s for d in self.documents.values() for s in d.stages.values()]
         if self.index is not None:
             steps.append(self.index)
-        return all(s.status in ("executed", "cached") for s in steps)
+        return steps
+
+    @property
+    def ok(self) -> bool:
+        """Every step that was asked for ran or came from the cache."""
+        return all(s.status in ("executed", "cached") for s in self._steps())
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of this
+        run's steps; see `pandion.cost.cost`. `prices` replaces
+        `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
+        per million output tokens)}."""
+        return _cost(self._steps(), prices)
 
 
 @dataclass
@@ -141,6 +152,13 @@ class Retrieval:
     def ok(self) -> bool:
         return all(s.status in ("executed", "cached") for s in self._steps())
 
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of this
+        run's steps; see `pandion.cost.cost`. `prices` replaces
+        `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
+        per million output tokens)}."""
+        return _cost(self._steps(), prices)
+
     @property
     def result(self) -> RetrievalResult | None:
         """The last step's output: the last reranker's, or the search's."""
@@ -175,6 +193,13 @@ class Answer:
     @property
     def ok(self) -> bool:
         return self.retrieval.ok and self.answer.status in ("executed", "cached")
+
+    def cost(self, prices: dict[str, tuple[float, float]] | None = None) -> dict[str, Any]:
+        """Seconds, tokens, estimated dollars and the cache share of this
+        run's steps; see `pandion.cost.cost`. `prices` replaces
+        `pandion.llm.PRICES`: {model id: (dollars per million input tokens,
+        per million output tokens)}."""
+        return _cost([*self.retrieval._steps(), self.answer], prices)
 
     @property
     def hits(self) -> list[Hit]:
@@ -755,9 +780,10 @@ class IndexPipeline:
             duration_ms=done.duration_ms,
             note=artifact.meta.get("note") if artifact else None,
             error=done.error,
-            # Only a step that ran now used tokens now: a cached step's stored
-            # meta holds the usage of the run that made it.
-            usage=artifact.meta.get("usage") if done.status is NodeStatus.EXECUTED else None,
+            # What the step used in this run: kept for a failed step too, and
+            # None for a cached one, whose stored meta holds the usage of the
+            # run that made it.
+            usage=done.usage,
         )
 
 

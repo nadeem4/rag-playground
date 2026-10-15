@@ -25,6 +25,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Ask a question](#ask-a-question)
 - [Evaluate a pipeline](#evaluate-a-pipeline)
 - [Compare settings](#compare-settings)
+- [Speed and cost](#speed-and-cost)
 - [Running a pipeline from an app](#running-a-pipeline-from-an-app)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [Templates](#templates)
@@ -257,9 +258,12 @@ fails is reported, not raised, and the steps after it are skipped.
 
 `usage` says how many tokens a model step used in this run, as
 `{"input_tokens": ..., "output_tokens": ..., "model": ...}`, where `model` is the model id
-the call went to. A count the server did not send is None, never 0. The rewrite, rerank
-and answer steps that call a chat model fill it. It is None for a step that calls no
-model, and for a cached step, because a cached step used no tokens this time.
+the server says it answered with, or the id that was sent when the server does not say.
+They can differ: OpenRouter's `openrouter/auto` sends the question on to another model. A
+count the server did not send is None, never 0. The rewrite, rerank and answer steps that
+call a chat model fill it. A step that fails after its model call keeps the usage it
+recorded, because the call was still billed. It is None for a step that calls no model,
+and for a cached step, because a cached step used no tokens this time.
 
 ## Keep an index up to date
 
@@ -628,6 +632,51 @@ then `Stopped before every variant had finished.` `results.cancelled`, also in
 comparison has its own `r.cancelled`, also in `r.to_dict()`, which says whether a cancel
 stopped that variant.
 
+## Speed and cost
+
+Every report has `cost()`: `Retrieval`, `Answer`, `IndexReport` (and so `SyncReport`),
+`EvaluationReport`, one `Comparison`, and the `Comparisons` that `pandion.compare`
+returns. It says how long the steps took, how many tokens the model steps used, and
+about what that cost.
+
+```python
+answer = p.ask("How big should a chunk be?", credentials=keys)
+answer.cost()
+# {"seconds": 1.84, "input_tokens": 2310, "output_tokens": 412, "dollars": 0.0041,
+#  "unpriced_models": [], "steps_run": 5, "steps_cached": 2, "prices_as_of": "2026-10-15"}
+```
+
+- `seconds` is the time of the steps that ran in this run, including a step that failed.
+- `input_tokens` and `output_tokens` add up what the model steps reported. They are None
+  when no step reported any. A local step, such as an embedder or a cross-encoder, gives
+  time only. Pandion never guesses a count with a tokenizer.
+- `dollars` is an estimate for the steps whose model has a price. It is None when no step
+  could be priced.
+- `unpriced_models` lists the model ids that used tokens but have no price, such as an
+  OpenRouter model or a custom endpoint. Their cost is unknown, so it is never counted
+  as 0.
+- `steps_run` counts the steps that ran in this run, and `steps_cached` the steps that
+  came from the cache. A cached step takes almost no time and uses no tokens, so a run
+  that reused the cache looks fast and cheap. The two counts show how much of it did.
+- `prices_as_of` is the date of the price table, or `"custom"` when you passed your own.
+
+Only steps that ran in this run count. A step that failed after its model call still
+counts, with the tokens it recorded, so a failed run never looks free.
+
+The prices are in `pandion.llm.PRICES`: US dollars per million input tokens and per
+million output tokens, for each Anthropic and OpenAI model Pandion offers, taken from
+each provider's published list price on the date in `pandion.llm.AS_OF`. They are the
+standard rates. Cached prompts, batch requests and long prompts are billed differently,
+so the dollars are an estimate, not a bill. Prices never go in the pipeline file. To use
+your own, pass them in the same shape:
+
+```python
+answer.cost(prices={"claude-sonnet-5": (2.0, 10.0), "openai/gpt-4o-mini": (0.15, 0.6)})
+```
+
+`pandion eval` and `pandion compare` print the cost as one line (see
+[The pandion command](#the-pandion-command)).
+
 ## Running a pipeline from an app
 
 An app, such as a web server or a command line tool, can do everything through
@@ -710,7 +759,8 @@ so results keep the names people gave their files.
 - `on_event` is called with each event as a plain dict, ready for JSON: `run_started`,
   `node_started`, `node_finished` (with `cache_hit`, the result's `artifact_id` and
   `usage`, the same value as `StageResult.usage`),
-  `node_failed` (with the error), `node_skipped` (a step after one that failed),
+  `node_failed` (with the error and `usage`, what the step recorded before it failed),
+  `node_skipped` (a step after one that failed),
   `warning` (with a `message`), `run_cancelled` and `run_finished`. To an event about
   one step, Pandion adds `document` (the document id, or None for the index) and
   `step`. Events about several steps name each one as `{"document": ..., "step": ...}`:
@@ -1105,13 +1155,23 @@ files remembers nothing from one command to the next, so name the documents agai
 `pandion.evaluate` on a question set (JSON or CSV, as in
 [Evaluate a pipeline](#evaluate-a-pipeline)) and prints the report as Pandion prints it:
 one line per question, then the totals. `--top-k` is how many of the top pieces are
-checked (5 when left out). `--json` prints the report's `to_dict()` instead. It exits
-with 1 when a question could not be scored.
+checked (5 when left out). A last line gives the run's cost (see
+[Speed and cost](#speed-and-cost)), for example:
+
+```text
+Cost: 1.84 s, 2,310 in / 412 out tokens, about $0.0041 (estimate, prices as of 2026-10-15); 2 of 7 steps cached; no price for openrouter/auto
+```
+
+A part that is unknown is left out rather than shown as 0: a pipeline with no model step
+shows only the time and the cached steps. `--json` prints the report's `to_dict()`
+instead, with the `cost()` dict under `"cost"`. It exits with 1 when a question could not
+be scored.
 
 **`pandion compare FILE --vary SPEC DOC... [--questions QUESTIONS] [--top-k K] [--json]`**
 runs `pandion.compare`: the pipeline once per value of one setting, indexing `DOC...`
 each time, so every step above the changed one comes from the cache. It prints one line
-per variant and, with `--questions`, the best one. `--json` prints `to_dict()`.
+per variant, each followed by that variant's cost line, and, with `--questions`, the best
+one. `--json` prints `to_dict()`, with each variant's `cost()` under `"cost"`.
 
 `--vary` takes `stage.setting=a,b,c`, and each value is read as YAML, so `200` is a
 number and `null` is no value:
@@ -1392,8 +1452,11 @@ result, as `StageResult.note`.
 A step that calls a model can record what the call used with
 `set_usage(ctx, usage, model)`. `usage` is `{"input_tokens": ..., "output_tokens": ...}`
 and `model` is the model id the call went to. Leave a count as None when the server did
-not send it. The usage is shown with the step's result, as `StageResult.usage`, and in
-its `node_finished` event. A cached run of the step shows None, since it called no model.
+not send it. Pass the model id the server reports when it gives one
+(`pandion.llm.complete` returns it as `Completion.model`). The usage is shown with the
+step's result, as `StageResult.usage`, and in its `node_finished` event, or its
+`node_failed` event when the step raises after recording it. A cached run of the step
+shows None, since it called no model.
 
 ## Loading your strategies
 

@@ -512,7 +512,9 @@ def _sentence_ids(
 
     payload: dict[str, Any] = {
         "question": question,
-        "model": llm.model_name_for(model, config.custom_model, config.openrouter_model)
+        # The id the server says it used, else the one sent.
+        "model": completion.model
+        or llm.model_name_for(model, config.custom_model, config.openrouter_model)
         or model.id,
         "provider": model.provider,
         "citation_method": "sentence_ids",

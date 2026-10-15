@@ -74,6 +74,26 @@ CHAT_MODELS: dict[str, ChatModel] = {
 }
 
 
+#: List prices in US dollars per million (input, output) tokens, for the
+#: native models in `CHAT_MODELS`, at the standard tier and short context.
+#: Cache, batch and long-context rates are not modelled, so a cost from these
+#: is an estimate. OpenRouter and custom models have no entry: their cost is
+#: unknown, never 0. Sources, read on `AS_OF`:
+#: https://platform.claude.com/docs/en/about-claude/pricing
+#: https://developers.openai.com/api/docs/pricing
+PRICES: dict[str, tuple[float, float]] = {
+    "claude-opus-5": (5.0, 25.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+    "gpt-6-astra": (10.0, 50.0),
+    "gpt-5.6-sol": (4.0, 20.0),
+    "gpt-5.6-luna": (0.2, 1.2),
+}
+
+#: The day `PRICES` was read from the providers' pricing pages.
+AS_OF = "2026-10-15"
+
+
 #: The `model` field's schema extras in every step that calls a model: the
 #: label of each choice, and its provider, so the web app knows which key a
 #: choice needs and the demo can drop the custom endpoint.
@@ -88,6 +108,9 @@ class Completion:
     text: str
     usage: dict[str, int | None]  # {"input_tokens", "output_tokens"}; None when not sent
     stop_reason: str
+    #: The model id the server says it used (`response.model`), or None.
+    #: OpenRouter can route a request to another model than the one asked for.
+    model: str | None = None
 
 
 #: Each provider's name and server variable, for the key sentences below.
@@ -300,6 +323,7 @@ def complete(
                 "output_tokens": response.usage.output_tokens,
             },
             stop_reason=response.stop_reason,
+            model=getattr(response, "model", None),
         )
 
     request: dict[str, Any] = {
@@ -351,6 +375,7 @@ def complete(
             "output_tokens": getattr(usage, "completion_tokens", None),
         },
         stop_reason="refusal" if refusal else (choice.finish_reason or "stop"),
+        model=getattr(response, "model", None),
     )
 
 

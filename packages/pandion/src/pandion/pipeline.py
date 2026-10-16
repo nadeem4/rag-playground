@@ -48,6 +48,7 @@ from pandion.config import ConfigError, PipelineConfig, build, from_dict as _fro
 from pandion.cost import cost as _cost
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
+from pandion.fetch import fetch_url, is_url
 from pandion.formats import check_readable
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
@@ -73,6 +74,9 @@ _OUTPUTS = {
 
 #: Settings a stage may take: a dict (the file's block), a step class, a name.
 Step = Any
+
+#: The largest page a URL document may be, in bytes.
+URL_MAX_BYTES = 20 * 1024 * 1024
 
 #: What index.run, retrieve and ask take as documents: a file, a folder, a
 #: list of both, or a mapping of document id to file.
@@ -548,6 +552,8 @@ class IndexPipeline:
         path inside the folder with forward slashes (`guides/chunking.pdf`); a
         file is named by its file name. A mapping names each document:
         `{"report.pdf": "/uploads/0f3a.pdf"}` indexes that file as report.pdf.
+        An `http(s)://` item is fetched (`pandion.fetch`) and named by its URL;
+        a refused one raises `FetchRefused`, a ValueError, before the run starts.
         A step that fails is reported, not raised, and the steps after it are
         skipped. A file the parser cannot read, such as a Word file given to
         pdfium, raises ValueError (`pandion.formats.UnreadableFormat`) before
@@ -612,6 +618,8 @@ class IndexPipeline:
                 doc_id: {
                     "content_hash": file.sha,
                     "chunk_set": report.documents[doc_id].stages["chunk"].artifact_id,
+                    # A fetched page's file name comes from its content type.
+                    **({} if file.filename == PurePosixPath(doc_id).name else {"filename": file.filename}),
                 }
                 for doc_id, file in documents.items()
             },
@@ -647,13 +655,32 @@ class IndexPipeline:
             if not self._uploads():
                 return {str(doc_id): str(location) for doc_id, location in sorted(paths.items())}
             return {
-                str(doc_id): self.sources.add_bytes(Path(path).read_bytes(), PurePosixPath(str(doc_id)).name)
+                str(doc_id): self._fetch(path)
+                if is_url(path)
+                else self.sources.add_bytes(Path(path).read_bytes(), PurePosixPath(str(doc_id)).name)
                 for doc_id, path in sorted(paths.items())
             }
+        items = paths if isinstance(paths, list) else [paths]
         if not self._uploads():
-            items = paths if isinstance(paths, list) else [paths]
             return {str(item).replace("\\", "/"): str(item) for item in items}
-        return {doc_id: self.sources.add(path) for doc_id, path in _files(paths)}
+        files = [item for item in items if not is_url(item)]
+        urls = [item for item in items if is_url(item)]
+        # With no URL, _files says when there is nothing to index.
+        found = {doc_id: self.sources.add(path) for doc_id, path in _files(files)} if files or not urls else {}
+        for url in urls:
+            if url in found:
+                raise ValueError(f"The document id '{url}' is given twice.")
+            found[url] = self._fetch(url)
+        return dict(sorted(found.items()))
+
+    def _fetch(self, url: str) -> SourceFile:
+        """The page at `url`, fetched behind the guard (`pandion.fetch`) and
+        kept in `sources/` like an uploaded file. `models.public_endpoints_only`
+        turns on the public-address rule."""
+        data, filename = fetch_url(
+            url, public_only=self.config.models.public_endpoints_only, max_bytes=URL_MAX_BYTES
+        )
+        return self.sources.add_bytes(data, filename)
 
     def _index(
         self,
@@ -769,7 +796,9 @@ class IndexPipeline:
                 "p.index.run or p.index.sync."
             )
         return {
-            doc_id: SourceFile(sha=entry["content_hash"], filename=PurePosixPath(doc_id).name)
+            doc_id: SourceFile(
+                sha=entry["content_hash"], filename=entry.get("filename", PurePosixPath(doc_id).name)
+            )
             for doc_id, entry in manifest.documents.items()
         }
 

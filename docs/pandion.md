@@ -502,6 +502,27 @@ answer = p.ask(question, credentials={"anthropic_api_key": "sk-ant-..."})
 - `answer.ok`, which is false if any step failed. A step that fails is reported, not
   raised, and then `output` is None.
 
+**What the chat labels mean.** `chat` labels every part of its answer that says something,
+in both citation modes. A part is `cited` when the model cited a piece for it and, with
+sentence ids, the cited sentence is close enough to the claim. It is `weak` when the model
+cited a sentence that is not close enough. A part the model did not cite is compared with
+every sentence of the pieces it read, using the index's own embedder: it is `similarity`
+when one is close enough, with that sentence as its citation, and `none` otherwise. With
+Claude's own citations, a part Claude cited is `cited`, and a part it did not cite gets the
+same check. Claude often splits a sentence where a citation starts, as in "According to
+the text, " followed by the cited part. A part like that, which leads into a cited part
+without ending a sentence, gets no label of its own. This check costs no second model
+call. Without an index there is nothing to compare with, so an uncited part is `none`.
+The output's `stats` counts each label, and also gives `claims`, how many parts say
+something, and `citing`, how many of those cite a piece, so "2 of 3 parts cite a piece"
+is `citing` of `claims`. A part can hold more than one sentence, or only part of one.
+
+Read the labels with care. Closeness is not proof. The check measures how alike two texts
+are, not whether one follows from the other, so "X is not allowed" scores close to "X is
+allowed". A `none` label is the one to trust: nothing in the pieces is even close to that
+claim. A `cited` or `similarity` label claims more than it can prove. It says the claim
+sits near a sentence of the source, not that the source supports it.
+
 With several documents in the index, `chat` finds its citations in the first document by
 name, the same rule as for a rewrite. A citation from another document is kept, and
 marked as not verified.

@@ -277,8 +277,8 @@ the question box.
   comes first and the search order folds under **Show search order**. Widen the panel to
   see the two side by side.
 - With Chat, the answer cites the passages it relied on. Each citation is checked against
-  the parsed document, and one that does not match is marked unverified. With sentence ids,
-  each claim is shown as cited, weak, matched by similarity, or not grounded. Clicking a
+  the parsed document, and one that does not match is marked unverified. Each claim is
+  shown as cited, weak, matched by similarity, or not grounded. Clicking a
   citation opens the PDF page with the sentence highlighted.
 - A piece that holds a table shows it as a table when the piece is open, and says each row
   in words (Measure: Before, After) when it is cut to two lines, as on Compare.

@@ -10,13 +10,18 @@ unchanged, and writes it again after a sync that worked.
   "index_recipe": "<sha256 of the index settings>",
   "index_artifact": "<artifact id of the lancedb index>",
   "documents": {
-    "guides/chunking.pdf": {"content_hash": "<sha256 of the bytes>", "chunk_set": "<artifact id>"}
+    "guides/chunking.pdf": {"content_hash": "<sha256 of the bytes>", "chunk_set": "<artifact id>"},
+    "https://example.com/guide": {"content_hash": "...", "chunk_set": "...", "filename": "guide.html"}
   }
 }
 ```
 
 A document id is the file's path inside the synced folder with forward
-slashes, so a manifest written on Windows reads the same on Linux.
+slashes, so a manifest written on Windows reads the same on Linux. A URL
+document's id is its URL, and its entry also has `filename`: the name the
+fetched page was stored under, whose suffix came from its content type
+(`pandion.fetch`). An entry has `filename` only when it differs from the last
+part of the id, so the entries of local files are as before.
 """
 
 from __future__ import annotations

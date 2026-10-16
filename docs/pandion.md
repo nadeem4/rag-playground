@@ -149,7 +149,10 @@ pixels), not PDF points.
 ## A URL as a document
 
 A web address works wherever a file does, in `index.run`, `index.sync` and the
-`documents` of `retrieve` and `ask`. It can sit beside local files in one list:
+`documents` of `retrieve` and `ask`. It can sit beside local files in one list. In
+`documents=[url]` on `retrieve` and `ask`, the page is fetched again on each call, so
+each question costs one request to that site; the steps after it are still cache hits
+when the bytes did not change.
 
 ```python
 p.index.run(["docs/", "https://example.com/guides/ferns", "https://example.com/report.pdf"])
@@ -169,7 +172,9 @@ JPG. Pandion does not follow links on the page, does not read sitemaps, and does
 robots.txt, because one fetch a person asks for is not crawling. Every request carries an
 honest User-Agent, `Pandion/<version>`, with a link to the project.
 
-**The limits.** A fetch gives up after 10 seconds. A page larger than 20 MB is refused:
+**The limits.** A fetch gives up 10 seconds after it starts. That is one deadline for the
+whole fetch, redirects, headers and body included, so a server that sends one byte at a
+time cannot hold it open. A page larger than 20 MB is refused:
 Pandion stops reading one byte past the limit. A refusal stops the run before any step
 runs, with a `pandion.extend.FetchRefused`, a `ValueError`. Its message is one plain
 sentence and never repeats the address, so nothing secret in a query string reaches a
@@ -197,10 +202,14 @@ models:
 
 Then every address, the first one and each redirect, must be https on port 443, and its
 host must have only public addresses: not localhost, not a private or link-local range,
-not a cloud metadata address. Pandion connects to the address it checked and never looks
+not a cloud metadata address. A name with one public and one private address is refused.
+Pandion connects only to the addresses it checked, trying each in turn, and never looks
 the name up a second time, so a name whose answer changes between the check and the
-request (DNS rebinding) cannot reach a private address. A redirect to a private address,
-or to plain http, is refused like the first address would be.
+request (DNS rebinding) cannot reach a private address. TLS is still checked against the
+host name. A redirect to a private address, or to plain http, is refused like the first
+address would be. An `@` is allowed after the host, in the path or query, but never before
+it, where it would carry a user name. A host name that has no ASCII (IDNA) form is
+refused with `The URL's host name is not valid, so it was not fetched.`
 
 **Sync with URLs.** `index.sync` fetches every URL again. When the page's bytes changed,
 the document is in `report.changed` and its pieces are rebuilt; when they did not, it is

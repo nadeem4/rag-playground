@@ -32,8 +32,9 @@ request to a private one.
 What this does not stop: the SDK resolves the name again when it connects, so a
 name whose DNS answer changes between the check and the request (DNS
 rebinding) can still slip past. `check_public_url` is the same check with a
-query string allowed; it returns the checked address, and `pandion.fetch`
-connects to that address only, so a fetched URL has no such gap. The playground refuses custom endpoints on its
+query string, and an `@` after the host, allowed; it returns the checked
+addresses, and `pandion.fetch` connects to those addresses only, so a fetched
+URL has no such gap. The playground refuses custom endpoints on its
 demo outright (`playground.backend.policy.PlaygroundPolicy`); this check is the second line
 behind that.
 """
@@ -116,24 +117,29 @@ def check_public_endpoint(url: str) -> None:
     # A base URL needs no query.
     if "?" in (url or ""):
         raise EndpointRefused()
+    # A base URL needs no `@` anywhere either (`#@` and `?@` tricks).
+    if "@" in (url or ""):
+        raise EndpointRefused()
     check_public_url(url)
 
 
-def check_public_url(url: str) -> str:
+def check_public_url(url: str) -> list[str]:
     """Raise `EndpointRefused` unless `url` is a public https address; a query
-    string is allowed. Returns the checked address, so a caller can connect to
-    that address and no other (`pandion.fetch` does, which closes the DNS
-    rebinding gap for it)."""
+    string, and an `@` after the host, are allowed. Returns every checked
+    address, so a caller can connect to those addresses and no other
+    (`pandion.fetch` does, which closes the DNS rebinding gap for it)."""
     url = url or ""
-    # No `@` anywhere (credentials, or `#@` and `?@` tricks), no fragment, no
-    # backslash, space or control character.
-    if "@" in url or "#" in url or _ODD.search(url):
+    # No fragment, backslash, space or control character.
+    if "#" in url or _ODD.search(url):
         raise EndpointRefused()
     try:
         parts = urlsplit(url)
         port = parts.port
     except ValueError:
         raise EndpointRefused() from None
+    # No user name or password: no `@` in the part before the path.
+    if "@" in parts.netloc:
+        raise EndpointRefused()
     if parts.scheme.lower() != "https":
         raise EndpointRefused()
     if parts.username is not None or parts.password is not None:
@@ -153,7 +159,7 @@ def check_public_url(url: str) -> str:
     if literal is not None:
         if not _is_public(literal):
             raise EndpointRefused()
-        return str(literal)
+        return [str(literal)]
     if _legacy_ipv4(host):
         raise EndpointRefused()
     try:
@@ -169,7 +175,7 @@ def check_public_url(url: str) -> str:
             raise EndpointRefused() from None
         if not _is_public(ip):
             raise EndpointRefused()
-    return addresses[0].split("%", 1)[0]
+    return [address.split("%", 1)[0] for address in addresses]
 
 
 #: The run extra that turns the check on. Never hashed or stored.

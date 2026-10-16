@@ -18,6 +18,7 @@ from pandion import __version__, endpoints, fetch
 from pandion.fetch import FetchRefused, fetch_url
 
 PUBLIC_V4 = "104.18.2.115"
+PUBLIC_V6 = "2606:4700::6812:273"
 PRIVATE_V4 = "10.0.0.5"
 BIG = 10_000_000
 
@@ -27,6 +28,8 @@ class Server:
 
     def __init__(self) -> None:
         self.routes: dict[str, tuple[int, dict[str, str], bytes]] = {}
+        #: Paths answered by a function of the handler, for slow answers.
+        self.handlers: dict[str, object] = {}
         self.delay = 0.0
         self.agents: list[str] = []
         routes, server = self.routes, self
@@ -36,6 +39,12 @@ class Server:
 
             def do_GET(self) -> None:  # noqa: N802
                 server.agents.append(self.headers.get("User-Agent", ""))
+                if self.path in server.handlers:
+                    try:
+                        server.handlers[self.path](self)
+                    except OSError:
+                        pass
+                    return
                 if server.delay:
                     time.sleep(server.delay)
                 status, headers, body = routes.get(self.path, (404, {}, b""))
@@ -257,10 +266,10 @@ def test_public_only_refuses_an_address_that_is_not_public(url, resolve):
 
 def test_public_only_allows_a_query_string(resolve, monkeypatch):
     resolve.table["example.com"] = [[PUBLIC_V4]]
-    asked: list[tuple[str, str | None]] = []
+    asked: list[tuple[str, list[str] | None]] = []
 
-    def send(url: str, ip: str | None):
-        asked.append((url, ip))
+    def send(url: str, ips: list[str] | None, deadline):
+        asked.append((url, ips))
         return FakeResponse(200, {"Content-Type": "text/html"}, b"<p>hi</p>")
 
     monkeypatch.setattr(fetch, "_send", send)
@@ -268,7 +277,7 @@ def test_public_only_allows_a_query_string(resolve, monkeypatch):
     data, filename = fetch_url("https://example.com/search?q=ferns#top", public_only=True, max_bytes=BIG)
 
     assert (data, filename) == (b"<p>hi</p>", "search.html")
-    assert asked == [("https://example.com/search?q=ferns", PUBLIC_V4)]
+    assert asked == [("https://example.com/search?q=ferns", [PUBLIC_V4])]
 
 
 def test_public_only_pins_the_checked_address_so_rebinding_cannot_slip_past(resolve, monkeypatch):
@@ -294,7 +303,7 @@ def test_public_only_checks_every_redirect_again(resolve, monkeypatch):
     resolve.table["intranet.example"] = [[PRIVATE_V4]]
     sent: list[str] = []
 
-    def send(url: str, ip: str | None):
+    def send(url: str, ips: list[str] | None, deadline):
         sent.append(url)
         return FakeResponse(302, {"Location": "https://intranet.example/admin"}, b"")
 
@@ -309,11 +318,128 @@ def test_public_only_checks_every_redirect_again(resolve, monkeypatch):
 def test_public_only_refuses_a_redirect_to_plain_http(resolve, monkeypatch):
     resolve.table["example.com"] = [[PUBLIC_V4]]
     monkeypatch.setattr(
-        fetch, "_send", lambda url, ip: FakeResponse(301, {"Location": "http://example.com/page"}, b"")
+        fetch, "_send", lambda url, ips, deadline: FakeResponse(301, {"Location": "http://example.com/page"}, b"")
     )
 
     assert refused("https://example.com/page", public_only=True) == (
         "Only https addresses on port 443 are fetched here."
+    )
+
+
+# --- fixes after review -------------------------------------------------------
+
+
+def trickle_headers(handler) -> None:
+    handler.wfile.write(b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n")
+    for n in range(60):
+        handler.wfile.write(f"X-Slow-{n}: 1\r\n".encode())
+        handler.wfile.flush()
+        time.sleep(0.1)
+
+
+def trickle_body(handler) -> None:
+    handler.wfile.write(b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\n\r\n")
+    for _ in range(60):
+        handler.wfile.write(b"x")
+        handler.wfile.flush()
+        time.sleep(0.1)
+
+
+@pytest.mark.parametrize("trickle", [trickle_headers, trickle_body], ids=["headers", "body"])
+def test_the_timeout_is_a_deadline_for_the_whole_fetch(server, monkeypatch, trickle):
+    # Each byte arrives well inside the socket timeout; only a total deadline stops it.
+    monkeypatch.setattr(fetch, "TIMEOUT", 0.6)
+    server.handlers["/trickle"] = trickle
+    started = time.monotonic()
+
+    assert refused(server.url("/trickle")) == (
+        "The URL took longer than 0.6 seconds to answer, so it was not fetched."
+    )
+    assert time.monotonic() - started < 2.0
+
+
+def test_check_public_url_allows_an_at_sign_after_the_host(resolve):
+    resolve.table["example.com"] = [[PUBLIC_V4]]
+
+    assert endpoints.check_public_url("https://example.com/@user?x=a@b") == [PUBLIC_V4]
+    with pytest.raises(endpoints.EndpointRefused):
+        endpoints.check_public_url("https://a@example.com/")
+    with pytest.raises(endpoints.EndpointRefused):
+        endpoints.check_public_endpoint("https://example.com/@user")
+
+
+@pytest.mark.parametrize("public_only", [False, True])
+def test_a_host_name_that_cannot_be_encoded_is_refused_plainly(public_only):
+    url = "https://" + "a" * 64 + ".example/page"
+
+    assert refused(url, public_only=public_only) == "The URL's host name is not valid, so it was not fetched."
+
+
+def test_an_international_host_name_is_sent_in_its_ascii_form(resolve, monkeypatch):
+    resolve.table["xn--bcher-kva.example"] = [[PUBLIC_V4]]
+    connected: list[tuple[str, int]] = []
+
+    def connect(address, timeout=None, *args, **kwargs):
+        connected.append(address)
+        raise ConnectionRefusedError("test stops here")
+
+    monkeypatch.setattr(fetch, "_connect", connect)
+
+    assert refused("https://bücher.example/page", public_only=True) == (
+        "The URL could not be reached, so it was not fetched."
+    )
+    assert connected == [(PUBLIC_V4, 443)]
+
+
+def test_every_checked_address_is_tried_in_turn(resolve, monkeypatch):
+    resolve.table["example.com"] = [[PUBLIC_V6, PUBLIC_V4]]
+    connected: list[tuple[str, int]] = []
+
+    def connect(address, timeout=None, *args, **kwargs):
+        connected.append(address)
+        raise OSError("no route")
+
+    monkeypatch.setattr(fetch, "_connect", connect)
+
+    refused("https://example.com/page", public_only=True)
+
+    assert connected == [(PUBLIC_V6, 443), (PUBLIC_V4, 443)]
+
+
+def test_tls_is_checked_against_the_host_while_connecting_to_the_pinned_address(resolve, monkeypatch):
+    import ssl
+
+    resolve.table["example.com"] = [[PUBLIC_V4]]
+    connected: list[tuple[str, int]] = []
+    hostnames: list[str | None] = []
+    raw = socket.socket()
+
+    def connect(address, timeout=None, *args, **kwargs):
+        connected.append(address)
+        return raw
+
+    class Context:
+        def wrap_socket(self, sock, server_hostname=None, **kwargs):
+            hostnames.append(server_hostname)
+            raise ssl.SSLError("test stops here")
+
+    monkeypatch.setattr(fetch, "_connect", connect)
+    monkeypatch.setattr(fetch.ssl, "create_default_context", lambda *a, **k: Context())
+
+    try:
+        refused("https://example.com/page", public_only=True)
+    finally:
+        raw.close()
+
+    assert connected == [(PUBLIC_V4, 443)]
+    assert hostnames == ["example.com"]
+
+
+def test_a_name_with_one_public_and_one_private_address_is_refused(resolve):
+    resolve.table["mixed.example"] = [[PUBLIC_V4, PRIVATE_V4]]
+
+    assert refused("https://mixed.example/page", public_only=True) == (
+        "That address is not on the public internet, so it was not fetched."
     )
 
 

@@ -68,6 +68,8 @@ export interface RunState {
   lastSeq: number
   /** Each evaluation question's outcome, by id, from `question_finished`. */
   questions: Record<string, { found: boolean; error: string | null; number: number }>
+  /** A question-writing run's progress, from its latest `part_finished`; null before the first. */
+  parts: { number: number; total: number } | null
   /** What the run returned, from `GET /api/v2/runs/{id}` once the stream ended. */
   result: unknown
   /** True when that read failed twice, so a page can say the result could not be read rather than show nothing. */
@@ -87,6 +89,7 @@ export const initialRunState: RunState = {
   queued: false,
   lastSeq: -1,
   questions: {},
+  parts: null,
   result: null,
   resultFailed: false,
 }
@@ -185,6 +188,8 @@ function applyEvent(prev: RunState, e: RunEvent): RunState {
     }
     case "question_finished":
       return { ...state, questions: { ...state.questions, [e.question]: { found: e.found, error: e.error, number: e.number } } }
+    case "part_finished":
+      return { ...state, parts: { number: e.number, total: e.total } }
     case "node_started":
       return patchNode(state, e.node_id, {
         status: "running",

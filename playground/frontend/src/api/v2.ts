@@ -59,6 +59,9 @@ export const v2 = {
   uploadQuestionSet: (sha: string, file: File) =>
     request<QuestionSetUpload>(`/documents/${id(sha)}/questions`, { method: "POST", body: form(file) }),
   deleteQuestionSet: (sha: string) => request<unknown>(`/documents/${id(sha)}/questions`, { method: "DELETE" }),
+  /** A model writes a question set for the document, as a run of kind `questions`. The set is handed back, never kept. */
+  generateQuestions: (sha: string, body: { model: string; count: number }, opts: KeyOpts = {}) =>
+    request<RunCreated>(`/documents/${id(sha)}/questions/generate`, jsonInit(body, keyHeaders(opts.keys))),
 
   createRun: (body: V2RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", jsonInit(body, keyHeaders(opts.keys))),
   ask: (body: V2AskRequest, opts: KeyOpts = {}) => request<RunCreated>("/ask", jsonInit(body, keyHeaders(opts.keys))),

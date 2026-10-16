@@ -433,6 +433,19 @@ then shows at once, instead of looking like a retrieval failure. A set is stored
 the document's fingerprint, so it can never be scored against the wrong document. On the
 demo the set is kept only in the tab; locally it is kept beside the document.
 
+You can also let a model write the questions. Open Use your own questions and press Write
+questions for me. A model reads the document part by part and writes one question for each
+part, with the passage that answers it. It runs on your own key, so add an Anthropic or
+OpenAI key with the Key button first, or set it in .env when running locally, and you pay
+for the calls. Pick the model and how many
+questions you want (15 to start with, at most 25 on the demo). Every question must quote
+its passage word for word from the document. A question whose passage is not found, is
+only a heading, or repeats another question is dropped, and you see why. A question that
+reuses most of its passage's words is marked copied, because it is easier to find than a
+real question would be. You can close the sheet while the model writes; the questions wait
+for you there. Then read each one, edit its wording, drop it, or keep it. Nothing is used
+until you press Save, which uploads the questions you kept like a file, with the same check.
+
 ### Reading a score and a miss
 
 While it runs, one line says whether the index came from the cache or was built now, and a

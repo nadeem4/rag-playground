@@ -222,3 +222,15 @@ describe("/api/v2 events", () => {
     expect(cardEvent(e as never)).toBe(e)
   })
 })
+
+describe("runReducer: questions written for you", () => {
+  it("keeps the latest part_finished as parts done and parts in all", () => {
+    expect(initialRunState.parts).toBeNull()
+    const state = reduceEvents([
+      { event: "part_finished", ts, number: 1, total: 4 },
+      { event: "part_finished", ts, number: 2, total: 4 },
+    ] as RunEvent[])
+    expect(state.parts).toEqual({ number: 2, total: 4 })
+    expect(state.status).toBe("running")
+  })
+})

@@ -1,7 +1,10 @@
+import { useEffect } from "react"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import { resetAppSettingsForTests } from "@/api/useDemo"
+import { resetWriteSessionsForTests } from "@/state/writeQuestions"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { EvalPayload, EvalQuestionResult, EvaluationRequest, EvaluationResult, GoldQuestion, QuestionSetUpload, Registry, SampleQuestion, Totals } from "@/api/types"
 import { stepOfCardIn } from "@/state/config"
@@ -237,6 +240,7 @@ function chooseFile(input: HTMLElement, name: string) {
 beforeEach(() => {
   window.history.replaceState(null, "", "/evaluate")
   resetAppSettingsForTests()
+  resetWriteSessionsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
   resetStoredGraphForTests()
@@ -364,7 +368,7 @@ describe("Evaluate", () => {
 
   it("uses only spacing steps the theme defines (0, 1, 2, 3, 4, 6, 8), since any other step compiles to nothing", async () => {
     const { readFileSync } = await import("node:fs")
-    const files = ["routes/Evaluate.tsx", "components/evaluate/QuestionSetPanel.tsx", "components/evaluate/EvalMetrics.tsx"]
+    const files = ["routes/Evaluate.tsx", "components/evaluate/QuestionSetPanel.tsx", "components/evaluate/WriteQuestions.tsx", "components/evaluate/EvalMetrics.tsx"]
     const offScale = /(^|[\s"'`:])-?(?:gap|gap-x|gap-y|p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|space-x|space-y|inset|top|bottom|left|right)-(?!(?:0|1|2|3|4|6|8)(?![0-9.]))[0-9][0-9.]*/m
     for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(offScale)
   })
@@ -381,7 +385,7 @@ describe("Evaluate", () => {
 
   it("uses no sm: class in its files, since the theme has no sm breakpoint", async () => {
     const { readFileSync } = await import("node:fs")
-    const files = ["routes/Evaluate.tsx", "components/evaluate/QuestionSetPanel.tsx", "components/evaluate/EvalMetrics.tsx"]
+    const files = ["routes/Evaluate.tsx", "components/evaluate/QuestionSetPanel.tsx", "components/evaluate/WriteQuestions.tsx", "components/evaluate/EvalMetrics.tsx"]
     for (const f of files) expect(readFileSync(`${__dirname}/../${f}`, "utf8"), f).not.toMatch(/(^|[\s"'`])sm:/m)
   })
 
@@ -511,6 +515,98 @@ describe("the question set panel", () => {
     chooseFile(screen.getByLabelText("Upload a question set"), "mine.csv")
     const err = await screen.findByTestId("set-error", {}, { timeout: 4000 })
     expect(err.textContent).toMatch(/does not store question sets/)
+  })
+})
+
+describe("questions written for you", () => {
+  beforeEach(() => storeGraph(sampleGraph(registry, SOURCE)))
+
+  it("offers Write questions for me inside Use your own questions, and it opens the sheet", async () => {
+    render(<Evaluate />)
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    openOwn()
+    const own = screen.getByTestId("own-questions")
+    const button = within(own).getByRole("button", { name: "Write questions for me" })
+    expect(own.textContent).toMatch(/A model reads this document and writes test questions with their evidence, on your own key\./)
+    fireEvent.click(button)
+    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "Write questions for me" })).toBeTruthy()
+  })
+
+  it("saves the kept questions through the upload, and the set line names the model and the document", async () => {
+    const saved = goldSet({
+      filename: "questions written by Claude Haiku 4.5.json",
+      format: "json",
+      count: 1,
+      set: { version: 1, document: "chunking-primer.pdf", questions: [question({ id: "q1", question: "Which two steps?", gold_answers: ["It answers in two steps."] })] },
+      summary: { questions: 1, found: 1, found_normalized: 0, not_found: 0 },
+      questions: [],
+    })
+    serve({ upload: saved })
+    const base = fetch
+    const uploads: File[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
+        if (url.endsWith("/questions/generate")) return ok({ run_id: "w1" }, 202)
+        if (url === "/api/v2/runs/w1")
+          return ok({
+            run_id: "w1", kind: "questions", status: "finished", ok: true, cancel_requested: false, last_event_id: 1, events: [],
+            result: {
+              questions: [{ id: "q1", question: "What are the two steps?", gold_answers: ["It answers in two steps."], answer: "", tags: [] }],
+              dropped: [],
+              usage: { input_tokens: 900, output_tokens: 200, model: "claude-haiku-4-5" },
+            },
+          })
+        if (url.endsWith("/questions") && init?.method === "POST") uploads.push((init.body as FormData).get("file") as File)
+        return base(url, init)
+      }),
+    )
+    let stream: { onmessage: ((ev: MessageEvent) => void) | null } | null = null
+    vi.stubGlobal(
+      "EventSource",
+      class {
+        onmessage: ((ev: MessageEvent) => void) | null = null
+        onerror = null
+        onopen = null
+        constructor() {
+          stream = this
+        }
+        close() {}
+      },
+    )
+    function WithKey() {
+      const { setKey } = useApiKey()
+      useEffect(() => setKey("anthropic", "sk-ant-test"), [setKey])
+      return null
+    }
+    render(
+      <ApiKeyProvider>
+        <WithKey />
+        <Evaluate />
+      </ApiKeyProvider>,
+    )
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready/))
+    openOwn()
+    fireEvent.click(within(screen.getByTestId("own-questions")).getByRole("button", { name: "Write questions for me" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Write 15 questions" }))
+    await waitFor(() => expect(stream).not.toBeNull())
+    act(() => stream!.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ ts: 1, event: "stream_end", status: "finished", ok: true }), lastEventId: "0" })))
+    const sheet = await screen.findByRole("dialog")
+    const row = (await within(sheet).findByText("What are the two steps?")).closest("li")!
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }))
+    fireEvent.change(within(row).getByRole("textbox"), { target: { value: "Which two steps?" } })
+    fireEvent.click(within(row).getByRole("button", { name: "Done" }))
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save 1 question" }))
+
+    await waitFor(() => expect(uploads).toHaveLength(1))
+    expect(JSON.parse(await uploads[0].text()).questions).toEqual([
+      { id: "q1", question: "Which two steps?", gold_answers: ["It answers in two steps."], answer: "", tags: [] },
+    ])
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    const line = screen.getByTestId("set-line").textContent!
+    expect(line).toMatch(/^1 question you kept, written by Claude Haiku 4\.5 from chunking-primer\.pdf\./)
+    expect((screen.getByTestId("own-questions") as HTMLDetailsElement).open).toBe(false)
   })
 })
 

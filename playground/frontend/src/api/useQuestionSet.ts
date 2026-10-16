@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { clearTabSet, readTabSet, report, storeTabSet, type Report } from "@/state/goldSet"
 
-import { ApiError } from "./client"
+import { ApiError, plainMessage } from "./client"
 import { v2 } from "./v2"
 import type { StoredQuestionSet } from "./types"
 
@@ -25,11 +25,11 @@ export interface QuestionSetState {
   error: string | null
   /** An upload or a removal is in flight. */
   busy: boolean
-  upload: (file: File) => Promise<void>
+  /** True when the set was taken (kept on the server or in this tab). */
+  upload: (file: File) => Promise<boolean>
   remove: () => Promise<void>
 }
 
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 const DEMO_REFUSED = "This hosted demo does not store question sets. Run the playground locally to evaluate your own document."
 
@@ -67,7 +67,7 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
   }, [sourceSha])
 
   const upload = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<boolean> => {
       setBusy(true)
       setError(null)
       try {
@@ -77,8 +77,10 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
         setSet(s)
         setTabOnly(!kept)
         setRep(report(s))
+        return true
       } catch (err) {
-        setError(err instanceof ApiError && err.status === 403 ? DEMO_REFUSED : message(err))
+        setError(err instanceof ApiError && err.status === 403 ? DEMO_REFUSED : plainMessage(err))
+        return false
       } finally {
         setBusy(false)
       }

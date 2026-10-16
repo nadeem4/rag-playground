@@ -55,6 +55,12 @@ export function requestFrom(base: string) {
 
 const request = requestFrom(API_BASE)
 
+/** An error in plain words: the server's own sentence when it sent one, without the status and path an `ApiError` message starts with. */
+export function plainMessage(err: unknown): string {
+  if (err instanceof ApiError && typeof err.detail === "string") return err.detail
+  return err instanceof Error ? err.message : String(err)
+}
+
 export const jsonInit = (body: unknown, headers: Record<string, string> = {}): RequestInit => ({
   method: "POST",
   headers: { "Content-Type": "application/json", ...headers },

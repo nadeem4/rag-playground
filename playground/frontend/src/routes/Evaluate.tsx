@@ -756,6 +756,8 @@ function Evaluation({
 
       <div className="flex flex-col gap-2">
         <QuestionSetPanel
+          sha={sourceSha}
+          registry={registry}
           inUse={which}
           set={uploaded.set}
           count={questions?.length ?? null}
@@ -766,7 +768,7 @@ function Evaluation({
           error={uploaded.error}
           busy={uploaded.busy}
           disabled={busy}
-          onUpload={(file) => void uploaded.upload(file)}
+          onUpload={uploaded.upload}
           onRemove={() => void uploaded.remove()}
           extra={
             questions?.length ? (

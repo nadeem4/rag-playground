@@ -387,6 +387,13 @@ export interface QuestionFinishedEvent extends EventBase {
   error: string | null
 }
 
+/** A question-writing run finished one part of the document: `number` parts of `total` are done. */
+export interface PartFinishedEvent extends EventBase {
+  event: "part_finished"
+  number: number
+  total: number
+}
+
 export type RunEvent =
   | RunStartedEvent
   | WarningEvent
@@ -401,6 +408,7 @@ export type RunEvent =
   | UnqueuedEvent
   | StreamEndEvent
   | QuestionFinishedEvent
+  | PartFinishedEvent
 
 // ------------------------------------------------------------------- app --
 

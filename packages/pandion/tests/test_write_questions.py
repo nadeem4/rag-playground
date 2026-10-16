@@ -309,6 +309,25 @@ def test_each_call_leaves_room_for_thinking_models(fake):
     assert model.calls[0]["max_tokens"] == 16000
 
 
+def test_the_prompt_asks_for_questions_a_user_would_type(fake):
+    # From the first live run: questions named "the sample" or "the primer",
+    # and one gold passage was a bare heading.
+    model = fake(GOOD[:1])
+    write_questions(TEXT, model="claude-haiku-4-5", count=1, credentials=CREDS)
+    system = model.calls[0]["system"]
+    assert "Do not mention the document" in system
+    assert "at least one full sentence" in system
+
+
+def test_a_heading_as_the_gold_passage_is_dropped(fake):
+    # The live run kept "Chunk size and overlap", a title, as a gold passage.
+    text = "Choosing chunk size and overlap\n\nChunk size is how many tokens go into each piece."
+    fake([reply("What does the guide cover about chunks?", "Choosing chunk size and overlap")])
+    result = write_questions(text, model="claude-haiku-4-5", count=1, credentials=CREDS)
+    assert result["questions"] == []
+    assert "shorter than 6 words" in result["dropped"][0]["reason"]
+
+
 @pytest.mark.parametrize("stop", ["max_tokens", "length"])
 def test_a_reply_that_was_cut_off_is_a_drop(fake, stop):
     fake([(GOOD[0], stop), GOOD[1]])
@@ -379,7 +398,7 @@ def test_text_between_paragraphs_is_in_a_part():
     [
         ({"question": "Why? " * 80, "gold_passage": "The capital of France is Paris."}, "longer than 300"),
         ({"question": "Which city?", "gold_passage": "The capital of France is Paris.", "answer": "x" * 600}, "answer is longer"),
-        ({"question": "Which city?", "gold_passage": "France is Paris."}, "shorter than 4 words"),
+        ({"question": "Which city?", "gold_passage": "France is Paris."}, "shorter than 6 words"),
     ],
 )
 def test_out_of_bounds_replies_are_drops(fake, item, why):

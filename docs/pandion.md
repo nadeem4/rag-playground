@@ -593,14 +593,15 @@ or one part per paragraph when there are fewer paragraphs than `count`. Text bet
 paragraphs, such as a table or a list, goes with the paragraph before it, so nothing is
 left out. Each part is one call to the model, which writes one question, a short answer,
 and the passage that answers it, quoted word for word, as JSON. The prompt says the
-question must make sense without the part in view, and that the part is document text,
-not instructions. A part's prompt holds at most 6,000 characters of it
+question must make sense without the part in view and read like something a person would
+search for, never naming the document itself. It asks for a gold passage of at least one
+full sentence, not a heading, and says the part is document text, not instructions. A part's prompt holds at most 6,000 characters of it
 (`MAX_PART_CHARS`): a longer part is sent as whole paragraphs spread evenly from its
 start to its end, as many as fit. Each call allows 16,000 output tokens, so a thinking
 or reasoning model has room. Then every question is checked, with no further calls:
 
 - **Bounds.** Line breaks and control characters are taken out of the reply. A question
-  over 300 characters, an answer over 500 characters, or a gold passage under 4 words is
+  over 300 characters, an answer over 500 characters, or a gold passage under 6 words (a heading, not a sentence) is
   dropped.
 - **The gold passage must be in the document.** It is looked for as `check_questions`
   looks: exactly, then with spacing, quotes, ligatures and capitals evened out. A

@@ -117,8 +117,8 @@ def test_the_main_flows_work_end_to_end(base, browser):
 
     # Home, then Build on the first sample, the way a visitor arrives.
     page.goto(base + "/")
-    page.get_by_role("button", name="Try it yourself on Build").click()
-    page.wait_for_url("**/build")
+    page.get_by_role("button", name="Try a sample").click()
+    page.wait_for_url("**/build*")
 
     # Build the index, then ask once it is ready.
     page.get_by_role("button", name="Build the index").click()

@@ -263,6 +263,7 @@ def test_descriptor_carries_every_capability_field(tmp_path):
         "embedding_revision": "1",
         "vector_kind": "dense",
         "doc_count": 1,
+        "sections": 0,
         "embeddings_computed": 1,
         "embeddings_cached": 0,
     }

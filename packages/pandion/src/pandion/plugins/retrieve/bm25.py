@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Query
-from pandion.ports import PortSpec, RunContext, Stage
+from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.retrieve import _base
@@ -71,10 +71,14 @@ class Bm25Retriever(Transform[Bm25Config]):
         # Checked here and not only at graph validation: `provides` says what the
         # index transform *can* build, the descriptor says what it *did*.
         _base.require_backend(descriptor, "fts", self.name)
+        where = _base.where_sql(query, descriptor)
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "search"):
-            rows = _base.fts_rows(table, query, config.top_k)
+            rows = _base.fts_rows(table, query, config.top_k, where=where)
+        note = _base.filter_note(table, query)
+        if note:
+            set_note(ctx, note)
 
         # LanceDB's `_score` is the BM25 score: already higher-is-better and
         # already sorted, so no sign flip and no re-sort.

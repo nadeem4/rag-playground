@@ -1,6 +1,7 @@
 """POST /ask: search the documents for a question, or answer it, as a run."""
 
 from apihelpers import PIPELINE, finish, upload
+from pdfs import build_pdf
 
 QUESTION = "What is the capital of France?"
 
@@ -75,3 +76,35 @@ def test_a_document_id_is_matched_whole():
 
     assert SHA.match("a" * 64)
     assert not SHA.match("a" * 64 + "\n") and not SHA.match("x" + "a" * 64)
+
+
+def test_where_is_passed_through_to_the_search(client):
+    report = upload(client)["sha"]
+    short = upload(client, "short.pdf", build_pdf([["Paris is the capital of France."]]))["sha"]
+    body = {"config": PIPELINE, "documents": [report, short], "question": QUESTION, "answer": False}
+
+    state, _ = finish(client, client.post("/ask", json={**body, "where": {"document": [short], "pages": [1, 1]}}))
+
+    hits = state["result"]["hits"]
+    assert state["result"]["ok"] is True and hits
+    assert {hit["chunk"]["doc_id"] for hit in hits} == {short}
+    answered, _ = finish(client, client.post("/ask", json={**body, "answer": True, "where": {"document": [short]}}))
+    assert {hit["chunk"]["doc_id"] for hit in answered["result"]["hits"]} == {short}
+
+
+def test_a_bad_where_is_422(client):
+    sha = upload(client)["sha"]
+    asked = {"config": PIPELINE, "documents": [sha], "question": QUESTION}
+    for where in (
+        {"sql": "1=1"},
+        {"pages": [1]},
+        {"pages": [3, 1]},
+        {"pages": ["1", "2"]},
+        {"pages": [1.5, 2]},
+        {"section": 3},
+        {"document": []},
+        {"document": ["b" * 64]},
+        "doc_id = 'x'",
+    ):
+        r = client.post("/ask", json={**asked, "where": where})
+        assert r.status_code == 422, where

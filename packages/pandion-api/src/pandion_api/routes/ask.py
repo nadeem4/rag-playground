@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, Field
+from pandion import check_where
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
 from pandion_api import reports
 from pandion_api.jobs import documents_of, start
@@ -23,6 +24,25 @@ NO_ANSWER = (
 )
 
 
+class WhereIn(BaseModel):
+    """A search filter: only these documents, pages or section. See the
+    package's `pandion.filters` for the rules; this checks the same ones."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Documents by sha; each must be one of the request's documents.
+    document: list[StrictStr] | None = None
+    #: First page and last page, both included.
+    pages: tuple[StrictInt, StrictInt] | None = None
+    #: A heading on the piece's heading path, matched exactly.
+    section: StrictStr | None = None
+
+    @model_validator(mode="after")
+    def _same_rules_as_the_package(self) -> "WhereIn":
+        check_where(self.model_dump(exclude_none=True))
+        return self
+
+
 class AskIn(BaseModel):
     config: Any
     documents: list[str] = Field(min_length=1)
@@ -32,6 +52,8 @@ class AskIn(BaseModel):
     #: False: search only, no answer step.
     answer: bool = True
     force: bool = False
+    #: Search only some documents, pages or a section. Left out, the search covers every document.
+    where: WhereIn | None = None
 
 
 @router.post("/ask", status_code=202)
@@ -43,11 +65,16 @@ async def ask(body: AskIn, request: Request) -> dict[str, str]:
         raise problems(NO_SEARCH)
     if body.answer and p.query is None:
         raise problems(NO_ANSWER)
+    where = body.where.model_dump(exclude_none=True) if body.where is not None else None
+    for sha in (where or {}).get("document", []):
+        if sha not in body.documents:
+            raise problems(f"where: document {sha} is not one of the documents sent with the question.")
     documents = documents_of(body.documents, request)
 
     def work(on_event, cancel, credentials):
         options = {
             "documents": documents,
+            "where": where,
             "credentials": credentials,
             "on_event": on_event,
             "cancel": cancel,

@@ -8,18 +8,19 @@ gets its own cached retrieval.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
-
-from pydantic import BaseModel
+from typing import Any, ClassVar, Mapping
 
 from pandion.artifacts import ArtifactType
+from pandion.ids import AddedSettings
 from pandion.payloads import Query
 from pandion.ports import RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 
 
-class TextQueryConfig(BaseModel):
+class TextQueryConfig(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("filters",)
+
     text: str = ""
 
     #: The sentence in the document that answers this question (I-23). Empty
@@ -30,6 +31,12 @@ class TextQueryConfig(BaseModel):
     #: found. `gold_answer` on its own behaves exactly as it always did; when
     #: both are set the resolved list holds the single one first.
     gold_answers: list[str] = []
+
+    #: The search filters for this question, as `pandion.filters.resolve`
+    #: gives them. Set by p.retrieve and p.ask from `where`, never in the
+    #: file. Part of the step's id, so a different filter is never served
+    #: another's results; left out of the id when empty, so ids stay as they were.
+    filters: dict | None = None
 
 
 @register
@@ -95,4 +102,5 @@ def _query(config: TextQueryConfig) -> Query:
         text=config.text,
         gold_answer=config.gold_answer,
         gold_answers=config.gold_answers,
+        filters=config.filters,
     )

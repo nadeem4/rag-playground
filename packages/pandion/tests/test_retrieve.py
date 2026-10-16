@@ -704,9 +704,9 @@ def test_prf_runs_the_dense_pass_once_on_the_original_question(tmp_path, monkeyp
         embedded.append(query.text)
         return real_embed(descriptor, query, extras)
 
-    def spy_fts(table, query, limit, text=None):
+    def spy_fts(table, query, limit, text=None, where=None):
         lexical.append(text)
-        return real_fts(table, query, limit, text=text)
+        return real_fts(table, query, limit, text=text, where=where)
 
     monkeypatch.setattr(_base, "embed_query", spy_embed)
     monkeypatch.setattr(_base, "fts_rows", spy_fts)
@@ -746,9 +746,9 @@ def test_prf_with_an_empty_dense_pass_searches_the_question_as_written(
     lexical: list[str | None] = []
     real_fts = _base.fts_rows
 
-    def spy_fts(table, query, limit, text=None):
+    def spy_fts(table, query, limit, text=None, where=None):
         lexical.append(text)
-        return real_fts(table, query, limit, text=text)
+        return real_fts(table, query, limit, text=text, where=where)
 
     monkeypatch.setattr(_base, "dense_rows", lambda *a, **k: [])
     monkeypatch.setattr(_base, "fts_rows", spy_fts)

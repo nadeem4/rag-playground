@@ -451,6 +451,11 @@ def _retrieve(retrieve: Any) -> RetrieveConfig:
                 "retrieve.rewrite sets text, but the question is not part of the "
                 "file: it is passed to p.retrieve."
             )
+        if isinstance(rewrite, dict) and "filters" in rewrite:
+            raise ConfigError(
+                "retrieve.rewrite sets filters, but a filter belongs to a "
+                "question, not to the file: pass where= to p.retrieve or p.ask."
+            )
         rewrite = _step(Stage.QUERY, rewrite, "retrieve.rewrite")
     rerank = retrieve.get("rerank")
     steps = [] if _none(rerank) else rerank if isinstance(rerank, list) else [rerank]

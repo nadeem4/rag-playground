@@ -33,6 +33,8 @@ MAX_RUNS_PER_VISITOR = 2
 MAX_EVALUATION_QUESTIONS = 50
 #: The most recipe-questions (recipes times questions) one comparison scores on the demo.
 MAX_COMPARISON_QUESTIONS = 120
+#: The most questions a model writes for a document in one run on the demo.
+MAX_GENERATED_QUESTIONS = 25
 #: All live uploads together, so a client that keeps getting new visitor ids
 #: still cannot fill the shared disk.
 MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024

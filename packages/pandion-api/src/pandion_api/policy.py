@@ -94,9 +94,10 @@ class Policy:
     def check_question_count(self, kind: str, count: int, request: Request) -> None:
         """Refuse a run that asks too many questions (raise HTTPException), which
         bounds the work one request can ask for. `kind` is "evaluation", where
-        `count` is its questions, or "comparison", where `count` is its variants
-        times its questions. Called before the run starts, after the route's own
-        cap of 500 questions a set."""
+        `count` is its questions, "comparison", where `count` is its variants
+        times its questions, or "generation", where `count` is the questions a
+        model is asked to write. Called before the run starts, after the route's
+        own cap (500 questions a set; 50 questions a model writes)."""
 
     def max_runs_per_owner(self, request: Request) -> int | None:
         """How many runs one owner (`run_owner`) may have working or waiting at

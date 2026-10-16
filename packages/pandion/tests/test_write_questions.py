@@ -428,6 +428,27 @@ def test_the_passages_are_checked_in_one_call(fake, monkeypatch):
     assert seen == [4]
 
 
+def test_on_part_is_called_once_per_part_with_done_and_total(fake):
+    fake([GOOD[0], RuntimeError("busy"), "not json", GOOD[3]])
+    seen = []
+    write_questions(TEXT, model="claude-haiku-4-5", count=4, credentials=CREDS, on_part=lambda d, t: seen.append((d, t)))
+    assert seen == [(1, 4), (2, 4), (3, 4), (4, 4)]
+
+
+def test_an_exception_from_on_part_stops_the_calls(fake):
+    model = fake(GOOD)
+
+    class Stop(Exception):
+        pass
+
+    def stop(done, total):
+        raise Stop
+
+    with pytest.raises(Stop):
+        write_questions(TEXT, model="claude-haiku-4-5", count=4, credentials=CREDS, on_part=stop)
+    assert len(model.calls) == 1
+
+
 def test_the_cli_refuses_an_existing_out_file_before_any_call(tmp_path, monkeypatch, capsys):
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(build_pdf(SAMPLE_PAGES))

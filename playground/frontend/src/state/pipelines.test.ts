@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { graphToConfig } from "./config"
 import { withDocument } from "./document"
-import { initialGraph, sampleGraph, setConfig, setTransform } from "./graph"
+import { addEnrich, initialGraph, sampleGraph, setConfig, setTransform } from "./graph"
+import { buildExport, libraryItems, parseImport } from "./library"
 import {
   LIST_KEY,
   MAX_PIPELINES,
@@ -53,6 +54,20 @@ describe("saved pipelines", () => {
     expect(a.id).toMatch(/^[A-Za-z0-9_-]{8}$/)
     expect(readCurrentId()).toBe(b.id)
     expect(readPipelines()[0].config?.index.chunk.use).toBe("token_based")
+  })
+
+  it("keeps an Enrich step through a save, a share link and a library export", () => {
+    const enriched = setConfig(addEnrich(g(), R), "enrich", { model: "gpt-5.6-luna", max_pieces: 40 })
+    savePipeline("With context", enriched)
+    const saved = readPipelines()[0]
+    expect(saved.config?.index.enrich).toEqual({ use: "llm_context", model: "gpt-5.6-luna", max_pieces: 40 })
+    expect(sameGraph(usableGraph(saved, R)!, enriched)).toBe(true)
+    const shared = decodePipeline(encodePipeline("With context", enriched), R)
+    expect(shared && "graph" in shared ? sameGraph(shared.graph, enriched) : shared).toBe(true)
+    const file = buildExport(libraryItems([saved], []), [], Date.now())
+    const back = parseImport(JSON.stringify(file))
+    if (!back.ok) throw new Error(back.error)
+    expect(sameGraph(usableGraph(back.pipelines[0], R)!, enriched)).toBe(true)
   })
 
   it("refuses an empty name and a name over 60 characters", () => {
@@ -318,7 +333,7 @@ describe("sameSteps and isEdited", () => {
 
 const DOC = { sha: "e".repeat(64), filename: "old.pdf" }
 const oldItem = (id: string, graph: unknown, savedAt = "2026-10-01T00:00:00.000Z") => ({ id, name: `Old ${id}`, graph, documents: [DOC], savedAt })
-const BROKEN = { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }
+const BROKEN = { nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] }
 
 describe("the Library list as configs", () => {
   it("converts an old list once into the new key and leaves the old key alone", () => {
@@ -336,7 +351,7 @@ describe("the Library list as configs", () => {
     window.localStorage.setItem(OLD_LIST_KEY, JSON.stringify([oldItem("bbbbbbbb", BROKEN), "not even an object"]))
     const list = readPipelines()
     expect(list).toHaveLength(2)
-    expect(list[0]).toMatchObject({ id: "bbbbbbbb", config: null, kept: { graph: BROKEN, problem: expect.stringContaining("enrich") } })
+    expect(list[0]).toMatchObject({ id: "bbbbbbbb", config: null, kept: { graph: BROKEN, problem: expect.stringContaining("extract") } })
     expect(list[1]).toMatchObject({ name: "A pipeline from an older version", config: null, kept: { graph: "not even an object" } })
     expect(usableGraph(list[0], R)).toBeNull()
     // Saving another pipeline and reading again keeps both.
@@ -436,7 +451,7 @@ describe("fix round 1", () => {
   })
 
   it("names a kept item's own problem as the reason it cannot be opened", () => {
-    expect(keptReason("It has an enrich step.")).toBe("Saved by an older version, and it cannot be opened here: It has an enrich step.")
+    expect(keptReason("It has an extract step.")).toBe("Saved by an older version, and it cannot be opened here: It has an extract step.")
     expect(keptReason(undefined)).toBe("This server does not have every step this pipeline uses.")
   })
 })
@@ -462,7 +477,7 @@ describe("share links", () => {
 
   it("an old link that cannot be converted says why", () => {
     const d = decodePipeline(b64({ v: 2, name: "Odd", graph: BROKEN, documents: [] }), R)
-    expect(d).toEqual({ ok: false, problem: expect.stringContaining("enrich") })
+    expect(d).toEqual({ ok: false, problem: expect.stringContaining("extract") })
   })
 
   it("a link from a server with other strategies says so", () => {

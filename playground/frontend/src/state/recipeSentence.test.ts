@@ -29,7 +29,7 @@ describe("recipeSentence", () => {
 
   it("says a size of one in the singular, a search's pieces, and a query rewrite by its label", () => {
     expect(say(recipeSentence({ transform: "sentence_window", config: { sentences_per_chunk: 1, overlap_sentences: 0 } }, schemaOf("chunk", "sentence_window"), "By sentence"))).toBe(
-      "Cut By sentence, 1 sentence to a piece, overlapping 0 sentences.",
+      "Cut By sentence, 1 sentence to a piece, overlapping 0 sentences. Heading context is off.",
     )
     expect(say(recipeSentence({ transform: "hybrid_rrf", config: { top_k: 20, rrf_k: 60, query_expansion: "none", prf_docs: 2, prf_terms: 6 } }, schemaOf("retrieve", "hybrid_rrf"), "Hybrid (RRF)"))).toMatch(
       /^Search with Hybrid \(RRF\), keeping 20 pieces, fused with RRF k 60\. Query rewrite is off\./,

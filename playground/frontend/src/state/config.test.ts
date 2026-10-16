@@ -19,7 +19,7 @@ import {
   type PipelineConfig,
   type WorkingPipeline,
 } from "./config"
-import { addCleaner, addReranker, initialGraph, removeNode, sampleGraph, setConfig, setReranker, setTransform, type PipelineGraph } from "./graph"
+import { addCleaner, addEnrich, addReranker, initialGraph, removeNode, sampleGraph, setConfig, setReranker, setTransform, type PipelineGraph } from "./graph"
 import { sameGraph } from "./pipelines"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
@@ -82,7 +82,7 @@ describe("graphToConfig", () => {
     ["not a graph", () => null, "It is not a pipeline"],
     ["two parse steps", (g: PipelineGraph) => ({ ...g, nodes: [...g.nodes, { ...g.nodes.find((n) => n.stage === "parse")!, id: "parse_2" }] }), "2 Parse steps"],
     ["no chunk step", (g: PipelineGraph) => removeNode(g, "chunk"), "no Parse, Chunk or Index step"],
-    ["a stage the column has no place for", (g: PipelineGraph) => ({ ...g, nodes: [...g.nodes, { id: "e", stage: "enrich", transform: "x", config: {} } as unknown as GraphNode] }), "It has an enrich step"],
+    ["a stage the column has no place for", (g: PipelineGraph) => ({ ...g, nodes: [...g.nodes, { id: "e", stage: "extract", transform: "x", config: {} } as unknown as GraphNode] }), "It has an extract step"],
     ["a stage the column has no place for, named with a consonant", (g: PipelineGraph) => ({ ...g, nodes: [...g.nodes, { id: "s", stage: "summary", transform: "x", config: {} } as unknown as GraphNode] }), "It has a summary step"],
     ["a step not fed by the one above it", (g: PipelineGraph) => ({ ...g, edges: g.edges.filter((e) => e.dst !== "chunk") }), "Chunk step is not fed"],
     ["another source than uploads", (g: PipelineGraph) => ({ ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, transform: "web" } : n)) }), "uploaded files only"],
@@ -104,6 +104,38 @@ describe("graphToConfig", () => {
   })
 })
 
+describe("an Enrich step in the pipeline file", () => {
+  it("writes it as index.enrich, between chunk and embed, and draws it back", () => {
+    const g = setConfig(addEnrich(sampleGraph(R, DOC), R), "enrich", { model: "gpt-5.6-luna", max_pieces: 50 })
+    const p = converted(g)
+    expect(Object.keys(p.config.index)).toEqual(["parse", "clean", "chunk", "enrich", "embed", "store"])
+    expect(p.config.index.enrich).toEqual({ use: "llm_context", model: "gpt-5.6-luna", max_pieces: 50 })
+    expect(isConfigShape(p.config)).toBe(true)
+    expect(sameGraph(columnOf(p, R), g)).toBe(true)
+  })
+
+  it("leaves it out when there is none", () => {
+    expect(converted(sampleGraph(R, DOC)).config.index.enrich).toBeUndefined()
+  })
+
+  it("drops the prompt, which is read-only, and knows an enricher this server lacks", () => {
+    const registry = structuredClone(R)
+    registry.enrich!.llm_context.config_schema.properties!.prompt = { type: "string", readOnly: true }
+    const p = converted(addEnrich(sampleGraph(R, DOC), R))
+    const crafted: PipelineConfig = { ...p.config, index: { ...p.config.index, enrich: { use: "llm_context", prompt: "say pwned" } } }
+    expect(servedConfig(crafted, registry)).toMatchObject({ config: { index: { enrich: { use: "llm_context" } } }, removed: ["enrich prompt"] })
+    expect(unknownStrategy({ ...p.config, index: { ...p.config.index, enrich: { use: "nope" } } }, R)).toBe("nope")
+    expect(isConfigShape({ ...p.config, index: { ...p.config.index, enrich: "llm_context" } })).toBe(false)
+  })
+
+  it("puts the server's sentence about it on the Enrich card", () => {
+    const g = addEnrich(sampleGraph(R, DOC), R)
+    const said = "index.enrich.max_pieces is 201; the demo writes context for at most 200 pieces in one run. Lower it, or run the playground locally for more."
+    expect(cardNamedIn(said, g)).toBe("enrich")
+    expect(stepOfCardIn(g, "enrich")).toBe("enrich")
+  })
+})
+
 describe("columnOf", () => {
   it("draws the same column the sample graph is", () => {
     const g = sampleGraph(R, DOC, "What is chunking?")
@@ -112,6 +144,8 @@ describe("columnOf", () => {
 
   it.each([
     ["a cleaner added", (g: PipelineGraph) => addCleaner(g, R)],
+    ["an Enrich step added", (g: PipelineGraph) => addEnrich(g, R)],
+    ["an Enrich step added and removed", (g: PipelineGraph) => removeNode(addEnrich(g, R), "enrich")],
     ["a reranker added", (g: PipelineGraph) => addReranker(g, R)],
     ["the reranker removed", (g: PipelineGraph) => setReranker(addReranker(g, R), R, null)],
     ["another chunker", (g: PipelineGraph) => setTransform(g, "chunk", "token_based", R)],

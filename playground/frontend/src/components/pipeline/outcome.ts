@@ -170,7 +170,10 @@ export function outcomeFor(stage: Stage, type: ArtifactType | undefined, data: u
       return parsedOutcome(doc)
     }
     case "chunk_set":
-      return Array.isArray(data.chunks) ? chunkOutcome(data as unknown as ChunkSet) : null
+      if (!Array.isArray(data.chunks)) return null
+      // Enrich keeps the chunks and puts a context in front of what is embedded.
+      if (stage === "enrich") return { headline: data.chunks.length, lead: `Wrote a context for ${count(data.chunks.length, "chunk", "chunks")}`, tail: ". The chunks themselves are unchanged." }
+      return chunkOutcome(data as unknown as ChunkSet)
     case "index":
       return indexOutcome(data as IndexDescriptor)
     case "retrieval_result":

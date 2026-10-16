@@ -17,7 +17,7 @@ import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, s
 export type Step = { use: string } & Record<string, unknown>
 
 export interface PipelineConfig {
-  index: { source?: Step; parse: Step; clean?: Step[]; chunk: Step; embed?: Step; store: Step }
+  index: { source?: Step; parse: Step; clean?: Step[]; chunk: Step; enrich?: Step; embed?: Step; store: Step }
   retrieve?: { rewrite?: Step; search: Step; rerank?: Step[] }
   answer?: Step
 }
@@ -41,7 +41,7 @@ const EMBED_KEYS = ["truncate_dim"]
 /** A query card's settings that are the question, not the rewrite step's. */
 const QUESTION_KEYS = ["text", "gold_answer", "gold_answers"]
 /** Stages a pipeline has at most one of. Clean and Rerank stack. */
-const ONE_EACH: Stage[] = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
+const ONE_EACH: Stage[] = ["source", "parse", "chunk", "enrich", "index", "query", "retrieve", "use_case"]
 
 const no = (problem: string): Converted => ({ ok: false, problem })
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
@@ -88,7 +88,7 @@ export function cardOfStepIn(graph: PipelineGraph, step: string): string | null 
 }
 
 /** A stacked step is numbered as `index.clean.2` in run events and as `index.clean step 2` in Pandion's problem sentences. */
-const WHERE = /\b(?:index\.(parse|clean|chunk|embed|store|source)(?:(?:\.| step )(\d+))?|retrieve\.(rewrite|search|rerank)(?:(?:\.| step )(\d+))?)\b/
+const WHERE = /\b(?:index\.(parse|clean|chunk|enrich|embed|store|source)(?:(?:\.| step )(\d+))?|retrieve\.(rewrite|search|rerank)(?:(?:\.| step )(\d+))?)\b/
 /** `answer` names the step only where a sentence or a clause starts, so "to answer the question" is not it. */
 const ANSWER = /(?:^|[.:;]\s+)answer\b/
 
@@ -136,7 +136,7 @@ export function isConfigShape(v: unknown): v is PipelineConfig {
   if (!isRecord(v) || !Object.keys(v).every((k) => k === "index" || k === "retrieve" || k === "answer")) return false
   const { index, retrieve, answer } = v
   if (!isRecord(index) || !isStep(index.parse) || !isStep(index.chunk) || !isStep(index.store)) return false
-  if (!optional(index.source, isStep) || !optional(index.embed, isStep) || !optional(index.clean, isStepList)) return false
+  if (!optional(index.source, isStep) || !optional(index.embed, isStep) || !optional(index.clean, isStepList) || !optional(index.enrich, isStep)) return false
   if (retrieve !== undefined) {
     if (!isRecord(retrieve) || !isStep(retrieve.search) || !optional(retrieve.rewrite, isStep) || !optional(retrieve.rerank, isStepList)) return false
   }
@@ -170,6 +170,7 @@ export function graphToConfig(graph: unknown): Converted {
   const [source] = of("source")
   const [parse] = of("parse")
   const [chunk] = of("chunk")
+  const [enrich] = of("enrich")
   const [index] = of("index")
   const [query] = of("query")
   const [retrieve] = of("retrieve")
@@ -182,7 +183,7 @@ export function graphToConfig(graph: unknown): Converted {
   if (!retrieve && (rewrites || reranks.length || useCase)) return no("It rewrites, reranks or answers without a search step.")
   const fed = (a: GraphNode, b: GraphNode) => g.edges.some((e) => e.src === a.id && e.dst === b.id)
   const chains = [
-    [source, parse, ...cleans, chunk, index].filter((n): n is GraphNode => n !== undefined),
+    [source, parse, ...cleans, chunk, enrich, index].filter((n): n is GraphNode => n !== undefined),
     retrieve ? [index, retrieve, ...reranks, ...(useCase ? [useCase] : [])] : [],
   ]
   for (const chain of chains) {
@@ -197,6 +198,7 @@ export function graphToConfig(graph: unknown): Converted {
       parse: step(parse),
       ...(cleans.length ? { clean: cleans.map((n) => step(n)) } : {}),
       chunk: step(chunk),
+      ...(enrich ? { enrich: step(enrich) } : {}),
       ...(embeds ? { embed: { use: embedder, ...only(storeSettings, EMBED_KEYS) } } : {}),
       store: { use: index.transform, ...without(storeSettings, embeds ? ["use", ...EMBED_KEYS] : ["use"]) },
     },
@@ -245,6 +247,7 @@ export function servedConfig(config: PipelineConfig, registry: Registry): { conf
       parse: keep("parse", index.parse, "parse"),
       ...(index.clean ? { clean: each("clean", index.clean, "clean") } : {}),
       chunk: keep("chunk", index.chunk, "chunk"),
+      ...(index.enrich ? { enrich: keep("enrich", index.enrich, "enrich") } : {}),
       // The embedder's settings are the Index card's: they are checked against the store's schema.
       ...(index.embed ? { embed: keep("index", index.embed, "embed", index.store.use) } : {}),
       store: keep("index", index.store, "store"),
@@ -289,6 +292,7 @@ export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph 
   add("parse", "parse", index.parse)
   index.clean?.forEach((s, i) => add(`clean_${i + 1}`, "clean", s))
   add("chunk", "chunk", index.chunk)
+  add("enrich", "enrich", index.enrich)
   const embed = index.embed ? { embedder: index.embed.use, ...without(index.embed, ["use"]) } : {}
   add("index", "index", index.store, embed)
   if (retrieve) {
@@ -313,6 +317,7 @@ export function unknownStrategy(config: PipelineConfig, registry: Registry): str
     ["parse", index.parse],
     ...(index.clean ?? []).map((s): [Stage, Step] => ["clean", s]),
     ["chunk", index.chunk],
+    ["enrich", index.enrich],
     ["index", index.store],
     ["query", retrieve?.rewrite],
     ["retrieve", retrieve?.search],

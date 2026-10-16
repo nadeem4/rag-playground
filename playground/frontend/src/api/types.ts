@@ -775,11 +775,11 @@ export interface EvaluationRequest {
   top_k: number
 }
 /** The stages /api/v2/comparisons varies (pandion.evaluation.COMPARE_STAGES). */
-export type CompareStage = "parse" | "clean" | "chunk" | "embed" | "store" | "rewrite" | "search" | "rerank"
+export type CompareStage = "parse" | "clean" | "chunk" | "enrich" | "embed" | "store" | "rewrite" | "search" | "rerank"
 export interface ComparisonRequest {
   config: PipelineConfig
   stage: CompareStage
-  variants: (Step | Step[])[]
+  variants: (Step | Step[] | "none")[]
   documents: string[]
   questions?: EvalQuestion[]
   question?: string
@@ -870,7 +870,7 @@ export interface AnswerReport extends RetrievalReport {
 }
 export interface ComparisonItem {
   stage: CompareStage
-  variant: Step | Step[]
+  variant: Step | Step[] | "none"
   ok: boolean
   cancelled: boolean
   outputs?: Record<string, { artifact_id: string | null; status: string; transform: string }>

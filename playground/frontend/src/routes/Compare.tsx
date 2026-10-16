@@ -39,6 +39,7 @@ import {
   columnOrder,
   defaultConfig,
   infoFor,
+  removeNode,
   setConfig,
   setTransform,
   storeGraph,
@@ -70,6 +71,7 @@ import {
   columnDelta,
   comparePipeline,
   compareRequest,
+  ENRICH_OFF,
   failureSentence,
   MAX_RECIPES,
   planSentence,
@@ -277,6 +279,8 @@ function halved(transform: string, config: Record<string, unknown>): Record<stri
  */
 export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Variant[] {
   const own: Variant = { transform: target.transform, config: target.config }
+  // Enrich is compared on against off.
+  if (target.stage === "enrich") return [own, { transform: ENRICH_OFF, config: {} }]
   if (target.stage === "chunk") {
     const half = halved(target.transform, target.config)
     const third = transforms.find((t) => t.name === (target.transform === "sentence_window" ? "recursive_character" : "sentence_window"))
@@ -464,7 +468,8 @@ function Sweep({
   const downstream = useMemo(() => order.filter((n) => n.id === target.id || ancestors(graph, n.id, registry).has(target.id)), [order, graph, registry, target.id])
   const terminal = terminalNode(graph)
   const [through, setThrough] = useState<string>(() =>
-    (preset || target.stage === "index" || target.stage === "retrieve") && terminal && downstream.includes(terminal) ? terminal.id : target.id,
+    // Enrich off has no Enrich step to stop at, so it is compared through the search too.
+    (preset || target.stage === "index" || target.stage === "enrich" || target.stage === "retrieve") && terminal && downstream.includes(terminal) ? terminal.id : target.id,
   )
   const nextKey = useRef(0)
   const [items, setItems] = useState<Item[]>(() =>
@@ -723,6 +728,7 @@ function Sweep({
   /** Put a finished recipe on Build: the target node takes its strategy and settings. */
   const putOnBuild = (i: number) => {
     const v = submitted.variants[i]
+    if (v.transform === ENRICH_OFF && target.stage === "enrich") return void storeGraph(removeNode(graph, target.id))
     storeGraph(setConfig(setTransform(graph, target.id, v.transform, registry), target.id, v.config))
   }
 

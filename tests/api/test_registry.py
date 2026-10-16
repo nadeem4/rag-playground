@@ -123,6 +123,12 @@ def test_stages_lists_every_stage_with_what_it_is_for(client):
         assert body[str(stage)] == expected
 
 
+def test_the_enrich_stage_says_what_it_does_now_that_it_has_a_strategy(client):
+    what = client.get("/api/stages").json()["enrich"]["what"]
+    assert "available yet" not in what
+    assert "model" in what
+
+
 def test_stages_carries_the_chunk_lesson_and_only_where_one_exists(client):
     body = client.get("/api/stages").json()
     lesson = body["chunk"]["lesson"]

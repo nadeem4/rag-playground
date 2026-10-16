@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   addCleaner,
+  addEnrich,
   addReranker,
   askNodes,
   ASK_STAGES,
@@ -113,6 +114,21 @@ describe("graph state", () => {
     expect(edgeSet(g)).toEqual(
       [`parse->${c1.id}:doc`, `${c1.id}->${c2.id}:doc`, `${c2.id}->chunk:doc`, "source->parse:file", ...RETRIEVAL_EDGES].sort(),
     )
+  })
+
+  it("adding an Enrich step splices one, named enrich, between Chunk and Index; removing it reconnects them", () => {
+    const g = addEnrich(initialGraph(R), R)
+    expect(columnOrder(g).map((n) => n.stage).slice(0, 5)).toEqual(["source", "parse", "chunk", "enrich", "index"])
+    const enrich = g.nodes.find((n) => n.stage === "enrich")!
+    expect(enrich).toMatchObject({ id: "enrich", transform: "llm_context", config: { model: "claude-haiku-4-5", max_pieces: 200 } })
+    expect(edgeSet(g)).toContain("chunk->enrich:chunks")
+    expect(edgeSet(g)).toContain("enrich->index:chunks")
+    expect(edgeSet(g)).not.toContain("chunk->index:chunks")
+    // A pipeline has one Enrich step.
+    expect(addEnrich(g, R)).toBe(g)
+    expect(edgeSet(removeNode(g, "enrich"))).toEqual(edgeSet(initialGraph(R)))
+    expect(titleFor(enrich)).toBe("Enrich")
+    expect(INDEX_STAGES).toContain("enrich")
   })
 
   it("removing the middle of a stack reconnects its neighbours", () => {
@@ -356,7 +372,7 @@ describe("ask panel helpers", () => {
   const SRC = { sha: "ef".repeat(32), filename: "primer.pdf" }
 
   it("splits the stages into Index and Ask halves that add up to the column", () => {
-    expect(INDEX_STAGES).toEqual(["source", "parse", "clean", "chunk", "index"])
+    expect(INDEX_STAGES).toEqual(["source", "parse", "clean", "chunk", "enrich", "index"])
     expect(ASK_STAGES).toEqual(["query", "retrieve", "rerank", "use_case"])
     expect([...INDEX_STAGES, ...ASK_STAGES]).toEqual(COLUMN_STAGES)
   })

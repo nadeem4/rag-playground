@@ -159,6 +159,16 @@ visit with no document, the first-visit card offers the samples, **Upload a PDF*
 - The **Sweep** button on a card opens Compare on that step.
 - Any chunk or search hit can open its PDF page with its source paragraphs outlined.
 
+**Add enrich step**, under Chunk, adds the optional Enrich step before Index. It asks a
+chat model to write one short sentence that places each chunk in its document, and puts
+that sentence in front of the chunk before it is searched. The chunk that is shown and
+cited does not change; its output shows each chunk's `embed_text` with the context in
+front. It costs one model call per chunk and needs the key for its model, so without one
+the card says which key it needs and Run waits. The hosted demo writes context for at most
+200 chunks in one run. The **x** on the card removes the step, and its **Sweep** opens
+Compare with the step on against off. Fixed token count and By sentence also have a free
+**Heading in front** setting that puts the heading path in front of each chunk instead.
+
 ### Start from a template
 
 **Start from a template**, beside the Pipeline picker, opens two sets of cards. The first,

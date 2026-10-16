@@ -226,7 +226,7 @@ describe("export and import", () => {
 })
 
 const DOC = { sha: "1".repeat(64), filename: "x.pdf" }
-const BROKEN = { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }
+const BROKEN = { nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] }
 
 describe("export and import with configs", () => {
   it("imports a version 1 file, converting each pipeline or keeping it with its reason", () => {
@@ -244,7 +244,7 @@ describe("export and import with configs", () => {
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.pipelines[0].config?.index.parse.use).toBe("pdfium")
-    expect(r.pipelines[1]).toMatchObject({ name: "Odd", config: null, kept: { problem: expect.stringContaining("enrich") } })
+    expect(r.pipelines[1]).toMatchObject({ name: "Odd", config: null, kept: { problem: expect.stringContaining("extract") } })
     expect(r.skipped).toBe(0)
   })
 

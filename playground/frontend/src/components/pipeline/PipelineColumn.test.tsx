@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/api/client"
-import { addCleaner, columnOrder, initialGraph, setTransform } from "@/state/graph"
+import { addCleaner, addEnrich, columnOrder, initialGraph, setTransform } from "@/state/graph"
 import { routeRunError } from "@/state/pipeline"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 import { optionNames, optionOf } from "@/components/ui/pickerTesting"
@@ -160,6 +160,38 @@ describe("PipelineColumn", () => {
     const clean = columnOrder(p.graph).find((n) => n.stage === "clean")!
     fireEvent.click(screen.getByRole("button", { name: /^Remove Clean, / }))
     expect(p.onRemove).toHaveBeenCalledWith(clean.id)
+  })
+
+  it("Add enrich step sits under Chunk until there is one; the Enrich card is removable and its settings come from the registry", () => {
+    const p = setup({ onAddEnrich: vi.fn() })
+    const add = screen.getByRole("button", { name: "Add enrich step" })
+    expect(add.closest("div")!.previousElementSibling?.getAttribute("data-node-id")).toBe("chunk")
+    fireEvent.click(add)
+    expect(p.onAddEnrich).toHaveBeenCalled()
+    cleanup()
+
+    const q = setup({ graph: addEnrich(addCleaner(initialGraph(R), R), R), selected: "enrich", onAddEnrich: vi.fn() })
+    expect(screen.queryByRole("button", { name: "Add enrich step" })).toBeNull()
+    const titles = [...document.querySelectorAll("article h3")].map((h) => h.textContent)
+    expect(titles).toEqual(["Document", "Parse", "Clean", "Chunk", "Enrich", "Index"])
+    const enrich = within(card("enrich"))
+    expect(enrich.getByText("Model")).toBeTruthy()
+    expect(enrich.getByText("Most pieces")).toBeTruthy()
+    // Compare sets it on against off.
+    fireEvent.click(enrich.getByRole("button", { name: "Sweep" }))
+    expect(q.onSweep).toHaveBeenCalledWith("enrich")
+    fireEvent.click(screen.getByRole("button", { name: /^Remove Enrich, / }))
+    expect(q.onRemove).toHaveBeenCalledWith("enrich")
+  })
+
+  it("without the key its model needs, the Enrich card says so and does not run", () => {
+    setup({ graph: addEnrich(initialGraph(R), R), selected: "enrich", missingKeys: { enrich: "anthropic" } })
+    const enrich = within(card("enrich"))
+    expect(enrich.getByText(/This model needs an Anthropic API key\./)).toBeTruthy()
+    expect((enrich.getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled).toBe(true)
+    expect(enrich.getByTestId("run-note").textContent).toBe("Add a key to run.")
+    // Other cards run as before.
+    expect((within(card("chunk")).getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it("Parse, Chunk and Index offer Sweep; Index also offers the dimensions preset", () => {

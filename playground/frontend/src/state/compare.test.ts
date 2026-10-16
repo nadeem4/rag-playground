@@ -12,6 +12,7 @@ import {
   comparePipeline,
   compareRequest,
   compareStage,
+  ENRICH_OFF,
   MAX_RECIPES,
   planSentence,
   recipeNames,
@@ -30,7 +31,7 @@ import {
   variantBlock,
 } from "./compare"
 import { graphToConfig, type WorkingPipeline } from "./config"
-import { addCleaner, addReranker, defaultConfig, sampleGraph } from "./graph"
+import { addCleaner, addEnrich, addReranker, defaultConfig, sampleGraph } from "./graph"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const registry = liveRegistry as unknown as Registry
@@ -433,6 +434,20 @@ describe("comparisons on /api/v2", () => {
       variants: [{ use: "recursive_character", chunk_size: 200, chunk_overlap: 0 }, { use: "token_based", max_tokens: 64, overlap: 8 }],
       documents: [DOC.sha],
     })
+  })
+
+  it("varies Enrich on and off: the recipe without it is written as none", () => {
+    const g = addEnrich(graph, R)
+    const c = graphToConfig(g)
+    if (!c.ok) throw new Error(c.problem)
+    const enrich = g.nodes.find((n) => n.id === "enrich")!
+    const variants = [{ transform: "llm_context", config: enrich.config }, { transform: ENRICH_OFF, config: {} }]
+    expect(compareStage(enrich, variants, c.pipeline)).toBe("enrich")
+    expect(compareRequest(c.pipeline, enrich, variants, "retrieval")).toMatchObject({
+      stage: "enrich",
+      variants: [{ use: "llm_context", model: "claude-haiku-4-5", max_pieces: 200 }, "none"],
+    })
+    expect(recipeNames(variants, "enrich", R).map((r) => r.name)).toEqual(["Context from a model", "No context"])
   })
 
   it("changes one cleaner in the stack and keeps the others", () => {

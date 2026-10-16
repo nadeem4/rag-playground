@@ -315,6 +315,15 @@ def test_the_preview_is_the_zips_text_as_json(client, monkeypatch):
     assert data["keys"] == [{"variable": "ANTHROPIC_API_KEY", "optional": False}]
 
 
+def test_a_pipeline_with_an_enrich_step_takes_it_home_and_names_its_key(client):
+    c = config()
+    c["index"] = {**c["index"], "enrich": {"use": "llm_context", "model": "claude-haiku-4-5"}}
+    data = client.post(f"{ROUTE}?preview=1", json={"config": c}).json()
+
+    assert "enrich:\n    use: llm_context\n    model: claude-haiku-4-5" in data["files"]["pipeline.yaml"]
+    assert data["keys"] == [{"variable": "ANTHROPIC_API_KEY", "optional": False}]
+
+
 def test_the_preview_names_no_key_for_a_pipeline_that_needs_none(client):
     data = client.post(f"{ROUTE}?preview=1", json={"config": config()}).json()
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
-import { keyMissing, keyNeedFor, needsKey, useApiKey, withArticle } from "@/api/apiKey"
+import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { v2 } from "@/api/v2"
 import type { NodeState } from "@/api/runState"
 import type { GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
   addCleaner,
+  addEnrich,
   ancestors,
   ASK_STAGES,
   askNodes,
@@ -229,6 +230,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const [keyNotice, setKeyNotice] = useState<string | null>(null)
   const [keyNoticeProvider, setKeyNoticeProvider] = useState<LlmProvider | null>(null)
   useEffect(() => setKeyNotice(null), [keys])
+  // Build's model steps (Enrich) whose key is surely missing, by card id.
+  const missingKeys = useMemo(() => missingKeySteps(graph, registry, server, keys), [graph, registry, server, keys])
 
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
   useEffect(() => {
@@ -372,9 +375,19 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         notice = `Search results are ready. Add ${noticeProvider ? withArticle(noticeProvider) : "a"} key to get a written answer.`
       }
     }
+    const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
+    // A model step in the index (Enrich) without its key would fail with a
+    // traceback. Stop before sending anything, and say so on that card.
+    const keyless = covered.find((id) => id in missingKeys)
+    if (keyless) {
+      const provider = missingKeys[keyless]
+      const node = graph.nodes.find((n) => n.id === keyless)!
+      setErrors({ [keyless]: { message: `${titleFor(node)} needs ${provider ? withArticle(provider) : "an"} API key to run. Add one, then run again.` } })
+      selectCard(keyless)
+      return
+    }
     setErrors({})
     setColumnError(null)
-    const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
     setRunSteps({ ids: new Set(covered), runId: null })
     setSubmitting(true)
     try {
@@ -612,6 +625,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
                 onConfig={(id, c) => edit(setConfig(graph, id, c), id)}
                 onRun={(id, force) => void start(id, force)}
                 onAddCleaner={() => edit(addCleaner(graph, registry))}
+                onAddEnrich={() => edit(addEnrich(graph, registry), "enrich")}
+                missingKeys={missingKeys}
                 onRemove={(id) => {
                   edit(removeNode(graph, id), id)
                   if (selected === id) setSelected(null)

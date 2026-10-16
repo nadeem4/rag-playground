@@ -20,15 +20,15 @@ export type PipelineGraph = Graph
 
 /**
  * The column, top to bottom (plan I-7). Clean and Rerank are stackable and
- * removable; the rest appear once.
+ * removable; Enrich is optional and removable, at most one; the rest appear once.
  */
-export const COLUMN_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "index", "query", "retrieve", "rerank", "use_case"]
+export const COLUMN_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "enrich", "index", "query", "retrieve", "rerank", "use_case"]
 
 /** The two halves of the column: what Build edits, and what the Ask panel edits. */
-export const INDEX_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "index"]
+export const INDEX_STAGES: Stage[] = ["source", "parse", "clean", "chunk", "enrich", "index"]
 export const ASK_STAGES: Stage[] = ["query", "retrieve", "rerank", "use_case"]
 
-/** Stages a new graph starts with. Clean and Rerank are added by the user. */
+/** Stages a new graph starts with. Clean, Enrich and Rerank are added by the user. */
 export const DEFAULT_STAGES: Stage[] = ["source", "parse", "chunk", "index", "query", "retrieve", "use_case"]
 
 export const STAGE_VERB: Partial<Record<Stage, string>> = {
@@ -36,6 +36,7 @@ export const STAGE_VERB: Partial<Record<Stage, string>> = {
   parse: "Parse",
   clean: "Clean",
   chunk: "Chunk",
+  enrich: "Enrich",
   index: "Index",
   query: "Ask",
   retrieve: "Retrieve",
@@ -262,7 +263,7 @@ function freshId(g: PipelineGraph, prefix: string): string {
  * new node's output type now leave the new node, on the same ports. Picks the
  * first transform not already in the stack.
  */
-export function addStacked(g: PipelineGraph, registry: Registry, stage: Stage): PipelineGraph {
+export function addStacked(g: PipelineGraph, registry: Registry, stage: Stage, id: string = freshId(g, stage)): PipelineGraph {
   const choices = transformsFor(registry, stage)
   const used = new Set(g.nodes.filter((n) => n.stage === stage).map((n) => n.transform))
   const pick = choices.find((c) => !used.has(c.name)) ?? choices[0]
@@ -272,7 +273,7 @@ export function addStacked(g: PipelineGraph, registry: Registry, stage: Stage): 
     .reverse()
     .find((n) => stageRank(n.stage) <= stageRank(stage) && infoFor(registry, n)?.output === pick.output)
   if (!anchor) return g
-  const node = makeNode(registry, freshId(g, stage), stage, pick.name)!
+  const node = makeNode(registry, id, stage, pick.name)!
   const byId = new Map(g.nodes.map((n) => [n.id, n]))
   const moves = (e: GraphEdge) => {
     const dst = byId.get(e.dst)
@@ -290,6 +291,13 @@ export function addStacked(g: PipelineGraph, registry: Registry, stage: Stage): 
 
 /** A cleaner between Parse (or the last cleaner) and Chunk. */
 export const addCleaner = (g: PipelineGraph, registry: Registry) => addStacked(g, registry, "clean")
+
+/**
+ * The Enrich step between Chunk and Index, with the card id `enrich`, which is
+ * also its step name. A pipeline has one, so a second add changes nothing.
+ */
+export const addEnrich = (g: PipelineGraph, registry: Registry) =>
+  g.nodes.some((n) => n.stage === "enrich") ? g : addStacked(g, registry, "enrich", "enrich")
 
 /** A reranker between Retrieve (or the last reranker) and Search. */
 export const addReranker = (g: PipelineGraph, registry: Registry) => addStacked(g, registry, "rerank")

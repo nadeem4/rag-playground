@@ -78,7 +78,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const uploadButton = () => screen.queryByRole("button", { name: "Upload a PDF" })
+const uploadButton = () => screen.queryByRole("button", { name: "Upload a document" })
 const NOTE =
   "This is a hosted demo. A PDF you upload is private to this browser, is not shared with anyone, and is deleted after a day. Files up to 10 MB and 20 pages, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
 const IN_A_FRAME = " Uploads need cookies. If your browser blocks them here, open the demo in its own tab."
@@ -116,18 +116,22 @@ describe("FirstRun", () => {
     expect(uploadButton()).not.toBeNull()
   })
 
-  it("Upload a PDF refuses a file that is not a PDF", async () => {
+  it("Upload a document refuses a file no parser reads, and takes every one a parser does", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    fireEvent.change(screen.getByLabelText("Upload a PDF file to start"), { target: { files: [new File(["hello"], "notes.txt", { type: "text/plain" })] } })
-    expect((await screen.findByRole("alert")).textContent).toBe("Upload of notes.txt failed: Only PDF files can be uploaded.")
+    const input = screen.getByLabelText("Upload a document to start")
+    await waitFor(() => expect(input.getAttribute("accept")).toBe(".pdf,.docx,.pptx,.html,.htm,.md,.txt,.png,.jpg,.jpeg"))
+    fireEvent.change(input, { target: { files: [new File(["x"], "sheet.xlsx")] } })
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Upload of sheet.xlsx failed: This kind of file cannot be read here. Upload PDF, Word, PowerPoint, HTML, Markdown, text or images.",
+    )
   })
 
   it("shows the server's own sentence when an upload is refused, without the status and path", async () => {
     uploadRefusal = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Or split out the pages you need and upload those."
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    fireEvent.change(screen.getByLabelText("Upload a PDF file to start"), { target: { files: [new File(["%PDF"], "big.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a document to start"), { target: { files: [new File(["%PDF"], "big.pdf", { type: "application/pdf" })] } })
     expect((await screen.findByRole("alert")).textContent).toBe(`Upload of big.pdf failed: ${uploadRefusal}`)
   })
 

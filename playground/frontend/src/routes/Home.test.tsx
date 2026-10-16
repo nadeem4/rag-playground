@@ -90,7 +90,7 @@ describe("Home", () => {
     expect(screen.getByRole("heading", { level: 1, name: "See why a RAG pipeline finds the answer, or misses it." })).toBeTruthy()
     expect(screen.getByText(/Load a PDF, cut it into pieces, search it and ask it a question\./)).toBeTruthy()
     expect(screen.getByRole("button", { name: "Try a sample" })).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Use your own PDF" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Use your own document" })).toBeTruthy()
     expect(screen.getByRole("link", { name: "See how it works" }).getAttribute("href")).toBe("#build")
     for (const fact of ["No sign in", "Runs on samples or your own PDF", "A key is only needed for chat answers"]) expect(screen.getByText(fact)).toBeTruthy()
   })
@@ -99,7 +99,7 @@ describe("Home", () => {
     render(<Home navigate={vi.fn()} />)
     const ctas = [
       screen.getByRole("button", { name: "Try a sample" }),
-      screen.getByRole("button", { name: "Use your own PDF" }),
+      screen.getByRole("button", { name: "Use your own document" }),
       ...["Build", "Compare", "Evaluate"].map((p) => screen.getByRole("button", { name: `Try it yourself on ${p}` })),
     ]
     for (const el of ctas) {
@@ -274,19 +274,20 @@ describe("Home's own PDF", () => {
     expect(link.className.split(/\s+/)).toContain("min-h-[44px]")
   })
 
-  it("Use your own PDF opens the file picker straight away", () => {
+  it("Use your own document opens the file picker straight away, and it takes every format a parser reads", async () => {
     render(<Home navigate={vi.fn()} />)
-    const input = screen.getByLabelText("Choose your own PDF") as HTMLInputElement
+    const input = screen.getByLabelText("Choose your own document") as HTMLInputElement
     expect(input.type).toBe("file")
+    await waitFor(() => expect(input.getAttribute("accept")).toBe(".pdf,.docx,.pptx,.html,.htm,.md,.txt,.png,.jpg,.jpeg"))
     const click = vi.spyOn(input, "click").mockImplementation(() => {})
-    fireEvent.click(screen.getByRole("button", { name: "Use your own PDF" }))
+    fireEvent.click(screen.getByRole("button", { name: "Use your own document" }))
     expect(click).toHaveBeenCalledTimes(1)
   })
 
   it("uploads the chosen PDF, makes it the document and opens Build", async () => {
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf()] } })
+    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf()] } })
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
     expect(uploaded).toEqual(["mine.pdf"])
     expect(posted).toEqual([])
@@ -296,21 +297,23 @@ describe("Home's own PDF", () => {
   it("says why an upload was refused under the buttons, stays on Home and puts focus back on the button", async () => {
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf("notes.txt", "text/plain")] } })
-    expect((await screen.findByRole("alert")).textContent).toBe("Upload of notes.txt failed: Only PDF files can be uploaded.")
+    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf("sheet.xlsx", "application/octet-stream")] } })
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Upload of sheet.xlsx failed: This kind of file cannot be read here. Upload PDF, Word, PowerPoint, HTML, Markdown, text or images.",
+    )
     expect(navigate).not.toHaveBeenCalled()
     expect(uploaded).toEqual([])
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own PDF" })))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own document" })))
   })
 
   it("says the server's refusal under the buttons and puts focus back on the button", async () => {
     refuseUpload = "This PDF has 40 pages. The hosted demo takes up to 20."
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf()] } })
+    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf()] } })
     expect((await screen.findByRole("alert")).textContent).toBe("Upload of mine.pdf failed: This PDF has 40 pages. The hosted demo takes up to 20.")
     expect(navigate).not.toHaveBeenCalled()
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own PDF" })))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own document" })))
   })
 
   it("while an upload runs, the busy button just says Uploading, and every button on Home waits", async () => {
@@ -318,7 +321,7 @@ describe("Home's own PDF", () => {
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
     const long = "a-very-long-file-name-that-would-push-the-button-far-past-the-edge-of-a-phone.pdf"
-    fireEvent.change(screen.getByLabelText("Choose your own PDF"), { target: { files: [pdf(long)] } })
+    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf(long)] } })
     const own = await screen.findByRole("button", { name: "Uploading" })
     expect(own.textContent).toBe("Uploading")
     expect((own as HTMLButtonElement).disabled).toBe(true)

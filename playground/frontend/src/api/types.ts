@@ -272,6 +272,8 @@ export interface Source {
   content_type: string
   /** `GET /api/v2/documents` only: when this browser uploaded it (the demo's hours count from it). Absent for a sample. */
   uploaded_at?: string
+  /** A document added from a link: the link, shown only to the browser that added it. */
+  origin_url?: string
 }
 
 /** One entry of `GET /api/samples`: a bundled sample document offered on the first-visit card and in the Document menu. */
@@ -420,7 +422,20 @@ export type RunEvent =
 export interface AppSettings {
   demo: boolean
   /** Demo mode only: the upload limits the server enforces, so the UI can state them. */
-  limits?: { max_bytes: number; max_pages: number; max_files: number; max_total_bytes: number; ttl_hours: number }
+  limits?: {
+    max_bytes: number
+    max_pages: number
+    max_files: number
+    max_total_bytes: number
+    ttl_hours: number
+    /** Word, PowerPoint, HTML, Markdown and text files. Absent on an older server. */
+    max_other_bytes?: number
+    /** PNG and JPG images. */
+    max_image_bytes?: number
+    max_image_pixels?: number
+    /** Links one browser may add in an hour. */
+    max_fetches_per_hour?: number
+  }
 }
 
 // ------------------------------------------------------------ credentials --

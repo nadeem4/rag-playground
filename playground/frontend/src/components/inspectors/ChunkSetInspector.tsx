@@ -4,6 +4,7 @@ import type { Chunk, ChunkSet, ParsedDoc } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
 import { ElementsInPdf } from "@/components/pdf/ElementsInPdf"
 import { Button } from "@/components/ui/button"
+import { showLabel } from "@/lib/formats"
 import { cn } from "@/lib/utils"
 
 import "./inspectors.css"
@@ -188,6 +189,7 @@ function ChunkSetView({
             chunk={selected === null ? undefined : chunks[selected]}
             index={selected}
             onShowPdf={doc && selected !== null ? () => setPdfChunk(selected) : undefined}
+            showLabel={doc ? showLabel(doc.filename) : undefined}
           />
         ) : null}
       </div>
@@ -451,7 +453,7 @@ function Field({ label, mono = false, children }: { label: string; mono?: boolea
   )
 }
 
-function Detail({ chunk, index, onShowPdf }: { chunk?: Chunk; index: number | null; onShowPdf?: () => void }) {
+function Detail({ chunk, index, onShowPdf, showLabel = "Show in PDF" }: { chunk?: Chunk; index: number | null; onShowPdf?: () => void; showLabel?: string }) {
   if (!chunk || index === null) {
     return (
       <aside data-testid="chunk-detail" className="bg-surface">
@@ -473,7 +475,7 @@ function Detail({ chunk, index, onShowPdf }: { chunk?: Chunk; index: number | nu
         <h3 className="text-sm font-semibold">Chunk {index + 1}</h3>
         {onShowPdf ? (
           <Button variant="outline" size="sm" className="ml-auto" onClick={onShowPdf}>
-            Show in PDF
+            {showLabel}
           </Button>
         ) : null}
       </div>

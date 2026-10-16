@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 
 import { v2 } from "@/api/v2"
 import { usePageSizes } from "@/api/usePdf"
+import { FORMATS, formatOf, hasPages } from "@/lib/formats"
 import { cn } from "@/lib/utils"
 import type { DocRef } from "@/state/document"
 
@@ -18,7 +19,8 @@ const reduceMotion = () => typeof window.matchMedia === "function" && window.mat
  * body, so no card or sticky bar can clip it.
  */
 export function DocumentPreview({ doc, facts, onClose }: { doc: DocRef; facts: DocumentFacts; onClose: () => void }) {
-  const sizes = usePageSizes(doc.sha)
+  const paged = hasPages(doc.filename)
+  const sizes = usePageSizes(paged ? doc.sha : null)
   const pages = sizes.kind === "ready" ? sizes.data : []
   const [current, setCurrent] = useState(1)
   const figures = useRef(new Map<number, HTMLElement>())
@@ -74,7 +76,11 @@ export function DocumentPreview({ doc, facts, onClose }: { doc: DocRef; facts: D
 
   return createPortal(
     <SideSheet title={facts.title} onClose={onClose} head={head}>
-      {sizes.kind === "loading" ? (
+      {!paged ? (
+        <p data-testid="no-pages" className="text-sm text-fg-muted">
+          {noPages(doc.filename)} Its text shows on the Parse step once the pipeline has run.
+        </p>
+      ) : sizes.kind === "loading" ? (
         <p role="status" className="text-sm text-fg-muted">
           Loading the pages
         </p>
@@ -109,4 +115,11 @@ export function DocumentPreview({ doc, facts, onClose }: { doc: DocRef; facts: D
     </SideSheet>,
     document.body,
   )
+}
+
+/** "A Word file has no pages to draw." */
+function noPages(filename: string): string {
+  const kind = formatOf(filename)
+  const what = kind === "png" || kind === "jpg" ? "An image" : kind === "html" ? "A web page" : kind ? `A ${FORMATS[kind].label} file` : "This file"
+  return `${what} has no pages to draw.`
 }

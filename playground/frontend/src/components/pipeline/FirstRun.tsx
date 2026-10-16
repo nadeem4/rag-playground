@@ -21,7 +21,7 @@ const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eig
 const count = (n: number) => WORDS[n] ?? String(n)
 export function FirstRun() {
   const { samples, error: samplesError } = useSamples()
-  const { upload, busy: uploading, error: uploadError } = useUpload()
+  const { upload, busy: uploading, error: uploadError, accept } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
   // Shared with the Pick a document menu: while either uploads or loads a sample, the other waits.
   const { sampleLoading } = useDocument()
@@ -86,10 +86,10 @@ export function FirstRun() {
         <input
           ref={fileRef}
           type="file"
-          accept=".pdf,application/pdf"
+          accept={accept}
           className="sr-only"
           tabIndex={-1}
-          aria-label="Upload a PDF file to start"
+          aria-label="Upload a document to start"
           onChange={(e) => {
             const file = e.target.files?.[0]
             e.target.value = ""
@@ -98,7 +98,7 @@ export function FirstRun() {
         />
         <Button variant="outline" size="sm" className="self-start" busy={uploading !== null} disabled={waiting} onClick={() => fileRef.current?.click()}>
           <Upload aria-hidden strokeWidth={1.75} />
-          {uploading ? `Uploading ${uploading}` : "Upload a PDF"}
+          {uploading ? `Uploading ${uploading}` : "Upload a document"}
         </Button>
         {uploadError ? (
           <p role="alert" className="text-xs break-words text-danger">

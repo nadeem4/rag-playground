@@ -68,3 +68,20 @@ describe("TransformSelect", () => {
     expect(screen.getByRole("listbox", { name: "Strategy" })).toBeTruthy()
   })
 })
+
+describe("TransformSelect on a Word document", () => {
+  it("greys out a parser that reads PDF files only, with the reason on the option and under the picker", () => {
+    const parsers: TransformInfo[] = [
+      { ...R.parse!.pdfium, name: "docling", provides: { formats: ["pdf", "docx"] }, summary: "Reads layout." },
+      { ...R.parse!.pdfium, name: "pdfium", provides: { formats: ["pdf"] }, summary: "Reads text fast." },
+    ]
+    const upstream = { file: { ...R.source!.upload, provides: { format: "docx" } } }
+    render(<TransformSelect id="p" label="Transform" transforms={parsers} value="pdfium" upstream={upstream} onChange={() => {}} />)
+    const trigger = screen.getByRole("button", { name: /^Transform/ })
+    const o = optionOf(trigger, "pdfium")
+    expect(o.getAttribute("aria-disabled")).toBe("true")
+    expect(o.textContent).toContain("pdfium reads PDF files only.")
+    expect(optionOf(trigger, "docling").getAttribute("aria-disabled")).toBe("false")
+    expect(screen.getByTestId("lock-reason").textContent).toBe("pdfium reads PDF files only.")
+  })
+})

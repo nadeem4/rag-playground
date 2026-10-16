@@ -5,13 +5,16 @@ import { useFind } from "@/api/usePdf"
 import { EmptyState } from "@/components/EmptyState"
 import { citationHighlight, highlightWords } from "@/components/pdf/geometry"
 import { PdfPageView } from "@/components/pdf/PdfPageView"
+import { TextView } from "@/components/pdf/TextView"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useHasPages } from "@/state/document"
 
 import {
   chatStats,
   checkLine,
   citationPage,
+  citationRange,
   citationSlot,
   claimKind,
   groundingLine,
@@ -99,8 +102,12 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
   const byN = new Map(payload.citations.map((c) => [c.n, c]))
   const stats = chatStats(payload)
   const note = stopNote(payload.stop_reason, payload.answer.every((s) => !s.text.trim()))
+  const hasPages = useHasPages()
   const current = open === null ? undefined : byN.get(open)
-  const place = current ? citationPage(current, chunkSet) : null
+  // A document without pages (Word, a web page, Markdown, text) shows its text instead of a page.
+  const paged = current ? hasPages(current.source_sha) : true
+  const range = current && !paged ? citationRange(current, chunkSet) : null
+  const place = current && paged ? citationPage(current, chunkSet) : range ? { page: 0, from: "text" as const } : null
   const method = methodCaption(payload.citation_method)
 
   // A discrete click: bring the page, or the citation when it has no page, into view.
@@ -193,7 +200,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
       {payload.citations.length ? (
         <ol ref={listRef} aria-label="Citations" className="flex flex-col bg-surface">
           {payload.citations.map((c) => (
-            <CitationRow key={c.n} c={c} chunkSet={chunkSet} selected={open === c.n} onOpen={() => setOpen(c.n)} />
+            <CitationRow key={c.n} c={c} chunkSet={chunkSet} paged={hasPages(c.source_sha)} selected={open === c.n} onOpen={() => setOpen(c.n)} />
           ))}
         </ol>
       ) : (
@@ -202,7 +209,23 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         </div>
       )}
 
-      {current && place ? (
+      {current && range && chunkSet ? (
+        <div ref={pdfRef}>
+          <TextView
+            key={current.n}
+            title={`Citation ${current.n}`}
+            text={chunkSet.source_text}
+            marks={[range]}
+            slot={citationSlot(current, chunkSet)}
+            notice={
+              current.verified
+                ? "This document has no pages, so its text is shown with the cited words marked."
+                : "This document has no pages, so its text is shown with the cited piece marked. The quote was not found at its place."
+            }
+            onClose={() => setOpen(null)}
+          />
+        </div>
+      ) : current && place && paged ? (
         <div ref={pdfRef}>
           <CitationInPdf key={current.n} c={current} page={place.page} fromChunk={place.from === "chunk"} chunkSet={chunkSet} onClose={() => setOpen(null)} />
         </div>
@@ -384,8 +407,22 @@ function Legend({ claims, labelled }: { claims: boolean; labelled: boolean }) {
   )
 }
 
-function CitationRow({ c, chunkSet, selected, onOpen }: { c: ChatCitation; chunkSet?: ChunkSet; selected: boolean; onOpen: () => void }) {
-  const place = citationPage(c, chunkSet)
+function CitationRow({
+  c,
+  chunkSet,
+  paged,
+  selected,
+  onOpen,
+}: {
+  c: ChatCitation
+  chunkSet?: ChunkSet
+  /** False for a document without pages: the row opens its text. */
+  paged: boolean
+  selected: boolean
+  onOpen: () => void
+}) {
+  const place = paged ? citationPage(c, chunkSet) : null
+  const inText = !paged && citationRange(c, chunkSet) !== null
   return (
     <li
       data-citation={c.n}
@@ -422,15 +459,15 @@ function CitationRow({ c, chunkSet, selected, onOpen }: { c: ChatCitation; chunk
           ) : null}
         </p>
         {!c.verified ? <p className="text-xs text-fg-muted">{unverifiedReason(c)}</p> : null}
-        {c.page === null ? <p className="text-xs text-fg-muted">Location not found in the page layout.</p> : null}
+        {c.page === null && paged ? <p className="text-xs text-fg-muted">Location not found in the page layout.</p> : null}
       </div>
       <div className="flex flex-col items-end gap-1">
         <span className="font-mono text-xs text-fg tabular-nums" data-testid="citation-page">
           {c.page !== null ? `p. ${c.page}` : place ? `p. ${place.page}?` : "no page"}
         </span>
-        {place ? (
+        {place || inText ? (
           <Button variant="outline" size="sm" onClick={onOpen}>
-            Show in PDF
+            {inText ? "Show in text" : "Show in PDF"}
           </Button>
         ) : null}
       </div>

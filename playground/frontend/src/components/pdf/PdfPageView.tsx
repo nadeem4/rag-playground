@@ -62,6 +62,13 @@ export function PdfPageView({ sha, initialPage, highlights, slot = null, title, 
         Loading the pages of this PDF
       </p>
     )
+  } else if (sizes.kind === "error" && sizes.status === 415) {
+    // Not a PDF: the server draws no pages for it. Said plainly, never as a failure.
+    body = (
+      <p data-testid="no-pages" className="p-3 text-sm text-fg-muted">
+        This document has no pages to draw.
+      </p>
+    )
   } else if (sizes.kind === "error") {
     body = (
       <div role="alert" className="flex flex-col gap-1 p-3">

@@ -4,6 +4,7 @@ import type { ChunkSet, ParsedDoc, RetrievalResult } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
 import { ElementsInPdf } from "@/components/pdf/ElementsInPdf"
 import { fmtMs } from "@/components/pipeline/NodeCard"
+import { showLabel } from "@/lib/formats"
 import { cn } from "@/lib/utils"
 
 import "./inspectors.css"
@@ -260,6 +261,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
             onSelect={select}
             onShowPdf={doc ? setPdfRow : undefined}
             canPdf={canPdf}
+            showLabel={doc ? showLabel(doc.filename) : undefined}
             showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
             kept={kept}
             keepLimit={keepLimit}
@@ -327,6 +329,7 @@ function HitList({
   onSelect,
   onShowPdf,
   canPdf,
+  showLabel,
   showRetriever,
   kept,
   keepLimit,
@@ -346,6 +349,7 @@ function HitList({
   onSelect: (row: number) => void
   onShowPdf?: (row: number) => void
   canPdf: (row: number) => boolean
+  showLabel?: string
   /** Per row only when the rows mix retrievers; otherwise the summary names it once. */
   showRetriever: boolean
   kept?: ReadonlySet<string>
@@ -394,6 +398,7 @@ function HitList({
             section={section(r)}
             retriever={showRetriever && r.retriever ? r.retriever : null}
             onShowInPdf={onShowPdf && canPdf(i) ? () => onShowPdf(i) : undefined}
+            showLabel={showLabel}
             data-hit-row={r.rank}
             data-flip-key={r.chunk_id}
             data-hits={k === undefined ? undefined : `h${k}`}

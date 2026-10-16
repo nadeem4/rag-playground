@@ -31,6 +31,15 @@ const never = new Promise<never>(() => {})
 
 let requests: { url: string; method: string; body?: unknown }[] = []
 let holdUpload = false
+let linkRefusal: string | null = null
+let uploadAnswer: unknown = null
+const LINK = {
+  sha: "56".repeat(32),
+  filename: "en.wikipedia.org-wiki-Retrieval-augmented_generation.html",
+  size: 40960,
+  content_type: "text/html",
+  origin_url: "https://en.wikipedia.org/wiki/Retrieval-augmented_generation",
+}
 let releaseUpload: () => void = () => {}
 
 function serve({ sources, samples, app = { demo: false } }: { sources: unknown; samples: unknown; app?: unknown }) {
@@ -43,7 +52,12 @@ function serve({ sources, samples, app = { demo: false } }: { sources: unknown; 
       if (url === "/api/settings/app") return ok(app)
       if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/sources/sample" && method === "POST") return ok({ ...UP, sha: SAMPLE_SHA, filename: "chunking-primer.pdf" })
+      if (url === "/api/v2/documents/url" && method === "POST") {
+        if (linkRefusal) return new Response(JSON.stringify({ detail: linkRefusal }), { status: 403 })
+        return ok(LINK)
+      }
       if (url === "/api/v2/documents" && method === "POST") {
+        if (uploadAnswer) return ok(uploadAnswer)
         const answer = () => ok({ ...UP, sha: "34".repeat(32), filename: "fresh.pdf" })
         return holdUpload ? new Promise<Response>((resolve) => (releaseUpload = () => resolve(answer()))) : answer()
       }
@@ -61,6 +75,8 @@ const posts = () => requests.filter((r) => r.method === "POST")
 beforeEach(() => {
   requests = []
   holdUpload = false
+  linkRefusal = null
+  uploadAnswer = null
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
@@ -73,7 +89,7 @@ afterEach(() => {
 })
 
 describe("DocumentControl", () => {
-  it("names the current document, and opens a menu of samples, your uploads and Upload a PDF", async () => {
+  it("names the current document, and opens a menu of samples, your uploads and Upload a document", async () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     render(<DocumentControl />)
@@ -86,7 +102,7 @@ describe("DocumentControl", () => {
     const items = within(menu).getAllByRole("menuitemradio")
     expect(items.map((i) => i.getAttribute("aria-checked"))).toEqual(["true", "false"])
     expect(within(menu).getByText("Your uploads")).toBeTruthy()
-    expect(within(menu).getByRole("menuitem", { name: "Upload a PDF" })).toBeTruthy()
+    expect(within(menu).getByRole("menuitem", { name: "Upload a document" })).toBeTruthy()
     expect(menu.textContent).toContain("The pipeline runs on this document. Your files stay on this machine.")
   })
 
@@ -166,7 +182,7 @@ describe("DocumentControl", () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger()))
   })
 
-  it("while an upload runs, the samples, your uploads and Upload a PDF wait, so a pick cannot race it", async () => {
+  it("while an upload runs, the samples, your uploads and Upload a document wait, so a pick cannot race it", async () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     holdUpload = true
@@ -174,7 +190,7 @@ describe("DocumentControl", () => {
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     await waitFor(() => expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(2))
-    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Uploading fresh.pdf"))
     for (const item of within(menu).getAllByRole("menuitemradio")) expect(item.getAttribute("aria-disabled")).toBe("true")
     expect(within(menu).getByRole("menuitem", { name: /Uploading fresh\.pdf/ }).getAttribute("aria-disabled")).toBe("true")
@@ -189,7 +205,7 @@ describe("DocumentControl", () => {
     holdUpload = true
     // The first-visit card holds the control itself.
     render(<FirstRun />)
-    const inputs = screen.getAllByLabelText("Upload a PDF file")
+    const inputs = screen.getAllByLabelText("Upload a document file")
     fireEvent.change(inputs[inputs.length - 1], { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Uploading fresh.pdf"))
     expect(trigger().getAttribute("aria-busy")).toBe("true")
@@ -245,13 +261,15 @@ describe("DocumentControl", () => {
     expect(readStoredGraph(registry)!.nodes.find((n) => n.stage === "query")!.config.text).toBe(SAMPLE.question)
   })
 
-  it("refuses a file that is not a PDF in the menu's own words", async () => {
+  it("refuses a file no parser reads in the menu's own words", async () => {
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
     fireEvent.keyDown(trigger(), { key: "Enter" })
     await screen.findByRole("menu")
-    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["hello"], "notes.txt", { type: "text/plain" })] } })
-    expect((await screen.findByRole("alert")).textContent).toBe("Upload of notes.txt failed: Only PDF files can be uploaded.")
+    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["x"], "sheet.xlsx")] } })
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Upload of sheet.xlsx failed: This kind of file cannot be read here. Upload PDF, Word, PowerPoint, HTML, Markdown, text or images.",
+    )
     expect(posts()).toEqual([])
   })
 
@@ -259,7 +277,7 @@ describe("DocumentControl", () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
-    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now fresh.pdf."))
     expect(documentOf(readStoredGraph(registry))?.sha).toBe("34".repeat(32))
   })
@@ -271,16 +289,23 @@ describe("DocumentControl", () => {
     await act(async () => {})
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
-    await waitFor(() => expect(within(menu).getByTestId("upload-limits").textContent).toBe("PDF only, up to 10 MB and 20 pages."))
+    await waitFor(() =>
+      expect(within(menu).getByTestId("upload-limits").textContent).toBe(
+        "PDF, Word, PowerPoint, HTML, Markdown, text or images. A PDF up to 10 MB and 20 pages.",
+      ),
+    )
     expect(menu.textContent).toContain("The pipeline runs on this document. Uploads on the demo are private to this browser and expire.")
+    expect(menu.textContent).toContain("A link is fetched once and kept like an upload. Only public web addresses work.")
   })
 
-  it("says PDF only when running locally", async () => {
+  it("names the formats when running locally", async () => {
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
-    expect(within(menu).getByTestId("upload-limits").textContent).toBe("PDF only.")
+    expect(within(menu).getByTestId("upload-limits").textContent).toBe("PDF, Word, PowerPoint, HTML, Markdown, text or images.")
+    expect(menu.textContent).toContain("A link is fetched once and kept like an upload.")
+    expect(menu.textContent).not.toContain("Only public web addresses work.")
   })
 
   it("says when the uploads could not be listed, and offers Retry", async () => {
@@ -327,8 +352,65 @@ describe("DocumentControl", () => {
     serve({ sources: [], samples: [SAMPLE] })
     const chosen: unknown[] = []
     render(<DocumentControl value={null} onChoose={(d) => void chosen.push(d)} />)
-    fireEvent.change(screen.getByLabelText("Upload a PDF file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(chosen).toEqual([{ sha: "34".repeat(32), filename: "fresh.pdf" }]))
     expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA)
+  })
+
+  it("uploads a Word file and shows it; the file input takes every format a parser reads", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    uploadAnswer = { sha: "78".repeat(32), filename: "field-guide.docx", size: 20480, content_type: "application/octet-stream" }
+    serve({ sources: [], samples: [SAMPLE] })
+    render(<DocumentControl />)
+    const input = screen.getByLabelText("Upload a document file")
+    await waitFor(() => expect(input.getAttribute("accept")).toBe(".pdf,.docx,.pptx,.html,.htm,.md,.txt,.png,.jpg,.jpeg"))
+    fireEvent.change(input, { target: { files: [new File(["PK"], "field-guide.docx")] } })
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now field-guide.docx."))
+    expect(posts().map((p) => p.url)).toEqual(["/api/v2/documents"])
+  })
+
+  it("adds a link: sends it, and the new document shows its host and From a link", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    let listed: unknown[] = []
+    serve({ sources: [], samples: [SAMPLE] })
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      url === "/api/v2/documents" && (init?.method ?? "GET") === "GET" ? new Response(JSON.stringify(listed)) : base(url, init),
+    )
+    render(<DocumentControl />)
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    listed = [LINK]
+    fireEvent.change(within(menu).getByLabelText("Link to a web page or PDF"), {
+      target: { value: " https://en.wikipedia.org/wiki/Retrieval-augmented_generation " },
+    })
+    fireEvent.click(within(menu).getByRole("button", { name: "Add" }))
+    await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(LINK.sha))
+    expect(posts()).toEqual([
+      { url: "/api/v2/documents/url", method: "POST", body: { url: "https://en.wikipedia.org/wiki/Retrieval-augmented_generation" } },
+    ])
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const again = await screen.findByRole("menu")
+    const item = await within(again).findByRole("menuitemradio", { name: /en\.wikipedia\.org/ })
+    expect(item.textContent).toContain("From a link")
+    expect(item.textContent).not.toContain(".html")
+  })
+
+  it("a refused link shows the server's own sentence, and a non-link is caught before sending", async () => {
+    linkRefusal = "That address is not on the public internet, so it was not fetched."
+    serve({ sources: [], samples: [SAMPLE] })
+    render(<DocumentControl />)
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    const box = within(menu).getByLabelText("Link to a web page or PDF")
+    fireEvent.change(box, { target: { value: "not a link" } })
+    fireEvent.click(within(menu).getByRole("button", { name: "Add" }))
+    expect((await within(menu).findByRole("alert")).textContent).toBe("That is not a link. Paste one that starts with https://")
+    expect(posts()).toEqual([])
+    fireEvent.change(box, { target: { value: "https://localhost/admin" } })
+    fireEvent.click(within(menu).getByRole("button", { name: "Add" }))
+    await waitFor(() =>
+      expect(within(menu).getByRole("alert").textContent).toBe("That address is not on the public internet, so it was not fetched."),
+    )
   })
 })

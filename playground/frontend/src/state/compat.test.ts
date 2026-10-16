@@ -81,3 +81,15 @@ describe("compatibility", () => {
     expect(compatibility(both, { doc: pdfium }).kind).toBe("hard")
   })
 })
+
+describe("compatibility with the document's format", () => {
+  const source = info({ name: "upload", stage: "source", provides: { format: "docx" } })
+  it("is hard when the parser does not read the document's format, and says what it reads", () => {
+    const only = info({ name: "pdfium", stage: "parse", provides: { formats: ["pdf"] } })
+    expect(compatibility(only, { file: source })).toEqual({ kind: "hard", reason: "pdfium reads PDF files only." })
+  })
+  it("is ok when it does, or declares no formats", () => {
+    expect(compatibility(info({ stage: "parse", provides: { formats: ["pdf", "docx"] } }), { file: source }).kind).toBe("ok")
+    expect(compatibility(pdfium, { file: source }).kind).toBe("ok")
+  })
+})

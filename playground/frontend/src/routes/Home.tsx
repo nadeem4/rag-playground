@@ -147,7 +147,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   const settings = useAppSettings()
   const demo = settings?.demo === true
   const limits = demo ? settings?.limits : undefined
-  const { upload, busy: uploading, error: uploadError } = useUpload()
+  const { upload, busy: uploading, error: uploadError, accept } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
   const ownRef = useRef<HTMLButtonElement>(null)
   // After a refused upload, focus goes back to the button once it is enabled again.
@@ -215,10 +215,10 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
               <input
                 ref={fileRef}
                 type="file"
-                accept=".pdf,application/pdf"
+                accept={accept}
                 className="sr-only"
                 tabIndex={-1}
-                aria-label="Choose your own PDF"
+                aria-label="Choose your own document"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   e.target.value = ""
@@ -235,7 +235,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                 onClick={() => fileRef.current?.click()}
               >
                 {/* The header names the file; a long name here would push the button past a phone's edge. */}
-                {uploading ? "Uploading" : "Use your own PDF"}
+                {uploading ? "Uploading" : "Use your own document"}
               </Button>
               <a href="#build" className="inline-flex min-h-[44px] items-center px-2 text-base text-fg-muted underline underline-offset-4 hover:text-fg">
                 See how it works

@@ -49,6 +49,7 @@ from pandion.cost import cost as _cost
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.fetch import fetch_url, is_url
+from pandion.filters import check_where, resolve as _resolve_where
 from pandion.formats import check_readable
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
@@ -440,6 +441,7 @@ class Pipeline:
         k: int | None = None,
         *,
         documents: Documents = None,
+        where: dict[str, Any] | None = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -452,7 +454,7 @@ class Pipeline:
                 "search with. Add a retrieve section with at least a search step."
             )
         return self.retrieval.retrieve(
-            question, k, documents=documents, credentials=credentials,
+            question, k, documents=documents, where=where, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -462,6 +464,7 @@ class Pipeline:
         k: int | None = None,
         *,
         documents: Documents = None,
+        where: dict[str, Any] | None = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -474,7 +477,7 @@ class Pipeline:
                 "with. Add answer: with any answer strategy, for example search or chat."
             )
         return self.query.ask(
-            question, k, documents=documents, credentials=credentials,
+            question, k, documents=documents, where=where, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -923,18 +926,25 @@ class RetrievalPipeline:
         question: str,
         k: int | None = None,
         documents: dict[str, SourceFile | str] | None = None,
+        where: dict[str, Any] | None = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph that searches the index for `question`, and each node's
         (document id, step name): the index's nodes, then rewrite, search and
         rerank.1, rerank.2 ... with no document id. `documents` (resolved by
         `IndexPipeline._documents`) are the ones to search; None means what
-        the index holds."""
+        the index holds. `where` is the search filter (see `pandion.filters`);
+        it travels in the rewrite step's settings like the question does."""
         retrieve = self.config.retrieve
-        graph, roles = self.index.graph(documents if documents is not None else self.index.indexed())
+        documents = documents if documents is not None else self.index.indexed()
+        graph, roles = self.index.graph(documents)
         nodes, edges = list(graph.nodes), list(graph.edges)
 
         use, settings = retrieve.rewrite or ("text", {})
-        nodes.append(Node("rewrite", Stage.QUERY, use, {**settings, "text": question}))
+        settings = {**settings, "text": question}
+        filters = _resolve_where(where, documents)
+        if filters:
+            settings["filters"] = filters
+        nodes.append(Node("rewrite", Stage.QUERY, use, settings))
         roles["rewrite"] = (None, "rewrite")
         if _reads_doc(Stage.QUERY, use):
             # A rewrite may read the start of a document. With several, the
@@ -960,6 +970,7 @@ class RetrievalPipeline:
         k: int | None = None,
         *,
         documents: Documents = None,
+        where: dict[str, Any] | None = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -978,10 +989,16 @@ class RetrievalPipeline:
         built from exactly them, indexed first through the cache when needed.
         Without it, the search covers what the index holds. `on_event`,
         `cancel` and `force` work as in `IndexPipeline.execute`.
+
+        `where` limits the search to some documents, pages or a section, for
+        example `{"document": ["guide.pdf"], "pages": [10, 30], "section":
+        "Installing"}`; see `pandion.filters` for the rules. A bad `where`
+        raises ValueError before anything runs.
         """
+        check_where(where)
         resolved = self.index._documents(documents) if documents is not None else None
         return self._retrieve(
-            question, k, resolved, credentials=credentials,
+            question, k, resolved, where=where, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -991,12 +1008,13 @@ class RetrievalPipeline:
         k: int | None,
         documents: dict[str, SourceFile | str] | None,
         *,
+        where: dict[str, Any] | None = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
     ) -> Retrieval:
-        graph, roles = self.graph(question, k, documents)
+        graph, roles = self.graph(question, k, documents, where)
         result = self.index.execute(
             graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
         )
@@ -1094,9 +1112,10 @@ class QueryPipeline:
         question: str,
         k: int | None = None,
         documents: dict[str, SourceFile | str] | None = None,
+        where: dict[str, Any] | None = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The retrieval's graph for `question` with the answer step at the end."""
-        graph, roles = self.retrieval.graph(question, k, documents)
+        graph, roles = self.retrieval.graph(question, k, documents, where)
         nodes, edges = list(graph.nodes), list(graph.edges)
         last = graph.nodes[-1].id
         use, settings = self.config.answer
@@ -1116,6 +1135,7 @@ class QueryPipeline:
         k: int | None = None,
         *,
         documents: Documents = None,
+        where: dict[str, Any] | None = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -1123,14 +1143,15 @@ class QueryPipeline:
     ) -> Answer:
         """Retrieve for `question`, then run the answer step on what was found.
 
-        `k`, `documents`, `credentials`, `on_event`, `cancel` and `force` work
+        `k`, `documents`, `where`, `credentials`, `on_event`, `cancel` and `force` work
         as for `RetrievalPipeline.retrieve`: chat's model key goes in
         `credentials`, for example `{"anthropic_api_key": ...}`. A search
         answer is cached like any step; a chat answer is a new model call
         every time.
         """
+        check_where(where)
         resolved = self.index._documents(documents) if documents is not None else None
-        graph, roles = self.graph(question, k, resolved)
+        graph, roles = self.graph(question, k, resolved, where)
         result = self.index.execute(
             graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
         )

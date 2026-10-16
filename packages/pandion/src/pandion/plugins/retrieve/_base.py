@@ -25,6 +25,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
+from pandion import filters as _filters
 from pandion.errors import require
 from pandion.ids import canonical_json
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
@@ -151,8 +152,34 @@ def embed_query(
     return vectors[0]
 
 
+def where_sql(query: Query, descriptor: dict[str, Any]) -> str | None:
+    """The SQL condition for the question's filters on this index, or None.
+
+    Built by `pandion.filters` from checked values only; see there for the rules.
+    """
+    return _filters.where_sql(query.filters, descriptor)
+
+
+def filter_note(table: Any, query: Query) -> str | None:
+    """The sentence for pieces a pages filter left out for having no pages."""
+    sql = _filters.no_pages_sql(query.filters)
+    if sql is None:
+        return None
+    return _filters.no_pages_note(table.count_rows(sql))
+
+
+def _filtered(search: Any, where: str | None) -> Any:
+    """The search limited to rows matching `where`, before ranking: a filter
+    applied after would leave fewer than `limit` hits, or none."""
+    return search if where is None else search.where(where, prefilter=True)
+
+
 def dense_rows(
-    table: Any, vector: list[float] | None, descriptor: dict[str, Any], limit: int
+    table: Any,
+    vector: list[float] | None,
+    descriptor: dict[str, Any],
+    limit: int,
+    where: str | None = None,
 ) -> list[dict[str, Any]]:
     """Vector search, using the distance type the index declared.
 
@@ -162,16 +189,16 @@ def dense_rows(
     """
     if vector is None:
         return []
-    return (
-        table.search(vector)
-        .distance_type(descriptor["metric"])
-        .limit(limit)
-        .to_list()
-    )
+    search = table.search(vector).distance_type(descriptor["metric"])
+    return _filtered(search, where).limit(limit).to_list()
 
 
 def fts_rows(
-    table: Any, query: Query, limit: int, text: str | None = None
+    table: Any,
+    query: Query,
+    limit: int,
+    text: str | None = None,
+    where: str | None = None,
 ) -> list[dict[str, Any]]:
     """Full-text search on the same rows the vectors were built from.
 
@@ -183,19 +210,22 @@ def fts_rows(
     if not query.text.strip():
         return []
     terms = query.text if text is None else text
-    return table.search(terms, query_type="fts").limit(limit).to_list()
+    search = table.search(terms, query_type="fts")
+    return _filtered(search, where).limit(limit).to_list()
 
 
-def indexed_texts(table: Any) -> list[str]:
-    """Every row's indexed text: the chunk set the full-text index was built on.
+def indexed_texts(table: Any, where: str | None = None) -> list[str]:
+    """Every row's indexed text: the chunk set the full-text index was built on,
+    or only the rows matching `where`, so a filtered search weighs words
+    against the pieces it can find.
 
     A plain scan with only the text column selected, so the vectors are never
     read: PRF needs the words, and the vectors are most of the table's bytes.
     """
-    rows = table.count_rows()
+    rows = table.count_rows(where) if where is not None else table.count_rows()
     if not rows:
         return []
-    scan = table.search().select([TEXT_COLUMN]).limit(rows).to_arrow()
+    scan = _filtered(table.search(), where).select([TEXT_COLUMN]).limit(rows).to_arrow()
     return scan.column(TEXT_COLUMN).to_pylist()
 
 

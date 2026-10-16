@@ -188,31 +188,37 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         table, descriptor = _base.open_index(inputs["index"])
         for backend in ("dense", "fts"):
             _base.require_backend(descriptor, backend, self.name)
+        where = _base.where_sql(query, descriptor)
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "dense"):
             vector = _base.embed_query(descriptor, query, ctx.extras)
-            dense = _base.dense_rows(table, vector, descriptor, config.top_k)
+            dense = _base.dense_rows(table, vector, descriptor, config.top_k, where)
 
         expanded: str | None = None
         terms: list[str] = []
+        notes: list[str] = []
         if config.query_expansion == "prf":
             with _base.timed(timings, "expand"):
-                expanded, terms = self._expand(table, dense, query, config)
+                expanded, terms = self._expand(table, dense, query, config, where)
             docs = min(config.prf_docs, len(dense))
             if terms:
-                set_note(
-                    ctx,
+                notes.append(
                     f"Expanded the keyword search with {len(terms)} terms from "
-                    f"the top {docs} dense hits: {', '.join(terms)}.",
+                    f"the top {docs} dense hits: {', '.join(terms)}."
                 )
             elif not dense:
-                set_note(ctx, NO_EXPANSION_NOTE)
+                notes.append(NO_EXPANSION_NOTE)
             else:
-                set_note(ctx, filtered_out_note(docs))
+                notes.append(filtered_out_note(docs))
+        skipped = _base.filter_note(table, query)
+        if skipped:
+            notes.append(skipped)
+        if notes:
+            set_note(ctx, " ".join(notes))
 
         with _base.timed(timings, "bm25"):
-            lexical = _base.fts_rows(table, query, config.top_k, text=expanded)
+            lexical = _base.fts_rows(table, query, config.top_k, text=expanded, where=where)
 
         with _base.timed(timings, "fuse"):
             hits = self._fuse(dense, lexical, descriptor, config)
@@ -235,18 +241,20 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         dense: list[dict[str, Any]],
         query: Query,
         config: HybridRrfConfig,
+        where: str | None = None,
     ) -> tuple[str | None, list[str]]:
         """The expanded keyword query and the words it added, or `(None, [])`.
 
         Words come from the indexed text of the top dense rows, weighed against
-        the indexed text of every row, so the idf is the document's own. The
+        the indexed text of every row the filter keeps, so the idf is the
+        searched documents' own. The
         question's words go first, so the search still looks for them.
         """
         if not dense:
             return None, []
         top = [row[_base.TEXT_COLUMN] for row in dense[: config.prf_docs]]
         terms = _prf.select_terms(
-            top, _base.indexed_texts(table), query.text, config.prf_terms
+            top, _base.indexed_texts(table, where), query.text, config.prf_terms
         )
         if not terms:
             return None, []

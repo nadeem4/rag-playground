@@ -241,6 +241,7 @@ class LlmRewrite(Transform[LlmRewriteConfig]):
             text=config.text,
             gold_answer=config.gold_answer,
             gold_answers=config.gold_answers,
+            filters=config.filters,
         )
         question = config.text.strip()
         if not question:

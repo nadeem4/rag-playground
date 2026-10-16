@@ -35,6 +35,7 @@ from pandion.evaluation import (
     evaluate,
 )
 from pandion.cost import total_cost, varied_costs
+from pandion.filters import check_where
 from pandion.results import ResultStore, StageResult
 from pandion.strategy_catalog import catalog, defaults, explain
 from pandion.pipeline_templates import compose_template, list_templates
@@ -61,6 +62,7 @@ __all__ = [
     "StageResult",
     "answer",
     "catalog",
+    "check_where",
     "chunk",
     "clean",
     "compare",

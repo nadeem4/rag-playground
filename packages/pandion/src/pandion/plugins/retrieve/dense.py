@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Query
-from pandion.ports import PortSpec, RunContext, Stage
+from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.retrieve import _base
@@ -72,12 +72,16 @@ class DenseRetriever(Transform[DenseConfig]):
         query = Query.model_validate(inputs["query"])
         table, descriptor = _base.open_index(inputs["index"])
         _base.require_backend(descriptor, "dense", self.name)
+        where = _base.where_sql(query, descriptor)
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "embed"):
             vector = _base.embed_query(descriptor, query, ctx.extras)
         with _base.timed(timings, "search"):
-            rows = _base.dense_rows(table, vector, descriptor, config.top_k)
+            rows = _base.dense_rows(table, vector, descriptor, config.top_k, where)
+        note = _base.filter_note(table, query)
+        if note:
+            set_note(ctx, note)
 
         hits = [
             _base.make_hit(

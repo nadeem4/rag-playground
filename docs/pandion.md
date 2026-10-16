@@ -570,6 +570,54 @@ To load the default cross-encoder before the first search, call
 `pandion.preload_reranker()`. It takes a model name and `pandion.ModelSettings`, like
 `preload_embedder`.
 
+### Filter a search
+
+`where=` limits a search to some documents, some pages or one section. `retrieve` and
+`ask` both take it:
+
+```python
+result = p.retrieve(
+    "How do I install it?",
+    where={"document": ["guide.pdf"], "pages": [10, 30], "section": "Installing"},
+)
+```
+
+Each key is optional, and when you give several, a piece must match all of them.
+
+- `document` is a list of documents, by the name `index.run` gave them (such as
+  `guides/chunking.pdf`) or by their sha. A name that is not in the index is an error
+  that lists the names it has. It needs the upload source, the usual one.
+- `pages` is a pair of whole numbers, the first page and the last, both included. A piece
+  matches when its pages overlap them, so a piece that runs from page 29 to page 31
+  matches `[30, 40]`. A piece with no pages never matches a `pages` filter. Word, HTML,
+  Markdown and the other files without pages give such pieces. The search does not fail
+  for them: its note says how many pieces it left out for having no page numbers.
+- `section` is a heading. A piece matches when one of the headings above it, at any
+  level, is exactly this text, with the same capital letters. So `"Installing"` matches
+  a piece under "Guide > Installing", and `"Install"` does not. An index whose parser
+  found no headings has no sections. pdfium finds none, for example. A `section` filter
+  on such an index fails with an error that says so, instead of quietly finding nothing.
+
+A `where` with an unknown key, a wrong type, or pages that are not a pair of whole
+numbers from 1 to 2,147,483,647 with the first not after the last, is an error before anything
+runs. `pandion.check_where(where)` runs the same check on its own.
+
+The filter is applied inside the index, before the ranking, so a search with `top_k: 20`
+still finds up to 20 matching pieces. It applies to vector search, keyword search and
+both halves of `hybrid_rrf`. With `query_expansion: prf`, the words added to the keyword
+search are also weighed against the matching pieces only.
+
+A filter belongs to a question, so it is never in the pipeline file. The file refuses a
+`filters` setting on `retrieve.rewrite`. The filter travels with the question to the
+search, so the same question with another filter, or with none, is searched again and
+never served the other's results. A search without a filter keeps the id it had before
+filters existed.
+
+The index keeps each piece's first page, last page and headings in columns of their own
+for this. Version 2 of the `lancedb` step added those columns, so every index built
+before it is built once more on its next run. The embeddings come from the embedding
+cache, so no text is embedded again.
+
 ## Ask a question
 
 `ask` runs the retrieval and then the answer step, in one go:
@@ -1176,6 +1224,10 @@ without it the search covers whatever was last indexed in the process.
 answer = p.ask("What does chapter 2 say?", documents={"report.pdf": "/uploads/0f3a.pdf"},
                on_event=send_to_browser, cancel=stop)
 ```
+
+`documents=` decides which index is searched. `where=` narrows the search inside that
+index to some of its documents, pages or a section, as in
+[Filter a search](#filter-a-search). Its `document` names must be among `documents=`.
 
 ## Three ways to write a pipeline
 

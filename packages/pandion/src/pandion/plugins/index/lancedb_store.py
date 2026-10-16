@@ -128,7 +128,9 @@ class LanceDbIndexConfig(BaseModel):
 class LanceDbIndex(Transform[LanceDbIndexConfig]):
     name = "lancedb"
     extra = "lancedb"
-    version = "1"
+    #: 2 added the page_start, page_end and section columns that search
+    #: filters read. Every index rebuilds once, from cached embeddings.
+    version = "2"
     stage = Stage.INDEX
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)}
     output = ArtifactType.INDEX
@@ -285,6 +287,11 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
                 TEXT_COLUMN: chunk.text_to_embed,
                 "doc_id": chunk.doc_id,
                 "ordinal": chunk.ordinal,
+                # What search filters read (pandion.filters). A piece with no
+                # pages has nulls, so it never matches a pages filter.
+                "page_start": chunk.page_span[0] if chunk.page_span else None,
+                "page_end": chunk.page_span[1] if chunk.page_span else None,
+                "section": list(chunk.heading_path),
                 # The canonical chunk, so a retriever can rebuild a `Hit.chunk`
                 # with its original text, offsets and provenance.
                 "chunk_json": json.dumps(
@@ -303,6 +310,9 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
                 pa.field(TEXT_COLUMN, pa.string()),
                 pa.field("doc_id", pa.string()),
                 pa.field("ordinal", pa.int32()),
+                pa.field("page_start", pa.int32()),
+                pa.field("page_end", pa.int32()),
+                pa.field("section", pa.list_(pa.string())),
                 pa.field("chunk_json", pa.string()),
             ]
         )
@@ -317,6 +327,9 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             "embedding_revision": embedder.revision,
             "vector_kind": embedder.vector_kind,
             "doc_count": len(rows),
+            # How many pieces sit under a heading. 0 means a section filter
+            # can match nothing, which the retriever reports as an error.
+            "sections": sum(1 for chunk in chunks if chunk.heading_path),
             "embeddings_computed": stats.computed,
             "embeddings_cached": stats.cached,
         }

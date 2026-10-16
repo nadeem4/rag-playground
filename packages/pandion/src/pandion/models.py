@@ -12,7 +12,8 @@ ModelSettings(...)}`.
   loads a model already in the folder, and says which one is missing.
 - `device: auto` picks cuda, then mps, then cpu.
 - `public_endpoints_only: true` is for a server strangers share: a custom model
-  endpoint must then be a public https address.
+  endpoint must then be a public https address, and so must a URL given as a
+  document (`pandion.fetch`).
 """
 
 from __future__ import annotations

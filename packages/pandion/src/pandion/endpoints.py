@@ -31,7 +31,9 @@ request to a private one.
 
 What this does not stop: the SDK resolves the name again when it connects, so a
 name whose DNS answer changes between the check and the request (DNS
-rebinding) can still slip past. The playground refuses custom endpoints on its
+rebinding) can still slip past. `check_public_url` is the same check with a
+query string allowed; it returns the checked address, and `pandion.fetch`
+connects to that address only, so a fetched URL has no such gap. The playground refuses custom endpoints on its
 demo outright (`playground.backend.policy.PlaygroundPolicy`); this check is the second line
 behind that.
 """
@@ -111,10 +113,21 @@ def _legacy_ipv4(host: str) -> bool:
 
 def check_public_endpoint(url: str) -> None:
     """Raise `EndpointRefused` unless `url` is a public https address."""
+    # A base URL needs no query.
+    if "?" in (url or ""):
+        raise EndpointRefused()
+    check_public_url(url)
+
+
+def check_public_url(url: str) -> str:
+    """Raise `EndpointRefused` unless `url` is a public https address; a query
+    string is allowed. Returns the checked address, so a caller can connect to
+    that address and no other (`pandion.fetch` does, which closes the DNS
+    rebinding gap for it)."""
     url = url or ""
-    # No `@` anywhere (credentials, or `#@` and `?@` tricks), no query or
-    # fragment, no backslash, space or control character: a base URL needs none.
-    if "@" in url or "?" in url or "#" in url or _ODD.search(url):
+    # No `@` anywhere (credentials, or `#@` and `?@` tricks), no fragment, no
+    # backslash, space or control character.
+    if "@" in url or "#" in url or _ODD.search(url):
         raise EndpointRefused()
     try:
         parts = urlsplit(url)
@@ -140,7 +153,7 @@ def check_public_endpoint(url: str) -> None:
     if literal is not None:
         if not _is_public(literal):
             raise EndpointRefused()
-        return
+        return str(literal)
     if _legacy_ipv4(host):
         raise EndpointRefused()
     try:
@@ -156,6 +169,7 @@ def check_public_endpoint(url: str) -> None:
             raise EndpointRefused() from None
         if not _is_public(ip):
             raise EndpointRefused()
+    return addresses[0].split("%", 1)[0]
 
 
 #: The run extra that turns the check on. Never hashed or stored.

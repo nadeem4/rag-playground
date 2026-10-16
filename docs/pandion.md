@@ -18,6 +18,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Install](#install)
 - [Try one stage at a time](#try-one-stage-at-a-time)
 - [Documents other than PDFs](#documents-other-than-pdfs)
+- [A URL as a document](#a-url-as-a-document)
 - [Rewrite a question](#rewrite-a-question)
 - [The pipeline file](#the-pipeline-file)
 - [Build an index](#build-an-index)
@@ -144,6 +145,72 @@ that loads the OCR models.
 citation just has no page. A PowerPoint file has one page per slide, so `page` is the
 slide number. Its boxes, and an image's, are in that page's own units (slide units or
 pixels), not PDF points.
+
+## A URL as a document
+
+A web address works wherever a file does, in `index.run`, `index.sync` and the
+`documents` of `retrieve` and `ask`. It can sit beside local files in one list:
+
+```python
+p.index.run(["docs/", "https://example.com/guides/ferns", "https://example.com/report.pdf"])
+p.index.run({"ferns.html": "https://example.com/guides/ferns"})   # name it yourself
+```
+
+**What is fetched.** Pandion sends one GET request for the address and follows up to 3
+redirects. It reads the page's bytes and keeps them in `sources/` like an uploaded file,
+then indexes them as one. The document id is the URL, unless a mapping names it. The file
+name comes from the last part of the address, with a suffix that follows the content type
+the server sent: `report.pdf`, `ferns.html`, or `page.html` for a site's front page. So the
+parser check in [Documents other than PDFs](#documents-other-than-pdfs) reads it right:
+pdfium takes a PDF at a URL, and a web page needs docling.
+
+Only these content types are accepted: HTML, PDF, Word (`.docx`), plain text, PNG and
+JPG. Pandion does not follow links on the page, does not read sitemaps, and does not read
+robots.txt, because one fetch a person asks for is not crawling. Every request carries an
+honest User-Agent, `Pandion/<version>`, with a link to the project.
+
+**The limits.** A fetch gives up after 10 seconds. A page larger than 20 MB is refused:
+Pandion stops reading one byte past the limit. A refusal stops the run before any step
+runs, with a `pandion.extend.FetchRefused`, a `ValueError`. Its message is one plain
+sentence and never repeats the address, so nothing secret in a query string reaches a
+log:
+
+```text
+That address is not on the public internet, so it was not fetched.
+Only https addresses on port 443 are fetched here.
+The page is larger than the limit of 20,971,520 bytes, so it was not fetched.
+Pandion reads HTML, PDF, Word, text, PNG and JPG files from a URL; this URL sent another kind of file, so it was not fetched.
+The URL redirected more than 3 times, so it was not fetched.
+The URL took longer than 10 seconds to answer, so it was not fetched.
+The URL answered with status 404, so it was not fetched.
+```
+
+**The guard.** On your own machine any address works, including a page on localhost or
+your own network. On a server that strangers share, turn on
+`models.public_endpoints_only` (the same switch that guards custom model endpoints, see
+[Models](#models)):
+
+```yaml
+models:
+  public_endpoints_only: true
+```
+
+Then every address, the first one and each redirect, must be https on port 443, and its
+host must have only public addresses: not localhost, not a private or link-local range,
+not a cloud metadata address. Pandion connects to the address it checked and never looks
+the name up a second time, so a name whose answer changes between the check and the
+request (DNS rebinding) cannot reach a private address. A redirect to a private address,
+or to plain http, is refused like the first address would be.
+
+**Sync with URLs.** `index.sync` fetches every URL again. When the page's bytes changed,
+the document is in `report.changed` and its pieces are rebuilt; when they did not, it is
+in `report.unchanged` and every step is read from the cache. A page that changes on every
+visit, such as one that prints the time, shows as changed on every sync. The manifest
+keeps the file name a fetched page was given, so a new process can search it.
+
+To fetch a page yourself, for example in a server that checks the bytes before it
+indexes them, call `pandion.extend.fetch_url(url, public_only=..., max_bytes=...)`. It
+returns the bytes and the file name.
 
 ## Rewrite a question
 
@@ -357,7 +424,8 @@ putting it back costs nothing. To remove every copy, delete the pipeline's `path
 and sync again.
 
 When to sync is up to you: by hand, from a scheduled job, or from a script that watches
-the folder.
+the folder. A URL in the list is fetched again on each sync and reported the same way
+(see [A URL as a document](#a-url-as-a-document)).
 
 ## Search an index
 
@@ -1388,7 +1456,8 @@ model runs: `auto` tries cuda, then mps, then cpu.
 `models.public_endpoints_only` is for a server that strangers share. When it is true, a
 step that calls a custom OpenAI-compatible endpoint accepts only a public https address
 and follows no redirects, so a visitor cannot make the server call an address on its own
-network. It changes no result.
+network. It also guards a URL given as a document (see
+[A URL as a document](#a-url-as-a-document)). It changes no result.
 
 To load the default embedder before the first run, so that run does not wait, call
 `pandion.preload_embedder("qwen3-embedding-0.6b")`. It takes the same settings as

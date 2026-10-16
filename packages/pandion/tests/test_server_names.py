@@ -36,6 +36,16 @@ def test_the_endpoint_check_is_public_and_the_same_object():
         assert name in pandion.extend.__all__
 
 
+def test_the_url_fetch_is_public_and_the_same_object():
+    import pandion.extend
+    import pandion.fetch
+
+    assert pandion.extend.fetch_url is pandion.fetch.fetch_url
+    assert pandion.extend.FetchRefused is pandion.fetch.FetchRefused
+    for name in ("FetchRefused", "fetch_url"):
+        assert name in pandion.extend.__all__
+
+
 def test_a_private_address_is_refused_when_only_public_ones_are_allowed():
     with pytest.raises(EndpointRefused):
         guard_endpoint("http://127.0.0.1:8080/v1", public_only=True)

@@ -27,7 +27,13 @@ Without `public_only` nothing is checked, so a page on your own machine or
 network can be indexed.
 
 Each refusal is a `FetchRefused` (a ValueError) with a plain message that never
-repeats the URL, so nothing secret in a query string leaks into a log.
+repeats the URL, so nothing secret in a query string leaks into a log, and a
+`kind` (one of `KINDS`) a server can map to a status without reading the
+message.
+
+A fetched page is named from its host and path, such as
+`en.wikipedia.org-wiki-Retrieval-augmented_generation.html`, so the front
+pages of two sites never share a name.
 """
 
 from __future__ import annotations
@@ -59,14 +65,32 @@ CONTENT_TYPES: dict[str, str] = {
 
 _REDIRECTS = {301, 302, 303, 307, 308}
 _CHUNK = 64 * 1024
-_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+#: The longest name a fetched page gets, before its suffix.
+MAX_NAME = 100
+
+#: What each `FetchRefused.kind` means.
+KINDS: dict[str, str] = {
+    "bad_url": "not an http or https URL, or its host name is not valid",
+    "not_https": "with public_only, not https on port 443",
+    "not_public": "with public_only, an address not on the public internet",
+    "too_big": "the page is larger than max_bytes",
+    "wrong_type": "the page sent a content type Pandion does not read",
+    "too_many_redirects": "more than MAX_REDIRECTS redirects",
+    "timed_out": "the fetch took longer than TIMEOUT",
+    "failed": "the page answered with an error status, or could not be reached",
+}
 
 #: Opens the TCP connection; tests patch it.
 _connect = socket.create_connection
 
 
 class FetchRefused(ValueError):
-    """A URL that was not fetched, with a plain reason."""
+    """A URL that was not fetched, with a plain reason and its `kind` (see KINDS)."""
+
+    def __init__(self, message: str, kind: str = "failed") -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 def is_url(item: object) -> bool:
@@ -135,7 +159,7 @@ def fetch_url(url: str, *, public_only: bool, max_bytes: int) -> tuple[bytes, st
 
 def _fetch(url: str, public_only: bool, max_bytes: int, deadline: _Deadline) -> tuple[bytes, str]:
     timed_out = FetchRefused(
-        f"The URL took longer than {TIMEOUT:g} seconds to answer, so it was not fetched."
+        f"The URL took longer than {TIMEOUT:g} seconds to answer, so it was not fetched.", "timed_out"
     )
     for _ in range(MAX_REDIRECTS + 1):
         url = urldefrag(url or "")[0]
@@ -156,7 +180,8 @@ def _fetch(url: str, public_only: bool, max_bytes: int, deadline: _Deadline) -> 
                 if suffix is None:
                     raise FetchRefused(
                         "Pandion reads HTML, PDF, Word, text, PNG and JPG files from a URL; "
-                        "this URL sent another kind of file, so it was not fetched."
+                        "this URL sent another kind of file, so it was not fetched.",
+                        "wrong_type",
                     )
                 data = _read(response, max_bytes, deadline)
                 if deadline.expired:
@@ -170,7 +195,9 @@ def _fetch(url: str, public_only: bool, max_bytes: int, deadline: _Deadline) -> 
             if deadline.expired:
                 raise timed_out from None
             raise FetchRefused("The URL could not be reached, so it was not fetched.") from None
-    raise FetchRefused(f"The URL redirected more than {MAX_REDIRECTS} times, so it was not fetched.")
+    raise FetchRefused(
+        f"The URL redirected more than {MAX_REDIRECTS} times, so it was not fetched.", "too_many_redirects"
+    )
 
 
 def _ascii(host: str) -> str:
@@ -178,7 +205,7 @@ def _ascii(host: str) -> str:
     try:
         return host.encode("idna").decode("ascii")
     except UnicodeError:
-        raise FetchRefused("The URL's host name is not valid, so it was not fetched.") from None
+        raise FetchRefused("The URL's host name is not valid, so it was not fetched.", "bad_url") from None
 
 
 def _check(url: str, public_only: bool) -> list[str] | None:
@@ -188,11 +215,11 @@ def _check(url: str, public_only: bool) -> list[str] | None:
         parts = urlsplit(url)
         scheme, host, port = parts.scheme.lower(), parts.hostname, parts.port
     except ValueError:
-        raise FetchRefused("A URL document must start with http:// or https://.") from None
+        raise FetchRefused("A URL document must start with http:// or https://.", "bad_url") from None
     if scheme not in ("http", "https") or not host:
-        raise FetchRefused("A URL document must start with http:// or https://.")
+        raise FetchRefused("A URL document must start with http:// or https://.", "bad_url")
     if public_only and (scheme != "https" or port not in (None, 443)):
-        raise FetchRefused("Only https addresses on port 443 are fetched here.")
+        raise FetchRefused("Only https addresses on port 443 are fetched here.", "not_https")
     _ascii(host)
     if not public_only:
         return None
@@ -200,7 +227,7 @@ def _check(url: str, public_only: bool) -> list[str] | None:
         return check_public_url(url)
     except EndpointRefused:
         raise FetchRefused(
-            "That address is not on the public internet, so it was not fetched."
+            "That address is not on the public internet, so it was not fetched.", "not_public"
         ) from None
 
 
@@ -268,7 +295,7 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
 def _read(response: http.client.HTTPResponse, max_bytes: int, deadline: _Deadline) -> bytes:
     """The body, refused once it passes `max_bytes` or the deadline."""
     too_big = FetchRefused(
-        f"The page is larger than the limit of {max_bytes:,} bytes, so it was not fetched."
+        f"The page is larger than the limit of {max_bytes:,} bytes, so it was not fetched.", "too_big"
     )
     announced = response.getheader("Content-Length")
     if announced and announced.isdigit() and int(announced) > max_bytes:
@@ -286,7 +313,15 @@ def _read(response: http.client.HTTPResponse, max_bytes: int, deadline: _Deadlin
 
 
 def _filename(url: str, suffix: str) -> str:
-    """The last part of the URL's path, made safe, with `suffix`: `report.pdf`,
-    or `page.html` for a site's front page."""
-    stem = _UNSAFE.sub("_", PurePosixPath(urlsplit(url).path).stem)[:100]
+    """The URL's host and path, made safe and joined with `-`, at most MAX_NAME
+    characters, with `suffix`: `example.com-files-report.pdf`, or
+    `example.com.html` for a site's front page. The path's own extension is
+    dropped (the suffix follows the content type), and so are `.` and `..`."""
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    path = PurePosixPath(parts.path or "/")
+    segments = [s for s in path.parent.parts if s not in ("/", ".", "..")]
+    if path.name not in ("", ".", ".."):
+        segments.append(path.stem)
+    stem = "-".join(_UNSAFE.sub("_", part) for part in [host, *segments] if part)[:MAX_NAME]
     return f"{stem or 'page'}{suffix}"

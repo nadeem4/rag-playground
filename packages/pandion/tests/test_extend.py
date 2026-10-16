@@ -16,6 +16,13 @@ def test_extend_exports_the_authoring_names():
         assert name in ext.__all__ and hasattr(ext, name)
 
 
+def test_extend_exports_what_a_server_needs_to_judge_a_files_format():
+    assert "format_of" in ext.__all__ and "FORMATS" in ext.__all__
+    assert ext.format_of("Notes.DOCX") == "docx"
+    assert ext.format_of("budget.xlsx") is None
+    assert ext.FORMATS["pdf"][0] == "PDF"
+
+
 class NoSettings(BaseModel):
     pass
 

@@ -127,30 +127,58 @@ def test_an_html_page_is_fetched_as_an_html_file(server):
     data, filename = fetch_url(server.url("/guide"), public_only=False, max_bytes=BIG)
 
     assert data == b"<html><body><p>Hi</p></body></html>"
-    assert filename == "guide.html"
+    assert filename == "127.0.0.1-guide.html"
 
 
 @pytest.mark.parametrize(
     ("path", "content_type", "filename"),
     [
-        ("/files/report.pdf", "application/pdf", "report.pdf"),
-        ("/download?id=7", "application/pdf", "download.pdf"),
-        ("/notes.php", "text/plain", "notes.txt"),
-        ("/", "text/html", "page.html"),
+        ("/files/report.pdf", "application/pdf", "127.0.0.1-files-report.pdf"),
+        ("/download?id=7", "application/pdf", "127.0.0.1-download.pdf"),
+        ("/notes.php", "text/plain", "127.0.0.1-notes.txt"),
+        ("/", "text/html", "127.0.0.1.html"),
         (
             "/memo",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "memo.docx",
+            "127.0.0.1-memo.docx",
         ),
-        ("/photo", "image/png", "photo.png"),
-        ("/photo.jpeg", "image/jpeg", "photo.jpg"),
-        ("/odd%20name!.html", "text/html", "odd_20name_.html"),
+        ("/photo", "image/png", "127.0.0.1-photo.png"),
+        ("/photo.jpeg", "image/jpeg", "127.0.0.1-photo.jpg"),
+        ("/odd%20name!.html", "text/html", "127.0.0.1-odd_20name_.html"),
     ],
 )
 def test_the_suffix_follows_the_content_type(server, path, content_type, filename):
     server.page(path, b"body", content_type)
 
     assert fetch_url(server.url(path), public_only=False, max_bytes=BIG)[1] == filename
+
+
+@pytest.mark.parametrize(
+    ("url", "suffix", "filename"),
+    [
+        (
+            "https://en.wikipedia.org/wiki/Retrieval-augmented_generation",
+            ".html",
+            "en.wikipedia.org-wiki-Retrieval-augmented_generation.html",
+        ),
+        ("https://example.com/", ".html", "example.com.html"),
+        ("https://other.example.org", ".html", "other.example.org.html"),
+        ("https://example.com/a/b/report.pdf?x=1#top", ".pdf", "example.com-a-b-report.pdf"),
+        ("https://Example.COM/docs/", ".html", "example.com-docs.html"),
+        ("https://example.com/../../etc/passwd", ".txt", "example.com-etc-passwd.txt"),
+    ],
+)
+def test_a_fetched_page_is_named_from_its_host_and_path(url, suffix, filename):
+    assert fetch._filename(url, suffix) == filename
+
+
+def test_two_front_pages_of_different_sites_get_different_names():
+    assert fetch._filename("https://a.example/", ".html") != fetch._filename("https://b.example/", ".html")
+
+
+def test_a_long_name_is_cut_to_100_characters_before_its_suffix():
+    name = fetch._filename("https://example.com/" + "x" * 300, ".html")
+    assert name == ("example.com-" + "x" * 300)[:100] + ".html"
 
 
 def test_the_user_agent_names_pandion_and_its_version(server):
@@ -167,7 +195,7 @@ def test_up_to_three_redirects_are_followed(server):
     server.redirect("/r2", server.url("/r3"))
     server.redirect("/r1", "/r2")
 
-    assert fetch_url(server.url("/r1"), public_only=False, max_bytes=BIG) == (b"done", "end.txt")
+    assert fetch_url(server.url("/r1"), public_only=False, max_bytes=BIG) == (b"done", "127.0.0.1-end.txt")
 
 
 # --- refusals -----------------------------------------------------------------
@@ -232,6 +260,39 @@ def test_only_http_and_https_urls_are_fetched(url):
     assert refused(url) == "A URL document must start with http:// or https://."
 
 
+def kind_of(url: str, *, public_only: bool = False, max_bytes: int = BIG) -> str:
+    with pytest.raises(FetchRefused) as caught:
+        fetch_url(url, public_only=public_only, max_bytes=max_bytes)
+    return caught.value.kind
+
+
+def test_every_refusal_says_what_kind_it_is(server, resolve, monkeypatch):
+    server.page("/big", b"x" * 2_000, "text/plain")
+    server.page("/zip", b"PK", "application/zip")
+    for n in range(1, 5):
+        server.redirect(f"/r{n}", f"/r{n + 1}")
+    resolve.table["intranet.example"] = [[PRIVATE_V4]]
+
+    assert kind_of("ftp://example.com/a") == "bad_url"
+    assert kind_of("https://" + "a" * 64 + ".example/page") == "bad_url"
+    assert kind_of("http://example.com/a", public_only=True) == "not_https"
+    assert kind_of("https://intranet.example/a", public_only=True) == "not_public"
+    assert kind_of(server.url("/big"), max_bytes=1_000) == "too_big"
+    assert kind_of(server.url("/zip")) == "wrong_type"
+    assert kind_of(server.url("/r1")) == "too_many_redirects"
+    assert kind_of(server.url("/missing")) == "failed"
+    monkeypatch.setattr(fetch, "TIMEOUT", 0.3)
+    server.delay = 1.0
+    server.page("/slow", b"x", "text/plain")
+    assert kind_of(server.url("/slow")) == "timed_out"
+
+
+def test_the_kinds_are_listed():
+    assert set(fetch.KINDS) == {
+        "bad_url", "not_https", "not_public", "too_big", "wrong_type", "too_many_redirects", "timed_out", "failed",
+    }
+
+
 def test_a_refusal_never_repeats_the_url(server):
     message = refused(server.url("/missing?token=s3cret"))
 
@@ -280,7 +341,7 @@ def test_public_only_allows_a_query_string(resolve, monkeypatch):
 
     data, filename = fetch_url("https://example.com/search?q=ferns#top", public_only=True, max_bytes=BIG)
 
-    assert (data, filename) == (b"<p>hi</p>", "search.html")
+    assert (data, filename) == (b"<p>hi</p>", "example.com-search.html")
     assert asked == [("https://example.com/search?q=ferns", [PUBLIC_V4])]
 
 
@@ -471,7 +532,7 @@ def test_the_deadline_stops_a_trickling_https_server(tmp_path, monkeypatch):
     tls = Server(tls=served)
     try:
         tls.page("/ok", b"fine", "text/plain")
-        assert fetch_url(tls.url("/ok"), public_only=False, max_bytes=BIG) == (b"fine", "ok.txt")
+        assert fetch_url(tls.url("/ok"), public_only=False, max_bytes=BIG) == (b"fine", "127.0.0.1-ok.txt")
 
         tls.handlers["/trickle"] = trickle_body
         started = time.monotonic()

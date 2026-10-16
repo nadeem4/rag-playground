@@ -29,6 +29,7 @@ import "@/components/learn/learn.css"
  *   state/libraryExperiments.ts, state/working.ts). The Ask panel's side, width
  *   and open or closed: localStorage (components/ask/AskDock.tsx). Whether Ask
  *   marks parts with no source: localStorage (components/inspectors/chat.ts, MARKS_KEY).
+ *   Evaluate's Best so far: localStorage (state/best.ts).
  * - Run results: packages/pandion/src/pandion/storage.py never expires an entry, playground/backend/expiry.py deletes
  *   only uploads, and DELETE /api/v2/cache clears them.
  *   The demo runs without persistent storage: scripts/publish_space.py asks
@@ -130,6 +131,11 @@ export function Privacy() {
       demo ? "Until you close the tab. The demo checks the set and keeps nothing." : "Until you delete it.",
     ],
     ["Your last evaluation, for the before and after", "In this tab only", "Until you close the tab."],
+    [
+      "Your best evaluation for each question set",
+      "In this browser's storage",
+      "Until you press Forget best on Evaluate or clear this site's data. It holds the score, the pipeline's name and settings, and which questions were found.",
+    ],
     ["Build's results and the questions you asked", "In this tab only", "Until you close the tab. They let you leave Build and come back to the same answer."],
     ["API keys you add", "In this tab's memory only", "Until you close or reload the tab. A key is sent with each request that needs it and is never written to storage, a cookie, a link or a saved file."],
   ]

@@ -466,6 +466,15 @@ number has its plain name and its technical name: Hit rate (Hit@5), Mean recipro
 Evidence found (recall) when a question has more than one passage. Each says what it was in
 the last run when that differs. "What these mean" opens the explanation.
 
+Under the score, **Best so far** compares the run with your best run for the same questions,
+documents and Pieces checked. The first run becomes the best. A better run says "New best."
+and names the questions it won. A worse run says how many fewer it found, names the questions
+it lost, and offers **Load the best pipeline**, which puts that pipeline on Build, and
+**Compare the two**, which opens Compare with the best pipeline loaded. Only questions decide
+better and worse: hit rate first, then mean reciprocal rank to break a tie, and a question
+either run could not score is left out. The best is kept in this browser only, and
+**Forget best** clears it.
+
 Changing Pieces checked after a run does not relabel the numbers: the page says "Scored at 5
 pieces. Evaluate again to use 3."
 

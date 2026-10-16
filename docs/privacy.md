@@ -17,6 +17,7 @@ with a run, and a question set while it is checked.
 | Theme and contrast | In this browser's storage | Until you change them. |
 | Where the Ask panel sits on Build | In this browser's storage | Its side, its width and whether it is open, until you change them. |
 | Whether Ask marks parts with no source | In this browser's storage | Until you change it. |
+| Your best evaluation for each question set | In this browser's storage | Until you press Forget best on Evaluate or clear this site's data. It holds the score, the pipeline's name and settings, and which questions were found. |
 | Page images you viewed | In this browser's cache | They may stay in this browser's cache until it is cleared, even after the upload they show is deleted. |
 | A question set you upload for Evaluate | On the demo: in this tab only. Locally: on this machine, beside the document. | On the demo: until you close the tab. The demo checks the set and keeps nothing. Locally: until you delete it. |
 | Your last evaluation, for the before and after | In this tab only | Until you close the tab. |

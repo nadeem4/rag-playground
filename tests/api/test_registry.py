@@ -127,6 +127,8 @@ def test_the_enrich_stage_says_what_it_does_now_that_it_has_a_strategy(client):
     what = client.get("/api/stages").json()["enrich"]["what"]
     assert "available yet" not in what
     assert "model" in what
+    # A custom endpoint may need none.
+    assert "usually needs an API key" in what
 
 
 def test_stages_carries_the_chunk_lesson_and_only_where_one_exists(client):

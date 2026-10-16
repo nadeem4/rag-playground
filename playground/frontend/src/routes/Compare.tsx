@@ -466,6 +466,8 @@ function Sweep({
   const order = useMemo(() => columnOrder(graph), [graph])
   // The target and every card that depends on it: where a sweep can stop.
   const downstream = useMemo(() => order.filter((n) => n.id === target.id || ancestors(graph, n.id, registry).has(target.id)), [order, graph, registry, target.id])
+  // Where the reader may stop. Not at Enrich itself: the No context recipe has no Enrich step to stop at.
+  const stops = target.stage === "enrich" ? downstream.filter((n) => n.id !== target.id) : downstream
   const terminal = terminalNode(graph)
   const [through, setThrough] = useState<string>(() =>
     // Enrich off has no Enrich step to stop at, so it is compared through the search too.
@@ -1062,13 +1064,13 @@ function Sweep({
             onChange={onChoose}
           />
           {/* Parse and Chunk columns show their own output; only a later stage has a choice of where to stop. */}
-          {downstream.length > 1 && target.stage !== "parse" && target.stage !== "chunk" ? (
+          {stops.length > 1 && target.stage !== "parse" && target.stage !== "chunk" ? (
             <div className="flex items-center gap-2">
               <label htmlFor={throughId} className="text-sm whitespace-nowrap text-fg-muted">
                 Show through
               </label>
               <select id={throughId} className={`${CONTROL} w-auto min-w-[10rem]`} value={through} disabled={busy || phase === "results"} onChange={(e) => setThrough(e.target.value)}>
-                {downstream.map((n) => (
+                {stops.map((n) => (
                   <option key={n.id} value={n.id}>
                     {titleFor(n)}
                     {n.stage === "clean" || n.stage === "rerank" ? ` ${n.id}` : ""}

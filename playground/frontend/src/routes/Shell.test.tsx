@@ -246,7 +246,11 @@ describe("Ask with a chat card and no API key", () => {
     const build = await screen.findByRole("button", { name: "Build the index" })
     await waitFor(() => expect(within(card("enrich")).getByTestId("key-hint").textContent).toContain("This model needs an Anthropic API key."))
     fireEvent.click(build)
-    await waitFor(() => expect(within(card("enrich")).getByText("Enrich needs an Anthropic API key to run. Add one, then run again.")).toBeTruthy())
+    // One line says it: the run stops on the card and focus goes to its Open API key button.
+    const open = within(card("enrich")).getByRole("button", { name: "Open API key" })
+    await waitFor(() => expect(document.activeElement).toBe(open))
+    expect(card("enrich").getAttribute("aria-current")).toBe("true")
+    expect(within(card("enrich")).queryByRole("alert")).toBeNull()
     expect(posts).toHaveLength(0)
   })
 
@@ -453,7 +457,7 @@ describe("Build the index", () => {
     expect(posts[0].path).toBe("/api/v2/runs")
     expect((posts[0].body as { through: string }).through).toBe("index")
     expect(screen.getByRole("heading", { name: "Index pipeline" })).toBeTruthy()
-    expect(screen.getByText("These five steps build the index. Retrieval, reranking and answering live in the Ask panel.")).toBeTruthy()
+    expect(screen.getByText("These steps build the index. Retrieval, reranking and answering live in the Ask panel.")).toBeTruthy()
   })
 
   it("says Building, disabled and busy, while its run is in flight", async () => {
@@ -1810,7 +1814,7 @@ describe("the Ask panel results on Build", () => {
   it("before a build the column says what the steps do; once the index is built it invites a change and points to Compare", async () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
     render(<Shell />)
-    const BEFORE = "These five steps build the index. Retrieval, reranking and answering live in the Ask panel."
+    const BEFORE = "These steps build the index. Retrieval, reranking and answering live in the Ask panel."
     const AFTER = "Open a step to change how it works, such as the chunk size, then build again. To see several settings side by side, use Compare."
     expect((await screen.findByTestId("column-intro")).textContent).toBe(BEFORE)
     const build = await screen.findByRole("button", { name: "Build the index" })

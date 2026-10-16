@@ -43,7 +43,7 @@ STAGE_WHAT: dict[Stage, str] = {
         "model writes one short sentence that says which document and part the "
         "piece comes from, so a piece that makes little sense on its own can "
         "still be found. The piece that is shown and cited does not change. It "
-        "is optional, needs an API key and makes one model call per piece."
+        "is optional, usually needs an API key and makes one model call per piece."
     ),
     Stage.INDEX: (
         "Indexing makes the pieces searchable. Each piece is turned into a "

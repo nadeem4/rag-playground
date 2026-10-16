@@ -516,6 +516,8 @@ describe("a chat card that failed for want of a key", () => {
       </ApiKeyProvider>,
     )
     expect(screen.getAllByText(/No Anthropic API key/).length).toBeGreaterThan(0)
+    // Without a provider, the hint names no step: it shows on Chat and Enrich alike.
+    expect(screen.getByTestId("key-hint").textContent).toBe("This step needs an API key. Open API key")
     fireEvent.click(within(screen.getByTestId("key-hint")).getByRole("button", { name: "Open API key" }))
     await waitFor(() => expect(screen.getByRole("dialog", { name: "API keys" })).toBeTruthy())
   })

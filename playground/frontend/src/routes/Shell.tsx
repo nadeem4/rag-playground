@@ -377,13 +377,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     }
     const covered = target ? [target, ...ancestors(graph, target, registry)] : graph.nodes.map((n) => n.id)
     // A model step in the index (Enrich) without its key would fail with a
-    // traceback. Stop before sending anything, and say so on that card.
+    // traceback. Stop before sending anything, on that card, whose key line
+    // already says which key it needs: focus goes to its Open API key.
     const keyless = covered.find((id) => id in missingKeys)
     if (keyless) {
-      const provider = missingKeys[keyless]
-      const node = graph.nodes.find((n) => n.id === keyless)!
-      setErrors({ [keyless]: { message: `${titleFor(node)} needs ${provider ? withArticle(provider) : "an"} API key to run. Add one, then run again.` } })
       selectCard(keyless)
+      window.setTimeout(() => document.querySelector<HTMLElement>(`[data-node-id="${keyless}"] [data-testid=key-hint] button`)?.focus())
       return
     }
     setErrors({})
@@ -563,7 +562,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           </p>
         ) : (
           <p data-testid="column-intro" className="border-b border-hairline px-3 py-2 text-xs text-fg-muted">
-            These five steps build the index. Retrieval, reranking and answering live in the Ask panel.
+            These steps build the index. Retrieval, reranking and answering live in the Ask panel.
           </p>
         )}
         {/* On a first visit the first-visit card already asks for a document. */}

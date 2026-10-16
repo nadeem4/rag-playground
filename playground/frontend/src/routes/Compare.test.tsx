@@ -240,6 +240,18 @@ describe("the Compare stage picker", () => {
     expect(screen.getByLabelText("Show through")).toBeTruthy()
   })
 
+  it("never offers the Enrich card itself as a stop, so No context always runs through a step it has", async () => {
+    storeGraph(addEnrich(sampleGraph(registry, SOURCE), registry))
+    openAt("?node=enrich")
+    render(<Compare />)
+    await waitFor(() => expect(pressed()).toBe("Enrich"))
+    const select = screen.getByLabelText("Show through") as HTMLSelectElement
+    const stops = [...select.options].map((o) => o.textContent)
+    expect(stops).not.toContain("Enrich")
+    expect(stops).toContain("Index")
+    expect(select.value).toBe("use_case")
+  })
+
   it("sets the tally sentence in sans, with only its numbers in mono", async () => {
     const { readFileSync } = await import("node:fs")
     const src = readFileSync(`${__dirname}/Compare.tsx`, "utf8")

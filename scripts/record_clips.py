@@ -116,8 +116,8 @@ def start_server(port: int, data: Path) -> subprocess.Popen:
 def pick_sample(page: Page, base: str, title: str | None) -> None:
     """Load the first sample the way a visitor does, from Home, then switch to `title` if given."""
     page.goto(base + "/")
-    page.get_by_role("button", name="Try it yourself on Build").click()
-    page.wait_for_url("**/build")
+    page.get_by_role("button", name="Try a sample").click()
+    page.wait_for_url("**/build*")
     page.get_by_role("button", name="Build the index").wait_for()
     if title:
         # The document is the pipeline's: Change sits on its Documents line.

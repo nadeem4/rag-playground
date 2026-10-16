@@ -202,7 +202,7 @@ export function KeyHint({ provider }: { provider?: LlmProvider | null }) {
   const { setPanelOpen } = useApiKey()
   return (
     <p className="text-xs text-fg-muted" data-testid="key-hint">
-      {provider ? `This model needs ${withArticle(provider)} API key.` : "Chat and the LLM reranker need an API key."}{" "}
+      {provider ? `This model needs ${withArticle(provider)} API key.` : "This step needs an API key."}{" "}
       <button
         type="button"
         className="text-fg underline underline-offset-2"

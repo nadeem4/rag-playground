@@ -4,7 +4,7 @@ import { Popover } from "radix-ui"
 
 import { needsKey } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
-import type { GraphNode, TransformInfo } from "@/api/types"
+import type { GraphNode, LlmProvider, TransformInfo } from "@/api/types"
 import type { ExplainState } from "@/api/useExplain"
 import { FieldHelp } from "@/components/fields/FieldHelp"
 import type { FieldErrors } from "@/components/fields/schema"
@@ -82,6 +82,8 @@ export interface NodeCardProps {
   previousArtifactId?: string
   /** Plan I-22: this stage's lesson paragraphs, when the server has them. Shown last in the explain pop-over. */
   lesson?: string[]
+  /** Set when the step's model needs a key that is not set: the card says so and does not run. */
+  missingKey?: { provider: LlmProvider | null }
   /** The transform wired into each of this node's input ports, for lock states. */
   upstream?: Record<string, TransformInfo | undefined>
 }
@@ -298,9 +300,11 @@ export function NodeCard(p: NodeCardProps) {
           ? "Locked. Pick another transform to run."
           : "Fix the settings to run."
         : `Fix the ${p.blockedBy} settings to run.`
-    : completed && p.stale
-      ? "Settings changed since the last run."
-      : null
+    : p.missingKey
+      ? "Add a key to run."
+      : completed && p.stale
+        ? "Settings changed since the last run."
+        : null
 
   const docs = isSource ? documentsOf({ nodes: [p.node] }) : []
 
@@ -566,6 +570,8 @@ export function NodeCard(p: NodeCardProps) {
         <EmptyParse transform={p.node.transform} config={p.node.config} onConfig={p.onConfig} />
       ) : null}
 
+      {p.missingKey ? <KeyHint provider={p.missingKey.provider} /> : null}
+
       {warning ? (
         <p role="status" data-testid="explain-warning" className="mt-2 text-xs leading-[1.5] break-words text-danger">
           {warning}
@@ -637,7 +643,7 @@ export function NodeCard(p: NodeCardProps) {
           variant="outline"
           size="sm"
           busy={running}
-          disabled={p.busy || Boolean(p.blockedBy)}
+          disabled={p.busy || Boolean(p.blockedBy) || Boolean(p.missingKey)}
           onClick={(e) => {
             e.stopPropagation()
             p.onRun(false)

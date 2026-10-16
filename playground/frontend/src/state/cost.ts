@@ -72,13 +72,14 @@ export function costLine(c: Cost): string {
 }
 
 /** Pandion's steps in pipeline order (`STAGE_ORDER`), as the comparison names them. */
-const ORDER = ["parse", "clean", "chunk", "embed", "store", "rewrite", "search", "rerank"] as const
+const ORDER = ["parse", "clean", "chunk", "enrich", "embed", "store", "rewrite", "search", "rerank"] as const
 
 /** Pandion's step names as the page's card titles: the embedder and the store are both the Index card. */
 const TITLES: Record<string, string> = {
   parse: "Parse",
   clean: "Clean",
   chunk: "Chunk",
+  enrich: "Enrich",
   embed: "Index",
   store: "Index",
   rewrite: "Ask",
@@ -93,6 +94,7 @@ export function sharedStages(config: PipelineConfig, variedFrom: string): string
     parse: true,
     clean: (config.index.clean?.length ?? 0) > 0,
     chunk: true,
+    enrich: config.index.enrich !== undefined,
     embed: config.index.embed !== undefined,
     store: true,
     rewrite: config.retrieve?.rewrite !== undefined,

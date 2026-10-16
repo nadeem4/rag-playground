@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
 
-import type { LlmCheck, LlmProvider, LlmServerSource, LlmSettings } from "./types"
+import type { Graph, LlmCheck, LlmProvider, LlmServerSource, LlmSettings, Registry } from "./types"
 
 /**
  * The API keys typed in the UI, one per provider (plan I-8, I-18).
@@ -129,12 +129,30 @@ export function hasKeyFor(provider: LlmProvider, server: LlmSettings | null, key
 
 /**
  * The strategies that call a model and so need a key: the ones the Ask panel
- * turns off when no key is set (the LLM reranker, the LLM rewrite and Chat).
+ * turns off when no key is set (the LLM reranker, the LLM rewrite and Chat),
+ * and Build's Enrich step (llm_context).
  */
-const KEY_TRANSFORMS = new Set(["llm_rerank", "llm_rewrite", "chat"])
+const KEY_TRANSFORMS = new Set(["llm_rerank", "llm_rewrite", "chat", "llm_context"])
 
 export function needsApiKey(transform: string): boolean {
   return KEY_TRANSFORMS.has(transform)
+}
+
+/**
+ * Build's model steps (Enrich) whose model needs a key that is surely not set,
+ * by card id: the provider, or null when any key would do. The Ask panel's
+ * model steps have their own stops.
+ */
+export function missingKeySteps(g: Graph, registry: Registry, server: LlmSettings | null, keys: Keys): Record<string, LlmProvider | null> {
+  const out: Record<string, LlmProvider | null> = {}
+  for (const n of g.nodes) {
+    if (n.stage !== "enrich" || !needsApiKey(n.transform)) continue
+    const of = registry.enrich
+    const schema = of && Object.hasOwn(of, n.transform) ? of[n.transform].config_schema.properties?.model : undefined
+    const need = keyNeedFor(schema, n.config.model)
+    if (keyMissing(need, server, keys)) out[n.id] = need.kind === "provider" ? need.provider : null
+  }
+  return out
 }
 
 export function checkMessage(provider: LlmProvider, check: LlmCheck): { ok: boolean; text: string } {
@@ -150,10 +168,10 @@ export function checkMessage(provider: LlmProvider, check: LlmCheck): { ok: bool
 }
 
 /**
- * Does this failure want the user to set a key? Only for the chat use case,
+ * Does this failure want the user to set a key? Only for Chat and Enrich,
  * and only when the message is about a key or authentication.
  */
 export function needsKey(transform: string, error: string | undefined): boolean {
-  if (transform !== "chat" || !error) return false
+  if ((transform !== "chat" && transform !== "llm_context") || !error) return false
   return /api[ _-]?key|credential|authenticat|unauthori[sz]ed|\b401\b/i.test(error)
 }

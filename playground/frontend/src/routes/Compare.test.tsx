@@ -12,7 +12,7 @@ import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Registry } from "@/api/types"
 import { chooseDocument, resetDocumentForTests } from "@/state/document"
 import { requestOpenExperiment, resetExperimentsForTests, saveExperiment } from "@/state/experiments"
-import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, transformsFor } from "@/state/graph"
+import { addEnrich, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, transformsFor } from "@/state/graph"
 import { readCurrentId, resetPipelinesForTests, STARTER_ID } from "@/state/pipelines"
 
 import { Compare, seedVariants, VariantResult } from "./Compare"
@@ -238,6 +238,18 @@ describe("the Compare stage picker", () => {
     expect(steps()).toEqual(["Parse", "Chunk", "Index", "Retrieve"])
     expect(text()).toMatch(/The Index step over chunking-primer\.pdf/)
     expect(screen.getByLabelText("Show through")).toBeTruthy()
+  })
+
+  it("never offers the Enrich card itself as a stop, so No context always runs through a step it has", async () => {
+    storeGraph(addEnrich(sampleGraph(registry, SOURCE), registry))
+    openAt("?node=enrich")
+    render(<Compare />)
+    await waitFor(() => expect(pressed()).toBe("Enrich"))
+    const select = screen.getByLabelText("Show through") as HTMLSelectElement
+    const stops = [...select.options].map((o) => o.textContent)
+    expect(stops).not.toContain("Enrich")
+    expect(stops).toContain("Index")
+    expect(select.value).toBe("use_case")
   })
 
   it("sets the tally sentence in sans, with only its numbers in mono", async () => {
@@ -1221,6 +1233,12 @@ describe("seedVariants", () => {
     const v = seedVariants(node, transformsFor(registry, "chunk"))
     expect(v.map((x) => x.transform)).toEqual(["sentence_window", "sentence_window", "recursive_character"])
     expect(v[1].config).toMatchObject({ sentences_per_chunk: 3, overlap_sentences: 1 })
+  })
+
+  it("seeds an Enrich sweep with the step on, then off", () => {
+    const enrich = addEnrich(sampleGraph(registry, SOURCE), registry).nodes.find((n) => n.stage === "enrich")!
+    const v = seedVariants(enrich, transformsFor(registry, "enrich"))
+    expect(v).toEqual([{ transform: "llm_context", config: enrich.config }, { transform: "none", config: {} }])
   })
 
   it("keeps the old rule for Parse: the node's parser, then the others", () => {

@@ -63,6 +63,18 @@ export const TEST_REGISTRY: Registry = {
       overlap: { type: "integer", default: 32, title: "Overlap" },
     }),
   },
+  enrich: {
+    llm_context: t("enrich", "llm_context", "chunk_set", { chunks: port("chunk_set") }, {
+      model: {
+        type: "string",
+        enum: ["claude-haiku-4-5", "gpt-5.6-luna", "custom"],
+        default: "claude-haiku-4-5",
+        title: "Model",
+        "x-providers": { "claude-haiku-4-5": "anthropic", "gpt-5.6-luna": "openai", custom: "openai_compatible" },
+      },
+      max_pieces: { type: "integer", default: 200, minimum: 1, title: "Most pieces" },
+    }, true),
+  },
   index: {
     lancedb: t("index", "lancedb", "index", { chunks: variadic("chunk_set") }, {
       embedder: { type: "string", default: "fake-deterministic", title: "Embedder" },

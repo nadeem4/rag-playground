@@ -377,7 +377,7 @@ describe("kept pipelines from an older version", () => {
   it("lists a kept old pipeline with its reason, without Open, and keeps it on Export", async () => {
     window.localStorage.setItem(
       "rag-playground:pipelines:v1",
-      JSON.stringify([{ id: "keptkept", name: "From last year", graph: { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }, documents: [], savedAt: "2026-01-01T00:00:00.000Z" }]),
+      JSON.stringify([{ id: "keptkept", name: "From last year", graph: { nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] }, documents: [], savedAt: "2026-01-01T00:00:00.000Z" }]),
     )
     render(<Library go={vi.fn()} />)
     expect(await screen.findByText("From last year")).toBeTruthy()

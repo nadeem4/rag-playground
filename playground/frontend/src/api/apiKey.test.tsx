@@ -5,12 +5,12 @@ import { AppHeader } from "@/components/AppHeader"
 import { NodeCard } from "@/components/pipeline/NodeCard"
 import { Shell } from "@/routes/Shell"
 import { resetDocumentForTests } from "@/state/document"
-import { initialGraph, readStoredGraph, resetStoredGraphForTests, setConfig, storeGraph } from "@/state/graph"
+import { addEnrich, initialGraph, readStoredGraph, resetStoredGraphForTests, setConfig, storeGraph } from "@/state/graph"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
 import { resetAppSettingsForTests } from "@/api/useDemo"
 
-import { ApiKeyProvider, checkMessage, hasAnyKey, hasKeyFor, keyMissing, keyNeedFor, keyShortLabel, keySourceLabel, needsApiKey, needsKey } from "./apiKey"
+import { ApiKeyProvider, checkMessage, hasAnyKey, hasKeyFor, keyMissing, keyNeedFor, keyShortLabel, keySourceLabel, missingKeySteps, needsApiKey, needsKey } from "./apiKey"
 import { KEY_HEADERS, keyHeaders } from "./client"
 import type { LlmProvider } from "./types"
 import { v2 } from "./v2"
@@ -281,6 +281,22 @@ describe("key source words", () => {
     })
   })
 
+  it("names the Enrich step when its model's key is missing, by provider; a custom endpoint or a key set clears it", () => {
+    const none = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as const
+    const noKeys = { anthropic: null, openai: null, custom: null, openrouter: null }
+    const g = addEnrich(initialGraph(TEST_REGISTRY), TEST_REGISTRY)
+    expect(missingKeySteps(g, TEST_REGISTRY, none, noKeys)).toEqual({ enrich: "anthropic" })
+    expect(missingKeySteps(g, TEST_REGISTRY, none, { ...noKeys, anthropic: FAKE.anthropic })).toEqual({})
+    expect(missingKeySteps(g, TEST_REGISTRY, { ...none, anthropic: "dotenv" }, noKeys)).toEqual({})
+    // Unknown while the server has not answered: nothing is stopped.
+    expect(missingKeySteps(g, TEST_REGISTRY, null, noKeys)).toEqual({})
+    expect(missingKeySteps(setConfig(g, "enrich", { model: "gpt-5.6-luna" }), TEST_REGISTRY, none, { ...noKeys, anthropic: FAKE.anthropic })).toEqual({ enrich: "openai" })
+    expect(missingKeySteps(setConfig(g, "enrich", { model: "custom" }), TEST_REGISTRY, none, noKeys)).toEqual({})
+    expect(missingKeySteps(initialGraph(TEST_REGISTRY), TEST_REGISTRY, none, noKeys)).toEqual({})
+    expect(needsApiKey("llm_context")).toBe(true)
+    expect(needsKey("llm_context", "ValueError: No Anthropic API key.")).toBe(true)
+  })
+
   it("says what a check found", () => {
     expect(checkMessage("anthropic", { ok: true, source: "dotenv", error: null })).toEqual({ ok: true, text: "The key works. Checked the key from .env." })
     expect(checkMessage("openai", { ok: true, source: "env", error: null }).text).toBe("The key works. Checked OPENAI_API_KEY from the environment.")
@@ -500,6 +516,8 @@ describe("a chat card that failed for want of a key", () => {
       </ApiKeyProvider>,
     )
     expect(screen.getAllByText(/No Anthropic API key/).length).toBeGreaterThan(0)
+    // Without a provider, the hint names no step: it shows on Chat and Enrich alike.
+    expect(screen.getByTestId("key-hint").textContent).toBe("This step needs an API key. Open API key")
     fireEvent.click(within(screen.getByTestId("key-hint")).getByRole("button", { name: "Open API key" }))
     await waitFor(() => expect(screen.getByRole("dialog", { name: "API keys" })).toBeTruthy())
   })

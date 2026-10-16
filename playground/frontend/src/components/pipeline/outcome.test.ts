@@ -49,6 +49,10 @@ describe("what it did, per artifact type", () => {
     expect(text("chunk", "chunk_set", { ...chunkRecursive, chunks: [] })).toBe("Made 0 chunks. The document produced no text to cut.")
   })
 
+  it("chunk_set from Enrich: how many chunks got a context in front", () => {
+    expect(text("enrich", "chunk_set", chunkRecursive)).toBe("Wrote a context for 6 chunks. The chunks themselves are unchanged.")
+  })
+
   it("index: embedded versus from cache, and dimensions", () => {
     expect(text("index", "index", index)).toBe("Indexed 6 chunks: 6 embedded, 0 from cache. 384 dimensions.")
     expect(text("index", "index", { ...index, dim: 256, native_dim: 1024, embeddings_cached: 6, embeddings_computed: 0 })).toBe(

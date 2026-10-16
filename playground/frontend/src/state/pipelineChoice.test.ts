@@ -84,9 +84,9 @@ describe("which pipeline Evaluate opens on", () => {
 
 describe("a kept pipeline in the choices", () => {
   it("carries its own problem, and cannot be scored", () => {
-    const kept = fromOld({ id: "keptkept", name: "Old", graph: { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }, savedAt: "2026-01-01T00:00:00Z" }, 0)
+    const kept = fromOld({ id: "keptkept", name: "Old", graph: { nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] }, savedAt: "2026-01-01T00:00:00Z" }, 0)
     const [, choice] = pipelineChoices({ starter, saved: [kept], registry: R, working: null, currentId: null })
     expect(choice).toMatchObject({ id: "keptkept", graph: null, problem: kept.kept!.problem })
-    expect(choice.problem).toContain("enrich")
+    expect(choice.problem).toContain("extract")
   })
 })

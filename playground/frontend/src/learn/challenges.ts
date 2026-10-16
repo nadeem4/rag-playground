@@ -68,6 +68,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   drop_matching: "Remove matching text",
   markdown_header: "By heading",
   lancedb: "LanceDB",
+  llm_context: "Context from a model",
 }
 
 /** A strategy's name for the reader. Settings sent to the server keep the id. */

@@ -2,7 +2,7 @@ import { Fragment, useState } from "react"
 import { Plus } from "lucide-react"
 
 import type { NodeState } from "@/api/runState"
-import type { GraphNode, Registry, Stage } from "@/api/types"
+import type { GraphNode, LlmProvider, Registry, Stage } from "@/api/types"
 import { useStages, type ExplainState } from "@/api/useExplain"
 import type { FieldErrors } from "@/components/fields/schema"
 import { Button } from "@/components/ui/button"
@@ -48,6 +48,10 @@ export interface PipelineColumnProps {
   onConfig: (id: string, config: Record<string, unknown>) => void
   onRun: (id: string, force: boolean) => void
   onAddCleaner: () => void
+  /** Add the Enrich step under Chunk. No button without it. */
+  onAddEnrich?: () => void
+  /** Per node id: the provider whose key the step's model needs and does not have (null when any key would do). */
+  missingKeys?: Record<string, LlmProvider | null>
   onRemove: (id: string) => void
   onSweep: (id: string, preset?: SweepPreset) => void
   /** Plan I-12, per node id: the explanation of each card's current settings. */
@@ -80,7 +84,7 @@ export function blockingNode(
 }
 
 /** Cards whose variants are worth comparing side by side. */
-export const SWEEPABLE: Stage[] = ["parse", "chunk", "index"]
+export const SWEEPABLE: Stage[] = ["parse", "chunk", "enrich", "index"]
 
 /** Where a stackable stage's "Add" button sits: after its last node, or after the card that feeds it. */
 function addAnchor(order: GraphNode[], stage: Stage, feeder: Stage): GraphNode | undefined {
@@ -94,6 +98,12 @@ export function PipelineColumn(p: PipelineColumnProps) {
   const [open, setOpen] = useState<string | null>(null)
   const adds: { anchor?: GraphNode; label: string; onAdd?: () => void }[] = [
     { anchor: transformsFor(p.registry, "clean").length ? addAnchor(order, "clean", "parse") : undefined, label: "Add cleaner", onAdd: p.onAddCleaner },
+    // One Enrich step at most, so the button goes once there is one.
+    {
+      anchor: transformsFor(p.registry, "enrich").length && !order.some((n) => n.stage === "enrich") ? order.find((n) => n.stage === "chunk") : undefined,
+      label: "Add enrich step",
+      onAdd: p.onAddEnrich,
+    },
   ]
 
   return (
@@ -138,6 +148,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
                 return b ? titleFor(b) : undefined
               })()}
               previousArtifactId={p.history?.[node.id]?.previous}
+              missingKey={p.missingKeys && node.id in p.missingKeys ? { provider: p.missingKeys[node.id] } : undefined}
               onRemove={stacked ? () => p.onRemove(node.id) : undefined}
               actions={
                 SWEEPABLE.includes(node.stage) ? (

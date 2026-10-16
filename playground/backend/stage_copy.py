@@ -39,10 +39,11 @@ STAGE_WHAT: dict[Stage, str] = {
         "what one search hit can contain."
     ),
     Stage.ENRICH: (
-        "Enrichment adds context to each piece before it is indexed, for "
-        "example a line saying which document and section it came from, so a "
-        "piece that makes little sense on its own can still be found. No "
-        "enricher is available yet."
+        "Enrichment adds context to each piece before it is indexed: a chat "
+        "model writes one short sentence that says which document and part the "
+        "piece comes from, so a piece that makes little sense on its own can "
+        "still be found. The piece that is shown and cited does not change. It "
+        "is optional, usually needs an API key and makes one model call per piece."
     ),
     Stage.INDEX: (
         "Indexing makes the pieces searchable. Each piece is turned into a "

@@ -8,7 +8,7 @@ import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/state/document"
-import { addCleaner, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
+import { addCleaner, addEnrich, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { graphToConfig } from "@/state/config"
 import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID, usableGraph } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
@@ -236,6 +236,48 @@ describe("Ask with a chat card and no API key", () => {
     expect(await waitFor(() => panel().getByTestId("key-notice"))).toBeTruthy()
   })
 
+  it("a keyless Enrich step says so on its card, and Build the index stops there and sends nothing", async () => {
+    storeGraph(addEnrich(chatSampleGraph(liveRegistry as never, SOURCE), liveRegistry as never))
+    render(
+      <ApiKeyProvider>
+        <Shell />
+      </ApiKeyProvider>,
+    )
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await waitFor(() => expect(within(card("enrich")).getByTestId("key-hint").textContent).toContain("This model needs an Anthropic API key."))
+    fireEvent.click(build)
+    // One line says it: the run stops on the card and focus goes to its Open API key button.
+    const open = within(card("enrich")).getByRole("button", { name: "Open API key" })
+    await waitFor(() => expect(document.activeElement).toBe(open))
+    expect(card("enrich").getAttribute("aria-current")).toBe("true")
+    expect(within(card("enrich")).queryByRole("alert")).toBeNull()
+    expect(posts).toHaveLength(0)
+  })
+
+  it("with a key, Build the index sends the Enrich step as index.enrich", async () => {
+    storeGraph(addEnrich(chatSampleGraph(liveRegistry as never, SOURCE), liveRegistry as never))
+    render(
+      <ApiKeyProvider>
+        <WithKey />
+        <Shell />
+      </ApiKeyProvider>,
+    )
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect(within(card("enrich")).queryByTestId("key-hint")).toBeNull())
+    fireEvent.click(build)
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect((posts[0].body as { config: { index: { enrich: unknown } } }).config.index.enrich).toEqual({
+      use: "llm_context",
+      model: "claude-haiku-4-5",
+      max_pieces: 200,
+      max_tokens: 4096,
+      custom_base_url: "",
+      custom_model: "",
+      openrouter_model: "",
+    })
+  })
+
   it("a UI key runs all the way", async () => {
     const body = await ask(true)
     expect(body.answer).toBe(true)
@@ -415,7 +457,7 @@ describe("Build the index", () => {
     expect(posts[0].path).toBe("/api/v2/runs")
     expect((posts[0].body as { through: string }).through).toBe("index")
     expect(screen.getByRole("heading", { name: "Index pipeline" })).toBeTruthy()
-    expect(screen.getByText("These five steps build the index. Retrieval, reranking and answering live in the Ask panel.")).toBeTruthy()
+    expect(screen.getByText("These steps build the index. Retrieval, reranking and answering live in the Ask panel.")).toBeTruthy()
   })
 
   it("says Building, disabled and busy, while its run is in flight", async () => {
@@ -771,11 +813,11 @@ describe("First run (plan I-15)", () => {
   })
 
   it("an old pipeline that cannot be opened is kept, Build says so once and opens the Starter", async () => {
-    const old = JSON.stringify({ nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] })
+    const old = JSON.stringify({ nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] })
     window.localStorage.setItem("rag-playground:graph:v1", old)
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    expect(screen.getByText(/could not be opened here/).textContent).toContain("enrich")
+    expect(screen.getByText(/could not be opened here/).textContent).toContain("extract")
     expect(storedColumn()!.nodes.find((n) => n.stage === "source")!.config).toEqual({ sha: SAMPLE.sha, filename: SAMPLE.filename })
     fireEvent.click(screen.getByRole("button", { name: "Got it" }))
     expect(screen.queryByText(/could not be opened here/)).toBeNull()
@@ -1241,7 +1283,7 @@ describe("saved pipelines on Build", () => {
   })
 
   it("says the list is full of older pipelines when Save as new or a share link cannot make room", async () => {
-    const enrich = { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }
+    const enrich = { nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] }
     const kept = Array.from({ length: 20 }, (_, i) => ({ id: `k${String(i).padStart(7, "0")}`, name: `Old ${i}`, graph: enrich, savedAt: "2026-01-01T00:00:00Z" }))
     window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(kept))
     const full = "The list is full of older pipelines that could not be converted. Delete one in the Library to save this."
@@ -1256,7 +1298,7 @@ describe("saved pipelines on Build", () => {
   })
 
   it("leaves an old link it cannot open in the address bar and says why", async () => {
-    const code = btoa(JSON.stringify({ v: 2, name: "Odd", graph: { nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] }, documents: [] }))
+    const code = btoa(JSON.stringify({ v: 2, name: "Odd", graph: { nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] }, documents: [] }))
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
     window.history.replaceState(null, "", `/build?pipeline=${code}`)
     setup()
@@ -1772,7 +1814,7 @@ describe("the Ask panel results on Build", () => {
   it("before a build the column says what the steps do; once the index is built it invites a change and points to Compare", async () => {
     storeGraph(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"))
     render(<Shell />)
-    const BEFORE = "These five steps build the index. Retrieval, reranking and answering live in the Ask panel."
+    const BEFORE = "These steps build the index. Retrieval, reranking and answering live in the Ask panel."
     const AFTER = "Open a step to change how it works, such as the chunk size, then build again. To see several settings side by side, use Compare."
     expect((await screen.findByTestId("column-intro")).textContent).toBe(BEFORE)
     const build = await screen.findByRole("button", { name: "Build the index" })

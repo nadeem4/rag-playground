@@ -88,6 +88,7 @@ const valueWord = (v: unknown) =>
 
 /** A strategy's plain name: Build's, or the Ask panel's on Retrieve. */
 export function strategyName(stage: Stage, transform: string): string {
+  if (stage === "enrich" && transform === ENRICH_OFF) return "No context"
   return (stage === "retrieve" ? RETRIEVAL_LABEL[transform] : undefined) ?? strategyLabel(transform)
 }
 
@@ -677,12 +678,19 @@ const stackPlace = (graph: PipelineGraph | undefined, target: GraphNode) => {
   return Number(/_(\d+)$/.exec(target.id)?.[1] ?? "1") - 1
 }
 
+/**
+ * The Enrich recipe with the step left out, so a comparison can set it on
+ * against off. The pipeline file writes it as `enrich: none`.
+ */
+export const ENRICH_OFF = "none"
+
 /** The stage a comparison varies for this card, or why these recipes cannot be compared in one run. */
 export function compareStage(target: GraphNode, variants: Variant[], p: WorkingPipeline): CompareStage | { problem: string } {
   switch (target.stage) {
     case "parse":
     case "clean":
     case "chunk":
+    case "enrich":
     case "rerank":
       return target.stage
     case "query":
@@ -707,7 +715,8 @@ export function compareStage(target: GraphNode, variants: Variant[], p: WorkingP
  * card's place: a whole list for Clean and Rerank, with the card's place
  * (its place in the column, given the graph) changed.
  */
-export function variantBlock(target: GraphNode, v: Variant, p: WorkingPipeline, stage: CompareStage, graph?: PipelineGraph): Step | Step[] {
+export function variantBlock(target: GraphNode, v: Variant, p: WorkingPipeline, stage: CompareStage, graph?: PipelineGraph): Step | Step[] | "none" {
+  if (stage === "enrich" && v.transform === ENRICH_OFF) return "none"
   if (stage === "embed") return { use: String(v.config.embedder), truncate_dim: v.config.truncate_dim ?? null }
   if (stage === "store") return { use: v.transform, ...strip(v.config, EMBED_KEYS) }
   const own: Step = { use: v.transform, ...strip(v.config, stage === "rewrite" ? QUESTION_KEYS : []) }

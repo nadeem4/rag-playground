@@ -55,17 +55,17 @@ describe("the working pipeline", () => {
   })
 
   it("one that cannot be converted is kept and build opens the starter", () => {
-    const old = JSON.stringify({ nodes: [{ id: "x", stage: "enrich", transform: "y", config: {} }], edges: [] })
+    const old = JSON.stringify({ nodes: [{ id: "x", stage: "extract", transform: "y", config: {} }], edges: [] })
     window.localStorage.setItem(OLD_GRAPH_KEY, old)
     expect(readWorking()).toBeNull()
     expect(readStoredGraph(R)).toBeNull()
     expect(window.localStorage.getItem(OLD_GRAPH_KEY)).toBe(old)
-    expect(keptOldPipeline()).toEqual({ problem: expect.stringContaining("enrich"), seen: false })
+    expect(keptOldPipeline()).toEqual({ problem: expect.stringContaining("extract"), seen: false })
     markKeptSeen()
     expect(keptOldPipeline()?.seen).toBe(true)
     // Once marked, the old graph is never tried again, and never removed.
     expect(readWorking()).toBeNull()
-    expect(JSON.parse(window.localStorage.getItem(KEPT_KEY)!).problem).toContain("enrich")
+    expect(JSON.parse(window.localStorage.getItem(KEPT_KEY)!).problem).toContain("extract")
     expect(window.localStorage.getItem(OLD_GRAPH_KEY)).toBe(old)
   })
 

@@ -91,6 +91,14 @@ describe("the shared line", () => {
     expect(sharedStages(config, "parse")).toEqual([])
   })
 
+  it("counts an Enrich step among the shared steps, and names it Enrich", () => {
+    const enriched = { ...config, index: { ...config.index, enrich: { use: "llm_context" } } }
+    expect(stageTitle("enrich")).toBe("Enrich")
+    expect(sharedStages(enriched, "embed")).toEqual(["Parse", "Clean", "Chunk", "Enrich"])
+    expect(sharedStages(enriched, "enrich")).toEqual(["Parse", "Clean", "Chunk"])
+    expect(sharedStages(config, "embed")).toEqual(["Parse", "Clean", "Chunk"])
+  })
+
   it("says what the shared steps took once, and that Time leaves them out", () => {
     const shared = cost({ seconds: 41.62, input_tokens: null, output_tokens: null, dollars: null, steps_run: 6 })
     expect(sharedLine(shared, ["parse", "clean", "chunk"])).toBe(

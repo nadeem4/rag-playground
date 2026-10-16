@@ -39,6 +39,13 @@ def validate(client, config):
     return client.post("/api/v2/pipelines/validate", json={"config": config})
 
 
+def test_copy_yaml_writes_an_enrich_step_where_pandion_reads_it(client):
+    enriched = {**PIPELINE, "index": {**PIPELINE["index"], "enrich": {"use": "llm_context", "max_pieces": 40}}}
+    r = validate(client, enriched)
+    assert r.json()["ok"] is True
+    assert "  chunk:\n    use: recursive_character\n  enrich:\n    use: llm_context\n    max_pieces: 40\n" in r.json()["yaml"]
+
+
 @pytest.mark.parametrize("name", list(CUSTOM_CONFIGS))
 def test_on_the_demo_a_custom_endpoint_is_refused(client, monkeypatch, name):
     demo_on(monkeypatch)

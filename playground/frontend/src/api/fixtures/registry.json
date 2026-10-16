@@ -797,6 +797,12 @@
             "minimum": 0,
             "title": "Overlap",
             "type": "integer"
+          },
+          "heading_context": {
+            "default": false,
+            "description": "heading_context: when on, the heading path where a piece starts, for example Experience > a role, is put in front of the piece's text before it is turned into a vector. The piece that is shown and cited does not change. A document without headings is not affected.",
+            "title": "Heading in front",
+            "type": "boolean"
           }
         },
         "title": "TokenBasedConfig",
@@ -822,6 +828,13 @@
           "more": [
             "If a sentence is cut at a border and it is shorter than the overlap, it appears whole at the start of the next chunk.",
             "The overlap must be smaller than the max tokens."
+          ]
+        },
+        "heading_context": {
+          "hint": "When this is on, the heading path is added to what gets searched.",
+          "more": [
+            "The headings above the place where a chunk starts are put in front of it before it is turned into a vector, for example Experience > a role. The chunk itself, and what is shown and cited, does not change.",
+            "This helps a question that names a section find the chunks in it. It needs a parser that finds headings. Without them, nothing is added."
           ]
         }
       }
@@ -862,6 +875,12 @@
             "minimum": 0,
             "title": "Overlap",
             "type": "integer"
+          },
+          "heading_context": {
+            "default": false,
+            "description": "heading_context: when on, the heading path where a piece starts, for example Experience > a role, is put in front of the piece's text before it is turned into a vector. The piece that is shown and cited does not change. A document without headings is not affected.",
+            "title": "Heading in front",
+            "type": "boolean"
           }
         },
         "title": "SentenceWindowConfig",
@@ -889,8 +908,123 @@
             "Sharing a sentence helps when an answer runs across the place where one piece ends and the next begins.",
             "The cost is more to store, and a search can return the same sentence twice. It must be smaller than the number of sentences per piece."
           ]
+        },
+        "heading_context": {
+          "hint": "When this is on, the heading path is added to what gets searched.",
+          "more": [
+            "The headings above the place where a piece starts are put in front of it before it is turned into a vector, for example Experience > a role. The piece itself, and what is shown and cited, does not change.",
+            "This helps a question that names a section find the pieces in it. It needs a parser that finds headings. Without them, nothing is added."
+          ]
         }
       }
+    }
+  },
+  "enrich": {
+    "llm_context": {
+      "name": "llm_context",
+      "version": "1",
+      "summary": "Asks a chat model to write one short sentence that places each piece in its document, and puts it in front of the piece before it is searched. The piece that is shown and cited does not change. It needs an API key and makes one model call per piece.",
+      "stage": "enrich",
+      "output": "chunk_set",
+      "stackable": true,
+      "deterministic": false,
+      "cacheable": true,
+      "requires": {},
+      "provides": {},
+      "prefers": {},
+      "fallback": "",
+      "inputs": {
+        "chunks": {
+          "type": "chunk_set",
+          "variadic": false,
+          "ambient": false,
+          "required": true
+        }
+      },
+      "config_schema": {
+        "properties": {
+          "model": {
+            "default": "claude-haiku-4-5",
+            "description": "The chat model that writes each piece's context.",
+            "enum": [
+              "claude-opus-5",
+              "claude-sonnet-5",
+              "claude-haiku-4-5",
+              "gpt-6-astra",
+              "gpt-5.6-sol",
+              "gpt-5.6-luna",
+              "openrouter",
+              "custom"
+            ],
+            "title": "Model",
+            "type": "string",
+            "x-labels": {
+              "claude-haiku-4-5": "Claude Haiku 4.5",
+              "claude-opus-5": "Claude Opus 5",
+              "claude-sonnet-5": "Claude Sonnet 5",
+              "custom": "Custom (OpenAI-compatible)",
+              "gpt-5.6-luna": "GPT-5.6 Luna",
+              "gpt-5.6-sol": "GPT-5.6 Sol",
+              "gpt-6-astra": "GPT-6 Astra",
+              "openrouter": "OpenRouter"
+            },
+            "x-providers": {
+              "claude-haiku-4-5": "anthropic",
+              "claude-opus-5": "anthropic",
+              "claude-sonnet-5": "anthropic",
+              "custom": "openai_compatible",
+              "gpt-5.6-luna": "openai",
+              "gpt-5.6-sol": "openai",
+              "gpt-6-astra": "openai",
+              "openrouter": "openrouter"
+            }
+          },
+          "custom_base_url": {
+            "default": "",
+            "description": "The address of an OpenAI-compatible server.",
+            "title": "Endpoint URL",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "custom_model": {
+            "default": "",
+            "description": "The model name that server expects.",
+            "title": "Model name",
+            "type": "string",
+            "x-show-when": {
+              "model": "custom"
+            }
+          },
+          "openrouter_model": {
+            "default": "",
+            "description": "The OpenRouter model id, for example anthropic/claude-sonnet-4, openai/gpt-4o-mini, meta-llama/llama-3.3-70b-instruct or google/gemini-2.5-flash.",
+            "title": "OpenRouter model",
+            "type": "string",
+            "x-show-when": {
+              "model": "openrouter"
+            }
+          },
+          "max_pieces": {
+            "default": 200,
+            "description": "A document cut into more pieces than this is refused before any model call, since each piece is one call.",
+            "minimum": 1,
+            "title": "Most pieces",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "default": 4096,
+            "description": "The most the model may write for one piece, thinking included.",
+            "minimum": 1,
+            "title": "Most output tokens",
+            "type": "integer"
+          }
+        },
+        "title": "LlmContextConfig",
+        "type": "object"
+      },
+      "learn": {}
     }
   },
   "index": {

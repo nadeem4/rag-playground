@@ -386,6 +386,9 @@ describe("ChatInspector, the answer check", () => {
   it("a native answer says how many parts cite a piece, and marks the one with no source", () => {
     render(<ChatInspector payload={NATIVE} chunkSet={chunks} />)
     expect(check().textContent).toBe("2 of 3 parts cite a piece.")
+    expect(check().getAttribute("role")).toBe("status")
+    // The check line replaces the old header fact on a labelled answer.
+    expect(screen.queryByTestId("chat-ungrounded")).toBeNull()
     expect(noSource()?.textContent).toBe("No source")
     expect(claim("none").textContent).toBe("Most teams use 500 tokens.")
     // A lead-in with no label is plain text, not a mark.
@@ -403,6 +406,7 @@ describe("ChatInspector, the answer check", () => {
     render(<ChatInspector payload={SID} chunkSet={chunks} />)
     expect(screen.getByTestId("chat-grounding").textContent).toBe("4 cited, 1 weak, 0 similarity, 1 not grounded, 0 invalid ids")
     expect(screen.queryByTestId("chat-check")).toBeNull()
+    expect(screen.getByTestId("chat-ungrounded").textContent).toBe("1 of 4")
   })
 
   it("the checkbox hides the marks, and is remembered", () => {

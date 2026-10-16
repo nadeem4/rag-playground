@@ -118,7 +118,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         <Fact id="output" value={fmt(payload.usage?.output_tokens ?? 0)} label="tokens out" />
         <Fact id="citations" value={fmt(stats.citations)} label={stats.citations === 1 ? "citation" : "citations"} />
         {stats.unverified ? <Fact id="unverified" value={fmt(stats.unverified)} label="not verified" /> : null}
-        <Fact id="ungrounded" value={`${stats.ungrounded} of ${stats.segments}`} label="passages not tied to a source" />
+        {labelled ? null : <Fact id="ungrounded" value={`${stats.ungrounded} of ${stats.segments}`} label="passages not tied to a source" />}
         {payload.stop_reason ? <span className="font-mono text-xs text-fg-muted">{payload.stop_reason}</span> : null}
       </div>
 
@@ -130,7 +130,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
             </span>
           ) : null}
           {check ? (
-            <span data-testid="chat-check" className="text-sm text-fg">
+            <span data-testid="chat-check" role="status" className="text-sm text-fg">
               {check}
             </span>
           ) : null}

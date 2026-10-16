@@ -75,14 +75,12 @@ export interface ChatStats {
 
 export function chatStats(p: ChatPayload): ChatStats {
   const verified = p.citations.filter((c) => c.verified).length
-  // A labelled answer counts its claims; an older one, its parts with words.
-  const labelled = isLabelled(p)
   return {
     citations: p.citations.length,
     verified,
     unverified: p.citations.length - verified,
-    segments: p.answer.filter((s) => (labelled ? claimKind(s) !== null : segmentKind(s) !== "plain")).length,
-    ungrounded: p.answer.filter((s) => (labelled ? claimKind(s) === "none" : segmentKind(s) === "ungrounded")).length,
+    segments: p.answer.filter((s) => segmentKind(s) !== "plain").length,
+    ungrounded: p.answer.filter((s) => segmentKind(s) === "ungrounded").length,
   }
 }
 

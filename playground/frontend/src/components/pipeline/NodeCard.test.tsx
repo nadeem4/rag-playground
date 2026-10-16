@@ -686,6 +686,14 @@ describe("a parse that found no text", () => {
     expect(within(note).queryByRole("button")).toBeNull()
   })
 
+  it("for a file that is not a PDF, says plainly that it found no text, with no word of scans", async () => {
+    payloads = { empty5: { ...empty, filename: "notes.docx" } }
+    card("docling", { do_ocr: false }, "empty5")
+    const note = await screen.findByTestId("empty-parse")
+    expect(note.textContent).toBe("Found no text in notes.docx. The file may be empty.")
+    expect(within(note).queryByRole("button")).toBeNull()
+  })
+
   it("says nothing when the parse found text, or when its settings changed since", async () => {
     payloads = { full1: parsedDoc, empty4: empty }
     card("docling", { do_ocr: false }, "full1")

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 
+import { ApiError } from "./client"
 import { v2 } from "./v2"
 import type { FindResult, PdfPageSize } from "./types"
 
@@ -21,7 +22,8 @@ function once<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promis
   return p
 }
 
-export type Loaded<T> = { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string }
+/** `status` is the HTTP status of a refused request: 415 when the document has no pages (not a PDF). */
+export type Loaded<T> = { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string; status?: number }
 
 function useLoad<T>(key: string | null, load: () => Promise<T>): Loaded<T> {
   const [state, setState] = useState<{ key: string | null; value: Loaded<T> }>({ key: null, value: { kind: "loading" } })
@@ -30,7 +32,12 @@ function useLoad<T>(key: string | null, load: () => Promise<T>): Loaded<T> {
     let live = true
     load().then(
       (data) => live && setState({ key, value: { kind: "ready", data } }),
-      (err: unknown) => live && setState({ key, value: { kind: "error", message: err instanceof Error ? err.message : String(err) } }),
+      (err: unknown) =>
+        live &&
+        setState({
+          key,
+          value: { kind: "error", message: err instanceof Error ? err.message : String(err), status: err instanceof ApiError ? err.status : undefined },
+        }),
     )
     return () => {
       live = false

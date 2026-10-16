@@ -39,6 +39,22 @@ export function citationSlot(c: Pick<ChatCitation, "chunk_id">, chunkSet?: Chunk
 }
 
 /**
+ * Where a citation sits in the chunk set's text, for a document without
+ * pages. Its piece must be in the set; then the cited characters when the
+ * set's text there reads as the quote, else the whole piece. Null otherwise.
+ */
+export function citationRange(
+  c: Pick<ChatCitation, "chunk_id" | "doc_start" | "doc_end" | "cited_text">,
+  chunkSet?: ChunkSet,
+): [number, number] | null {
+  const i = chunkIndexOf(c, chunkSet)
+  if (i === null || !chunkSet) return null
+  const { doc_start: a, doc_end: b } = c
+  if (a !== null && b !== null && chunkSet.source_text.slice(a, b) === c.cited_text) return [a, b]
+  return [chunkSet.chunks[i].start_char, chunkSet.chunks[i].end_char]
+}
+
+/**
  * The page to open for a citation. The citation's own page first; when its
  * offset fell in no element (page null), the first page of its chunk, where
  * the text search can still find the quote. Null when neither is known.

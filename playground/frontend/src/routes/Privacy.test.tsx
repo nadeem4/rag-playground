@@ -48,7 +48,10 @@ describe("Your data and privacy", () => {
     render(<Privacy />)
     expect(screen.getByRole("heading", { level: 1, name: "Your data and privacy" })).toBeTruthy()
     const server = await screen.findByRole("table", { name: "On the demo server" })
-    expect(rowFor(server, "PDFs you upload").textContent).toContain("24 hours, then deleted. At most 3 files at a time, 10 MB and 20 pages each.")
+    expect(rowFor(server, "Files you upload").textContent).toContain(
+      "24 hours, then deleted. At most 3 files at a time. A PDF can be up to 10 MB and 20 pages. A Word, PowerPoint, HTML, Markdown or text file can be up to 2 MB. A PNG or JPG image can be up to 5 MB.",
+    )
+    expect(rowFor(server, "Pages you add from a link").textContent).toContain("The demo fetches the page once, over https only, and never again for a question.")
     expect(rowFor(server, "An anonymous browser id").textContent).toContain("rag_visitor")
     expect(rowFor(server, "An anonymous browser id").textContent).toContain("One year.")
     expect(rowFor(server, "Run results").textContent).toContain("until the demo restarts or the cache is cleared")
@@ -75,7 +78,7 @@ describe("Your data and privacy", () => {
     demo = false
     render(<Privacy />)
     const machine = await screen.findByRole("table", { name: "On this machine" })
-    expect(rowFor(machine, "PDFs you upload").textContent).toContain("Until you delete them. Nothing expires on your machine.")
+    expect(rowFor(machine, "Files you upload, and pages you add from a link").textContent).toContain("Until you delete them. Nothing expires on your machine.")
     expect(screen.queryByRole("table", { name: "On the demo server" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Delete my uploads from the demo" })).toBeNull()
     expect(screen.queryByRole("link", { name: "privacy policy" })).toBeNull()
@@ -116,6 +119,7 @@ describe("Your data and privacy", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete my uploads from the demo" }))
     const ask = await screen.findByRole("group", { name: "Confirm deleting uploads" })
     expect(ask.textContent).toContain("mine.pdf")
+    expect(ask.textContent).toContain("ask for the file again when opened")
     fireEvent.click(within(ask).getByRole("button", { name: "Delete them" }))
     await waitFor(() => expect(screen.getByText("Deleted 1 upload from the demo.")).toBeTruthy())
     expect(fetchMock.mock.calls.some(([u, i]) => u === `/api/v2/documents/${UP}` && i?.method === "DELETE")).toBe(true)

@@ -45,7 +45,8 @@ export function TransformSelect({ id, label, transforms, value, upstream, labelF
       value: t.name,
       name: labelFor(t.name),
       code: t.name,
-      help: t.summary ? firstSentence(t.summary) : undefined,
+      // A strategy that cannot run says why in the list, not only once picked.
+      help: lock.kind === "hard" ? lock.reason : t.summary ? firstSentence(t.summary) : undefined,
       lock: lock.kind === "ok" ? undefined : lock,
       needsKey: hasKey === false && needsApiKey(t.name),
     }

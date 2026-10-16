@@ -323,6 +323,19 @@ describe("upstreamFor", () => {
     expect(upstreamFor(g, R, "parse").file?.name).toBe("upload")
   })
 
+  it("tells a parser the document's format, from the source's file name", () => {
+    const LIVE = liveRegistry as unknown as Registry
+    const g = initialGraph(LIVE)
+    const on = (filename: string) => ({ ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { sha: "ab", filename } } : n)) })
+    expect(upstreamFor(on("field-guide.docx"), LIVE, "parse").file?.provides.format).toBe("docx")
+    expect(upstreamFor(on("report.pdf"), LIVE, "parse").file?.provides.format).toBe("pdf")
+    expect(compatibility(LIVE.parse!.pdfium, upstreamFor(on("field-guide.docx"), LIVE, "parse"))).toEqual({
+      kind: "hard",
+      reason: "pdfium reads PDF files only.",
+    })
+    expect(compatibility(LIVE.parse!.docling, upstreamFor(on("field-guide.docx"), LIVE, "parse")).kind).toBe("ok")
+  })
+
   it("resolves an ambient port from the column, the way the server binds it", () => {
     const g = initialGraph(R)
     expect(upstreamFor(g, R, "retrieve").query?.name).toBe("text")

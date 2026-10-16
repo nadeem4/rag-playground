@@ -11,7 +11,7 @@ import { documentBusy, loadSampleDocument, useDocument } from "@/state/document"
 /**
  * The first-visit card on Build (plan I-15): no document yet. Load one of the
  * bundled samples (`GET /api/samples`, then `POST /api/sources/sample`), or
- * upload a PDF; either becomes the pipeline's document. This browser's
+ * upload a document; either becomes the pipeline's document. This browser's
  * earlier uploads are in the Pick a document menu. Nothing runs until the
  * user presses Run. A hosted demo states its limits in a note.
  */
@@ -21,7 +21,7 @@ const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eig
 const count = (n: number) => WORDS[n] ?? String(n)
 export function FirstRun() {
   const { samples, error: samplesError } = useSamples()
-  const { upload, busy: uploading, error: uploadError } = useUpload()
+  const { upload, busy: uploading, error: uploadError, accept } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
   // Shared with the Pick a document menu: while either uploads or loads a sample, the other waits.
   const { sampleLoading } = useDocument()
@@ -54,16 +54,17 @@ export function FirstRun() {
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold">Document</h3>
         <p className="m-0 flex flex-wrap items-baseline gap-x-2 text-sm text-fg-muted">
-          <span>Load a sample or upload a PDF. Your earlier uploads are in the list.</span>
+          <span>Load a sample or upload a document. Your earlier uploads are in the list.</span>
           <DocumentControl />
         </p>
       </div>
       {demo ? (
         <p data-testid="demo-note" className="text-sm text-fg-muted">
-          This is a hosted demo. A PDF you upload is private to this browser, is not shared with anyone, and is deleted after{" "}
-          {ttlHours === 24 ? "a day" : `${ttlHours} hours`}. Files up to{" "}
-          {Math.round((limits?.max_bytes ?? 10485760) / 1048576)} MB and {limits?.max_pages ?? 20} pages,{" "}
-          {count(limits?.max_files ?? 3)} at a time. Clearing cookies loses access to your uploads. For anything larger,{" "}
+          This is a hosted demo. A file you upload is private to this browser, is not shared with anyone, and is deleted after{" "}
+          {ttlHours === 24 ? "a day" : `${ttlHours} hours`}. A PDF up to {Math.round((limits?.max_bytes ?? 10485760) / 1048576)} MB and{" "}
+          {limits?.max_pages ?? 20} pages, a Word, PowerPoint, HTML, Markdown or text file up to{" "}
+          {Math.round((limits?.max_other_bytes ?? 2097152) / 1048576)} MB, and an image up to{" "}
+          {Math.round((limits?.max_image_bytes ?? 5242880) / 1048576)} MB, {count(limits?.max_files ?? 3)} at a time. Clearing cookies loses access to your uploads. For anything larger,{" "}
           <a href={REPO} target="_blank" rel="noreferrer" className="underline underline-offset-2">
             run it locally
           </a>
@@ -86,10 +87,10 @@ export function FirstRun() {
         <input
           ref={fileRef}
           type="file"
-          accept=".pdf,application/pdf"
+          accept={accept}
           className="sr-only"
           tabIndex={-1}
-          aria-label="Upload a PDF file to start"
+          aria-label="Upload a document to start"
           onChange={(e) => {
             const file = e.target.files?.[0]
             e.target.value = ""
@@ -98,7 +99,7 @@ export function FirstRun() {
         />
         <Button variant="outline" size="sm" className="self-start" busy={uploading !== null} disabled={waiting} onClick={() => fileRef.current?.click()}>
           <Upload aria-hidden strokeWidth={1.75} />
-          {uploading ? `Uploading ${uploading}` : "Upload a PDF"}
+          {uploading ?? "Upload a document"}
         </Button>
         {uploadError ? (
           <p role="alert" className="text-xs break-words text-danger">

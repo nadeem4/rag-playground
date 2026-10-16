@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
 
 import type { Graph, GraphEdge, GraphNode, PortSchema, Registry, Stage, TransformInfo } from "@/api/types"
 import { defaultsFor } from "@/components/fields/schema"
+import { formatOf } from "@/lib/formats"
 
 import { columnOf, graphToConfig, unknownStrategy } from "./config"
 import { keepUndrawn, parseWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
@@ -395,7 +396,11 @@ export function upstreamFor(g: PipelineGraph, registry: Registry, id: string): R
     const src = edge ? edge.src : spec.ambient ? ambientSourceFor(g, registry, spec, blocked) : undefined
     const srcNode = src ? g.nodes.find((n) => n.id === src) : undefined
     const info = srcNode ? infoFor(registry, srcNode) : undefined
-    if (srcNode && info) out[port] = { ...info, provides: effectiveProvides(g, registry, srcNode.id) }
+    if (!srcNode || !info) continue
+    const provides = effectiveProvides(g, registry, srcNode.id)
+    // The document's format, so a parser that cannot read it is judged before it runs.
+    const format = srcNode.stage === "source" ? formatOf(String(srcNode.config?.filename ?? "")) : null
+    out[port] = { ...info, provides: format ? { ...provides, format } : provides }
   }
   return out
 }

@@ -44,6 +44,8 @@ export interface EvidenceSlipProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   /** The retriever, when the list mixes them. */
   retriever?: string | null
   onShowInPdf?: () => void
+  /** The words on that button: "Show in text" for a document without pages. */
+  showLabel?: string
   /** No finding line and no scores: the row has no rank or score worth saying. Not a tab stop. */
   bare?: boolean
   /** The finding line to show in place of the computed one: a piece in Compare is named, not ranked. */
@@ -73,6 +75,7 @@ export function EvidenceSlip({
   section,
   retriever,
   onShowInPdf,
+  showLabel = "Show in PDF",
   bare = false,
   finding,
   scores: withScores = true,
@@ -125,7 +128,7 @@ export function EvidenceSlip({
         onShowInPdf()
       }}
     >
-      Show in PDF
+      {showLabel}
     </button>
   ) : null
   const tail = (

@@ -1,7 +1,9 @@
 import type { ParsedDoc } from "@/api/types"
+import { hasPages } from "@/lib/formats"
 
 import { regionsForElements } from "./geometry"
 import { PdfPageView } from "./PdfPageView"
+import { elementsText, TextView } from "./TextView"
 
 /**
  * "Show in PDF" for a chunk or a hit: the bboxes of the parsed elements the
@@ -23,6 +25,25 @@ export function ElementsInPdf({
   title: string
   onClose: () => void
 }) {
+  if (!hasPages(doc.filename)) {
+    // No pages to draw (Word, a web page, Markdown, text, an image or slides): the parsed text, with this piece's elements marked.
+    const { text, marks } = elementsText(doc, elementIds)
+    return (
+      <TextView
+        key={`${doc.source_id}:${elementIds.join(",")}`}
+        title={title}
+        text={text}
+        marks={marks}
+        slot={slot}
+        notice={
+          marks.length
+            ? "This document has no pages, so its parsed text is shown with this piece marked."
+            : "None of this piece's source elements are in the parsed document, so nothing is marked."
+        }
+        onClose={onClose}
+      />
+    )
+  }
   const r = regionsForElements(doc.elements, elementIds)
   const first = r.regions[0]?.page ?? r.pages[0] ?? pageSpan?.[0] ?? 1
   const parser = typeof doc.parser_meta?.parser === "string" ? doc.parser_meta.parser : "This parser"

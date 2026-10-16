@@ -48,6 +48,8 @@ export const v2 = {
 
   documents: () => request<Source[]>("/documents"),
   uploadDocument: (file: File) => request<Source>("/documents", { method: "POST", body: form(file) }),
+  /** Fetch a page once and keep it like an upload. A refusal is the fetch guard's own sentence (400, 403, 413, 415, 429, 502, 503 or 504). */
+  addLink: (url: string) => request<Source>("/documents/url", jsonInit({ url })),
   deleteDocument: (sha: string) => request<{ sha: string; deleted: boolean }>(`/documents/${id(sha)}`, { method: "DELETE" }),
   documentFileUrl: (sha: string) => `${V2_BASE}/documents/${id(sha)}/file`,
   pages: (sha: string) => request<PdfPageSize[]>(`/documents/${id(sha)}/pages`),

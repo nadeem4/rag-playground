@@ -5,6 +5,7 @@ import { loadRegistry } from "@/api/useRegistry"
 import { v2 } from "@/api/v2"
 import { sampleQuestionTexts } from "@/api/samples"
 import type { SampleCard, Source } from "@/api/types"
+import { hasPages } from "@/lib/formats"
 
 import { followSample, setCurrentId, STARTER_ID } from "./pipelines"
 import { initialGraph, readStoredGraph, sampleGraph, storedGraphJson, storeGraph, subscribeGraph, type PipelineGraph } from "./graph"
@@ -84,7 +85,7 @@ interface State {
   samplesFailed: boolean
   known: ReadonlySet<string>
   menuOpen: boolean
-  /** The file an upload is sending now, shared by the menu and the first-visit card. */
+  /** What is on its way now, as its label ("Uploading x" or "Fetching x"), shared by the menu and the first-visit card. */
   uploading: string | null
   /** Why the last upload was refused or failed. */
   uploadError: string | null
@@ -354,6 +355,19 @@ export function useDocument(): DocumentState {
 export function useDocStatus(doc: DocRef | null): DocStatus {
   const s = useSyncExternalStore(subscribe, getState)
   return docStatus(doc, s.sources, s.samples, s.samplesFailed, s.known)
+}
+
+/**
+ * Whether a document has pages to draw, by its name in the lists: a PDF does,
+ * Word, a web page, Markdown, text and images do not. A document the lists do
+ * not name (a sample not loaded yet) is taken as a PDF, as every sample is.
+ */
+export function useHasPages(): (sha: string) => boolean {
+  const s = useSyncExternalStore(subscribe, getState)
+  return (sha) => {
+    const name = s.sources?.find((x) => x.sha === sha)?.filename
+    return name === undefined || hasPages(name)
+  }
 }
 
 /** Tests only: forget the lists, the files chosen and the menu, and fetch again on the next subscriber. */

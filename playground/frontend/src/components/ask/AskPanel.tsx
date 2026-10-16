@@ -217,7 +217,8 @@ export function AskPanel(p: AskPanelProps) {
 
   const ready = [
     filename,
-    typeof pages === "number" ? plural(pages, "page", "pages") : null,
+    // A document without pages (Word, a web page) says nothing of them.
+    typeof pages === "number" && pages > 0 ? plural(pages, "page", "pages") : null,
     typeof pieces === "number" ? plural(pieces, "piece", "pieces") : null,
   ].filter(Boolean)
 

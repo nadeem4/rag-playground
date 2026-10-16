@@ -9,6 +9,7 @@
  */
 
 import type { TransformInfo } from "@/api/types"
+import { readsLine } from "@/lib/formats"
 
 export type Compat = { kind: "ok" } | { kind: "soft" | "hard"; reason: string }
 
@@ -40,6 +41,14 @@ function list(items: string[]): string {
 
 /** `upstream` maps each of the candidate's input ports to the transform wired into it, when known. */
 export function compatibility(candidate: TransformInfo, upstream: Record<string, TransformInfo | undefined>): Compat {
+  // A parser that declares its formats, behind a source whose document is another one (`upstreamFor` adds `format`).
+  const formats = candidate.provides?.formats
+  if (Array.isArray(formats)) {
+    for (const up of Object.values(upstream)) {
+      const format = up?.provides?.format
+      if (typeof format === "string" && !formats.includes(format)) return { kind: "hard", reason: readsLine(candidate.name, formats.map(String)) }
+    }
+  }
   for (const [port, need] of Object.entries(candidate.requires ?? {})) {
     const up = upstream[port]
     if (!up) continue

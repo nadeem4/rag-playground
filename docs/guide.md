@@ -31,23 +31,52 @@ several, and nothing about saved pipelines, links or exported files will need to
 
 On Build and Evaluate the **Pipeline** picker comes first. Wherever the app names a
 document, it shows it the same way: a small picture of page 1, the title, then the file
-name, the page count and a tag, **Sample** or **Your upload**, with a **Preview** button.
+name, the page count and a tag, **Sample**, **Your upload** or **From a link**, with a
+**Preview** button. A document without pages shows its kind, such as DOCX, in place of the
+picture, and a document from a link takes the link's host, such as en.wikipedia.org, as its
+title.
 
 - On **Build** the documents belong to the pipeline, so they are in its first step, the
   **Document** card. Its **Add or change** link opens a menu with the bundled samples, your
-  uploads and **Upload a PDF**.
+  uploads, **Upload a document** and **Or add a link**.
 - On **Evaluate** they are listed under **Documents**, with **Change**.
 - **Compare** stays document first: a **Document** line above the recipes shows the
   picture and the title, with **Preview** and **Change**. It works on the pipeline on Build.
 - **Library** shows every saved document the same way.
 
 The header has no document control. Home, Read and Privacy show no document, because they
-do not work on one. Home has its own **Try a sample** and **Use your own PDF** buttons.
+do not work on one. Home has its own **Try a sample** and **Use your own document** buttons.
 
 **Preview** opens a side sheet with every page of the document. A row of page numbers at
 the top jumps to a page, and the page in view is marked as you scroll. Each page is
 captioned, such as Page 3 of 6. Escape or the close button closes it, and you are back
-where you were.
+where you were. A document without pages says so in the sheet; its text shows on the
+Parse step once the pipeline has run.
+
+### Kinds of document, and links
+
+**Upload a document** takes every kind of file a parser on the server reads. With the
+parsers here that is PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG. The file
+picker offers only those, and the menu names them under the upload. On the demo the same
+line gives the limits: a PDF up to 10 MB and 20 pages, other files up to 2 MB, and images up
+to 5 MB.
+
+**Or add a link** takes the address of a web page or a PDF. Paste it and press **Add**. The
+server fetches the page once and keeps it like an upload: it counts as one of your uploads,
+expires with them on the demo, and is never fetched again for a question. On the demo only
+public https addresses work. When a link is refused, the menu shows the server's own
+sentence, such as "That address is not on the public internet, so it was not fetched."
+
+Not every parser reads every kind. In the Parse step's picker, a parser that cannot read
+the document is greyed out with the reason, such as "pdfium reads PDF files only." If you
+choose a Word file while Parse uses pdfium, the Parse card says the same thing under its
+picker, and the run waits until you pick a parser that reads it, such as Docling.
+
+Word files, web pages, Markdown and text have no pages. Images and PowerPoint slides do,
+but their boxes are in pixels or slide units, not PDF points, so the app does not draw
+them. For all of these, **Show in text** takes the place of **Show in PDF**: it opens the
+document's text in a scrolling panel, with the cited or selected piece marked in its
+chunk's colour.
 
 The five samples were written for the playground, and each one shows a problem:
 
@@ -98,7 +127,7 @@ Home (`/`) is the first page. It has:
 - a **Try a sample** button, which opens Build on the Starter pipeline with the default
   sample. An unsaved pipeline on Build is kept rather than replaced, and the Starter waits
   in its picker;
-- a **Use your own PDF** button, which opens a file picker and opens Build once the upload
+- a **Use your own document** button, which opens a file picker and opens Build once the upload
   is done. If the upload is refused, it says why under the buttons. One line under the
   buttons says what happens to your file: on the demo, the page and size limits and how
   many hours until it is deleted; running locally, that it stays on your machine;
@@ -125,7 +154,7 @@ pipeline from the Starter's settings on the documents in use.
 The column on the left of Build is the index pipeline: Document, Parse, Clean, Chunk and
 Index, one card each with its own settings. The Document card lists the pipeline's
 documents, each with **Preview**, and its **Add or change** link picks another. On a first
-visit with no document, the first-visit card offers the samples, **Upload a PDF**, and
+visit with no document, the first-visit card offers the samples, **Upload a document**, and
 **Pick a document** for your earlier uploads.
 
 - **Build the index** runs the steps. Each card also has its own **Run**. Each card runs
@@ -288,7 +317,8 @@ the question box.
   see the two side by side.
 - With Chat, the answer cites the passages it relied on. Each citation is checked against
   the parsed document, and one that does not match is marked unverified. Clicking a
-  citation opens the PDF page with the sentence highlighted.
+  citation opens the PDF page with the sentence highlighted. For a document without
+  pages it opens the document's text with the cited words marked instead.
 - Every part of a Chat answer gets a label, whichever model answered. A part is cited,
   weak, matched by similarity, or has no source. A line above the answer counts them, for
   example "2 of 3 parts cite a piece." A part with no source is drawn in red with a small

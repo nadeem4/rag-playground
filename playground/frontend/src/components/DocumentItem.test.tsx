@@ -19,6 +19,14 @@ const SAMPLE = {
   question: "Why?",
 }
 const UP = { sha: "12".repeat(32), filename: "my-chunking-notes.pdf", size: 7451, content_type: "application/pdf" }
+const LINK = {
+  sha: "56".repeat(32),
+  filename: "en.wikipedia.org-wiki-Retrieval-augmented_generation.html",
+  size: 40960,
+  content_type: "text/html",
+  origin_url: "https://en.wikipedia.org/wiki/Retrieval-augmented_generation",
+}
+const WORD = { sha: "78".repeat(32), filename: "field-guide.docx", size: 20480, content_type: "application/octet-stream" }
 const GONE = { sha: "ef".repeat(32), filename: "onboarding-handbook.pdf" }
 
 beforeEach(() => {
@@ -29,7 +37,7 @@ beforeEach(() => {
     vi.fn(async (url: string) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/samples") return ok([SAMPLE])
-      if (url === "/api/v2/documents") return ok([UP])
+      if (url === "/api/v2/documents") return ok([UP, LINK, WORD])
       if (url === `/api/v2/documents/${UP.sha}/pages`) return ok([1, 2, 3, 4, 5, 6].map((n) => ({ n, width: 612, height: 792 })))
       if (url === `/api/v2/documents/${SAMPLE.sha}/pages`) return ok([1, 2, 3].map((n) => ({ n, width: 612, height: 792 })))
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
@@ -62,6 +70,29 @@ describe("DocumentItem", () => {
     const item = screen.getByTestId("document-item")
     await waitFor(() => expect(within(item).getByTestId("document-facts").textContent).toBe("my-chunking-notes.pdf6 pagesYour upload"))
     expect(within(item).getByText("My chunking notes")).toBeTruthy()
+  })
+
+  it("a link: its host is its title, the tag says From a link, and no page is asked for", async () => {
+    render(<DocumentItem doc={{ sha: LINK.sha, filename: LINK.filename }} />)
+    const item = screen.getByTestId("document-item")
+    await waitFor(() => expect(within(item).getByText("en.wikipedia.org")).toBeTruthy())
+    expect(within(item).getByTestId("document-facts").textContent).toBe(`${LINK.filename}From a link`)
+    expect(item.querySelector("img")).toBeNull()
+    expect(within(item).getByText("HTML")).toBeTruthy()
+    const asked = vi.mocked(fetch).mock.calls.map((c) => String(c[0]))
+    expect(asked.some((u) => u.includes("/pages"))).toBe(false)
+  })
+
+  it("a Word upload keeps Your upload, shows its kind instead of a page, and its Preview says it has no pages", async () => {
+    render(<DocumentItem doc={{ sha: WORD.sha, filename: WORD.filename }} />)
+    const item = screen.getByTestId("document-item")
+    await waitFor(() => expect(within(item).getByTestId("document-facts").textContent).toBe("field-guide.docxYour upload"))
+    expect(item.querySelector("img")).toBeNull()
+    fireEvent.click(within(item).getByRole("button", { name: "Preview Field guide" }))
+    expect((await screen.findByTestId("no-pages")).textContent).toBe(
+      "A Word file has no pages to draw. Its text shows on the Parse step once the pipeline has run.",
+    )
+    expect(screen.queryByRole("alert")).toBeNull()
   })
 
   it("compact: the thumbnail and the title inline, with a small Preview beside them", async () => {

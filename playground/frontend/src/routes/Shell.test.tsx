@@ -776,7 +776,7 @@ describe("First run (plan I-15)", () => {
       vi.fn(async (url: string, init?: RequestInit) => (url === "/api/samples" ? new Response("{}", { status: 500 }) : base(url, init))),
     )
     render(<Shell />)
-    expect(await screen.findByRole("button", { name: "Upload a PDF" })).toBeTruthy()
+    expect(await screen.findByRole("button", { name: "Upload a document" })).toBeTruthy()
     // The Ask panel's status line carries the first-run guidance; no empty state sits above it.
     expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the Document step, then build the index.")
     expect(document.body.textContent).not.toContain("Nothing to show yet")
@@ -802,7 +802,7 @@ describe("First run (plan I-15)", () => {
     expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the Document step, then build the index.")
     expect(card("parse")).toBeNull()
     expect(within(upload).getByTestId("document-trigger").textContent).toBe("Pick a document")
-    expect(within(upload).getByRole("button", { name: "Upload a PDF" })).toBeTruthy()
+    expect(within(upload).getByRole("button", { name: "Upload a document" })).toBeTruthy()
   })
 
   it("does not show when the stored graph already has a source", async () => {
@@ -1529,7 +1529,7 @@ describe("saved pipelines on Build", () => {
       ),
     )
     setup()
-    const upload = await screen.findByLabelText("Upload a PDF file to start")
+    const upload = await screen.findByLabelText("Upload a document to start")
     await act(async () => {
       fireEvent.change(upload, { target: { files: [new File(["%PDF-1.4"], "my-notes.pdf", { type: "application/pdf" })] } })
     })
@@ -2120,7 +2120,7 @@ describe("the document comes with the pipeline", () => {
   it("with no sample to start from, asks for a document once: the first-visit card, with no note above it", async () => {
     setup()
     await act(async () => settle.resolve(new Response(JSON.stringify([]), { status: 200 })))
-    await screen.findByRole("button", { name: "Upload a PDF" })
+    await screen.findByRole("button", { name: "Upload a document" })
     expect(screen.queryByTestId("document-note")).toBeNull()
   })
 })

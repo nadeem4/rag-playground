@@ -2,12 +2,15 @@ import { useId, useRef, type ReactNode } from "react"
 import { Upload } from "lucide-react"
 
 import { api } from "@/api/client"
-import type { StoredQuestionSet } from "@/api/types"
+import type { Registry, StoredQuestionSet } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { EvidenceSlip } from "@/components/inspectors/EvidenceSlip"
 import type { HitRowData } from "@/components/inspectors/hits"
 import { Button } from "@/components/ui/button"
 import { mismatch, reportLines, type InUse, type Report } from "@/state/goldSet"
+import { writtenBy } from "@/state/writeQuestions"
+
+import { WriteQuestions } from "./WriteQuestions"
 
 /**
  * Which question set this page is about to score, and everything you can do
@@ -25,6 +28,8 @@ import { mismatch, reportLines, type InUse, type Report } from "@/state/goldSet"
 const REPO = "https://github.com/nadeem4/rag-playground"
 
 export function QuestionSetPanel({
+  sha,
+  registry,
   inUse,
   set,
   count,
@@ -39,6 +44,9 @@ export function QuestionSetPanel({
   onRemove,
   extra,
 }: {
+  /** The document on Build's fingerprint, which Write questions for me writes for. */
+  sha: string
+  registry: Registry
   inUse: InUse
   set: StoredQuestionSet | null
   /** Questions this set would ask. */
@@ -53,7 +61,8 @@ export function QuestionSetPanel({
   busy: boolean
   /** A run is in flight, so the set must not change under it. */
   disabled: boolean
-  onUpload: (file: File) => void
+  /** True when the set was taken. */
+  onUpload: (file: File) => Promise<boolean>
   onRemove: () => void
   /** A quiet sentence after the set line, such as what found means at this k. */
   extra?: ReactNode
@@ -61,6 +70,8 @@ export function QuestionSetPanel({
   const id = useId()
   const demo = useDemo()
   const fileRef = useRef<HTMLInputElement>(null)
+  const ownRef = useRef<HTMLDetailsElement>(null)
+  const lineRef = useRef<HTMLParagraphElement>(null)
   const uploaded = inUse.kind === "uploaded"
   // A "sample" mismatch only ever means "no bundled set matches this
   // document", which is not a warning about a wrong set in play: Evaluate
@@ -83,7 +94,7 @@ export function QuestionSetPanel({
         aria-label="Upload a question set"
         onChange={(e) => {
           const file = e.target.files?.[0]
-          if (file) onUpload(file)
+          if (file) void onUpload(file)
           e.target.value = ""
         }}
       />
@@ -95,9 +106,11 @@ export function QuestionSetPanel({
   )
 
   const n = count === null ? null : `${count} ${count === 1 ? "question" : "questions"}`
+  // A set Write questions for me saved names its model in the file name.
+  const writer = uploaded && set ? writtenBy(set.filename) : null
   const name = (
     <span data-testid="set-name" className={noSet ? undefined : "text-fg"}>
-      {noSet ? "No question set yet" : uploaded && set ? set.filename : sampleName}
+      {noSet ? "No question set yet" : uploaded && set ? (writer ? set.set.document || filename : set.filename) : sampleName}
     </span>
   )
 
@@ -105,9 +118,13 @@ export function QuestionSetPanel({
     <section aria-label="Question set" data-testid="question-set" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         {/* The set in one line: what is scored, and from where. */}
-        <p data-testid="set-line" className="text-sm text-fg-muted">
+        <p ref={lineRef} data-testid="set-line" className="text-sm text-fg-muted">
           {noSet ? (
             <>{name}.</>
+          ) : writer ? (
+            <>
+              {n ? <strong className="font-semibold text-fg">{n}</strong> : "The questions"} you kept, written by {writer} from {name}.
+            </>
           ) : uploaded && set ? (
             <>
               {n ? <strong className="font-semibold text-fg">{n}</strong> : "The questions"} from {name}.
@@ -119,7 +136,7 @@ export function QuestionSetPanel({
           )}
           {extra ? <> {extra}</> : null}
         </p>
-        <details data-testid="own-questions" className="group text-sm text-fg-muted">
+        <details ref={ownRef} data-testid="own-questions" className="group text-sm text-fg-muted">
           <summary className="inline-flex cursor-pointer list-none items-center text-primary underline underline-offset-4">Use your own questions</summary>
           <div className="mt-2 flex max-w-[70ch] flex-col gap-2 rounded-panel border border-hairline bg-surface-elevated px-3 py-3">
             <p>
@@ -152,7 +169,25 @@ export function QuestionSetPanel({
                   Remove this set
                 </Button>
               ) : null}
+              <WriteQuestions
+                sha={sha}
+                filename={filename}
+                registry={registry}
+                locked={locked}
+                saveError={error}
+                onSave={async (file) => {
+                  const ok = await onUpload(file)
+                  if (ok) {
+                    if (ownRef.current) ownRef.current.open = false
+                    lineRef.current?.scrollIntoView?.({ block: "start" })
+                  }
+                  return ok
+                }}
+              />
             </div>
+            <p className="text-xs text-fg-muted">
+              A model reads this document and writes test questions with their evidence, on your own key. You review every question before it is used.
+            </p>
           </div>
         </details>
       </div>

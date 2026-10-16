@@ -183,6 +183,16 @@ def test_a_format_no_parser_reads_names_what_the_parser_reads(tmp_path):
     )
 
 
+def test_an_unreadable_file_raises_its_own_value_error():
+    from pandion.formats import UnreadableFormat, check_readable
+
+    assert issubclass(UnreadableFormat, ValueError)
+    with pytest.raises(UnreadableFormat):
+        check_readable("pdfium", "notes.docx")
+    with pytest.raises(UnreadableFormat):
+        check_readable("docling", "data.xlsx")
+
+
 def test_the_suffix_is_matched_without_case(tmp_path):
     from pandion.formats import check_readable
 
@@ -238,6 +248,15 @@ def test_a_web_page_title_is_not_counted_as_set_aside(tmp_path):
     path = tmp_path / "ferns.html"
     path.write_text(HTML, encoding="utf-8")
     assert pandion.parse(path, use="docling").note is None
+
+
+def test_a_web_page_title_is_counted_when_furniture_is_read(tmp_path):
+    path = tmp_path / "ferns.html"
+    path.write_text(HTML, encoding="utf-8")
+    result = pandion.parse(path, use="docling", content_layers=["body", "furniture"])
+
+    assert result.note == "Docling read 1 block from its furniture layer into the text."
+    assert headings(result.output)[0] == ("Care guide", 1)
 
 
 def test_a_markdown_file_keeps_its_heading_levels(tmp_path):
@@ -340,8 +359,16 @@ def test_evaluation_and_the_miss_trace_work_without_pages(tmp_path):
     assert str(report)
 
 
-def test_an_answer_cites_a_piece_without_pages(tmp_path):
+def test_an_answer_cites_a_piece_without_pages(tmp_path, monkeypatch):
     pytest.importorskip("docling")
+    from pandion import llm
+    from pandion.llm import Completion
+
+    def complete(model, **kwargs):
+        # Cites the first sentence of the first piece.
+        return Completion(text="Ferns need water weekly [1.1].", usage={}, stop_reason="end_turn")
+
+    monkeypatch.setattr(llm, "complete", complete)
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "ferns.docx").write_bytes(docx_bytes())
@@ -352,9 +379,19 @@ def test_an_answer_cites_a_piece_without_pages(tmp_path):
         embed="fake-deterministic",
         store="lancedb",
         search={"use": "hybrid_rrf", "top_k": 3},
-        answer="search",
+        answer={"use": "chat", "model": "gpt-6-astra"},
     )
     assert p.index.run(docs).ok
 
-    answer = p.ask("How often do ferns need water?")
-    assert answer.ok
+    answer = p.ask("How often do ferns need water?", credentials={"openai_api_key": "sk-test"})
+    assert answer.ok, answer.stages["answer"].error
+
+    citations = answer.output.payload["citations"]
+    assert citations
+    pieces = {hit.chunk.id: hit.chunk for hit in answer.hits}
+    for citation in citations:
+        assert citation["cited_text"]
+        piece = pieces[citation["chunk_id"]]
+        assert piece.page_span is None
+        assert citation["cited_text"] in piece.text
+        assert citation["page"] is None and citation["bbox"] is None

@@ -124,7 +124,8 @@ A parser declares its formats in `provides`, for example `{"formats": ["pdf"]}` 
 `pdfium`. A pipeline checks every file against its parser before any step runs, so a file
 the parser cannot read fails at once with a plain message, such as `pdfium reads PDF files;
 notes.docx is a Word file. Use docling.` The extension is matched without regard to case.
-A file with no extension, and a parser that declares no formats, are not checked.
+A file with no extension, and a parser that declares no formats, are not checked. The
+error is `pandion.extend.UnreadableFormat`, a `ValueError`, so a server can catch it alone.
 
 Word, HTML, Markdown and text files load no model, so Docling reads them quickly.
 Docling reads a `.txt` file with its Markdown reader, so a line that starts with

@@ -279,9 +279,13 @@ def _furniture_title(doc: Any) -> Any | None:
     return titles[0]
 
 
-def furniture_count(doc: Any) -> int:
-    """How many items with text Docling filed in its furniture layer, leaving
-    out the title of a document without pages, which is not page furniture."""
+def furniture_count(doc: Any, *, read: bool = False) -> int:
+    """How many items with text Docling filed in its furniture layer.
+
+    When the layer is not read, the title of a document without pages is left
+    out: it is read anyway or repeats the first heading, so it is not set
+    aside. When the layer is read, the title is counted with the rest.
+    """
     from docling_core.types.doc import ContentLayer
 
     count = sum(
@@ -291,7 +295,7 @@ def furniture_count(doc: Any) -> int:
         )
         if _text(item)
     )
-    return count - len(_furniture_titles(doc))
+    return count if read else count - len(_furniture_titles(doc))
 
 
 def furniture_note(count: int, *, read: bool) -> str | None:
@@ -519,9 +523,8 @@ class DoclingParse(Transform[DoclingConfig]):
         doc = result.document
         page_count = len(doc.pages)
         elements = elements_from_document(doc, content_layers=config.content_layers)
-        note = furniture_note(
-            furniture_count(doc), read="furniture" in config.content_layers
-        )
+        read = "furniture" in config.content_layers
+        note = furniture_note(furniture_count(doc, read=read), read=read)
         if note:
             set_note(ctx, note)
         return ParsedDoc(

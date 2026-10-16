@@ -11,7 +11,8 @@ strategy per stage.
 
 A strategy, or a server, that calls a model endpoint the user named checks it
 with `guard_endpoint` and builds the OpenAI client's arguments with
-`openai_client_kwargs`.
+`openai_client_kwargs`. A server that parses a stored file catches
+`UnreadableFormat`, raised when the parser cannot read the file's format.
 """
 
 from typing import Any
@@ -19,6 +20,7 @@ from typing import Any
 from pandion.artifacts import ArtifactType
 from pandion.embeddings import Embedder, get_embedder, register_embedder
 from pandion.endpoints import EndpointRefused, guard_endpoint
+from pandion.formats import UnreadableFormat
 from pandion.llm import openai_client_kwargs
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
@@ -29,7 +31,7 @@ from pandion.transform import Explanation, Transform
 __all__ = [
     "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "EndpointRefused",
     "Explanation", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
-    "RunContext", "Stage", "Transform", "get_embedder", "guard_endpoint",
+    "RunContext", "Stage", "Transform", "UnreadableFormat", "get_embedder", "guard_endpoint",
     "openai_client_kwargs", "raw_file", "register", "set_note", "set_usage",
 ]
 

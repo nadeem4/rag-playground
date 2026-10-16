@@ -24,6 +24,10 @@ FORMATS: dict[str, tuple[str, str, tuple[str, ...]]] = {
 }
 
 
+class UnreadableFormat(ValueError):
+    """The parser cannot read a file of this format."""
+
+
 def format_of(filename: str) -> str | None:
     """The format of `filename` by its extension, or None if it is not one."""
     suffix = PurePosixPath(filename.replace("\\", "/")).suffix.lower()
@@ -54,7 +58,8 @@ def listed(words: list[str]) -> str:
 
 
 def check_readable(parser: str, filename: str) -> None:
-    """Raise ValueError if the parser named `parser` cannot read `filename`.
+    """Raise UnreadableFormat, a ValueError, if the parser named `parser`
+    cannot read `filename`.
 
     The message names what the parser reads, what the file is, and a parser
     that reads it when there is one: "pdfium reads PDF files; notes.docx is a
@@ -69,12 +74,12 @@ def check_readable(parser: str, filename: str) -> None:
         return
     reads = f"{parser} reads {listed([FORMATS[f][0] for f in formats])} files"
     if kind is None:
-        raise ValueError(f"{reads}; {name} is not one of them.")
+        raise UnreadableFormat(f"{reads}; {name} is not one of them.")
     message = f"{reads}; {name} is {FORMATS[kind][1]}."
     others = [p for p in _parsers_reading(kind) if p != parser]
     if others:
         message += f" Use {listed(others)}."
-    raise ValueError(message)
+    raise UnreadableFormat(message)
 
 
 def _parsers_reading(kind: str) -> list[str]:

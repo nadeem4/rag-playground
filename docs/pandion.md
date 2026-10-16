@@ -60,8 +60,8 @@ The base install is small. Each parser, store and model library is an extra:
 | `docling` | Docling and its OCR engine | the `docling` parser |
 | `local` | sentence-transformers and torch | the `qwen3-embedding-0.6b` and `bge-small-en-v1.5` embedders, and the `mmr` and `cross_encoder` rerankers |
 | `lancedb` | LanceDB and pyarrow | the `lancedb` index and the `dense`, `bm25` and `hybrid_rrf` retrievers |
-| `anthropic` | the Anthropic SDK | `llm_rewrite`, `llm_rerank` and `chat` with a Claude model |
-| `openai` | the OpenAI SDK | `llm_rewrite`, `llm_rerank` and `chat` with an OpenAI model, OpenRouter or a custom endpoint |
+| `anthropic` | the Anthropic SDK | `llm_context`, `llm_rewrite`, `llm_rerank` and `chat` with a Claude model |
+| `openai` | the OpenAI SDK | `llm_context`, `llm_rewrite`, `llm_rerank` and `chat` with an OpenAI model, OpenRouter or a custom endpoint |
 
 The cleaners, the chunkers, the `text` query step and the `search` answer step need only the base install. The `fake-deterministic`
 embedder needs no extra and no download, so it is good for trying things out.
@@ -232,6 +232,7 @@ index:
   chunk:                # required
     use: recursive_character
     chunk_size: 400     # any other key is a setting of this chunker
+  enrich: none          # optional; none, or llm_context (see Context before embedding)
   embed:                # required when the store has an embedder setting, as lancedb does
     use: qwen3-embedding-0.6b   # or bge-small-en-v1.5, fake-deterministic
     truncate_dim: null  # optional
@@ -266,6 +267,54 @@ one step when it runs, because the index embeds the pieces as it writes them. Th
 `embed` fits in one sentence: if the store has an `embedder` setting, `embed` is required
 and its `use` becomes that setting, and if it does not, the store embeds by itself and
 `embed` must be left out.
+
+### Context before embedding
+
+A piece cut out of a document often does not say what it is about. There are two ways to
+put context in front of each piece before it is embedded. Both change only what the piece
+is searched by: its id, its text, its citation, the gold checks and the miss trace stay
+the same.
+
+- **Headings, free.** `heading_context: true` on the chunker puts the heading path above
+  each piece in front of it. `recursive_character` and `layout_blocks` have it on by
+  default; `token_based` and `sentence_window` have it off.
+- **A model's context, paid.** `enrich: {use: llm_context}` asks a chat model to write one
+  short sentence that places each piece in its document. It goes in front of the heading
+  path, so the two add up.
+
+```yaml
+index:
+  parse: {use: docling}
+  chunk: {use: recursive_character, chunk_size: 400}
+  enrich:
+    use: llm_context
+    model: claude-haiku-4-5
+  embed: {use: qwen3-embedding-0.6b}
+  store: {use: lancedb}
+```
+
+In code, pass `enrich={"use": "llm_context"}` to `Pipeline` or `IndexPipeline`, and the
+key with `credentials=` to `index.run` or `index.sync`, as for the chat step. The
+`pandion index` command reads the key from the environment. The report has an `enrich` step for each
+document after `chunk`.
+
+Keyword search (BM25) sees the context too, because the index keeps what was embedded in
+its text column. That matches the published contextual retrieval recipe.
+
+The cost is one model call per piece. Each call sends the document, up to its first
+40,000 characters, as the same opening text marked for the provider's prompt cache, so
+after the first call most of the input is a cache read. A short document is below the
+provider's caching minimum (4,096 tokens for Claude Haiku 4.5), so each call then pays
+full input, which is still small. The first call runs alone to fill the cache, and the rest run six at a time. A 20-page document cut into 50 pieces is
+about 50 calls of some 10,000 input tokens each, mostly cache reads, plus 50 short
+replies. `cost()` counts every input token and prices the cache reads at a tenth of the
+input price (`pandion.llm.CACHE_READ_SHARE`).
+
+The contexts are stored like any other result, so the same pieces again cost nothing.
+Changing anything that makes new pieces, such as the parser, a cleaner or the chunk size,
+pays again in full. A document with more pieces than `max_pieces` (200) is refused before
+any call, and if one call fails the step fails and names the piece. See
+[Strategies](strategies.md#enrich) for every setting and the built-in prompt.
 
 ## Build an index
 
@@ -784,9 +833,9 @@ for r in results:
     r.variant, r.report.found, r.report.total   # each variant's evaluation
 ```
 
-The stage is one of `parse`, `clean`, `chunk`, `embed`, `store`, `rewrite`, `search` and
-`rerank`. A variant is what the pipeline file takes for that stage: a block, a name such
-as `"bm25"`, a step class such as `RecursiveCharacter(chunk_size=800)`, or for `clean` and
+The stage is one of `parse`, `clean`, `chunk`, `enrich`, `embed`, `store`, `rewrite`,
+`search` and `rerank`. A variant is what the pipeline file takes for that stage: a block,
+`"none"` for `enrich` or `rewrite`, a name such as `"bm25"`, a step class such as `RecursiveCharacter(chunk_size=800)`, or for `clean` and
 `rerank` a list. Every variant is checked before any runs, and a problem names the
 variant: "variant 2: index.chunk (recursive_character) has no setting 'chunk_sise'."
 
@@ -895,7 +944,7 @@ answer.cost(prices={"claude-sonnet-5": (2.0, 10.0), "openai/gpt-4o-mini": (0.15,
 
 `cost()` takes `since` and `before`, each a stage name. `since="rerank"` counts only the
 steps at that stage or after it, and `before="rerank"` only the steps before it, so the
-two split a run in two. The order is the pipeline's: source, parse, clean, chunk, the index
+two split a run in two. The order is the pipeline's: source, parse, clean, chunk, enrich, the index
 (`embed`, `store` and `index` all name it), rewrite, search, rerank, answer. A name that
 is not a stage raises `ValueError`.
 
@@ -1153,7 +1202,7 @@ data = p.to_dict()                        # plain data, the file's shape
 `clean=[DedupeBlocks(), {"use": "drop_matching", "pattern": "Draft"}]`.
 
 **One part at a time.** Each part can be built on its own: `IndexPipeline` (parse,
-clean, chunk, embed, store), `RetrievalPipeline` (rewrite, search, rerank) and
+clean, chunk, enrich, embed, store), `RetrievalPipeline` (rewrite, search, rerank) and
 `QueryPipeline` (the answer step). Each takes the part before it:
 
 ```python
@@ -1517,8 +1566,8 @@ number and `null` is no value:
   `drop_short`, the cleaner in the own_strategies example, where
   `--vary clean.1.min_chars=20,200` works as is.)
 
-The stages `--vary` can name are parse, clean, chunk, embed, store, rewrite, search and
-rerank. Without `--questions`, compare only indexes, and shows each variant's step; it
+The stages `--vary` can name are parse, clean, chunk, enrich, embed, store, rewrite,
+search and rerank. Without `--questions`, compare only indexes, and shows each variant's step; it
 cannot compare a search, rewrite or rerank step that way, because nothing is searched.
 
 **`pandion install FILE [--print]`** installs the extras the file needs, as described in

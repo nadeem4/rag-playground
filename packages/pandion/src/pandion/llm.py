@@ -90,6 +90,11 @@ PRICES: dict[str, tuple[float, float]] = {
     "gpt-5.6-luna": (0.2, 1.2),
 }
 
+#: A token read from a provider's prompt cache costs this share of the input
+#: price: a tenth at Anthropic, and at OpenAI for the models above. Writing to
+#: the cache is priced as plain input.
+CACHE_READ_SHARE = 0.1
+
 #: The day `PRICES` was read from the providers' pricing pages.
 AS_OF = "2026-10-15"
 
@@ -299,33 +304,56 @@ def complete(
     model_name: str | None = None,
     max_tokens: int = 2048,
     public_only: bool = False,
+    cache_prefix: str | None = None,
 ) -> Completion:
     """One answer from any registered model. Raises a readable error, key-free.
 
     `public_only` is for a server that strangers share: a custom endpoint must
     then be a public https address (`pandion.endpoints`).
+
+    `cache_prefix` is text that opens the user message and is the same across
+    many calls, such as a whole document. Claude gets it as a block marked for
+    prompt caching; OpenAI-style servers cache a repeated prefix by themselves.
+    The usage then counts every input token read, cached ones included, and
+    says how many were cache reads (`cache_read_input_tokens`).
     """
     if model.provider == "anthropic":
         if not api_key:
             raise ValueError(no_key_message("anthropic", public_only=public_only))
+        content: Any = user
+        if cache_prefix is not None:
+            content = [
+                {"type": "text", "text": cache_prefix, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": user},
+            ]
         request = {
             "model": model.id,
             "max_tokens": max_tokens,
             "system": system,
-            "messages": [{"role": "user", "content": user}],
+            "messages": [{"role": "user", "content": content}],
             **anthropic_request_extras(model.id),
         }
         response = call_anthropic(make_anthropic_client(api_key), request, api_key)
+        usage: dict[str, int | None] = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+        if cache_prefix is not None:
+            # Claude's input_tokens leaves out the cached part: add it back.
+            read = getattr(response.usage, "cache_read_input_tokens", None) or 0
+            written = getattr(response.usage, "cache_creation_input_tokens", None) or 0
+            if usage["input_tokens"] is not None:
+                usage["input_tokens"] += read + written
+            usage["cache_read_input_tokens"] = read
         return Completion(
             text="".join(b.text for b in response.content if b.type == "text"),
-            usage={
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            },
+            usage=usage,
             stop_reason=response.stop_reason,
             model=getattr(response, "model", None),
         )
 
+    if cache_prefix is not None:
+        user = f"{cache_prefix}\n\n{user}"
     request: dict[str, Any] = {
         "messages": [
             {"role": "system", "content": system},
@@ -366,14 +394,18 @@ def complete(
     message = choice.message
     usage = response.usage
     refusal = getattr(message, "refusal", None)
+    counts: dict[str, int | None] = {
+        # A server may send no usage, or only part of it: a missing count
+        # is None, never 0, so it is never read as a free call.
+        "input_tokens": getattr(usage, "prompt_tokens", None),
+        "output_tokens": getattr(usage, "completion_tokens", None),
+    }
+    if cache_prefix is not None:
+        details = getattr(usage, "prompt_tokens_details", None)
+        counts["cache_read_input_tokens"] = getattr(details, "cached_tokens", None) or 0
     return Completion(
         text=refusal if refusal else (message.content or ""),
-        usage={
-            # A server may send no usage, or only part of it: a missing count
-            # is None, never 0, so it is never read as a free call.
-            "input_tokens": getattr(usage, "prompt_tokens", None),
-            "output_tokens": getattr(usage, "completion_tokens", None),
-        },
+        usage=counts,
         stop_reason="refusal" if refusal else (choice.finish_reason or "stop"),
         model=getattr(response, "model", None),
     )

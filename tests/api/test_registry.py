@@ -14,7 +14,7 @@ def test_the_catalog_lists_every_plugin_with_its_contract(client):
     assert r.status_code == 200
     body = r.json()["stages"]
     entries = [t for stage in body.values() for t in stage.values()]
-    assert len(entries) == len(PLUGIN_MODULES) == 23
+    assert len(entries) == len(PLUGIN_MODULES) == 24
     for t in entries:
         for key in ("config_schema", "inputs", "output", "stackable", "learn"):
             assert key in t, (t["name"], key)

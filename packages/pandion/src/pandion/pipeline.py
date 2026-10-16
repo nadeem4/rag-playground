@@ -64,6 +64,7 @@ _OUTPUTS = {
     Stage.PARSE: ParsedDoc,
     Stage.CLEAN: ParsedDoc,
     Stage.CHUNK: ChunkSet,
+    Stage.ENRICH: ChunkSet,
     Stage.QUERY: Query,
     Stage.RETRIEVE: RetrievalResult,
     Stage.RERANK: RetrievalResult,
@@ -85,7 +86,8 @@ _NAMED_LISTS = (("nodes", "steps"), ("selected", "selected_steps"), ("skipped", 
 
 @dataclass
 class DocumentReport:
-    """What each step did to one document, keyed source, parse, clean.1 ..., chunk."""
+    """What each step did to one document, keyed source, parse, clean.1 ...,
+    chunk, and enrich when the index has one."""
 
     stages: dict[str, StageResult] = field(default_factory=dict)
 
@@ -262,7 +264,12 @@ class Answer:
 
 
 #: Steps that call a chat model, by stage; their extra depends on the model's provider.
-CHAT_STEPS = {"llm_rewrite": "query", "llm_rerank": "rerank", "chat": "use_case"}
+CHAT_STEPS = {
+    "llm_context": "enrich",
+    "llm_rewrite": "query",
+    "llm_rerank": "rerank",
+    "chat": "use_case",
+}
 
 
 def extras_for(config: PipelineConfig) -> list[str]:
@@ -283,6 +290,7 @@ def extras_for(config: PipelineConfig) -> list[str]:
         ("index.parse", Stage.PARSE, index.parse),
         *(("index.clean", Stage.CLEAN, step) for step in index.clean),
         ("index.chunk", Stage.CHUNK, index.chunk),
+        *((("index.enrich", Stage.ENRICH, index.enrich),) if index.enrich else ()),
         ("index.store", Stage.INDEX, (index.store_use, index.store)),
     ]
     if config.retrieve is not None:
@@ -352,6 +360,7 @@ class Pipeline:
         embed: Step = None,
         clean: Step = None,
         source: Step = None,
+        enrich: Step = None,
         rewrite: Step = None,
         search: Step = None,
         rerank: Step = None,
@@ -364,7 +373,7 @@ class Pipeline:
                 models=models,
                 index={
                     "source": source, "parse": parse, "clean": clean,
-                    "chunk": chunk, "embed": embed, "store": store,
+                    "chunk": chunk, "enrich": enrich, "embed": embed, "store": store,
                 },
                 retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
                 answer=answer,
@@ -484,6 +493,7 @@ class IndexPipeline:
         embed: Step = None,
         clean: Step = None,
         source: Step = None,
+        enrich: Step = None,
         models: Any = None,
     ) -> None:
         self._setup(
@@ -492,7 +502,7 @@ class IndexPipeline:
                 models=models,
                 index={
                     "source": source, "parse": parse, "clean": clean,
-                    "chunk": chunk, "embed": embed, "store": store,
+                    "chunk": chunk, "enrich": enrich, "embed": embed, "store": store,
                 },
             )
         )
@@ -570,7 +580,7 @@ class IndexPipeline:
         named = ", ".join(["parse", "clean", *cleans, "chunk", "index"])
         raise ValueError(f"through names the step to stop after: one of {named}, not '{through}'.")
 
-    def sync(self, paths: Documents) -> SyncReport:
+    def sync(self, paths: Documents, *, credentials: dict[str, str] | None = None) -> SyncReport:
         """Bring the index in line with the files at `paths` now.
 
         Reads `manifest.json` under the config's `path`, indexes the files the
@@ -583,7 +593,8 @@ class IndexPipeline:
         folder only reads what is stored. After a sync that worked, the
         manifest is written and the previous index is deleted from the store,
         so the pieces of a removed or changed document are gone. After a sync
-        with a failed step, both are left as they were.
+        with a failed step, both are left as they were. `credentials` (model
+        keys, for a step such as llm_context) work as in `run`.
         """
         if not self._uploads():
             raise ValueError(
@@ -592,7 +603,7 @@ class IndexPipeline:
         manifest_path = self.config.path / MANIFEST
         before = Manifest.load(manifest_path)
         documents = self._documents(paths)
-        report = self._index(documents)
+        report = self._index(documents, credentials=credentials)
         recipe = recipe_hash(self.config.index)
         after = Manifest(
             index_recipe=recipe,
@@ -802,6 +813,10 @@ class IndexPipeline:
                 last = clean
             chunk = add(doc_id, "chunk", Stage.CHUNK, *index.chunk)
             edges.append(Edge(last, chunk, "doc"))
+            if index.enrich is not None:
+                enrich = add(doc_id, "enrich", Stage.ENRICH, *index.enrich)
+                edges.append(Edge(chunk, enrich, "chunks"))
+                chunk = enrich
             chunk_nodes.append(chunk)
         store = add(None, "index", Stage.INDEX, index.store_use, index.store)
         edges += [Edge(chunk, store, "chunks") for chunk in chunk_nodes]
@@ -1106,7 +1121,7 @@ def _first_doc(roles: dict[str, tuple[str | None, str]]) -> str:
     """The node holding the first document by id as parsed and cleaned: the
     last step before its chunker."""
     first = min(doc_id for doc_id, _ in roles.values() if doc_id is not None)
-    return [n for n, (d, role) in roles.items() if d == first and role not in ("source", "chunk")][-1]
+    return [n for n, (d, role) in roles.items() if d == first and role not in ("source", "chunk", "enrich")][-1]
 
 
 def _write(config: PipelineConfig, file: str | Path | None) -> str:

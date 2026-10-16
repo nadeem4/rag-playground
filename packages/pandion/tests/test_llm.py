@@ -296,6 +296,46 @@ def test_anthropic_plain_completion(fake_anthropic):
     assert req["fallbacks"] == "default"
 
 
+def test_anthropic_cache_prefix_is_a_cached_first_block_and_counted(fake_anthropic):
+    reply = anthropic_reply("ok")
+    reply.usage = SimpleNamespace(
+        input_tokens=20, output_tokens=5,
+        cache_creation_input_tokens=0, cache_read_input_tokens=900,
+    )
+    fake_anthropic.reply = reply
+    out = complete(
+        CHAT_MODELS["claude-haiku-4-5"], system="s", user="u", api_key=KEY,
+        cache_prefix="DOC",
+    )
+    [req] = fake_anthropic.client.requests
+    assert req["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "DOC", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "u"},
+            ],
+        }
+    ]
+    # Every input token the model read, and how many of them were cache reads.
+    assert out.usage == {"input_tokens": 920, "output_tokens": 5, "cache_read_input_tokens": 900}
+
+
+def test_openai_cache_prefix_leads_the_user_message_and_counts_cached_tokens(fake_openai):
+    reply = openai_reply()
+    reply.usage = SimpleNamespace(
+        prompt_tokens=1200, completion_tokens=30,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=1024),
+    )
+    fake_openai.reply = reply
+    out = complete(
+        CHAT_MODELS["gpt-6-astra"], system="s", user="u", api_key=KEY, cache_prefix="DOC"
+    )
+    [req] = fake_openai.client.requests
+    assert req["messages"][1] == {"role": "user", "content": "DOC\n\nu"}
+    assert out.usage == {"input_tokens": 1200, "output_tokens": 30, "cache_read_input_tokens": 1024}
+
+
 def test_anthropic_haiku_gets_no_adaptive_thinking(fake_anthropic):
     complete(CHAT_MODELS["claude-haiku-4-5"], system="s", user="u", api_key=KEY)
     [req] = fake_anthropic.client.requests

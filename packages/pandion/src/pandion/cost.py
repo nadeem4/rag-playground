@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
-from pandion.llm import AS_OF, PRICES
+from pandion.llm import AS_OF, CACHE_READ_SHARE, PRICES
 from pandion.results import StageResult
 
 #: Where each stage falls in a run, in pipeline order. `embed` and `store` are
@@ -23,13 +23,14 @@ STAGE_ORDER: dict[str, int] = {
     "parse": 1,
     "clean": 2,
     "chunk": 3,
-    "embed": 4,
-    "store": 4,
-    "index": 4,
-    "rewrite": 5,
-    "search": 6,
-    "rerank": 7,
-    "answer": 8,
+    "enrich": 4,
+    "embed": 5,
+    "store": 5,
+    "index": 5,
+    "rewrite": 6,
+    "search": 7,
+    "rerank": 8,
+    "answer": 9,
 }
 
 #: The statuses of a step that ran in this run.
@@ -177,7 +178,9 @@ def cost(
             if model is not None:
                 (unpriced if price is None else uncounted).add(str(model))
             continue
-        dollars = (dollars or 0.0) + (counts[0] * price[0] + counts[1] * price[1]) / 1_000_000
+        read = usage.get("cache_read_input_tokens") or 0
+        input_dollars = (counts[0] - read) * price[0] + read * price[0] * CACHE_READ_SHARE
+        dollars = (dollars or 0.0) + (input_dollars + counts[1] * price[1]) / 1_000_000
     return {
         "seconds": sum(s.duration_ms for s in ran) / 1000,
         **tokens,

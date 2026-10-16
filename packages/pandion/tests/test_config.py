@@ -138,8 +138,8 @@ def test_an_unknown_top_level_key_lists_the_valid_ones(tmp_path):
 
 
 def test_an_unknown_index_key_lists_the_steps(tmp_path):
-    with pytest.raises(ConfigError, match="'enrich'.*parse, clean, chunk, embed, store"):
-        load(write(tmp_path, GOOD + "  enrich:\n    use: x\n"))
+    with pytest.raises(ConfigError, match="'summarize'.*parse, clean, chunk, enrich, embed, store"):
+        load(write(tmp_path, GOOD + "  summarize:\n    use: x\n"))
 
 
 def test_a_bad_model_setting_is_named(tmp_path):

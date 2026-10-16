@@ -14,6 +14,7 @@ the API and exported files use it.
 - [Parse](#parse)
 - [Clean](#clean)
 - [Chunk](#chunk)
+- [Enrich](#enrich)
 - [Index](#index)
 - [Query and rewrite](#query-and-rewrite)
 - [Search](#search)
@@ -26,7 +27,8 @@ To write a strategy of your own for any step, see "Write your own strategy" in
 
 ## The steps
 
-Indexing runs once per document: Document, Parse, Clean, Chunk, then Index. Asking runs
+Indexing runs once per document: Document, Parse, Clean, Chunk, Enrich if there is one,
+then Index. Asking runs
 once per question: the question (optionally rewritten), Search, Rerank, then Answer.
 
 Clean and Rerank are stackable: their input and output are the same kind of thing, so you
@@ -134,7 +136,8 @@ already starts with its heading. When on, the heading path where a piece starts,
 example "Experience > a role", is put in front of the piece's text before it is turned
 into a vector, less the headings the piece already opens with. Retrieval then sees the
 section name, while the piece that is shown and cited does not change. A document without
-headings is not affected.
+headings is not affected. For a context a model writes, see
+[Enrich](#enrich).
 
 ### Recursive, natural breaks (`recursive_character`)
 
@@ -206,6 +209,53 @@ of its own and joins the sentence after it, so no piece ends on a bare heading. 
 with any parser.
 
 **Use it** when answers are single sentences and you never want one cut.
+
+## Enrich
+
+Enrich is an optional step between Chunk and Index, written `index.enrich` in a pipeline
+file. It changes what each piece is searched by, never the piece that is shown and cited.
+Piece ids, their text, citations, gold checks and the miss trace stay the same; only the
+enrich result and the index are new.
+
+### Context from a model (`llm_context`)
+
+Asks a chat model to write one short sentence that places each piece in its document,
+and puts it in front of the piece before it is searched. A piece that says "Revenue grew
+3%" can then be found by a question that names the company and the quarter. It builds on
+`heading_context`: the context goes first, then the heading path, then the piece. This is
+the contextual retrieval recipe.
+
+- `model`: the same choices as the chat answer. Claude Haiku 4.5 by default.
+- `prompt` (empty): the instructions the model is given. Empty, or spaces only, uses the
+  built-in ones (below). Read-only in the playground; set it in a pipeline file or in code.
+- `max_pieces` (200): a document cut into more pieces is refused before any model call.
+  The hosted demo allows at most 200.
+- `max_tokens` (4096): the most the model may write for one piece, thinking included.
+
+Keyword search (BM25) sees the context too, because the index keeps what was embedded in
+its text column. That matches the published recipe.
+
+The cost is one model call per piece. Each call sends the document, up to its first
+40,000 characters, as the same opening text, marked for the provider's prompt cache, so
+after the first call most of the input is read from the cache at a tenth of the price.
+A short document is below the provider's caching minimum (4,096 tokens for Claude Haiku
+4.5), so each call then pays full input, which is still small. The first call runs alone to fill the cache, and the rest run six at a time. The contexts
+are stored, so running the same pieces again costs nothing. Changing anything that makes
+new pieces, such as the parser, a cleaner or the chunk size, pays again in full. If one
+call fails, the step fails and says which piece; no context is kept. It needs an API key.
+
+The built-in prompt:
+
+> You help a search engine. You are given a document and one piece of it. Write one
+> sentence of at most about 25 words that places the piece in the document: what the
+> document is, which part the piece comes from, and what it is about, naming anything the
+> piece leaves unsaid. Do not mention page numbers, do not use the words "this piece", do
+> not repeat the piece and do not add facts that are not in the document. Reply with the
+> sentence only.
+
+**Use it** when pieces lose their meaning out of context, such as tables, figures and
+short sections that never name their subject, and the cost of one call per piece is worth
+it.
 
 ## Index
 
@@ -520,12 +570,16 @@ MMR needs the `local` extra, which brings numpy.
 - Leaves at the default: nothing else is passed to numpy. The embedder's own options are
   as listed under Embedders.
 
-### llm_rewrite, llm_rerank and chat (Anthropic and OpenAI SDKs)
+### llm_context, llm_rewrite, llm_rerank and chat (Anthropic and OpenAI SDKs)
 
 - Sets: the model, the system prompt from its `prompt` setting, one user message, and its
-  `max_tokens` setting (16,000 by default; sent as `max_completion_tokens` for OpenAI).
+  `max_tokens` setting (16,000 by default, 4,096 for `llm_context`; sent as
+  `max_completion_tokens` for OpenAI).
   For Claude Opus 5 and Sonnet 5, adaptive thinking is on. `chat` with a Claude model and
   `citation_method: auto` sends each piece as a document with citations on, through
-  `client.beta.messages.create`.
+  `client.beta.messages.create`. `llm_context` sends the document as the first block of
+  the user message with `cache_control: {"type": "ephemeral"}` for Claude; for OpenAI and
+  other servers the document opens the user message, which their automatic prefix
+  caching can reuse.
 - Leaves at the default: `temperature`, `top_p` and the other sampling settings, so the
   provider's defaults apply and two runs can give different text.

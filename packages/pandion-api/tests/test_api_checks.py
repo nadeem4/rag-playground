@@ -27,6 +27,12 @@ def test_steps_name_every_step_as_the_file_does():
     assert steps(config)[1][3] == {"chunk_size": 70, "chunk_overlap": 10}
 
 
+def test_steps_include_the_enrich_step():
+    config = {**PIPELINE, "index": {**PIPELINE["index"], "enrich": {"use": "llm_context", **CUSTOM}}}
+    assert ("index.enrich", "enrich", "llm_context") in [s[:3] for s in steps(config)]
+    assert custom_endpoint_steps(config) == ["index.enrich"]
+
+
 def test_steps_skip_what_is_not_a_step():
     assert steps({"index": 3, "retrieve": {"search": "dense"}, "answer": None}) == []
 

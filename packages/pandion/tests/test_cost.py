@@ -85,6 +85,23 @@ def test_a_fixed_price_table_gives_exact_dollars():
     }
 
 
+def test_cache_reads_are_priced_at_the_cache_read_share_of_the_input_price():
+    usage = {**use("model-a", 1_000_000, 0), "cache_read_input_tokens": 800_000}
+    cost = retrieval(step(usage=usage)).cost(prices=TABLE)
+    # 200,000 uncached at $2 a million, 800,000 cache reads at a tenth of that.
+    assert llm.CACHE_READ_SHARE == 0.1
+    assert cost["dollars"] == pytest.approx(0.4 + 0.16)
+    assert cost["input_tokens"] == 1_000_000
+
+
+def test_set_usage_keeps_the_cache_read_count():
+    from pandion.ports import RunContext
+
+    run_ctx = RunContext(output_dir=None, emit=lambda e: None, tmp=None)
+    set_usage(run_ctx, {"input_tokens": 9, "output_tokens": 1, "cache_read_input_tokens": 5}, "m")
+    assert run_ctx.extras["meta"]["usage"]["cache_read_input_tokens"] == 5
+
+
 def test_without_prices_the_package_table_and_its_date_are_used():
     r = retrieval(step(usage=use("claude-haiku-4-5", 1_000_000, 0)))
     cost = r.cost()

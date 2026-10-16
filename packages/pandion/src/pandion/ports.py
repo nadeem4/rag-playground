@@ -13,8 +13,9 @@ from pandion.artifacts import ArtifactType
 class Stage(StrEnum):
     """The slots a transform can plug into.
 
-    ENRICH and QUERY_TRANSFORM are reserved: no strategy uses them yet, and
-    they are kept so result ids stay stable.
+    ENRICH runs between the chunker and the index (`llm_context`).
+    QUERY_TRANSFORM is reserved: no strategy uses it yet, and it is kept so
+    result ids stay stable.
     """
 
     SOURCE = "source"
@@ -132,6 +133,9 @@ def set_usage(
         "output_tokens": usage.get("output_tokens"),
         "model": model,
     }
+    if usage.get("cache_read_input_tokens") is not None:
+        # Part of input_tokens, read from the provider's prompt cache.
+        recorded["cache_read_input_tokens"] = usage["cache_read_input_tokens"]
     if requested_model and requested_model != model:
         recorded["requested_model"] = requested_model
     ctx.extras.setdefault("meta", {})["usage"] = recorded

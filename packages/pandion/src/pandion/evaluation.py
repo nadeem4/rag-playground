@@ -491,7 +491,9 @@ def evaluate(
             if not score["hit"]:
                 if index is None:
                     index = p.index._index(
-                        resolved if resolved is not None else p.index.indexed(), remember=False
+                        resolved if resolved is not None else p.index.indexed(),
+                        credentials=credentials,
+                        remember=False,
                     )
                 miss = _trace(index, retrieval, q, top_k)
             result = QuestionResult(
@@ -598,6 +600,7 @@ COMPARE_STAGES: dict[str, str] = {
     "parse": "index",
     "clean": "index",
     "chunk": "index",
+    "enrich": "index",
     "embed": "index",
     "store": "index",
     "rewrite": "retrieve",

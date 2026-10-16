@@ -309,10 +309,11 @@ def test_identical_citations_share_a_number(fake, pipeline):
     )
     out = run(pipeline)
     assert [c["n"] for c in out.payload["citations"]] == [1, 2]
-    # Native segments are labelled too: cited, or "none" with no index to check.
+    # Native segments are labelled too. " and " leads into a cited segment
+    # without ending a sentence, so it is part of that claim, not one of its own.
     assert out.payload["answer"] == [
         {"text": "A", "citations": [1], "grounding": "cited"},
-        {"text": " and ", "citations": [], "grounding": "none"},
+        {"text": " and ", "citations": [], "grounding": None},
         {"text": "B", "citations": [2, 1], "grounding": "cited"},
         {"text": "C", "citations": [1], "grounding": "cited"},
     ]
@@ -331,6 +332,9 @@ def test_answer_preserves_uncited_segments_in_order(fake, pipeline):
         "According to the text, chunking splits documents."
     )
     assert [s["citations"] for s in payload["answer"]] == [[], [1], []]
+    # The lead-in and the closing "." belong to the cited claim: one claim, cited.
+    assert [s["grounding"] for s in payload["answer"]] == [None, "cited", None]
+    assert payload["stats"]["claims"] == payload["stats"]["citing"] == 1
     assert payload["question"] == QUESTION
     assert payload["model"] == "claude-opus-5"
     assert payload["usage"] == {"input_tokens": 321, "output_tokens": 45}

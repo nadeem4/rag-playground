@@ -273,6 +273,14 @@ def test_native_every_segment_cited(fake, pipeline, index):
     assert stats["none"] == stats["similarity"] == 0
 
 
+def test_native_with_no_hits_labels_an_uncited_segment_none(fake, pipeline, index):
+    doc, _ = pipeline
+    fake.reply = response(text_block("Nothing was found."))
+    inputs = {"result": result_of([]), "query": {"text": QUESTION}, "doc": doc, "index": index}
+    out = Output.model_validate(ChatUseCase().apply(inputs, ChatConfig(), context()))
+    assert [s["grounding"] for s in out.payload["answer"]] == ["none"]
+
+
 def test_both_modes_give_the_same_summary_shape(fake, openai_fake, pipeline, index):
     table = table_for(pipeline)
     sid = sid_containing(table, "passages")

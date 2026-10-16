@@ -496,10 +496,21 @@ def _check_uncited(
 ) -> None:
     """Label native segments in place: a cited one is `cited`; an uncited one
     gets `ground()`'s label, and its closest sentence when that is `similarity`.
-    A segment with no words (". ") stays None."""
+    A segment with no words (". ") stays None, and so does a lead-in: Claude
+    splits text at citation edges ("According to the text, " + a cited part), so
+    an uncited segment that does not end a sentence and runs into a cited one
+    belongs to that claim."""
     uncited: list[dict[str, Any]] = []
-    for a in answer:
+    for i, a in enumerate(answer):
         if not any(ch.isalnum() for ch in a["text"]):
+            continue
+        following = answer[i + 1] if i + 1 < len(answer) else None
+        if (
+            not a["citations"]
+            and following is not None
+            and following["citations"]
+            and not a["text"].rstrip().endswith((".", "!", "?"))
+        ):
             continue
         a["grounding"] = "cited" if a["citations"] else "none"
         if not a["citations"]:

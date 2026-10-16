@@ -30,6 +30,7 @@ from pandion.evaluation import (
     Comparisons,
     EvaluationReport,
     QuestionResult,
+    Regression,
     compare,
     evaluate,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "Pipeline",
     "QueryPipeline",
     "QuestionResult",
+    "Regression",
     "Retrieval",
     "RetrievalPipeline",
     "ResultStore",

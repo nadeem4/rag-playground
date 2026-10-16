@@ -290,12 +290,11 @@ def cost_line(cost: dict[str, Any]) -> str:
 def cmd_eval(args: argparse.Namespace) -> int:
     if args.allow is not None and args.baseline is None:
         raise ValueError("--allow counts newly missed questions against a baseline: add --baseline base.json.")
-    if args.baseline is not None:
-        # Check the baseline file before anything runs: comparing an empty report reads it.
-        pandion.EvaluationReport(top_k=args.top_k, questions=[]).against(args.baseline)
+    # Read the baseline before anything runs, so a wrong file costs nothing.
+    baseline = pandion.evaluation.load_baseline(args.baseline) if args.baseline is not None else None
     p = _load(args)
     report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
-    regression = report.against(args.baseline) if args.baseline is not None else None
+    regression = report.against(baseline) if baseline is not None else None
     if args.json:
         data = {**report.to_dict(), "cost": report.cost()}
         if regression is not None:

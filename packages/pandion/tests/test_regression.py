@@ -8,6 +8,7 @@ the network.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -50,6 +51,31 @@ def test_questions_without_ids_are_matched_by_their_text():
     r = now.against(before)
     assert r.newly_missed == ["question 2"]
     assert r.newly_found == []
+
+
+def test_an_errored_question_is_left_out_and_said_so():
+    broken = q("q2", False)
+    broken.error = "The search step (dense) failed: no key."
+    now = report(q("q1", True), broken, q("q3", False), q("q4", True))
+    r = now.against(BEFORE)
+    assert r.newly_missed == [] and r.unmatched == []
+    assert (r.compared, r.found_before, r.found_now) == (3, 2, 2)
+    assert "1 question could not be scored and is left out." in r.notes
+    other = q("q1", True)
+    other.error = broken.error
+    assert "2 questions could not be scored and are left out." in BEFORE.against(report(other, broken)).notes
+
+
+def test_ids_pair_first_so_a_new_id_with_the_same_text_takes_no_partner():
+    before = report(q("q1", True, "Where is Paris?"), q("q2", True, "Where is Rome?"))
+    now = report(q("new", False, "Where is Paris?"), q("q1", True, "Where is Paris?"), q("q2", True, "Where is Rome?"))
+    r = now.against(before)
+    assert r.unmatched == ["new"]
+    assert r.newly_missed == []
+
+
+def test_regression_is_public():
+    assert pandion.Regression is Regression and "Regression" in pandion.__all__
 
 
 def test_a_reordered_set_still_matches():
@@ -222,6 +248,16 @@ def test_a_missing_baseline_is_a_plain_error_before_anything_runs(cli_run, monke
     code, _, err = cli_run("--baseline", missing)
     assert code == 2
     assert err.strip() == f"pandion: There is no baseline file at {missing}. Save one with pandion eval ... --json > {missing}."
+
+
+def test_the_baseline_is_read_once_before_the_run(cli_run, monkeypatch):
+    def evaluate(*a, **kw):
+        Path(cli_run.base).unlink()  # gone by the time the run ends
+        return NOW
+
+    monkeypatch.setattr(cli.pandion, "evaluate", evaluate)
+    code, out, _ = cli_run("--baseline", cli_run.base, "--allow", "2")
+    assert code == 0 and "Newly missed: q2, q4." in out
 
 
 def test_allow_needs_a_baseline(cli_run):

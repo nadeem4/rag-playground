@@ -592,7 +592,10 @@ The `Regression` it returns has these fields:
 - `ok(allow=0)` is True when at most `allow` questions were newly missed.
 
 Questions are paired by their `id`. A question the set gave no id (named by its place,
-such as `question 3`) is paired by its text, so a reordered set still pairs up. When
+such as `question 3`) is paired by its text, so a reordered set still pairs up. Ids are
+paired first, over the whole set; a named question whose id has no partner then falls
+back to its text, among the questions still unpaired. A question that could not be
+scored in either run is left out, and a note says how many. When
 the question sets differ, only the questions both runs asked are compared, and the
 note says so. When `top_k` differs, a note says the counts are not like for like.
 

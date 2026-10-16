@@ -60,6 +60,7 @@ __all__ = [
     "compare",
     "document_text",
     "evaluate",
+    "load_baseline",
     "load_questions",
     "paragraph_spans",
     "parse_question_set",
@@ -221,7 +222,7 @@ class EvaluationReport:
         """This run compared with `baseline`: an earlier report, its `to_dict()`,
         or the path of a file `pandion eval --json` wrote. Questions are paired
         by id, or by their text when the set gave them no id. See `Regression`."""
-        return _regression(self.to_dict(), _baseline(baseline))
+        return _regression(self.to_dict(), load_baseline(baseline))
 
 
 @dataclass
@@ -271,8 +272,10 @@ def _fingerprint(questions: list[dict[str, Any]]) -> str:
     return hashlib.sha256(json.dumps(entries).encode("utf-8")).hexdigest()
 
 
-def _baseline(baseline: EvaluationReport | dict[str, Any] | str | Path) -> dict[str, Any]:
-    """The baseline as a report's dict, with a plain error for a missing or wrong file."""
+def load_baseline(baseline: EvaluationReport | dict[str, Any] | str | Path) -> dict[str, Any]:
+    """A baseline for `against` as a report's dict: from a report, a dict, or
+    a file `pandion eval --json` wrote. A missing or wrong file is a
+    ValueError with a plain sentence."""
     if isinstance(baseline, EvaluationReport):
         return baseline.to_dict()
     name = "The baseline"
@@ -299,19 +302,33 @@ def _key(q: dict[str, Any]) -> tuple[str, str]:
 
 
 def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
-    """Pair the questions by id (or text), then count and name the changes."""
-    by_key = {_key(b): b for b in before["questions"]}
-    by_text = {b["question"]: b for b in before["questions"]}
-    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    unmatched: list[str] = []
-    for q in now["questions"]:
-        b = by_key.get(_key(q)) or by_text.get(q["question"])
-        if b is None or any(b is paired for _, paired in pairs):
-            unmatched.append(q["id"])
-        else:
-            pairs.append((q, b))
-    unmatched += [b["id"] for b in before["questions"] if not any(b is paired for _, paired in pairs)]
+    """Pair the questions by id, then the rest by text, then count and name the changes."""
+    partner: dict[int, dict[str, Any]] = {}  # index in now -> baseline question
+    taken: set[int] = set()  # id() of paired baseline questions
+    by_id = {b["id"]: b for b in before["questions"] if _key(b)[0] == "id"}
+    for n, q in enumerate(now["questions"]):
+        b = by_id.get(q["id"]) if _key(q)[0] == "id" else None
+        if b is not None and id(b) not in taken:
+            partner[n] = b
+            taken.add(id(b))
+    for n, q in enumerate(now["questions"]):
+        if n in partner:
+            continue
+        b = next((b for b in before["questions"] if id(b) not in taken and b["question"] == q["question"]), None)
+        if b is not None:
+            partner[n] = b
+            taken.add(id(b))
+    unmatched = [q["id"] for n, q in enumerate(now["questions"]) if n not in partner]
+    unmatched += [b["id"] for b in before["questions"] if id(b) not in taken]
+    every = [(now["questions"][n], b) for n, b in sorted(partner.items())]
+    pairs = [(q, b) for q, b in every if q.get("error") is None and b.get("error") is None]
     notes: list[str] = []
+    errored = len(every) - len(pairs)
+    if errored:
+        notes.append(
+            f"{errored} question{' could' if errored == 1 else 's could'} not be scored and "
+            f"{'is' if errored == 1 else 'are'} left out."
+        )
     fingerprint = before.get("questions_fingerprint") or _fingerprint(before["questions"])
     partial = fingerprint != now["questions_fingerprint"]
     if partial:

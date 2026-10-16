@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { EvalQuestionResult, EvaluationResult } from "@/api/types"
 
-import { afterRun, best, BEST_KEY, bestKey, forgetBest, readBest, whenText, type BestPipeline } from "./best"
+import { afterRun, best, BEST_KEY, bestHeadline, bestKey, forgetBest, readBest, whenText, type BestPipeline } from "./best"
 
 const PIPELINE: BestPipeline = {
   config: { index: { parse: { use: "docling" }, chunk: { use: "recursive_character" }, store: { use: "lancedb" } } },
@@ -72,7 +72,12 @@ describe("Best so far", () => {
     const r = report([q("a", true), q("b", false)])
     expect(run(r).outcome).toEqual({ kind: "first" })
     const stored = readBest(bestKey(r)!)!
-    expect(stored).toEqual({ found: 1, scored: 2, mrr: 0.5, hit_rate: 0.5, name: "Mine", pipeline: PIPELINE, at: expect.any(String), foundKeys: ["id:a"], errored: [] })
+    expect(stored).toEqual({ found: 1, scored: 2, mrr: 0.5, hit_rate: 0.5, name: "Mine", pipeline: PIPELINE, at: expect.any(String),
+      questions: [
+        { id: "a", text: "Question a?", found: true, errored: false },
+        { id: "b", text: "Question b?", found: false, errored: false },
+      ],
+    })
     expect(new Date(stored.at).getTime()).toBe(new Date("2026-10-16T21:40:00").getTime())
   })
 
@@ -111,6 +116,58 @@ describe("Best so far", () => {
     // a errored now, so it is not lost; b errored before, so it is not won.
     expect(outcome.kind).toBe("better")
     if (outcome.kind === "better") expect(outcome.won).toEqual(["Question c?"])
+  })
+
+  it("counts fewer over the questions both runs scored: a best of 9 of 9 (3 errored) against 11 of 12", () => {
+    const ids = "abcdefghijkl".split("")
+    // The best: the first nine found, the last three errored.
+    run(report(ids.map((id, n) => (n < 9 ? q(id, true) : q(id, false, { error: "boom" })))), "Best")
+    // This run: every question scored, and only "a" missed.
+    const { outcome } = run(report(ids.map((id) => q(id, id !== "a"))))
+    expect(outcome.kind).toBe("worse")
+    if (outcome.kind !== "worse") return
+    expect(outcome.fewer).toBe(1)
+    expect(outcome.lost).toEqual(["Question a?"])
+    expect(bestHeadline(outcome)).toBe("1 fewer found than your best.")
+  })
+
+  it("says a lower hit rate when no question both runs scored was lost", () => {
+    const ids = "abcd".split("")
+    run(report(ids.map((id, n) => (n < 3 ? q(id, true) : q(id, false, { error: "boom" })))), "Best")
+    // Only "d" missed, and the best could not score "d": nothing paired was lost, yet 3 of 4 is below 3 of 3.
+    const { outcome } = run(report(ids.map((id) => q(id, id !== "d"))))
+    expect(outcome.kind).toBe("worse")
+    if (outcome.kind !== "worse") return
+    expect(outcome.fewer).toBe(0)
+    expect(outcome.lost).toEqual([])
+    expect(bestHeadline(outcome)).toBe("A lower hit rate than your best.")
+  })
+
+  it("says the best ranks higher only when the hit rates are equal", () => {
+    run(report([q("a", true), q("b", false)], { mrr: 0.5 }), "Best")
+    const { outcome } = run(report([q("a", true), q("b", false)], { mrr: 0.25 }))
+    expect(outcome.kind).toBe("worse")
+    if (outcome.kind === "worse") expect(bestHeadline(outcome)).toBe("Your best ranks the answers higher.")
+  })
+
+  it("has no false lost or won when the same set gains ids", () => {
+    run(report([q("question 1", true, { question: "One?" }), q("question 2", false, { question: "Two?" })]), "Best")
+    const same = run(report([q("one", true, { question: "One?" }), q("two", false, { question: "Two?" })])).outcome
+    expect(same.kind).toBe("equal")
+    // Better: only Two? is won; One? was found in both, under no id and then under its new one.
+    const { outcome } = run(report([q("one", true, { question: "One?" }), q("two", true, { question: "Two?" })]))
+    expect(outcome.kind === "better" && outcome.won).toEqual(["Two?"])
+    expect(outcome.kind === "better" && outcome.more).toBe(1)
+  })
+
+  it("pairs by real id first, then by text for what is left", () => {
+    // The best: "x" (found) and "y" (missed). This run: "x" under new text, missed, so it pairs by id;
+    // and "Why?", which had the id "y" in the best, now with no id of its own, so it pairs by text.
+    run(report([q("x", true, { question: "Same?" }), q("y", true, { question: "Why?" }), q("z", false, { question: "Gone?" })]), "Best")
+    const { outcome } = run(report([q("x", false, { question: "Changed?" }), q("question 2", false, { question: "Why?" }), q("question 3", true, { question: "New?" })]))
+    expect(outcome.kind === "worse" && outcome.lost).toEqual(["Changed?", "Why?"])
+    // "New?" pairs with nothing, so it is never won.
+    expect(outcome.kind === "worse" && outcome.fewer).toBe(2)
   })
 
   it("pairs a question with no id of its own by its text", () => {

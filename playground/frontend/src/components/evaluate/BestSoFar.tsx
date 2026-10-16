@@ -2,14 +2,15 @@ import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { whenText, type BestRun, type Outcome } from "@/state/best"
+import { bestHeadline, betterLine, whenText, type BestRun, type Outcome } from "@/state/best"
 
 /**
  * Best so far, under the score: how this run compares with the best run in
  * this browser for the same questions, documents and Pieces checked. Worse
  * names the lost questions and offers the best pipeline; better names the won
  * ones; the first run becomes the best. `outcome` null means the visitor
- * pressed Forget best.
+ * pressed Forget best. The page's own live region reads the headline out, so
+ * this box is not a live region.
  */
 
 const mrr = (x: number | null) => (x === null ? "none" : x.toFixed(2))
@@ -39,14 +40,14 @@ function Changed({ kind, questions }: { kind: "lost" | "won"; questions: string[
 
 export function BestSoFar({
   outcome,
-  now,
+  problem,
   onLoad,
   onCompare,
   onForget,
 }: {
   outcome: Outcome | null
-  /** This run's counts, for the equal line. */
-  now: { found: number; scored: number }
+  /** Why the best pipeline cannot open on this server, after a press of Load or Compare. */
+  problem: string | null
   onLoad: () => void
   onCompare: () => void
   onForget: () => void
@@ -54,7 +55,7 @@ export function BestSoFar({
   const kind = outcome?.kind ?? "forgotten"
   return (
     <div className="flex max-w-[70ch] flex-col gap-2">
-      <div data-testid="best-so-far" aria-live="polite" className={cn("flex flex-col gap-2 rounded-panel text-sm", kind === "equal" || kind === "forgotten" ? "" : "px-3 py-2", TONE[kind])}>
+      <div data-testid="best-so-far" className={cn("flex flex-col gap-2 rounded-panel text-sm", kind === "equal" || kind === "forgotten" ? "" : "px-3 py-2", TONE[kind])}>
         {outcome === null ? (
           <p>Best forgotten. Your next run with these questions becomes the best.</p>
         ) : outcome.kind === "first" ? (
@@ -64,22 +65,22 @@ export function BestSoFar({
           </p>
         ) : outcome.kind === "equal" ? (
           <p>
-            <MonoNumbers text={`Same as your best: ${now.found} of ${now.scored}.`} />
+            <MonoNumbers text={bestHeadline(outcome)} />
           </p>
         ) : outcome.kind === "better" ? (
           <>
             <p>
-              <strong className="font-semibold">New best.</strong>{" "}
-              <MonoNumbers
-                text={`${outcome.more > 0 ? `${outcome.more} more found than` : "The answers rank higher than in"} the last best (${scoreOf(outcome.before)}). This pipeline is now your best for these questions.`}
-              />
+              <strong className="font-semibold">{bestHeadline(outcome)}</strong>{" "}
+              <MonoNumbers text={`${betterLine(outcome)} (${scoreOf(outcome.before)}). This pipeline is now your best for these questions.`} />
             </p>
             <Changed kind="won" questions={outcome.won} />
           </>
         ) : (
           <>
             <p>
-              <strong className="font-semibold">{outcome.fewer > 0 ? `${outcome.fewer} fewer found than your best.` : "Your best ranks the answers higher."}</strong>{" "}
+              <strong className="font-semibold">
+                <MonoNumbers text={bestHeadline(outcome)} />
+              </strong>{" "}
               <MonoNumbers text={`Best so far: ${scoreOf(outcome.best)}, with `} />
               <strong className="font-semibold">{outcome.best.name}</strong>, {whenText(outcome.best.at)}.
             </p>
@@ -95,6 +96,11 @@ export function BestSoFar({
                 Forget best
               </button>
             </div>
+            {problem ? (
+              <p role="alert" data-testid="best-problem">
+                {problem}
+              </p>
+            ) : null}
           </>
         )}
       </div>

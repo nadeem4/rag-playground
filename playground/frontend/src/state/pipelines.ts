@@ -241,7 +241,7 @@ export function usableGraph(p: Pick<SavedPipeline, "config" | "documents" | "que
 }
 
 /** Why a config cannot open on this server: documents that are not uploads, or a strategy it lacks. Null when it can. */
-function notHere(config: PipelineConfig, registry: Registry): string | null {
+export function notHere(config: PipelineConfig, registry: Registry): string | null {
   const source = config.index.source?.use
   if (source !== undefined && source !== "upload") return otherSource(source)
   const missing = unknownStrategy(config, registry)

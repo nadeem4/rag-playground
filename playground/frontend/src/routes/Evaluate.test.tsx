@@ -1483,7 +1483,8 @@ describe("a large question set", () => {
   })
 })
 
-describe("Best so far", () => {
+// A cold first render can take more than the default five seconds on a busy machine.
+describe("Best so far", { timeout: 15000 }, () => {
   const graph = sampleGraph(registry, SOURCE)
   const KEYED = { questions_fingerprint: "fp", document_shas: [SOURCE.sha] }
   const found = (id: string, text: string) => verdict(id, { question: text })
@@ -1590,6 +1591,42 @@ describe("Best so far", () => {
     fireEvent.click(forget)
     expect(readBest(bestKey(report([], KEYED))!)).toBeNull()
     expect(screen.getByTestId("best-so-far").textContent).toBe("Best forgotten. Your next run with these questions becomes the best.")
+  })
+
+  it("reads only the headline out, from a live region that is always there", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    // Mounted, and empty, before any run.
+    const empty = { live: "" as string | null }
+    const seen = new MutationObserver(() => {
+      const live = document.querySelector('[data-testid="best-live"]')
+      if (live && empty.live === "") empty.live = live.getAttribute("aria-live") === "polite" && live.textContent === "" ? "ok" : "bad"
+    })
+    seen.observe(document.body, { childList: true, subtree: true })
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    seen.disconnect()
+    expect(empty.live).toBe("ok")
+    await waitFor(() => expect(screen.getByTestId("best-live").textContent).toBe("1 fewer found than your best."))
+    expect(screen.getByTestId("best-so-far").getAttribute("aria-live")).toBeNull()
+  })
+
+  it("moves focus to the live region when Forget best takes its button away", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    const forget = await screen.findByRole("button", { name: "Forget best" })
+    forget.focus()
+    fireEvent.click(forget)
+    const live = screen.getByTestId("best-live")
+    expect(live.textContent).toBe("Best forgotten.")
+    await waitFor(() => expect(document.activeElement).toBe(live))
+  })
+
+  it("says why the best pipeline cannot open here, instead of doing nothing", async () => {
+    const p = bestPipeline()
+    afterRun(report([found("a", A), found("b", B)], KEYED), "Old one", { ...p, config: { ...p.config, index: { ...p.config.index, chunk: { use: "nope" } } } })
+    const navigate = await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    fireEvent.click(await screen.findByRole("button", { name: "Load the best pipeline" }))
+    expect(navigate).not.toHaveBeenCalled()
+    expect((await screen.findByTestId("best-problem")).textContent).toBe("Old one cannot open here. It uses a step this server does not have: nope.")
   })
 
   it("keeps Evaluate working when localStorage throws", async () => {

@@ -59,14 +59,14 @@ import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { RunStrip, stripSegments } from "@/components/pipeline/RunStrip"
 import { FieldHelp } from "@/components/fields/FieldHelp"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
-import { FULL_OF_KEPT, fullOfKept, keptReason, savePipeline, setCurrentId, usableGraph, usePipelines } from "@/state/pipelines"
+import { FULL_OF_KEPT, fullOfKept, keptReason, notHere, savePipeline, setCurrentId, usableGraph, usePipelines } from "@/state/pipelines"
 import { BUILD_YOUR_OWN, defaultChoice, ON_BUILD, pipelineChoices, type PipelineChoice } from "@/state/pipelineChoice"
 import { plantedLine, useStarter } from "@/state/starter"
 import { DocumentControl } from "@/components/DocumentControl"
 import { DocumentItem } from "@/components/DocumentItem"
 import { BuildYourOwn } from "@/components/evaluate/BuildYourOwn"
 import { BestSoFar } from "@/components/evaluate/BestSoFar"
-import { afterRun, forgetBest, type BestPipeline, type Outcome } from "@/state/best"
+import { afterRun, bestHeadline, forgetBest, type BestPipeline, type Outcome } from "@/state/best"
 
 import { RegistryScreen } from "./Shell"
 
@@ -190,13 +190,17 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
     navigate("/build?from=evaluate")
   }
 
-  /** Best so far's pipeline, put on Build as an unsaved one the way Build your own does, then open `href`. */
-  function openBest(p: BestPipeline, href: string) {
+  /**
+   * Best so far's pipeline, put on Build as an unsaved one the way Build your own does, then open `href`.
+   * Returns why it cannot open on this server, as the Library says it, or null when it opened.
+   */
+  function openBest(name: string, p: BestPipeline, href: string): string | null {
     const g = usableGraph(p, registry)
-    if (!g) return
+    if (!g) return `${name} cannot open here. ${notHere(p.config, registry) ?? "This server does not have every step it uses."}`
     storeGraph(g)
     setCurrentId(null)
     navigate(href)
+    return null
   }
 
   // Nothing to pick yet: the Starter waits on the samples list, or it could not be read.
@@ -323,7 +327,9 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
   )
 }
 
-const READY_TAG = { label: "Ready-made", tone: "plain" as const }
+type OpenBest = (name: string, p: BestPipeline, href: string) => string | null
+
+const READY_TAG ={ label: "Ready-made", tone: "plain" as const }
 const NOT_SAVED_TAG = { label: "Not saved", tone: "soft" as const }
 
 /**
@@ -349,8 +355,8 @@ function EvaluateBody({
   pipelineKey: string
   /** The pipeline's name in the picker, kept with a best run. */
   pipelineName: string
-  /** Put Best so far's pipeline on Build, then open `href`. */
-  onOpenBest: (p: BestPipeline, href: string) => void
+  /** Put Best so far's pipeline on Build, then open `href`; returns why it cannot, or null. */
+  onOpenBest: OpenBest
   registry: Registry
   onBusy: (busy: boolean) => void
   slot: HTMLElement | null
@@ -477,7 +483,7 @@ function Evaluation({
   sourceSha: string
   pipelineKey: string
   pipelineName: string
-  onOpenBest: (p: BestPipeline, href: string) => void
+  onOpenBest: OpenBest
   onBusy: (busy: boolean) => void
   /** The header's slot, where Pieces checked and the run button go. */
   slot: HTMLElement | null
@@ -706,7 +712,15 @@ function Evaluation({
 
   // Best so far: judged once per finished run against the best in this browser for the same
   // questions, documents and Pieces checked. Null before that, and when the server sent no fingerprint.
-  const [best, setBest] = useState<{ key: string; outcome: Outcome | null } | null>(null)
+  const [best, setBest] = useState<{ key: string; outcome: Outcome | null; problem?: string } | null>(null)
+  const bestLive = useRef<HTMLParagraphElement>(null)
+  const showBest = ran && !busy && score !== null && best !== null
+  /** Open the best pipeline on Build or Compare, or say why it cannot open here. */
+  function openBestAt(href: string) {
+    if (best?.outcome?.kind !== "worse") return
+    const problem = onOpenBest(best.outcome.best.name, best.outcome.best.pipeline, href)
+    if (problem) setBest({ ...best, problem })
+  }
   const bestInput = useRef<{ result: EvaluationResult; pipeline: BestPipeline; name: string } | null>(null)
   bestInput.current = finishedRun && result && scoredMade.ok ? { result, pipeline: scoredMade.pipeline, name: pipelineName } : null
   const judged = useRef<string | null>(null)
@@ -950,15 +964,20 @@ function Evaluation({
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
 
-        {ran && !busy && score && best && totals ? (
+        {/* Always mounted, so a screen reader hears the headline when it arrives; Forget best moves focus here. */}
+        <p ref={bestLive} tabIndex={-1} aria-live="polite" data-testid="best-live" className="sr-only">
+          {showBest ? bestHeadline(best.outcome) : ""}
+        </p>
+        {showBest ? (
           <BestSoFar
             outcome={best.outcome}
-            now={totals}
-            onLoad={() => best.outcome?.kind === "worse" && onOpenBest(best.outcome.best.pipeline, "/build?from=evaluate")}
-            onCompare={() => best.outcome?.kind === "worse" && onOpenBest(best.outcome.best.pipeline, "/compare")}
+            problem={best.problem ?? null}
+            onLoad={() => openBestAt("/build?from=evaluate")}
+            onCompare={() => openBestAt("/compare")}
             onForget={() => {
               forgetBest(best.key)
               setBest({ key: best.key, outcome: null })
+              bestLive.current?.focus()
             }}
           />
         ) : null}

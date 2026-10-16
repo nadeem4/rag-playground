@@ -23,17 +23,24 @@ export interface BestRun {
   pipeline: BestPipeline
   /** When it ran, as an ISO string. */
   at: string
-  /** The found questions' keys (`questionKey`). */
-  foundKeys: string[]
-  /** The questions it could not score, left out of lost and won. */
-  errored: string[]
+  /** Each question, to pair with a later run's: its own id (null for a positional "question 3"), its text, and how it did. */
+  questions: BestQuestion[]
+}
+
+export interface BestQuestion {
+  id: string | null
+  text: string
+  found: boolean
+  /** It could not be scored, so it is left out of lost and won. */
+  errored: boolean
 }
 
 export type Outcome =
   | { kind: "first" }
-  | { kind: "better"; before: BestRun; more: number; won: string[] }
-  | { kind: "worse"; best: BestRun; fewer: number; lost: string[] }
-  | { kind: "equal"; best: BestRun }
+  /** `more` and `fewer` count over the paired questions neither run errored on; `tie` is equal hit rates, so MRR decided. */
+  | { kind: "better"; before: BestRun; more: number; tie: boolean; won: string[] }
+  | { kind: "worse"; best: BestRun; fewer: number; tie: boolean; lost: string[] }
+  | { kind: "equal"; best: BestRun; found: number; scored: number }
 
 export const BEST_KEY = "rag-playground:best:v1"
 const MAX_BEST = 40
@@ -53,8 +60,35 @@ export function best(runs: readonly Scored[]): number[] {
   return scored.filter((n) => key(n)[0] === top[0] && key(n)[1] === top[1])
 }
 
-/** As Pandion pairs questions: by id, or by text when the set gave it none ("question 3"). */
-const questionKey = (q: Pick<EvalQuestionResult, "id" | "question">) => (/^question \d+$/.test(q.id) ? `text:${q.question}` : `id:${q.id}`)
+/** A question as a best run keeps it. A positional id ("question 3") is no id: it moves when the set is reordered. */
+const asBest = (q: EvalQuestionResult): BestQuestion => ({ id: /^question \d+$/.test(q.id) ? null : q.id, text: q.question, found: q.found && !q.error, errored: q.error !== null })
+
+/**
+ * Pair this run's questions with the best's as `pandion.evaluation._regression`
+ * does: by id over the whole set first, then the rest by text. Returns the
+ * pairs neither run errored on.
+ */
+function pairs(now: BestQuestion[], before: BestQuestion[]): [BestQuestion, BestQuestion][] {
+  const partner = new Map<number, BestQuestion>()
+  const taken = new Set<BestQuestion>()
+  const byId = new Map(before.filter((b) => b.id !== null).map((b) => [b.id, b] as const))
+  now.forEach((q, n) => {
+    const b = q.id !== null ? byId.get(q.id) : undefined
+    if (b && !taken.has(b)) {
+      partner.set(n, b)
+      taken.add(b)
+    }
+  })
+  now.forEach((q, n) => {
+    if (partner.has(n)) return
+    const b = before.find((x) => !taken.has(x) && x.text === q.text)
+    if (b) {
+      partner.set(n, b)
+      taken.add(b)
+    }
+  })
+  return [...partner].sort(([a], [b]) => a - b).flatMap(([n, b]) => (now[n].errored || b.errored ? [] : [[now[n], b] as [BestQuestion, BestQuestion]]))
+}
 
 /** The key a run is compared under, or null when the server sent no fingerprint. */
 export function bestKey(r: EvaluationResult): string | null {
@@ -64,14 +98,13 @@ export function bestKey(r: EvaluationResult): string | null {
 
 const isBest = (b: unknown): b is BestRun => {
   const x = b as BestRun | null
-  const strings = (v: unknown) => Array.isArray(v) && v.every((s) => typeof s === "string")
   return (
     typeof x?.found === "number" &&
     typeof x.scored === "number" &&
     typeof x.name === "string" &&
     typeof x.at === "string" &&
-    strings(x.foundKeys) &&
-    strings(x.errored) &&
+    Array.isArray(x.questions) &&
+    x.questions.every((q) => (q?.id === null || typeof q?.id === "string") && typeof q.text === "string" && typeof q.found === "boolean" && typeof q.errored === "boolean") &&
     isConfigShape(x.pipeline?.config) &&
     Array.isArray(x.pipeline.documents)
   )
@@ -119,8 +152,7 @@ export function afterRun(r: EvaluationResult, name: string, pipeline: BestPipeli
     name,
     pipeline,
     at: at.toISOString(),
-    foundKeys: r.questions.filter((q) => q.found && !q.error).map(questionKey),
-    errored: r.questions.filter((q) => q.error).map(questionKey),
+    questions: r.questions.map(asBest),
   }
   if (key === null) return { key, outcome: { kind: "first" } }
   const all = readAll()
@@ -130,17 +162,44 @@ export function afterRun(r: EvaluationResult, name: string, pipeline: BestPipeli
     store()
     return { key, outcome: { kind: "first" } }
   }
-  const was = new Set(stored.foundKeys)
-  const both = r.questions.filter((q) => !q.error && !stored.errored.includes(questionKey(q)))
+  // Counted over the paired questions neither run errored on, as Regression counts them.
+  const paired = pairs(run.questions, stored.questions)
+  const lost = paired.filter(([q, b]) => b.found && !q.found).map(([q]) => q.text)
+  const won = paired.filter(([q, b]) => q.found && !b.found).map(([q]) => q.text)
+  const tie = run.hit_rate === stored.hit_rate
   const top = best([stored, run])
   if (top.length === 1 && top[0] === 1) {
     store()
-    return { key, outcome: { kind: "better", before: stored, more: run.found - stored.found, won: both.filter((q) => q.found && !was.has(questionKey(q))).map((q) => q.question) } }
+    return { key, outcome: { kind: "better", before: stored, more: won.length - lost.length, tie, won } }
   }
   if (top.length === 1) {
-    return { key, outcome: { kind: "worse", best: stored, fewer: stored.found - run.found, lost: both.filter((q) => !q.found && was.has(questionKey(q))).map((q) => q.question) } }
+    return { key, outcome: { kind: "worse", best: stored, fewer: lost.length - won.length, tie, lost } }
   }
-  return { key, outcome: { kind: "equal", best: stored } }
+  return { key, outcome: { kind: "equal", best: stored, found: run.found, scored: run.scored } }
+}
+
+/**
+ * The outcome's first sentence, which the page's live region reads out. Null
+ * is the best forgotten. "Ranks higher" is said only when the hit rates are
+ * equal, so MRR alone decided; a count is said only when it is above zero.
+ */
+export function bestHeadline(o: Outcome | null): string {
+  if (o === null) return "Best forgotten."
+  switch (o.kind) {
+    case "first":
+      return "Your first run with these questions, so it is your best so far."
+    case "equal":
+      return `Same as your best: ${o.found} of ${o.scored}.`
+    case "better":
+      return "New best."
+    case "worse":
+      return o.tie ? "Your best ranks the answers higher." : o.fewer > 0 ? `${o.fewer} fewer found than your best.` : "A lower hit rate than your best."
+  }
+}
+
+/** What follows "New best.": how it beat the last best, in the same rule as the worse headline. */
+export function betterLine(o: Extract<Outcome, { kind: "better" }>): string {
+  return o.tie ? "The answers rank higher than in the last best" : o.more > 0 ? `${o.more} more found than the last best` : "A higher hit rate than the last best"
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

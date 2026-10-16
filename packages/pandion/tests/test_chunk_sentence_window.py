@@ -257,4 +257,5 @@ def test_explanation_has_no_code_names_or_dashes():
         "_strategy",
         "sentences_per_chunk",
         "overlap_sentences",
+        "heading_context",
     }

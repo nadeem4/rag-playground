@@ -496,3 +496,55 @@ def test_the_character_chunker_defaults_to_the_samples_400_and_80():
 
     c = RecursiveCharacterConfig()
     assert (c.chunk_size, c.chunk_overlap) == (400, 80)
+
+
+# --------------------------------------------------------------------------- #
+# heading_context on token_based and sentence_window
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("cls", [TokenBasedChunker, SentenceWindowChunker])
+def test_heading_context_is_off_by_default_so_stored_ids_stay(cls):
+    config = cls.config_model()
+    assert config.heading_context is False
+    assert "heading_context" not in config.model_dump()
+
+
+def test_token_based_heading_context_prefixes_embed_text_only():
+    doc = _experience_doc()
+    result = run(TokenBasedChunker, doc, max_tokens=6, overlap=0, heading_context=True)
+    [body] = [c for c in result.chunks if "Did the first thing" in c.text]
+    assert body.text == "Did the first thing well."
+    assert body.embed_text == "EXPERIENCE > Role one\n\nDid the first thing well."
+    off = run(TokenBasedChunker, doc, max_tokens=6, overlap=0)
+    assert [c.text for c in off.chunks] == [c.text for c in result.chunks]
+    assert all(c.embed_text is None for c in off.chunks)
+
+
+def test_sentence_window_heading_context_prefixes_embed_text_only():
+    doc = _doc(
+        [
+            ("heading", "EXPERIENCE", 1, 1),
+            ("paragraph", "First sentence here. Second sentence here.", None, 1),
+        ]
+    )
+    result = run(
+        SentenceWindowChunker,
+        doc,
+        sentences_per_chunk=1,
+        overlap_sentences=0,
+        heading_context=True,
+    )
+    first, second = result.chunks
+    assert first.embed_text is None  # it opens with the heading itself
+    assert second.text == "Second sentence here."
+    assert second.embed_text == "EXPERIENCE\n\nSecond sentence here."
+
+
+@pytest.mark.parametrize("cls", [TokenBasedChunker, SentenceWindowChunker])
+def test_heading_context_is_named_in_schema_and_explain(cls):
+    schema = cls.config_model.model_json_schema()
+    assert "heading_context" in schema["properties"]["heading_context"]["description"]
+    on = cls().explain(cls.config_model(heading_context=True)).settings
+    off = cls().explain(cls.config_model()).settings
+    assert "heading_context" in on and on != off

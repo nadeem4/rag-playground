@@ -32,6 +32,8 @@ const never = new Promise<never>(() => {})
 let requests: { url: string; method: string; body?: unknown }[] = []
 let holdUpload = false
 let linkRefusal: string | null = null
+let holdLink = false
+let releaseLink: () => void = () => {}
 let uploadAnswer: unknown = null
 const LINK = {
   sha: "56".repeat(32),
@@ -54,7 +56,7 @@ function serve({ sources, samples, app = { demo: false } }: { sources: unknown; 
       if (url === "/api/sources/sample" && method === "POST") return ok({ ...UP, sha: SAMPLE_SHA, filename: "chunking-primer.pdf" })
       if (url === "/api/v2/documents/url" && method === "POST") {
         if (linkRefusal) return new Response(JSON.stringify({ detail: linkRefusal }), { status: 403 })
-        return ok(LINK)
+        return holdLink ? new Promise<Response>((resolve) => (releaseLink = () => resolve(ok(LINK)))) : ok(LINK)
       }
       if (url === "/api/v2/documents" && method === "POST") {
         if (uploadAnswer) return ok(uploadAnswer)
@@ -76,6 +78,7 @@ beforeEach(() => {
   requests = []
   holdUpload = false
   linkRefusal = null
+  holdLink = false
   uploadAnswer = null
   window.localStorage.clear()
   resetStoredGraphForTests()
@@ -412,5 +415,30 @@ describe("DocumentControl", () => {
     await waitFor(() =>
       expect(within(menu).getByRole("alert").textContent).toBe("That address is not on the public internet, so it was not fetched."),
     )
+  })
+
+  it("the link box is reached and used by keyboard alone, and keeps focus while the page is fetched", async () => {
+    stored(SAMPLE_SHA, "chunking-primer.pdf")
+    holdLink = true
+    serve({ sources: [], samples: [SAMPLE] })
+    render(<DocumentControl />)
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    const item = within(menu).getByRole("menuitem", { name: "Or add a link" })
+    fireEvent.keyDown(menu, { key: "End" })
+    await waitFor(() => expect(document.activeElement).toBe(item))
+    fireEvent.keyDown(item, { key: "Enter" })
+    const box = within(menu).getByLabelText("Link to a web page or PDF") as HTMLInputElement
+    await waitFor(() => expect(document.activeElement).toBe(box))
+    fireEvent.change(box, { target: { value: LINK.origin_url } })
+    fireEvent.keyDown(box, { key: "Enter" })
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Fetching en.wikipedia.org"))
+    expect(posts()).toEqual([{ url: "/api/v2/documents/url", method: "POST", body: { url: LINK.origin_url } }])
+    expect(box.disabled).toBe(false)
+    expect(box.readOnly).toBe(true)
+    expect(box.getAttribute("aria-disabled")).toBe("true")
+    expect(document.activeElement).toBe(box)
+    await act(async () => releaseLink())
+    await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(LINK.sha))
   })
 })

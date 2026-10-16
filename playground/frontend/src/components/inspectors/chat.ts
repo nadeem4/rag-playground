@@ -40,17 +40,18 @@ export function citationSlot(c: Pick<ChatCitation, "chunk_id">, chunkSet?: Chunk
 
 /**
  * Where a citation sits in the chunk set's text, for a document without
- * pages: the cited characters when they were verified there, else its whole
- * piece. Null when neither is known.
+ * pages. Its piece must be in the set; then the cited characters when the
+ * set's text there reads as the quote, else the whole piece. Null otherwise.
  */
 export function citationRange(
-  c: Pick<ChatCitation, "chunk_id" | "doc_start" | "doc_end" | "verified">,
+  c: Pick<ChatCitation, "chunk_id" | "doc_start" | "doc_end" | "cited_text">,
   chunkSet?: ChunkSet,
 ): [number, number] | null {
-  if (!chunkSet) return null
-  if (c.verified && c.doc_start !== null && c.doc_end !== null) return [c.doc_start, c.doc_end]
   const i = chunkIndexOf(c, chunkSet)
-  return i === null ? null : [chunkSet.chunks[i].start_char, chunkSet.chunks[i].end_char]
+  if (i === null || !chunkSet) return null
+  const { doc_start: a, doc_end: b } = c
+  if (a !== null && b !== null && chunkSet.source_text.slice(a, b) === c.cited_text) return [a, b]
+  return [chunkSet.chunks[i].start_char, chunkSet.chunks[i].end_char]
 }
 
 /**

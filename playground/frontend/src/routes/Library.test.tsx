@@ -172,6 +172,7 @@ describe("Library", () => {
     const warn = screen.getByTestId("upload-warning")
     expect(warn.className).toContain("bg-stale-wash")
     expect(warn.textContent).toContain("1 saved item uses an upload that is deleted from the demo in 4 hours.")
+    expect(warn.textContent).toContain("Only the file goes.")
     fireEvent.click(within(warn).getByRole("button", { name: "Export them with the document" }))
     const sheet = screen.getByRole("dialog", { name: /Export/ })
     expect(within(sheet).getByRole("checkbox", { name: /Include the document/ })).toHaveProperty("checked", true)
@@ -343,7 +344,7 @@ describe("Library", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export everything" }))
     const sheet = screen.getByRole("dialog", { name: /Export/ })
     expect(within(sheet).getByRole("checkbox", { name: /Include the documents/ })).toBeTruthy()
-    expect(sheet.textContent).toContain("Without them, importing later")
+    expect(sheet.textContent).toContain("Without them, importing later asks you to upload the files again")
   })
 
   it("imports a file dropped on the drop zone, and refuses one that is not ours", async () => {

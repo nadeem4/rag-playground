@@ -30,13 +30,14 @@ export function TextView({
 }) {
   const first = useRef<HTMLElement>(null)
   const panel = useRef<HTMLDivElement>(null)
+  const ranges = [...marks].filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])
+  const firstStart = ranges[0]?.[0] ?? null
   // Only the text panel scrolls to the first mark, never the page or the panel around it.
   useEffect(() => {
     if (panel.current && first.current) panel.current.scrollTop = Math.max(0, first.current.offsetTop - 48)
-  }, [text, marks])
+  }, [text, firstStart])
 
   const tone = { "--hl": slot === null ? "var(--text-secondary)" : `var(--chunk-${slot})` } as CSSProperties
-  const ranges = [...marks].filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])
   const parts: ReactNode[] = []
   let at = 0
   ranges.forEach(([a, b], k) => {
@@ -44,7 +45,7 @@ export function TextView({
     if (b <= start) return
     if (start > at) parts.push(text.slice(at, start))
     parts.push(
-      <mark key={k} ref={parts.length <= 1 ? first : undefined} className="pdf-hl text-fg" style={tone}>
+      <mark key={k} ref={k === 0 ? first : undefined} className="pdf-hl text-fg" style={tone}>
         {text.slice(start, b)}
       </mark>,
     )

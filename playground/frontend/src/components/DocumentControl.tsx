@@ -70,6 +70,7 @@ export function DocumentControl({
   const { upload, addLink, busy, error: uploadError, limitsLine, linkLine, accept } = useUpload()
   const fileRef = useRef<HTMLInputElement>(null)
   const [link, setLink] = useState("")
+  const linkRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [pickError, setPickError] = useState<string | null>(null)
 
@@ -78,7 +79,7 @@ export function DocumentControl({
   const waiting = loading !== null || busy !== null || sampleLoading !== null
   const empty = !doc
   const name = busy
-    ? `Uploading ${busy}`
+    ? busy
     : missing
       ? `Document ${doc?.filename} is missing. Pick another or upload it again.`
       : empty
@@ -118,6 +119,11 @@ export function DocumentControl({
   }
 
   const error = uploadError ?? pickError
+
+  function submitLink() {
+    if (waiting || !link.trim()) return
+    void addLink(link, onChoose ? use : undefined).then((ok) => ok && setLink(""))
+  }
   const errorRef = useRef<HTMLParagraphElement>(null)
   // The menu scrolls: a refusal under the link box is brought into view.
   useEffect(() => {
@@ -148,7 +154,7 @@ export function DocumentControl({
           aria-busy={busy ? true : undefined}
           className="inline-flex min-h-[1.5rem] items-center text-sm font-semibold text-primary underline underline-offset-4 outline-none hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
         >
-          {busy ? `Uploading ${busy}` : empty ? "Pick a document" : label}
+          {busy ?? (empty ? "Pick a document" : label)}
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
@@ -257,27 +263,46 @@ export function DocumentControl({
               }}
             >
               <Upload aria-hidden strokeWidth={1.75} className="size-4" />
-              {busy ? `Uploading ${busy}` : "Upload a document"}
+              {busy ?? "Upload a document"}
             </DropdownMenu.Item>
-            <p className={HEADING}>Or add a link</p>
+            {/* A menu item, so the arrow keys reach the link box: choosing it moves focus into the box. */}
+            <DropdownMenu.Item
+              className="rounded-control px-2 pt-2 pb-1 text-2xs text-fg-muted outline-none data-[highlighted]:bg-surface-hover"
+              onSelect={(e) => {
+                e.preventDefault()
+                linkRef.current?.focus()
+              }}
+            >
+              Or add a link
+            </DropdownMenu.Item>
             <form
               noValidate
               className="flex gap-2 px-2"
               onSubmit={(e) => {
                 e.preventDefault()
-                void addLink(link, onChoose ? use : undefined).then((ok) => ok && setLink(""))
+                submitLink()
               }}
             >
               <input
+                ref={linkRef}
                 type="url"
                 value={link}
                 placeholder="https://example.com/guide.html"
                 aria-label="Link to a web page or PDF"
-                disabled={waiting}
-                className="min-h-[36px] min-w-0 flex-1 rounded-control border border-field-border bg-surface px-2 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
+                // Read-only, not disabled, while something is on its way: focus stays in the box.
+                readOnly={waiting}
+                aria-disabled={waiting || undefined}
+                className="min-h-[36px] min-w-0 flex-1 rounded-control border border-field-border bg-surface px-2 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:outline-2 focus-visible:outline-(--focus-ring) aria-disabled:opacity-50"
                 onChange={(e) => setLink(e.target.value)}
-                // The menu jumps to an item by its first letter: typing here stays in the box.
-                onKeyDown={(e) => e.key !== "Escape" && e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") return
+                  // The menu jumps to an item by its first letter: typing here stays in the box.
+                  e.stopPropagation()
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    submitLink()
+                  }
+                }}
               />
               <Button type="submit" size="sm" disabled={waiting || !link.trim()}>
                 Add

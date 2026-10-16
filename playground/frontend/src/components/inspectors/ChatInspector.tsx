@@ -498,7 +498,8 @@ function CitationInPdf({
   const prefix = fromChunk ? `Location not found in the page layout. Searched p. ${page}, where its chunk starts. ` : ""
   let notice: string
   if (find.kind === "loading") notice = `${prefix}Looking for the cited text on p. ${page}.`
-  else if (find.kind === "error") notice = `${prefix}Could not search the page (${find.message}). ${highlightWords(h!)}`
+  // 415: the server searches PDFs only; the stand-in mark says enough.
+  else if (find.kind === "error" && find.status !== 415) notice = `${prefix}Could not search the page (${find.message}). ${highlightWords(h!)}`
   else notice = prefix + highlightWords(h!)
 
   return (

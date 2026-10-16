@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
@@ -51,6 +51,7 @@ beforeEach(() => {
       if (url === "/api/samples") return ok([CARD])
       if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)
       if (url === "/api/v2/results/idx1/payload") return ok({ doc_count: 42 })
+      if (url === "/api/v2/results/doc1/payload") return ok({ page_count: 0, elements: [], filename: "field-guide.docx" })
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
   )
@@ -214,6 +215,16 @@ describe("an empty question", () => {
 })
 
 describe("the Ask panel header", () => {
+  it("leaves out the pages for a document without any", async () => {
+    const graph = sampleGraph(LIVE, { sha: "ef".repeat(32), filename: "field-guide.docx" })
+    const results: Record<string, NodeState> = { ...INDEX_DONE }
+    for (const n of graph.nodes) if (n.stage === "parse" || n.stage === "clean") results[n.id] = { id: n.id, status: "done", artifact_id: "doc1" }
+    setup({ graph, results })
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => String(c[0]) === "/api/v2/results/doc1/payload")).toBe(true))
+    await act(async () => {})
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toBe("Index ready: field-guide.docx, 42 pieces"))
+  })
+
   it("says the index is ready, with the file, its pages and its pieces", async () => {
     setup()
     expect(screen.getByRole("heading", { name: "Ask" })).toBeTruthy()

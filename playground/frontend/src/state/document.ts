@@ -85,7 +85,7 @@ interface State {
   samplesFailed: boolean
   known: ReadonlySet<string>
   menuOpen: boolean
-  /** The file an upload is sending now, shared by the menu and the first-visit card. */
+  /** What is on its way now, as its label ("Uploading x" or "Fetching x"), shared by the menu and the first-visit card. */
   uploading: string | null
   /** Why the last upload was refused or failed. */
   uploadError: string | null

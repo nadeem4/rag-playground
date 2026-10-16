@@ -16,7 +16,7 @@ const chunks = recursiveJson as unknown as ChunkSet
 const SHA = chat.payload.citations[0].source_sha
 const byN = (n: number) => chat.payload.citations.find((c) => c.n === n)!
 
-let finds: Record<number, FindResult | "error"> = {}
+let finds: Record<number, FindResult | "error" | 415> = {}
 let urls: string[] = []
 
 beforeEach(() => {
@@ -38,6 +38,7 @@ beforeEach(() => {
         const c = chat.payload.citations.find((x) => text && x.cited_text.replace(/\s+/g, " ").trim() === text)
         const f = c ? finds[c.n] : undefined
         if (f === "error") return ok({ detail: "boom" }, 500)
+        if (f === 415) return ok({ detail: "The page routes read PDFs only." }, 415)
         return ok(f ?? { rects: [], matched: "none" })
       }
       return ok({ detail: "not found" }, 404)
@@ -434,5 +435,17 @@ describe("ChatInspector, the answer check", () => {
     fireEvent.click(box())
     expect(box().checked).toBe(false)
     expect(noSource()).toBeNull()
+  })
+})
+
+describe("ChatInspector, a page search the server cannot run", () => {
+  it("says nothing extra when the find route answers 415", async () => {
+    finds[1] = 415
+    render(<ChatInspector payload={chat.payload} chunkSet={chunks} />)
+    fireEvent.click(answer().querySelector("[data-cite='1']")!)
+    await waitFor(() => expect(how()).not.toBe("loading"))
+    const notice = screen.getByTestId("pdf-notice").textContent ?? ""
+    expect(notice).not.toContain("Could not search")
+    expect(notice).not.toContain("415")
   })
 })

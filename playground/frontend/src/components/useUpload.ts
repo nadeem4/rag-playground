@@ -42,7 +42,7 @@ export interface Upload {
   upload: (file: File | undefined, use?: (doc: DocRef) => Promise<void> | void) => Promise<boolean>
   /** Fetch a page from a link once (`POST /api/v2/documents/url`) and use it like an upload. True when it did. */
   addLink: (url: string, use?: (doc: DocRef) => Promise<void> | void) => Promise<boolean>
-  /** The name of the file being sent, or null. */
+  /** What is on its way, as its label ("Uploading notes.docx", "Fetching example.com"), or null. */
   busy: string | null
   /** The sentence to show when an upload or a link was refused or failed, or null. */
   error: string | null
@@ -71,8 +71,8 @@ export function useUpload(): Upload {
   const { uploading: busy, uploadError: error } = useDocument()
   const line = formatsLine(formats)
 
-  async function send(name: string, call: () => Promise<{ sha: string; filename: string }>, use: (doc: DocRef) => Promise<void> | void, fail: (why: string) => string) {
-    setUploadState({ uploading: name, uploadError: null })
+  async function send(label: string, call: () => Promise<{ sha: string; filename: string }>, use: (doc: DocRef) => Promise<void> | void, fail: (why: string) => string) {
+    setUploadState({ uploading: label, uploadError: null })
     try {
       const src = await call()
       refreshUploads()
@@ -109,7 +109,7 @@ export function useUpload(): Upload {
           : `This file is ${(file.size / 1048576).toFixed(1)} MB. The hosted demo takes ${kind === "png" || kind === "jpg" ? "images" : `${FORMATS[kind].label} files`} up to ${mb} MB.`,
       )
     }
-    return send(file.name, () => v2.uploadDocument(file), use, (why) => `Upload of ${file.name} failed: ${why}`)
+    return send(`Uploading ${file.name}`, () => v2.uploadDocument(file), use, (why) => `Upload of ${file.name} failed: ${why}`)
   }
 
   async function addLink(text: string, use: (doc: DocRef) => Promise<void> | void = chooseDocument) {
@@ -126,7 +126,7 @@ export function useUpload(): Upload {
       setUploadState({ uploadError: "That is not a link. Paste one that starts with https://" })
       return false
     }
-    return send(host, () => v2.addLink(url), use, (why) => why)
+    return send(`Fetching ${host}`, () => v2.addLink(url), use, (why) => why)
   }
 
   const parts: string[] = []

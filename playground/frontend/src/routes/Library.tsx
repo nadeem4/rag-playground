@@ -300,7 +300,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
               <b>
                 {plural(soon.length, "saved item")} {soon.length === 1 ? "uses" : "use"} an upload that is deleted from the demo in {hoursWords(soonHours)}.
               </b>{" "}
-              Uploads are kept for {ttlHours} hours. The saved settings stay. Only the PDF goes.
+              Uploads are kept for {ttlHours} hours. The saved settings stay. Only the file goes.
             </p>
             <Button variant="outline" onClick={() => startExport(soon.map(key), true)}>
               Export them with the document
@@ -365,8 +365,8 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
                   <span className="text-fg-muted">
                     {listWords(exportable.map((d) => d.filename))}, about {size(exportable.reduce((n, d) => n + d.size, 0))}.{" "}
                     {demo
-                      ? `Without ${exportable.length === 1 ? "it" : "them"}, importing later asks you to upload the ${exportable.length === 1 ? "PDF" : "PDFs"} again, because the demo keeps uploads for ${ttlHours} hours.`
-                      : `Without ${exportable.length === 1 ? "it" : "them"}, importing in another copy of RAG Playground asks you to upload the ${exportable.length === 1 ? "PDF" : "PDFs"} again.`}
+                      ? `Without ${exportable.length === 1 ? "it" : "them"}, importing later asks you to upload the ${exportable.length === 1 ? "file" : "files"} again, because the demo keeps uploads for ${ttlHours} hours.`
+                      : `Without ${exportable.length === 1 ? "it" : "them"}, importing in another copy of RAG Playground asks you to upload the ${exportable.length === 1 ? "file" : "files"} again.`}
                   </span>
                 </span>
               </label>

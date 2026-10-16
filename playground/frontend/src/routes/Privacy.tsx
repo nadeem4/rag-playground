@@ -99,6 +99,8 @@ export function Privacy() {
   const files = limits?.max_files ?? 3
   const mb = Math.round((limits?.max_bytes ?? 10 * 1024 * 1024) / (1024 * 1024))
   const pages = limits?.max_pages ?? 20
+  const otherMb = Math.round((limits?.max_other_bytes ?? 2 * 1024 * 1024) / (1024 * 1024))
+  const imageMb = Math.round((limits?.max_image_bytes ?? 5 * 1024 * 1024) / (1024 * 1024))
   const { pipelines } = usePipelines()
   const experiments = useExperiments()
   const { uploads, samples } = useDocument()
@@ -142,7 +144,16 @@ export function Privacy() {
 
   const serverRows: Row[] = demo
     ? [
-        ["PDFs you upload", "On the demo server, private to this browser", `${ttl} hours, then deleted. At most ${files} files at a time, ${mb} MB and ${pages} pages each.`],
+        [
+          "Files you upload",
+          "On the demo server, private to this browser",
+          `${ttl} hours, then deleted. At most ${files} files at a time. A PDF can be up to ${mb} MB and ${pages} pages. A Word, PowerPoint, HTML, Markdown or text file can be up to ${otherMb} MB. A PNG or JPG image can be up to ${imageMb} MB.`,
+        ],
+        [
+          "Pages you add from a link",
+          "On the demo server, private to this browser. The link you gave is kept in the page's record under this browser's id.",
+          `Like an upload: ${ttl} hours, then deleted, and each one counts as one of your ${files} files. The demo fetches the page once, over https only, and never again for a question. Your link is shown only to this browser, and is removed when you delete your copy or it expires.`,
+        ],
         ["An anonymous browser id", <>A cookie named {mono("rag_visitor")}</>, "One year. It only links your uploads to this browser. It holds no name, email or account."],
         [
           "Run results (pieces, indexes, answers)",
@@ -151,7 +162,7 @@ export function Privacy() {
         ],
       ]
     : [
-        ["PDFs you upload", <>In the project's {mono("sources")} folder</>, "Until you delete them. Nothing expires on your machine."],
+        ["Files you upload, and pages you add from a link (with the link)", <>In the project's {mono("sources")} folder</>, "Until you delete them. Nothing expires on your machine."],
         ["An anonymous browser id", <>A cookie named {mono("rag_visitor")}</>, "One year. On your machine it only marks which browser uploaded a file."],
         ["Run results", <>In the project's {mono("artifacts")} folder, as a cache</>, "Until you clear the cache."],
       ]
@@ -275,7 +286,7 @@ export function Privacy() {
           {asking === "uploads" ? (
             <Confirm label="Confirm deleting uploads" busy={busy} onYes={() => void deleteUploads()} onNo={() => setAsking(null)}>
               This deletes {listWords((mine ?? []).map((u) => u.filename))} from the demo now, instead of after {ttl} hours. Saved items that use{" "}
-              {(mine ?? []).length === 1 ? "it" : "them"} stay, and ask for the PDF again when opened.
+              {(mine ?? []).length === 1 ? "it" : "them"} stay, and ask for the file again when opened.
             </Confirm>
           ) : null}
         </section>

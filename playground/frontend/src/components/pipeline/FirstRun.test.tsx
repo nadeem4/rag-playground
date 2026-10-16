@@ -58,7 +58,11 @@ beforeEach(() => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/settings/app") {
         appCalls += 1
-        return ok(demo ? { demo, limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, ttl_hours: 24 } } : { demo })
+        return ok(
+          demo
+            ? { demo, limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, ttl_hours: 24, max_other_bytes: 2097152, max_image_bytes: 5242880 } }
+            : { demo },
+        )
       }
       if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/v2/documents" && init?.method === "POST") return new Response(JSON.stringify({ detail: uploadRefusal }), { status: 413 })
@@ -80,7 +84,7 @@ afterEach(() => {
 
 const uploadButton = () => screen.queryByRole("button", { name: "Upload a document" })
 const NOTE =
-  "This is a hosted demo. A PDF you upload is private to this browser, is not shared with anyone, and is deleted after a day. Files up to 10 MB and 20 pages, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
+  "This is a hosted demo. A file you upload is private to this browser, is not shared with anyone, and is deleted after a day. A PDF up to 10 MB and 20 pages, a Word, PowerPoint, HTML, Markdown or text file up to 2 MB, and an image up to 5 MB, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
 const IN_A_FRAME = " Uploads need cookies. If your browser blocks them here, open the demo in its own tab."
 
 describe("FirstRun", () => {
@@ -110,7 +114,7 @@ describe("FirstRun", () => {
   it("offers your earlier uploads through Pick a document, and has no file picker of its own", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    expect(screen.getByText("Load a sample or upload a PDF. Your earlier uploads are in the list.")).toBeTruthy()
+    expect(screen.getByText("Load a sample or upload a document. Your earlier uploads are in the list.")).toBeTruthy()
     expect(screen.getByTestId("document-trigger").textContent).toBe("Pick a document")
     expect(screen.queryByRole("combobox")).toBeNull()
     expect(uploadButton()).not.toBeNull()

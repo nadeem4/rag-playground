@@ -16,6 +16,7 @@ import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
 import { strategyLabel } from "@/learn/challenges"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
+import { formatOf } from "@/lib/formats"
 import { cn } from "@/lib/utils"
 import { documentsOf } from "@/state/document"
 import { STAGE_VERB } from "@/state/graph"
@@ -136,10 +137,23 @@ const RING: Record<Look, string> = {
  * of text. Docling can read them with OCR, so it offers to turn OCR on; the
  * change marks the step, and Run reads the pages again.
  */
-function EmptyParse({ transform, config, onConfig }: { transform: string; config: Record<string, unknown>; onConfig: (c: Record<string, unknown>) => void }) {
+function EmptyParse({
+  transform,
+  config,
+  filename,
+  onConfig,
+}: {
+  transform: string
+  config: Record<string, unknown>
+  /** The parsed file's name: only a PDF is said to be maybe scanned. */
+  filename?: string
+  onConfig: (c: Record<string, unknown>) => void
+}) {
   const scanned = "Found no text. This PDF may be scanned: its pages are pictures of text."
   const body =
-    transform !== "docling" ? (
+    filename && formatOf(filename) !== null && formatOf(filename) !== "pdf" ? (
+      `Found no text in ${filename}. The file may be empty.`
+    ) : transform !== "docling" ? (
       `${scanned} Pick Docling above and turn on OCR to read them.`
     ) : config.do_ocr === true ? (
       "Found no text, even with OCR. The pages may be blank, or the text too faint to read."
@@ -567,7 +581,12 @@ export function NodeCard(p: NodeCardProps) {
       {ready?.outcome && !isSource && !open ? <ResultLine outcome={ready.outcome} onShow={p.onShowOutput} /> : null}
       {ready && p.node.stage === "chunk" ? <ChunkBar data={ready.data} /> : null}
       {ready?.outcome && p.node.stage === "parse" && ready.outcome.headline === 0 && !p.stale ? (
-        <EmptyParse transform={p.node.transform} config={p.node.config} onConfig={p.onConfig} />
+        <EmptyParse
+          transform={p.node.transform}
+          config={p.node.config}
+          filename={typeof (ready.data as { filename?: unknown } | undefined)?.filename === "string" ? (ready.data as { filename: string }).filename : undefined}
+          onConfig={p.onConfig}
+        />
       ) : null}
 
       {p.missingKey ? <KeyHint provider={p.missingKey.provider} /> : null}

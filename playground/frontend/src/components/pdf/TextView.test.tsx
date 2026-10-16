@@ -6,6 +6,7 @@ import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
 import cleanedJson from "@/api/fixtures/parsed_doc_cleaned.json"
 import type { ChatOutput, ChunkSet, ParsedDoc } from "@/api/types"
 import { clearPdfCaches } from "@/api/usePdf"
+import { citationRange } from "@/components/inspectors/chat"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
 import { ChunkSetInspector } from "@/components/inspectors/ChunkSetInspector"
 import { resetDocumentForTests } from "@/state/document"
@@ -88,5 +89,19 @@ describe("a document without pages", () => {
     render(<PdfPageView sha={SHA} initialPage={1} highlights={[]} title="Chunk 1" />)
     expect((await screen.findByTestId("no-pages")).textContent).toBe("This document has no pages to draw.")
     expect(screen.queryByRole("alert")).toBeNull()
+  })
+})
+
+describe("citationRange", () => {
+  const c = payload.citations[0]
+  const piece = chunks.chunks.find((k) => k.id === c.chunk_id)!
+  it("marks the cited characters only when its piece is in the set and they read as the quote", () => {
+    expect(citationRange(c, chunks)).toEqual([c.doc_start, c.doc_end])
+  })
+  it("marks the whole piece when the characters there are not the quote", () => {
+    expect(citationRange({ ...c, cited_text: "Something else entirely." }, chunks)).toEqual([piece.start_char, piece.end_char])
+  })
+  it("marks nothing when its piece is not in the chunk set, even with offsets", () => {
+    expect(citationRange({ ...c, chunk_id: "not-in-the-set" }, chunks)).toBeNull()
   })
 })

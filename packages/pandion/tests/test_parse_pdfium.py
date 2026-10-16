@@ -257,10 +257,11 @@ def test_hyphenation_is_repaired_only_at_a_real_word_break(
 
 
 def test_pdfium_provides_no_structure():
-    """pdfium finds no headings, so it claims none: heading chunking then falls back."""
+    """pdfium finds no headings, so it claims none: heading chunking then falls
+    back. It claims only the format it reads."""
     from pandion.plugins.parse.pdfium import PdfiumParse
 
-    assert PdfiumParse.provides == {}
+    assert PdfiumParse.provides == {"formats": ["pdf"]}
 
 
 def test_the_default_pdfium_node_keeps_its_artifact_id():

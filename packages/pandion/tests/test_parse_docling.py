@@ -598,7 +598,7 @@ def test_docling_provides_headings():
     """The heading chunker prefers this; the UI reads it to lock softly elsewhere."""
     from pandion.plugins.parse.docling import DoclingParse
 
-    assert DoclingParse.provides == {"structure": ["headings"]}
+    assert DoclingParse.provides["structure"] == ["headings"]
 
 
 def test_preload_builds_the_converter_and_its_pdf_pipeline(monkeypatch):

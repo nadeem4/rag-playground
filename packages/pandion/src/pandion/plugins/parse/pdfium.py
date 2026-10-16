@@ -106,6 +106,8 @@ class PdfiumParse(Transform[PdfiumConfig]):
 
     name = "pdfium"
     extra = "pdfium"
+    #: The formats it reads; a pipeline refuses any other file before it runs.
+    provides = {"formats": ["pdf"]}
     version = "2"
     stage = Stage.PARSE
     inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}

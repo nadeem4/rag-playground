@@ -17,13 +17,18 @@ from typing import Any
 
 import yaml
 
+from pandion.formats import declared_formats, listed, suffixes as format_suffixes
+
 #: A path that may name a folder outside the project: a URL scheme or a drive
 #: (`file:`, `C:`), a root or share (`/`, `\\`) or a home folder (`~`).
 _OUTSIDE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|[\\/]|~)")
 
-#: The file types each built-in parser reads. A parser not named here reads
-#: every file, as far as run.py knows.
-PARSE_SUFFIXES = {"pdfium": (".pdf",), "docling": (".pdf",)}
+def parse_suffixes(parser: str) -> tuple[str, ...] | None:
+    """The file extensions the parser named `parser` reads, from the formats it
+    declares. None for a parser that declares none: it reads every file, as far
+    as run.py knows."""
+    formats = declared_formats(parser)
+    return format_suffixes(formats) if formats else None
 
 #: The question asked when the project has no question set.
 EXAMPLE_QUESTION = "What is this document about?"
@@ -151,7 +156,7 @@ def _readme(
         key = "Every step in this pipeline runs on your computer, so it needs no API key."
     if suffixes:
         reads = (
-            f"Put your documents in `docs/`. The pipeline reads {' and '.join(suffixes)} files; "
+            f"Put your documents in `docs/`. The pipeline reads {listed(list(suffixes))} files; "
             "run.py skips any other file and says which. Files in subfolders of `docs/` are not read."
         )
     else:
@@ -249,7 +254,7 @@ def main():
     files = sorted(f for f in Path("docs").iterdir() if f.is_file() and not f.name.startswith("."))
     skipped = [f.name for f in files if SUFFIXES and f.suffix.lower() not in SUFFIXES]
     if skipped:
-        print(f"Skipped {{', '.join(skipped)}}: this pipeline reads only {{' and '.join(SUFFIXES)}} files.")
+        print(f"Skipped {{', '.join(skipped)}}: this pipeline reads only {{', '.join(SUFFIXES)}} files.")
     documents = [f"docs/{{f.name}}" for f in files if f.name not in skipped]
     if not documents:
         print("There are no documents to index yet. Put your documents in docs/ and run this again.")
@@ -329,7 +334,7 @@ def new_project(
         for q in [question_set, *question_set["questions"]]:
             if q.get("document") and q["document"] not in named:
                 named.append(q["document"])
-    suffixes = PARSE_SUFFIXES.get(data["index"]["parse"]["use"])
+    suffixes = parse_suffixes(data["index"]["parse"]["use"])
 
     files = {
         "pipeline.yaml": yaml.safe_dump(data, sort_keys=False, allow_unicode=True),

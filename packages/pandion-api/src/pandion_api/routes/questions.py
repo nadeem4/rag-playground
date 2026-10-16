@@ -75,7 +75,7 @@ def _text(path: Path) -> str:
     try:
         with PDFIUM_LOCK:
             return document_text(pandion.parse(path, use=PARSER))
-    except pdfium.PdfiumError as exc:
+    except (pdfium.PdfiumError, ValueError) as exc:  # ValueError: pdfium refused the file's type
         raise HTTPException(status_code=415, detail="this source is not a PDF, so its text cannot be checked") from exc
 
 

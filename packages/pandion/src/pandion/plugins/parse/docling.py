@@ -37,6 +37,13 @@ font style can be read.
 **Boxes** use pdfium's convention: (left, bottom, right, top) in PDF points,
 y growing upwards.
 
+**Formats.** Docling is told the formats in `FORMATS` and no others. Word,
+HTML, Markdown and text have no pages: `page_count` is 0 and elements have no
+page or box. A slide is a page, and an image is one page read with OCR, which
+is always on for images whatever `do_ocr` says. An HTML <title> sits in the
+furniture layer; a document without pages has no page furniture, so the title
+is read as the first heading unless the body's first heading repeats it.
+
 The first run downloads the layout and table models from Hugging Face.
 """
 
@@ -76,6 +83,9 @@ _DIRECT: dict[str, ElementType] = {
 
 #: Docling's labels for page furniture.
 _FURNITURE = {"page_header", "page_footer"}
+
+#: The formats this parser reads, as `pandion.formats` names them.
+FORMATS = ["pdf", "docx", "pptx", "html", "md", "txt", "png", "jpg"]
 
 ContentLayerName = Literal["body", "furniture", "background", "invisible", "notes"]
 
@@ -187,9 +197,13 @@ def elements_from_document(
 
     furniture_read = "furniture" in content_layers
     layers = {ContentLayer(name) for name in content_layers}
+    items = [item for item, _depth in doc.iterate_items(included_content_layers=layers)]
+    title = _furniture_title(doc)
+    if title is not None and not furniture_read:
+        items.insert(0, title)
     elements: list[Element] = []
-    for item, _depth in doc.iterate_items(included_content_layers=layers):
-        label = str(getattr(item.label, "value", item.label))
+    for item in items:
+        label = _label(item)
         in_furniture = getattr(item, "content_layer", None) == ContentLayer.FURNITURE
         if furniture_read and in_furniture and label in _FURNITURE:
             type_, level = "paragraph", None
@@ -222,17 +236,62 @@ def elements_from_document(
     return elements
 
 
-def furniture_count(doc: Any) -> int:
-    """How many items with text Docling filed in its furniture layer."""
+def _text(item: Any) -> str:
+    return (getattr(item, "text", "") or "").strip()
+
+
+def _label(item: Any) -> str:
+    return str(getattr(item.label, "value", item.label))
+
+
+def _furniture_titles(doc: Any) -> list[Any]:
+    """The titles with text Docling filed in its furniture layer, for a
+    document without pages; none for a paged one."""
     from docling_core.types.doc import ContentLayer
 
-    return sum(
+    if doc.pages:
+        return []
+    return [
+        item
+        for item, _depth in doc.iterate_items(included_content_layers={ContentLayer.FURNITURE})
+        if _label(item) == "title" and _text(item)
+    ]
+
+
+def _furniture_title(doc: Any) -> Any | None:
+    """The document's own title from the furniture layer, to read as its first
+    heading, or None.
+
+    A document without pages (a web page) has no page headers or footers, so
+    a title Docling filed as furniture is the HTML <title>. It is read unless
+    the body's first heading says the same.
+    """
+    titles = _furniture_titles(doc)
+    if not titles:
+        return None
+    first = next(
+        (item for item, _depth in doc.iterate_items()
+         if _label(item) in ("title", "section_header")),
+        None,
+    )
+    if first is not None and _text(first) == _text(titles[0]):
+        return None
+    return titles[0]
+
+
+def furniture_count(doc: Any) -> int:
+    """How many items with text Docling filed in its furniture layer, leaving
+    out the title of a document without pages, which is not page furniture."""
+    from docling_core.types.doc import ContentLayer
+
+    count = sum(
         1
         for item, _depth in doc.iterate_items(
             included_content_layers={ContentLayer.FURNITURE}
         )
-        if (getattr(item, "text", "") or "").strip()
+        if _text(item)
     )
+    return count - len(_furniture_titles(doc))
 
 
 def furniture_note(count: int, *, read: bool) -> str | None:
@@ -303,16 +362,45 @@ def _require_docling() -> None:
     require("docling", extra="docling", step="The docling parser")
 
 
+def allowed_formats() -> list[Any]:
+    """Docling's input formats for `FORMATS`, so nothing untested slips in.
+
+    Docling reads a .txt file with its Markdown reader, and PNG and JPG with
+    its image reader.
+    """
+    from docling.datamodel.base_models import InputFormat
+
+    return [InputFormat.PDF, InputFormat.DOCX, InputFormat.PPTX,
+            InputFormat.HTML, InputFormat.MD, InputFormat.IMAGE]
+
+
+def format_options(config: DoclingConfig) -> dict[Any, Any]:
+    """Docling's format options: PDFs as configured, images always with OCR.
+
+    An image has no text layer, so without OCR it would come out empty. Its
+    options are the PDF options with OCR turned on; the PDF options are left
+    as they are, so a PDF result does not change.
+    """
+    from docling.datamodel.base_models import InputFormat
+    from docling.document_converter import ImageFormatOption, PdfFormatOption
+
+    options = pipeline_options(config)
+    return {
+        InputFormat.PDF: PdfFormatOption(pipeline_options=options),
+        InputFormat.IMAGE: ImageFormatOption(
+            pipeline_options=options.model_copy(update={"do_ocr": True})
+        ),
+    }
+
+
 def _converter(config: DoclingConfig) -> Any:
     _require_docling()
     key = converter_key(config)
     if key not in _CONVERTERS:
-        from docling.datamodel.base_models import InputFormat
-        from docling.document_converter import DocumentConverter, PdfFormatOption
+        from docling.document_converter import DocumentConverter
 
-        options = pipeline_options(config)
         _CONVERTERS[key] = DocumentConverter(
-            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+            allowed_formats=allowed_formats(), format_options=format_options(config)
         )
     return _CONVERTERS[key]
 
@@ -337,7 +425,8 @@ class DoclingParse(Transform[DoclingConfig]):
     name = "docling"
     extra = "docling"
     #: Headings come out as heading elements, which `markdown_header` prefers.
-    provides = {"structure": ["headings"]}
+    #: The formats are the ones `allowed_formats` lets Docling read.
+    provides = {"structure": ["headings"], "formats": FORMATS}
     version = "4"
     stage = Stage.PARSE
     inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}

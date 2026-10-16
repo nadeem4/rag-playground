@@ -7,7 +7,7 @@ import type { ChatOutput, ChatPayload, ChunkSet, FindResult } from "@/api/types"
 import { clearPdfCaches } from "@/api/usePdf"
 import { titleFor } from "@/state/graph"
 
-import { chatStats, citationPage, claimKind, groundingLine, methodCaption, segmentKind } from "./chat"
+import { chatStats, citationPage, checkLine, claimKind, groundingLine, MARKS_KEY, methodCaption, segmentKind } from "./chat"
 import { ChatInspector } from "./ChatInspector"
 import { ArtifactInspector } from "./registry"
 
@@ -294,6 +294,13 @@ describe("sentence-id grounding helpers", () => {
     )
   })
 
+  it("the check line counts the parts that cite a piece, only when claims are counted", () => {
+    expect(checkLine({ ...SID.stats!, claims: 3, citing: 2 })).toBe("2 of 3 parts cite a piece.")
+    expect(checkLine({ ...SID.stats!, claims: 1, citing: 0 })).toBe("0 of 1 part cites a piece.")
+    expect(checkLine(SID.stats!)).toBeNull()
+    expect(checkLine(undefined)).toBeNull()
+  })
+
   it("names the method", () => {
     expect(methodCaption("native")).toBe("Citations: native (Claude)")
     expect(methodCaption("sentence_ids")).toBe("Citations: sentence ids, checked by us")
@@ -312,7 +319,7 @@ describe("ChatInspector, sentence ids", () => {
     expect(claim("cited").getAttribute("style")).toMatch(/--tone: var\(--chunk-\d\)/)
     expect(claim("similarity").getAttribute("style")).toMatch(/--tone: var\(--chunk-\d\)/)
     expect(claim("weak").getAttribute("style") ?? "").not.toMatch(/chunk/)
-    expect(claim("none").getAttribute("title")).toBe("Not grounded: no source sentence supports this")
+    expect(claim("none").getAttribute("title")).toBe("No source: nothing in the retrieved pieces backs this")
     // A claim with no citation is not a control.
     expect(claim("none").getAttribute("role")).toBeNull()
     // Whitespace is not a claim.
@@ -351,5 +358,77 @@ describe("ChatInspector, sentence ids", () => {
   it("an I-10 payload shows no method caption", () => {
     render(<ChatInspector payload={chat.payload} chunkSet={chunks} />)
     expect(screen.queryByTestId("chat-method")).toBeNull()
+  })
+})
+
+// Pandion #164: every answer part carries a label in both modes, and stats
+// count `claims` (parts that say something) and `citing` (those that cite).
+const NATIVE: ChatPayload = {
+  ...chat.payload,
+  citation_method: "native",
+  answer: [
+    { text: "According to the notes, ", citations: [], grounding: null },
+    { text: "a retriever only returns what a chunk contains.", citations: [1], grounding: "cited" },
+    { text: " Boundaries decide recall.", citations: [2], grounding: "cited" },
+    { text: " Most teams use 500 tokens.", citations: [], grounding: "none" },
+  ],
+  stats: { cited: 2, weak: 0, similarity: 0, none: 1, unknown_ids: 0, claims: 3, citing: 2 },
+}
+
+describe("ChatInspector, the answer check", () => {
+  beforeEach(() => window.localStorage.removeItem(MARKS_KEY))
+  afterEach(() => vi.restoreAllMocks())
+
+  const check = () => screen.getByTestId("chat-check")
+  const box = () => screen.getByRole("checkbox", { name: "Mark parts with no source" }) as HTMLInputElement
+  const noSource = () => answer().querySelector<HTMLElement>("[data-no-source]")
+
+  it("a native answer says how many parts cite a piece, and marks the one with no source", () => {
+    render(<ChatInspector payload={NATIVE} chunkSet={chunks} />)
+    expect(check().textContent).toBe("2 of 3 parts cite a piece.")
+    expect(noSource()?.textContent).toBe("No source")
+    expect(claim("none").textContent).toBe("Most teams use 500 tokens.")
+    // A lead-in with no label is plain text, not a mark.
+    expect(answer().querySelector("[data-segment='ungrounded']")).toBeNull()
+    expect(screen.getByTestId("chat-legend").textContent).toContain("no source")
+    expect(screen.getByTestId("chat-legend").textContent).not.toContain("not tied to a source")
+  })
+
+  it("a sentence-id answer shows the same line", () => {
+    render(<ChatInspector payload={{ ...SID, stats: { ...SID.stats!, claims: 3, citing: 2 } }} chunkSet={chunks} />)
+    expect(check().textContent).toBe("2 of 3 parts cite a piece.")
+  })
+
+  it("an old payload without claims keeps the old line and no check", () => {
+    render(<ChatInspector payload={SID} chunkSet={chunks} />)
+    expect(screen.getByTestId("chat-grounding").textContent).toBe("4 cited, 1 weak, 0 similarity, 1 not grounded, 0 invalid ids")
+    expect(screen.queryByTestId("chat-check")).toBeNull()
+  })
+
+  it("the checkbox hides the marks, and is remembered", () => {
+    render(<ChatInspector payload={NATIVE} chunkSet={chunks} />)
+    expect(box().checked).toBe(true)
+    fireEvent.click(box())
+    expect(noSource()).toBeNull()
+    expect(answer().querySelector("[data-grounding='none']")).toBeNull()
+    expect(answer().textContent).toContain("Most teams use 500 tokens.")
+    cleanup()
+    render(<ChatInspector payload={NATIVE} chunkSet={chunks} />)
+    expect(box().checked).toBe(false)
+    expect(noSource()).toBeNull()
+  })
+
+  it("still works when storage throws", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked")
+    })
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked")
+    })
+    render(<ChatInspector payload={NATIVE} chunkSet={chunks} />)
+    expect(box().checked).toBe(true)
+    fireEvent.click(box())
+    expect(box().checked).toBe(false)
+    expect(noSource()).toBeNull()
   })
 })

@@ -479,7 +479,10 @@ export type Grounding = "cited" | "weak" | "similarity" | "none"
 export interface ChatSegment {
   text: string
   citations: number[]
-  /** Plan I-20. Null (or absent) on native Claude segments, which keep the I-10 behaviour. */
+  /**
+   * Plan I-20, and since Pandion #164 in both modes. Null on a part that is not
+   * a claim (a lead-in, punctuation), and absent on older payloads.
+   */
   grounding?: Grounding | null
 }
 
@@ -512,13 +515,19 @@ export interface ChatCitation {
   support?: number | null
 }
 
-/** Plan I-20: claim counts per label, and marker ids that named no sentence. */
+/**
+ * Plan I-20: claim counts per label, and marker ids that named no sentence.
+ * Pandion #164 adds `claims` (parts that say something) and `citing` (those
+ * that cite a piece: cited or weak); older payloads lack both.
+ */
 export interface GroundingStats {
   cited: number
   weak: number
   similarity: number
   none: number
   unknown_ids: number
+  claims?: number
+  citing?: number
 }
 
 export interface ChatPayload {

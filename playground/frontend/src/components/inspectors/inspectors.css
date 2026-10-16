@@ -323,3 +323,16 @@ button.chat-cite[aria-pressed="true"] {
 .chat-quote {
   quotes: "\201C" "\201D";
 }
+/* "No source" after a part nothing backs (Pandion #164), in danger ink like its rule. */
+.chat-nosource {
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  color: var(--danger);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: 2px;
+  white-space: nowrap;
+}

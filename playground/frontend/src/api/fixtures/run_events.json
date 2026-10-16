@@ -82,6 +82,7 @@
     "artifact_id": "c4069eb4ac07ff45d4e7b9050876df669d40a4f61687ab3f661e978a0fb43aa6",
     "cache_hit": false,
     "duration_ms": 14.859,
+    "usage": null,
     "document": "chunking-notes.pdf",
     "step": "source"
   },
@@ -101,6 +102,7 @@
     "artifact_id": "506ee6169f12af73d0f9dd90e3d6a557e695dd58c7b0f4b3da28574f16da2132",
     "cache_hit": false,
     "duration_ms": 8.615,
+    "usage": null,
     "document": "chunking-notes.pdf",
     "step": "parse"
   },
@@ -120,6 +122,7 @@
     "artifact_id": "907dd7de2d0debd0e322d4b79bf2870ed25db3fda6b32fa2dc6b9fa5a07e286c",
     "cache_hit": false,
     "duration_ms": 4.59,
+    "usage": null,
     "document": "chunking-notes.pdf",
     "step": "clean.1"
   },
@@ -139,6 +142,7 @@
     "artifact_id": "d5d15bc9e799d57645037c6f5558c2b6dc70f52193d4c63a06a6adcaa40ada05",
     "cache_hit": false,
     "duration_ms": 4.057,
+    "usage": null,
     "document": "chunking-notes.pdf",
     "step": "clean.2"
   },
@@ -158,6 +162,7 @@
     "artifact_id": "ee60259011f9300f619ff8aca78353f9964db88db009dd3638df08d47bb40f94",
     "cache_hit": false,
     "duration_ms": 3.975,
+    "usage": null,
     "document": "chunking-notes.pdf",
     "step": "chunk"
   },

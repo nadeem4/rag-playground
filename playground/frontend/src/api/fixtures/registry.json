@@ -228,7 +228,11 @@
       "deterministic": true,
       "cacheable": true,
       "requires": {},
-      "provides": {},
+      "provides": {
+        "formats": [
+          "pdf"
+        ]
+      },
       "prefers": {},
       "fallback": "",
       "inputs": {
@@ -280,6 +284,16 @@
       "provides": {
         "structure": [
           "headings"
+        ],
+        "formats": [
+          "pdf",
+          "docx",
+          "pptx",
+          "html",
+          "md",
+          "txt",
+          "png",
+          "jpg"
         ]
       },
       "prefers": {},
@@ -1144,6 +1158,20 @@
             "minimum": 1,
             "title": "PRF words",
             "type": "integer"
+          },
+          "dense_weight": {
+            "default": 1.0,
+            "description": "How much the vector (meaning) search counts in the fusion. Each list's 1/(rrf_k + place) is multiplied by its weight. 1 and 1 count both searches the same.",
+            "minimum": 0,
+            "title": "Meaning weight",
+            "type": "number"
+          },
+          "bm25_weight": {
+            "default": 1.0,
+            "description": "How much the keyword search counts in the fusion. Set it above the meaning weight, for example 2, to favour exact names, codes and part numbers.",
+            "minimum": 0,
+            "title": "Keyword weight",
+            "type": "number"
           }
         },
         "title": "HybridRrfConfig",

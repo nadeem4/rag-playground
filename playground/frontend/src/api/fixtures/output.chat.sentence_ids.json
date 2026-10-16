@@ -102,7 +102,9 @@
       "weak": 1,
       "similarity": 1,
       "none": 1,
-      "unknown_ids": 1
+      "unknown_ids": 1,
+      "claims": 4,
+      "citing": 2
     }
   }
 }

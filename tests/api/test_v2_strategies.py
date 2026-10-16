@@ -22,9 +22,11 @@ CUSTOM_CONFIGS = {
     "chat": {**PIPELINE, "answer": {"use": "chat", **CUSTOM}},
     "llm_rerank": {**PIPELINE, "retrieve": {**PIPELINE["retrieve"], "rerank": [{"use": "llm_rerank", **CUSTOM}]}},
     "llm_rewrite": {**PIPELINE, "retrieve": {**PIPELINE["retrieve"], "rewrite": {"use": "llm_rewrite", **CUSTOM}}},
+    "llm_context": {**PIPELINE, "index": {**PIPELINE["index"], "enrich": {"use": "llm_context", **CUSTOM}}},
 }
 FIXED_CONFIGS = {
     "prompt": {**PIPELINE, "answer": {"use": "chat", "prompt": "Say yes."}},
+    "context prompt": {**PIPELINE, "index": {**PIPELINE["index"], "enrich": {"use": "llm_context", "prompt": "Say yes."}}},
     "revision": {**PIPELINE, "retrieve": {**PIPELINE["retrieve"], "rerank": [{"use": "cross_encoder", "revision": "a" * 40}]}},
 }
 
@@ -73,6 +75,26 @@ def test_a_model_may_write_at_most_16000_tokens(client):
     r = validate(client, answer(16001))
     assert r.status_code == 403
     assert r.json()["detail"] == "answer.max_tokens is 16001; the playground allows at most 16000."
+
+
+def test_on_the_demo_llm_context_writes_context_for_at_most_200_pieces(client, monkeypatch):
+    from playground.backend import demo
+
+    def enriched(n=None):
+        step = {"use": "llm_context"} if n is None else {"use": "llm_context", "max_pieces": n}
+        return {**PIPELINE, "index": {**PIPELINE["index"], "enrich": step}}
+
+    assert demo.MAX_CONTEXT_PIECES == 200
+    assert validate(client, enriched(5000)).json()["ok"] is True  # locally, no cap
+    demo_on(monkeypatch)
+    assert validate(client, enriched()).json()["ok"] is True
+    assert validate(client, enriched(200)).json()["ok"] is True
+    r = validate(client, enriched("201"))
+    assert r.status_code == 403
+    assert r.json()["detail"] == (
+        "index.enrich.max_pieces is 201; the demo writes context for at most 200 pieces "
+        "in one run. Lower it, or run the playground locally for more."
+    )
 
 
 def test_a_chunk_size_named_max_tokens_is_not_capped(client):

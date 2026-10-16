@@ -67,7 +67,7 @@ from pandion.stages import _problems, _strategy
 
 TOP_KEYS = ("plugins", "path", "models", "index", "retrieve", "answer")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
-INDEX_KEYS = ("source", "parse", "clean", "chunk", "embed", "store")
+INDEX_KEYS = ("source", "parse", "clean", "chunk", "enrich", "embed", "store")
 #: The source step when the file has none: the files given to index.run.
 DEFAULT_SOURCE: tuple[str, dict[str, Any]] = ("upload", {})
 #: Settings written under `embed` that the store receives with `embedder`.
@@ -78,6 +78,7 @@ WHERE = {
     Stage.PARSE: "index.parse",
     Stage.CLEAN: "index.clean",
     Stage.CHUNK: "index.chunk",
+    Stage.ENRICH: "index.enrich",
     Stage.QUERY: "retrieve.rewrite",
     Stage.RETRIEVE: "retrieve.search",
     Stage.RERANK: "retrieve.rerank",
@@ -104,6 +105,9 @@ class IndexConfig:
     #: Where each document comes from. `upload` reads the files given to
     #: index.run; another source is told each item as its `location` setting.
     source: tuple[str, dict[str, Any]] = DEFAULT_SOURCE
+    #: The step between the chunker and the store that changes what each
+    #: piece is searched by, such as llm_context, or None.
+    enrich: tuple[str, dict[str, Any]] | None = None
 
 
 @dataclass
@@ -279,6 +283,8 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     if index.clean:
         data["index"]["clean"] = [_out(step) for step in index.clean]
     data["index"]["chunk"] = _out(index.chunk)
+    if index.enrich is not None:
+        data["index"]["enrich"] = _out(index.enrich)
     if embed is not None:
         data["index"]["embed"] = embed
     data["index"]["store"] = {"use": index.store_use, **store}
@@ -404,6 +410,9 @@ def _index(index: Any) -> IndexConfig:
         store=store,
         store_use=store_use,
         source=_source(index["source"]) if "source" in index else DEFAULT_SOURCE,
+        enrich=None
+        if _none(index.get("enrich"))
+        else _step(Stage.ENRICH, index["enrich"], "index.enrich"),
     )
 
 

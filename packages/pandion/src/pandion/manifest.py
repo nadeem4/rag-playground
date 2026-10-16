@@ -34,8 +34,14 @@ MANIFEST = "manifest.json"
 
 
 def recipe_hash(index_settings: Any) -> str:
-    """A sha256 of the index settings (an `IndexConfig`), in canonical JSON."""
-    return hashlib.sha256(canonical_json(asdict(index_settings)).encode("utf-8")).hexdigest()
+    """A sha256 of the index settings (an `IndexConfig`), in canonical JSON.
+
+    No enrich step is left out, so an index made before the enrich stage
+    existed keeps its hash."""
+    settings = asdict(index_settings)
+    if settings.get("enrich") is None:
+        settings.pop("enrich", None)
+    return hashlib.sha256(canonical_json(settings).encode("utf-8")).hexdigest()
 
 
 @dataclass

@@ -98,7 +98,7 @@ def _keys(p: Any) -> list[tuple[str, str]]:
     from pandion.registry import registry
 
     config = p.config
-    steps = []
+    steps = [config.index.enrich]
     if config.retrieve is not None:
         steps += [config.retrieve.rewrite, *config.retrieve.rerank]
     steps.append(config.answer)

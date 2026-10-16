@@ -35,6 +35,9 @@ MAX_EVALUATION_QUESTIONS = 50
 MAX_COMPARISON_QUESTIONS = 120
 #: The most questions a model writes for a document in one run on the demo.
 MAX_GENERATED_QUESTIONS = 25
+#: The most pieces llm_context writes context for in one run on the demo (its
+#: max_pieces), so one run makes at most this many model calls.
+MAX_CONTEXT_PIECES = 200
 #: All live uploads together, so a client that keeps getting new visitor ids
 #: still cannot fill the shared disk.
 MAX_TOTAL_UPLOAD_BYTES = 200 * 1024 * 1024

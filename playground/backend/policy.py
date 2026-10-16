@@ -97,6 +97,25 @@ def over_limit(config: dict[str, Any]) -> str | None:
     return None
 
 
+def too_many_context_pieces(config: dict[str, Any]) -> str | None:
+    """The demo's refusal of an llm_context step whose max_pieces, as sent or
+    by default, is above demo.MAX_CONTEXT_PIECES, or None. Each piece is one
+    model call on the visitor's key and holds a shared run slot."""
+    catalog = pandion.catalog()
+    for where, stage, use, settings in steps(config):
+        if (stage, use) != ("enrich", "llm_context"):
+            continue
+        default = catalog[stage][use]["config_schema"]["properties"]["max_pieces"]["default"]
+        number = _as_int(settings.get("max_pieces", default))
+        if number is not None and number > demo.MAX_CONTEXT_PIECES:
+            return (
+                f"{where}.max_pieces is {number}; the demo writes context for at most "
+                f"{demo.MAX_CONTEXT_PIECES} pieces in one run. Lower it, or run the "
+                "playground locally for more."
+            )
+    return None
+
+
 def step_over_limit(
     where: str, stage: str, use: str, settings: dict[str, Any], catalog: dict[str, Any] | None = None
 ) -> str | None:
@@ -303,7 +322,7 @@ class PlaygroundPolicy(Policy):
             raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
         if changed_read_only_settings(config):
             raise HTTPException(status_code=403, detail=PROMPTS_FIXED)
-        refusal = over_limit(config)
+        refusal = over_limit(config) or (too_many_context_pieces(config) if demo.enabled() else None)
         if refusal:
             raise HTTPException(status_code=403, detail=refusal)
 

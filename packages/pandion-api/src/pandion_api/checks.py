@@ -15,6 +15,7 @@ SINGLE = (
     ("index", "source", "source"),
     ("index", "parse", "parse"),
     ("index", "chunk", "chunk"),
+    ("index", "enrich", "enrich"),
     ("index", "store", "index"),
     ("retrieve", "rewrite", "query"),
     ("retrieve", "search", "retrieve"),

@@ -143,7 +143,7 @@ def cmd_index(args: argparse.Namespace) -> int:
     # With local files, a whole run is a sync, so the next command remembers
     # which documents to search. --sync also says what changed.
     if args.sync or (args.through is None and _can_sync(p)):
-        report = p.index.sync(args.documents)
+        report = p.index.sync(args.documents, credentials=credentials_from_env())
         _print_index(report)
         if args.sync:
             for word in ("added", "changed", "removed", "unchanged"):

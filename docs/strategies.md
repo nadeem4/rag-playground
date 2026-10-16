@@ -380,7 +380,9 @@ checked against the parsed document; one that does not match is marked unverifie
 - `support_threshold` (0.55): with sentence ids, each claim is compared with the sentences
   it cites using the index's embedder. Above the threshold it counts as cited; below, as
   weak. A claim that cites nothing but matches a shown sentence is marked matched by
-  similarity, and one with no match is not grounded.
+  similarity, and one with no match is not grounded. With Claude's own citations, a claim
+  Claude cited counts as cited, and a claim it did not cite gets the same similarity check,
+  so it is matched by similarity or not grounded.
 - `max_chunks` (5): how many pieces the model reads.
 - `prompt`: the instructions with the model's own citations, by default:
 

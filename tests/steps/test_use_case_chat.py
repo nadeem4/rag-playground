@@ -309,12 +309,12 @@ def test_identical_citations_share_a_number(fake, pipeline):
     )
     out = run(pipeline)
     assert [c["n"] for c in out.payload["citations"]] == [1, 2]
-    # I-20: native segments carry `grounding: None`.
+    # Native segments are labelled too: cited, or "none" with no index to check.
     assert out.payload["answer"] == [
-        {"text": "A", "citations": [1], "grounding": None},
-        {"text": " and ", "citations": [], "grounding": None},
-        {"text": "B", "citations": [2, 1], "grounding": None},
-        {"text": "C", "citations": [1], "grounding": None},
+        {"text": "A", "citations": [1], "grounding": "cited"},
+        {"text": " and ", "citations": [], "grounding": "none"},
+        {"text": "B", "citations": [2, 1], "grounding": "cited"},
+        {"text": "C", "citations": [1], "grounding": "cited"},
     ]
 
 

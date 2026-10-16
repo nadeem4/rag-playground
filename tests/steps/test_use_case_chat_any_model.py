@@ -211,12 +211,81 @@ def test_native_path_adds_provider_method_and_stats(fake, pipeline):
     assert payload["citation_method"] == "native"
     assert payload["stats"] == {
         "cited": 1, "weak": 0, "similarity": 0, "none": 1, "unknown_ids": 0,
+        "claims": 2, "citing": 1,
     }
-    assert all(seg["grounding"] is None for seg in payload["answer"])
+    # With no index there is no embedder to check against: uncited is "none".
+    assert [seg["grounding"] for seg in payload["answer"]] == ["cited", None, "none"]
     [c] = payload["citations"]
     assert c["method"] == "native" and c["support"] is None
     # The native request is untouched: document blocks, no index needed.
     assert any(b["type"] == "document" for b in fake.client.requests[0]["messages"][0]["content"])
+
+
+def native_reply(pipeline, *uncited: str):
+    """One cited segment, then each uncited text as its own segment."""
+    _, chunks = pipeline
+    index = next(i for i, c in enumerate(chunks) if c.ordinal == 2)
+    return response(
+        text_block("Chunking splits it", cite("Chunking", index, 0, 8)),
+        *(text_block(t) for t in uncited),
+    )
+
+
+def test_native_uncited_segment_gets_a_similarity_label(fake, pipeline, index):
+    table = table_for(pipeline)
+    sid = sid_containing(table, "passages")
+    fake.reply = native_reply(pipeline, " " + table[sid].text)
+    payload = ask(pipeline, index=index).payload
+    cited, uncited = payload["answer"]
+    assert cited["grounding"] == "cited"
+    assert uncited["grounding"] == "similarity"
+    [n] = uncited["citations"]
+    c = next(c for c in payload["citations"] if c["n"] == n)
+    assert c["method"] == "similarity" and c["support"] == pytest.approx(1.0)
+    assert c["cited_text"] == table[sid].text and c["verified"] is True
+    assert payload["stats"] == {
+        "cited": 1, "weak": 0, "similarity": 1, "none": 0, "unknown_ids": 0,
+        "claims": 2, "citing": 1,
+    }
+    # The check embeds; it never calls the model again.
+    assert len(fake.client.requests) == 1
+
+
+def test_native_unrelated_segment_is_none(fake, pipeline, index):
+    fake.reply = native_reply(pipeline, " Zebras quietly juggle violet xylophones.")
+    payload = ask(pipeline, index=index).payload
+    assert [s["grounding"] for s in payload["answer"]] == ["cited", "none"]
+    assert payload["answer"][1]["citations"] == []
+    assert payload["stats"]["claims"] == 2 and payload["stats"]["citing"] == 1
+    assert len(fake.client.requests) == 1
+
+
+def test_native_every_segment_cited(fake, pipeline, index):
+    _, chunks = pipeline
+    i = next(i for i, c in enumerate(chunks) if c.ordinal == 2)
+    fake.reply = response(
+        text_block("Chunking splits it", cite("Chunking", i, 0, 8)),
+        text_block("."),
+        text_block("Into passages", cite("passages", i, 32, 40)),
+    )
+    stats = ask(pipeline, index=index).payload["stats"]
+    assert stats["claims"] == stats["citing"] == 2
+    assert stats["none"] == stats["similarity"] == 0
+
+
+def test_both_modes_give_the_same_summary_shape(fake, openai_fake, pipeline, index):
+    table = table_for(pipeline)
+    sid = sid_containing(table, "passages")
+    fake.reply = native_reply(pipeline, " Zebras juggle.")
+    openai_fake.answer = lambda prompt: f"{table[sid].text} [{sid}] Zebras juggle."
+    native = ask(pipeline, index=index).payload
+    ids = ask(pipeline, index=index, model="gpt-6-astra").payload
+    assert native["citation_method"] == "native"
+    assert ids["citation_method"] == "sentence_ids"
+    assert native["stats"].keys() == ids["stats"].keys()
+    for payload in (native, ids):
+        assert [s["grounding"] for s in payload["answer"]] == ["cited", "none"]
+        assert (payload["stats"]["claims"], payload["stats"]["citing"]) == (2, 1)
 
 
 def test_a_rewritten_question_still_asks_the_model_the_original(fake, pipeline):
@@ -272,6 +341,7 @@ def test_openai_end_to_end_citation_slices_the_document(openai_fake, pipeline, i
     assert c["chunk_id"] == chunks[sentence.chunk_index].id
     assert payload["stats"] == {
         "cited": 1, "weak": 0, "similarity": 0, "none": 0, "unknown_ids": 0,
+        "claims": 1, "citing": 1,
     }
 
 
@@ -291,6 +361,7 @@ def test_every_label_and_unknown_ids(openai_fake, pipeline, index):
     assert labels == ["cited", "weak", "none", "similarity"]
     assert payload["stats"] == {
         "cited": 1, "weak": 1, "similarity": 1, "none": 1, "unknown_ids": 1,
+        "claims": 4, "citing": 2,
     }
     by_label = {s["grounding"]: s for s in payload["answer"] if s["grounding"]}
     methods = {c["n"]: c["method"] for c in payload["citations"]}
@@ -405,6 +476,7 @@ def test_a_refusal_is_one_ungrounded_segment(monkeypatch, pipeline, index):
     assert payload["citations"] == []
     assert payload["stats"] == {
         "cited": 0, "weak": 0, "similarity": 0, "none": 0, "unknown_ids": 0,
+        "claims": 0, "citing": 0,
     }
 
 

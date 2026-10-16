@@ -12,6 +12,13 @@ Two ways to cite, chosen by `citation_method` (I-17):
   claim, and each claim is checked against its sentences with the index's own
   embedder (`_grounding`). The model points, and we quote.
 
+Both paths label every claim the same way: `cited`, `weak`, `similarity` or
+`none`. In native mode a segment Claude cited is `cited`, and an uncited one
+goes through the same `ground()` similarity check as the sentence-id path,
+with the index's embedder and no second model call. Without an index there is
+no embedder, so an uncited segment is `none`. `stats` counts each label, plus
+`claims` (segments that say something) and `citing` (claims that cite a piece).
+
 Either way, adding the chunk's `start_char` turns an offset into the chunk into
 an offset into the parsed document's rendered markdown, which is what the
 chunker cut from. From there the element whose span contains the start gives
@@ -62,6 +69,7 @@ from pandion.ports import PortSpec, RunContext, Stage, set_usage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.answer._grounding import (
+    Claim,
     GroundedClaim,
     Sentence,
     ground,
@@ -276,8 +284,10 @@ class ChatUseCase(Transform[ChatConfig]):
                 "Citations come from Claude's own citations feature, which quotes "
                 "the exact passages; every citation is verified against the "
                 "parsed text, and one that does not match is shown as unverified "
-                f"rather than hidden. The support threshold ({t:g}) is used only "
-                "with sentence ids."
+                "rather than hidden. A claim Claude did not cite is compared with "
+                "the pieces' sentences using the index's embedder: it gets the "
+                f"closest sentence shown if that reaches {t:g}, and is marked not "
+                "grounded otherwise."
             )
             tradeoff = (
                 "More pieces give the model more evidence, but make each request "
@@ -338,7 +348,9 @@ class ChatUseCase(Transform[ChatConfig]):
         creds = ctx.extras.get("credentials") or {}
         public_only = bool(ctx.extras.get(PUBLIC_ONLY_EXTRA, False))
         if uses_native(config):
-            out = _native(inputs, config, creds.get("anthropic_api_key"), public_only)
+            out = _native(
+                inputs, config, creds.get("anthropic_api_key"), ctx.extras, public_only
+            )
         else:
             model = CHAT_MODELS[config.model]
             out = _sentence_ids(
@@ -358,7 +370,11 @@ class ChatUseCase(Transform[ChatConfig]):
 
 
 def _native(
-    inputs: Mapping[str, Any], config: ChatConfig, api_key: str | None, public_only: bool
+    inputs: Mapping[str, Any],
+    config: ChatConfig,
+    api_key: str | None,
+    extras: Mapping[str, Any],
+    public_only: bool,
 ) -> dict[str, Any]:
     if not api_key:
         raise ValueError(llm.no_key_message("anthropic", public_only=public_only))
@@ -403,13 +419,14 @@ def _native(
         payload["citations"] = []
         payload["stats"] = _stats()
     else:
-        payload["answer"], payload["citations"] = _ground(response.content, hits, doc)
-        # Native segments carry no label; stats count cited and uncited claims,
-        # skipping pieces with no words (". ").
-        claims = [a for a in payload["answer"] if any(ch.isalnum() for ch in a["text"])]
+        answer, citations = _ground(response.content, hits, doc)
+        _check_uncited(
+            answer, citations, hits, doc, inputs.get("index"), extras,
+            config.support_threshold,
+        )
+        payload["answer"], payload["citations"] = answer, citations
         payload["stats"] = _stats(
-            cited=sum(1 for a in claims if a["citations"]),
-            none=sum(1 for a in claims if not a["citations"]),
+            **{label: sum(1 for a in answer if a["grounding"] == label) for label in LABELS}
         )
     return Output(kind="chat", payload=payload).model_dump(mode="json")
 
@@ -466,6 +483,46 @@ def _ground(
                 refs.append(numbers[key])
         answer.append({"text": block.text, "citations": refs, "grounding": None})
     return answer, citations
+
+
+def _check_uncited(
+    answer: list[dict[str, Any]],
+    citations: list[dict[str, Any]],
+    hits: list[Hit],
+    doc: ParsedDoc,
+    index: Any,
+    extras: Mapping[str, Any],
+    threshold: float,
+) -> None:
+    """Label native segments in place: a cited one is `cited`; an uncited one
+    gets `ground()`'s label, and its closest sentence when that is `similarity`.
+    A segment with no words (". ") stays None."""
+    uncited: list[dict[str, Any]] = []
+    for a in answer:
+        if not any(ch.isalnum() for ch in a["text"]):
+            continue
+        a["grounding"] = "cited" if a["citations"] else "none"
+        if not a["citations"]:
+            uncited.append(a)
+    if index is None or not uncited:
+        return
+    _, table = number_sources([hit.chunk for hit in hits])
+    embed = _index_embed(index, extras)
+    grounded = ground([Claim(a["text"]) for a in uncited], table, embed, threshold)
+    doc_md, spans = doc.render_markdown()
+    elements = {e.id: e for e in doc.elements}
+    numbers: dict[str, int] = {}
+    for a, g in zip(uncited, grounded):
+        a["grounding"] = g.label
+        for sid, support in g.citations:
+            if sid not in numbers:
+                numbers[sid] = len(citations) + 1
+                entry = _sentence_entry(
+                    numbers[sid], table[sid], hits, doc, doc_md, spans, elements
+                )
+                entry["method"], entry["support"] = "similarity", round(support, 4)
+                citations.append(entry)
+            a["citations"].append(numbers[sid])
 
 
 # --------------------------------------------------------------------------
@@ -568,16 +625,9 @@ def _sentence_citations(
         refs: list[int] = []
         for sid, support in g.citations:
             if sid not in numbers:
-                sentence = table[sid]
                 numbers[sid] = len(citations) + 1
-                located = SimpleNamespace(
-                    cited_text=sentence.text,
-                    start_char_index=sentence.start,
-                    end_char_index=sentence.end,
-                )
-                entry = _citation(
-                    numbers[sid], located, hits[sentence.chunk_index].chunk,
-                    doc, doc_md, spans, elements,
+                entry = _sentence_entry(
+                    numbers[sid], table[sid], hits, doc, doc_md, spans, elements
                 )
                 entry["method"] = "similarity" if g.label == "similarity" else "id"
                 entry["support"] = round(support, 4)
@@ -588,15 +638,32 @@ def _sentence_citations(
     return answer, citations
 
 
+def _sentence_entry(n, sentence: Sentence, hits, doc, doc_md, spans, elements):
+    """One numbered sentence as a citation located in the parsed document."""
+    located = SimpleNamespace(
+        cited_text=sentence.text,
+        start_char_index=sentence.start,
+        end_char_index=sentence.end,
+    )
+    return _citation(
+        n, located, hits[sentence.chunk_index].chunk, doc, doc_md, spans, elements
+    )
+
+
 def _stats(
     cited: int = 0, weak: int = 0, similarity: int = 0, none: int = 0, unknown_ids: int = 0
 ) -> dict[str, int]:
+    """Counts per label, plus the summary a reader sees: `claims` is how many
+    answer segments say something, and `citing` how many of those the model
+    cited a piece for (cited or weak)."""
     return {
         "cited": cited,
         "weak": weak,
         "similarity": similarity,
         "none": none,
         "unknown_ids": unknown_ids,
+        "claims": cited + weak + similarity + none,
+        "citing": cited + weak,
     }
 
 

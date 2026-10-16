@@ -202,3 +202,14 @@ def test_a_document_that_is_not_a_pdf_ends_the_run_with_a_plain_error(client, mo
     state, _ = finish(client, generate(client, sha))
     assert state["ok"] is False and state["result"]["error"] == "this source is not a PDF, so its text cannot be checked"
     assert model.calls == 0
+
+
+def test_a_cancel_during_the_last_part_keeps_the_set(client, monkeypatch):
+    go = threading.Event()
+    monkeypatch.setattr(llm, "complete", FakeModel(before=lambda n: go.wait(10)))
+    sha = upload(client)["sha"]
+    r = generate(client, sha, count=1)
+    assert client.post(f"/runs/{r.json()['run_id']}/cancel").status_code == 202
+    go.set()
+    state, _ = finish(client, r)
+    assert state["status"] == "finished" and state["result"]["questions"]

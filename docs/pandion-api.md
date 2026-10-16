@@ -237,8 +237,9 @@ true. A missing key is a 400 with the Policy's `missing_key` sentence. When the 
 model call fails, for example for a rejected key or an unknown `model_name`, the run ends
 with `ok` false and a result of `{"error": ...}`, scrubbed of keys and by the Policy's
 `scrub`. A document that is not a PDF ends the run the same way, with the sentence the
-upload route gives as a 415. Cancelling the run stops it after the part in progress, and no further model
-call is made.
+upload route gives as a 415. Cancelling the run stops it after the part in progress,
+and no further model call is made. A cancel that comes during the last part does not
+stop it: the set is already paid for, so the run finishes with it.
 
 ## Site rules: the Policy
 

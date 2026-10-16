@@ -194,7 +194,7 @@ async def generate_questions(
     def work(on_event, cancel: threading.Event, credentials):
         def on_part(done: int, total: int) -> None:
             on_event(event("part_finished", number=done, total=total))
-            if cancel.is_set():
+            if cancel.is_set() and done < total:  # after the last part, the set is paid for: keep it
                 raise _Cancelled
 
         try:

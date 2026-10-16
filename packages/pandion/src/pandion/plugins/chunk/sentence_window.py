@@ -12,23 +12,32 @@ piece may be shorter.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, ClassVar, Mapping
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_core import PydanticCustomError
 
 from pandion.artifacts import ArtifactType
+from pandion.ids import AddedSettings
 from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-from pandion.plugins.chunk import DocView, Span, build_chunk_set, normalize
+from pandion.plugins.chunk import (
+    DocView,
+    Span,
+    add_heading_context,
+    build_chunk_set,
+    normalize,
+)
 from pandion.text import split_sentences
 
 _OVERLAP_TOO_BIG = "Overlap must be smaller than the number of sentences per chunk."
 
 
-class SentenceWindowConfig(BaseModel):
+class SentenceWindowConfig(AddedSettings):
+    added: ClassVar[tuple[str, ...]] = ("heading_context",)
+
     sentences_per_chunk: int = Field(
         title="Sentences per piece",
         description="How many sentences go in each piece.",
@@ -40,6 +49,19 @@ class SentenceWindowConfig(BaseModel):
         description="How many sentences each piece repeats from the one before.",
         default=1,
         ge=0,
+    )
+    #: Added after this chunker's results were first stored, and off by
+    #: default, so those results keep their ids (pandion.ids.AddedSettings).
+    heading_context: bool = Field(
+        title="Heading in front",
+        default=False,
+        description=(
+            "heading_context: when on, the heading path where a piece starts, "
+            "for example Experience > a role, is put in front of the piece's "
+            "text before it is turned into a vector. The piece that is shown "
+            "and cited does not change. A document without headings is not "
+            "affected."
+        ),
     )
 
     @field_validator("overlap_sentences")
@@ -138,6 +160,18 @@ class SentenceWindowChunker(Transform[SentenceWindowConfig]):
                 "per piece.",
             ],
         },
+        "heading_context": {
+            "hint": "When this is on, the heading path is added to what gets searched.",
+            "more": [
+                "The headings above the place where a piece starts are put in "
+                "front of it before it is turned into a vector, for example "
+                "Experience > a role. The piece itself, and what is shown and "
+                "cited, does not change.",
+                "This helps a question that names a section find the pieces in "
+                "it. It needs a parser that finds headings. Without them, "
+                "nothing is added.",
+            ],
+        },
     }
 
     def explain(self, config: SentenceWindowConfig) -> Explanation:
@@ -148,11 +182,18 @@ class SentenceWindowChunker(Transform[SentenceWindowConfig]):
             if overlap == 0
             else f"Each piece shares {_count(overlap, 'sentence')} with the next one."
         )
+        context = (
+            " With heading_context on, the heading path where a piece starts "
+            "is added in front of it when it is searched, so the section's "
+            "name helps it match."
+            if config.heading_context
+            else ""
+        )
         return Explanation(
             settings=(
                 f"Every {_count(size, 'sentence')} in a row become one piece, and "
                 f"a piece only ends where a sentence ends. {shared} A heading line "
-                "joins the sentence after it."
+                f"joins the sentence after it.{context}"
             ),
             tradeoff=(
                 "An answer sentence is never cut in half, but pieces vary in "
@@ -200,4 +241,6 @@ class SentenceWindowChunker(Transform[SentenceWindowConfig]):
                 f"{_count(config.sentences_per_chunk, 'sentence')}, "
                 f"{config.overlap_sentences} shared between neighbours.",
             )
+        if config.heading_context:
+            add_heading_context(view, chunk_set)
         return chunk_set

@@ -128,10 +128,13 @@ Chunking cuts the text into the pieces that get indexed and retrieved.
 ### Heading context
 
 `recursive_character` and `layout_blocks` have a `heading_context` setting, on by default.
-When on, the heading path where a piece starts, for example "Experience > a role", is put
-in front of the piece's text before it is turned into a vector, less the headings the
-piece already opens with. Retrieval then sees the section name, while the piece that is
-shown and cited does not change. A document without headings is not affected.
+`token_based` and `sentence_window` have it too, off by default, so the results they
+stored before it existed keep their ids. `markdown_header` needs none: each of its pieces
+already starts with its heading. When on, the heading path where a piece starts, for
+example "Experience > a role", is put in front of the piece's text before it is turned
+into a vector, less the headings the piece already opens with. Retrieval then sees the
+section name, while the piece that is shown and cited does not change. A document without
+headings is not affected.
 
 ### Recursive, natural breaks (`recursive_character`)
 
@@ -162,6 +165,7 @@ Counts tokens and cuts each time the count is reached, wherever that falls. A to
 a word or a single punctuation mark. It ignores the structure of the text completely.
 
 - `max_tokens` (512) and `overlap` (64).
+- `heading_context` (off).
 
 **Use it** as a baseline to compare the other chunkers against.
 
@@ -195,6 +199,7 @@ Cuts only where a sentence ends, so an answer sentence is never cut in half. Eac
 a fixed number of sentences in a row, and neighbouring pieces can share a few sentences.
 
 - `sentences_per_chunk` (5) and `overlap_sentences` (1), which must be fewer.
+- `heading_context` (off).
 
 A list item and a table row each count as one sentence. A heading line is not a sentence
 of its own and joins the sentence after it, so no piece ends on a bare heading. It works

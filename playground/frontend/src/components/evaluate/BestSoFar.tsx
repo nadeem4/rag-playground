@@ -91,7 +91,7 @@ export function BestSoFar({
               <Button variant="outline" size="sm" onClick={onCompare}>
                 Compare the two
               </Button>
-              <button type="button" className={cn(LINK_BUTTON, "ml-auto inline-flex items-center underline")} onClick={onForget}>
+              <button type="button" className={cn(LINK_BUTTON, "ml-auto inline-flex items-center text-current underline")} onClick={onForget}>
                 Forget best
               </button>
             </div>

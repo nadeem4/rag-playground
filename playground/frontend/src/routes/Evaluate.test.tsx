@@ -1509,11 +1509,12 @@ describe("Best so far", () => {
     serve({ result })
     storeGraph(graph)
     render(<Evaluate navigate={navigate} />)
-    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    // A cold first render can take more than the default second on a busy machine.
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false), { timeout: 4000 })
     fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
     DrivenEventSource.instances[0].emit(1, { event: "stream_end", status: "finished", ok: true })
-    await screen.findByTestId("summary")
+    await screen.findByTestId("summary", {}, { timeout: 4000 })
     return navigate
   }
 
@@ -1582,7 +1583,11 @@ describe("Best so far", () => {
   it("forgets the best", async () => {
     seed(report([found("a", A), found("b", B)], KEYED))
     await runOnce(report([found("a", A), missed("b", B)], KEYED))
-    fireEvent.click(await screen.findByRole("button", { name: "Forget best" }))
+    const forget = await screen.findByRole("button", { name: "Forget best" })
+    // On the amber box the link takes the box's text colour, not the green link colour.
+    expect(forget.className).toContain("text-current")
+    expect(forget.className).not.toContain("text-primary")
+    fireEvent.click(forget)
     expect(readBest(bestKey(report([], KEYED))!)).toBeNull()
     expect(screen.getByTestId("best-so-far").textContent).toBe("Best forgotten. Your next run with these questions becomes the best.")
   })

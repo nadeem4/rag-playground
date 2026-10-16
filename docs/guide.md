@@ -277,9 +277,14 @@ the question box.
   comes first and the search order folds under **Show search order**. Widen the panel to
   see the two side by side.
 - With Chat, the answer cites the passages it relied on. Each citation is checked against
-  the parsed document, and one that does not match is marked unverified. Each claim is
-  shown as cited, weak, matched by similarity, or not grounded. Clicking a
+  the parsed document, and one that does not match is marked unverified. Clicking a
   citation opens the PDF page with the sentence highlighted.
+- Every part of a Chat answer gets a label, whichever model answered. A part is cited,
+  weak, matched by similarity, or has no source. A line above the answer counts them, for
+  example "2 of 3 parts cite a piece." A part with no source is drawn in red with a small
+  "No source" tag, because nothing in the retrieved pieces backs it. A similarity match
+  only means a shown sentence is close in meaning, not that it proves the part. Untick
+  **Mark parts with no source** to hide those marks; this browser remembers the choice.
 - A piece that holds a table shows it as a table when the piece is open, and says each row
   in words (Measure: Before, After) when it is cut to two lines, as on Compare.
 - The questions asked earlier in the tab stay in a list below.

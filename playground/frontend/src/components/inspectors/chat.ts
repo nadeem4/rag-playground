@@ -84,6 +84,21 @@ export function chatStats(p: ChatPayload): ChatStats {
   }
 }
 
+/** Pandion #164: every part carries a label, in both modes, and stats count claims. */
+export function isLabelled(p: ChatPayload): boolean {
+  return typeof p.stats?.claims === "number"
+}
+
+/** "2 of 3 parts cite a piece." Null on payloads that do not count claims. */
+export function checkLine(s: GroundingStats | undefined): string | null {
+  if (typeof s?.claims !== "number") return null
+  const verb = s.claims === 1 ? "part cites" : "parts cite"
+  return `${s.citing ?? 0} of ${s.claims} ${verb} a piece.`
+}
+
+/** Per browser: whether parts with no source are marked. */
+export const MARKS_KEY = "rag-playground:ask:mark-no-source"
+
 /** A sentence for a stop reason that changes how the answer should be read. */
 export function stopNote(stop: string | null, empty: boolean): string | null {
   if (stop === "refusal") return "The model declined to answer this question."
@@ -93,8 +108,9 @@ export function stopNote(stop: string | null, empty: boolean): string | null {
 }
 
 /**
- * The sentence-id label a segment is drawn with (plan I-20). Null for native
- * segments, which keep the I-10 marks, and for text with no word in it.
+ * The label a segment is drawn with (plan I-20; native too since Pandion #164).
+ * Null for a part with no label (older native payloads keep the I-10 marks)
+ * and for text with no word in it.
  */
 export function claimKind(seg: ChatSegment): Grounding | null {
   if (!seg.grounding) return null

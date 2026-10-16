@@ -16,6 +16,7 @@ with a run, and a question set while it is checked.
 | The pipeline you are working on | In this browser's storage | Until you change it. It is how Build, Compare and Evaluate share one pipeline. The pipeline on Build is kept as a pipeline file's settings, under `rag-playground:pipeline:v2`. A pipeline from an older version stays where it was (`rag-playground:graph:v1`); it is converted once, and if it cannot be, it is kept as it was and Build says why. A pipeline that uses a strategy this server does not have is kept the same way, under `rag-playground:pipeline:v2:kept`, before Build opens the Starter. |
 | Theme and contrast | In this browser's storage | Until you change them. |
 | Where the Ask panel sits on Build | In this browser's storage | Its side, its width and whether it is open, until you change them. |
+| Whether Ask marks parts with no source | In this browser's storage | Until you change it. |
 | Page images you viewed | In this browser's cache | They may stay in this browser's cache until it is cleared, even after the upload they show is deleted. |
 | A question set you upload for Evaluate | On the demo: in this tab only. Locally: on this machine, beside the document. | On the demo: until you close the tab. The demo checks the set and keeps nothing. Locally: until you delete it. |
 | Your last evaluation, for the before and after | In this tab only | Until you close the tab. |

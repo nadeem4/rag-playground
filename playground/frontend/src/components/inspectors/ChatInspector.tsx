@@ -10,10 +10,13 @@ import { cn } from "@/lib/utils"
 
 import {
   chatStats,
+  checkLine,
   citationPage,
   citationSlot,
   claimKind,
   groundingLine,
+  isLabelled,
+  MARKS_KEY,
   methodCaption,
   quoteText,
   segmentKind,
@@ -36,11 +39,13 @@ import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
  *                  inspector gives text no chunk covers. One mark, one meaning:
  *                  no source behind this text
  *
- * A sentence-id answer (plan I-20) also marks each claim by its label, as the
- * approved explainer does: cited in its chunk's hue with a solid rule,
- * similarity in the same hue with a dotted rule, weak on the warning fill
- * with a dashed rule, not grounded in danger ink with a dotted rule. A native
- * answer (grounding null) is drawn exactly as above.
+ * A labelled answer (sentence ids, plan I-20, and native since Pandion #164)
+ * also marks each claim by its label, as the approved explainer does: cited
+ * in its chunk's hue with a solid rule, similarity in the same hue with a
+ * dotted rule, weak on the warning fill with a dashed rule, and a part with no
+ * source in danger ink with a dotted rule and a "No source" mark, which a
+ * checkbox hides (remembered per browser). A part with no label is plain. An
+ * older native answer (no labels) is drawn exactly as above.
  *
  * Clicking a number, or a claim, opens the page it cites, with the quote found on it.
  */
@@ -68,8 +73,27 @@ function toneOf(slot: number | null): CSSProperties {
   ) as CSSProperties
 }
 
+function readMarks(): boolean {
+  try {
+    return window.localStorage.getItem(MARKS_KEY) !== "off"
+  } catch {
+    return true
+  }
+}
+
 function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: ChunkSet }) {
   const [open, setOpen] = useState<number | null>(null)
+  const [marks, setMarksState] = useState(readMarks)
+  const setMarks = (on: boolean) => {
+    setMarksState(on)
+    try {
+      window.localStorage.setItem(MARKS_KEY, on ? "on" : "off")
+    } catch {
+      // Storage is a convenience: the choice still holds for this view.
+    }
+  }
+  const labelled = isLabelled(payload)
+  const check = checkLine(payload.stats)
   const listRef = useRef<HTMLOListElement>(null)
   const pdfRef = useRef<HTMLDivElement>(null)
   const byN = new Map(payload.citations.map((c) => [c.n, c]))
@@ -94,19 +118,32 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         <Fact id="output" value={fmt(payload.usage?.output_tokens ?? 0)} label="tokens out" />
         <Fact id="citations" value={fmt(stats.citations)} label={stats.citations === 1 ? "citation" : "citations"} />
         {stats.unverified ? <Fact id="unverified" value={fmt(stats.unverified)} label="not verified" /> : null}
-        <Fact id="ungrounded" value={`${stats.ungrounded} of ${stats.segments}`} label="passages not tied to a source" />
+        {labelled ? null : <Fact id="ungrounded" value={`${stats.ungrounded} of ${stats.segments}`} label="passages not tied to a source" />}
         {payload.stop_reason ? <span className="font-mono text-xs text-fg-muted">{payload.stop_reason}</span> : null}
       </div>
 
-      {method ? (
+      {method || check ? (
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-surface-elevated px-3 py-2">
-          <span data-testid="chat-method" className="text-xs text-fg-muted">
-            {method}
-          </span>
+          {method ? (
+            <span data-testid="chat-method" className="text-xs text-fg-muted">
+              {method}
+            </span>
+          ) : null}
+          {check ? (
+            <span data-testid="chat-check" role="status" className="text-sm text-fg">
+              {check}
+            </span>
+          ) : null}
           {payload.citation_method === "sentence_ids" && payload.stats ? (
             <span data-testid="chat-grounding" className="font-mono text-xs text-fg tabular-nums">
               {groundingLine(payload.stats)}
             </span>
+          ) : null}
+          {check ? (
+            <label className="flex items-center gap-1.5 text-xs text-fg-muted">
+              <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} />
+              Mark parts with no source
+            </label>
           ) : null}
         </div>
       ) : null}
@@ -125,10 +162,12 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         <p data-answer="" className="max-w-[82ch] font-sans text-base whitespace-pre-wrap text-fg">
           {payload.answer.map((seg, k) => {
             const grounding = claimKind(seg)
+            if (grounding === "none" && !marks) return <span key={k}>{seg.text}</span>
             if (grounding) {
               return <Claim key={k} seg={seg} grounding={grounding} byN={byN} chunkSet={chunkSet} open={open} onOpen={setOpen} />
             }
-            const kind = segmentKind(seg)
+            // A labelled answer marks only its claims: a lead-in is plain text.
+            const kind = labelled && segmentKind(seg) === "ungrounded" ? "plain" : segmentKind(seg)
             if (kind === "ungrounded") {
               return (
                 <span key={k} data-segment="ungrounded" className="chat-ungrounded" title="Not tied to a source">
@@ -149,7 +188,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         </p>
       </div>
 
-      <Legend claims={payload.citation_method === "sentence_ids"} />
+      <Legend claims={payload.citation_method === "sentence_ids" || labelled} labelled={labelled} />
 
       {payload.citations.length ? (
         <ol ref={listRef} aria-label="Citations" className="flex flex-col bg-surface">
@@ -228,7 +267,7 @@ const CLAIM_TITLE: Record<Grounding, string> = {
   cited: "Cited: the named sentences support this",
   weak: "Weak support: the named sentences are not similar enough. Read them to judge.",
   similarity: "Similarity match: no id given, but a shown sentence matches",
-  none: "Not grounded: no source sentence supports this",
+  none: "No source: nothing in the retrieved pieces backs this",
 }
 
 /** One sentence-id claim. It opens its first citation, like its number does. */
@@ -277,6 +316,11 @@ function Claim({
       >
         {body}
       </span>
+      {grounding === "none" ? (
+        <span data-no-source="" className="chat-nosource">
+          No source
+        </span>
+      ) : null}
       {trail}
       {seg.citations.map((n) => (
         <CiteMark key={n} n={n} citation={byN.get(n)} chunkSet={chunkSet} selected={open === n} onOpen={() => onOpen(n)} />
@@ -285,9 +329,9 @@ function Claim({
   )
 }
 
-function Legend({ claims }: { claims: boolean }) {
+function Legend({ claims, labelled }: { claims: boolean; labelled: boolean }) {
   return (
-    <p className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-surface px-3 py-2 text-xs text-fg-muted">
+    <p data-testid="chat-legend" className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-surface px-3 py-2 text-xs text-fg-muted">
       {claims ? (
         <>
           <span className="flex items-center gap-1">
@@ -312,7 +356,7 @@ function Legend({ claims }: { claims: boolean }) {
             <span aria-hidden className="chat-claim" data-grounding="none">
               text
             </span>
-            not grounded
+            no source
           </span>
         </>
       ) : null}
@@ -328,12 +372,14 @@ function Legend({ claims }: { claims: boolean }) {
         </span>
         citation not verified
       </span>
-      <span className="flex items-center gap-1">
-        <span aria-hidden className="chat-ungrounded">
-          text
+      {labelled ? null : (
+        <span className="flex items-center gap-1">
+          <span aria-hidden className="chat-ungrounded">
+            text
+          </span>
+          not tied to a source
         </span>
-        not tied to a source
-      </span>
+      )}
     </p>
   )
 }

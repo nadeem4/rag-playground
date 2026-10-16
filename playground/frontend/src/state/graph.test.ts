@@ -327,7 +327,7 @@ describe("effective provides: capabilities pass through Clean", () => {
   it("sees Docling's headings behind a Clean step", () => {
     const g = sampleGraph(LIVE, SRC) // Docling -> dedupe_blocks -> Chunk
     expect(upstreamFor(g, LIVE, "chunk").doc?.name).toBe("dedupe_blocks")
-    expect(effectiveProvides(g, LIVE, "clean_1")).toEqual({ structure: ["headings"] })
+    expect(effectiveProvides(g, LIVE, "clean_1")).toEqual({ structure: ["headings"], formats: LIVE.parse!.docling.provides.formats })
     expect(compatibility(headings, upstreamFor(g, LIVE, "chunk"))).toEqual({ kind: "ok" })
   })
 
@@ -346,7 +346,7 @@ describe("effective provides: capabilities pass through Clean", () => {
     const dedupe = LIVE.clean!.dedupe_blocks
     const reg: Registry = { ...LIVE, clean: { ...LIVE.clean, dedupe_blocks: { ...dedupe, provides: { structure: [] } } } }
     const g = sampleGraph(reg, SRC)
-    expect(effectiveProvides(g, reg, "clean_1")).toEqual({ structure: [] })
+    expect(effectiveProvides(g, reg, "clean_1")).toEqual({ structure: [], formats: LIVE.parse!.docling.provides.formats })
     expect(compatibility(headings, upstreamFor(g, reg, "chunk")).kind).toBe("soft")
   })
 })

@@ -27,7 +27,8 @@ import "@/components/learn/learn.css"
  *   set and keeps nothing (playground/backend/routes/questions.py).
  * - Saved items and the working pipeline: localStorage (state/pipelines.ts,
  *   state/libraryExperiments.ts, state/working.ts). The Ask panel's side, width
- *   and open or closed: localStorage (components/ask/AskDock.tsx).
+ *   and open or closed: localStorage (components/ask/AskDock.tsx). Whether Ask
+ *   marks parts with no source: localStorage (components/inspectors/chat.ts, MARKS_KEY).
  * - Run results: packages/pandion/src/pandion/storage.py never expires an entry, playground/backend/expiry.py deletes
  *   only uploads, and DELETE /api/v2/cache clears them.
  *   The demo runs without persistent storage: scripts/publish_space.py asks
@@ -116,6 +117,7 @@ export function Privacy() {
     ],
     ["Theme and contrast", "In this browser's storage", "Until you change them."],
     ["Where the Ask panel sits on Build", "In this browser's storage", "Its side, its width and whether it is open, until you change them."],
+    ["Whether Ask marks parts with no source", "In this browser's storage", "Until you change it."],
     [
       "Page images you viewed",
       "In this browser's cache",

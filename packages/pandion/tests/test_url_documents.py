@@ -52,7 +52,7 @@ def test_a_pdf_at_a_url_indexes_end_to_end_with_the_url_as_its_id(tmp_path, serv
 
     assert report.ok, report
     assert list(report.documents) == [url]
-    assert p.index.documents[url].filename == "report.pdf"
+    assert p.index.documents[url].filename == "127.0.0.1-files-report.pdf"
     result = p.retrieve("What is the capital of France?")
     assert any("Paris" in hit.chunk.text for hit in result.hits)
 
@@ -66,7 +66,7 @@ def test_an_html_page_at_a_url_indexes_end_to_end(tmp_path, server):
     report = p.index.run([url])
 
     assert report.ok, report
-    assert p.index.documents[url].filename == "care.html"
+    assert p.index.documents[url].filename == "127.0.0.1-care.html"
     result = p.retrieve("How often do ferns need water?")
     assert any("water weekly" in hit.chunk.text for hit in result.hits)
 
@@ -133,7 +133,7 @@ def test_sync_reports_a_changed_page_and_then_nothing_new(tmp_path, server):
     assert changed.unchanged == ["report.pdf"]
 
     entry = Manifest.load(tmp_path / "index" / MANIFEST).documents[url]
-    assert entry["filename"] == "short.pdf"
+    assert entry["filename"] == "127.0.0.1-short.pdf"
 
 
 def test_a_new_process_searches_a_synced_url_from_the_manifest(tmp_path, server):
@@ -143,7 +143,7 @@ def test_a_new_process_searches_a_synced_url_from_the_manifest(tmp_path, server)
     assert synced.ok
 
     fresh = pipeline(tmp_path)
-    assert fresh.index.indexed()[url].filename == "short.pdf"
+    assert fresh.index.indexed()[url].filename == "127.0.0.1-short.pdf"
     result = fresh.retrieve("What is the capital of France?")
     assert result.ok
     assert any("Paris" in hit.chunk.text for hit in result.hits)

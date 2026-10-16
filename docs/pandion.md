@@ -162,8 +162,10 @@ p.index.run({"ferns.html": "https://example.com/guides/ferns"})   # name it your
 **What is fetched.** Pandion sends one GET request for the address and follows up to 3
 redirects. It reads the page's bytes and keeps them in `sources/` like an uploaded file,
 then indexes them as one. The document id is the URL, unless a mapping names it. The file
-name comes from the last part of the address, with a suffix that follows the content type
-the server sent: `report.pdf`, `ferns.html`, or `page.html` for a site's front page. So the
+name comes from the host and the path, joined with `-` and cut to 100 characters, with a
+suffix that follows the content type the server sent: `example.com-report.pdf`,
+`example.com-guides-ferns.html`, or `example.com.html` for a site's front page. So two
+sites' front pages never share a name, and the
 parser check in [Documents other than PDFs](#documents-other-than-pdfs) reads it right:
 pdfium takes a PDF at a URL, and a web page needs docling.
 
@@ -189,6 +191,20 @@ The URL redirected more than 3 times, so it was not fetched.
 The URL took longer than 10 seconds to answer, so it was not fetched.
 The URL answered with status 404, so it was not fetched.
 ```
+
+Each refusal also has a `kind`, so a server can choose its answer without reading the
+message:
+
+| `kind` | When |
+|---|---|
+| `bad_url` | the address is not `http://` or `https://`, or its host name is not valid |
+| `not_https` | with `public_endpoints_only`: not https on port 443 |
+| `not_public` | with `public_endpoints_only`: an address that is not on the public internet |
+| `too_big` | the page is larger than the limit |
+| `wrong_type` | the page sent a content type Pandion does not read |
+| `too_many_redirects` | more than 3 redirects |
+| `timed_out` | the fetch took longer than 10 seconds |
+| `failed` | the page answered with an error status, or could not be reached |
 
 **The guard.** On your own machine any address works, including a page on localhost or
 your own network. On a server that strangers share, turn on
@@ -219,7 +235,10 @@ keeps the file name a fetched page was given, so a new process can search it.
 
 To fetch a page yourself, for example in a server that checks the bytes before it
 indexes them, call `pandion.extend.fetch_url(url, public_only=..., max_bytes=...)`. It
-returns the bytes and the file name.
+returns the bytes and the file name. To judge a file before you keep it,
+`pandion.extend.format_of(filename)` gives its format by its extension (`"pdf"`, `"docx"`,
+and so on), or None, and `pandion.extend.FORMATS` gives each format's name, what one file
+of it is, and its extensions.
 
 ## Rewrite a question
 

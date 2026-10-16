@@ -12,9 +12,12 @@ strategy per stage.
 A strategy, or a server, that calls a model endpoint the user named checks it
 with `guard_endpoint` and builds the OpenAI client's arguments with
 `openai_client_kwargs`. A server that parses a stored file catches
-`UnreadableFormat`, raised when the parser cannot read the file's format. A
-server that takes a URL as a document fetches it with `fetch_url` and catches
-`FetchRefused`, raised with a plain reason when the guard refuses it.
+`UnreadableFormat`, raised when the parser cannot read the file's format, and
+can judge a file before it keeps it with `format_of` (a file name's format by
+its extension, or None) and `FORMATS` (each format's name, what one file of it
+is, and its extensions). A server that takes a URL as a document fetches it
+with `fetch_url` and catches `FetchRefused`, raised with a plain reason when
+the guard refuses it.
 """
 
 from typing import Any
@@ -23,7 +26,7 @@ from pandion.artifacts import ArtifactType
 from pandion.embeddings import Embedder, get_embedder, register_embedder
 from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.fetch import FetchRefused, fetch_url
-from pandion.formats import UnreadableFormat
+from pandion.formats import FORMATS, UnreadableFormat, format_of
 from pandion.llm import openai_client_kwargs
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
@@ -32,9 +35,9 @@ from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
 __all__ = [
-    "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "EndpointRefused",
+    "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "EndpointRefused",
     "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
-    "RunContext", "Stage", "Transform", "UnreadableFormat", "fetch_url", "get_embedder", "guard_endpoint",
+    "RunContext", "Stage", "Transform", "UnreadableFormat", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
     "openai_client_kwargs", "raw_file", "register", "set_note", "set_usage",
 ]
 

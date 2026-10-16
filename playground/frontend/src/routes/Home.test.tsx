@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { AppSettings, Registry, SampleCard, Source } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
-import { documentOf, resetDocumentForTests, useDocument } from "@/state/document"
+import { documentOf, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, storedGraphJson } from "@/state/graph"
-import { readCurrentId, resetPipelinesForTests, STARTER_ID } from "@/state/pipelines"
+import { resetPipelinesForTests } from "@/state/pipelines"
 
 import { Home } from "./Home"
 
@@ -14,7 +14,7 @@ const registry = liveRegistry as unknown as Registry
 
 const FIRST: SampleCard = {
   name: "two-column-report",
-  title: "A two-column report",
+  title: "Two-column report",
   blurb: "Two pages laid out in two columns.",
   shows: "Reading order.",
   stresses: "parse",
@@ -24,7 +24,15 @@ const FIRST: SampleCard = {
   sha: "cd".repeat(32),
   question: "How long did the survey run?",
 }
-const SECOND: SampleCard = { ...FIRST, name: "chunking-primer", filename: "chunking-primer.pdf", sha: "ef".repeat(32), default: false, question: "How big is a chunk?" }
+const SECOND: SampleCard = {
+  ...FIRST,
+  name: "scanned-notes",
+  title: "Scanned notes",
+  filename: "scanned-notes.pdf",
+  sha: "ef".repeat(32),
+  default: false,
+  question: "What was noted?",
+}
 const OWN: Source = { sha: "ab".repeat(32), filename: "mine.pdf", size: 2048, content_type: "application/pdf" }
 
 let posted: string[] = []
@@ -38,7 +46,7 @@ const DEMO = {
   limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, max_total_bytes: 31457280, ttl_hours: 24 },
 } as AppSettings
 
-function serve({ settings = { demo: false } as AppSettings, sources = [] as Source[] | "never" } = {}) {
+function serve({ settings = { demo: false } as AppSettings, sources = [] as Source[] } = {}) {
   posted = []
   uploaded = []
   vi.stubGlobal(
@@ -54,13 +62,11 @@ function serve({ settings = { demo: false } as AppSettings, sources = [] as Sour
         const answer = () => ok({ ...OWN, filename: file.name })
         return holdUpload ? new Promise<Response>((resolve) => (releaseUpload = () => resolve(answer()))) : answer()
       }
-      if (url === "/api/v2/documents") return sources === "never" ? new Promise<Response>(() => {}) : ok(sources)
+      if (url === "/api/v2/documents") return ok(sources)
       if (url === "/api/settings/app") return ok(settings)
       if (url === "/api/sources/sample" && init?.method === "POST") {
-        const name = JSON.parse(String(init.body ?? "{}")).name as string
-        posted.push(name)
-        const card = [FIRST, SECOND].find((c) => c.name === name)!
-        return ok({ sha: card.sha, filename: card.filename, size: 1000, content_type: "application/pdf" })
+        posted.push(JSON.parse(String(init.body ?? "{}")).name as string)
+        return ok({ sha: FIRST.sha, filename: FIRST.filename, size: 1000, content_type: "application/pdf" })
       }
       return new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
     }),
@@ -83,92 +89,34 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("Home", () => {
-  it("opens with the promise, the two buttons and the three facts", () => {
+const region = (name: string) => screen.getByRole("region", { name })
+
+describe("Home's hero", () => {
+  it("names the reader, the promise, the lede and what they leave with", () => {
     render(<Home navigate={vi.fn()} />)
-    expect(screen.getByText("Retrieval, made visible")).toBeTruthy()
-    expect(screen.getByRole("heading", { level: 1, name: "See why a RAG pipeline finds the answer, or misses it." })).toBeTruthy()
-    expect(screen.getByText(/Load a PDF, cut it into pieces, search it and ask it a question\./)).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Try a sample" })).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Use your own document" })).toBeTruthy()
-    expect(screen.getByRole("link", { name: "See how it works" }).getAttribute("href")).toBe("#build")
-    for (const fact of ["No sign in", "Runs on samples or your own PDF", "A key is only needed for chat answers"]) expect(screen.getByText(fact)).toBeTruthy()
+    expect(screen.getByText("For developers building search over their own knowledge")).toBeTruthy()
+    expect(screen.getByRole("heading", { level: 1, name: "Tune a RAG pipeline on your own knowledge, then take it home." })).toBeTruthy()
+    expect(screen.getByText(/^Bring your documents, web pages or photos of pages\./)).toBeTruthy()
+    const outcome = screen.getByText("You leave with").parentElement!
+    expect(outcome.textContent).toContain("a Python project that runs the winning pipeline on your computer")
+    expect(within(outcome).getByText("Pandion")).toBeTruthy()
   })
 
-  it("makes every call to action 44 px tall, with no smaller height left to win", () => {
+  it("has the three actions with their targets, each 44 px tall", () => {
     render(<Home navigate={vi.fn()} />)
-    const ctas = [
-      screen.getByRole("button", { name: "Try a sample" }),
-      screen.getByRole("button", { name: "Use your own document" }),
-      ...["Build", "Compare", "Evaluate"].map((p) => screen.getByRole("button", { name: `Try it yourself on ${p}` })),
-    ]
-    for (const el of ctas) {
-      const c = el.className.split(/\s+/)
-      expect(c).toContain("h-[44px]")
-      expect(c).not.toContain("h-control")
+    const sample = screen.getByRole("button", { name: "Try a sample" })
+    const own = screen.getByRole("button", { name: "Use your own files" })
+    const home = screen.getByRole("link", { name: "See what you take home" })
+    expect(home.getAttribute("href")).toBe("#pandion")
+    expect(document.getElementById("pandion")).toBeTruthy()
+    for (const el of [sample, own, home]) expect(el.className.split(/\s+/)).toContain("min-h-[44px]")
+  })
+
+  it("states the three facts", () => {
+    render(<Home navigate={vi.fn()} />)
+    for (const fact of ["No sign in", "Your files stay private to your browser", "A key is needed only for model steps"]) {
+      expect(screen.getByText(fact)).toBeTruthy()
     }
-  })
-
-  it("names the six steps from Document to Ask, in order", () => {
-    render(<Home navigate={vi.fn()} />)
-    const strip = screen.getByRole("list", { name: "The steps you can look inside" })
-    const steps = within(strip)
-      .getAllByRole("listitem")
-      .map((li) => li.firstElementChild!.textContent)
-    expect(steps).toEqual(["Document", "Parse", "Clean", "Chunk", "Index", "Ask"])
-  })
-
-  it("has one section each for Build, Compare and Evaluate, counted 1 to 3, with alternating sides", () => {
-    render(<Home navigate={vi.fn()} />)
-    const names = ["Build a pipeline and ask it", "Compare recipes on the same document", "Evaluate it on real questions"]
-    const sections = names.map((name) => screen.getByRole("region", { name }))
-    sections.forEach((s, i) => {
-      expect(within(s).getByText(`${i + 1} of 3`)).toBeTruthy()
-      expect(within(s).getAllByRole("listitem")).toHaveLength(2)
-      expect(within(s).getByRole("figure")).toBeTruthy()
-    })
-    // The middle section puts its words on the right from lg up.
-    expect(sections[1].querySelector("[data-copy]")!.className).toContain("lg:order-2")
-    expect(sections[0].querySelector("[data-copy]")!.className).not.toContain("lg:order-2")
-  })
-
-  it("stacks each section full width until lg, so the clip is readable at 768", () => {
-    render(<Home navigate={vi.fn()} />)
-    for (const name of ["Build a pipeline and ask it", "Compare recipes on the same document", "Evaluate it on real questions"]) {
-      const c = screen.getByRole("region", { name }).className.split(/\s+/)
-      expect(c).toContain("grid-cols-1")
-      expect(c.some((k) => k.startsWith("lg:grid-cols-["))).toBe(true)
-      expect(c.some((k) => k.startsWith("md:grid-cols-"))).toBe(false)
-      const copy = screen.getByRole("region", { name }).querySelector("[data-copy]")!.className
-      expect(copy).not.toContain("md:order-2")
-    }
-  })
-
-  it("lists each section's points as a bulleted list at 1rem", () => {
-    render(<Home navigate={vi.fn()} />)
-    const list = within(screen.getByRole("region", { name: "Build a pipeline and ask it" })).getByRole("list").className.split(/\s+/)
-    for (const k of ["list-disc", "pl-4", "text-[1rem]"]) expect(list).toContain(k)
-  })
-
-  it("sets the eyebrow at weight 700", () => {
-    render(<Home navigate={vi.fn()} />)
-    expect(screen.getByText("Retrieval, made visible").className.split(/\s+/)).toContain("font-[700]")
-  })
-
-  it.each([
-    ["Build", "/build"],
-    ["Compare", "/compare"],
-    ["Evaluate", "/evaluate"],
-  ])("Try it yourself on %s loads the first sample when there is no document, then opens %s", async (page, href) => {
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    fireEvent.click(screen.getByRole("button", { name: `Try it yourself on ${page}` }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(href))
-    expect(posted).toEqual([FIRST.name])
-    const g = readStoredGraph(registry)!
-    expect(documentOf(g)).toEqual({ sha: FIRST.sha, filename: FIRST.filename })
-    // The sample's own question is set, so the first run asks something real.
-    expect(g.nodes.find((n) => n.stage === "query")!.config.text).toBe(FIRST.question)
   })
 
   it("Try a sample opens Build on the Starter pipeline with the default sample, whatever document is loaded", async () => {
@@ -177,88 +125,168 @@ describe("Home", () => {
     const before = storedGraphJson()
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    await waitFor(() => expect(lines()[0]).toBe("On your file: mine.pdf"))
     fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/build?starter=${FIRST.name}`))
-    // Build opens the Starter on it; nothing is loaded or changed here.
     expect(posted).toEqual([])
     expect(storedGraphJson()).toBe(before)
   })
+})
 
-  it("Try it yourself on a first visit opens the Starter pipeline: the default recipe on the first sample", async () => {
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    fireEvent.click(screen.getByRole("button", { name: "Try it yourself on Build" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
-    expect(readCurrentId()).toBe(STARTER_ID)
-  })
-
-  it("keeps the visitor's own document and just opens the page", async () => {
-    storeGraph(sampleGraph(registry, OWN))
-    const before = storedGraphJson()
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    fireEvent.click(screen.getByRole("button", { name: "Try it yourself on Evaluate" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/evaluate"))
-    expect(posted).toEqual([])
-    expect(storedGraphJson()).toBe(before)
-  })
-
-  it("still opens the page when the sample cannot be loaded", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "down" }), { status: 500 })))
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    fireEvent.click(screen.getByRole("button", { name: "Try it yourself on Build" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
-  })
-
-  it("shows a clip for Build, Compare and Evaluate, each in light and dark", () => {
+describe("Home's finding slip", () => {
+  it("shows the scanned notes finding: 0 of 8 with OCR off, 8 of 8 with OCR on, why, and its source", () => {
     render(<Home navigate={vi.fn()} />)
-    const videos = document.querySelectorAll("video")
-    expect([...videos].map((v) => [...v.querySelectorAll("source")].map((s) => s.getAttribute("src")))).toEqual([
-      ["/clips/build-dark.webm", "/clips/build.webm"],
-      ["/clips/compare-dark.webm", "/clips/compare.webm"],
-      ["/clips/evaluate-dark.webm", "/clips/evaluate.webm"],
+    const slip = screen.getByRole("figure", { name: "A real finding from the scanned notes sample" })
+    expect(within(slip).getByText("Docling, OCR off")).toBeTruthy()
+    expect(within(slip).getByText("0 of 8")).toBeTruthy()
+    expect(within(slip).getByText("Docling, OCR on")).toBeTruthy()
+    expect(within(slip).getByText("8 of 8")).toBeTruthy()
+    expect(within(slip).getByText(/^A scan is pictures of pages, so there was no text to search\./)).toBeTruthy()
+    expect(within(slip).getByText("From the scanned notes sample. Lessons learned, Parsing.")).toBeTruthy()
+  })
+})
+
+describe("Home's four steps", () => {
+  const tabs = () => screen.getAllByRole("tab")
+  const panel = () => screen.getByRole("tabpanel")
+  const sources = () => [...panel().querySelectorAll("source")].map((s) => s.getAttribute("src"))
+
+  it("are real tabs, Build first and selected, with its clip in light and dark", () => {
+    render(<Home navigate={vi.fn()} />)
+    expect(screen.getByRole("tablist", { name: "From your files to a project you own" })).toBeTruthy()
+    expect(tabs().map((t) => t.querySelector("strong")!.textContent)).toEqual(["Build", "Evaluate", "Compare", "Take it home"])
+    expect(tabs().map((t) => t.getAttribute("aria-selected"))).toEqual(["true", "false", "false", "false"])
+    expect(tabs().map((t) => t.tabIndex)).toEqual([0, -1, -1, -1])
+    expect(panel().getAttribute("aria-labelledby")).toBe(tabs()[0].id)
+    expect(sources()).toEqual(["/clips/build-dark.webm", "/clips/build.webm"])
+    expect(panel().querySelector("video")!.getAttribute("poster")).toBe("/clips/build.jpg")
+  })
+
+  it("switches the panel on a click", () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.click(tabs()[1])
+    expect(tabs()[1].getAttribute("aria-selected")).toBe("true")
+    expect(sources()).toEqual(["/clips/evaluate-dark.webm", "/clips/evaluate.webm"])
+    expect(within(panel()).getByText(/Write questions for me reads the document/)).toBeTruthy()
+    fireEvent.click(tabs()[2])
+    expect(sources()).toEqual(["/clips/compare-dark.webm", "/clips/compare.webm"])
+  })
+
+  it("moves with the arrow keys, Home and End, wrapping round, and focuses the new tab", () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.keyDown(tabs()[0], { key: "ArrowRight" })
+    expect(tabs()[1].getAttribute("aria-selected")).toBe("true")
+    expect(document.activeElement).toBe(tabs()[1])
+    fireEvent.keyDown(tabs()[1], { key: "ArrowLeft" })
+    fireEvent.keyDown(tabs()[0], { key: "ArrowLeft" })
+    expect(tabs()[3].getAttribute("aria-selected")).toBe("true")
+    expect(document.activeElement).toBe(tabs()[3])
+    fireEvent.keyDown(tabs()[3], { key: "ArrowRight" })
+    expect(tabs()[0].getAttribute("aria-selected")).toBe("true")
+    fireEvent.keyDown(tabs()[0], { key: "End" })
+    expect(tabs()[3].getAttribute("aria-selected")).toBe("true")
+    fireEvent.keyDown(tabs()[3], { key: "Home" })
+    expect(tabs()[0].getAttribute("aria-selected")).toBe("true")
+  })
+
+  it("Take it home shows the zip's commands and its files, and no clip", () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.click(tabs()[3])
+    expect(panel().querySelector("video")).toBeNull()
+    const term = within(panel()).getByLabelText("What the zip holds")
+    expect(term.textContent).toContain("unzip starter.zip && cd starter")
+    expect(term.textContent).toContain("pip install -r requirements.txt")
+    expect(term.textContent).toContain("python run.py")
+    const files = within(panel()).getByRole("list", { name: "The files in the zip" })
+    expect(within(files).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "pipeline.yaml",
+      "run.py",
+      "questions.json",
+      "requirements.txt",
+      "README.md",
+      "docs/",
     ])
-    expect([...videos].map((v) => v.getAttribute("poster"))).toEqual(["/clips/build.jpg", "/clips/compare.jpg", "/clips/evaluate.jpg"])
-    const compare = screen.getByRole("region", { name: "Compare recipes on the same document" })
-    expect(within(compare).getByRole("figure", { name: "Clip: running three recipes on Compare and reading what changed" })).toBeTruthy()
-    expect(within(compare).getByText("Run three recipes and read what changed")).toBeTruthy()
-    expect(screen.queryByText("Clip coming soon")).toBeNull()
+  })
+})
+
+describe("Home's starts", () => {
+  it("offers a sample, your own knowledge and a template", async () => {
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    const start = region("Start from what you have")
+    expect(within(start).getByRole("heading", { level: 3, name: "A sample" })).toBeTruthy()
+    expect(await within(start).findByText("Scanned notes")).toBeTruthy()
+    expect(within(start).getByText("Two-column report")).toBeTruthy()
+    expect(within(start).getByRole("link", { name: "Start from a template" }).getAttribute("href")).toBe("/build")
+    fireEvent.click(within(start).getByRole("button", { name: "Open a sample on Build" }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/build?starter=${FIRST.name}`))
   })
 
-  it("describes the Compare page as it is now", () => {
+  it("says where your files stay, from the demo's own limits", async () => {
+    serve({ settings: DEMO })
     render(<Home navigate={vi.fn()} />)
-    const compare = screen.getByRole("region", { name: "Compare recipes on the same document" })
-    expect(within(compare).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      "Save the set as an experiment and come back to it.",
-      "Up to ten recipes; open any three side by side.",
+    const start = region("Start from what you have")
+    expect(await within(start).findByText(/On this demo your files stay private to your browser and are deleted after 24 hours\./)).toBeTruthy()
+  })
+
+  it("Upload your files opens the file picker", () => {
+    render(<Home navigate={vi.fn()} />)
+    const input = screen.getByLabelText("Choose your own files") as HTMLInputElement
+    const click = vi.spyOn(input, "click").mockImplementation(() => {})
+    fireEvent.click(within(region("Start from what you have")).getByRole("button", { name: "Upload your files" }))
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("Home's lessons and Pandion", () => {
+  it("lists three lessons and links the Read page", () => {
+    render(<Home navigate={vi.fn()} />)
+    const lessons = region("What we learned building it")
+    expect(within(lessons).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      "pdfium gave us lines, not paragraphs",
+      "The question used words the document never uses",
+      "A new rewrite was searched with the old results",
     ])
+    expect(within(lessons).getByRole("link", { name: "Read all the lessons" }).getAttribute("href")).toBe("/read")
   })
 
-  it("links Read, running it on your machine and the source, then the footer", () => {
+  it("shows Pandion's real commands and real output, and links PyPI and GitHub", () => {
     render(<Home navigate={vi.fn()} />)
-    const more = screen.getByRole("region", { name: "More" })
-    expect(within(more).getByRole("link", { name: "Read" }).getAttribute("href")).toBe("/read")
-    expect(within(more).getByRole("link", { name: "Run it on your machine" }).getAttribute("href")).toBe(
-      "https://github.com/nadeem4/rag-playground#quick-start",
-    )
-    expect(within(more).getByRole("link", { name: "Source on GitHub" }).getAttribute("href")).toBe("https://github.com/nadeem4/rag-playground")
-    const footer = screen.getByRole("contentinfo")
-    // A footer inside main is not a contentinfo landmark in a browser.
-    expect(footer.tagName).toBe("FOOTER")
-    expect(footer.closest("main")).toBeNull()
-    for (const name of ["Read", "Run it on your machine", "Source on GitHub"]) {
-      const c = within(more).getByRole("link", { name }).className.split(/\s+/)
-      for (const k of ["inline-flex", "min-h-[44px]", "items-center"]) expect(c).toContain(k)
+    const pkg = region("The engine is a Python package")
+    const term = within(pkg).getByLabelText("Terminal")
+    for (const line of [
+      "$ pip install pandion",
+      "$ pandion init my-rag --index text --query balanced --questions questions.json",
+      "$ python run.py",
+      "Found 11 of 12 (92%). Mean reciprocal rank 0.92.",
+    ]) {
+      expect(term.textContent).toContain(line)
     }
-    expect(within(footer).getByRole("link", { name: "Your data and privacy" }).getAttribute("href")).toBe("/privacy")
-    expect(within(footer).getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe("https://github.com/nadeem4/rag-playground")
+    expect(within(pkg).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Start a project from a template with pandion init.",
+      "Have a model write test questions with pandion questions.",
+      "Fail a CI run when a change loses questions, with --baseline.",
+    ])
+    expect(within(pkg).getByRole("link", { name: "Pandion on PyPI" }).getAttribute("href")).toBe("https://pypi.org/project/pandion/")
+    expect(within(pkg).getByRole("link", { name: "Pandion on GitHub" }).getAttribute("href")).toBe(
+      "https://github.com/nadeem4/rag-playground/tree/main/packages/pandion",
+    )
   })
 
-  it("has no em-dashes or en-dashes in its copy", () => {
+  it("ends with the footer, outside main", () => {
     render(<Home navigate={vi.fn()} />)
-    expect(document.body.textContent).not.toMatch(/[–—]/)
+    const footer = screen.getByRole("contentinfo")
+    expect(footer.closest("main")).toBeNull()
+    expect(within(footer).getByRole("link", { name: "Source on GitHub" }).getAttribute("href")).toBe("https://github.com/nadeem4/rag-playground")
+    expect(within(footer).getByRole("link", { name: "Pandion on PyPI" }).getAttribute("href")).toBe("https://pypi.org/project/pandion/")
+    expect(within(footer).getByRole("link", { name: "Your data and privacy" }).getAttribute("href")).toBe("/privacy")
+  })
+
+  it("has no em-dashes or en-dashes in its copy, on any tab", () => {
+    render(<Home navigate={vi.fn()} />)
+    for (const tab of screen.getAllByRole("tab")) {
+      fireEvent.click(tab)
+      expect(document.body.textContent).not.toMatch(/[–—]/)
+    }
     const labels = [...document.querySelectorAll("[aria-label]")].map((e) => e.getAttribute("aria-label")).join(" ")
     expect(labels).not.toMatch(/[–—]/)
   })
@@ -266,72 +294,44 @@ describe("Home", () => {
 
 const pdf = (name = "mine.pdf", type = "application/pdf") => new File(["%PDF-1.4"], name, { type })
 
-describe("Home's own PDF", () => {
-  it("keeps See how it works as a quiet text link, 44 px tall", () => {
+describe("Home's own files", () => {
+  it("Use your own files opens the file picker straight away", () => {
     render(<Home navigate={vi.fn()} />)
-    const link = screen.getByRole("link", { name: "See how it works" })
-    expect(link.getAttribute("data-slot")).toBeNull()
-    expect(link.className.split(/\s+/)).toContain("min-h-[44px]")
-  })
-
-  it("Use your own document opens the file picker straight away, and it takes every format a parser reads", async () => {
-    render(<Home navigate={vi.fn()} />)
-    const input = screen.getByLabelText("Choose your own document") as HTMLInputElement
+    const input = screen.getByLabelText("Choose your own files") as HTMLInputElement
     expect(input.type).toBe("file")
-    await waitFor(() => expect(input.getAttribute("accept")).toBe(".pdf,.docx,.pptx,.html,.htm,.md,.txt,.png,.jpg,.jpeg"))
     const click = vi.spyOn(input, "click").mockImplementation(() => {})
-    fireEvent.click(screen.getByRole("button", { name: "Use your own document" }))
+    fireEvent.click(screen.getByRole("button", { name: "Use your own files" }))
     expect(click).toHaveBeenCalledTimes(1)
   })
 
-  it("uploads the chosen PDF, makes it the document and opens Build", async () => {
+  it("uploads the chosen file, makes it the document and opens Build", async () => {
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf()] } })
+    fireEvent.change(screen.getByLabelText("Choose your own files"), { target: { files: [pdf()] } })
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
     expect(uploaded).toEqual(["mine.pdf"])
-    expect(posted).toEqual([])
     expect(documentOf(readStoredGraph(registry))).toEqual({ sha: OWN.sha, filename: "mine.pdf" })
   })
 
-  it("says why an upload was refused under the buttons, stays on Home and puts focus back on the button", async () => {
-    const navigate = vi.fn()
-    render(<Home navigate={navigate} />)
-    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf("sheet.xlsx", "application/octet-stream")] } })
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "Upload of sheet.xlsx failed: This kind of file cannot be read here. Upload PDF, Word, PowerPoint, HTML, Markdown, text or images.",
-    )
-    expect(navigate).not.toHaveBeenCalled()
-    expect(uploaded).toEqual([])
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own document" })))
-  })
-
-  it("says the server's refusal under the buttons and puts focus back on the button", async () => {
+  it("says the server's refusal under the buttons, stays on Home and puts focus back on the button", async () => {
     refuseUpload = "This PDF has 40 pages. The hosted demo takes up to 20."
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf()] } })
+    fireEvent.change(screen.getByLabelText("Choose your own files"), { target: { files: [pdf()] } })
     expect((await screen.findByRole("alert")).textContent).toBe("Upload of mine.pdf failed: This PDF has 40 pages. The hosted demo takes up to 20.")
     expect(navigate).not.toHaveBeenCalled()
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own document" })))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use your own files" })))
   })
 
-  it("while an upload runs, the busy button just says Uploading, and every button on Home waits", async () => {
+  it("while an upload runs, the busy button says Uploading and the sample buttons wait", async () => {
     holdUpload = true
     const navigate = vi.fn()
     render(<Home navigate={navigate} />)
-    const long = "a-very-long-file-name-that-would-push-the-button-far-past-the-edge-of-a-phone.pdf"
-    fireEvent.change(screen.getByLabelText("Choose your own document"), { target: { files: [pdf(long)] } })
+    fireEvent.change(screen.getByLabelText("Choose your own files"), { target: { files: [pdf()] } })
     const own = await screen.findByRole("button", { name: "Uploading" })
-    expect(own.textContent).toBe("Uploading")
     expect((own as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole("button", { name: "Try a sample" }) as HTMLButtonElement).disabled).toBe(true)
-    for (const p of ["Build", "Compare", "Evaluate"]) {
-      const b = screen.getByRole("button", { name: `Try it yourself on ${p}` }) as HTMLButtonElement
-      expect(b.disabled).toBe(true)
-      fireEvent.click(b)
-    }
-    expect(posted).toEqual([])
+    expect((screen.getByRole("button", { name: "Open a sample on Build" }) as HTMLButtonElement).disabled).toBe(true)
     await act(async () => releaseUpload())
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
     expect(navigate).toHaveBeenCalledTimes(1)
@@ -341,81 +341,12 @@ describe("Home's own PDF", () => {
     serve({ settings: DEMO })
     render(<Home navigate={vi.fn()} />)
     expect(await screen.findByText("Up to 20 pages and 10 MB. Private to your browser and deleted after 24 hours.")).toBeTruthy()
-    expect(screen.queryByText("Your file stays on this machine.")).toBeNull()
   })
 
   it("says the file stays on this machine when running locally", async () => {
     render(<Home navigate={vi.fn()} />)
-    expect(await screen.findByText("Your file stays on this machine.")).toBeTruthy()
+    expect(await screen.findByText("Your files stay on this machine.")).toBeTruthy()
     expect(screen.queryByText(/Private to your browser/)).toBeNull()
-  })
-})
-
-function MenuProbe() {
-  return <span data-testid="menu">{useDocument().menuOpen ? "open" : "closed"}</span>
-}
-
-const lines = () => screen.queryAllByTestId("home-document").map((el) => el.firstElementChild!.textContent)
-
-describe("Home's document line", () => {
-  it("names the first sample under each Try it yourself when there is no document", async () => {
-    render(<Home navigate={vi.fn()} />)
-    await waitFor(() => expect(lines()).toEqual(Array(3).fill("On the sample: two-column-report.pdf")))
-  })
-
-  it("names the sample that is loaded", async () => {
-    storeGraph(sampleGraph(registry, { sha: SECOND.sha, filename: SECOND.filename }))
-    render(<Home navigate={vi.fn()} />)
-    await waitFor(() => expect(lines()).toEqual(Array(3).fill("On the sample: chunking-primer.pdf")))
-  })
-
-  it("names the visitor's own upload", async () => {
-    serve({ sources: [OWN] })
-    storeGraph(sampleGraph(registry, OWN))
-    render(<Home navigate={vi.fn()} />)
-    await waitFor(() => expect(lines()).toEqual(Array(3).fill("On your file: mine.pdf")))
-  })
-
-  it("says, in the stale tone, when the upload is gone on the demo", async () => {
-    serve({ settings: DEMO })
-    storeGraph(sampleGraph(registry, OWN))
-    render(<Home navigate={vi.fn()} />)
-    await waitFor(() => expect(lines()).toEqual(Array(3).fill("mine.pdf is no longer on the demo.")))
-    expect(screen.getAllByTestId("home-document")[0].className.split(/\s+/)).toContain("text-stale")
-  })
-
-  it("says the upload is gone from this machine when running locally", async () => {
-    storeGraph(sampleGraph(registry, OWN))
-    render(<Home navigate={vi.fn()} />)
-    await waitFor(() => expect(lines()).toEqual(Array(3).fill("mine.pdf is no longer on this machine.")))
-  })
-
-  it("shows nothing while the document is being checked, so it does not flicker", async () => {
-    serve({ sources: "never" })
-    storeGraph(sampleGraph(registry, OWN))
-    render(<Home navigate={vi.fn()} />)
-    await act(async () => {})
-    expect(lines()).toEqual([])
-  })
-
-  it("Change goes to its page with the Document menu open, named for its page, 44 px tall", async () => {
-    const navigate = vi.fn()
-    render(
-      <>
-        <MenuProbe />
-        <Home navigate={navigate} />
-      </>,
-    )
-    const change = await screen.findByRole("button", { name: "Change the document for Compare" })
-    expect(screen.getByRole("button", { name: "Change the document for Build" })).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Change the document for Evaluate" })).toBeTruthy()
-    expect(change.textContent).toBe("Change")
-    expect(change.className.split(/\s+/)).toContain("min-h-[44px]")
-    expect(screen.getByTestId("menu").textContent).toBe("closed")
-    fireEvent.click(change)
-    expect(screen.getByTestId("menu").textContent).toBe("open")
-    // Home has no menu of its own: the page that owns the document opens with it.
-    expect(navigate).toHaveBeenCalledWith("/compare")
   })
 })
 

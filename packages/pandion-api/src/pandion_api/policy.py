@@ -37,8 +37,26 @@ class Policy:
 
     async def check_upload(self, file: UploadFile, request: Request) -> bytes:
         """Read the upload and return its bytes, or raise to refuse it. Read no
-        more than you accept: `await file.read(limit + 1)`."""
+        more than you accept: `await file.read(limit + 1)`. What the bytes may
+        be is `check_document`'s to judge, for an upload and a URL alike."""
         return await file.read()
+
+    def check_document(self, data: bytes, filename: str, request: Request) -> None:
+        """Refuse a document's bytes before they are kept (raise HTTPException):
+        an upload's after `check_upload` read them, and a URL document's after
+        the fetch. `filename` is the upload's name, or the one the fetch gave
+        (`report.pdf`, `page.html`). The default takes any bytes."""
+
+    def check_fetch(self, url: str, request: Request) -> None:
+        """Refuse a URL document before anything is fetched (raise
+        HTTPException), for example a rate limit. A fetch that then fails
+        still came through here, so it counts."""
+
+    def max_url_bytes(self, request: Request) -> int:
+        """The most a URL document may be, in bytes: the fetch stops reading one
+        byte past it and refuses the page with a 413. The default is Pandion's
+        own limit for a URL in a pipeline, 20 MB."""
+        return 20 * 1024 * 1024
 
     def on_uploaded(self, document: Document, request: Request) -> None:
         """Called with the store's lock held, right after the record is written,

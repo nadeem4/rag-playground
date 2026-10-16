@@ -140,7 +140,7 @@ def test_a_file_name_never_chooses_where_the_file_goes(client, tmp_path, name, s
 def test_the_same_bytes_under_another_name_are_never_stored_twice(client, tmp_path):
     data = build_pdf(SAMPLE_PAGES)
     sha = upload(client, "r.pdf", data)["sha"]
-    upload(client, "r.bin", data)
+    upload(client, "r.txt", data)
     upload(client, "r", data)
     sources = tmp_path / "data" / "sources"
     assert [p.name for p in sources.iterdir() if p.is_file()] == [f"{sha}.pdf"]

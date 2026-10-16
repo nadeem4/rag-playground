@@ -17,8 +17,25 @@ from fastapi import Request
 ENV_VAR = "RAG_PLAYGROUND_DEMO"
 
 #: Demo-mode upload limits: the Space has two CPUs and a shared disk.
+#: MAX_UPLOAD_BYTES is the most any file, or any page fetched from a URL, may be;
+#: a PDF may use all of it, and MAX_UPLOAD_PAGES applies to PDFs only.
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_UPLOAD_PAGES = 20
+#: Word, PowerPoint, HTML, Markdown and text files have no page count to cap, so
+#: they get a lower byte cap instead. 2 MB of text is about a thousand pages, far
+#: more than 20 PDF pages, and Docling reads these formats without a model.
+MAX_OTHER_BYTES = 2 * 1024 * 1024
+#: A Word or PowerPoint file is a zip: the most its parts may unpack to, and the
+#: most parts it may have, so a zip bomb is refused before it is kept.
+MAX_UNZIPPED_BYTES = 50 * 1024 * 1024
+MAX_ZIP_MEMBERS = 1000
+#: An image is one page read with OCR, about 10 seconds a page. A phone photo
+#: (12 megapixels, 3 to 5 MB) fits; a poster-sized scan does not.
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_PIXELS = 20_000_000
+#: Links one visitor may ask the demo to fetch in an hour. Every attempt counts,
+#: a failed one too, because it still sends a request to someone else's server.
+MAX_FETCHES_PER_HOUR = 10
 MAX_UPLOADS_PER_VISITOR = 3
 #: The largest page side the demo takes, in points (72 a inch): about 41 inches.
 #: Docling draws each page as an image, so a poster-sized page would take the shared memory.
@@ -62,6 +79,10 @@ def limits() -> dict[str, int]:
     return {
         "max_bytes": MAX_UPLOAD_BYTES,
         "max_pages": MAX_UPLOAD_PAGES,
+        "max_other_bytes": MAX_OTHER_BYTES,
+        "max_image_bytes": MAX_IMAGE_BYTES,
+        "max_image_pixels": MAX_IMAGE_PIXELS,
+        "max_fetches_per_hour": MAX_FETCHES_PER_HOUR,
         "max_files": MAX_UPLOADS_PER_VISITOR,
         "max_total_bytes": MAX_TOTAL_UPLOAD_BYTES,
         "ttl_hours": int(UPLOAD_TTL.total_seconds() // 3600),

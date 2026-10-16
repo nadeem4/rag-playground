@@ -11,6 +11,8 @@ import asyncio
 import contextlib
 import json
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +46,15 @@ DEMO_NO_CUSTOM = (
 
 #: The demo's 403 for checking a key against a custom endpoint.
 NO_CUSTOM_CHECK = "custom endpoints are disabled in this hosted demo"
+
+#: The demo's 429 for a visitor past MAX_FETCHES_PER_HOUR links (`PlaygroundPolicy.check_fetch`).
+TOO_MANY_FETCHES = (
+    f"This browser has asked for {demo.MAX_FETCHES_PER_HOUR} links in the last hour. "
+    "Wait a while, or run the playground locally."
+)
+
+#: The clock the fetch limit reads; tests move it.
+_clock = time.monotonic
 
 #: The demo's 403 for DELETE /api/v2/cache (`PlaygroundPolicy.check_clear_cache`).
 NO_CLEARING = (
@@ -225,6 +236,9 @@ class PlaygroundPolicy(Policy):
     def __init__(self) -> None:
         self._sweeper: asyncio.Task | None = None
         self._data_dir: Path | None = None
+        #: Each visitor's fetch times in the last hour (`check_fetch`), in this process.
+        self._fetches: dict[str, list[float]] = {}
+        self._fetch_lock = threading.Lock()
 
     def dependencies(self) -> list[Any]:
         return [Depends(_mint_visitor)]
@@ -235,10 +249,9 @@ class PlaygroundPolicy(Policy):
         return demo.readable(sha, request)
 
     async def check_upload(self, file: UploadFile, request: Request) -> bytes:
-        """Locally, any file. On the demo: a visitor id, at most 10 MB read (and
-        never more than one byte past it), a PDF of at most 20 pages, no page
-        over 41 inches a side, three live uploads a visitor, and room on the
-        shared disk."""
+        """Locally, any file. On the demo: a visitor id, and at most 10 MB read
+        (never more than one byte past it). What the bytes may be is
+        `check_document`'s to judge."""
         if not demo.enabled():
             return await file.read()
         me = visitor.visitor_id(request)
@@ -257,8 +270,49 @@ class PlaygroundPolicy(Policy):
             raise sources._too_big(None)
         if not data:
             raise HTTPException(status_code=400, detail="empty upload")
-        sources._check_demo_limits(request.app.state.deps.sources_dir, me, data)
         return data
+
+    def check_document(self, data: bytes, filename: str, request: Request) -> None:
+        """Locally, anything. On the demo, an upload or a URL document alike: a
+        PDF of at most 20 pages, no page over 41 inches a side; Word,
+        PowerPoint, HTML, Markdown and text files up to 2 MB, a Word or
+        PowerPoint file unpacking to at most 50 MB in at most 1,000 parts; an
+        image up to 5 MB and 20 million pixels. Then three live uploads a
+        visitor, and room on the shared disk."""
+        if not demo.enabled():
+            return
+        me = visitor.visitor_id(request)
+        if me is None:
+            raise HTTPException(400, sources.NO_VISITOR)
+        sources._check_demo_limits(request.app.state.deps.sources_dir, me, data, filename)
+
+    def check_fetch(self, url: str, request: Request) -> None:
+        """Locally, any link. On the demo: a visitor id, room for one more upload
+        (a URL document counts as one), and at most MAX_FETCHES_PER_HOUR links
+        a visitor in the last hour. The attempt counts before the fetch, so a
+        failed one counts too: it still sent a request to someone's server."""
+        if not demo.enabled():
+            return
+        me = visitor.visitor_id(request)
+        if me is None:
+            raise HTTPException(400, sources.NO_VISITOR)
+        if sources.live_uploads(request.app.state.deps.sources_dir, me) >= demo.MAX_UPLOADS_PER_VISITOR:
+            raise sources.too_many_uploads()
+        now = _clock()
+        with self._fetch_lock:
+            recent = [t for t in self._fetches.get(me, []) if now - t < 3600]
+            if len(recent) >= demo.MAX_FETCHES_PER_HOUR:
+                self._fetches[me] = recent
+                raise HTTPException(429, TOO_MANY_FETCHES)
+            self._fetches[me] = [*recent, now]
+            # Forget visitors with no fetch in the last hour, so the table stays small.
+            for other in [v for v, times in self._fetches.items() if not any(now - t < 3600 for t in times)]:
+                del self._fetches[other]
+
+    def max_url_bytes(self, request: Request) -> int:
+        """On the demo, the upload cap (10 MB): the per-format caps then apply
+        to what came back. Locally, pandion-api's default."""
+        return demo.MAX_UPLOAD_BYTES if demo.enabled() else super().max_url_bytes(request)
 
     def on_uploaded(self, document: Document, request: Request) -> None:
         sources.record_upload(request.app.state.deps.sources_dir, document.sha, _visitor(request))

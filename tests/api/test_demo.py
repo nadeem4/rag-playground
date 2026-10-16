@@ -139,6 +139,10 @@ def test_demo_settings_report_the_limits(client, monkeypatch):
         "limits": {
             "max_bytes": 10 * 1024 * 1024,
             "max_pages": 20,
+            "max_other_bytes": 2 * 1024 * 1024,
+            "max_image_bytes": 5 * 1024 * 1024,
+            "max_image_pixels": 20_000_000,
+            "max_fetches_per_hour": 10,
             "max_files": 3,
             "max_total_bytes": 200 * 1024 * 1024,
             "ttl_hours": 24,
@@ -157,12 +161,19 @@ def test_demo_refuses_a_file_over_10_mb(client, monkeypatch):
     assert r.json()["detail"] == "This file is 10.0 MB. The hosted demo takes files up to 10 MB. Run the playground locally for larger files. Or split out the pages you need and upload those."
 
 
-def test_demo_refuses_a_non_pdf(client, monkeypatch):
+def test_demo_refuses_a_file_with_no_extension_that_is_not_a_pdf(client, monkeypatch):
+    # The parser is chosen by the extension, so without one only a PDF can be told apart.
+    # The demo's rules for the other formats are in test_demo_documents.py.
     demo_on(monkeypatch)
     client.get("/api/settings/app")
-    r = client.post("/api/v2/documents", files={"file": ("notes.txt", b"just text", "text/plain")})
+    r = client.post("/api/v2/documents", files={"file": ("notes", b"just text", "text/plain")})
     assert r.status_code == 415
-    assert r.json()["detail"] == "The hosted demo takes PDF files only."
+    assert r.json()["detail"] == (
+        "The hosted demo takes PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG files, "
+        "named with their extension, such as notes.docx. Rename the file and try again."
+    )
+    one = client.post("/api/v2/documents", files={"file": ("one", _pdf_with_pages(1), "application/pdf")})
+    assert one.status_code == 200
 
 
 def test_demo_refuses_more_than_20_pages(client, monkeypatch):

@@ -12,12 +12,15 @@ how it fits with the frontend.
   playground's own routes under `/api` and serves the built frontend last.
   `playground.backend.main:app` is the app uvicorn runs.
 - `policy.py` holds `PlaygroundPolicy`, the demo's rules as a pandion-api `Policy`. It
-  decides who may read a document, checks each upload, refuses a custom model endpoint on
+  decides who may read a document, checks each upload and each page fetched from a link
+  (with a per-browser limit on links an hour), refuses a custom model endpoint on
   the demo, refuses a changed prompt or model revision, and caps the work one run can ask
   for. [docs/pandion-api.md](../../docs/pandion-api.md#the-playground-on-pandion-api) lists
   every rule.
 - `demo.py` is demo mode, switched on by `RAG_PLAYGROUND_DEMO=1`. It holds the demo's
-  limits: the upload size, pages and count, the runs that may work at once, and the
+  limits: the upload size, pages and count, the lower caps for files that are not PDFs
+  (bytes, a zip's unpacked size and parts, an image's pixels), the links a browser may
+  ask for in an hour, the runs that may work at once, and the
   questions a run may ask.
 - `visitor.py` gives each browser an anonymous id in a cookie. On the demo, that id is
   what keeps a visitor's uploads and runs their own. There is no login.

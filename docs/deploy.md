@@ -82,9 +82,17 @@ turns off what is unsafe to share.
 - The server gives each browser an anonymous `rag_visitor` cookie. An upload belongs to
   that browser: no other visitor can list it, see its pages or run on it. Clearing
   cookies loses access to your uploads.
-- Uploads are PDFs only, up to 10 MB and 20 pages each, with no page over 41 inches
-  (3,000 points) a side, and 3 live files per browser. All live uploads together are
+- A PDF upload can be up to 10 MB and 20 pages, with no page over 41 inches (3,000
+  points) a side. A Word, PowerPoint, HTML, Markdown or text file can be up to 2 MB,
+  because it has no pages to count. A Word or PowerPoint file is a zip, so it must
+  unpack to 50 MB or less in at most 1,000 parts, which refuses a zip bomb. A PNG or JPG
+  image can be up to 5 MB and 20 million pixels, because each image is read with OCR,
+  about 10 seconds a page. A browser keeps 3 live files. All live uploads together are
   capped at 200 MB, so the shared disk cannot fill up.
+- A page can be added from a link. The demo fetches https links on port 443 to public
+  addresses only, up to 10 MB, once. The page then follows the upload rules above and
+  counts as one of the browser's 3 files. A browser can ask for 10 links an hour, and a
+  failed fetch counts too, because it still sent a request to someone else's server.
 - An upload is deleted 24 hours after it was made. A sweep checks once an hour.
 - The bundled samples stay public, and cannot be deleted. They are put back in the store
   each time the server starts, so a restart never loses one.

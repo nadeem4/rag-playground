@@ -28,14 +28,20 @@ with a run, and a question set while it is checked.
 
 | What | Where | How long |
 |---|---|---|
-| PDFs you upload | On the demo server, private to this browser | 24 hours, then deleted. At most 3 files at a time, 10 MB and 20 pages each. |
+| Files you upload | On the demo server, private to this browser | 24 hours, then deleted. At most 3 files at a time. A PDF can be up to 10 MB and 20 pages. A Word, PowerPoint, HTML, Markdown or text file can be up to 2 MB. A PNG or JPG image can be up to 5 MB and 20 million pixels. |
+| Pages you add from a link | On the demo server, private to this browser, with the link kept beside the page | Like an upload: 24 hours, then deleted, and each one counts as one of your 3 files. The demo fetches the page once, over https only, and never again for a question. A browser can ask for 10 links an hour. The link is shown only to this browser. |
 | An anonymous browser id | A cookie named `rag_visitor` | One year. It only links your uploads to this browser. It holds no name, email or account. |
 | Run results (pieces, indexes, answers) | On the demo server, as a cache shared by recipe | So a repeat run is quick. Nothing deletes them on a timer, not even when the upload they came from is deleted. They stay until the demo restarts or the cache is cleared, since the demo runs without persistent storage. |
 
-The app uploads a PDF with `POST /api/v2/documents`, deletes one with
+The app uploads a file with `POST /api/v2/documents`, adds a page from a link with
+`POST /api/v2/documents/url`, deletes one with
 `DELETE /api/v2/documents/{id}` and shows its pages from `GET /api/v2/documents/{id}/pages`
 and `GET /api/v2/documents/{id}/pages/{n}`. A question set is kept, checked or deleted at
 `/api/v2/documents/{id}/questions`. The rules above are the same on every one of them.
+
+When you add a page from a link, the demo server fetches it, not your browser. The site
+that hosts the page sees the server's address and a User-Agent naming Pandion, never
+your browser's address or cookie.
 
 ## On your machine
 
@@ -43,7 +49,7 @@ When you run RAG Playground yourself with demo mode off:
 
 | What | Where | How long |
 |---|---|---|
-| PDFs you upload | In the project's `sources` folder | Until you delete them. Nothing expires on your machine. |
+| Files you upload, and pages you add from a link (with the link) | In the project's `sources` folder | Until you delete them. Nothing expires on your machine. |
 | An anonymous browser id | A cookie named `rag_visitor` | One year. On your machine it only marks which browser uploaded a file. |
 | Run results | In the project's `artifacts` folder, as a cache | Until you clear the cache. |
 

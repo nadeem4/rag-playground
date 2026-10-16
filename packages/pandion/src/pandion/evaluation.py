@@ -7,6 +7,7 @@ one gold passage (`gold_answer` or `gold_answers`): the sentence in the
 document that answers it. `id`, `answer`, `tags` and `document` are optional.
 `trace` follows one question's answer down a finished run and says the first step
 that lost it. `evaluate` asks every question in a set and runs `trace` for every miss.
+`report.against(baseline)` says which questions a run newly missed or newly found.
 `compare` runs a pipeline once per variant of one stage and evaluates each.
 See docs/pandion.md, "Evaluate a pipeline" and "Compare settings".
 """
@@ -14,9 +15,12 @@ See docs/pandion.md, "Evaluate a pipeline" and "Compare settings".
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
+import re
 import statistics
 import threading
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -49,7 +53,9 @@ __all__ = [
     "GOLD_SEPARATOR",
     "QuestionResult",
     "QuestionSetError",
+    "Regression",
     "StepInput",
+    "best",
     "check_questions",
     "compare",
     "document_text",
@@ -138,6 +144,11 @@ class EvaluationReport:
     questions: list[QuestionResult]
     #: A cancel stopped the run before every question was asked.
     cancelled: bool = False
+    #: The searched documents' content hashes (or locations, for a source
+    #: other than upload), sorted.
+    document_shas: list[str] = field(default_factory=list)
+    #: The retrieval steps that may give a different result each run, such as llm_rerank.
+    nondeterministic: list[str] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -192,14 +203,162 @@ class EvaluationReport:
         return "\n".join(out)
 
     def to_dict(self) -> dict[str, Any]:
-        """Plain JSON: the totals, the totals by tag, and every question."""
+        """Plain JSON: the totals, the totals by tag, and every question, with
+        what `against` needs to compare a later run with this one: the
+        question set's fingerprint, the document shas and `top_k`."""
         return {
             "top_k": self.top_k,
             "cancelled": self.cancelled,
+            "questions_fingerprint": _fingerprint([q.to_dict() for q in self.questions]),
+            "document_shas": list(self.document_shas),
+            "nondeterministic": list(self.nondeterministic),
             **self.totals(),
             "by_tag": self.by_tag(),
             "questions": [q.to_dict() for q in self.questions],
         }
+
+    def against(self, baseline: EvaluationReport | dict[str, Any] | str | Path) -> Regression:
+        """This run compared with `baseline`: an earlier report, its `to_dict()`,
+        or the path of a file `pandion eval --json` wrote. Questions are paired
+        by id, or by their text when the set gave them no id. See `Regression`."""
+        return _regression(self.to_dict(), _baseline(baseline))
+
+
+@dataclass
+class Regression:
+    """What `EvaluationReport.against` returns.
+
+    `compared` questions are in both runs; `found_before` and `found_now`
+    count the found ones among them. `newly_missed` and `newly_found` are
+    their ids. `unmatched` names the questions only one run asked: this
+    run's first, then the baseline's. `partial` is True when the question
+    sets or `top_k` differ, and `notes` says so, and warns when a step that
+    is not deterministic may have made a question miss by chance.
+    """
+
+    found_before: int
+    found_now: int
+    compared: int
+    newly_missed: list[str]
+    newly_found: list[str]
+    unmatched: list[str]
+    partial: bool
+    notes: list[str]
+
+    def ok(self, allow: int = 0) -> bool:
+        """At most `allow` questions were newly missed."""
+        return len(self.newly_missed) <= allow
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**asdict(self), "ok": self.ok()}
+
+    def __str__(self) -> str:
+        line = f"Found {self.found_now} of {self.compared}; the baseline found {self.found_before} of {self.compared}."
+        if self.newly_missed:
+            line += " Newly missed: " + ", ".join(self.newly_missed) + "."
+        if self.newly_found:
+            line += " Newly found: " + ", ".join(self.newly_found) + "."
+        return "\n".join([line, *self.notes])
+
+
+#: A question with no id in its set is named by its place, which moves when the set is reordered.
+_POSITIONAL = re.compile(r"question \d+")
+
+
+def _fingerprint(questions: list[dict[str, Any]]) -> str:
+    """A hash of the questions and their gold passages, whatever their order."""
+    entries = sorted(json.dumps([q["question"], sorted(q["golds"])]) for q in questions)
+    return hashlib.sha256(json.dumps(entries).encode("utf-8")).hexdigest()
+
+
+def _baseline(baseline: EvaluationReport | dict[str, Any] | str | Path) -> dict[str, Any]:
+    """The baseline as a report's dict, with a plain error for a missing or wrong file."""
+    if isinstance(baseline, EvaluationReport):
+        return baseline.to_dict()
+    name = "The baseline"
+    if isinstance(baseline, (str, Path)):
+        name = str(baseline)
+        try:
+            baseline = json.loads(Path(baseline).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise ValueError(
+                f"There is no baseline file at {name}. Save one with pandion eval ... --json > {name}."
+            ) from None
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"{name} cannot be read as JSON: {exc}") from None
+    if not isinstance(baseline, dict) or not isinstance(baseline.get("questions"), list):
+        raise ValueError(
+            f"{name} is not an evaluation report. Save one with pandion eval ... --json, "
+            "or pass a report or its to_dict()."
+        )
+    return baseline
+
+
+def _key(q: dict[str, Any]) -> tuple[str, str]:
+    return ("text", q["question"]) if _POSITIONAL.fullmatch(q["id"]) else ("id", q["id"])
+
+
+def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
+    """Pair the questions by id (or text), then count and name the changes."""
+    by_key = {_key(b): b for b in before["questions"]}
+    by_text = {b["question"]: b for b in before["questions"]}
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    unmatched: list[str] = []
+    for q in now["questions"]:
+        b = by_key.get(_key(q)) or by_text.get(q["question"])
+        if b is None or any(b is paired for _, paired in pairs):
+            unmatched.append(q["id"])
+        else:
+            pairs.append((q, b))
+    unmatched += [b["id"] for b in before["questions"] if not any(b is paired for _, paired in pairs)]
+    notes: list[str] = []
+    fingerprint = before.get("questions_fingerprint") or _fingerprint(before["questions"])
+    partial = fingerprint != now["questions_fingerprint"]
+    if partial:
+        notes.append(
+            f"The question sets differ, so only the {len(pairs)} questions both runs share are compared."
+        )
+    if before.get("top_k") != now["top_k"]:
+        partial = True
+        notes.append(
+            f"The baseline checked the top {before.get('top_k')} pieces and this run the top "
+            f"{now['top_k']}, so the counts are not like for like."
+        )
+    if before.get("document_shas") and before["document_shas"] != now["document_shas"]:
+        notes.append("The documents differ from the baseline's.")
+    shaky = sorted({*now.get("nondeterministic", []), *before.get("nondeterministic", [])})
+    if shaky:
+        notes.append(
+            f"{', '.join(shaky)} can give a different result each run, so a newly missed "
+            "question may be noise. Run it again before you trust the change."
+        )
+    return Regression(
+        found_before=sum(b["found"] for _, b in pairs),
+        found_now=sum(q["found"] for q, _ in pairs),
+        compared=len(pairs),
+        newly_missed=[q["id"] for q, b in pairs if b["found"] and not q["found"]],
+        newly_found=[q["id"] for q, b in pairs if q["found"] and not b["found"]],
+        unmatched=unmatched,
+        partial=partial,
+        notes=notes,
+    )
+
+
+def best(reports: list[EvaluationReport]) -> list[int]:
+    """The places of the best reports, every one tied for first: the highest
+    hit rate (found out of scored), then the highest mean reciprocal rank.
+    Empty when no report was scored or none found an answer. `compare` names
+    its best variant by this rule."""
+    scored = [n for n, r in enumerate(reports) if r.totals()["scored"]]
+    if not any(reports[n].found for n in scored):
+        return []
+
+    def key(n: int) -> tuple[float, float]:
+        t = reports[n].totals()
+        return (t["hit_rate"], t["mrr"])
+
+    top = key(max(scored, key=key))
+    return [n for n in scored if key(n) == top]
 
 
 def _line(q: QuestionResult) -> str:
@@ -329,7 +488,39 @@ def evaluate(
                 "question_finished", question=qid, number=n, total=len(asked),
                 found=result.found, error=result.error,
             ))
-    return EvaluationReport(top_k=top_k, questions=results, cancelled=cancelled)
+    return EvaluationReport(
+        top_k=top_k, questions=results, cancelled=cancelled,
+        document_shas=_shas(p, resolved), nondeterministic=_nondeterministic(results),
+    )
+
+
+#: The registry stage of each retrieval step, by its name in `Retrieval.stages`.
+_RETRIEVAL_STAGES = {"rewrite": Stage.QUERY, "search": Stage.RETRIEVE, "rerank": Stage.RERANK}
+
+
+def _shas(p: Pipeline, documents: dict[str, Any] | None) -> list[str]:
+    """The searched documents' content hashes, or locations for a source other than upload."""
+    if documents is None:
+        try:
+            documents = p.index.indexed()
+        except ValueError:
+            return []
+    return sorted(getattr(d, "sha", d) for d in documents.values())
+
+
+def _nondeterministic(results: list[QuestionResult]) -> list[str]:
+    """The names of the retrieval steps that are not deterministic, such as llm_rerank."""
+    retrieval = next((q.retrieval for q in results if q.retrieval is not None), None)
+    if retrieval is None:
+        return []
+    steps = [("rewrite", retrieval.stages["rewrite"]), ("search", retrieval.stages["search"])]
+    steps += [("rerank", s) for s in retrieval.stages["rerank"]]
+    names: list[str] = []
+    for role, step in steps:
+        cls = registry.all_for(_RETRIEVAL_STAGES[role]).get(step.transform)
+        if cls is not None and not cls.deterministic and step.transform not in names:
+            names.append(step.transform)
+    return names
 
 
 def _failure(retrieval: Retrieval) -> str:
@@ -541,15 +732,7 @@ class Comparisons(list[Comparison]):
         """The best comparisons, every one tied for first, in order; empty when
         no variant finished and was scored, or none found an answer."""
         scored = self._scored()
-        if not any(c.report.found for c in scored):
-            return []
-
-        def key(c: Comparison) -> tuple[float, float]:
-            t = c.report.totals()
-            return (t["hit_rate"], t["mrr"])
-
-        top = key(max(scored, key=key))
-        return [c for c in scored if key(c) == top]
+        return [scored[n] for n in best([c.report for c in scored])]
 
     def cost(
         self,

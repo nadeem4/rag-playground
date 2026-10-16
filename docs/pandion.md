@@ -560,6 +560,58 @@ question is left out of the rates.
 retrieval result (the last reranker's, or the search's), so the hits can be read back
 by id later. It is None when the retrieval failed.
 
+### Compare with a baseline
+
+`report.against(baseline)` says which questions this run missed that an earlier run
+found, and the other way round. The baseline is an earlier report, its `to_dict()`, or
+the path of a file that `pandion eval --json` wrote.
+
+```python
+before = pandion.evaluate(p, "questions.json", documents="docs/")
+# ... change a setting, then run again
+now = pandion.evaluate(p2, "questions.json", documents="docs/")
+r = now.against(before)          # or now.against("base.json")
+r.found_before, r.found_now      # 9, 8
+r.newly_missed, r.newly_found    # ["q4", "q7"], []
+r.ok()                           # False: a question was newly missed
+r.ok(allow=2)                    # True: up to 2 newly missed questions are allowed
+print(r)                         # Found 8 of 12; the baseline found 9 of 12. Newly missed: q4, q7.
+```
+
+The `Regression` it returns has these fields:
+
+- `compared` is how many questions both runs asked. `found_before` and `found_now`
+  count the found ones among them.
+- `newly_missed` and `newly_found` are the ids of the questions whose verdict changed.
+- `unmatched` names the questions only one run asked: this run's first, then the
+  baseline's.
+- `partial` is True when the two runs did not ask the same set, or did not check the
+  same number of pieces. `notes` then says so in a plain sentence.
+- `notes` holds every plain sentence about the comparison, and `print(r)` prints them
+  under the counts.
+- `ok(allow=0)` is True when at most `allow` questions were newly missed.
+
+Questions are paired by their `id`. A question the set gave no id (named by its place,
+such as `question 3`) is paired by its text, so a reordered set still pairs up. When
+the question sets differ, only the questions both runs asked are compared, and the
+note says so. When `top_k` differs, a note says the counts are not like for like.
+
+To tell a changed set from the same one, `report.to_dict()` carries
+`questions_fingerprint`, a hash of the questions and their gold passages that does not
+depend on their order. It also carries `document_shas`, the searched documents' content
+hashes, and `top_k`. When the documents differ, a note says so.
+
+**The noise warning.** Some steps can give a different result each time they run, for
+example `llm_rewrite` and `llm_rerank`, which ask a model. When either run used such a
+step, `report.nondeterministic` names it, and a note says that a newly missed question
+may be noise: the model may simply have answered differently this time. Run it again
+before you trust the change. A pipeline without a model step gives the same result
+every run.
+
+`pandion.evaluation.best(reports)` gives the places of the best reports in a list,
+every one tied for first: the highest hit rate, then the highest mean reciprocal rank.
+It is the rule [`compare`](#compare-settings) names its best variant by.
+
 ## Questions written for you
 
 A question set takes time to write by hand. `pandion.evaluation.write_questions` asks a
@@ -1348,7 +1400,7 @@ needed. Without it, `retrieve` and `ask` search the documents the last `pandion 
 indexed, so name every document each time you index. A pipeline whose source is not local
 files remembers nothing from one command to the next, so name the documents again.
 
-**`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json]`** runs
+**`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json] [--baseline BASE [--allow N]]`** runs
 `pandion.evaluate` on a question set (JSON or CSV, as in
 [Evaluate a pipeline](#evaluate-a-pipeline)) and prints the report as Pandion prints it:
 one line per question, then the totals. `--top-k` is how many of the top pieces are
@@ -1364,6 +1416,20 @@ shows only the time and the cached steps. A priced model whose server sent no to
 is named as "no token count for ...". `--json` prints the report's `to_dict()`
 instead, with the `cost()` dict under `"cost"`. It exits with 1 when a question could not
 be scored.
+
+**`--baseline FILE [--allow N]`** compares the run with an earlier one, as
+[`against`](#compare-with-a-baseline) does, and prints one more line, such as
+"Found 8 of 12; the baseline found 9 of 12. Newly missed: q4, q7.", followed by any
+notes. It exits with 1 when more than `N` questions were newly missed (0 when `--allow`
+is left out). Save a baseline with `--json`; there is no other way to save one. The
+baseline file is checked before anything runs, and a missing one exits with 2. In CI:
+
+```bash
+pandion eval pipeline.yaml questions.json --json > base.json      # once, on the main branch
+pandion eval pipeline.yaml questions.json --baseline base.json --allow 1   # on every change
+```
+
+With `--json`, the comparison is under `"regression"`.
 
 **`pandion compare FILE --vary SPEC DOC... [--questions QUESTIONS] [--top-k K] [--json]`**
 runs `pandion.compare`: the pipeline once per value of one setting, indexing `DOC...`
@@ -1432,7 +1498,9 @@ A model's key comes from the environment, never from the file or a flag:
 printed.
 
 The command exits with 0 when it is done, 1 when a step failed (the line for that step
-says why), and 2 when the file or a flag is wrong (the message starts with `pandion: `).
+says why) or `pandion eval --baseline` found more newly missed questions than `--allow`,
+and 2 when the file, a flag or the baseline file is wrong (the message starts with
+`pandion: `).
 
 ## Write your own strategy
 

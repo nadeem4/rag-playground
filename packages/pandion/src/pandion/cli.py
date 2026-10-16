@@ -5,7 +5,7 @@
     pandion index pipeline.yaml report.pdf notes/ [--sync] [--through chunk]
     pandion retrieve pipeline.yaml "What is chunking?" [--k 5] [--documents report.pdf]
     pandion ask pipeline.yaml "What is chunking?" [--documents report.pdf]
-    pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json]
+    pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json] [--baseline base.json [--allow 0]]
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
@@ -288,14 +288,27 @@ def cost_line(cost: dict[str, Any]) -> str:
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
+    if args.allow is not None and args.baseline is None:
+        raise ValueError("--allow counts newly missed questions against a baseline: add --baseline base.json.")
+    if args.baseline is not None:
+        # Check the baseline file before anything runs: comparing an empty report reads it.
+        pandion.EvaluationReport(top_k=args.top_k, questions=[]).against(args.baseline)
     p = _load(args)
     report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
+    regression = report.against(args.baseline) if args.baseline is not None else None
     if args.json:
-        print(json.dumps({**report.to_dict(), "cost": report.cost()}, indent=2))
+        data = {**report.to_dict(), "cost": report.cost()}
+        if regression is not None:
+            data["regression"] = regression.to_dict()
+        print(json.dumps(data, indent=2))
     else:
         print(report)
         print(cost_line(report.cost()))
-    return 0 if all(q.error is None for q in report.questions) else 1
+        if regression is not None:
+            print(regression)
+    if not all(q.error is None for q in report.questions):
+        return 1
+    return 0 if regression is None or regression.ok(args.allow or 0) else 1
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
@@ -465,7 +478,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("questions", help="a question set, JSON or CSV, in the samples' format")
     sub.add_argument("--top-k", dest="top_k", type=int, default=5, help="how many of the top pieces are checked (default 5)")
     sub.add_argument("--documents", nargs="+", help="evaluate on exactly these documents, indexing them first if needed")
-    sub.add_argument("--json", action="store_true", help="print the report as JSON")
+    sub.add_argument("--json", action="store_true", help="print the report as JSON; save it as a baseline with --json > base.json")
+    sub.add_argument("--baseline", help="a report saved with --json: say which questions this run newly missed or newly found")
+    sub.add_argument("--allow", type=int, help="with --baseline, how many newly missed questions still exit 0 (default 0)")
 
     sub = command("compare", "run a pipeline once per value of one setting", cmd_compare)
     sub.add_argument("config")

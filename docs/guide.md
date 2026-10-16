@@ -31,11 +31,14 @@ several, and nothing about saved pipelines, links or exported files will need to
 
 On Build and Evaluate the **Pipeline** picker comes first. Wherever the app names a
 document, it shows it the same way: a small picture of page 1, the title, then the file
-name, the page count and a tag, **Sample** or **Your upload**, with a **Preview** button.
+name, the page count and a tag, **Sample**, **Your upload** or **From a link**, with a
+**Preview** button. A document without pages shows its kind, such as DOCX, in place of the
+picture, and a document from a link takes the link's host, such as en.wikipedia.org, as its
+title.
 
 - On **Build** the documents belong to the pipeline, so they are in its first step, the
   **Document** card. Its **Add or change** link opens a menu with the bundled samples, your
-  uploads and **Upload a PDF**.
+  uploads, **Upload a document** and **Or add a link**.
 - On **Evaluate** they are listed under **Documents**, with **Change**.
 - **Compare** stays document first: a **Document** line above the recipes shows the
   picture and the title, with **Preview** and **Change**. It works on the pipeline on Build.
@@ -47,7 +50,33 @@ do not work on one. Home has its own **Try a sample** and **Use your own files**
 **Preview** opens a side sheet with every page of the document. A row of page numbers at
 the top jumps to a page, and the page in view is marked as you scroll. Each page is
 captioned, such as Page 3 of 6. Escape or the close button closes it, and you are back
-where you were.
+where you were. A document without pages says so in the sheet; its text shows on the
+Parse step once the pipeline has run.
+
+### Kinds of document, and links
+
+**Upload a document** takes every kind of file a parser on the server reads. With the
+parsers here that is PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG. The file
+picker offers only those, and the menu names them under the upload. On the demo the same
+line gives the limits: a PDF up to 10 MB and 20 pages, other files up to 2 MB, and images up
+to 5 MB.
+
+**Or add a link** takes the address of a web page or a PDF. Paste it and press **Add**. The
+server fetches the page once and keeps it like an upload: it counts as one of your uploads,
+expires with them on the demo, and is never fetched again for a question. On the demo only
+public https addresses work. When a link is refused, the menu shows the server's own
+sentence, such as "That address is not on the public internet, so it was not fetched."
+
+Not every parser reads every kind. In the Parse step's picker, a parser that cannot read
+the document is greyed out with the reason, such as "pdfium reads PDF files only." If you
+choose a Word file while Parse uses pdfium, the Parse card says the same thing under its
+picker, and the run waits until you pick a parser that reads it, such as Docling.
+
+Word files, web pages, Markdown and text have no pages. Images and PowerPoint slides do,
+but their boxes are in pixels or slide units, not PDF points, so the app does not draw
+them. For all of these, **Show in text** takes the place of **Show in PDF**: it opens the
+document's text in a scrolling panel, with the cited or selected piece marked in its
+chunk's colour.
 
 The five samples were written for the playground, and each one shows a problem:
 
@@ -130,7 +159,7 @@ pipeline from the Starter's settings on the documents in use.
 The column on the left of Build is the index pipeline: Document, Parse, Clean, Chunk and
 Index, one card each with its own settings. The Document card lists the pipeline's
 documents, each with **Preview**, and its **Add or change** link picks another. On a first
-visit with no document, the first-visit card offers the samples, **Upload a PDF**, and
+visit with no document, the first-visit card offers the samples, **Upload a document**, and
 **Pick a document** for your earlier uploads.
 
 - **Build the index** runs the steps. Each card also has its own **Run**. Each card runs
@@ -163,6 +192,16 @@ visit with no document, the first-visit card offers the samples, **Upload a PDF*
   seconds a page.
 - The **Sweep** button on a card opens Compare on that step.
 - Any chunk or search hit can open its PDF page with its source paragraphs outlined.
+
+**Add enrich step**, under Chunk, adds the optional Enrich step before Index. It asks a
+chat model to write one short sentence that places each chunk in its document, and puts
+that sentence in front of the chunk before it is searched. The chunk that is shown and
+cited does not change; its output shows each chunk's `embed_text` with the context in
+front. It costs one model call per chunk and needs the key for its model, so without one
+the card says which key it needs and Run waits. The hosted demo writes context for at most
+200 chunks in one run. The **x** on the card removes the step, and its **Sweep** opens
+Compare with the step on against off. Fixed token count and By sentence also have a free
+**Heading in front** setting that puts the heading path in front of each chunk instead.
 
 ### Start from a template
 
@@ -282,9 +321,15 @@ the question box.
   comes first and the search order folds under **Show search order**. Widen the panel to
   see the two side by side.
 - With Chat, the answer cites the passages it relied on. Each citation is checked against
-  the parsed document, and one that does not match is marked unverified. With sentence ids,
-  each claim is shown as cited, weak, matched by similarity, or not grounded. Clicking a
-  citation opens the PDF page with the sentence highlighted.
+  the parsed document, and one that does not match is marked unverified. Clicking a
+  citation opens the PDF page with the sentence highlighted. For a document without
+  pages it opens the document's text with the cited words marked instead.
+- Every part of a Chat answer gets a label, whichever model answered. A part is cited,
+  weak, matched by similarity, or has no source. A line above the answer counts them, for
+  example "2 of 3 parts cite a piece." A part with no source is drawn in red with a small
+  "No source" tag, because nothing in the retrieved pieces backs it. A similarity match
+  only means a shown sentence is close in meaning, not that it proves the part. Untick
+  **Mark parts with no source** to hide those marks; this browser remembers the choice.
 - A piece that holds a table shows it as a table when the piece is open, and says each row
   in words (Measure: Before, After) when it is cut to two lines, as on Compare.
 - The questions asked earlier in the tab stay in a list below.
@@ -465,6 +510,15 @@ number has its plain name and its technical name: Hit rate (Hit@5), Mean recipro
 (MRR), Average rank when found (mean rank) and Middle rank when found (median rank), plus
 Evidence found (recall) when a question has more than one passage. Each says what it was in
 the last run when that differs. "What these mean" opens the explanation.
+
+Under the score, **Best so far** compares the run with your best run for the same questions,
+documents and Pieces checked. The first run becomes the best. A better run says "New best."
+and names the questions it won. A worse run says how many fewer it found, names the questions
+it lost, and offers **Load the best pipeline**, which puts that pipeline on Build, and
+**Compare the two**, which opens Compare with the best pipeline loaded. Only questions decide
+better and worse: hit rate first, then mean reciprocal rank to break a tie, and a question
+either run could not score is left out. The best is kept in this browser only, and
+**Forget best** clears it.
 
 Changing Pieces checked after a run does not relabel the numbers: the page says "Scored at 5
 pieces. Evaluate again to use 3."

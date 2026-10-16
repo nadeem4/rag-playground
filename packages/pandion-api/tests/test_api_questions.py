@@ -44,6 +44,14 @@ def test_a_document_that_is_not_a_pdf_is_415(client):
     assert post_set(client, sha, [{"question": "Q?", "gold_answers": ["hello there"]}]).status_code == 415
 
 
+def test_a_word_document_is_415_because_pdfium_cannot_read_it(client):
+    sha = client.post(
+        "/documents", files={"file": ("notes.docx", b"PK not really a word file", "application/octet-stream")}
+    ).json()["sha"]
+    r = post_set(client, sha, [{"question": "Q?", "gold_answers": ["hello there"]}])
+    assert r.status_code == 415
+
+
 def test_an_unknown_or_hidden_document_is_404(tmp_path):
     class Hidden(Policy):
         def can_read(self, sha, request):

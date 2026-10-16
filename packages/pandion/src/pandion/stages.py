@@ -17,6 +17,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from pandion.formats import check_readable
 from pandion.payloads import ChunkSet, ParsedDoc, Query
 from pandion.plugins import discover
 from pandion.ports import RunContext, Stage
@@ -33,6 +34,7 @@ def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
     discover()
     cls, settings = _strategy(Stage.PARSE, use, config, where="The parser")
     path = Path(source)
+    check_readable(use, path.name)
     raw = {
         "sha": hashlib.sha256(path.read_bytes()).hexdigest(),
         "filename": path.name,

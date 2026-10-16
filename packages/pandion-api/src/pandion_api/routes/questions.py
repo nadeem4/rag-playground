@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 import pandion
 from pandion.evaluation import QuestionSetError, check_questions, document_text, parse_question_set, write_questions
-from pandion.extend import EndpointRefused, guard_endpoint
+from pandion.extend import EndpointRefused, UnreadableFormat, guard_endpoint
 from pandion_api.checks import chat_providers
 from pandion_api.credentials import PROVIDERS
 from pandion_api.deps import get_documents, get_policy
@@ -75,7 +75,7 @@ def _text(path: Path) -> str:
     try:
         with PDFIUM_LOCK:
             return document_text(pandion.parse(path, use=PARSER))
-    except pdfium.PdfiumError as exc:
+    except (pdfium.PdfiumError, UnreadableFormat) as exc:
         raise HTTPException(status_code=415, detail="this source is not a PDF, so its text cannot be checked") from exc
 
 

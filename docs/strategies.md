@@ -40,8 +40,10 @@ a single copy on disk.
 
 ## Parse
 
-Parsing turns the PDF into text elements (headings, paragraphs, lists and tables) with
-their pages and positions.
+Parsing turns the document into text elements (headings, paragraphs, lists and tables)
+with their pages and positions. `pdfium` reads PDF files only. `docling` also reads Word,
+PowerPoint, HTML, Markdown, plain text and PNG or JPG images; see
+[Documents other than PDFs](pandion.md#documents-other-than-pdfs).
 
 ### Fast text (`pdfium`)
 
@@ -432,6 +434,9 @@ searches, then fuses them with Pandion's own code.
 
 ### docling (Docling)
 
+- Sets `allowed_formats` on the `DocumentConverter` to PDF, DOCX, PPTX, HTML, MD (which
+  also reads `.txt`) and IMAGE, so no other format is read. Images get their own
+  `ImageFormatOption` with the same options as PDFs but `do_ocr` always on.
 - Sets in `PdfPipelineOptions`: `do_ocr`, `do_table_structure`,
   `table_structure_options.mode` (from `table_mode`), `heading_hierarchy_options.enabled`
   (from `heading_hierarchy`), and `generate_parsed_pages`, which is on only when

@@ -318,6 +318,14 @@ def test_the_readme_names_the_file_types_and_says_subfolders_are_not_read(tmp_pa
     assert ".pdf" in readme and "subfolders" in readme
 
 
+def test_a_docling_project_reads_every_format_docling_declares(tmp_path):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, {**OFFLINE, "index": {**OFFLINE["index"], "parse": {"use": "docling"}}})
+    readme = (folder / "README.md").read_text(encoding="utf-8")
+    assert "The pipeline reads .pdf, .docx, .pptx, .html, .htm, .md, .txt, .png, .jpg and .jpeg files" in readme
+    assert "'.docx'" in (folder / "run.py").read_text(encoding="utf-8")
+
+
 def test_run_py_skips_files_the_parser_cannot_read_and_says_so(tmp_path):
     folder = tmp_path / "project"
     pandion.new_project(folder, OFFLINE, QUESTIONS)

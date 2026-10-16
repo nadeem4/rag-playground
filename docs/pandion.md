@@ -17,6 +17,7 @@ installs the built package in new environments, with and without extras, and tes
 
 - [Install](#install)
 - [Try one stage at a time](#try-one-stage-at-a-time)
+- [Documents other than PDFs](#documents-other-than-pdfs)
 - [Rewrite a question](#rewrite-a-question)
 - [The pipeline file](#the-pipeline-file)
 - [Build an index](#build-an-index)
@@ -100,6 +101,49 @@ names its cleaner with `use` and holds its settings beside it, for example
 `{"use": "drop_matching", "pattern": "Draft"}`. Its note has one line per step, saying
 what it removed. `clean` and `chunk` accept either a parsed document or the result of
 the stage before, as above.
+
+## Documents other than PDFs
+
+Each parser reads a fixed set of formats, chosen by the file's extension:
+
+| Format | Extensions | `pdfium` | `docling` |
+|---|---|---|---|
+| PDF | `.pdf` | yes | yes |
+| Word | `.docx` | no | yes |
+| PowerPoint | `.pptx` | no | yes |
+| HTML | `.html`, `.htm` | no | yes |
+| Markdown | `.md` | no | yes |
+| Plain text | `.txt` | no | yes |
+| PNG and JPG images | `.png`, `.jpg`, `.jpeg` | no | yes |
+
+```python
+parsed = pandion.parse("notes.docx", use="docling")
+```
+
+A parser declares its formats in `provides`, for example `{"formats": ["pdf"]}` for
+`pdfium`. A pipeline checks every file against its parser before any step runs, so a file
+the parser cannot read fails at once with a plain message, such as `pdfium reads PDF files;
+notes.docx is a Word file. Use docling.` The extension is matched without regard to case.
+A file with no extension, and a parser that declares no formats, are not checked. The
+error is `pandion.extend.UnreadableFormat`, a `ValueError`, so a server can catch it alone.
+
+Word, HTML, Markdown and text files load no model, so Docling reads them quickly.
+Docling reads a `.txt` file with its Markdown reader, so a line that starts with
+`#` becomes a heading. Headings keep their levels: in HTML and Markdown, `h1` or `#` is
+level 1 and each level below is one deeper. In a Word file, Heading 1 is level 2, one below
+the Title style; the levels still nest. An HTML `<title>` is read
+as the first heading, unless the page's first heading says the same thing.
+
+An image is a one-page document read with OCR. OCR is always on for images, whatever
+`do_ocr` says; `do_ocr` is for PDFs only. Expect about 10 seconds a page, and a first run
+that loads the OCR models.
+
+**Documents without pages.** Word, HTML, Markdown and text files have no pages. Their
+`page_count` is 0, every element's `page` and `bbox` are None, and every piece's
+`page_span` is None. Chunking, search, answers and evaluation all work the same; a
+citation just has no page. A PowerPoint file has one page per slide, so `page` is the
+slide number. Its boxes, and an image's, are in that page's own units (slide units or
+pixels), not PDF points.
 
 ## Rewrite a question
 
@@ -1251,8 +1295,9 @@ dict, as `pandion.evaluate` takes), and returns the paths it wrote:
   (absolute, a drive, a URL, `~` or `..`) keeps only its last part, so no folder of the
   computer that wrote it ends up in the file. Every other setting is copied as it is.
   `models.public_endpoints_only` is left out, so the default applies at home.
-- `run.py`: indexes the files in `docs/` that the parse step reads (`.pdf` for pdfium
-  and docling), says which other files it skipped, then evaluates the questions in
+- `run.py`: indexes the files in `docs/` that the parse step reads (`.pdf` for pdfium; every
+  format in [Documents other than PDFs](#documents-other-than-pdfs) for docling), says which
+  other files it skipped, then evaluates the questions in
   `questions.json`, or asks one example question when there is no question set. It
   warns about a question that names a document not in `docs/`, and prints the results
   and the cost of the run. Subfolders of `docs/` are not read.

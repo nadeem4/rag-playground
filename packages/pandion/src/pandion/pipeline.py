@@ -48,6 +48,7 @@ from pandion.config import ConfigError, PipelineConfig, build, from_dict as _fro
 from pandion.cost import cost as _cost
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
+from pandion.formats import check_readable
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -538,7 +539,9 @@ class IndexPipeline:
         file is named by its file name. A mapping names each document:
         `{"report.pdf": "/uploads/0f3a.pdf"}` indexes that file as report.pdf.
         A step that fails is reported, not raised, and the steps after it are
-        skipped.
+        skipped. A file the parser cannot read, such as a Word file given to
+        pdfium, raises ValueError (`pandion.formats.UnreadableFormat`) before
+        the run starts.
 
         `through` stops every document after that step: "parse", "clean" (the
         last cleaner, or parse when there are none), "clean.1", "clean.2" ...,
@@ -776,6 +779,11 @@ class IndexPipeline:
             nodes.append(Node(node_id, stage, use, settings))
             roles[node_id] = (doc_id, role)
             return node_id
+
+        # A file the parser cannot read fails here, before any step runs.
+        if self._uploads():
+            for doc_id in sorted(documents):
+                check_readable(index.parse[0], documents[doc_id].filename)
 
         chunk_nodes = []
         for doc_id in sorted(documents):

@@ -39,6 +39,18 @@ def test_a_file_two_visitors_own_survives_until_both_expire(tmp_path):
     assert (tmp_path / f"{body['sha']}.pdf").exists()
 
 
+def test_an_expired_visitors_link_goes_with_their_upload(tmp_path):
+    body = _store(tmp_path, "shared.txt", b"shared text", "text/plain", visitor="a")
+    meta_path = tmp_path / META_DIR / f"{body['sha']}.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["origin_urls"] = {"a": "https://a.example/?token=a", "b": "https://b.example/"}
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    _stamp(tmp_path, body["sha"], {"a": NOW - timedelta(days=2), "b": NOW - timedelta(hours=1)})
+    assert expiry.sweep(tmp_path, NOW) == 0
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert meta["origin_urls"] == {"b": "https://b.example/"}
+
+
 def test_samples_are_never_touched(tmp_path):
     sample = _store(tmp_path, "chunking-primer.pdf", b"%PDF-1.4 sample", "application/pdf")
     assert expiry.sweep(tmp_path, NOW + timedelta(days=400)) == 0

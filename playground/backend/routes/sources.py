@@ -10,14 +10,18 @@ uploader's time), written under pandion-api's `SIDECAR_LOCK`.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import mimetypes
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pypdfium2 as pdfium
 from fastapi import APIRouter, HTTPException, Request
+from pandion.extend import format_of
+from PIL import Image
 from pydantic import BaseModel
 
 # The record helpers are pandion-api's, so the app and /api/v2 share one record
@@ -106,10 +110,38 @@ def _too_big(size: int | None) -> HTTPException:
     )
 
 
-def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
+#: The demo's 415 for a file with no extension that is not a PDF: the parser is
+#: chosen by the extension, so without one only a PDF can be told apart.
+NO_FORMAT = (
+    "The hosted demo takes PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG files, "
+    "named with their extension, such as notes.docx. Rename the file and try again."
+)
+NOT_A_PDF = "This file is named as a PDF, but it cannot be read as one."
+NOT_A_ZIP = "This file is named as a Word or PowerPoint file, but it cannot be opened as one."
+NOT_AN_IMAGE = "This file is named as an image, but it cannot be opened as one."
+
+
+def _check_demo_limits(sources: Path, me: str, data: bytes, filename: str) -> None:
+    """The demo's rules for one document's bytes: a PDF's pages, another
+    format's caps, then this visitor's room and the shared disk."""
+    kind = format_of(filename)
+    if kind is None and page_count(data) is not None:
+        kind = "pdf"  # a name with no extension: only a PDF can be told by its bytes
+    if kind is None:
+        raise HTTPException(415, NO_FORMAT)
+    if kind == "pdf":
+        _check_pdf(data)
+    elif kind in ("png", "jpg"):
+        _check_image(data)
+    else:
+        _check_other(kind, data)
+    _check_room(sources, me, data)
+
+
+def _check_pdf(data: bytes) -> None:
     pages = page_count(data)
     if pages is None:
-        raise HTTPException(415, "The hosted demo takes PDF files only.")
+        raise HTTPException(415, NOT_A_PDF)
     if pages > demo.MAX_UPLOAD_PAGES:
         raise HTTPException(
             413,
@@ -125,19 +157,87 @@ def _check_demo_limits(sources: Path, me: str, data: bytes) -> None:
             f"Page {number} is {round(width / 72)} by {round(height / 72)} inches. The hosted demo takes pages up to "
             f"{int(demo.MAX_PAGE_POINTS / 72)} inches a side. Run the playground locally for larger pages.",
         )
+
+
+def _check_other(kind: str, data: bytes) -> None:
+    """Word, PowerPoint, HTML, Markdown and text: MAX_OTHER_BYTES, and for the two
+    zips their unpacked size and parts. Python's zip reader, which Docling's
+    readers use, never unpacks more than a part's declared size, so the sizes
+    the zip declares are the ones that count."""
+    if len(data) > demo.MAX_OTHER_BYTES:
+        raise HTTPException(
+            413,
+            f"This file is {_fmt_mb(len(data))}. The hosted demo takes Word, PowerPoint, HTML, Markdown "
+            f"and text files up to {demo.MAX_OTHER_BYTES // (1024 * 1024)} MB. "
+            "Run the playground locally for larger files.",
+        )
+    if kind not in ("docx", "pptx"):
+        return
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            parts = archive.infolist()
+    except (zipfile.BadZipFile, OSError, ValueError, EOFError):
+        raise HTTPException(415, NOT_A_ZIP) from None
+    if len(parts) > demo.MAX_ZIP_MEMBERS:
+        raise HTTPException(
+            413,
+            f"This Word or PowerPoint file has more than {demo.MAX_ZIP_MEMBERS:,} parts. The hosted demo "
+            f"takes files with up to {demo.MAX_ZIP_MEMBERS:,}. Run the playground locally for larger files.",
+        )
+    if sum(part.file_size for part in parts) > demo.MAX_UNZIPPED_BYTES:
+        cap = f"{demo.MAX_UNZIPPED_BYTES // (1024 * 1024)} MB"
+        raise HTTPException(
+            413,
+            f"This Word or PowerPoint file unpacks to more than {cap}. The hosted demo takes files that "
+            f"unpack to {cap} or less. Run the playground locally for larger files.",
+        )
+
+
+def _check_image(data: bytes) -> None:
+    """PNG and JPG: MAX_IMAGE_BYTES, and MAX_IMAGE_PIXELS read from the header
+    alone, so a huge image is never decoded here."""
+    if len(data) > demo.MAX_IMAGE_BYTES:
+        raise HTTPException(
+            413,
+            f"This file is {_fmt_mb(len(data))}. The hosted demo takes images up to "
+            f"{demo.MAX_IMAGE_BYTES // (1024 * 1024)} MB. Run the playground locally for larger images.",
+        )
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            width, height = image.size
+    except Image.DecompressionBombError:
+        width = height = None
+    except (OSError, ValueError, SyntaxError):
+        raise HTTPException(415, NOT_AN_IMAGE) from None
+    if width is None or width * height > demo.MAX_IMAGE_PIXELS:
+        size = f"{width} by {height} pixels" if width is not None else "far too many pixels"
+        raise HTTPException(
+            413,
+            f"This image is {size}. The hosted demo reads images of up to "
+            f"{demo.MAX_IMAGE_PIXELS // 1_000_000} million pixels, because each one is read with OCR. "
+            "Run the playground locally for larger images.",
+        )
+
+
+def _check_room(sources: Path, me: str, data: bytes) -> None:
+    """The visitor's three live uploads, and the shared disk."""
     sha = hashlib.sha256(data).hexdigest()
     if sha in sample_set.readable_shas():
         return  # a sample's bytes store nothing new and stay public (see `_store`)
     current = owners(sources, sha)
     if me not in current and live_uploads(sources, me) >= demo.MAX_UPLOADS_PER_VISITOR:
-        raise HTTPException(
-            429,
-            f"This browser already has {demo.MAX_UPLOADS_PER_VISITOR} uploads. "
-            "Wait for one to expire, or run the playground locally.",
-        )
+        raise too_many_uploads()
     # bytes someone already uploaded take no more disk
     if not current and live_upload_bytes(sources) + len(data) > demo.MAX_TOTAL_UPLOAD_BYTES:
         raise HTTPException(503, DEMO_FULL)
+
+
+def too_many_uploads() -> HTTPException:
+    return HTTPException(
+        429,
+        f"This browser already has {demo.MAX_UPLOADS_PER_VISITOR} uploads. "
+        "Wait for one to expire, or run the playground locally.",
+    )
 
 
 def record_upload(sources: Path, sha: str, visitor: str | None) -> None:
@@ -151,6 +251,10 @@ def record_upload(sources: Path, sha: str, visitor: str | None) -> None:
     if sample is not None:
         body["filename"], visitor = sample.pdf.name, None
     visitors = dict(body.get("visitors") or {})
+    # A link is one browser's own (it may hold a token): kept under its visitor, never shared.
+    origin = body.pop("origin_url", None)
+    if visitor and isinstance(origin, str):
+        body["origin_urls"] = {**(body.get("origin_urls") or {}), visitor: origin}
     if visitor:
         visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     if visitors:

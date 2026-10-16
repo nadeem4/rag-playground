@@ -41,9 +41,11 @@ There are four ways in: [try it online](#try-it-online),
 
 Open the [live demo](https://rag.codewithnk.com). There is no sign in.
 
-- Pick one of the bundled samples, or upload your own PDF. On the demo an upload can be
-  up to 10 MB and 20 pages, a browser can keep 3 uploads at a time, and each upload is
-  deleted 24 hours after it was made. Your uploads are private to your browser.
+- Pick one of the bundled samples, or upload your own PDF. On the demo a PDF can be up to
+  10 MB and 20 pages, a browser can keep 3 uploads at a time, and each upload is deleted
+  24 hours after it was made. Your uploads are private to your browser. The server also
+  takes Word, PowerPoint, HTML, Markdown, text and image files, and pages from a link;
+  [deploy.md](docs/deploy.md) lists the demo's limits for them.
 - The demo is shared, so one browser can have two runs going at once, an evaluation
   scores at most 50 questions, and a comparison at most 120 recipe-questions (recipes
   times questions). Run the playground locally for more.

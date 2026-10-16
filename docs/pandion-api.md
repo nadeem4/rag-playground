@@ -64,8 +64,9 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /strategies` | `{"stages": ..., "defaults": ...}`: every strategy by stage with its settings as a JSON schema (`pandion.catalog()`, as the Policy shows it), and the strategy a new pipeline starts with per part (`pandion.defaults()`) |
 | `POST /explain` | `{"stage", "use", "settings"}` gives what that strategy will do with those settings, in plain words (`pandion.explain`). Nothing runs. |
 | `POST /pipelines/validate` | `{"config": <pipeline>}` gives `{"ok": true, "problems": [], "config": <the pipeline in the file's shape>, "yaml": <text>}` or `{"ok": false, "problems": [<sentence>]}`, where `yaml` is the pipeline as a file Pandion reads, with `path: ./pandion-index`. The file holds the pipeline as it ran; a site rule may refuse changed prompts before any file is made |
-| `GET /documents` | the documents this caller may read, by name: `sha`, `filename`, `size`, `content_type`, plus what the Policy's `describe` adds. Never cached. |
-| `POST /documents` | multipart `file`: keeps it by its fingerprint and returns its record. The same bytes twice are one document. |
+| `GET /documents` | the documents this caller may read, by name: `sha`, `filename`, `size`, `content_type`, `origin_url` for a URL document, plus what the Policy's `describe` adds. Never cached. |
+| `POST /documents` | multipart `file`: keeps it by its fingerprint and returns its record. The same bytes twice are one document. A file whose extension no parser here reads (such as `.xlsx`) is a 415 before anything is kept; the formats are the ones the parsers declare (`provides["formats"]`): PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG. |
+| `POST /documents/url` | `{"url"}` (at most 2,000 characters): fetches the page once (`pandion.extend.fetch_url`), then keeps it exactly like an upload and returns the same record plus `origin_url`. See [URL documents](#url-documents). |
 | `DELETE /documents/{id}` | `{"sha", "deleted"}`: deletes the file, its record and its question set, if the Policy agrees |
 | `GET /documents/{id}/file` | the file's own bytes. Never cached. |
 | `GET /documents/{id}/pages` | each page's size in PDF points: `[{"n", "width", "height"}]` |
@@ -94,7 +95,41 @@ with the same fixed sentence, which never repeats the id the request sent. A pag
 number past the last page is 404, and a `scale` or `text` outside its range is 422.
 pdfium is not thread-safe, so every page request and every question-set check holds
 `pandion_api.pages.PDFIUM_LOCK`; anything else in the same process that uses pdfium on
-request threads should hold it too.
+request threads should hold it too. The page and find routes read PDFs only: for a Word,
+HTML, Markdown, text or image document they are a 415.
+
+### URL documents
+
+`POST /documents/url` takes one link. The route asks the Policy first
+(`check_fetch(url, request)`, for example a rate limit), then, inside the Policy's
+`fetch_slot(request)` (for example one of a few slots), fetches the page with
+`pandion.extend.fetch_url`, with `public_only` set to the Policy's
+`public_endpoints_only(request)` and the byte cap set to its `max_url_bytes(request)`
+(20 MB by default). The page then takes the upload's own path: `check_document`, the
+store, the record and `on_uploaded`. The store's lock is held from `check_document` to
+`on_uploaded`, for an upload too, so two requests at once cannot both pass a cap that
+counts records. The record also keeps the link as `origin_url`, and the response gives
+it back; a Policy may move it out of the record in `on_uploaded` (the playground keeps it
+per browser).
+
+The page is fetched once. Every later route (runs, ask, evaluations, questions, pages)
+takes the stored id, as for an upload, and reads the stored file. Nothing is fetched
+again for a question.
+
+The status follows the refusal's `kind` (`pandion.extend.FetchRefused.kind`), not its
+words. A refusal is the fetch guard's own sentence, which never repeats the URL or anything the
+page sent:
+
+| Status | When |
+|---|---|
+| 400 | the link is not `http://` or `https://`, or its host name is not valid |
+| 403 | with `public_only`: the address is not on the public internet, or it is not https on port 443 |
+| 413 | the page is larger than `max_url_bytes` |
+| 415 | the page sent a type the fetcher does not take (only HTML, PDF, Word, text, PNG and JPG) |
+| 502 | the page answered with an error status, could not be reached, or redirected more than 3 times |
+| 504 | the page took longer than 10 seconds |
+
+A Policy's own refusals, from `check_fetch` or `check_document`, keep their own status.
 
 ## Runs
 
@@ -251,6 +286,10 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `dependencies()` | `[]` | FastAPI dependencies run on every route |
 | `can_read(sha, request)` | `True` | the list, a document's file, pages and questions (404 when False), and a run on it (403) |
 | `check_upload(file, request)` | reads it all | `POST /documents`: return the bytes, or raise to refuse. Read no more than you accept. |
+| `check_document(data, filename, request)` | takes any bytes | `POST /documents` after `check_upload`, and `POST /documents/url` after the fetch, before anything is kept: raise to refuse. One place for the rules on what a document may be. |
+| `check_fetch(url, request)` | allows | `POST /documents/url` before anything is fetched: raise to refuse. A fetch that then fails still came through here. |
+| `fetch_slot(request)` | does nothing | `POST /documents/url`: a context manager the fetch runs inside, left even when the fetch fails; raise HTTPException in it to refuse, for example when every slot is taken |
+| `max_url_bytes(request)` | 20 MB | `POST /documents/url`: a larger page is a 413 |
 | `on_uploaded(document, request)` | nothing | with the store's lock held, after the record is written |
 | `on_delete(sha, document, request)` | 404 without a record, else `True` | with the lock held: `True` deletes the file, `False` keeps it |
 | `describe(document, request)` | `{}` | keys added to each document in the list |
@@ -335,14 +374,20 @@ limits and the visitor cookie), `GET /api/questions/template` and `GET /api/temp
 |---|---|---|
 | `dependencies` | every `/api/v2` request gets a visitor cookie | the same |
 | `can_read` | a sample, or this browser's own upload | any document |
-| `check_upload` | a visitor cookie; at most 10 MB, a PDF, 20 pages, 41 inches a side; three live uploads a browser; 200 MB for all uploads | anything |
+| `check_upload` | a visitor cookie; at most 10 MB read | anything |
+| `check_document` | for an upload and a URL document alike: a PDF of at most 20 pages, 41 inches a side; Word, PowerPoint, HTML, Markdown and text files up to 2 MB; a Word or PowerPoint file that unpacks to at most 50 MB in at most 1,000 parts (a zip bomb is a 413); a PNG or JPG up to 5 MB and 20 million pixels; a file with no extension only if it is a PDF; three live uploads a browser; 200 MB for all uploads | anything |
+| `check_fetch` | a visitor cookie; room for one more upload (a URL document counts as one: 429); at most 10 links a browser an hour and 100 links an hour for every browser together, failed fetches included (429) | anything |
+| `fetch_slot` | at most 2 fetches at once; a third is a 503 | no limit |
+| `on_uploaded` (a URL document) | the link is kept under the browser that added it (`origin_urls`), never as a shared `origin_url`; `describe` shows a browser only its own link, and deleting or expiring its upload drops it | the same |
+| `on_startup` (images) | `PIL.Image.MAX_IMAGE_PIXELS` is set to 20 million, so an image inside a Word, PowerPoint or HTML file cannot decode into huge memory | Pillow's default |
+| `max_url_bytes` | 10 MB, the upload cap | 20 MB |
 | `on_uploaded` | records which browser uploaded the file, and when | the same |
 | `on_delete` | only your own upload; a file another browser holds stays; never a sample | any upload, never a sample |
 | `describe` | the upload time: this browser's own when it uploaded the file, else the latest | the same |
 | `private` | an upload's page images are cached privately, a sample's publicly | public |
 | `keeps_question_sets` | no: checked and handed back | yes |
 | `check_run` | no custom endpoint; no changed prompt or model revision; `max_tokens` at most 16,000 on a step that calls a model; a text budget at most four times its default | the same, but a custom endpoint is allowed |
-| `public_endpoints_only` | yes | no |
+| `public_endpoints_only` | yes, for a custom endpoint and for a URL document: https on port 443, to a public address | no |
 | `max_active_runs` | 2 | no limit |
 | `max_variants` | 10 | 10 |
 | `check_question_count` | at most 50 questions an evaluation, and 120 recipe-questions (recipes times questions) a comparison: a 413 naming the cap; at most 25 questions a model writes at a time: a 400 that says so | only the 500 a set, and 50 questions a model writes |
@@ -389,6 +434,9 @@ variant stops after the card it shows. These are still open:
   a 200. A pipeline that is not a mapping, lists `plugins` or has a `models` that is not a
   mapping is refused the same way, before Pandion reads it.
 - A site rule's refusal is the status and sentence the Policy raised, usually 403.
+- A refused URL document is a 400, 403, 413, 415, 502 or 504 with the fetch guard's own
+  sentence (see [URL documents](#url-documents)). It never repeats the URL or anything
+  the page sent.
 - An unknown stage or strategy in `POST /explain` is a 404 naming the ones there are.
 - `Policy.scrub` runs over the sentences that could carry a server path: a `ConfigError`'s
   problem (on every route that reads a pipeline, and on `POST /pipelines/validate`), the

@@ -148,7 +148,7 @@ def test_a_samples_bytes_under_new_names_store_no_new_file(client, dirs, monkeyp
     client.get("/api/settings/app")
     sample = sample_set.default_sample()
     before = sorted(p.name for p in dirs["sources"].iterdir() if p.is_file())
-    for name in ("s.a", "s.b", "s.c"):
+    for name in ("s.txt", "s.md", "s.html"):
         r = client.post("/api/v2/documents", files={"file": (name, sample.pdf.read_bytes(), "application/pdf")})
         assert r.status_code == 200 and r.json()["sha"] == sample.sha
     assert sorted(p.name for p in dirs["sources"].iterdir() if p.is_file()) == before
@@ -161,5 +161,5 @@ def test_your_own_reupload_under_another_name_stores_no_second_copy(client, dirs
     client.get("/api/settings/app")
     data = _pdf_with_pages(1)
     sha = client.post("/api/v2/documents", files={"file": ("mine.pdf", data, "application/pdf")}).json()["sha"]
-    assert client.post("/api/v2/documents", files={"file": ("mine-again.bin", data, "application/pdf")}).status_code == 200
+    assert client.post("/api/v2/documents", files={"file": ("mine-again.txt", data, "application/pdf")}).status_code == 200
     assert [p.name for p in dirs["sources"].glob(f"{sha}*") if p.is_file()] == [f"{sha}.pdf"]

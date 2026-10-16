@@ -299,7 +299,10 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   const settings = useAppSettings()
   const demo = settings?.demo === true
   const limits = demo ? settings?.limits : undefined
-  const { upload, busy: uploading, error: uploadError } = useUpload()
+  const { upload, addLink, busy: uploading, error: uploadError, limitsLine, linkLine, accept } = useUpload()
+  const [link, setLink] = useState("")
+  // The upload error is shared with the link box: it shows beside whichever one was used last.
+  const [errorAt, setErrorAt] = useState<"upload" | "link">("upload")
   const fileRef = useRef<HTMLInputElement>(null)
   const ownRef = useRef<HTMLButtonElement>(null)
   // After a refused upload, focus goes back to the button once it is enabled again.
@@ -313,8 +316,16 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
 
   async function uploadOwn(file: File | undefined) {
     if (!file) return
+    setErrorAt("upload")
     if (await upload(file)) navigate("/build")
     else setRefocus(true)
+  }
+
+  /** Add a document from a link, the way the Document menu does, then open Build. */
+  async function submitLink() {
+    if (waiting || !link.trim()) return
+    setErrorAt("link")
+    if (await addLink(link)) navigate("/build")
   }
 
   /** Try a sample: Build opens the Starter pipeline on the default sample, whatever is loaded now. */
@@ -331,9 +342,6 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   }
   const waiting = uploading !== null || current.sampleLoading !== null
 
-  const limitsLine = limits
-    ? `Up to ${limits.max_pages} pages and ${Math.round(limits.max_bytes / 1048576)} MB. Private to your browser and deleted after ${limits.ttl_hours} hours.`
-    : null
   // Private to the browser is true only on the demo; locally the files never leave the machine.
   const filesFact = settings === null ? null : demo ? "Your files stay private to your browser" : "Your files stay on this machine."
   const facts = ["No sign in", filesFact, "A key is needed only for model steps"].filter((f): f is string => f !== null)
@@ -374,7 +382,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".pdf,application/pdf"
+                  accept={accept}
                   className="sr-only"
                   tabIndex={-1}
                   aria-label="Choose your own files"
@@ -394,18 +402,18 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                   onClick={() => fileRef.current?.click()}
                 >
                   {/* The header names the file; a long name here would push the button past a phone's edge. */}
-                  {uploading ? "Uploading" : "Use your own files"}
+                  {uploading ? (uploading.startsWith("Fetching") ? "Fetching" : "Uploading") : "Use your own files"}
                 </Button>
                 <a href="#pandion" className={cn(LINK, "px-2")}>
                   See what you take home
                 </a>
               </div>
-              {uploadError ? (
+              {uploadError && errorAt === "upload" ? (
                 <p role="alert" className="m-0 text-sm break-words text-danger">
                   {uploadError}
                 </p>
               ) : null}
-              {limitsLine ? <p className="m-0 text-sm text-fg-muted">{limitsLine}</p> : null}
+              <p className="m-0 text-sm text-fg-muted">{limitsLine}</p>
             </div>
             <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0 text-sm text-fg-muted">
               {facts.map((f) => (
@@ -456,6 +464,35 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
               <button type="button" disabled={waiting} className={cn(LINK, "disabled:opacity-50")} onClick={() => fileRef.current?.click()}>
                 Upload your files
               </button>
+              <form
+                noValidate
+                className="flex w-full gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void submitLink()
+                }}
+              >
+                <input
+                  type="url"
+                  value={link}
+                  placeholder="https://example.com/guide.html"
+                  aria-label="Link to a web page or PDF"
+                  // Read-only, not disabled, while something is on its way: focus stays in the box.
+                  readOnly={waiting}
+                  aria-disabled={waiting || undefined}
+                  className="min-h-[44px] min-w-0 flex-1 rounded-control border border-field-border bg-surface px-2 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:outline-2 focus-visible:outline-(--focus-ring) aria-disabled:opacity-50"
+                  onChange={(e) => setLink(e.target.value)}
+                />
+                <Button type="submit" variant="outline" size={null} className="min-h-[44px] px-4 font-semibold" disabled={waiting || !link.trim()}>
+                  Add
+                </Button>
+              </form>
+              {uploadError && errorAt === "link" ? (
+                <p role="alert" className="m-0 text-sm break-words text-danger">
+                  {uploadError}
+                </p>
+              ) : null}
+              <p className="m-0 text-xs text-fg-muted">{linkLine}</p>
             </div>
             <div className="grid content-start justify-items-start gap-2 border-t-[3px] border-primary pt-3">
               <h3 className="m-0 text-base font-semibold">A template</h3>

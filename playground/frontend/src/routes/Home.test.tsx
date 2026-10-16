@@ -40,15 +40,26 @@ let uploaded: string[] = []
 let holdUpload = false
 let releaseUpload: () => void = () => {}
 let refuseUpload: string | null = null
+let linked: string[] = []
+let refuseLink: string | null = null
 
 const DEMO = {
   demo: true,
-  limits: { max_bytes: 10485760, max_pages: 20, max_files: 3, max_total_bytes: 31457280, ttl_hours: 24 },
+  limits: {
+    max_bytes: 10485760,
+    max_pages: 20,
+    max_files: 3,
+    max_total_bytes: 31457280,
+    ttl_hours: 24,
+    max_other_bytes: 2097152,
+    max_image_bytes: 5242880,
+  },
 } as AppSettings
 
 function serve({ settings = { demo: false } as AppSettings, sources = [] as Source[] } = {}) {
   posted = []
   uploaded = []
+  linked = []
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -60,6 +71,13 @@ function serve({ settings = { demo: false } as AppSettings, sources = [] as Sour
         uploaded.push(file.name)
         if (refuseUpload) return new Response(JSON.stringify({ detail: refuseUpload }), { status: 422 })
         const answer = () => ok({ ...OWN, filename: file.name })
+        return holdUpload ? new Promise<Response>((resolve) => (releaseUpload = () => resolve(answer()))) : answer()
+      }
+      if (url === "/api/v2/documents/url" && init?.method === "POST") {
+        const link = JSON.parse(String(init.body ?? "{}")).url as string
+        linked.push(link)
+        if (refuseLink) return new Response(JSON.stringify({ detail: refuseLink }), { status: 422 })
+        const answer = () => ok({ ...OWN, filename: "example.com" })
         return holdUpload ? new Promise<Response>((resolve) => (releaseUpload = () => resolve(answer()))) : answer()
       }
       if (url === "/api/v2/documents") return ok(sources)
@@ -81,6 +99,7 @@ beforeEach(() => {
   resetAppSettingsForTests()
   holdUpload = false
   refuseUpload = null
+  refuseLink = null
   serve()
 })
 
@@ -241,6 +260,42 @@ describe("Home's starts", () => {
     expect(await within(start).findByText(/On this demo your files stay private to your browser and are deleted after 24 hours\./)).toBeTruthy()
   })
 
+  it("adds a document from a link, by keyboard, and opens Build", async () => {
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    const start = region("Start from what you have")
+    const box = within(start).getByRole("textbox", { name: "Link to a web page or PDF" })
+    expect(box.getAttribute("type")).toBe("url")
+    expect(within(start).getByText("A link is fetched once and kept like an upload.")).toBeTruthy()
+    fireEvent.change(box, { target: { value: "https://example.com/guide.html" } })
+    fireEvent.submit(box.closest("form")!)
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/build"))
+    expect(linked).toEqual(["https://example.com/guide.html"])
+    expect(documentOf(readStoredGraph(registry))).toEqual({ sha: OWN.sha, filename: "example.com" })
+  })
+
+  it("while a link is fetched, the hero's button says Fetching", async () => {
+    holdUpload = true
+    render(<Home navigate={vi.fn()} />)
+    const box = within(region("Start from what you have")).getByRole("textbox", { name: "Link to a web page or PDF" })
+    fireEvent.change(box, { target: { value: "https://example.com/guide.html" } })
+    fireEvent.submit(box.closest("form")!)
+    expect(((await screen.findByRole("button", { name: "Fetching" })) as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => releaseUpload())
+  })
+
+  it("says why a link was refused and stays on Home", async () => {
+    refuseLink = "That address is not on the public internet, so it was not fetched."
+    const navigate = vi.fn()
+    render(<Home navigate={navigate} />)
+    const start = region("Start from what you have")
+    const box = within(start).getByRole("textbox", { name: "Link to a web page or PDF" })
+    fireEvent.change(box, { target: { value: "https://10.0.0.1/" } })
+    fireEvent.click(within(start).getByRole("button", { name: "Add" }))
+    expect((await within(start).findByRole("alert")).textContent).toBe(refuseLink)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   it("Upload your files opens the file picker", () => {
     render(<Home navigate={vi.fn()} />)
     const input = screen.getByLabelText("Choose your own files") as HTMLInputElement
@@ -317,10 +372,12 @@ describe("Home's lessons and Pandion", () => {
 const pdf = (name = "mine.pdf", type = "application/pdf") => new File(["%PDF-1.4"], name, { type })
 
 describe("Home's own files", () => {
-  it("Use your own files opens the file picker straight away", () => {
+  it("Use your own files opens the file picker straight away, and it takes every format a parser reads", async () => {
     render(<Home navigate={vi.fn()} />)
     const input = screen.getByLabelText("Choose your own files") as HTMLInputElement
     expect(input.type).toBe("file")
+    // Every format a parser on the server reads, from the shared upload hook.
+    await waitFor(() => expect(input.getAttribute("accept")).toBe(".pdf,.docx,.pptx,.html,.htm,.md,.txt,.png,.jpg,.jpeg"))
     const click = vi.spyOn(input, "click").mockImplementation(() => {})
     fireEvent.click(screen.getByRole("button", { name: "Use your own files" }))
     expect(click).toHaveBeenCalledTimes(1)
@@ -359,10 +416,28 @@ describe("Home's own files", () => {
     expect(navigate).toHaveBeenCalledTimes(1)
   })
 
-  it("states the demo's real limits under the buttons", async () => {
+  it("names each kind of file and its demo limit under the buttons", async () => {
     serve({ settings: DEMO })
     render(<Home navigate={vi.fn()} />)
-    expect(await screen.findByText("Up to 20 pages and 10 MB. Private to your browser and deleted after 24 hours.")).toBeTruthy()
+    expect(
+      await screen.findByText(
+        "PDF, Word, PowerPoint, HTML, Markdown, text or images. A PDF up to 10 MB and 20 pages. Other files up to 2 MB. Images up to 5 MB.",
+      ),
+    ).toBeTruthy()
+  })
+
+  it("names each kind of file, with no limits, when running locally", async () => {
+    render(<Home navigate={vi.fn()} />)
+    expect(await screen.findByText("PDF, Word, PowerPoint, HTML, Markdown, text or images.")).toBeTruthy()
+  })
+
+  it("refuses a kind of file no parser reads, naming the kinds it takes", async () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText("Choose your own files"), { target: { files: [pdf("sheet.xlsx", "application/octet-stream")] } })
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Upload of sheet.xlsx failed: This kind of file cannot be read here. Upload PDF, Word, PowerPoint, HTML, Markdown, text or images.",
+    )
+    expect(uploaded).toEqual([])
   })
 
   it("says the file stays on this machine when running locally", async () => {

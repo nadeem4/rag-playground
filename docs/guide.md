@@ -128,10 +128,10 @@ knowledge. It has:
 - a hero with what you leave with (a Python project built on Pandion), and three actions:
   - **Try a sample** opens Build on the Starter pipeline with the default sample. An unsaved
     pipeline on Build is kept rather than replaced, and the Starter waits in its picker;
-  - **Use your own files** opens a file picker and opens Build once the upload is done. If
-    the upload is refused, it says why under the buttons. One line under the buttons says
-    what happens to your file: on the demo, the page and size limits and how many hours
-    until it is deleted; running locally, that it stays on your machine;
+  - **Use your own files** opens a file picker that offers every kind of file a parser on the
+    server reads, and opens Build once the upload is done. If the upload is refused, it says
+    why under the buttons. One line under the buttons names each kind of file and, on the
+    demo, its limit, as the Document menu does;
   - **See what you take home** jumps to the Pandion section;
 - three facts: no sign in, where your files stay (private to your browser on the demo, on
   your machine when running locally), and a key only for model steps;
@@ -140,7 +140,9 @@ knowledge. It has:
 - **From your files to a project you own**: four tabs, Build, Evaluate, Compare and Take it
   home. The first three play a short clip of the page; Take it home shows what the zip holds.
   The arrow keys, Home and End move between the tabs;
-- **Start from what you have**: a sample, your own files, or a template;
+- **Start from what you have**: a sample, your own files, or a template. Your own files
+  also takes a link: paste it and press **Add**, and Build opens on the page it fetched. A
+  refused link says why under the box;
 - three lessons from building it, each linking its entry in [Lessons learned](lessons-learned.md);
 - Pandion: the commands and the output of a real `pandion init` project, with links to
   PyPI and GitHub.

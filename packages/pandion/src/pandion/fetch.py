@@ -75,12 +75,16 @@ def is_url(item: object) -> bool:
 
 
 class _Deadline:
-    """The fetch's one deadline. `arm(sock)` starts a timer that shuts `sock`
-    down when the deadline passes, which ends any read blocked on it."""
+    """The fetch's one deadline. `arm(sock)` starts a timer that shuts the
+    socket in use down when the deadline passes, which ends any read blocked
+    on it. After TLS wraps the socket, `retarget` points the timer at the
+    wrapped one: wrapping detaches the raw socket, so shutting that would do
+    nothing."""
 
     def __init__(self, seconds: float) -> None:
         self.end = time.monotonic() + seconds
         self.expired = False
+        self.target: socket.socket | None = None
         self._timers: list[threading.Timer] = []
 
     def remaining(self) -> float:
@@ -91,10 +95,13 @@ class _Deadline:
         return left
 
     def arm(self, sock: socket.socket) -> None:
+        self.target = sock
+
         def shut() -> None:
             self.expired = True
             try:
-                sock.shutdown(socket.SHUT_RDWR)
+                if self.target is not None:
+                    self.target.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
 
@@ -102,6 +109,15 @@ class _Deadline:
         timer.daemon = True
         timer.start()
         self._timers.append(timer)
+
+    def retarget(self, sock: socket.socket) -> None:
+        """Shut `sock` instead when the deadline passes."""
+        self.target = sock
+        if self.expired:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
     def cancel(self) -> None:
         for timer in self._timers:
@@ -211,7 +227,7 @@ def _open(conn: http.client.HTTPConnection, ips: list[str] | None, deadline: _De
     """A socket to the first of `ips` that answers (or to the host when there
     are none), with the deadline armed on it."""
     error: OSError | None = None
-    for address in ips or [conn.host]:
+    for address in [conn.host] if ips is None else ips:
         try:
             sock = _connect((address, conn.port), min(TIMEOUT, deadline.remaining()))
         except TimeoutError:
@@ -243,8 +259,10 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
         self.ips, self.deadline = ips, deadline
 
     def connect(self) -> None:
+        # The timer is armed on the raw socket, so it covers the handshake.
         sock = _open(self, self.ips, self.deadline)
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+        self.deadline.retarget(self.sock)
 
 
 def _read(response: http.client.HTTPResponse, max_bytes: int, deadline: _Deadline) -> bytes:

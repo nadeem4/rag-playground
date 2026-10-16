@@ -26,7 +26,8 @@ BIG = 10_000_000
 class Server:
     """A local server whose routes map a path to (status, headers, body)."""
 
-    def __init__(self) -> None:
+    def __init__(self, tls=None) -> None:
+        """`tls` is an `ssl.SSLContext` to serve https with."""
         self.routes: dict[str, tuple[int, dict[str, str], bytes]] = {}
         #: Paths answered by a function of the handler, for slow answers.
         self.handlers: dict[str, object] = {}
@@ -62,11 +63,14 @@ class Server:
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.daemon_threads = True
+        self.scheme = "https" if tls else "http"
+        if tls:
+            self.httpd.socket = tls.wrap_socket(self.httpd.socket, server_side=True)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
 
     def url(self, path: str) -> str:
-        return f"http://127.0.0.1:{self.httpd.server_address[1]}{path}"
+        return f"{self.scheme}://127.0.0.1:{self.httpd.server_address[1]}{path}"
 
     def page(self, path: str, body: bytes, content_type: str, length: bool = True) -> None:
         headers = {"Content-Type": content_type}
@@ -441,6 +445,51 @@ def test_a_name_with_one_public_and_one_private_address_is_refused(resolve):
     assert refused("https://mixed.example/page", public_only=True) == (
         "That address is not on the public internet, so it was not fetched."
     )
+
+
+def test_the_deadline_stops_a_trickling_https_server(tmp_path, monkeypatch):
+    # The deadline must shut the TLS socket in use, not the raw one it wraps.
+    import shutil
+    import ssl
+    import subprocess
+
+    openssl = shutil.which("openssl")
+    if openssl is None:
+        pytest.skip("openssl makes the throwaway certificate")
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    subprocess.run(
+        [openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+         "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
+         "-keyout", str(key), "-out", str(cert)],
+        check=True, capture_output=True,
+    )
+    served = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    served.load_cert_chain(cert, key)
+    trusting = ssl.create_default_context
+    monkeypatch.setattr(fetch.ssl, "create_default_context", lambda *a, **k: trusting(cafile=str(cert)))
+    monkeypatch.setattr(fetch, "TIMEOUT", 1.0)
+    tls = Server(tls=served)
+    try:
+        tls.page("/ok", b"fine", "text/plain")
+        assert fetch_url(tls.url("/ok"), public_only=False, max_bytes=BIG) == (b"fine", "ok.txt")
+
+        tls.handlers["/trickle"] = trickle_body
+        started = time.monotonic()
+        assert refused(tls.url("/trickle")) == (
+            "The URL took longer than 1 seconds to answer, so it was not fetched."
+        )
+        assert time.monotonic() - started < 2.5
+    finally:
+        tls.stop()
+
+
+def test_no_checked_addresses_means_no_connection(monkeypatch):
+    connected: list = []
+    monkeypatch.setattr(fetch, "_connect", lambda *a, **k: connected.append(a))
+
+    with pytest.raises(OSError):
+        fetch._open(fetch._PinnedHTTP("example.com", 80, ips=[], deadline=fetch._Deadline(5)), [], fetch._Deadline(5))
+    assert connected == []
 
 
 class FakeResponse:

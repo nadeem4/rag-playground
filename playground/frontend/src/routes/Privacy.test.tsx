@@ -57,6 +57,7 @@ describe("Your data and privacy", () => {
       expect(rowFor(browser, what)).toBeTruthy()
     }
     expect(rowFor(browser, "A question set you upload for Evaluate").textContent).toContain("In this tab only")
+    expect(rowFor(browser, "Your best evaluation for each question set").textContent).toContain("Until you press Forget best on Evaluate or clear this site's data.")
     expect(rowFor(browser, "API keys you add").textContent).toContain("never written to storage, a cookie, a link or a saved file")
     expect(rowFor(browser, "The pipeline you are working on").textContent).toContain("it is kept as it was and Build says why")
     expect(rowFor(browser, "The pipeline you are working on").textContent).toContain("A pipeline that uses a strategy this server does not have is kept the same way before Build opens the Starter.")

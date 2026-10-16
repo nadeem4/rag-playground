@@ -822,6 +822,10 @@ export interface EvaluationResult extends Totals {
   cancelled: boolean
   by_tag: Record<string, Totals>
   questions: EvalQuestionResult[]
+  /** A hash of the questions and their gold passages, whatever their order. Absent from an older server. */
+  questions_fingerprint?: string
+  /** The searched documents' content hashes, sorted. Absent from an older server. */
+  document_shas?: string[]
 }
 /** What one step's model call used (pandion-api, "Speed and cost"); a count is null when the server sent none. */
 export interface StepUsage {

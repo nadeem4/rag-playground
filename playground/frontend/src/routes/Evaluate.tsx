@@ -59,12 +59,14 @@ import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { RunStrip, stripSegments } from "@/components/pipeline/RunStrip"
 import { FieldHelp } from "@/components/fields/FieldHelp"
 import { errorHeadline, routeRunError } from "@/state/pipeline"
-import { FULL_OF_KEPT, fullOfKept, keptReason, savePipeline, setCurrentId, usePipelines } from "@/state/pipelines"
+import { FULL_OF_KEPT, fullOfKept, keptReason, savePipeline, setCurrentId, usableGraph, usePipelines } from "@/state/pipelines"
 import { BUILD_YOUR_OWN, defaultChoice, ON_BUILD, pipelineChoices, type PipelineChoice } from "@/state/pipelineChoice"
 import { plantedLine, useStarter } from "@/state/starter"
 import { DocumentControl } from "@/components/DocumentControl"
 import { DocumentItem } from "@/components/DocumentItem"
 import { BuildYourOwn } from "@/components/evaluate/BuildYourOwn"
+import { BestSoFar } from "@/components/evaluate/BestSoFar"
+import { afterRun, forgetBest, type BestPipeline, type Outcome } from "@/state/best"
 
 import { RegistryScreen } from "./Shell"
 
@@ -188,6 +190,15 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
     navigate("/build?from=evaluate")
   }
 
+  /** Best so far's pipeline, put on Build as an unsaved one the way Build your own does, then open `href`. */
+  function openBest(p: BestPipeline, href: string) {
+    const g = usableGraph(p, registry)
+    if (!g) return
+    storeGraph(g)
+    setCurrentId(null)
+    navigate(href)
+  }
+
   // Nothing to pick yet: the Starter waits on the samples list, or it could not be read.
   const waiting = !chosen && !choices.some((c) => c.graph)
   return (
@@ -280,6 +291,8 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
             key={`${chosen!.id}:${sha}`}
             graph={graph}
             pipelineKey={chosen!.key}
+            pipelineName={chosen!.name}
+            onOpenBest={openBest}
             registry={registry}
             onBusy={setBusy}
             slot={slot}
@@ -322,6 +335,8 @@ const NOT_SAVED_TAG = { label: "Not saved", tone: "soft" as const }
 function EvaluateBody({
   graph,
   pipelineKey,
+  pipelineName,
+  onOpenBest,
   registry,
   onBusy,
   slot,
@@ -332,6 +347,10 @@ function EvaluateBody({
 }: {
   graph: PipelineGraph | null
   pipelineKey: string
+  /** The pipeline's name in the picker, kept with a best run. */
+  pipelineName: string
+  /** Put Best so far's pipeline on Build, then open `href`. */
+  onOpenBest: (p: BestPipeline, href: string) => void
   registry: Registry
   onBusy: (busy: boolean) => void
   slot: HTMLElement | null
@@ -374,6 +393,8 @@ function EvaluateBody({
       graph={graph}
       sourceSha={sourceSha}
       pipelineKey={pipelineKey}
+      pipelineName={pipelineName}
+      onOpenBest={onOpenBest}
       onBusy={onBusy}
       slot={slot}
       needsDocument={needsDocument}
@@ -442,6 +463,8 @@ function Evaluation({
   graph,
   sourceSha,
   pipelineKey,
+  pipelineName,
+  onOpenBest,
   onBusy,
   slot,
   needsDocument,
@@ -453,6 +476,8 @@ function Evaluation({
   graph: PipelineGraph
   sourceSha: string
   pipelineKey: string
+  pipelineName: string
+  onOpenBest: (p: BestPipeline, href: string) => void
   onBusy: (busy: boolean) => void
   /** The header's slot, where Pieces checked and the run button go. */
   slot: HTMLElement | null
@@ -679,12 +704,27 @@ function Evaluation({
     if (latest.current) storePreviousEvaluation(latest.current)
   }, [stored])
 
+  // Best so far: judged once per finished run against the best in this browser for the same
+  // questions, documents and Pieces checked. Null before that, and when the server sent no fingerprint.
+  const [best, setBest] = useState<{ key: string; outcome: Outcome | null } | null>(null)
+  const bestInput = useRef<{ result: EvaluationResult; pipeline: BestPipeline; name: string } | null>(null)
+  bestInput.current = finishedRun && result && scoredMade.ok ? { result, pipeline: scoredMade.pipeline, name: pipelineName } : null
+  const judged = useRef<string | null>(null)
+  useEffect(() => {
+    const input = bestInput.current
+    if (!input || stored === null || judged.current === stored) return
+    judged.current = stored
+    const { key, outcome } = afterRun(input.result, input.name, input.pipeline)
+    setBest(key === null ? null : { key, outcome })
+  }, [stored])
+
   async function evaluate() {
     if (!questions?.length) return
     setError(null)
     setSubmitting(true)
     setDetail(null)
     const before = finishedRun
+    setBest(null)
     setStartedAt(Date.now())
     setTookMs(null)
     try {
@@ -909,6 +949,19 @@ function Evaluation({
           </p>
         )}
         {run.error ? <p className="font-mono text-xs text-danger">{errorHeadline(run.error)}</p> : null}
+
+        {ran && !busy && score && best && totals ? (
+          <BestSoFar
+            outcome={best.outcome}
+            now={totals}
+            onLoad={() => best.outcome?.kind === "worse" && onOpenBest(best.outcome.best.pipeline, "/build?from=evaluate")}
+            onCompare={() => best.outcome?.kind === "worse" && onOpenBest(best.outcome.best.pipeline, "/compare")}
+            onForget={() => {
+              forgetBest(best.key)
+              setBest({ key: best.key, outcome: null })
+            }}
+          />
+        ) : null}
 
         {ran && !busy && segments.length ? (
           <div data-testid="run-summary" className="flex max-w-[40rem] flex-col gap-1 text-sm">

@@ -7,7 +7,8 @@ import { resetAppSettingsForTests } from "@/api/useDemo"
 import { resetWriteSessionsForTests } from "@/state/writeQuestions"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { EvalPayload, EvalQuestionResult, EvaluationRequest, EvaluationResult, GoldQuestion, QuestionSetUpload, Registry, SampleQuestion, Totals } from "@/api/types"
-import { stepOfCardIn } from "@/state/config"
+import { afterRun, BEST_KEY, bestKey, readBest } from "@/state/best"
+import { graphToConfig, stepOfCardIn } from "@/state/config"
 import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
 import { chooseDocument, resetDocumentForTests, withDocument } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
@@ -1479,5 +1480,132 @@ describe("a large question set", () => {
     expect(screen.queryByTestId("numbers")).toBeNull()
     expect(document.body.textContent).not.toContain("0 of 0")
     expect(document.body.textContent).not.toContain("0 searches")
+  })
+})
+
+describe("Best so far", () => {
+  const graph = sampleGraph(registry, SOURCE)
+  const KEYED = { questions_fingerprint: "fp", document_shas: [SOURCE.sha] }
+  const found = (id: string, text: string) => verdict(id, { question: text })
+  const missed = (id: string, text: string) => verdict(id, { question: text, score: score({ hit: false, rank: null, matched_chunk_id: "", match: "none" }) })
+  const A = "What are the two steps?"
+  const B = "How big is a chunk?"
+  /** The best pipeline: the sample's, with another chunk size, so loading it is visible. */
+  const chunkId = graph.nodes.find((n) => n.stage === "chunk")!.id
+  const bestGraph = setConfig(graph, chunkId, { ...graph.nodes.find((n) => n.id === chunkId)!.config, chunk_size: 321 })
+  const bestPipeline = () => {
+    const c = graphToConfig(bestGraph)
+    if (!c.ok) throw new Error(c.problem)
+    return c.pipeline
+  }
+  const seed = (r: EvaluationResult, name = "Best one") => afterRun(r, name, bestPipeline())
+
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  async function runOnce(result: EvaluationResult, navigate = vi.fn()) {
+    serve({ result })
+    storeGraph(graph)
+    render(<Evaluate navigate={navigate} />)
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    DrivenEventSource.instances[0].emit(1, { event: "stream_end", status: "finished", ok: true })
+    await screen.findByTestId("summary")
+    return navigate
+  }
+
+  it("makes the first run with these questions the best so far", async () => {
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    const line = await screen.findByTestId("best-so-far")
+    expect(line.textContent).toContain("Your first run with these questions, so it is your best so far.")
+    expect(screen.getByTestId("best-note").textContent).toContain('Only questions decide "better" and "worse"')
+    expect(readBest(bestKey(report([], KEYED))!)!.found).toBe(1)
+  })
+
+  it("says a worse run, names the lost questions, and offers the best pipeline", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    const line = await screen.findByTestId("best-so-far")
+    expect(line.textContent).toContain("1 fewer found than your best.")
+    expect(line.textContent).toMatch(/Best so far: 2 of 2, MRR 1\.00, with Best one, today at \d\d:\d\d\./)
+    expect(within(line).getByRole("list", { name: "Lost since your best" }).textContent).toBe(`lost${B}`)
+    expect(within(line).getByRole("button", { name: "Load the best pipeline" })).toBeTruthy()
+    expect(within(line).getByRole("button", { name: "Compare the two" })).toBeTruthy()
+    // The best stays the best.
+    expect(readBest(bestKey(report([], KEYED))!)!.name).toBe("Best one")
+  })
+
+  it("says a better run, names the won questions, and makes it the best", async () => {
+    seed(report([found("a", A), missed("b", B)], { ...KEYED, mrr: 0.5 }))
+    await runOnce(report([found("a", A), found("b", B)], KEYED))
+    const line = await screen.findByTestId("best-so-far")
+    expect(line.textContent).toContain("New best. 1 more found than the last best (1 of 2, MRR 0.50). This pipeline is now your best for these questions.")
+    expect(within(line).getByRole("list", { name: "Won since your best" }).textContent).toBe(`won${B}`)
+    expect(readBest(bestKey(report([], KEYED))!)!.found).toBe(2)
+  })
+
+  it("says an equal run in a short line and keeps the best", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    await runOnce(report([found("a", A), found("b", B)], KEYED))
+    expect((await screen.findByTestId("best-so-far")).textContent).toBe("Same as your best: 2 of 2.")
+    expect(readBest(bestKey(report([], KEYED))!)!.name).toBe("Best one")
+  })
+
+  it("does not compare with the best of another question set or another Pieces checked", async () => {
+    seed(report([found("a", A), found("b", B)], { ...KEYED, questions_fingerprint: "another" }))
+    seed(report([found("a", A), found("b", B)], { ...KEYED, top_k: 3 }))
+    await runOnce(report([missed("a", A), missed("b", B)], KEYED))
+    expect((await screen.findByTestId("best-so-far")).textContent).toContain("Your first run with these questions")
+  })
+
+  it("loads the best pipeline onto Build", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    const navigate = await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    fireEvent.click(await screen.findByRole("button", { name: "Load the best pipeline" }))
+    expect(navigate).toHaveBeenCalledWith("/build?from=evaluate")
+    const loaded = graphToConfig(readStoredGraph(registry))
+    expect(loaded.ok && loaded.pipeline.config).toEqual(bestPipeline().config)
+  })
+
+  it("opens Compare with the best pipeline loaded", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    const navigate = await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    fireEvent.click(await screen.findByRole("button", { name: "Compare the two" }))
+    expect(navigate).toHaveBeenCalledWith("/compare")
+    const loaded = graphToConfig(readStoredGraph(registry))
+    expect(loaded.ok && loaded.pipeline.config).toEqual(bestPipeline().config)
+  })
+
+  it("forgets the best", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    fireEvent.click(await screen.findByRole("button", { name: "Forget best" }))
+    expect(readBest(bestKey(report([], KEYED))!)).toBeNull()
+    expect(screen.getByTestId("best-so-far").textContent).toBe("Best forgotten. Your next run with these questions becomes the best.")
+  })
+
+  it("keeps Evaluate working when localStorage throws", async () => {
+    const get = Storage.prototype.getItem
+    const set = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (this: Storage, k: string) {
+      if (k === BEST_KEY) throw new Error("blocked")
+      return get.call(this, k)
+    })
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, k: string, v: string) {
+      if (k === BEST_KEY) throw new Error("blocked")
+      return set.call(this, k, v)
+    })
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    expect(screen.getByTestId("summary").textContent).toBe("1 of 2 questions found the answer.")
+    expect((await screen.findByTestId("best-so-far")).textContent).toContain("Your first run with these questions")
+    vi.restoreAllMocks()
+  })
+
+  it("says nothing about a best when the server sends no fingerprint", async () => {
+    await runOnce(report([found("a", A), missed("b", B)]))
+    expect(screen.queryByTestId("best-so-far")).toBeNull()
   })
 })

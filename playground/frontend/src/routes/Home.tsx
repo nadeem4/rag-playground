@@ -26,6 +26,7 @@ import { defaultSample } from "@/state/starter"
 const REPO = "https://github.com/nadeem4/rag-playground"
 const PYPI = "https://pypi.org/project/pandion/"
 const PANDION_SOURCE = `${REPO}/tree/main/packages/pandion`
+const LESSONS_DOC = `${REPO}/blob/main/docs/lessons-learned.md`
 
 const goTo = (href: string) => window.location.assign(href)
 
@@ -100,17 +101,35 @@ const STEPS: Step[] = [
 const ZIP_FILES = ["pipeline.yaml", "run.py", "questions.json", "requirements.txt", "README.md", "docs/"]
 
 const LESSONS = [
-  { stage: "Parsing", title: "pdfium gave us lines, not paragraphs", line: "The chunker can only cut at breaks the parser gives it." },
-  { stage: "Retrieval", title: "The question used words the document never uses", line: "Why a rewrite step finds what plain search misses." },
-  { stage: "Caching", title: "A new rewrite was searched with the old results", line: "A cache key that forgets one input serves yesterday's answer." },
+  // `anchor` is GitHub's heading anchor for the entry in docs/lessons-learned.md.
+  {
+    stage: "Parsing",
+    title: "pdfium gave us lines, not paragraphs",
+    anchor: "pdfium-gave-us-lines-not-paragraphs",
+    line: "The chunker can only cut at breaks the parser gives it.",
+  },
+  {
+    stage: "Retrieval",
+    title: "The question used words the document never uses",
+    anchor: "the-question-used-words-the-document-never-uses",
+    line: "Why a rewrite step finds what plain search misses.",
+  },
+  {
+    stage: "Caching",
+    title: "A new rewrite was searched with the old results",
+    anchor: "a-new-rewrite-was-searched-with-the-old-results",
+    line: "A cache key that forgets one input serves yesterday's answer.",
+  },
 ]
 
 /** A terminal block: `#` lines are comments, `$` lines are commands, the rest is output. */
 function Terminal({ label, lines }: { label: string; lines: string[] }) {
   return (
+    // Focusable, so a keyboard can scroll it sideways on a phone.
     <pre
       aria-label={label}
-      className="m-0 min-w-0 overflow-x-auto rounded-panel border border-hairline bg-surface-elevated p-4 font-mono text-xs leading-[1.75] text-fg"
+      tabIndex={0}
+      className="m-0 min-w-0 overflow-x-auto rounded-panel border border-hairline bg-surface-elevated p-4 font-mono text-xs leading-[1.75] text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
     >
       {lines.map((l, i) => (
         <span key={i} className="block">
@@ -180,7 +199,9 @@ function FindingSlip() {
         A scan is pictures of pages, so there was no text to search. Nothing failed loudly: the parse was just empty. The Parse card shows it in one
         look.
       </p>
-      <span className="text-xs text-fg-muted">From the scanned notes sample. Lessons learned, Parsing.</span>
+      <a href={`${LESSONS_DOC}#a-scanned-pdf-has-no-text-to-read`} className="text-xs text-fg-muted underline underline-offset-4 hover:text-fg">
+        From the scanned notes sample. Lessons learned, Parsing.
+      </a>
     </figure>
   )
 }
@@ -310,14 +331,12 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   }
   const waiting = uploading !== null || current.sampleLoading !== null
 
-  const limitsLine =
-    settings === null
-      ? null
-      : limits
-        ? `Up to ${limits.max_pages} pages and ${Math.round(limits.max_bytes / 1048576)} MB. Private to your browser and deleted after ${limits.ttl_hours} hours.`
-        : demo
-          ? null
-          : "Your files stay on this machine."
+  const limitsLine = limits
+    ? `Up to ${limits.max_pages} pages and ${Math.round(limits.max_bytes / 1048576)} MB. Private to your browser and deleted after ${limits.ttl_hours} hours.`
+    : null
+  // Private to the browser is true only on the demo; locally the files never leave the machine.
+  const filesFact = settings === null ? null : demo ? "Your files stay private to your browser" : "Your files stay on this machine."
+  const facts = ["No sign in", filesFact, "A key is needed only for model steps"].filter((f): f is string => f !== null)
   const whereFilesStay =
     settings === null
       ? null
@@ -389,7 +408,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
               {limitsLine ? <p className="m-0 text-sm text-fg-muted">{limitsLine}</p> : null}
             </div>
             <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0 text-sm text-fg-muted">
-              {["No sign in", "Your files stay private to your browser", "A key is needed only for model steps"].map((f) => (
+              {facts.map((f) => (
                 <li key={f} className="flex items-center gap-2">
                   <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-primary" />
                   {f}
@@ -457,12 +476,16 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
             {LESSONS.map((l) => (
               <li key={l.title} className="grid content-start gap-2 border-t border-hairline py-4">
                 <span className="text-2xs font-[700] tracking-[0.08em] text-fg-muted uppercase">{l.stage}</span>
-                <h3 className="m-0 font-serif text-lg font-semibold">{l.title}</h3>
+                <h3 className="m-0 font-serif text-lg font-semibold">
+                  <a href={`${LESSONS_DOC}#${l.anchor}`} className="text-fg underline-offset-4 hover:underline">
+                    {l.title}
+                  </a>
+                </h3>
                 <p className="m-0 text-sm text-fg-muted">{l.line}</p>
               </li>
             ))}
           </ul>
-          <a href="/read" className={LINK}>
+          <a href={LESSONS_DOC} className={LINK}>
             Read all the lessons
           </a>
         </Section>

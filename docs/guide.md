@@ -104,15 +104,15 @@ knowledge. It has:
     what happens to your file: on the demo, the page and size limits and how many hours
     until it is deleted; running locally, that it stays on your machine;
   - **See what you take home** jumps to the Pandion section;
-- three facts: no sign in, your files stay private to your browser, and a key only for
-  model steps;
+- three facts: no sign in, where your files stay (private to your browser on the demo, on
+  your machine when running locally), and a key only for model steps;
 - a real finding from the scanned notes sample: 0 of 8 questions found with Docling's OCR
   off, 8 of 8 with it on (from [Lessons learned](lessons-learned.md));
 - **From your files to a project you own**: four tabs, Build, Evaluate, Compare and Take it
   home. The first three play a short clip of the page; Take it home shows what the zip holds.
   The arrow keys, Home and End move between the tabs;
 - **Start from what you have**: a sample, your own files, or a template;
-- three lessons from building it, with a link to Read;
+- three lessons from building it, each linking its entry in [Lessons learned](lessons-learned.md);
 - Pandion: the commands and the output of a real `pandion init` project, with links to
   PyPI and GitHub.
 

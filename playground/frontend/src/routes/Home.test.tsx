@@ -89,6 +89,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+const LESSONS_DOC = "https://github.com/nadeem4/rag-playground/blob/main/docs/lessons-learned.md"
+
 const region = (name: string) => screen.getByRole("region", { name })
 
 describe("Home's hero", () => {
@@ -112,11 +114,19 @@ describe("Home's hero", () => {
     for (const el of [sample, own, home]) expect(el.className.split(/\s+/)).toContain("min-h-[44px]")
   })
 
-  it("states the three facts", () => {
+  it("states the three facts, saying files stay private to the browser on the demo", async () => {
+    serve({ settings: DEMO })
     render(<Home navigate={vi.fn()} />)
-    for (const fact of ["No sign in", "Your files stay private to your browser", "A key is needed only for model steps"]) {
-      expect(screen.getByText(fact)).toBeTruthy()
-    }
+    expect(await screen.findByText("Your files stay private to your browser")).toBeTruthy()
+    for (const fact of ["No sign in", "A key is needed only for model steps"]) expect(screen.getByText(fact)).toBeTruthy()
+    expect(screen.queryByText("Your files stay on this machine.")).toBeNull()
+  })
+
+  it("says files stay on this machine as a fact when running locally, and only once", async () => {
+    render(<Home navigate={vi.fn()} />)
+    const fact = await screen.findByText("Your files stay on this machine.")
+    expect(fact.closest("li")).toBeTruthy()
+    expect(screen.queryByText("Your files stay private to your browser")).toBeNull()
   })
 
   it("Try a sample opens Build on the Starter pipeline with the default sample, whatever document is loaded", async () => {
@@ -141,7 +151,9 @@ describe("Home's finding slip", () => {
     expect(within(slip).getByText("Docling, OCR on")).toBeTruthy()
     expect(within(slip).getByText("8 of 8")).toBeTruthy()
     expect(within(slip).getByText(/^A scan is pictures of pages, so there was no text to search\./)).toBeTruthy()
-    expect(within(slip).getByText("From the scanned notes sample. Lessons learned, Parsing.")).toBeTruthy()
+    expect(within(slip).getByRole("link", { name: "From the scanned notes sample. Lessons learned, Parsing." }).getAttribute("href")).toBe(
+      `${LESSONS_DOC}#a-scanned-pdf-has-no-text-to-read`,
+    )
   })
 })
 
@@ -193,6 +205,7 @@ describe("Home's four steps", () => {
     fireEvent.click(tabs()[3])
     expect(panel().querySelector("video")).toBeNull()
     const term = within(panel()).getByLabelText("What the zip holds")
+    expect(term.tabIndex).toBe(0)
     expect(term.textContent).toContain("unzip starter.zip && cd starter")
     expect(term.textContent).toContain("pip install -r requirements.txt")
     expect(term.textContent).toContain("python run.py")
@@ -238,7 +251,7 @@ describe("Home's starts", () => {
 })
 
 describe("Home's lessons and Pandion", () => {
-  it("lists three lessons and links the Read page", () => {
+  it("lists three lessons, each linking its own entry in Lessons learned", () => {
     render(<Home navigate={vi.fn()} />)
     const lessons = region("What we learned building it")
     expect(within(lessons).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
@@ -246,13 +259,22 @@ describe("Home's lessons and Pandion", () => {
       "The question used words the document never uses",
       "A new rewrite was searched with the old results",
     ])
-    expect(within(lessons).getByRole("link", { name: "Read all the lessons" }).getAttribute("href")).toBe("/read")
+    expect(within(lessons).getByRole("link", { name: "Read all the lessons" }).getAttribute("href")).toBe(LESSONS_DOC)
+    for (const [name, anchor] of [
+      ["pdfium gave us lines, not paragraphs", "pdfium-gave-us-lines-not-paragraphs"],
+      ["The question used words the document never uses", "the-question-used-words-the-document-never-uses"],
+      ["A new rewrite was searched with the old results", "a-new-rewrite-was-searched-with-the-old-results"],
+    ]) {
+      expect(within(lessons).getByRole("link", { name }).getAttribute("href")).toBe(`${LESSONS_DOC}#${anchor}`)
+    }
   })
 
   it("shows Pandion's real commands and real output, and links PyPI and GitHub", () => {
     render(<Home navigate={vi.fn()} />)
     const pkg = region("The engine is a Python package")
     const term = within(pkg).getByLabelText("Terminal")
+    // It scrolls sideways on a phone, so a keyboard can reach it.
+    expect(term.tabIndex).toBe(0)
     for (const line of [
       "$ pip install pandion",
       "$ pandion init my-rag --index text --query balanced --questions questions.json",

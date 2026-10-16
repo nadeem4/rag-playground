@@ -599,7 +599,7 @@ Each key is optional, and when you give several, a piece must match all of them.
   on such an index fails with an error that says so, instead of quietly finding nothing.
 
 A `where` with an unknown key, a wrong type, or pages that are not a pair of whole
-numbers starting at 1 with the first not after the last, is an error before anything
+numbers from 1 to 2,147,483,647 with the first not after the last, is an error before anything
 runs. `pandion.check_where(where)` runs the same check on its own.
 
 The filter is applied inside the index, before the ranking, so a search with `top_k: 20`

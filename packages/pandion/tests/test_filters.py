@@ -112,6 +112,26 @@ def test_a_quote_in_a_section_is_matched_literally(transform, tmp_path):
 
 
 @pytest.mark.parametrize("transform", ALL, ids=IDS)
+def test_a_backslash_in_a_heading_is_matched_literally(transform, tmp_path):
+    pieces = PIECES + [("c5", "doc-a", (60, 60), ["a\\"], "France backslash heading")]
+    index = filtered_index(tmp_path, pieces)
+    assert found(transform, index, tmp_path, {"section": "a\\"}) == {"c5"}
+    assert found(transform, index, tmp_path, {"section": "a"}) == set()
+
+
+@pytest.mark.parametrize("transform", ALL, ids=IDS)
+def test_the_no_pages_note_counts_only_pieces_in_the_section(transform, tmp_path):
+    index = filtered_index(tmp_path)
+    # c3 has no pages and is under Installing; nothing under Guide lacks pages.
+    ctx = _ctx(tmp_path / "guide")
+    found(transform, index, tmp_path, {"pages": [1, 1000], "section": "Guide"}, ctx)
+    assert "note" not in ctx.extras.get("meta", {})
+    ctx = _ctx(tmp_path / "installing")
+    found(transform, index, tmp_path, {"pages": [1, 1000], "section": "Installing"}, ctx)
+    assert "1 piece has no page numbers" in ctx.extras["meta"]["note"]
+
+
+@pytest.mark.parametrize("transform", ALL, ids=IDS)
 def test_a_section_filter_on_an_index_without_sections_is_an_error(transform, tmp_path):
     flat = [(cid, doc, pages, [], text) for cid, doc, pages, _, text in PIECES]
     index = filtered_index(tmp_path, flat)
@@ -162,6 +182,7 @@ def test_prf_sees_only_the_filtered_pieces(tmp_path, monkeypatch):
         ({"pages": ["1", "2"]}, "pages must be a pair of whole numbers"),
         ({"pages": [5, 2]}, "first page must not be after the last"),
         ({"pages": [0, 2]}, "Pages start at 1"),
+        ({"pages": [1, 10**20]}, "A page number must be 2147483647 or less"),
         ({"section": 3}, "section must be text"),
         ({"section": "  "}, "section must not be blank"),
         ("document = 'a'", "where must be a mapping"),
@@ -170,6 +191,17 @@ def test_prf_sees_only_the_filtered_pieces(tmp_path, monkeypatch):
 def test_a_bad_where_is_a_plain_error(where, message):
     with pytest.raises(ValueError, match=message):
         check_where(where)
+
+
+def test_document_order_does_not_change_the_filter():
+    from types import SimpleNamespace
+
+    from pandion.filters import resolve
+
+    files = {"x.pdf": SimpleNamespace(sha="2" * 64), "y.pdf": SimpleNamespace(sha="1" * 64)}
+    one = resolve({"document": ["x.pdf", "y.pdf"]}, files)
+    other = resolve({"document": ["y.pdf", "x.pdf"]}, files)
+    assert one == other == {"doc_ids": ["1" * 64, "2" * 64]}
 
 
 def test_a_good_where_is_returned_in_order():

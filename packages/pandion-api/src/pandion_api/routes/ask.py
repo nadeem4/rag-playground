@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Request
 from pandion import check_where
@@ -24,6 +24,11 @@ NO_ANSWER = (
 )
 
 
+#: The largest page number: the index keeps pages as 32-bit whole numbers.
+MAX_PAGE = 2**31 - 1
+Page = Annotated[StrictInt, Field(ge=1, le=MAX_PAGE)]
+
+
 class WhereIn(BaseModel):
     """A search filter: only these documents, pages or section. See the
     package's `pandion.filters` for the rules; this checks the same ones."""
@@ -33,7 +38,7 @@ class WhereIn(BaseModel):
     #: Documents by sha; each must be one of the request's documents.
     document: list[StrictStr] | None = None
     #: First page and last page, both included.
-    pages: tuple[StrictInt, StrictInt] | None = None
+    pages: tuple[Page, Page] | None = None
     #: A heading on the piece's heading path, matched exactly.
     section: StrictStr | None = None
 

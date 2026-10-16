@@ -31,6 +31,9 @@ KEYS = ("document", "pages", "section")
 
 _SHA_LENGTH = 64
 
+#: The largest page number: the index keeps pages as 32-bit whole numbers.
+MAX_PAGE = 2**31 - 1
+
 
 def check_where(where: Any) -> dict[str, Any] | None:
     """`where` checked and in a plain form, or None when it sets nothing.
@@ -78,6 +81,8 @@ def _pages(value: Any) -> list[int]:
     first, last = value
     if first < 1:
         raise ValueError("where: Pages start at 1, so the first page must be 1 or more.")
+    if last > MAX_PAGE:
+        raise ValueError(f"where: A page number must be {MAX_PAGE} or less.")
     if first > last:
         raise ValueError(f"where: the first page must not be after the last; got [{first}, {last}].")
     return [first, last]
@@ -130,7 +135,8 @@ def _shas(names: list[str], documents: Mapping[str, Any]) -> list[str]:
             )
         if sha not in out:
             out.append(sha)
-    return out
+    # Sorted, so the order the names were given in never changes the step's id.
+    return sorted(out)
 
 
 # --------------------------------------------------------------------------
@@ -192,12 +198,14 @@ def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) 
 
 def no_pages_sql(filters: Mapping[str, Any] | None) -> str | None:
     """The condition for pieces a pages filter skipped for having no pages,
-    within the same documents. None when there is no pages filter."""
+    within the same documents and section. None when there is no pages filter."""
     if not filters or "pages" not in filters:
         return None
     parts = ["page_start IS NULL"]
     if filters.get("doc_ids"):
         parts.append(f"doc_id IN ({', '.join(_quote(i) for i in filters['doc_ids'])})")
+    if isinstance(filters.get("section"), str):
+        parts.append(f"array_has(section, {_quote(filters['section'])})")
     return " AND ".join(parts)
 
 

@@ -101,6 +101,7 @@ def test_a_bad_where_is_422(client):
         {"pages": [3, 1]},
         {"pages": ["1", "2"]},
         {"pages": [1.5, 2]},
+        {"pages": [1, 10**20]},
         {"section": 3},
         {"document": []},
         {"document": ["b" * 64]},

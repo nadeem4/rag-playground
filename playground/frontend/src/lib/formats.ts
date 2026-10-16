@@ -27,9 +27,9 @@ export function formatOf(filename: string): string | null {
 }
 
 /** Every format some parser declares, in FORMATS order. */
-export function readableFormats(registry: Registry): string[] {
+export function readableFormats(registry: Registry | null | undefined): string[] {
   const declared = new Set<string>()
-  for (const t of Object.values(registry.parse ?? {})) {
+  for (const t of Object.values(registry?.parse ?? {})) {
     const formats = t.provides?.formats
     if (Array.isArray(formats)) for (const f of formats) declared.add(String(f))
   }

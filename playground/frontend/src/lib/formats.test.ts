@@ -19,6 +19,9 @@ describe("formats", () => {
   it("lists every format a parser declares, in one order", () => {
     expect(readableFormats(registry)).toEqual(["pdf", "docx", "pptx", "html", "md", "txt", "png", "jpg"])
     expect(readableFormats({ parse: { pdfium: registry.parse!.pdfium } })).toEqual(["pdf"])
+    // A registry that has not loaded (or a mocked fetch that answers nothing) reads as none, not a crash.
+    expect(readableFormats(undefined as unknown as Registry)).toEqual([])
+    expect(readableFormats(null as unknown as Registry)).toEqual([])
   })
 
   it("builds the file input's accept list and the menu's line", () => {

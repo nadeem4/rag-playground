@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import { resetAppSettingsForTests } from "@/api/useDemo"
+import { resetWriteSessionsForTests } from "@/state/writeQuestions"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { EvalPayload, EvalQuestionResult, EvaluationRequest, EvaluationResult, GoldQuestion, QuestionSetUpload, Registry, SampleQuestion, Totals } from "@/api/types"
 import { stepOfCardIn } from "@/state/config"
@@ -239,6 +240,7 @@ function chooseFile(input: HTMLElement, name: string) {
 beforeEach(() => {
   window.history.replaceState(null, "", "/evaluate")
   resetAppSettingsForTests()
+  resetWriteSessionsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
   resetStoredGraphForTests()

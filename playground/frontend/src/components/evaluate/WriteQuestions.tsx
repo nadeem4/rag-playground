@@ -1,10 +1,10 @@
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
 import { PROVIDER_INFO, useApiKey } from "@/api/apiKey"
-import { ApiError } from "@/api/client"
+import { plainMessage } from "@/api/client"
 import { QUEUED_LINE } from "@/api/runState"
-import type { Registry } from "@/api/types"
+import type { LlmSettings, Registry } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import { useRun } from "@/api/useRun"
 import { v2 } from "@/api/v2"
@@ -19,10 +19,12 @@ import {
   defaultModel,
   DEMO_MAX_COUNT,
   keptSet,
+  keyNotice,
   LOCAL_MAX_COUNT,
   reviewItems,
   reviewSummary,
   usageLine,
+  useWriteSession,
   writtenFilename,
   type ReviewItem,
   type WrittenSet,
@@ -34,13 +36,10 @@ import {
  * steps: set up, writing (the run's `part_finished` events) and review. The
  * questions kept are saved through the same upload a file goes through.
  *
- * The run and the review live here, not in the sheet, so closing the sheet
+ * The run and the review live above the page (`useWriteSession`, keyed by the
+ * document), so closing the sheet, switching the pipeline or leaving Evaluate
  * neither cancels the run nor loses the review: opening it again shows them.
  */
-
-/** A refusal's own sentence, without the status and path an `ApiError` message starts with. */
-const plain = (err: unknown) =>
-  err instanceof ApiError && typeof err.detail === "string" ? err.detail : err instanceof Error ? err.message : String(err)
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
 
@@ -66,20 +65,28 @@ export function WriteQuestions({
   const [open, setOpen] = useState(false)
   const { keys, setPanelOpen } = useApiKey()
   const demo = useDemo()
-  const models = chatModels(registry, keys)
+  // Which keys the server has, as Shell asks. Null until it answers, or when it cannot.
+  const [server, setServer] = useState<LlmSettings | null>(null)
+  useEffect(() => {
+    let live = true
+    v2.modelSources().then(
+      (s) => live && setServer(s),
+      () => live && setServer(null),
+    )
+    return () => {
+      live = false
+    }
+  }, [])
+  const models = chatModels(registry, keys, server)
   const [picked, setPicked] = useState<string | null>(null)
   const model = models.find((m) => m.id === picked) ?? models.find((m) => m.id === defaultModel(models)) ?? null
   const max = demo ? DEMO_MAX_COUNT : LOCAL_MAX_COUNT
   const [countText, setCountText] = useState(String(DEFAULT_COUNT))
   const count = clampCount(Number(countText), max)
 
-  const [runId, setRunId] = useState<string | null>(null)
-  /** The model the run in flight (or the review) was written by. */
-  const [writer, setWriter] = useState<string>("")
+  const [session, setSession] = useWriteSession(sha)
+  const { runId, writer, error, written, items } = session
   const [starting, setStarting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [written, setWritten] = useState<WrittenSet | null>(null)
-  const [items, setItems] = useState<ReviewItem[]>([])
   const [saving, setSaving] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
   const run = useRun(runId)
@@ -89,46 +96,40 @@ export function WriteQuestions({
     if (!runId || !run.closed) return
     const result = run.result as (Partial<WrittenSet> & { error?: string }) | null
     if (run.status === "cancelled") {
-      setRunId(null)
+      setSession({ runId: null })
     } else if (result && typeof result.error === "string") {
-      setError(result.error)
-      setRunId(null)
+      setSession({ runId: null, error: result.error })
     } else if (result && Array.isArray(result.questions)) {
       const set: WrittenSet = { questions: result.questions, dropped: result.dropped ?? [], usage: result.usage ?? { input_tokens: null, output_tokens: null, model: null } }
-      setWritten(set)
-      setItems(reviewItems(set))
-      setRunId(null)
+      setSession({ runId: null, written: set, items: reviewItems(set) })
     } else if (run.resultFailed || run.error) {
-      setError(run.error ?? "The questions were written, but they could not be read. Write them again.")
-      setRunId(null)
+      setSession({ runId: null, error: run.error ?? "The questions were written, but they could not be read. Write them again." })
     }
-  }, [runId, run.closed, run.status, run.result, run.resultFailed, run.error])
+  }, [runId, run.closed, run.status, run.result, run.resultFailed, run.error, setSession])
 
   const step: "setup" | "writing" | "review" | "error" = written ? "review" : error !== null && !starting && runId === null ? "error" : runId || starting ? "writing" : "setup"
 
   const write = async () => {
     if (!model) return
     setStarting(true)
-    setError(null)
+    setSession({ error: null })
     try {
       const { run_id } = await v2.generateQuestions(sha, { model: model.id, count }, { keys })
-      setWriter(model.label)
-      setRunId(run_id)
+      setSession({ writer: model.label, runId: run_id })
     } catch (err) {
-      setError(plain(err))
+      setSession({ error: plainMessage(err) })
     } finally {
       setStarting(false)
     }
   }
 
+  // Only asks: the run is still followed, and ends cancelled (back to set up) or, during the last part, finished (review).
   const stop = () => {
     if (runId) void v2.cancelRun(runId).catch(() => undefined)
-    setRunId(null)
   }
 
   const discard = () => {
-    setWritten(null)
-    setItems([])
+    setSession({ written: null, items: [] })
     setSaveFailed(false)
     setOpen(false)
   }
@@ -143,7 +144,7 @@ export function WriteQuestions({
     else setSaveFailed(true)
   }
 
-  const update = (i: number, patch: Partial<ReviewItem>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+  const update = (i: number, patch: Partial<ReviewItem>) => setSession((s) => ({ items: s.items.map((x, j) => (j === i ? { ...x, ...patch } : x)) }))
 
   const sum = reviewSummary(items)
   const footer =
@@ -166,7 +167,7 @@ export function WriteQuestions({
         <Button busy>Writing</Button>
       </>
     ) : step === "error" ? (
-      <Button variant="outline" className="ml-auto" onClick={() => setError(null)}>
+      <Button variant="outline" className="ml-auto" onClick={() => setSession({ error: null })}>
         Back to set up
       </Button>
     ) : (
@@ -211,11 +212,11 @@ export function WriteQuestions({
                   max={max}
                   demo={demo}
                   provider={model ? PROVIDER_INFO[model.provider].name : null}
+                  keyLine={model ? keyNotice(model.provider, server, keys) : ""}
                   onAddKey={() => {
                     setOpen(false)
                     setPanelOpen(true)
                   }}
-                  error={error}
                 />
               ) : step === "writing" ? (
                 <Writing done={run.parts?.number ?? 0} total={run.parts?.total ?? null} queued={run.queued} />
@@ -252,8 +253,8 @@ function SetUp({
   max,
   demo,
   provider,
+  keyLine,
   onAddKey,
-  error,
 }: {
   models: ReturnType<typeof chatModels>
   model: string
@@ -263,8 +264,9 @@ function SetUp({
   max: number
   demo: boolean
   provider: string | null
+  /** Where the key comes from, as the notice's last sentence. */
+  keyLine: string
   onAddKey: () => void
-  error: string | null
 }) {
   const id = useId()
   return (
@@ -274,7 +276,7 @@ function SetUp({
           <p className="text-sm font-semibold">This way, you're going to use your key.</p>
           <p className="text-xs">
             Each part is one call to the model on your {provider} key, so you pay for it. 20 questions with Claude Sonnet 5 used about 8,700 tokens in and
-            2,700 out in our test. The key stays in this browser and is sent only with this request.
+            2,700 out in our test.{keyLine ? ` ${keyLine}` : ""}
           </p>
         </div>
       ) : (
@@ -328,11 +330,6 @@ function SetUp({
           passage's words is marked <em>copied</em>, because it is easier to find than a real question would be.
         </p>
       </div>
-      {error ? (
-        <p role="alert" className="text-sm break-words text-danger">
-          {error}
-        </p>
-      ) : null}
     </>
   )
 }
@@ -377,6 +374,19 @@ function Review({
 }) {
   const sum = reviewSummary(items)
   const [editing, setEditing] = useState<{ i: number; text: string } | null>(null)
+  // After an action the row's own button takes focus, since the one pressed is gone.
+  const listRef = useRef<HTMLOListElement>(null)
+  const focusRow = useRef<number | null>(null)
+  useEffect(() => {
+    const i = focusRow.current
+    if (i === null) return
+    focusRow.current = null
+    listRef.current?.children[i]?.querySelector<HTMLElement>("textarea, button")?.focus()
+  }, [items, editing])
+  const act = (i: number, f: () => void) => {
+    focusRow.current = i
+    f()
+  }
   return (
     <div className="flex flex-col gap-4">
       <p data-testid="review-summary" aria-live="polite" className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg tabular-nums">
@@ -398,7 +408,7 @@ function Review({
         </p>
       ) : null}
       {items.length === 0 ? <p className="text-sm text-fg">The model wrote no question that passed the checks.</p> : null}
-      <ol data-testid="review-list" className="flex flex-col gap-2">
+      <ol ref={listRef} data-testid="review-list" className="flex flex-col gap-2">
         {items.map((it, i) => {
           const isEditing = editing?.i === i
           return (
@@ -436,35 +446,39 @@ function Review({
                   <>
                     <Button
                       size="sm"
-                      onClick={() => {
-                        const text = editing.text.trim()
-                        if (text) update(i, { question: text })
-                        setEditing(null)
-                      }}
+                      onClick={() =>
+                        act(i, () => {
+                          const text = editing.text.trim()
+                          if (text) update(i, { question: text })
+                          setEditing(null)
+                        })
+                      }
                     >
                       Done
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
-                        update(i, { question: it.original })
-                        setEditing(null)
-                      }}
+                      onClick={() =>
+                        act(i, () => {
+                          update(i, { question: it.original })
+                          setEditing(null)
+                        })
+                      }
                     >
                       Put back the original
                     </Button>
                   </>
                 ) : it.dropped ? (
-                  <Button size="sm" variant="outline" onClick={() => update(i, { dropped: false })}>
+                  <Button size="sm" variant="outline" onClick={() => act(i, () => update(i, { dropped: false }))}>
                     Keep after all
                   </Button>
                 ) : (
                   <>
-                    <Button size="sm" variant="outline" onClick={() => setEditing({ i, text: it.question })}>
+                    <Button size="sm" variant="outline" onClick={() => act(i, () => setEditing({ i, text: it.question }))}>
                       Edit
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => update(i, { dropped: true })}>
+                    <Button size="sm" variant="outline" onClick={() => act(i, () => update(i, { dropped: true }))}>
                       Drop
                     </Button>
                   </>

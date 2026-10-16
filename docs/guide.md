@@ -436,7 +436,8 @@ demo the set is kept only in the tab; locally it is kept beside the document.
 You can also let a model write the questions. Open Use your own questions and press Write
 questions for me. A model reads the document part by part and writes one question for each
 part, with the passage that answers it. It runs on your own key, so add an Anthropic or
-OpenAI key with the Key button first, and you pay for the calls. Pick the model and how many
+OpenAI key with the Key button first, or set it in .env when running locally, and you pay
+for the calls. Pick the model and how many
 questions you want (15 to start with, at most 25 on the demo). Every question must quote
 its passage word for word from the document. A question whose passage is not found, is
 only a heading, or repeats another question is dropped, and you see why. A question that

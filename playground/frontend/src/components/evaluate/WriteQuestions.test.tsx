@@ -6,7 +6,7 @@ import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
-import type { WrittenSet } from "@/state/writeQuestions"
+import { resetWriteSessionsForTests, type WrittenSet } from "@/state/writeQuestions"
 
 import { WriteQuestions } from "./WriteQuestions"
 
@@ -48,13 +48,21 @@ interface Served {
   cancelled: string[]
 }
 
-function serve({ result = WRITTEN as unknown, ok = true, refuse }: { result?: unknown; ok?: boolean; refuse?: { status: number; detail: string } } = {}): Served {
+const NO_SERVER_KEYS = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
+
+function serve({
+  result = WRITTEN as unknown,
+  ok = true,
+  refuse,
+  server = NO_SERVER_KEYS as Record<string, string>,
+}: { result?: unknown; ok?: boolean; refuse?: { status: number; detail: string }; server?: Record<string, string> } = {}): Served {
   const served: Served = { generated: [], cancelled: [] }
   const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/settings/app") return json({ demo: false })
+      if (url === "/api/v2/settings/models") return json(server)
       if (url === `/api/v2/documents/${SHA}/questions/generate` && init?.method === "POST") {
         served.generated.push({ body: JSON.parse(String(init.body)), headers: init.headers as Record<string, string> })
         return refuse ? json({ detail: refuse.detail }, refuse.status) : json({ run_id: "w1" }, 202)
@@ -78,13 +86,17 @@ function KeyProbe({ anthropic }: { anthropic: string | null }) {
   return <p data-testid="key-panel">{panelOpen ? "open" : "closed"}</p>
 }
 
-function setup({ key = "sk-ant-test" as string | null, onSave = vi.fn(async (_file: File) => true), saveError = null as string | null } = {}) {
-  render(
+function Page({ keyValue, onSave, saveError }: { keyValue: string | null; onSave: (file: File) => Promise<boolean>; saveError: string | null }) {
+  return (
     <ApiKeyProvider>
-      <KeyProbe anthropic={key} />
+      <KeyProbe anthropic={keyValue} />
       <WriteQuestions sha={SHA} filename="chunking-primer.pdf" registry={registry} locked={false} onSave={onSave} saveError={saveError} />
-    </ApiKeyProvider>,
+    </ApiKeyProvider>
   )
+}
+
+function setup({ key = "sk-ant-test" as string | null, onSave = vi.fn(async (_file: File) => true), saveError = null as string | null } = {}) {
+  render(<Page keyValue={key} onSave={onSave} saveError={saveError} />)
   fireEvent.click(screen.getByRole("button", { name: "Write questions for me" }))
   return { onSave, sheet: () => screen.getByRole("dialog") }
 }
@@ -106,6 +118,7 @@ beforeEach(() => {
   FakeEventSource.instances = []
   vi.stubGlobal("EventSource", FakeEventSource)
   resetAppSettingsForTests()
+  resetWriteSessionsForTests()
 })
 
 afterEach(() => {
@@ -117,7 +130,8 @@ describe("Write questions for me: set up", () => {
   it("without a key, says to add one first, disables Write and opens the Key dialog", async () => {
     serve()
     const { sheet } = setup({ key: null })
-    expect(within(sheet()).getByText("Add a key first.")).toBeTruthy()
+    // Until the server says it has no key either, a key is not ruled out.
+    expect(await within(sheet()).findByText("Add a key first.")).toBeTruthy()
     expect((within(sheet()).getByRole("button", { name: /^Write \d+ questions?$/ }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(within(sheet()).getByRole("button", { name: "Add a key" }))
     expect(screen.getByTestId("key-panel").textContent).toBe("open")
@@ -131,6 +145,25 @@ describe("Write questions for me: set up", () => {
     expect((within(sheet()).getByLabelText("Model") as HTMLSelectElement).value).toBe("claude-haiku-4-5")
     expect((within(sheet()).getByLabelText("Questions") as HTMLInputElement).value).toBe("15")
     expect(sheet().textContent).toMatch(/What gets checked for you\./)
+  })
+})
+
+describe("Write questions for me: a key the server has", () => {
+  it("counts a key from .env and says where it comes from", async () => {
+    const served = serve({ server: { ...NO_SERVER_KEYS, anthropic: "dotenv" } })
+    const { sheet } = setup({ key: null })
+    await waitFor(() => expect(within(sheet()).getByText("This way, you're going to use your key.")).toBeTruthy())
+    expect(sheet().textContent).toMatch(/Using the key from \.env\./)
+    expect(sheet().textContent).not.toMatch(/The key stays in this browser/)
+    fireEvent.click(within(sheet()).getByRole("button", { name: "Write 15 questions" }))
+    await waitFor(() => expect(served.generated).toHaveLength(1))
+    expect(served.generated[0].headers["X-Anthropic-Api-Key"]).toBeUndefined()
+  })
+
+  it("keeps the browser sentence for a key typed here", async () => {
+    serve({ server: { ...NO_SERVER_KEYS, anthropic: "dotenv" } })
+    const { sheet } = setup()
+    await waitFor(() => expect(sheet().textContent).toMatch(/The key stays in this browser and is sent only with this request\./))
   })
 })
 
@@ -155,14 +188,46 @@ describe("Write questions for me: writing", () => {
     expect(within(sheet()).getByText("Part 2 of 3 done.")).toBeTruthy()
   })
 
-  it("Stop cancels the run and goes back to set up", async () => {
+  it("Stop only asks to cancel: the run is still followed, and a cancelled run goes back to set up", async () => {
     const served = serve()
     const { sheet } = setup()
     fireEvent.click(within(sheet()).getByRole("button", { name: "Write 15 questions" }))
     await waitFor(() => expect(FakeEventSource.instances.length).toBe(1))
     fireEvent.click(within(sheet()).getByRole("button", { name: "Stop" }))
     await waitFor(() => expect(served.cancelled).toEqual(["w1"]))
-    expect(within(sheet()).getByRole("button", { name: "Write 15 questions" })).toBeTruthy()
+    // Still writing until the run says it ended.
+    expect(within(sheet()).getByText("Writing questions")).toBeTruthy()
+    es().emit(0, { event: "part_finished", number: 1, total: 3 })
+    expect(within(sheet()).getByText("Part 1 of 3 done.")).toBeTruthy()
+    es().emit(1, { event: "stream_end", status: "cancelled", ok: false })
+    await waitFor(() => expect(within(sheet()).getByRole("button", { name: "Write 15 questions" })).toBeTruthy())
+  })
+
+  it("a run that finishes after Stop lands in review", async () => {
+    const served = serve()
+    const { sheet } = setup()
+    fireEvent.click(within(sheet()).getByRole("button", { name: "Write 15 questions" }))
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1))
+    fireEvent.click(within(sheet()).getByRole("button", { name: "Stop" }))
+    await waitFor(() => expect(served.cancelled).toEqual(["w1"]))
+    es().emit(0, { event: "stream_end", status: "finished", ok: true })
+    expect(await within(sheet()).findByText("What two steps does RAG use?")).toBeTruthy()
+  })
+
+  it("keeps a run in flight across a remount of the page", async () => {
+    serve()
+    const onSave = vi.fn(async (_file: File) => true)
+    const { unmount } = render(<Page keyValue="sk-ant-test" onSave={onSave} saveError={null} />)
+    fireEvent.click(screen.getByRole("button", { name: "Write questions for me" }))
+    fireEvent.click(screen.getByRole("button", { name: "Write 15 questions" }))
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1))
+    unmount()
+    render(<Page keyValue="sk-ant-test" onSave={onSave} saveError={null} />)
+    fireEvent.click(screen.getByRole("button", { name: "Write questions for me" }))
+    expect(screen.getByText("Writing questions")).toBeTruthy()
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(2))
+    es().emit(0, { event: "stream_end", status: "finished", ok: true })
+    expect(await screen.findByText("What two steps does RAG use?")).toBeTruthy()
   })
 
   it("closing the sheet does not cancel, and opening it again shows the progress", async () => {
@@ -238,6 +303,37 @@ describe("Write questions for me: review", () => {
 
     for (const r of within(screen.getByTestId("review-list")).getAllByRole("listitem")) fireEvent.click(within(r).getByRole("button", { name: "Drop" }))
     expect((within(sheet()).getByRole("button", { name: "Save 0 questions" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("keeps a paid review across a remount of the page", async () => {
+    const served = serve()
+    const onSave = vi.fn(async (_file: File) => true)
+    const { unmount } = render(<Page keyValue="sk-ant-test" onSave={onSave} saveError={null} />)
+    fireEvent.click(screen.getByRole("button", { name: "Write questions for me" }))
+    await toReview(served)
+    fireEvent.click(within(within(screen.getByTestId("review-list")).getAllByRole("listitem")[1]).getByRole("button", { name: "Drop" }))
+    unmount()
+    render(<Page keyValue="sk-ant-test" onSave={onSave} saveError={null} />)
+    fireEvent.click(screen.getByRole("button", { name: "Write questions for me" }))
+    expect(screen.getByTestId("review-summary").textContent).toMatch(/1 dropped by you/)
+  })
+
+  it("moves focus into the textarea on Edit and back to the row's button after each action", async () => {
+    const served = serve()
+    setup()
+    await toReview(served)
+    const row = () => within(screen.getByTestId("review-list")).getAllByRole("listitem")[0]
+    fireEvent.click(within(row()).getByRole("button", { name: "Edit" }))
+    expect(document.activeElement).toBe(within(row()).getByRole("textbox"))
+    fireEvent.click(within(row()).getByRole("button", { name: "Done" }))
+    await waitFor(() => expect(document.activeElement).toBe(within(row()).getByRole("button", { name: "Edit" })))
+    fireEvent.click(within(row()).getByRole("button", { name: "Edit" }))
+    fireEvent.click(within(row()).getByRole("button", { name: "Put back the original" }))
+    await waitFor(() => expect(document.activeElement).toBe(within(row()).getByRole("button", { name: "Edit" })))
+    fireEvent.click(within(row()).getByRole("button", { name: "Drop" }))
+    await waitFor(() => expect(document.activeElement).toBe(within(row()).getByRole("button", { name: "Keep after all" })))
+    fireEvent.click(within(row()).getByRole("button", { name: "Keep after all" }))
+    await waitFor(() => expect(document.activeElement).toBe(within(row()).getByRole("button", { name: "Edit" })))
   })
 
   it("Save uploads the kept questions with their edits as a JSON set", async () => {

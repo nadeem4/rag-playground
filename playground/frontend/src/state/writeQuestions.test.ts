@@ -6,6 +6,7 @@ import type { Registry } from "@/api/types"
 import {
   chatModels,
   clampCount,
+  keyNotice,
   defaultModel,
   keptSet,
   reviewItems,
@@ -28,22 +29,40 @@ const written: WrittenSet = {
   usage: { input_tokens: 8674, output_tokens: 2677, model: "claude-sonnet-5" },
 }
 
+const SERVER_NONE = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as const
+
 describe("chatModels", () => {
+  it("counts a key the server has, and a key not yet known, as the app does", () => {
+    expect(chatModels(registry, NO_KEYS, { ...SERVER_NONE, anthropic: "dotenv" }).map((m) => m.provider)).toEqual(["anthropic", "anthropic", "anthropic"])
+    expect(chatModels(registry, NO_KEYS, null).length).toBeGreaterThan(3)
+  })
+
   it("lists only the chat models whose provider has a key in this browser", () => {
-    expect(chatModels(registry, NO_KEYS)).toEqual([])
-    const anthropic = chatModels(registry, { ...NO_KEYS, anthropic: "sk-ant" })
+    expect(chatModels(registry, NO_KEYS, SERVER_NONE)).toEqual([])
+    const anthropic = chatModels(registry, { ...NO_KEYS, anthropic: "sk-ant" }, SERVER_NONE)
     expect(anthropic.map((m) => m.id)).toEqual(["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"])
     expect(anthropic[1]).toEqual({ id: "claude-sonnet-5", label: "Claude Sonnet 5", provider: "anthropic" })
-    const both = chatModels(registry, { ...NO_KEYS, anthropic: "sk-ant", openai: "sk-oa" })
+    const both = chatModels(registry, { ...NO_KEYS, anthropic: "sk-ant", openai: "sk-oa" }, SERVER_NONE)
     expect(both.map((m) => m.provider)).toContain("openai")
     // OpenRouter and a custom endpoint need more than a key, so they are not offered here.
-    expect(chatModels(registry, { ...NO_KEYS, openrouter: "or", custom: "c" })).toEqual([])
+    expect(chatModels(registry, { ...NO_KEYS, openrouter: "or", custom: "c" }, SERVER_NONE)).toEqual([])
   })
 
   it("defaults to the cheapest Anthropic model when there is one", () => {
-    expect(defaultModel(chatModels(registry, { ...NO_KEYS, anthropic: "k", openai: "k" }))).toBe("claude-haiku-4-5")
-    expect(defaultModel(chatModels(registry, { ...NO_KEYS, openai: "k" }))).toBe("gpt-6-astra")
+    expect(defaultModel(chatModels(registry, { ...NO_KEYS, anthropic: "k", openai: "k" }, SERVER_NONE))).toBe("claude-haiku-4-5")
+    expect(defaultModel(chatModels(registry, { ...NO_KEYS, openai: "k" }, SERVER_NONE))).toBe("gpt-6-astra")
     expect(defaultModel([])).toBeNull()
+  })
+})
+
+describe("keyNotice", () => {
+  it("says the key stays in this browser only when it was typed here", () => {
+    expect(keyNotice("anthropic", { ...SERVER_NONE, anthropic: "dotenv" }, { ...NO_KEYS, anthropic: "k" })).toBe(
+      "The key stays in this browser and is sent only with this request.",
+    )
+    expect(keyNotice("anthropic", { ...SERVER_NONE, anthropic: "dotenv" }, NO_KEYS)).toBe("Using the key from .env.")
+    expect(keyNotice("openai", { ...SERVER_NONE, openai: "env" }, NO_KEYS)).toBe("Using OPENAI_API_KEY from the environment.")
+    expect(keyNotice("anthropic", null, NO_KEYS)).toBe("")
   })
 })
 

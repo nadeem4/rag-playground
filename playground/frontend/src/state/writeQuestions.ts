@@ -1,5 +1,7 @@
-import type { Keys } from "@/api/apiKey"
-import type { Registry } from "@/api/types"
+import { useCallback, useSyncExternalStore } from "react"
+
+import { hasKeyFor, keySourceLabel, type Keys } from "@/api/apiKey"
+import type { LlmSettings, Registry } from "@/api/types"
 
 /**
  * Questions written for you: the pure half of Evaluate's Write questions for me
@@ -53,15 +55,19 @@ export interface ReviewItem extends WrittenQuestion {
   dropped: boolean
 }
 
-/** The chat models the registry offers whose provider has a key in this browser, in the registry's order. */
-export function chatModels(registry: Registry, keys: Keys): ChatModel[] {
+/**
+ * The chat models the registry offers whose provider has a key, in the
+ * registry's order. The app's rule: a key typed here or one the server has, and
+ * a key not yet known (the server has not answered) is not ruled out.
+ */
+export function chatModels(registry: Registry, keys: Keys, server: LlmSettings | null): ChatModel[] {
   const schema = registry.use_case?.chat?.config_schema?.properties?.model as Record<string, unknown> | undefined
   const ids = (schema?.enum as string[] | undefined) ?? []
   const providers = (schema?.["x-providers"] as Record<string, string> | undefined) ?? {}
   const labels = (schema?.["x-labels"] as Record<string, string> | undefined) ?? {}
   return ids.flatMap((id) => {
     const provider = providers[id]
-    if (!KEYED.includes(provider) || !keys[provider as KeyedProvider]) return []
+    if (!KEYED.includes(provider) || hasKeyFor(provider as KeyedProvider, server, keys) === false) return []
     return [{ id, label: labels[id] ?? id, provider: provider as KeyedProvider }]
   })
 }
@@ -70,6 +76,13 @@ export function chatModels(registry: Registry, keys: Keys): ChatModel[] {
 export function defaultModel(models: ChatModel[]): string | null {
   const anthropic = models.filter((m) => m.provider === "anthropic")
   return (anthropic.find((m) => /haiku/i.test(m.id)) ?? anthropic[anthropic.length - 1] ?? models[0])?.id ?? null
+}
+
+/** Where the key for this request comes from, as the notice's last sentence. Empty while nobody knows. */
+export function keyNotice(provider: KeyedProvider, server: LlmSettings | null, keys: Keys): string {
+  if (keys[provider]) return "The key stays in this browser and is sent only with this request."
+  if (server === null) return ""
+  return `${keySourceLabel(provider, server[provider], false)}.`
 }
 
 export function clampCount(n: number, max: number): number {
@@ -116,4 +129,51 @@ export const writtenFilename = (label: string) => `questions written by ${label}
 
 export function writtenBy(filename: string): string | null {
   return WRITTEN.exec(filename)?.[1] ?? null
+}
+
+// ------------------------------------------------------------- the session --
+
+/**
+ * One document's run and review, held in memory above the page, so leaving
+ * Evaluate or switching the pipeline does not lose a run in flight or a review
+ * that was paid for. Keyed by the document's fingerprint; a reload drops it.
+ */
+export interface WriteSession {
+  runId: string | null
+  /** The model label the run (and so the review) was written by. */
+  writer: string
+  error: string | null
+  written: WrittenSet | null
+  items: ReviewItem[]
+}
+
+const EMPTY: WriteSession = { runId: null, writer: "", error: null, written: null, items: [] }
+let sessions: Record<string, WriteSession> = {}
+const listeners = new Set<() => void>()
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+type Patch = Partial<WriteSession> | ((s: WriteSession) => Partial<WriteSession>)
+
+export function useWriteSession(sha: string): [WriteSession, (patch: Patch) => void] {
+  const session = useSyncExternalStore(subscribe, () => sessions[sha] ?? EMPTY)
+  const update = useCallback(
+    (patch: Patch) => {
+      const now = sessions[sha] ?? EMPTY
+      sessions = { ...sessions, [sha]: { ...now, ...(typeof patch === "function" ? patch(now) : patch) } }
+      listeners.forEach((l) => l())
+    },
+    [sha],
+  )
+  return [session, update]
+}
+
+/** Forget every session, so each test starts clean. */
+export function resetWriteSessionsForTests() {
+  sessions = {}
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { clearTabSet, readTabSet, report, storeTabSet, type Report } from "@/state/goldSet"
 
-import { ApiError } from "./client"
+import { ApiError, plainMessage } from "./client"
 import { v2 } from "./v2"
 import type { StoredQuestionSet } from "./types"
 
@@ -30,9 +30,6 @@ export interface QuestionSetState {
   remove: () => Promise<void>
 }
 
-/** The server's own sentence when it sent one, without the status and path an `ApiError` message starts with. */
-const message = (err: unknown) =>
-  err instanceof ApiError && typeof err.detail === "string" ? err.detail : err instanceof Error ? err.message : String(err)
 
 const DEMO_REFUSED = "This hosted demo does not store question sets. Run the playground locally to evaluate your own document."
 
@@ -82,7 +79,7 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
         setRep(report(s))
         return true
       } catch (err) {
-        setError(err instanceof ApiError && err.status === 403 ? DEMO_REFUSED : message(err))
+        setError(err instanceof ApiError && err.status === 403 ? DEMO_REFUSED : plainMessage(err))
         return false
       } finally {
         setBusy(false)

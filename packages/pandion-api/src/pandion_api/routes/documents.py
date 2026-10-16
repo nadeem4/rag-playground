@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pandion.extend import FetchRefused, fetch_url
 from pydantic import BaseModel, Field
 
@@ -64,7 +65,8 @@ async def upload_document(
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
     content_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    return keep(request, store, policy, data, filename, content_type)
+    # On a worker thread: the checks may be slow (a PDF's pages) and wait for the lock.
+    return await run_in_threadpool(keep, request, store, policy, data, filename, content_type)
 
 
 def keep(
@@ -77,27 +79,28 @@ def keep(
     origin_url: str | None = None,
 ) -> dict[str, Any]:
     """Judge the bytes (`Policy.check_document`), store them and write the
-    record: one path for an upload and a URL document."""
-    policy.check_document(data, filename, request)
-    sha = store.save(data, filename)
+    record: one path for an upload and a URL document. The store's lock is
+    held from the check to the record, so two requests at once cannot both
+    pass a cap that counts records (a Policy's uploads a visitor, or its disk)."""
     with store.lock:
+        policy.check_document(data, filename, request)
+        sha = store.save(data, filename)
         document = store.write(sha, filename, len(data), content_type, origin_url)
         policy.on_uploaded(document, request)
     return store.get(sha).record()
 
 
-#: The status for each kind of fetch refusal, by the start of the guard's own
-#: sentence (`pandion.extend.FetchRefused`). Anything else, such as a page that
-#: answered 404 or could not be reached, is a 502.
-FETCH_STATUS: tuple[tuple[str, int], ...] = (
-    ("That address is not on the public internet", 403),
-    ("Only https addresses", 403),
-    ("A URL document must start with", 400),
-    ("The URL's host name is not valid", 400),
-    ("The page is larger than the limit", 413),
-    ("Pandion reads HTML, PDF", 415),
-    ("The URL took longer than", 504),
-)
+#: The status for each kind of fetch refusal (`pandion.extend.FetchRefused.kind`).
+#: Any other kind, such as a page that answered 404, could not be reached or
+#: redirected too often, is a 502.
+FETCH_STATUS: dict[str, int] = {
+    "bad_url": 400,
+    "not_https": 403,
+    "not_public": 403,
+    "too_big": 413,
+    "wrong_type": 415,
+    "timed_out": 504,
+}
 
 #: The longest URL the route takes.
 MAX_URL_CHARS = 2000
@@ -108,8 +111,7 @@ class UrlDocument(BaseModel):
 
 
 def fetch_status(refusal: FetchRefused) -> int:
-    said = str(refusal)
-    return next((status for start, status in FETCH_STATUS if said.startswith(start)), 502)
+    return FETCH_STATUS.get(getattr(refusal, "kind", ""), 502)
 
 
 @router.post("/documents/url")
@@ -122,13 +124,16 @@ def add_url_document(
     """Fetch one page (`pandion.extend.fetch_url`), then keep it like an upload,
     with the link in its record as `origin_url`. Every later route uses the
     stored id, so nothing is fetched again. A refusal is the guard's own
-    sentence, which never repeats the URL or anything the page sent."""
+    sentence, which never repeats the URL or anything the page sent. The
+    fetch runs inside the Policy's `fetch_slot`, which may bound how many run
+    at once."""
     url = body.url.strip()
     policy.check_fetch(url, request)
     try:
-        data, filename = fetch_url(
-            url, public_only=policy.public_endpoints_only(request), max_bytes=policy.max_url_bytes(request)
-        )
+        with policy.fetch_slot(request):
+            data, filename = fetch_url(
+                url, public_only=policy.public_endpoints_only(request), max_bytes=policy.max_url_bytes(request)
+            )
     except FetchRefused as refusal:
         raise HTTPException(status_code=fetch_status(refusal), detail=str(refusal)) from None
     refusal = unreadable(filename)
@@ -137,7 +142,8 @@ def add_url_document(
     if not data:
         raise HTTPException(status_code=400, detail="The page was empty, so there is nothing to keep.")
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    return keep(request, store, policy, data, filename, content_type, origin_url=url)
+    # The caller sent the link, so it may have it back, whatever the Policy keeps of it.
+    return {**keep(request, store, policy, data, filename, content_type, origin_url=url), "origin_url": url}
 
 
 @router.delete("/documents/{sha}")

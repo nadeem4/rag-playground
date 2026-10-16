@@ -36,6 +36,11 @@ MAX_IMAGE_PIXELS = 20_000_000
 #: Links one visitor may ask the demo to fetch in an hour. Every attempt counts,
 #: a failed one too, because it still sends a request to someone else's server.
 MAX_FETCHES_PER_HOUR = 10
+#: Links the demo fetches in an hour for every visitor together, failed ones
+#: included, so many new visitor ids cannot turn the demo into a crawler.
+MAX_FETCHES_PER_HOUR_ALL = 100
+#: Fetches running at the same time: each can hold a worker for 10 seconds.
+MAX_ACTIVE_FETCHES = 2
 MAX_UPLOADS_PER_VISITOR = 3
 #: The largest page side the demo takes, in points (72 a inch): about 41 inches.
 #: Docling draws each page as an image, so a poster-sized page would take the shared memory.

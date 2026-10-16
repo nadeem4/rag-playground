@@ -50,7 +50,9 @@ def _sweep_one(sources: Path, meta: Path, now: datetime, samples: frozenset[str]
     kept = {v: t for v, t in visitors.items() if not _expired(t, now)}
     if kept:
         if kept != visitors:
-            meta.write_text(json.dumps({**body, "visitors": kept}), encoding="utf-8")
+            # An expired visitor's link goes with their upload.
+            links = {v: u for v, u in (body.get("origin_urls") or {}).items() if v in kept}
+            meta.write_text(json.dumps({**body, "visitors": kept, "origin_urls": links}), encoding="utf-8")
         return 0
     deleted = 0
     if isinstance(sha, str) and SHA.match(sha):

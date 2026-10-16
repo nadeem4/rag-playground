@@ -9,6 +9,7 @@ and the sentence the caller should see. See docs/pandion-api.md, "Site rules".
 from __future__ import annotations
 
 import os
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
@@ -45,12 +46,18 @@ class Policy:
         """Refuse a document's bytes before they are kept (raise HTTPException):
         an upload's after `check_upload` read them, and a URL document's after
         the fetch. `filename` is the upload's name, or the one the fetch gave
-        (`report.pdf`, `page.html`). The default takes any bytes."""
+        (such as `example.com-guide.html`). The default takes any bytes."""
 
     def check_fetch(self, url: str, request: Request) -> None:
         """Refuse a URL document before anything is fetched (raise
         HTTPException), for example a rate limit. A fetch that then fails
         still came through here, so it counts."""
+
+    def fetch_slot(self, request: Request) -> AbstractContextManager[Any]:
+        """A context the fetch runs inside, for example one that holds one of a
+        few slots, or raises HTTPException when none is free. It is left even
+        when the fetch fails. The default does nothing."""
+        return nullcontext()
 
     def max_url_bytes(self, request: Request) -> int:
         """The most a URL document may be, in bytes: the fetch stops reading one

@@ -36,6 +36,14 @@ def no_server_key(tmp_path: Path, monkeypatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def restore_image_pixel_cap(monkeypatch) -> None:
+    """A demo app sets Pillow's process-wide MAX_IMAGE_PIXELS at startup; put it back after each test."""
+    from PIL import Image
+
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", Image.MAX_IMAGE_PIXELS)
+
+
+@pytest.fixture(autouse=True)
 def no_model_warm_up(monkeypatch) -> None:
     """Never load a real model from an API test; start each test un-warmed."""
     from playground.backend import warmup

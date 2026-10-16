@@ -10,6 +10,8 @@ visitor may ask for only a few fetches an hour, failed ones included.
 from __future__ import annotations
 
 import io
+import json
+import threading
 import zipfile
 
 import pytest
@@ -208,7 +210,7 @@ def test_a_url_document_is_kept_and_is_this_browsers_own(on_demo, dirs, server, 
     server.page("/paper.pdf", data, "application/pdf")
     url = server.url("/paper.pdf")
     body = add_url(on_demo, url).json()
-    assert body["filename"] == "paper.pdf" and body["origin_url"] == url
+    assert body["filename"] == "127.0.0.1-paper.pdf" and body["origin_url"] == url
     assert [d["sha"] for d in on_demo.get("/api/v2/documents").json()] == [body["sha"]]
     with make_client(dirs) as someone_else:
         someone_else.get("/api/settings/app")
@@ -276,6 +278,137 @@ def test_locally_a_url_is_not_rate_limited_and_any_address_is_fetched(client, se
     server.page("/a.txt", b"local text", "text/plain")
     for _ in range(demo.MAX_FETCHES_PER_HOUR + 1):
         assert add_url(client, server.url("/a.txt")).status_code == 200
+
+
+def pdf_fetch(monkeypatch, delay: float = 0.0, gate: threading.Event | None = None):
+    """Make the URL route's fetch return a new one-page PDF for each URL, without the network."""
+    import time
+
+    from pandion_api.routes import documents as route
+
+    def fake(url, **_):
+        if gate is not None:
+            gate.wait(5)
+        time.sleep(delay)
+        return build_pdf([[url]]), "page.pdf"
+
+    monkeypatch.setattr(route, "fetch_url", fake)
+
+
+def test_parallel_requests_from_one_browser_cannot_pass_the_three_upload_cap(on_demo, monkeypatch):
+    from pandion_api.documents import DocumentStore
+
+    monkeypatch.setattr(demo, "MAX_ACTIVE_FETCHES", 10)
+    pdf_fetch(monkeypatch)
+    real_save = DocumentStore.save
+
+    def slow_save(self, data, filename):
+        import time
+
+        time.sleep(0.2)  # widen the gap between the check and the record
+        return real_save(self, data, filename)
+
+    monkeypatch.setattr(DocumentStore, "save", slow_save)
+    results: list[int] = []
+
+    def ask(n):
+        results.append(add_url(on_demo, f"https://example.com/{n}").status_code)
+
+    threads = [threading.Thread(target=ask, args=(n,)) for n in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(results) == [200, 200, 200, 429, 429, 429]
+    assert len(on_demo.get("/api/v2/documents").json()) == 3
+
+
+def test_at_most_two_fetches_run_at_once_on_the_demo(on_demo, monkeypatch):
+    import time
+
+    gate = threading.Event()
+    pdf_fetch(monkeypatch, gate=gate)
+    results: list[int] = []
+    threads = [
+        threading.Thread(target=lambda n=n: results.append(add_url(on_demo, f"https://example.com/{n}").status_code))
+        for n in range(2)
+    ]
+    try:
+        for t in threads:
+            t.start()
+        policy = on_demo.app.state.policy
+        deadline = time.monotonic() + 5
+        while policy.active_fetches() < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        r = add_url(on_demo, "https://example.com/third")
+        assert r.status_code == 503
+        assert r.json()["detail"] == "The demo is already fetching 2 links. Try again in a moment."
+    finally:
+        gate.set()
+        for t in threads:
+            t.join()
+    assert results == [200, 200]
+    assert policy.active_fetches() == 0
+    assert add_url(on_demo, "https://example.com/third").status_code == 200
+
+
+def test_the_demo_fetches_at_most_so_many_links_an_hour_for_everyone(on_demo, monkeypatch):
+    monkeypatch.setattr(demo, "MAX_FETCHES_PER_HOUR_ALL", 3)
+    for _ in range(3):  # failed fetches count
+        assert add_url(on_demo, "https://127.0.0.1/x.pdf").status_code == 403
+    on_demo.cookies.clear()  # another browser on the same server
+    on_demo.get("/api/settings/app")
+    r = add_url(on_demo, "https://127.0.0.1/x.pdf")
+    assert r.status_code == 429
+    assert r.json()["detail"] == (
+        "The demo has fetched 3 links in the last hour, its limit for everyone. "
+        "Try again later, or run the playground locally."
+    )
+
+
+def test_the_global_hourly_cap_is_100():
+    assert demo.MAX_FETCHES_PER_HOUR_ALL == 100
+    assert demo.MAX_ACTIVE_FETCHES == 2
+
+
+def test_the_demo_caps_how_big_an_image_any_parser_may_decode(dirs, monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 89_478_485)  # Pillow's default
+    with make_client(dirs):
+        assert Image.MAX_IMAGE_PIXELS != demo.MAX_IMAGE_PIXELS
+    demo_on(monkeypatch)
+    with make_client(dirs):
+        assert Image.MAX_IMAGE_PIXELS == demo.MAX_IMAGE_PIXELS
+
+
+def test_a_link_is_shown_only_to_the_browser_that_added_it(dirs, monkeypatch, server, local_fetches):
+    demo_on(monkeypatch)
+    data = b"the same page for both"
+    server.page("/a.txt?token=ann", data, "text/plain")
+    server.page("/b.txt?token=bob", data, "text/plain")
+    with make_client(dirs) as ann, make_client(dirs) as bob:
+        ann.get("/api/settings/app")
+        bob.get("/api/settings/app")
+        a = add_url(ann, server.url("/a.txt?token=ann")).json()
+        assert a["origin_url"] == server.url("/a.txt?token=ann")
+        # Bob uploads the same bytes as a file: he sees no link.
+        assert post(bob, "mine.txt", data).status_code == 200
+        assert "origin_url" not in bob.get("/api/v2/documents").json()[0]
+        # Bob adds the same bytes from his own link: he sees his, Ann still sees hers.
+        b = add_url(bob, server.url("/b.txt?token=bob")).json()
+        assert b["origin_url"] == server.url("/b.txt?token=bob") and b["sha"] == a["sha"]
+        assert bob.get("/api/v2/documents").json()[0]["origin_url"] == server.url("/b.txt?token=bob")
+        assert ann.get("/api/v2/documents").json()[0]["origin_url"] == server.url("/a.txt?token=ann")
+        assert "token=ann" not in bob.get("/api/v2/documents").text
+        # Neither link is a key anyone else's record could show.
+        body = json.loads((dirs["sources"] / ".meta" / f"{a['sha']}.json").read_text(encoding="utf-8"))
+        assert "origin_url" not in body
+        # Ann deletes her copy: her link goes with it, Bob's stays.
+        assert ann.delete(f"/api/v2/documents/{a['sha']}").status_code == 200
+        body = json.loads((dirs["sources"] / ".meta" / f"{a['sha']}.json").read_text(encoding="utf-8"))
+        assert "token=ann" not in json.dumps(body)
+        assert bob.get("/api/v2/documents").json()[0]["origin_url"] == server.url("/b.txt?token=bob")
 
 
 def test_the_demo_limits_name_the_new_caps(client, monkeypatch):

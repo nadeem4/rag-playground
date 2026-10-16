@@ -101,17 +101,23 @@ HTML, Markdown, text or image document they are a 415.
 ### URL documents
 
 `POST /documents/url` takes one link. The route asks the Policy first
-(`check_fetch(url, request)`, for example a rate limit), then fetches the page with
+(`check_fetch(url, request)`, for example a rate limit), then, inside the Policy's
+`fetch_slot(request)` (for example one of a few slots), fetches the page with
 `pandion.extend.fetch_url`, with `public_only` set to the Policy's
 `public_endpoints_only(request)` and the byte cap set to its `max_url_bytes(request)`
 (20 MB by default). The page then takes the upload's own path: `check_document`, the
-store, the record and `on_uploaded`. The record also keeps the link as `origin_url`.
+store, the record and `on_uploaded`. The store's lock is held from `check_document` to
+`on_uploaded`, for an upload too, so two requests at once cannot both pass a cap that
+counts records. The record also keeps the link as `origin_url`, and the response gives
+it back; a Policy may move it out of the record in `on_uploaded` (the playground keeps it
+per browser).
 
 The page is fetched once. Every later route (runs, ask, evaluations, questions, pages)
 takes the stored id, as for an upload, and reads the stored file. Nothing is fetched
 again for a question.
 
-A refusal is the fetch guard's own sentence, which never repeats the URL or anything the
+The status follows the refusal's `kind` (`pandion.extend.FetchRefused.kind`), not its
+words. A refusal is the fetch guard's own sentence, which never repeats the URL or anything the
 page sent:
 
 | Status | When |
@@ -282,6 +288,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `check_upload(file, request)` | reads it all | `POST /documents`: return the bytes, or raise to refuse. Read no more than you accept. |
 | `check_document(data, filename, request)` | takes any bytes | `POST /documents` after `check_upload`, and `POST /documents/url` after the fetch, before anything is kept: raise to refuse. One place for the rules on what a document may be. |
 | `check_fetch(url, request)` | allows | `POST /documents/url` before anything is fetched: raise to refuse. A fetch that then fails still came through here. |
+| `fetch_slot(request)` | does nothing | `POST /documents/url`: a context manager the fetch runs inside, left even when the fetch fails; raise HTTPException in it to refuse, for example when every slot is taken |
 | `max_url_bytes(request)` | 20 MB | `POST /documents/url`: a larger page is a 413 |
 | `on_uploaded(document, request)` | nothing | with the store's lock held, after the record is written |
 | `on_delete(sha, document, request)` | 404 without a record, else `True` | with the lock held: `True` deletes the file, `False` keeps it |
@@ -369,7 +376,10 @@ limits and the visitor cookie), `GET /api/questions/template` and `GET /api/temp
 | `can_read` | a sample, or this browser's own upload | any document |
 | `check_upload` | a visitor cookie; at most 10 MB read | anything |
 | `check_document` | for an upload and a URL document alike: a PDF of at most 20 pages, 41 inches a side; Word, PowerPoint, HTML, Markdown and text files up to 2 MB; a Word or PowerPoint file that unpacks to at most 50 MB in at most 1,000 parts (a zip bomb is a 413); a PNG or JPG up to 5 MB and 20 million pixels; a file with no extension only if it is a PDF; three live uploads a browser; 200 MB for all uploads | anything |
-| `check_fetch` | a visitor cookie; room for one more upload (a URL document counts as one: 429); at most 10 links a browser an hour, failed fetches included (429) | anything |
+| `check_fetch` | a visitor cookie; room for one more upload (a URL document counts as one: 429); at most 10 links a browser an hour and 100 links an hour for every browser together, failed fetches included (429) | anything |
+| `fetch_slot` | at most 2 fetches at once; a third is a 503 | no limit |
+| `on_uploaded` (a URL document) | the link is kept under the browser that added it (`origin_urls`), never as a shared `origin_url`; `describe` shows a browser only its own link, and deleting or expiring its upload drops it | the same |
+| `on_startup` (images) | `PIL.Image.MAX_IMAGE_PIXELS` is set to 20 million, so an image inside a Word, PowerPoint or HTML file cannot decode into huge memory | Pillow's default |
 | `max_url_bytes` | 10 MB, the upload cap | 20 MB |
 | `on_uploaded` | records which browser uploaded the file, and when | the same |
 | `on_delete` | only your own upload; a file another browser holds stays; never a sample | any upload, never a sample |

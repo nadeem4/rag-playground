@@ -251,6 +251,10 @@ def record_upload(sources: Path, sha: str, visitor: str | None) -> None:
     if sample is not None:
         body["filename"], visitor = sample.pdf.name, None
     visitors = dict(body.get("visitors") or {})
+    # A link is one browser's own (it may hold a token): kept under its visitor, never shared.
+    origin = body.pop("origin_url", None)
+    if visitor and isinstance(origin, str):
+        body["origin_urls"] = {**(body.get("origin_urls") or {}), visitor: origin}
     if visitor:
         visitors[visitor] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     if visitors:

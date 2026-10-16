@@ -91,8 +91,13 @@ turns off what is unsafe to share.
   capped at 200 MB, so the shared disk cannot fill up.
 - A page can be added from a link. The demo fetches https links on port 443 to public
   addresses only, up to 10 MB, once. The page then follows the upload rules above and
-  counts as one of the browser's 3 files. A browser can ask for 10 links an hour, and a
-  failed fetch counts too, because it still sent a request to someone else's server.
+  counts as one of the browser's 3 files. A browser can ask for 10 links an hour, and
+  every browser together for 100, and a failed fetch counts too, because it still sent a
+  request to someone else's server. At most 2 fetches run at once; a third is told to
+  try again in a moment.
+- Images inside Word, PowerPoint and HTML files may decode to at most 20 million pixels
+  (Pillow's `MAX_IMAGE_PIXELS`), so a run that meets a larger one fails plainly instead
+  of filling the shared memory.
 - An upload is deleted 24 hours after it was made. A sweep checks once an hour.
 - The bundled samples stay public, and cannot be deleted. They are put back in the store
   each time the server starts, so a restart never loses one.

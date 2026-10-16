@@ -14,9 +14,10 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
+from PIL import Image
 from pydantic import TypeAdapter, ValidationError
 
 import pandion
@@ -52,6 +53,19 @@ TOO_MANY_FETCHES = (
     f"This browser has asked for {demo.MAX_FETCHES_PER_HOUR} links in the last hour. "
     "Wait a while, or run the playground locally."
 )
+
+def too_many_fetches_for_everyone() -> str:
+    """The demo's 429 once every visitor together reached MAX_FETCHES_PER_HOUR_ALL links."""
+    return (
+        f"The demo has fetched {demo.MAX_FETCHES_PER_HOUR_ALL} links in the last hour, its limit for everyone. "
+        "Try again later, or run the playground locally."
+    )
+
+
+def busy_fetching() -> str:
+    """The demo's 503 when MAX_ACTIVE_FETCHES fetches are running."""
+    return f"The demo is already fetching {demo.MAX_ACTIVE_FETCHES} links. Try again in a moment."
+
 
 #: The clock the fetch limit reads; tests move it.
 _clock = time.monotonic
@@ -238,6 +252,9 @@ class PlaygroundPolicy(Policy):
         self._data_dir: Path | None = None
         #: Each visitor's fetch times in the last hour (`check_fetch`), in this process.
         self._fetches: dict[str, list[float]] = {}
+        #: Every visitor's fetch times in the last hour, together.
+        self._all_fetches: list[float] = []
+        self._active_fetches = 0
         self._fetch_lock = threading.Lock()
 
     def dependencies(self) -> list[Any]:
@@ -300,14 +317,40 @@ class PlaygroundPolicy(Policy):
             raise sources.too_many_uploads()
         now = _clock()
         with self._fetch_lock:
+            self._all_fetches = [t for t in self._all_fetches if now - t < 3600]
+            if len(self._all_fetches) >= demo.MAX_FETCHES_PER_HOUR_ALL:
+                raise HTTPException(429, too_many_fetches_for_everyone())
             recent = [t for t in self._fetches.get(me, []) if now - t < 3600]
             if len(recent) >= demo.MAX_FETCHES_PER_HOUR:
                 self._fetches[me] = recent
                 raise HTTPException(429, TOO_MANY_FETCHES)
             self._fetches[me] = [*recent, now]
+            self._all_fetches.append(now)
             # Forget visitors with no fetch in the last hour, so the table stays small.
             for other in [v for v, times in self._fetches.items() if not any(now - t < 3600 for t in times)]:
                 del self._fetches[other]
+
+    @contextlib.contextmanager
+    def fetch_slot(self, request: Request) -> Iterator[None]:
+        """On the demo, one of MAX_ACTIVE_FETCHES slots, or a 503 when all are
+        taken: each fetch can hold a worker for up to 10 seconds. Locally, no
+        limit."""
+        if not demo.enabled():
+            yield
+            return
+        with self._fetch_lock:
+            if self._active_fetches >= demo.MAX_ACTIVE_FETCHES:
+                raise HTTPException(503, busy_fetching())
+            self._active_fetches += 1
+        try:
+            yield
+        finally:
+            with self._fetch_lock:
+                self._active_fetches -= 1
+
+    def active_fetches(self) -> int:
+        """Fetches running now, in this process."""
+        return self._active_fetches
 
     def max_url_bytes(self, request: Request) -> int:
         """On the demo, the upload cap (10 MB): the per-format caps then apply
@@ -332,16 +375,22 @@ class PlaygroundPolicy(Policy):
         if demo.enabled():
             visitors.pop(me, None)
             if visitors:
-                body = {**document.record(), **document.extra, "visitors": visitors}
+                links = {v: u for v, u in (document.extra.get("origin_urls") or {}).items() if v != me}
+                body = {**document.record(), **document.extra, "visitors": visitors, "origin_urls": links}
                 sidecar = request.app.state.deps.sources_dir / META_DIR / f"{sha}.json"
                 sidecar.write_text(json.dumps(body), encoding="utf-8")
                 return False
         return True
 
     def describe(self, document: Document, request: Request) -> dict[str, Any]:
-        """The upload time: this browser's own when it uploaded the file, else the latest."""
-        listed = sources._listed({**document.record(), **document.extra}, _visitor(request))
-        return {"uploaded_at": listed["uploaded_at"]} if "uploaded_at" in listed else {}
+        """The upload time: this browser's own when it uploaded the file, else the
+        latest. And the link this browser added the document from, if it did:
+        never another browser's link."""
+        me = _visitor(request)
+        listed = sources._listed({**document.record(), **document.extra}, me)
+        out = {"uploaded_at": listed["uploaded_at"]} if "uploaded_at" in listed else {}
+        link = (document.extra.get("origin_urls") or {}).get(me) if me else None
+        return {**out, "origin_url": link} if isinstance(link, str) else out
 
     def private(self, sha: str, request: Request) -> bool:
         """On the demo an upload is one browser's own: no shared cache may keep it."""
@@ -446,11 +495,15 @@ class PlaygroundPolicy(Policy):
         return scrub_paths(text, self._data_dir)
 
     async def on_startup(self, app: FastAPI) -> None:
-        """Put every sample's file in the store; on the demo, start expiring uploads."""
+        """Put every sample's file in the store; on the demo, start expiring uploads,
+        and cap the pixels any image may decode to (`PIL.Image.MAX_IMAGE_PIXELS`),
+        so an image inside a Word, PowerPoint or HTML file cannot take the shared
+        memory: a run that meets a larger one fails with a plain error."""
         self._data_dir = app.state.settings.data_dir
         folder = app.state.deps.sources_dir
         sources.seed_sample_files(folder)
         if demo.enabled():
+            Image.MAX_IMAGE_PIXELS = demo.MAX_IMAGE_PIXELS
             self._sweeper = asyncio.create_task(expiry.run_forever(folder))
 
     async def on_shutdown(self, app: FastAPI) -> None:

@@ -45,7 +45,7 @@ title.
 - **Library** shows every saved document the same way.
 
 The header has no document control. Home, Read and Privacy show no document, because they
-do not work on one. Home has its own **Try a sample** and **Use your own document** buttons.
+do not work on one. Home has its own **Try a sample** and **Use your own files** buttons.
 
 **Preview** opens a side sheet with every page of the document. A row of page numbers at
 the top jumps to a page, and the page in view is marked as you scroll. Each page is
@@ -122,23 +122,30 @@ filename.
 
 ## Home
 
-Home (`/`) is the first page. It has:
+Home (`/`) is the first page, written for developers building search over their own
+knowledge. It has:
 
-- a **Try a sample** button, which opens Build on the Starter pipeline with the default
-  sample. An unsaved pipeline on Build is kept rather than replaced, and the Starter waits
-  in its picker;
-- a **Use your own document** button, which opens a file picker and opens Build once the upload
-  is done. If the upload is refused, it says why under the buttons. One line under the
-  buttons says what happens to your file: on the demo, the page and size limits and how
-  many hours until it is deleted; running locally, that it stays on your machine;
-- a **See how it works** link, and three facts: no sign in, samples or your own PDF, and a
-  key only for chat answers;
-- the steps you can look inside;
-- one section each for Build, Compare and Evaluate, with a short clip and a **Try it
-  yourself** button. With no document yet, the button loads the first sample, which gives
-  you the Starter pipeline on it, then opens the page. One line under the button names the document the page will use, and its
-  **Change** button opens the Document menu;
-- links to Read, to running it on your machine and to the source on GitHub.
+- a hero with what you leave with (a Python project built on Pandion), and three actions:
+  - **Try a sample** opens Build on the Starter pipeline with the default sample. An unsaved
+    pipeline on Build is kept rather than replaced, and the Starter waits in its picker;
+  - **Use your own files** opens a file picker that offers every kind of file a parser on the
+    server reads, and opens Build once the upload is done. If the upload is refused, it says
+    why under the buttons. One line under the buttons names each kind of file and, on the
+    demo, its limit, as the Document menu does;
+  - **See what you take home** jumps to the Pandion section;
+- three facts: no sign in, where your files stay (private to your browser on the demo, on
+  your machine when running locally), and a key only for model steps;
+- a real finding from the scanned notes sample: 0 of 8 questions found with Docling's OCR
+  off, 8 of 8 with it on (from [Lessons learned](lessons-learned.md));
+- **From your files to a project you own**: four tabs, Build, Evaluate, Compare and Take it
+  home. The first three play a short clip of the page; Take it home shows what the zip holds.
+  The arrow keys, Home and End move between the tabs;
+- **Start from what you have**: a sample, your own files, or a template. Your own files
+  also takes a link: paste it and press **Add**, and Build opens on the page it fetched. A
+  refused link says why under the box;
+- three lessons from building it, each linking its entry in [Lessons learned](lessons-learned.md);
+- Pandion: the commands and the output of a real `pandion init` project, with links to
+  PyPI and GitHub.
 
 The clips are muted and loop. Each has a Pause and Play button. With reduced motion turned
 on, they hold still on their poster until you press Play. Any path the app does not know

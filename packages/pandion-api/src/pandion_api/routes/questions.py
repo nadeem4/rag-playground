@@ -5,24 +5,35 @@ Every set is checked against the document as the pdfium parser reads it, and
 the report says so: another parser can put the text together differently. A
 set with passages that were not found is kept anyway; a partly good set is
 still useful, and refusing it would leave the reader nothing to fix.
+
+A set can also be written for a document by a model
+(POST /documents/{sha}/questions/generate), as a run. That set is handed back,
+never kept: the reader reviews it and uploads the questions they keep here.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
 import pypdfium2 as pdfium
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel
 
 import pandion
-from pandion.evaluation import QuestionSetError, check_questions, document_text, parse_question_set
+from pandion.evaluation import QuestionSetError, check_questions, document_text, parse_question_set, write_questions
+from pandion.extend import EndpointRefused, guard_endpoint
+from pandion_api.checks import chat_providers
+from pandion_api.credentials import PROVIDERS
 from pandion_api.deps import get_documents, get_policy
 from pandion_api.documents import DocumentStore
+from pandion_api.jobs import start
 from pandion_api.pages import PDFIUM_LOCK
 from pandion_api.policy import Policy
+from pandion_api.runs import event
 from pandion_api.routes.documents import document_file
 
 router = APIRouter()
@@ -123,3 +134,80 @@ def delete_questions(sha: str, request: Request, store: DocumentStore = Depends(
     document_file(request, sha)
     store.questions(sha).unlink(missing_ok=True)
     return Response(status_code=204)
+
+
+#: The most questions one generate run may ask for; a Policy may allow fewer.
+MAX_GENERATED = 50
+TOO_FEW = "Ask for at least one question."
+TOO_MANY = f"A model writes at most {MAX_GENERATED} questions at a time. Ask for fewer."
+
+
+class GenerateIn(BaseModel):
+    model: str
+    count: int = 15
+    #: For `openrouter` and `custom`: the model's name at that provider.
+    model_name: str | None = None
+    #: For `custom`: the OpenAI-compatible server's base URL.
+    base_url: str | None = None
+
+
+class _Cancelled(Exception):
+    """Raised between parts when the run is cancelled."""
+
+
+@router.post("/documents/{sha}/questions/generate", status_code=202)
+async def generate_questions(
+    sha: str, body: GenerateIn, request: Request, policy: Policy = Depends(get_policy)
+) -> dict[str, str]:
+    """Have a model write up to `count` test questions for the document, as a run
+    (`pandion.evaluation.write_questions`, one call a part). Follow it as any run:
+    a `part_finished` event after each part, then the result, the dict
+    `write_questions` returns. The set is not kept here: the reader reviews it,
+    then uploads the questions they keep with POST /documents/{sha}/questions.
+
+    Refused before the run starts: a count under 1 or over MAX_GENERATED (422),
+    `Policy.check_question_count("generation", ...)`, an unknown model (422),
+    `Policy.check_provider`, a custom endpoint that is not public where
+    `Policy.public_endpoints_only` (403), and a missing key (400)."""
+    path = document_file(request, sha)
+    if body.count < 1:
+        raise HTTPException(status_code=422, detail=TOO_FEW)
+    if body.count > MAX_GENERATED:
+        raise HTTPException(status_code=422, detail=TOO_MANY)
+    policy.check_question_count("generation", body.count, request)
+    providers = chat_providers()
+    if body.model not in providers:
+        raise HTTPException(
+            status_code=422, detail=f"model must be one of {', '.join(providers)}; not '{body.model}'."
+        )
+    provider = "custom" if providers[body.model] == "openai_compatible" else providers[body.model]
+    policy.check_provider(provider, request)
+    public_only = policy.public_endpoints_only(request)
+    if provider == "custom":
+        try:
+            await run_in_threadpool(guard_endpoint, body.base_url or "", public_only=public_only)
+        except EndpointRefused as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
+    elif PROVIDERS[provider].extra not in policy.credentials(request):
+        raise HTTPException(status_code=400, detail=policy.missing_key(provider))
+
+    def work(on_event, cancel: threading.Event, credentials):
+        def on_part(done: int, total: int) -> None:
+            on_event(event("part_finished", number=done, total=total))
+            if cancel.is_set():
+                raise _Cancelled
+
+        try:
+            result = write_questions(
+                _text(path), model=body.model, count=body.count, credentials=credentials,
+                model_name=body.model_name, base_url=body.base_url, public_only=public_only, on_part=on_part,
+            )
+        except _Cancelled:
+            return False, True, None
+        except HTTPException as exc:  # the document is not a PDF
+            return False, False, {"error": exc.detail}
+        except Exception as exc:  # noqa: BLE001 - the first call failed; scrubbed by jobs.start
+            return False, False, {"error": str(exc)}
+        return True, False, result
+
+    return start(request, "questions", work)

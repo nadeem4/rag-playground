@@ -60,6 +60,12 @@ def _properties(catalog: dict[str, Any], stage: str, use: str) -> dict[str, Any]
     return catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {})
 
 
+def chat_providers(catalog: dict[str, Any] | None = None) -> dict[str, str]:
+    """{chat model id: its provider}, as the chat step's `model` setting lists them."""
+    catalog = catalog if catalog is not None else pandion.catalog()
+    return dict((_properties(catalog, "use_case", "chat").get("model") or {}).get("x-providers") or {})
+
+
 def custom_endpoint_steps(config: dict[str, Any], catalog: dict[str, Any] | None = None) -> list[str]:
     """The steps set to call a model at an address the request chose (an
     OpenAI-compatible endpoint): a server would send a request there."""

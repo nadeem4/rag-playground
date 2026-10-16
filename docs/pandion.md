@@ -635,6 +635,13 @@ When the first call fails, such as for a rejected key, a wrong model id or an en
 that cannot be reached, the error is raised. A call after that which fails is a drop,
 with its reason, and the questions already written are still returned.
 
+**Following its progress.** Pass `on_part`, a function that takes two numbers, and it is
+called after each part with how many parts are done and how many there are in all, for
+example `on_part=lambda done, total: print(f"{done} of {total}")`. It is called for a part
+whose call failed too. An exception it raises stops the calls and is raised again from
+`write_questions`, so raising one is how a caller stops it early; pandion-api does this
+when a run is cancelled.
+
 From the command line, `pandion questions` does the same; see
 [The pandion command](#the-pandion-command).
 

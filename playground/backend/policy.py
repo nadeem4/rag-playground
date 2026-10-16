@@ -67,6 +67,13 @@ def too_many_questions(kind: str, count: int) -> str:
     )
 
 
+#: The demo's 400 for asking a model to write too many questions at once.
+TOO_MANY_GENERATED = (
+    f"The demo writes at most {demo.MAX_GENERATED_QUESTIONS} questions at a time. "
+    "Ask for fewer, or run the playground locally for more."
+)
+
+
 #: The most recipes one comparison runs (`PlaygroundPolicy.max_variants`).
 MAX_VARIANTS = 10
 
@@ -309,10 +316,14 @@ class PlaygroundPolicy(Policy):
         return MAX_VARIANTS
 
     def check_question_count(self, kind: str, count: int, request: Request) -> None:
-        """On the demo, at most 50 questions an evaluation and 120 recipe-questions
-        a comparison, so one run cannot hold a shared slot for long. Locally,
-        only pandion-api's own cap of 500 questions a set."""
+        """On the demo, at most 50 questions an evaluation, 120 recipe-questions
+        a comparison and 25 questions a model writes, so one run cannot hold a
+        shared slot for long. Locally, only pandion-api's own caps."""
         if not demo.enabled():
+            return
+        if kind == "generation":
+            if count > demo.MAX_GENERATED_QUESTIONS:
+                raise HTTPException(status_code=400, detail=TOO_MANY_GENERATED)
             return
         most = demo.MAX_EVALUATION_QUESTIONS if kind == "evaluation" else demo.MAX_COMPARISON_QUESTIONS
         if count > most:

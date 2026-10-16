@@ -30,7 +30,7 @@ from __future__ import annotations
 import difflib
 import json
 import re
-from typing import Any
+from typing import Any, Callable
 
 from pandion import llm
 from pandion.questions import check_questions, parse_question_set
@@ -108,6 +108,7 @@ def write_questions(
     model_name: str | None = None,
     base_url: str | None = None,
     public_only: bool = False,
+    on_part: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """Ask `model` for up to `count` test questions about `text`, checked.
 
@@ -117,7 +118,9 @@ def write_questions(
     model id from `pandion.llm.CHAT_MODELS`; `openrouter` and `custom` take
     `model_name`, and `custom` takes `base_url`. Keys come from `credentials`,
     under the same names a pipeline run uses. `public_only` is for a server
-    strangers share, as in `pandion.llm.complete`.
+    strangers share, as in `pandion.llm.complete`. `on_part`, when given, is
+    called after each part with (parts done, parts in all); an exception it
+    raises stops the calls and is raised again, which is how a caller cancels.
     """
     if not isinstance(count, int) or count < 1:
         raise ValueError(f"count must be a whole number of at least 1, not {count!r}.")
@@ -150,12 +153,14 @@ def write_questions(
                 # The original can hold the request and the key, so it is not chained.
                 raise (ValueError if isinstance(exc, ValueError) else RuntimeError)(message) from None
             outcomes.append(_drop("", f"The call for part {n} failed: {message}"))
-            continue
-        replies.append(completion)
-        if completion.stop_reason in CUT_OFF:
-            outcomes.append(_drop("", f"The reply for part {n} was cut off."))
         else:
-            outcomes.append(_reply(completion.text, n))
+            replies.append(completion)
+            if completion.stop_reason in CUT_OFF:
+                outcomes.append(_drop("", f"The reply for part {n} was cut off."))
+            else:
+                outcomes.append(_reply(completion.text, n))
+        if on_part is not None:
+            on_part(n, len(parts))
 
     kept, dropped = _check(outcomes, _body(text))
     for n, question in enumerate(kept, start=1):

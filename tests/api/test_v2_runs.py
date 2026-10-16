@@ -299,6 +299,21 @@ def test_on_the_demo_a_comparison_asks_at_most_120_recipe_questions(client, monk
     policy.check_question_count("comparison", 5000, None)
 
 
+def test_on_the_demo_a_model_writes_at_most_25_questions_at_a_time(client, monkeypatch):
+    from playground.backend.policy import TOO_MANY_GENERATED
+
+    demo_on(monkeypatch)
+    sample = client.post("/api/sources/sample").json()
+    body = {"model": "claude-haiku-4-5", "count": 26}
+    r = client.post(f"/api/v2/documents/{sample['sha']}/questions/generate", json=body, headers=HEADER)
+    assert r.status_code == 400 and r.json()["detail"] == TOO_MANY_GENERATED
+    assert TOO_MANY_GENERATED == "The demo writes at most 25 questions at a time. Ask for fewer, or run the playground locally for more."
+    policy = PlaygroundPolicy()
+    policy.check_question_count("generation", 25, None)
+    monkeypatch.delenv("RAG_PLAYGROUND_DEMO")
+    policy.check_question_count("generation", 50, None)
+
+
 def test_on_the_demo_a_visitor_has_at_most_two_runs_going(client, monkeypatch):
     import threading
 

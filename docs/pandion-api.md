@@ -74,6 +74,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document as pdfium reads it, keeps the set if the Policy keeps sets, and reports per question whether each passage was found. A set over 1 MB is 413; a set that cannot be used (more than 500 questions, more than 20 gold passages in one, a file that cannot be read) is 400 with its sentence; a document that is not a PDF is 415. |
 | `GET /documents/{id}/questions` | the set kept for the document, or `null` |
 | `DELETE /documents/{id}/questions` | remove it: 204 |
+| `POST /documents/{id}/questions/generate` | `{"model", "count"?, "model_name"?, "base_url"?}`: a model writes up to `count` test questions (default 15) for the document, as pdfium reads it, one call a part (`pandion.evaluation.write_questions`). A run: 202 `{"run_id"}`. See [Questions written for you](#questions-written-for-you). |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. |
 | `GET /runs/{run_id}` | the run's status, its whole event log, and once it ended its `result` |
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
@@ -213,6 +214,32 @@ The default Policy names no one, so anyone with the `run_id` may follow it. Ever
 run shows (a failed step's `error`, in its event and in the result, and a crash's
 `run_error`) goes through the Policy's `scrub` after the keys are taken out.
 
+### Questions written for you
+
+`POST /documents/{id}/questions/generate` has a model write a question set for one
+document. It is a run, like an evaluation, so it counts against the same limits
+(`max_active_runs`, `max_runs_per_owner`, `run_owner`) and no request is held open while
+the model works, which takes about a minute for 20 questions. After each part there is a
+`part_finished` event with `number` (parts done) and `total` (parts in all). The result
+is the dict `write_questions` returns, as it is: `format`, `version`, `document`,
+`questions`, `dropped`, `usage` and `parts`. The server does not keep the set. The reader
+looks it over, then uploads the questions they keep with
+`POST /documents/{id}/questions`, so `GET /documents/{id}/questions` is the same after
+the run as before it.
+
+These are refused before the run starts, in this order. An unknown or unreadable document
+is a 404. A `count` under 1 or over 50 is a 422. Then the Policy's
+`check_question_count("generation", count, request)` may refuse fewer; the playground's
+demo allows at most 25, with a 400 that says so. A `model` that is not a chat model id is
+a 422. The Policy's `check_provider` may refuse the model's provider. A `custom` model
+whose `base_url` is not a public https address is a 403 where `public_endpoints_only` is
+true. A missing key is a 400 with the Policy's `missing_key` sentence. When the first
+model call fails, for example for a rejected key or an unknown `model_name`, the run ends
+with `ok` false and a result of `{"error": ...}`, scrubbed of keys and by the Policy's
+`scrub`. A document that is not a PDF ends the run the same way, with the sentence the
+upload route gives as a 415. Cancelling the run stops it after the part in progress, and no further model
+call is made.
+
 ## Site rules: the Policy
 
 Subclass `pandion_api.Policy` and override what your site needs. A method that refuses
@@ -234,7 +261,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `public_endpoints_only(request)` | `False` | every pipeline: a custom model endpoint must then be a public https address |
 | `check_clear_cache(request)` | allows | `DELETE /cache` |
 | `max_variants(request)` | 10 | `POST /comparisons`: more variants than this is a 422 |
-| `check_question_count(kind, count, request)` | allows | before an evaluation (`kind` "evaluation", `count` its questions) or a comparison with questions (`kind` "comparison", `count` its variants times its questions) starts: raise to refuse |
+| `check_question_count(kind, count, request)` | allows | before an evaluation (`kind` "evaluation", `count` its questions), a comparison with questions (`kind` "comparison", `count` its variants times its questions) or a model writing questions (`kind` "generation", `count` the questions asked for) starts: raise to refuse |
 | `max_runs_per_owner(request)` | None (no limit) | when a run starts: an owner (`run_owner`) who already has this many runs working or waiting gets a 429 |
 | `run_owner(request)` | None (anyone) | when a run starts, and on its state, events and cancel: a run with an owner is a 404 to anyone else |
 | `scrub(text)` | the text as it is | on a `ConfigError`'s problem sentence, on the problem and 404 sentences of `POST /explain`, and on every error a run shows (see [Errors](#errors)) |
@@ -317,7 +344,7 @@ limits and the visitor cookie), `GET /api/questions/template` and `GET /api/temp
 | `public_endpoints_only` | yes | no |
 | `max_active_runs` | 2 | no limit |
 | `max_variants` | 10 | 10 |
-| `check_question_count` | at most 50 questions an evaluation, and 120 recipe-questions (recipes times questions) a comparison: a 413 naming the cap | only the 500 a set |
+| `check_question_count` | at most 50 questions an evaluation, and 120 recipe-questions (recipes times questions) a comparison: a 413 naming the cap; at most 25 questions a model writes at a time: a 400 that says so | only the 500 a set, and 50 questions a model writes |
 | `max_runs_per_owner` | 2 a visitor | no limit |
 | `run_owner` | the visitor: to anyone else the run is a 404 | no one |
 | `scrub` | a server path keeps only its last part (`[server]/x.py`) | the same |

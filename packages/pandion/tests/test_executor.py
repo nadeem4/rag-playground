@@ -577,6 +577,19 @@ def test_a_child_hits_the_cache_when_a_non_cacheable_parent_gives_the_same_outpu
     assert second.nodes["p"].artifact.id == first.nodes["p"].artifact.id
 
 
+def test_a_pipeline_with_no_non_cacheable_step_keeps_its_ids(store):
+    """Computed with the executor at 3c052f2^, before the fix for non-cacheable parents.
+
+    If one of these moves, every cached result of an ordinary pipeline is lost.
+    """
+    res = run(g_linear(), counting_registry(), store)
+    assert {nid: res.nodes[nid].artifact.id for nid in ("s", "p", "c")} == {
+        "s": "7bac22ffb408d5bdd32e59b5d609c6abf2f54b493decdedddc6c18f87375c91e",
+        "p": "bfc01c623c011a0a7a6b77ba6f9733b330d7cf52ffe23ab5c7202ea18f0f04aa",
+        "c": "ed50fae2e011705d80107226529773955a81d347f4ed24e23cf7e9866f3a6559",
+    }
+
+
 def _another_run_writes_the_parent(store, change):
     """After `s` is stored, another run replaces or removes the same entry."""
 

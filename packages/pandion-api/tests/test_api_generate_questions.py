@@ -213,3 +213,10 @@ def test_a_cancel_during_the_last_part_keeps_the_set(client, monkeypatch):
     go.set()
     state, _ = finish(client, r)
     assert state["status"] == "finished" and state["result"]["questions"]
+
+
+def test_each_written_question_names_the_document_it_was_written_for(client, monkeypatch):
+    monkeypatch.setattr(llm, "complete", FakeModel())
+    sha = upload(client)["sha"]
+    state, _ = finish(client, generate(client, sha, count=1))
+    assert [q["document"] for q in state["result"]["questions"]] == [sha]

@@ -73,6 +73,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /documents/{id}/pages/{n}?scale=1` | the page as PNG, `scale` above 0 and at most 8, lowered so the image stays within 25 million pixels |
 | `GET /documents/{id}/pages/{n}/find?text=` | where the text (1 to 2,000 characters) is on the page: `{"rects": [[left, bottom, right, top], ...], "matched": "exact" or "normalized" or "none"}` |
 | `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document as pdfium reads it, keeps the set if the Policy keeps sets, and reports per question whether each passage was found. A set over 1 MB is 413; a set that cannot be used (more than 500 questions, more than 20 gold passages in one, a file that cannot be read) is 400 with its sentence; a document that is not a PDF is 415. |
+| `POST /questions` | multipart `file`, one question set for several documents, and a `documents` field per document (its sha): each question may name its `document` by filename or sha. Each gold passage is checked in the document its question names, or in every one for a question naming none, as pdfium reads them. Each question's row names its document's sha (`document`, `null` when it names none) and each gold passage the sha of the document it was found in (`null` when it was not). If the Policy keeps sets, the set is kept split by document: each document's named questions against it, and the questions naming none against the first document; a document the set has no question for loses the set it had. A question naming another document is 400 with its sentence; the other refusals are those of `POST /documents/{id}/questions`. |
 | `GET /documents/{id}/questions` | the set kept for the document, or `null` |
 | `DELETE /documents/{id}/questions` | remove it: 204 |
 | `POST /documents/{id}/questions/generate` | `{"model", "count"?, "model_name"?, "base_url"?}`: a model writes up to `count` test questions (default 15) for the document, as pdfium reads it, one call a part (`pandion.evaluation.write_questions`). A run: 202 `{"run_id"}`. See [Questions written for you](#questions-written-for-you). |
@@ -216,8 +217,17 @@ A Policy can cap the runs one owner has working or waiting (`max_runs_per_owner`
 past it, on any route that starts a run, is a 429: "You already have 2 runs going. Wait
 for one to finish, or stop one."
 
+A question that names its `document` (by filename or sha) is found only in a piece from
+that document, and a question naming none in a piece from any; the result's
+`by_document` has the totals per document a question names, then for the questions naming
+none, and each question its `document` (the sha, or `null`). A question naming a document
+the request does not send is a 400 before anything runs: "Question 1 names the document
+bees.pdf, which is not one of the documents searched: report.pdf." The same holds for a
+comparison's questions.
+
 An evaluation sent without questions asks those of the sets kept against its documents,
-in the order the documents are listed. An id that two documents' sets both use is
+in the order the documents are listed. A kept question that names a document is about the
+document it is kept against, so it is found only there. An id that two documents' sets both use is
 prefixed with each document's name (`report.pdf: capital`), and the kept sets together
 hold at most 500 questions (400 past that). An evaluation with no questions at all is a
 400. A comparison asks only the questions it is sent: without them it is index only,
@@ -259,7 +269,8 @@ document. It is a run, like an evaluation, so it counts against the same limits
 the model works, which takes about a minute for 20 questions. After each part there is a
 `part_finished` event with `number` (parts done) and `total` (parts in all). The result
 is the dict `write_questions` returns, as it is: `format`, `version`, `document`,
-`questions`, `dropped`, `usage` and `parts`. The server does not keep the set. The reader
+`questions`, `dropped`, `usage` and `parts`. Each question's `document`, and the set's,
+is the document's sha. The server does not keep the set. The reader
 looks it over, then uploads the questions they keep with
 `POST /documents/{id}/questions`, so `GET /documents/{id}/questions` is the same after
 the run as before it.

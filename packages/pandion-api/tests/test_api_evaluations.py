@@ -479,3 +479,57 @@ def test_against_caps_the_gold_passages_together_at_a_sets_size(client):
     r = client.post("/evaluations/against", json={"report": report, "baseline": _run(True)})
     assert r.status_code == 422
     assert "gold passages together" in json.dumps(r.json())
+
+
+# --- a question scores only in its own document (multi-document part 4) ------------
+
+BEES = {"id": "bees", "question": "How do bees show the way?", "gold_answers": ["Bees dance to show the hive where the flowers are."]}
+
+
+def _two(client):
+    from pdfs import build_pdf
+
+    first = upload(client)["sha"]
+    second = upload(client, "bees.pdf", build_pdf([[BEES["gold_answers"][0]], ["Honey keeps for years."]]))["sha"]
+    return first, second
+
+
+def test_an_evaluation_scores_a_named_question_in_its_own_document_and_totals_by_document(client):
+    first, second = _two(client)
+    questions = [{**BEES, "id": "named", "document": "report.pdf"}, BEES]
+    body = {"config": PIPELINE, "documents": [first, second], "questions": questions}
+    state, _ = finish(client, client.post("/evaluations", json=body))
+    result = state["result"]
+    assert [(q["id"], q["found"], q["document"]) for q in result["questions"]] == [
+        ("named", False, first), ("bees", True, None),
+    ]
+    assert [(d["document"], d["total"], d["found"]) for d in result["by_document"]] == [(first, 1, 0), (None, 1, 1)]
+
+
+def test_a_question_naming_a_document_not_evaluated_is_400_before_anything_runs(client):
+    first, second = _two(client)
+    body = {"config": PIPELINE, "documents": [first], "questions": [{**BEES, "document": "bees.pdf"}]}
+    r = client.post("/evaluations", json=body)
+    assert r.status_code == 400
+    assert r.json()["detail"] == (
+        "Question 1 names the document bees.pdf, which is not one of the documents searched: report.pdf."
+    )
+
+
+def test_a_question_kept_against_a_document_is_scored_in_that_document(client):
+    first, second = _two(client)
+    keep(client, first, [{**BEES, "document": "whatever-it-was-called.pdf"}])
+    state, _ = finish(client, client.post("/evaluations", json={"config": PIPELINE, "documents": [first, second]}))
+    q = state["result"]["questions"][0]
+    assert (q["found"], q["document"]) == (False, first)
+
+
+def test_one_kept_set_across_documents_runs_as_one(client):
+    first, second = _two(client)
+    data = json.dumps([{**BEES, "id": "named", "document": "bees.pdf"}, {**QUESTIONS[0], "id": "any"}]).encode()
+    r = client.post("/questions", data={"documents": [first, second]}, files={"file": ("g.json", data, "application/json")})
+    assert r.status_code == 200, r.text
+    state, _ = finish(client, client.post("/evaluations", json={"config": PIPELINE, "documents": [first, second]}))
+    assert [(q["id"], q["found"], q["document"]) for q in state["result"]["questions"]] == [
+        ("any", True, None), ("named", True, second),
+    ]

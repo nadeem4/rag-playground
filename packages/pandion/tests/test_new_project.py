@@ -357,13 +357,15 @@ def test_the_readme_says_document_names_must_match_exactly(tmp_path):
     assert "exactly" in readme and "extension" in readme
 
 
-def test_run_py_warns_when_a_question_names_a_document_not_in_docs(tmp_path):
+def test_run_py_stops_when_a_question_names_a_document_not_in_docs(tmp_path):
     folder = tmp_path / "project"
     pandion.new_project(folder, OFFLINE, [{**QUESTIONS[0], "document": "primer.pdf"}])
     (folder / "docs" / "report.pdf").write_bytes(build_pdf(SAMPLE_PAGES))
 
     out = _run(folder)
-    assert "primer.pdf" in out.stdout and "not in docs/" in out.stdout
+    assert out.returncode == 1, out.stderr
+    assert "names the document primer.pdf, which is not one of the documents searched" in out.stdout
+    assert "Traceback" not in out.stderr
 
 
 def test_a_custom_endpoint_with_a_user_and_token_is_refused(tmp_path):

@@ -273,3 +273,84 @@ def test_a_cancel_during_a_search_leaves_that_question_out(tmp_path, docs):
                               on_event=on_event, cancel=stop)
     assert report.questions == [] and report.cancelled
     assert str(report).splitlines()[-1] == "Stopped before every question was asked."
+
+
+# --- a question scores only in its own document (multi-document part 4) -----------
+
+
+def _sha(path):
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@pytest.fixture
+def two(tmp_path, docs):
+    bees = tmp_path / "bees.pdf"
+    bees.write_bytes(build_pdf(OTHER_DOC))
+    return [docs / "sample.pdf", bees]
+
+
+def test_a_named_question_is_found_only_in_its_own_document(tmp_path, two):
+    report = pandion.evaluate(
+        pipeline(tmp_path), [{**BEES, "document": "sample.pdf"}, BEES], documents=two
+    )
+    named, unnamed = report.questions
+    assert (named.found, named.lost_at, named.trace["document"]) == (False, "parse", "sample.pdf")
+    assert unnamed.found and unnamed.rank == 1
+
+
+def test_a_question_may_name_its_document_by_id_filename_or_sha(tmp_path, two):
+    sha = _sha(two[1])
+    names = ["guides/bees.pdf", "bees.pdf", sha]
+    asked = [{**BEES, "id": str(n), "document": d} for n, d in enumerate(names, start=1)]
+    report = pandion.evaluate(
+        pipeline(tmp_path), asked, documents={"guides/bees.pdf": two[1], "sample.pdf": two[0]}
+    )
+    assert [q.found for q in report.questions] == [True, True, True]
+    assert {q.document for q in report.questions} == {sha}
+
+
+def test_a_document_no_one_searched_is_refused_before_anything_runs(tmp_path, two):
+    p = pipeline(tmp_path)
+    with pytest.raises(
+        QuestionSetError,
+        match=r"Question 1 names the document nope\.pdf, which is not one of the documents searched: bees\.pdf, sample\.pdf\.",
+    ):
+        pandion.evaluate(p, [{**BEES, "document": "nope.pdf"}], documents=two)
+    assert p.index.documents is None
+
+
+def test_the_report_has_totals_by_document_and_one_for_questions_naming_none(tmp_path, two):
+    asked = [
+        {**FOUND, "document": "sample.pdf"},
+        {**NOT_IN_DOC, "document": "sample.pdf"},
+        {**BEES, "document": "bees.pdf"},
+        BEES,
+    ]
+    report = pandion.evaluate(pipeline(tmp_path), asked, documents=two)
+    by = report.by_document()
+    sample, bees = _sha(two[0]), _sha(two[1])
+    assert [(d["document"], d["total"], d["found"], d["mrr"]) for d in by] == [
+        (sample, 2, 1, 0.5),
+        (bees, 1, 1, 1.0),
+        (None, 1, 1, 1.0),
+    ]
+    data = json.loads(json.dumps(report.to_dict()))
+    assert data["by_document"] == by
+    assert [q["document"] for q in data["questions"]] == [sample, sample, bees, None]
+    assert (data["total"], data["found"]) == (4, 3)   # the overall totals are unchanged
+
+
+def test_with_one_document_naming_it_changes_nothing(tmp_path, docs):
+    p = pipeline(tmp_path)
+    p.index.run(docs)
+    plain = pandion.evaluate(p, [FOUND, NOT_IN_DOC]).to_dict()
+    named = pandion.evaluate(p, [{**q, "document": "sample.pdf"} for q in (FOUND, NOT_IN_DOC)]).to_dict()
+    for report in (plain, named):
+        for key in ("by_document", "questions_fingerprint"):
+            report.pop(key)
+        for q in report["questions"]:
+            q.pop("document")
+            q.pop("result_id")
+    assert named == plain

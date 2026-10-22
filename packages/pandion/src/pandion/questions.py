@@ -229,13 +229,16 @@ def _one_document(document: str, questions: list[dict], labels: list[str], *, st
 
     A question's `document` says which document its evidence is in. The set's
     document is its own `document`, else the first a question names. With
-    `strict`, the app's path, a set covers that one document, because the
-    app's Evaluate page runs on one document: a question naming another is
-    refused, naming its row. `load_questions` passes `strict=False`, because
-    `pandion.evaluate` indexes several documents and traces each question in
-    the one it names.
+    `strict`, the one-document upload's path, a set covers that one document:
+    a question naming another is refused, naming its row, and a question
+    naming none is about that one. `load_questions` passes `strict=False`,
+    because `pandion.evaluate` searches several documents: there only the
+    set's own `document` fills a question that names none, and a question
+    left with none is found in any document.
     """
+    named = document
     document = document or next((q["document"] for q in questions if q["document"]), "")
+    fill = document if strict else named
     for label, question in zip(labels, questions):
         own = question["document"]
         if strict and own and document and own != document:
@@ -243,7 +246,7 @@ def _one_document(document: str, questions: list[dict], labels: list[str], *, st
                 f"{label}: its evidence is in {own}, but this set is for {document}. "
                 f"A set covers one document for now, so put {own}'s questions in a set of their own"
             )
-        question["document"] = own or document
+        question["document"] = own or fill
     return document
 
 
@@ -304,6 +307,43 @@ def check_questions(questions: list[dict], text: str) -> list[dict[str, Any]]:
                 "golds": golds,
             }
         )
+    return rows
+
+
+def check_questions_across(questions: list[dict], texts: dict[str, str]) -> list[dict[str, Any]]:
+    """`check_questions` over several documents, `texts` by document key.
+
+    A question whose `document` is one of the keys is checked in that document
+    only; a question naming none is checked in every one, and each gold
+    passage takes its best match across them. Each row says the document the
+    question names (`document`, None when it names none), and each gold
+    passage the document it was found in (None when it was not). The closest
+    sentence of a passage found nowhere comes from the first document that has one.
+    """
+    keys = list(texts)
+    for n, question in enumerate(questions, start=1):
+        named = question.get("document") or ""
+        if named and named not in texts:
+            raise QuestionSetError(f"question {n} names the document {named}, which is not one of {', '.join(keys)}")
+    checked = {key: check_questions(questions, text) for key, text in texts.items()}
+    rank = {"found": 0, "found_normalized": 1, "not_found": 2}
+    rows = []
+    for index, question in enumerate(questions):
+        named = question.get("document") or None
+        where = [named] if named else keys
+        golds = []
+        for g, gold in enumerate(question["gold_answers"]):
+            tries = [(key, checked[key][index]["golds"][g]) for key in where]
+            key, best = min(tries, key=lambda t: rank[t[1]["status"]])
+            if best["status"] == "not_found":
+                key, best = None, next((row for _, row in tries if row["closest"]), tries[0][1])
+            golds.append({**best, "document": key})
+        rows.append({
+            **checked[where[0]][index],
+            "status": _worst(gold["status"] for gold in golds),
+            "golds": golds,
+            "document": named,
+        })
     return rows
 
 

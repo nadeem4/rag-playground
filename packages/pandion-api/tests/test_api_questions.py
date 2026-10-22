@@ -111,3 +111,75 @@ def test_find_gold_caps_keep_one_call_small(client):
     long = "t" * 900_000 + " the gold passage"
     found = client.post("/golds/find", json={"golds": ["the gold passage"], "texts": [long]}).json()["found"]
     assert found == {"index": 0, "gold": "the gold passage", "match": "exact"}
+
+
+# --- one set for several documents (multi-document part 4) ------------------------
+
+from pdfs import build_pdf  # noqa: E402
+
+BEES = "Bees dance to show the hive where the flowers are."
+
+
+def two(client):
+    first = upload(client)["sha"]
+    second = upload(client, "bees.pdf", build_pdf([[BEES], ["Honey keeps for years."]]))["sha"]
+    return first, second
+
+
+def post_across(client, shas, questions, filename="golden.json"):
+    blob = json.dumps(questions).encode("utf-8")
+    return client.post(
+        "/questions",
+        data={"documents": list(shas)},
+        files={"file": (filename, blob, "application/json")},
+    )
+
+
+def test_one_set_for_several_documents_is_checked_each_question_in_its_own_document(client):
+    first, second = two(client)
+    body = post_across(client, [first, second], [
+        {"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
+        {"id": "wrong", "question": "Bees?", "gold_answers": [BEES], "document": "report.pdf"},
+        {"id": "bees", "question": "Bees?", "gold_answers": [BEES], "document": second},
+        {"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]},
+    ]).json()
+    assert body["stored"] is True and body["documents"] == [first, second]
+    assert body["summary"] == {"questions": 4, "found": 3, "found_normalized": 0, "not_found": 1}
+    rows = {r["id"]: r for r in body["questions"]}
+    assert (rows["capital"]["document"], rows["capital"]["golds"][0]["document"]) == (first, first)
+    assert (rows["wrong"]["status"], rows["wrong"]["golds"][0]["document"]) == ("not_found", None)
+    assert (rows["bees"]["document"], rows["bees"]["golds"][0]["document"]) == (second, second)
+    assert (rows["any"]["document"], rows["any"]["golds"][0]["document"]) == (None, second)
+
+
+def test_one_set_is_kept_split_by_document_with_unnamed_questions_in_the_first(client):
+    first, second = two(client)
+    post_across(client, [first, second], [
+        {"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
+        {"id": "bees", "question": "Bees?", "gold_answers": [BEES], "document": "bees.pdf"},
+        {"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]},
+    ])
+    kept = {sha: client.get(f"/documents/{sha}/questions").json() for sha in (first, second)}
+    assert [(q["id"], q["document"]) for q in kept[first]["set"]["questions"]] == [("capital", "report.pdf"), ("any", "")]
+    assert [(q["id"], q["document"]) for q in kept[second]["set"]["questions"]] == [("bees", "bees.pdf")]
+    assert kept[first]["filename"] == kept[second]["filename"] == "golden.json"
+
+
+def test_a_document_the_new_set_has_no_questions_for_loses_its_old_set(client):
+    first, second = two(client)
+    post_set(client, second, [{"id": "old", "question": "Old?", "gold_answers": [BEES]}])
+    post_across(client, [first, second], [{"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE]}])
+    assert client.get(f"/documents/{second}/questions").json() is None
+
+
+def test_a_set_naming_a_document_it_is_not_for_is_400_and_nothing_is_kept(client):
+    first, second = two(client)
+    r = post_across(client, [first, second], [
+        {"question": "Capital?", "gold_answers": [PASSAGE], "document": "elsewhere.pdf"},
+    ])
+    assert r.status_code == 400
+    assert r.json()["detail"] == (
+        "Question 1 names the document elsewhere.pdf, which is not one of the documents "
+        "searched: bees.pdf, report.pdf."
+    )
+    assert client.get(f"/documents/{first}/questions").json() is None

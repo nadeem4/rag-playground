@@ -6,9 +6,17 @@ the report says so: another parser can put the text together differently. A
 set with passages that were not found is kept anyway; a partly good set is
 still useful, and refusing it would leave the reader nothing to fix.
 
+One set can also cover several documents (POST /questions). Each question may
+name its `document`, by filename or sha: it is checked in that document only,
+and one naming none is checked in every one. The set is kept split by document,
+each document's named questions against it and the questions naming none
+against the first document, so a run over those documents (POST /evaluations
+without questions) asks every question once.
+
 A set can also be written for a document by a model
 (POST /documents/{sha}/questions/generate), as a run. That set is handed back,
 never kept: the reader reviews it and uploads the questions they keep here.
+Each written question names the document's sha as its `document`.
 """
 
 from __future__ import annotations
@@ -16,10 +24,11 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Annotated, Any
 
 import pypdfium2 as pdfium
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 
@@ -27,7 +36,9 @@ import pandion
 from pandion.evaluation import (
     QuestionSetError,
     check_questions,
+    check_questions_across,
     document_text,
+    documents_named,
     find_gold,
     parse_question_set,
     write_questions,
@@ -37,7 +48,7 @@ from pandion_api.checks import chat_providers
 from pandion_api.credentials import PROVIDERS
 from pandion_api.deps import get_documents, get_policy
 from pandion_api.documents import DocumentStore
-from pandion_api.jobs import start
+from pandion_api.jobs import documents_of, start
 from pandion_api.pages import PDFIUM_LOCK
 from pandion_api.policy import Policy
 from pandion_api.runs import event
@@ -60,17 +71,20 @@ MAX_GOLDS = 20
 TOO_BIG = "The question set is larger than 1 MB. Split it into smaller sets and upload each."
 
 
-async def read_set(file: UploadFile) -> dict[str, Any]:
+async def read_set(file: UploadFile, *, one_document: bool = True) -> dict[str, Any]:
     """The upload read as a question set: 413 past MAX_SET_BYTES (never more
     than one byte past it is read), 400 with the set's own sentence when it
     cannot be used. Parsing runs on a worker thread, so a large set never
-    holds the event loop."""
+    holds the event loop. `one_document`, as `parse_question_set` takes it:
+    off for a set across several documents."""
     data = await file.read(MAX_SET_BYTES + 1)
     if len(data) > MAX_SET_BYTES:
         raise HTTPException(status_code=413, detail=TOO_BIG)
     try:
         return await run_in_threadpool(
-            parse_question_set, data, file.filename or "", max_questions=MAX_QUESTIONS, max_golds=MAX_GOLDS
+            lambda: parse_question_set(
+                data, file.filename or "", one_document=one_document, max_questions=MAX_QUESTIONS, max_golds=MAX_GOLDS
+            )
         )
     except QuestionSetError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -117,13 +131,87 @@ async def upload_questions(
         "note": "" if keep else policy.not_keeping_note,
         "parser": PARSER,
         "parser_note": PARSER_NOTE,
-        "summary": {
-            "questions": len(rows),
-            "found": sum(r["status"] == "found" for r in rows),
-            "found_normalized": sum(r["status"] == "found_normalized" for r in rows),
-            "not_found": sum(r["status"] == "not_found" for r in rows),
-        },
+        "summary": _summary(rows),
         "questions": rows,
+    }
+
+
+def named_documents(questions: list[dict[str, Any]], documents: dict[str, str], shas: list[str]) -> list[str | None]:
+    """The sha of the document each question names, or None for one naming
+    none. `documents` is what `documents_of(shas)` returns, by name; a
+    question names a document by that name or its sha
+    (`pandion.evaluation.documents_named`). A name that is neither is a 400
+    with Pandion's sentence."""
+    files = {name: SimpleNamespace(sha=sha, filename=name) for name, sha in zip(documents, shas)}
+    try:
+        named = documents_named(questions, files)
+    except QuestionSetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return [None if name is None else files[name].sha for name in named]
+
+
+@router.post("/questions")
+async def upload_questions_across(
+    request: Request,
+    file: UploadFile,
+    documents: Annotated[list[str], Form(min_length=1)],
+    store: DocumentStore = Depends(get_documents),
+    policy: Policy = Depends(get_policy),
+) -> dict[str, Any]:
+    """One set for several documents: check each gold passage in the document
+    its question names, or in every one for a question naming none, and keep
+    the set split by document if the Policy keeps sets. Each question's row
+    names its document's sha (`document`, null when it names none) and each
+    gold passage the sha of the document it was found in. A document the set
+    has no question for loses the set it had: the new set replaces the old."""
+    shas = list(dict.fromkeys(documents))
+    names = documents_of(shas, request)
+    parsed = await read_set(file, one_document=False)
+    owners = named_documents(parsed["questions"], names, shas)
+    texts = {sha: await run_in_threadpool(_text, Path(path)) for sha, path in zip(shas, names.values())}
+    own = [{**q, "document": owner or ""} for q, owner in zip(parsed["questions"], owners)]
+    rows = await run_in_threadpool(check_questions_across, own, texts)
+    filename = Path(file.filename or "questions.json").name
+    split = {
+        sha: [q for q, owner in zip(parsed["questions"], owners) if owner == sha or (owner is None and sha == shas[0])]
+        for sha in shas
+    }
+    keep = policy.keeps_question_sets(request)
+    if keep:
+        for sha, questions in split.items():
+            target = store.questions(sha)
+            if not questions:
+                target.unlink(missing_ok=True)
+                continue
+            record = {
+                "sha": sha,
+                "filename": filename,
+                "format": parsed["format"],
+                "count": len(questions),
+                "set": {"version": parsed["version"], "document": "", "questions": questions},
+            }
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(record), encoding="utf-8")
+    return {
+        "documents": shas,
+        "filename": filename,
+        "format": parsed["format"],
+        "count": len(parsed["questions"]),
+        "stored": keep,
+        "note": "" if keep else policy.not_keeping_note,
+        "parser": PARSER,
+        "parser_note": PARSER_NOTE,
+        "summary": _summary(rows),
+        "questions": rows,
+    }
+
+
+def _summary(rows: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        "questions": len(rows),
+        "found": sum(r["status"] == "found" for r in rows),
+        "found_normalized": sum(r["status"] == "found_normalized" for r in rows),
+        "not_found": sum(r["status"] == "not_found" for r in rows),
     }
 
 
@@ -208,6 +296,7 @@ async def generate_questions(
             result = write_questions(
                 _text(path), model=body.model, count=body.count, credentials=credentials,
                 model_name=body.model_name, base_url=body.base_url, public_only=public_only, on_part=on_part,
+                document=sha,
             )
         except _Cancelled:
             return False, True, None

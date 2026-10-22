@@ -745,6 +745,7 @@ for q in report.questions:
     q.trace                           # for a miss: why, step by step
 report.totals()                       # hit_rate, mrr, recall, mean_rank, median_rank
 report.by_tag()                       # the same numbers per tag
+report.by_document()                  # the same numbers per document a question names
 report.to_dict()                      # all of it as plain JSON
 print(report)                         # one line per question, then the totals
 ```
@@ -787,7 +788,20 @@ in `gold_answers`, copied from the document word for word. `id`, `answer`, `tags
 named by its place in the set, such as `question 3`. The file may also be an object with
 a `questions` list, a `version` and a `document`, which every question that names no
 document takes. One set can cover several documents: give each question the `document`
-its evidence is in, and pass them all in `documents=`. In a CSV file, several gold
+its evidence is in, and pass them all in `documents=`. A question that names its
+document, by its id, its filename or its content hash, counts as found only when a piece
+from that document holds a gold passage in the top `top_k`, and its miss is traced in
+that document. A question that names none counts as found when a piece from any document
+does. A question naming a document that is not searched is refused before anything
+runs: "Question 3 names the document annex.pdf, which is not one of the documents
+searched: handbook.pdf, report.pdf." (With a source other than upload, a document's
+content is not known before it is read, so there a named question counts in any document
+too.) `report.by_document()` gives the totals for the questions naming each document, in
+the order the set first names them, as `{"document": its content hash, ...the totals}`,
+then one entry with `"document": None` for the questions naming none; each
+`q.document` (also in `q.to_dict()`) says which, and `report.to_dict()` carries
+`by_document`. The overall totals count every question as before. With one document,
+naming it or not gives the same result. In a CSV file, several gold
 passages share one cell, separated by `||`. A set with a problem is refused before
 anything runs, with a `QuestionSetError` naming the question:
 "The question set at questions.json cannot be used: question 3: no question text."
@@ -795,7 +809,13 @@ anything runs, with a `QuestionSetError` naming the question:
 `pandion.evaluation.document_text(pandion.parse("report.pdf", use="pdfium"))` gives the
 text gold passages are looked for in, and
 `pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
-is really in that text. `pandion.evaluation.paragraph_spans(doc)` says where each
+is really in that text. `pandion.evaluation.check_questions_across(questions, texts)`
+does the same over several documents (`texts` is `{document key: its text}`): a question
+whose `document` is a key is checked in that document only, one naming none in every
+one, and each gold passage says the document it was found in (`document`, None when it
+was not). `pandion.evaluation.documents_named(questions, documents)` says which of
+`documents` (as `p.index.indexed()` returns them) each question names, and refuses a name
+that is none of them. `pandion.evaluation.paragraph_spans(doc)` says where each
 paragraph starts and ends in that text, as (start, end) pairs in order.
 `pandion.evaluation.find_gold(golds, texts)` says which of `texts` (pieces in the order
 a reader meets them) first holds any gold passage, by the same rule the `eval` step
@@ -916,6 +936,9 @@ under the names a run uses. With no key, the error is the same sentence the chat
 give, and no error message ever contains a key. `public_only=True` is for a server that
 strangers share: it is passed to the model call, so a custom endpoint must be a public
 https address, and the no-key sentence does not suggest a server variable.
+`document="report.pdf"` names the document the text is: every question written carries
+it as its `document`, so questions written for several documents, one call each, can
+join one set.
 
 **How it works.** The text is split into `count` parts, each a run of whole paragraphs,
 or one part per paragraph when there are fewer paragraphs than `count`. Text between
@@ -1533,7 +1556,7 @@ dict, as `pandion.evaluate` takes), and returns the paths it wrote:
   format in [Documents other than PDFs](#documents-other-than-pdfs) for docling), says which
   other files it skipped, then evaluates the questions in
   `questions.json`, or asks one example question when there is no question set. It
-  warns about a question that names a document not in `docs/`, and prints the results
+  stops with a sentence when a question names a document not in `docs/`, and prints the results
   and the cost of the run. Subfolders of `docs/` are not read.
 - `questions.json`: only when you give a question set.
 - `README.md`: how to set it up with Python 3.13 and run it, and the environment variable

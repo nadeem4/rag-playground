@@ -203,7 +203,7 @@ def _readme(
             "",
             f"The questions in `questions.json` name these documents: {', '.join(named)}. Those names refer to "
             "the original documents, so the files you put in `docs/` must match them exactly, extension "
-            "included. run.py warns about a name it does not find in `docs/`.",
+            "included. run.py stops with a sentence naming a document it does not find in `docs/`.",
         ]
     if extra.strip():
         lines += ["", extra.strip()]
@@ -219,12 +219,12 @@ def _run_py(suffixes: tuple[str, ...] | None) -> str:
 Run it with: python run.py
 """
 
-import json
 import os
 import sys
 from pathlib import Path
 
 import pandion
+from pandion.evaluation import QuestionSetError
 
 HERE = Path(__file__).resolve().parent
 
@@ -273,11 +273,11 @@ def main():
         return 1
 
     if Path("questions.json").is_file():
-        questions = json.loads(Path("questions.json").read_text(encoding="utf-8"))
-        here = {{Path(d).name for d in documents}}
-        for name in sorted({{q.get("document") for q in questions["questions"]}} - here - {{None, ""}}):
-            print(f"Warning: a question names {{name}}, which is not in docs/.")
-        result = pandion.evaluate(p, "questions.json", documents=documents, credentials=credentials)
+        try:
+            result = pandion.evaluate(p, "questions.json", documents=documents, credentials=credentials)
+        except QuestionSetError as exc:
+            print(exc)
+            return 1
         print(result)
     elif p.query is not None:
         print(f"Question: {{EXAMPLE_QUESTION}}")

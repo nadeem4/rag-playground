@@ -109,6 +109,7 @@ def write_questions(
     base_url: str | None = None,
     public_only: bool = False,
     on_part: Callable[[int, int], None] | None = None,
+    document: str = "",
 ) -> dict[str, Any]:
     """Ask `model` for up to `count` test questions about `text`, checked.
 
@@ -121,6 +122,9 @@ def write_questions(
     strangers share, as in `pandion.llm.complete`. `on_part`, when given, is
     called after each part with (parts done, parts in all); an exception it
     raises stops the calls and is raised again, which is how a caller cancels.
+    `document` names the document `text` is, and every question written
+    carries it as its `document`, so questions written for several documents,
+    one call each, can join one set.
     """
     if not isinstance(count, int) or count < 1:
         raise ValueError(f"count must be a whole number of at least 1, not {count!r}.")
@@ -165,6 +169,7 @@ def write_questions(
     kept, dropped = _check(outcomes, _body(text))
     for n, question in enumerate(kept, start=1):
         question["id"] = f"q{n}"
+        question["document"] = document
 
     if kept:
         result = parse_question_set(json.dumps({"questions": kept}).encode("utf-8"))

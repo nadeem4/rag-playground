@@ -474,10 +474,16 @@ def test_the_report_carries_the_question_and_its_id(client):
     assert row["index"] == 0
 
 
-def test_a_source_that_is_not_a_pdf_says_so(client):
+def test_a_text_source_is_checked_as_docling_reads_it(client):
     r = client.post(
         "/api/v2/documents", files={"file": ("notes.txt", b"hello there", "text/plain")}
     )
+    got = post_set(client, r.json()["sha"], one_json("hello there"), "q.json")
+    assert got.status_code == 200 and got.json()["parser"] == "docling"
+
+
+def test_an_image_source_says_its_text_cannot_be_checked(client):
+    r = client.post("/api/v2/documents", files={"file": ("scan.png", b"PNG not really", "image/png")})
     got = post_set(client, r.json()["sha"], one_json("hello there"), "q.json")
     assert got.status_code == 415
 

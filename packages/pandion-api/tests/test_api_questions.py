@@ -268,30 +268,62 @@ def test_the_set_for_several_documents_names_each_file_its_questions_came_from(c
     assert client.get("/questions", params={"documents": [first]}).json()["filenames"] == ["report-set.json"]
 
 
-def test_a_newer_set_across_some_of_the_documents_is_never_merged_with_the_older_set(client):
+def three(client):
     first, second = two(client)
     third = upload(client, "ferns.pdf", build_pdf([["Ferns need water weekly."]]))["sha"]
+    return first, second, third
+
+
+def asked(client, shas):
+    return [q["id"] for q in client.get("/questions", params={"documents": list(shas)}).json()["questions"]]
+
+
+def test_a_newer_set_replaces_every_older_set_it_overlaps_in_full(client):
+    first, second, third = three(client)
     post_across(client, [first, second], [
         {"id": "old-capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
         {"id": "old-any", "question": "Bees anywhere?", "gold_answers": [BEES]},
     ], filename="old.json")
-    post_across(client, [second, third], [
-        {"id": "new-any", "question": "Bees anywhere?", "gold_answers": [BEES]},
-    ], filename="new.json")
+    post_across(client, [second, third], [{"id": "new-any", "question": "Bees anywhere?", "gold_answers": [BEES]}], filename="new.json")
+    assert client.get(f"/documents/{first}/questions").json() is None
+    assert asked(client, [first]) == []
+    assert asked(client, [first, third]) == ["new-any"]
     body = client.get("/questions", params={"documents": [first, second, third]}).json()
-    assert [q["id"] for q in body["questions"]] == ["new-any"]
-    assert body["filenames"] == ["new.json"]
-    # On its own, the first document still asks what it kept.
-    alone = client.get("/questions", params={"documents": [first]}).json()
-    assert [q["id"] for q in alone["questions"]] == ["old-capital", "old-any"]
+    assert [q["id"] for q in body["questions"]] == ["new-any"] and body["filenames"] == ["new.json"]
 
 
-def test_a_set_kept_for_one_document_leaves_the_rest_of_its_older_set_across_documents_unasked(client):
+def test_a_newer_set_with_no_questions_for_a_shared_document_still_replaces_the_older_set(client):
+    first, second, third = three(client)
+    post_across(client, [first, second], [{"id": "old-any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    post_across(client, [second, third], [
+        {"id": "new-ferns", "question": "Ferns?", "gold_answers": ["Ferns need water weekly."], "document": "ferns.pdf"},
+    ])
+    assert client.get(f"/documents/{first}/questions").json() is None
+    assert client.get(f"/documents/{second}/questions").json() is None
+    assert asked(client, [first, second, third]) == ["new-ferns"]
+
+
+def test_a_set_saved_for_one_document_then_with_a_group_is_replaced_by_the_group(client):
     first, second = two(client)
-    post_across(client, [first, second], [{"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    post_set(client, first, [{"id": "solo", "question": "Capital?", "gold_answers": [PASSAGE]}])
+    post_across(client, [first, second], [{"id": "group", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    assert asked(client, [first]) == ["group"]
+    assert asked(client, [first, second]) == ["group"]
+
+
+def test_a_set_saved_for_one_document_replaces_the_group_set_it_was_part_of(client):
+    first, second = two(client)
+    post_across(client, [first, second], [{"id": "group", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    post_set(client, second, [{"id": "solo", "question": "Bees?", "gold_answers": [BEES]}])
+    assert client.get(f"/documents/{first}/questions").json() is None
+    assert asked(client, [first, second]) == ["solo"]
+
+
+def test_sets_saved_one_document_at_a_time_never_replace_each_other(client):
+    first, second = two(client)
+    post_set(client, first, [{"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE]}])
     post_set(client, second, [{"id": "bees", "question": "Bees?", "gold_answers": [BEES]}])
-    body = client.get("/questions", params={"documents": [first, second]}).json()
-    assert [q["id"] for q in body["questions"]] == ["bees"]
+    assert asked(client, [first, second]) == ["capital", "bees"]
 
 
 def test_unnamed_questions_stay_when_the_first_document_goes(client):

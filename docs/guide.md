@@ -469,6 +469,9 @@ the pipeline: "24 questions from golden-set.csv, covering all 3 documents", then
 questions name each document and how many name none (**no document named**, found in any
 document). **Upload another set** replaces the set for every document at once
 (`POST /api/v2/questions`); on the demo it is kept whole in the tab, tags and answers too.
+A new set replaces in full any older set it overlaps: if an older set covered this
+pipeline's documents and others too, it is gone from all of them, so its questions are
+never asked with the new ones.
 **Write questions for me** asks which documents to write for (**Write for**, one checkbox
 per document with how many questions it already has) and how many **Questions per
 document** (at most 25): "6 for each of 2 documents: 12 questions, written one document at a

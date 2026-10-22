@@ -158,7 +158,9 @@ async def upload_questions(
     store: DocumentStore = Depends(get_documents),
     policy: Policy = Depends(get_policy),
 ) -> dict[str, Any]:
-    """Check every gold passage, and keep the set if the Policy keeps sets."""
+    """Check every gold passage, and keep the set if the Policy keeps sets,
+    in place of the document's old one. A set across documents that the
+    document was part of is removed from all of them (`replace_overlapping`)."""
     path = document_file(request, sha)
     parsed = await read_set(file)
     text, parser = await run_in_threadpool(_read, path)
@@ -172,6 +174,7 @@ async def upload_questions(
     }
     keep = policy.keeps_question_sets(request)
     if keep:
+        replace_overlapping(store, [sha])
         target = store.questions(sha)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(record), encoding="utf-8")
@@ -200,6 +203,26 @@ def named_documents(questions: list[dict[str, Any]], documents: dict[str, str], 
     return [None if name is None else files[name].sha for name in named]
 
 
+def replace_overlapping(store: DocumentStore, shas: list[str]) -> None:
+    """Before a set is kept against `shas`, remove in full every older set it
+    overlaps: a set kept across documents (POST /questions) that any of `shas`
+    holds is removed from every document it was kept against, so no part of
+    it is left to be asked with the new set. A set kept for one document
+    alone overlaps only that document, which the new set replaces anyway."""
+    for sha in shas:
+        kept = store.questions(sha)
+        if not kept.is_file():
+            continue
+        across = json.loads(kept.read_text(encoding="utf-8")).get("across")
+        for other in across or []:
+            if other in shas:
+                continue
+            part = store.questions(other)
+            # Only the same save's part: a document saved again since keeps its newer set.
+            if part.is_file() and json.loads(part.read_text(encoding="utf-8")).get("across") == across:
+                part.unlink()
+
+
 @router.post("/questions")
 async def upload_questions_across(
     request: Request,
@@ -217,7 +240,9 @@ async def upload_questions_across(
     it names none) and each gold passage the sha of the document it was found
     in. `set` is the set as read, each question's `document` its sha or empty,
     for a page to keep when the server does not. A document the set has no
-    question for loses the set it had: the new set replaces the old."""
+    question for loses the set it had: the new set replaces the old. Every
+    older set across documents it overlaps is removed in full, from every
+    document it was kept against (`replace_overlapping`)."""
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     parsed = await read_set(file, one_document=False)
@@ -231,6 +256,7 @@ async def upload_questions_across(
     split = {sha: [q for q, owner in zip(parsed["questions"], owners) if owner in (sha, None)] for sha in shas}
     keep = policy.keeps_question_sets(request)
     if keep:
+        replace_overlapping(store, shas)
         for sha, questions in split.items():
             target = store.questions(sha)
             if not questions:
@@ -261,40 +287,20 @@ async def upload_questions_across(
     }
 
 
-def kept_sets(store: DocumentStore, shas: list[str]) -> dict[str, dict[str, Any]]:
-    """The set kept against each of these documents that has one, by sha.
-    Only sets saved together are merged: a set kept by POST /questions across
-    documents is left out when another of these documents it was saved across
-    now keeps a different set (a newer one saved across other documents, or a
-    set kept for that document alone), since that part of it was replaced."""
-    records: dict[str, dict[str, Any]] = {}
-    for sha in shas:
-        kept = store.questions(sha)
-        if kept.is_file():
-            records[sha] = json.loads(kept.read_text(encoding="utf-8"))
-    return {
-        sha: record
-        for sha, record in records.items()
-        if "across" not in record
-        or all(records[other].get("across") == record["across"] for other in record["across"] if other in records)
-    }
-
-
 def kept_questions(store: DocumentStore, shas: list[str], names: list[str]) -> list[dict[str, Any]]:
     """The questions of the sets kept against these documents, in their order.
     A question that names a document names the one it is kept against, by
     sha; one naming none is found in any of them. A question naming none from
     one set across documents (POST /questions) is kept against each of them
-    and asked once. Only sets saved together are merged (`kept_sets`). An id
-    two documents' sets both use is prefixed with each document's name, so
-    every question stays apart."""
+    and asked once. An id two documents' sets both use is prefixed with each
+    document's name, so every question stays apart."""
     sets: list[tuple[str, list[dict[str, Any]]]] = []
     shared: set[str] = set()
-    records = kept_sets(store, shas)
     for sha, name in zip(shas, names):
-        record = records.get(sha)
-        if record is None:
+        kept = store.questions(sha)
+        if not kept.is_file():
             continue
+        record = json.loads(kept.read_text(encoding="utf-8"))
         questions = []
         for q in record["set"]["questions"]:
             if q.get("document"):
@@ -333,7 +339,11 @@ def get_questions_across(
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     questions = kept_questions(store, shas, list(names))
-    filenames = [record["filename"] for record in kept_sets(store, shas).values()]
+    filenames: list[str] = []
+    for sha in shas:
+        kept = store.questions(sha)
+        if kept.is_file():
+            filenames.append(json.loads(kept.read_text(encoding="utf-8"))["filename"])
     return {"documents": shas, "count": len(questions), "questions": questions, "filenames": list(dict.fromkeys(filenames))}
 
 

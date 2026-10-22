@@ -95,6 +95,64 @@ describe("Overview", () => {
     expect(screen.getAllByText("Best")).toHaveLength(1)
   })
 
+  describe("several documents", () => {
+    const primer = { sha: "cd".repeat(32), filename: "chunking-primer.pdf", slot: 1 }
+    const guide = { sha: "ab".repeat(32), filename: "field-guide.docx", slot: 2 }
+    const set = (n: number) => ({ chunks: Array.from({ length: n }, () => ({ token_count: 10 })) })
+    const chunkRow = (i: number): OverviewRow => ({
+      i,
+      name: `R${i}`,
+      code: "token_based",
+      own: i === 0,
+      status: { kind: "done" },
+      seconds: null,
+      done: true,
+      values: { pieces: 84, tokens: 9000, median: 96, p95: 121, uncovered: 0 },
+      scale: [
+        { file: primer, set: set(3) },
+        { file: guide, set: set(2) },
+      ],
+    })
+
+    it("calls the picture The documents, to scale, with one line per file named by its file tag in its colour", () => {
+      render(<Overview {...props} stage="chunk" goldKnown={false} several rows={[0, 1, 2, 3].map(chunkRow)} />)
+      const table = screen.getByRole("table")
+      expect(within(table).getAllByRole("columnheader").at(-1)!.textContent).toBe("The documents, to scale")
+      const row = document.querySelector<HTMLElement>('[data-recipe="1"]')!
+      const lines = within(row).getAllByTestId("file-scale-line")
+      expect(lines.map((l) => l.querySelector("[data-file-tag]")!.textContent)).toEqual(["chunking-primer.pdf", "field-guide.docx"])
+      expect(lines[1].querySelector<HTMLElement>("[data-testid=chunk-bar] span")!.style.background).toBe("var(--file-2)")
+      expect(within(row).getByText("84")).toBeTruthy()
+    })
+
+    it("names the answer's file in the Answer cell, and colours each top 5 swatch by its file with the file in its name", () => {
+      const rows = props.rows.map((r) => ({
+        ...r,
+        answerFile: r.values.rank ? guide : undefined,
+        pieces: [
+          { piece: 4, slot: 4, answer: r.values.rank === 1, file: guide },
+          { piece: 2, slot: 2, answer: false, file: primer },
+        ],
+      }))
+      const { rerender } = render(<Overview {...props} several rows={rows} />)
+      const row = document.querySelector<HTMLElement>('[data-recipe="0"]')!
+      expect(row.textContent).toContain("Found 1st, field-guide.docx")
+      expect(within(row).getByRole("img", { name: "Top 2: piece 4 from field-guide.docx (the answer), piece 2 from chunking-primer.pdf" })).toBeTruthy()
+      const swatch = within(row).getByRole("img").querySelector<HTMLElement>("span")!
+      expect(swatch.style.background).toBe("var(--file-2)")
+      expect(swatch.getAttribute("title")).toBe("field-guide.docx")
+      rerender(<Overview {...props} several narrow rows={rows} />)
+      expect(document.querySelector<HTMLElement>('[data-recipe="0"]')!.textContent).toContain("Answer 1st, from field-guide.docx.")
+    })
+
+    it("keeps The document, to scale and the piece colours with one document", () => {
+      render(<Overview {...props} />)
+      expect(screen.queryByTestId("file-scale-line")).toBeNull()
+      expect(document.querySelector('[data-recipe="0"]')!.textContent).not.toContain("Found")
+      expect(document.querySelector<HTMLElement>('[role="img"] span')!.style.background).toBe("var(--chunk-1)")
+    })
+  })
+
   describe("time, tokens and cost", () => {
     const cost = (over: Partial<Cost>): Cost => ({
       seconds: 1,

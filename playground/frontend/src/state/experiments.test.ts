@@ -5,6 +5,7 @@ import type { Registry } from "@/api/types"
 
 import {
   deleteExperiment,
+  experimentDocuments,
   MAX_EXPERIMENTS,
   readExperiments,
   requestOpenExperiment,
@@ -30,6 +31,25 @@ describe("experiments", () => {
     const { saved } = saveExperiment("Chunk sizes", { stage: "chunk", recipes, doc })!
     expect(readExperiments()).toEqual([saved])
     expect(Object.keys(JSON.parse(window.localStorage.getItem("rag-playground:experiments:v1")!)[0]).sort()).toEqual(["doc", "id", "name", "recipes", "savedAt", "stage"])
+  })
+
+  it("keeps every document of a pipeline with several, and saves one document as before", () => {
+    const other = { sha: "ab".repeat(32), filename: "field-guide.docx" }
+    const { saved } = saveExperiment("Chunkers on 2 documents", { stage: "chunk", recipes, doc, docs: [doc, other] })!
+    expect(saved.doc).toEqual(doc)
+    expect(experimentDocuments(readExperiments()[0])).toEqual([doc, other])
+    // One document: the entry has the same fields it always had.
+    const one = saveExperiment("One", { stage: "chunk", recipes, doc, docs: [doc] })!.saved
+    expect(Object.keys(one).sort()).toEqual(["doc", "id", "name", "recipes", "savedAt", "stage"])
+    expect(experimentDocuments(one)).toEqual([doc])
+    expect(experimentDocuments({ ...one, doc: null })).toEqual([])
+  })
+
+  it("leaves out an entry whose documents are not documents", () => {
+    const { saved } = saveExperiment("A", { stage: "chunk", recipes, doc })!
+    window.localStorage.setItem("rag-playground:experiments:v1", JSON.stringify([saved, { ...saved, id: "bad", docs: [{ sha: 1 }] }]))
+    resetExperimentsForTests()
+    expect(readExperiments().map((e) => e.id)).toEqual([saved.id])
   })
 
   it("updates in place, deletes, and starts from what storage holds now", () => {

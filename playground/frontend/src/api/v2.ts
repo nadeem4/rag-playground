@@ -10,6 +10,7 @@ import { jsonInit, keyHeaders, requestFrom, type KeyOpts } from "./client"
 import type {
   Against,
   CancelResponse,
+  ChunkStats,
   ComparisonRequest,
   EvaluationRequest,
   Explanation,
@@ -98,6 +99,8 @@ export const v2 = {
 
   result: (resultId: string) => request<ResultInfo>(`/results/${id(resultId)}`),
   resultPayload: <T = unknown>(resultId: string) => request<T>(`/results/${id(resultId)}/payload`),
+  /** One chunker's chunk sets for several documents, summed up as one by `pandion.chunk.stats`. */
+  chunkStats: (ids: string[]) => request<ChunkStats>("/chunk-stats", jsonInit({ ids })),
 
   /** Where the server's own key for each provider comes from. Never a key. */
   modelSources: () => request<LlmSettings>("/settings/models"),

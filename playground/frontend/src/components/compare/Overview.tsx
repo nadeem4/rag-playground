@@ -4,12 +4,15 @@ import { ArrowDown, ArrowUp } from "lucide-react"
 import type { Cost, Stage } from "@/api/types"
 import { ordinal } from "@/components/inspectors/hits"
 import { CONTROL } from "@/components/fields/types"
+import { FileTag } from "@/components/FileTag"
 import { ChunkBar } from "@/components/pipeline/NodeCard"
 import { Button } from "@/components/ui/button"
+import type { FileInfo } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { cachedOnly, costCell, costLine, partlyCached, seconds as secondsText, stageTitle, tokenCounts, unpricedTitle } from "@/state/cost"
 import { firstDirection, sortRecipes, type RecipeStatus as Status, type SortKey } from "@/state/compare"
 
+import { FileScale, type FileLine } from "./FileScale"
 import { RecipeStatus } from "./RecipeStatus"
 import { Swatches, type SwatchPiece } from "./Swatches"
 
@@ -25,6 +28,10 @@ export interface OverviewRow {
   values: Partial<Record<SortKey, number | null>>
   /** The chunk set, for its bar. */
   set?: unknown
+  /** With several documents: each file's chunk set, for its own line in the scale picture. */
+  scale?: FileLine[]
+  /** With several documents: the file the answer's piece came from. */
+  answerFile?: FileInfo
   /** The top 5, for the swatches. */
   pieces?: SwatchPiece[]
   /** The server names this recipe best (pandion's Comparisons.best). */
@@ -177,6 +184,7 @@ export function Overview({
   baseAt = 0,
   baseName = "Your pipeline",
   variedFrom = null,
+  several = false,
 }: {
   stage: Stage
   /** In recipe order. */
@@ -202,6 +210,8 @@ export function Overview({
   baseName?: string
   /** The stage the comparison varies, from its result; null for a result saved before speed and cost. */
   variedFrom?: string | null
+  /** The pipeline has several documents: the scale picture draws each on its own line, and the Answer names the file. */
+  several?: boolean
 }) {
   const sortId = useId()
   // Time, Tokens and Cost, when the result carries each recipe's varied cost. On Chunk, Tokens are already the pieces'.
@@ -259,10 +269,11 @@ export function Overview({
       const ext = extreme(r)
       return [`${v.pieces} ${v.pieces === 1 ? "piece" : "pieces"}${ext ? ` (${ext})` : ""}`, `${v.tokens} tokens`, ...(v.median != null ? [`median ${v.median}`] : []), `${v.uncovered} characters left out`].join(", ")
     }
-    const answer = goldKnown ? `Answer ${v.rank ? ordinal(v.rank) : "not found"}. ` : ""
+    const answer = goldKnown ? `Answer ${v.rank ? ordinal(v.rank) : "not found"}${v.rank && r.answerFile ? `, from ${r.answerFile.filename}` : ""}. ` : ""
     return `${answer}${r.i === baseAt ? "The baseline." : `Shares ${v.shared ?? 0} of ${top} with ${baseName}.`}`
   }
-  const picture = (r: OverviewRow) => (stage === "chunk" ? <ChunkBar data={r.set} size="bar" /> : r.pieces ? <Swatches pieces={r.pieces} /> : null)
+  const picture = (r: OverviewRow) =>
+    stage === "chunk" ? r.scale ? <FileScale lines={r.scale} /> : <ChunkBar data={r.set} size="bar" /> : r.pieces ? <Swatches pieces={r.pieces} /> : null
 
   let body
   if (!narrow && !plain) {
@@ -292,7 +303,7 @@ export function Overview({
             {th("order", "Recipe", false)}
             {columns.map(([k, l]) => th(k, l, true))}
             <th scope="col" className={cn("px-2 py-1 text-left text-xs font-medium text-fg-muted", stage === "chunk" ? "w-[30%]" : "w-[180px]")}>
-              {stage === "chunk" ? "The document, to scale" : "Top 5, by piece"}
+              {stage === "chunk" ? (several ? "The documents, to scale" : "The document, to scale") : "Top 5, by piece"}
             </th>
             {costShown ? (
               <>
@@ -336,7 +347,14 @@ export function Overview({
                         </span>
                       ) : k === "rank" ? (
                         r.values.rank ? (
-                          ordinal(r.values.rank)
+                          r.answerFile ? (
+                            <span className="inline-flex max-w-full flex-col items-end gap-px">
+                              <span className="font-sans">Found {ordinal(r.values.rank)},{" "}</span>
+                              <FileTag file={r.answerFile} />
+                            </span>
+                          ) : (
+                            ordinal(r.values.rank)
+                          )
                         ) : (
                           <span className="inline-flex flex-col items-end">
                             none<small className="font-sans text-2xs text-fg-muted">not found</small>

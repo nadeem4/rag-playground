@@ -351,7 +351,8 @@ function on the old client (`api.createRun`). It cannot see a path built up from
   to `/api/v2/runs/{id}/cancel`. The `/api/v2` client is `playground/frontend/src/api/v2.ts`; it sends keys
   in the same headers as `/api`.
 - **Results.** The inspectors read results with `GET /api/v2/results/{id}/payload`, and
-  Build checks that a kept result is still there with `GET /api/v2/results/{id}`.
+  Build checks that a kept result is still there with `GET /api/v2/results/{id}`. A Compare
+  chunk run over several documents asks `POST /api/v2/chunk-stats` for each recipe's totals.
 - **Miss trace.** Each missed question in an evaluation's result carries its trace, the
   first step that lost the answer, worked out by `pandion.evaluate` with the eval step's own
   matching. Evaluate shows it with each step's code name swapped for Build's name

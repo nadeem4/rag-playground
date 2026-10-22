@@ -99,6 +99,22 @@ describe("ChunkEvidence", () => {
     expect(screen.getAllByTestId("passage")[0].className).not.toContain("line-clamp-2")
   })
 
+  it("with several documents, says the totals, draws each file on its own line, and names each piece's file", () => {
+    const primer = { sha: "cd".repeat(32), filename: "chunking-primer.pdf", slot: 1 }
+    const guide = { sha: "ab".repeat(32), filename: "field-guide.docx", slot: 2 }
+    const totals = { ...STATS, pieces: 8, tokens: 451 }
+    const two = { ...set, chunks: set.chunks.slice(0, 2) }
+    render(<ChunkEvidence set={set} files={[{ file: primer, set }, { file: guide, set: two }]} stats={totals} />)
+    expect([...screen.getByTestId("chunk-numbers").querySelectorAll("dd")].map((d) => d.textContent).slice(0, 2)).toEqual(["8", "451"])
+    expect(screen.getAllByTestId("file-scale-line")).toHaveLength(2)
+    expect(screen.getByText("The 2 documents as 8 pieces, each on its own line, drawn to scale by tokens.")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }))
+    const findings = screen.getAllByTestId("finding").map((f) => f.textContent)
+    expect(findings).toHaveLength(8)
+    expect(findings[0]).toBe("Piece 1 of chunking-primer.pdf, 58 tokens")
+    expect(findings[6]).toBe("Piece 1 of field-guide.docx, 58 tokens")
+  })
+
   it("never puts the column in a scrolling box of its own", () => {
     const { container } = render(<ChunkEvidence set={set} />)
     expect(container.innerHTML).not.toMatch(/overflow-(y-)?(auto|scroll)|max-h-/)

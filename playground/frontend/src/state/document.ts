@@ -310,6 +310,19 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
   setDocumentMenuOpen(false)
 }
 
+/**
+ * Make `docs` the working graph's documents, in this order: a saved Compare
+ * experiment on several reopens on all of them. One document is `chooseDocument`.
+ */
+export async function chooseDocuments(docs: readonly DocRef[]): Promise<void> {
+  if (!docs.length) return
+  await chooseDocument(docs[0])
+  const current = readWorking()
+  if (docs.length < 2 || !current) return
+  set({ known: new Set([...state.known, ...docs.map((d) => d.sha)]) })
+  storeWorking({ ...current, documents: docs.map((d) => ({ sha: d.sha, filename: d.filename })) })
+}
+
 /** The server indexes documents by their names, so two with one name cannot run together. */
 export const sameName = (filename: string) =>
   `This pipeline already has a document named ${filename}. Remove it first, or upload the new one under another name.`

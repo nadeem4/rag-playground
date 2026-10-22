@@ -19,6 +19,8 @@ import type {
   LlmProvider,
   LlmSettings,
   PdfPageSize,
+  QuestionSetAcross,
+  QuestionSetAcrossUpload,
   QuestionSetUpload,
   ResultInfo,
   RunCreated,
@@ -63,6 +65,15 @@ export const v2 = {
   questionSet: (sha: string) => request<StoredQuestionSet | null>(`/documents/${id(sha)}/questions`),
   uploadQuestionSet: (sha: string, file: File) =>
     request<QuestionSetUpload>(`/documents/${id(sha)}/questions`, { method: "POST", body: form(file) }),
+  /** The sets kept against several documents, as one. */
+  questionSetAcross: (shas: readonly string[]) =>
+    request<QuestionSetAcross>(`/questions?${shas.map((s) => `documents=${id(s)}`).join("&")}`),
+  /** One set for several documents: each question checked in the document it names, kept split by document. */
+  uploadQuestionSetAcross: (shas: readonly string[], file: File) => {
+    const body = form(file)
+    for (const sha of shas) body.append("documents", sha)
+    return request<QuestionSetAcrossUpload>("/questions", { method: "POST", body })
+  },
   /** Which piece first holds a gold passage, by the eval step's own rule: `found` is null when none does. */
   findGold: (body: { golds: string[]; texts: string[] }, signal?: AbortSignal) =>
     request<FindGoldResult>("/golds/find", { ...jsonInit(body), signal }),

@@ -21,8 +21,9 @@ export interface Question {
   answer: string
   /**
    * The document its evidence is in, by filename: the question's own, else the
-   * set's only document. Carried, not yet scored on: a pipeline runs on one
-   * document today, so every question is scored on it.
+   * set's only document. Carried, not yet sent: Pandion scores a named
+   * question in its own document, but Evaluate does not send `document` yet,
+   * so every question is found in any of the pipeline's documents.
    */
   document?: string
 }

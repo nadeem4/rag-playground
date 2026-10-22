@@ -145,3 +145,42 @@ def test_deeply_nested_json_is_a_plain_error():
 
     with pytest.raises(QuestionSetError, match="nested"):
         parse_question_set(b"[" * 100_000 + b"]" * 100_000)
+
+
+# --- several documents (multi-document part 4) --------------------------------------
+
+
+def test_a_question_that_names_no_document_stays_unnamed_beside_named_ones():
+    mixed = [
+        {"question": "q?", "gold_answers": ["g."], "document": "annex.pdf"},
+        {"question": "r?", "gold_answers": ["h."]},
+    ]
+    assert [q["document"] for q in load_questions(mixed)["questions"]] == ["annex.pdf", ""]
+
+
+def test_the_sets_own_document_still_names_every_question_that_leaves_it_out():
+    whole = {"document": "handbook.pdf", "questions": [{"question": "q?", "gold_answers": ["g."]}]}
+    assert load_questions(whole)["questions"][0]["document"] == "handbook.pdf"
+
+
+def test_the_check_across_documents_looks_in_a_questions_own_document_only():
+    from pandion.evaluation import check_questions_across
+
+    texts = {"a": "The capital of France is Paris.", "b": "Bees dance to show the hive."}
+    rows = check_questions_across(
+        [
+            {"question": "Capital?", "gold_answers": ["The capital of France is Paris."], "document": "b"},
+            {"question": "Bees?", "gold_answers": ["Bees dance to show the hive."], "document": ""},
+            {"question": "Both?", "gold_answers": ["The capital of France is Paris.", "bees DANCE to show the hive."]},
+        ],
+        texts,
+    )
+    assert [(r["status"], r["document"]) for r in rows] == [
+        ("not_found", "b"),
+        ("found", None),
+        ("found_normalized", None),
+    ]
+    assert [g["document"] for g in rows[0]["golds"]] == [None]
+    assert [g["document"] for g in rows[1]["golds"]] == ["b"]
+    assert [g["document"] for g in rows[2]["golds"]] == ["a", "b"]
+    assert rows[2]["golds"][1]["document_text"] == "Bees dance to show the hive."

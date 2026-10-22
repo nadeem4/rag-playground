@@ -4,7 +4,9 @@ A question set is the JSON format the bundled samples use (a list of
 questions, or an object with a "questions" list), or a CSV file with the same
 columns, or the same list in code. Each question has `question` and at least
 one gold passage (`gold_answer` or `gold_answers`): the sentence in the
-document that answers it. `id`, `answer`, `tags` and `document` are optional.
+document that answers it. `id`, `answer`, `tags` and `document` are optional. A question that names its
+`document` (by id, filename or content hash) is found only in a piece from
+that document; one that names none is found in a piece from any.
 `trace` follows one question's answer down a finished run and says the first step
 that lost it. `evaluate` asks every question in a set and runs `trace` for every miss.
 `report.against(baseline)` says which questions a run newly missed or newly found.
@@ -21,14 +23,14 @@ import re
 import statistics
 import threading
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from pandion.config import ConfigError, _block, from_dict, to_dict
 from pandion.cost import STAGE_ORDER, total_cost
 from pandion.cost import cost as _cost
 from pandion.events import event
-from pandion.payloads import ChunkSet, Query
+from pandion.payloads import ChunkSet, Query, RetrievalResult
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
 from pandion.plugins import discover
 from pandion.plugins.answer.eval import EvalConfig
@@ -38,6 +40,7 @@ from pandion.questions import (
     GOLD_SEPARATOR,
     QuestionSetError,
     check_questions,
+    check_questions_across,
     load_questions,
     parse_question_set,
 )
@@ -61,8 +64,10 @@ __all__ = [
     "StepInput",
     "best",
     "check_questions",
+    "check_questions_across",
     "compare",
     "document_text",
+    "documents_named",
     "evaluate",
     "find_gold",
     "load_baseline",
@@ -132,6 +137,8 @@ class QuestionResult:
     `error` says which retrieval step failed, when one did; the question is
     then left out of the rates. `retrieval` is what `p.retrieve` returned.
     A question with no `id` in the set is named by its place, "question 3".
+    `document` is the document the question names, by its content hash (its
+    location, for a source other than upload), or None when it names none.
     """
 
     id: str
@@ -145,6 +152,7 @@ class QuestionResult:
     score: dict[str, Any]
     error: str | None = None
     retrieval: Retrieval | None = field(default=None, repr=False)
+    document: str | None = None
 
     @property
     def result_id(self) -> str | None:
@@ -169,6 +177,7 @@ class QuestionResult:
             "score": dict(self.score),
             "error": self.error,
             "result_id": self.result_id,
+            "document": self.document,
         }
 
 
@@ -221,6 +230,19 @@ class EvaluationReport:
         tags = sorted({tag for q in self.questions for tag in q.tags})
         return {tag: _totals([q for q in self.questions if tag in q.tags]) for tag in tags}
 
+    def by_document(self) -> list[dict[str, Any]]:
+        """The same numbers for the questions naming each document, in the
+        order the set first names them, then for the questions naming none.
+        Each entry's `document` is the one in `QuestionResult.document`. A
+        document no question names has no entry, nor do the questions naming
+        none when every question names one."""
+        named = list(dict.fromkeys(q.document for q in self.questions if q.document is not None))
+        out = [{"document": d, **_totals([q for q in self.questions if q.document == d])} for d in named]
+        unnamed = [q for q in self.questions if q.document is None]
+        if unnamed:
+            out.append({"document": None, **_totals(unnamed)})
+        return out
+
     def __str__(self) -> str:
         """One plain line per question, then the totals."""
         lines = [_line(q) for q in self.questions]
@@ -239,7 +261,7 @@ class EvaluationReport:
         return "\n".join(out)
 
     def to_dict(self) -> dict[str, Any]:
-        """Plain JSON: the totals, the totals by tag, and every question, with
+        """Plain JSON: the totals, the totals by tag and by document, and every question, with
         what `against` needs to compare a later run with this one: the
         question set's fingerprint, the document shas and `top_k`."""
         return {
@@ -250,6 +272,7 @@ class EvaluationReport:
             "nondeterministic": list(self.nondeterministic),
             **self.totals(),
             "by_tag": self.by_tag(),
+            "by_document": self.by_document(),
             "questions": [q.to_dict() for q in self.questions],
         }
 
@@ -487,8 +510,15 @@ def evaluate(
     through the cache when needed; without it, the search covers what `p.index`
     indexed last. Each question is scored by the `eval` step, the one the
     playground's Evaluate page runs, and a miss is traced down the steps to
-    the first one that lost it. A model's key goes in `credentials`, as for
-    `p.retrieve`.
+    the first one that lost it. A question that names its `document` (by id,
+    filename or content hash) is found only in a piece from that document,
+    and its miss is traced there; one naming a document that is not searched
+    is a QuestionSetError before anything runs. A question naming none is
+    found in a piece from any document. (With a source other than upload, a
+    question names a document by its location or the location's last part,
+    but the content is not known before it is read, so there a named question
+    is found in any document too.) A model's key goes in
+    `credentials`, as for `p.retrieve`.
 
     `on_event` gets every event of every search, with the question's id under
     "question", and a "question_finished" event after each question. `cancel`
@@ -505,13 +535,18 @@ def evaluate(
         )
     asked = load_questions(questions)["questions"]
     resolved = p.index._documents(documents) if documents is not None else None
+    owners: list[str | None] = [None] * len(asked)
+    searched: dict[str, Any] = {}
+    if any(q["document"] for q in asked):
+        searched = resolved if resolved is not None else p.index.indexed()
+        owners = documents_named(asked, searched)
     discover()
     step = registry.get(Stage.USE_CASE, "eval")
     settings = step.config_model(top_k=top_k)
     index: IndexReport | None = None
     results: list[QuestionResult] = []
     cancelled = False
-    for n, q in enumerate(asked, start=1):
+    for n, (q, owner) in enumerate(zip(asked, owners), start=1):
         if cancel is not None and cancel.is_set():
             cancelled = True
             break
@@ -526,7 +561,11 @@ def evaluate(
         if not retrieval.ok and cancel is not None and cancel.is_set():
             cancelled = True
             break
-        common = {"id": qid, "question": q["question"], "golds": q["gold_answers"], "tags": q["tags"]}
+        sha = getattr(searched[owner], "sha", None) if owner is not None else None
+        common = {
+            "id": qid, "question": q["question"], "golds": q["gold_answers"], "tags": q["tags"],
+            "document": None if owner is None else sha or owner,
+        }
         if not retrieval.ok:
             result = QuestionResult(
                 **common, found=False, rank=None, lost_at=None, trace=None, score={},
@@ -535,7 +574,7 @@ def evaluate(
         else:
             query = Query(text=q["question"], gold_answers=q["gold_answers"])
             score = step().apply(
-                {"result": retrieval.result.model_dump(mode="json"), "query": query.model_dump(mode="json")},
+                {"result": _only(retrieval.result.model_dump(mode="json"), sha), "query": query.model_dump(mode="json")},
                 settings,
                 None,
             )["payload"]
@@ -547,7 +586,7 @@ def evaluate(
                         credentials=credentials,
                         remember=False,
                     )
-                miss = _trace(index, retrieval, q, top_k)
+                miss = _trace(index, retrieval, {**q, "document": owner}, top_k, sha)
             result = QuestionResult(
                 **common, found=score["hit"], rank=score["rank"],
                 lost_at=miss["lost_at"] if miss else None, trace=miss, score=score,
@@ -604,6 +643,59 @@ def _failure(retrieval: Retrieval) -> str:
     return f"The {failed.stage} step ({failed.transform}) failed: {lines[-1] if lines else 'it gave no reason'}"
 
 
+def documents_named(questions: list[dict[str, Any]], documents: dict[str, Any]) -> list[str | None]:
+    """The document each question names, as its id in `documents` ({document
+    id: stored file or location}, what `p.index.indexed()` returns), or None
+    for a question naming none. A question names a document by its id, its
+    filename (for a location, its last part) or its content hash (for a stored
+    file). A name that is none of `documents`, or a filename two of them
+    share, is a QuestionSetError naming the question."""
+    out: list[str | None] = []
+    for n, question in enumerate(questions, start=1):
+        name = question.get("document") or ""
+        if not name:
+            out.append(None)
+            continue
+        if name in documents:
+            out.append(name)
+            continue
+        hits = [d for d, f in documents.items() if getattr(f, "sha", None) == name]
+        hits = hits or [d for d, f in documents.items() if _filename(f) == name]
+        if len(hits) > 1:
+            raise QuestionSetError(
+                f"Question {n} names the document {name}, and {len(hits)} of the documents searched "
+                f"have that name: {', '.join(hits)}. Name it by its id instead."
+            )
+        if not hits:
+            raise QuestionSetError(
+                f"Question {n} names the document {name}, which is not one of the documents "
+                f"searched: {', '.join(sorted(documents))}."
+            )
+        out.append(hits[0])
+    return out
+
+
+def _filename(document: Any) -> str:
+    """A stored file's name, or the last part of a location."""
+    if isinstance(document, str):
+        return PurePosixPath(document.replace("\\", "/")).name
+    return getattr(document, "filename", "")
+
+
+def _only(result: Any, sha: str | None) -> Any:
+    """A retrieval result (as JSON) in which only the pieces from the document
+    with this content hash can hold an answer: every other piece keeps its
+    place, so the top k is still the reader's top k, but its text is empty.
+    With no sha, the result as it is."""
+    if sha is None or result is None:
+        return result
+    out = RetrievalResult.model_validate(result).model_dump(mode="json")
+    for hit in out["hits"]:
+        if hit["chunk"]["doc_id"] != sha:
+            hit["chunk"]["text"] = ""
+    return out
+
+
 def _document_for(index: IndexReport, question: dict[str, Any]) -> str:
     """The document a miss is traced in: the one the question names when it
     is indexed, else the first whose pieces hold a gold passage whole, else
@@ -624,11 +716,14 @@ def _document_for(index: IndexReport, question: dict[str, Any]) -> str:
     return ids[0]
 
 
-def _trace(index: IndexReport, retrieval: Retrieval, question: dict[str, Any], top_k: int) -> dict[str, Any]:
+def _trace(
+    index: IndexReport, retrieval: Retrieval, question: dict[str, Any], top_k: int, sha: str | None = None
+) -> dict[str, Any]:
     """The miss trace over one document's index steps and the retrieval.
 
     With several rerankers, the trace checks the last one, whose result the
-    eval step scored.
+    eval step scored. With `sha`, the content hash of the question's own
+    document, only that document's pieces can hold the answer, as in the score.
     """
     doc_id = _document_for(index, question)
     stages = index.documents[doc_id].stages
@@ -639,8 +734,8 @@ def _trace(index: IndexReport, retrieval: Retrieval, question: dict[str, Any], t
         parse=StepInput(stages["parse"].transform, stages["parse"].output),
         cleans=[StepInput(stages[k].transform, stages[k].output) for k in cleans],
         chunks=stages["chunk"].output,
-        retrieve=retrieval.stages["search"].output,
-        final=reranks[-1].output if reranks else None,
+        retrieve=_only(retrieval.stages["search"].output, sha),
+        final=_only(reranks[-1].output, sha) if reranks else None,
         rerank_name=reranks[-1].transform if reranks else None,
         top_k=top_k,
     )

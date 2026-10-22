@@ -72,10 +72,12 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /documents/{id}/pages` | each page's size in PDF points: `[{"n", "width", "height"}]` |
 | `GET /documents/{id}/pages/{n}?scale=1` | the page as PNG, `scale` above 0 and at most 8, lowered so the image stays within 25 million pixels |
 | `GET /documents/{id}/pages/{n}/find?text=` | where the text (1 to 2,000 characters) is on the page: `{"rects": [[left, bottom, right, top], ...], "matched": "exact" or "normalized" or "none"}` |
-| `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document as pdfium reads it, keeps the set if the Policy keeps sets, and reports per question whether each passage was found. A set over 1 MB is 413; a set that cannot be used (more than 500 questions, more than 20 gold passages in one, a file that cannot be read) is 400 with its sentence; a document that is not a PDF is 415. |
+| `POST /documents/{id}/questions` | multipart `file`, a question set as JSON or CSV: checks every gold passage against the document's text (a PDF as pdfium reads it; Word, PowerPoint, HTML, Markdown and text as docling reads them, with no model; `parser` and `parser_note` say which), keeps the set if the Policy keeps sets, and reports per question whether each passage was found. A set over 1 MB is 413; a set that cannot be used (more than 500 questions, more than 20 gold passages in one, a file that cannot be read) is 400 with its sentence; a document whose text cannot be read, an image (it would need OCR models), or a PDF or an image behind another format's name ("this file is named .md but holds a PDF, so its text cannot be checked") is 415. |
+| `POST /questions` | multipart `file`, one question set for several documents, and a `documents` field per document (its sha): each question may name its `document` by filename or sha. Each gold passage is checked in the document its question names, or in every one for a question naming none, each read as for `POST /documents/{id}/questions` (`parser` lists the parsers used). Each question's row names its document's sha (`document`, `null` when it names none) and each gold passage the sha of the document it was found in (`null` when it was not). If the Policy keeps sets, the set is kept split by document: each document's named questions against it, and the questions naming none against every one, so removing a document loses none of them; a document the set has no question for loses the set it had. A question naming another document is 400 with its sentence; the other refusals are those of `POST /documents/{id}/questions`. |
+| `GET /questions?documents=...` | the sets kept against these documents (one `documents` parameter per sha) as one, as an evaluation without questions asks them: `{"documents", "count", "questions"}`. A named question's `document` is the sha of the document it is kept against; a question naming none has an empty one and comes once, however many of the documents keep it. |
 | `GET /documents/{id}/questions` | the set kept for the document, or `null` |
 | `DELETE /documents/{id}/questions` | remove it: 204 |
-| `POST /documents/{id}/questions/generate` | `{"model", "count"?, "model_name"?, "base_url"?}`: a model writes up to `count` test questions (default 15) for the document, as pdfium reads it, one call a part (`pandion.evaluation.write_questions`). A run: 202 `{"run_id"}`. See [Questions written for you](#questions-written-for-you). |
+| `POST /documents/{id}/questions/generate` | `{"model", "count"?, "model_name"?, "base_url"?}`: a model writes up to `count` test questions (default 15) for the document, read as the upload check reads it, one call a part (`pandion.evaluation.write_questions`). A run: 202 `{"run_id"}`. See [Questions written for you](#questions-written-for-you). |
 | `POST /golds/find` | `{"golds": [...], "texts": [...]}`: which of `texts`, pieces in the order a reader meets them, first holds any gold passage, by the eval step's own rule (`pandion.evaluation.find_gold`): `{"found": {"index", "gold", "match"}}`, or `{"found": null}`. At most 20 golds of up to 10,000 characters each, and 100 pieces of up to 1,000,000 characters together (a 422 past them). A single piece has no cap of its own, so a long one is looked through whole. These caps keep one call under about half a second of work, so the route needs no rate limit. Nothing runs or is kept. |
 | `POST /evaluations/against` | `{"report", "baseline"}`, each an evaluation's result or the part of it a comparison reads (`top_k`, the totals, the fingerprint, the documents, `nondeterministic`, and each question's `id`, `question`, `found` and `error`): the run compared with the baseline as `report.against(baseline)` compares them (`pandion.evaluation.regression`), with `best`, `pandion.evaluation.best` of `[baseline, report]`. Each text is held to the caps the other routes use (a question at most 2,000 characters, an `error` at most 10,000 so a long failure line still compares, each gold passage at most 10,000, all of a run's gold passages together at most 1 MB, an `id`, the fingerprint, each document sha and each `nondeterministic` step at most 500, at most 500 documents and 50 steps): a 422 past them. Nothing runs. |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. |
@@ -216,8 +218,17 @@ A Policy can cap the runs one owner has working or waiting (`max_runs_per_owner`
 past it, on any route that starts a run, is a 429: "You already have 2 runs going. Wait
 for one to finish, or stop one."
 
+A question that names its `document` (by filename or sha) is found only in a piece from
+that document, and a question naming none in a piece from any; the result's
+`by_document` has the totals per document a question names, then for the questions naming
+none, and each question its `document` (the sha, or `null`). A question naming a document
+the request does not send is a 400 before anything runs: "Question 1 names the document
+bees.pdf, which is not one of the documents searched: report.pdf." The same holds for a
+comparison's questions.
+
 An evaluation sent without questions asks those of the sets kept against its documents,
-in the order the documents are listed. An id that two documents' sets both use is
+in the order the documents are listed. A kept question that names a document is about the
+document it is kept against, so it is found only there. An id that two documents' sets both use is
 prefixed with each document's name (`report.pdf: capital`), and the kept sets together
 hold at most 500 questions (400 past that). An evaluation with no questions at all is a
 400. A comparison asks only the questions it is sent: without them it is index only,
@@ -259,7 +270,8 @@ document. It is a run, like an evaluation, so it counts against the same limits
 the model works, which takes about a minute for 20 questions. After each part there is a
 `part_finished` event with `number` (parts done) and `total` (parts in all). The result
 is the dict `write_questions` returns, as it is: `format`, `version`, `document`,
-`questions`, `dropped`, `usage` and `parts`. The server does not keep the set. The reader
+`questions`, `dropped`, `usage` and `parts`. Each question's `document`, and the set's,
+is the document's sha. The server does not keep the set. The reader
 looks it over, then uploads the questions they keep with
 `POST /documents/{id}/questions`, so `GET /documents/{id}/questions` is the same after
 the run as before it.
@@ -273,7 +285,7 @@ whose `base_url` is not a public https address is a 403 where `public_endpoints_
 true. A missing key is a 400 with the Policy's `missing_key` sentence. When the first
 model call fails, for example for a rejected key or an unknown `model_name`, the run ends
 with `ok` false and a result of `{"error": ...}`, scrubbed of keys and by the Policy's
-`scrub`. A document that is not a PDF ends the run the same way, with the sentence the
+`scrub`. A document whose text cannot be read, or an image, ends the run the same way, with the sentence the
 upload route gives as a 415. Cancelling the run stops it after the part in progress,
 and no further model call is made. A cancel that comes during the last part does not
 stop it: the set is already paid for, so the run finishes with it.

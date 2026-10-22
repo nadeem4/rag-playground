@@ -33,6 +33,21 @@ describe("the /api/v2 client", () => {
     expect(v2.eventsUrl("r1", 4)).toBe("/api/v2/runs/r1/events?last_event_id=4")
   })
 
+  it("uploads one question set for several documents, each sha a documents field", async () => {
+    const calls = capture({ documents: ["a", "b"], questions: [] })
+    await v2.uploadQuestionSetAcross(["a", "b"], new File(["[]"], "golden.json"))
+    expect(calls[0].url).toBe("/api/v2/questions")
+    const body = calls[0].init?.body as FormData
+    expect(body.getAll("documents")).toEqual(["a", "b"])
+    expect((body.get("file") as File).name).toBe("golden.json")
+  })
+
+  it("reads the set kept against several documents as one", async () => {
+    const calls = capture({ documents: ["a", "b"], count: 0, questions: [] })
+    await v2.questionSetAcross(["a", "b"])
+    expect(calls[0].url).toBe("/api/v2/questions?documents=a&documents=b")
+  })
+
   it("keeps a problem list as the error's detail", async () => {
     capture({ detail: { problems: ["index.chunk: chunk_overlap must be smaller than chunk_size."] } }, 422)
     await expect(v2.validate({})).rejects.toMatchObject({ status: 422, detail: { problems: [expect.stringContaining("index.chunk")] } })

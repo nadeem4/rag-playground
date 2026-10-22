@@ -216,6 +216,7 @@ def test_a_pdf_named_as_markdown_is_refused_before_any_step_runs(tmp_path, monke
     [
         ("notes.txt", b"\x89PNG\r\n\x1a\n" + bytes(64), "an image"),
         ("notes.docx", b"%PDF-1.7\n", "a PDF"),
+        ("NOTES.MD", b"%PDF-1.7\n", "a PDF"),
     ],
 )
 def test_disguised_names_what_a_text_or_office_file_really_holds(tmp_path, name, data, held):
@@ -224,6 +225,52 @@ def test_disguised_names_what_a_text_or_office_file_really_holds(tmp_path, name,
     path = tmp_path / name
     path.write_bytes(data)
     assert disguised(path) == held
+
+
+def test_the_message_names_the_suffix_in_lower_case(tmp_path):
+    from pandion.formats import UnreadableFormat, check_contents
+
+    path = tmp_path / "NOTES.MD"
+    path.write_bytes(b"%PDF-1.7\n")
+    with pytest.raises(UnreadableFormat, match=r"^this file is named \.md but holds a PDF$"):
+        check_contents(path)
+
+
+def test_a_file_with_no_extension_is_not_checked(tmp_path):
+    from pandion.formats import check_contents, disguised
+
+    path = tmp_path / "notes"
+    path.write_bytes(b"%PDF-1.7\n")
+    assert disguised(path) is None
+    check_contents(path)
+
+
+def test_a_pdf_start_is_caught_without_filetype(tmp_path, monkeypatch):
+    import sys
+
+    from pandion.formats import disguised
+
+    monkeypatch.setitem(sys.modules, "filetype", None)
+    path = tmp_path / "notes.md"
+    path.write_bytes(b"%PDF-1.7\n")
+    assert disguised(path) == "a PDF"
+
+
+def test_an_index_whose_stored_source_is_gone_still_runs_from_the_cache(tmp_path):
+    """The source file is only read when it is there: a cached index whose
+    sources folder was cleaned still runs, as evaluate's trace of a miss does."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "notes.md").write_text("# Notes\n\nFerns need water weekly.\n", encoding="utf-8")
+    _pipeline(tmp_path, parse="docling").index.sync(docs)
+    p = _pipeline(tmp_path, parse="docling")
+    documents = p.index.indexed()
+    for file in documents.values():
+        p.index.sources.path(file.sha, file.filename).unlink()
+
+    report = p.index._index(documents, remember=False)
+
+    assert report.ok
 
 
 def test_a_file_that_is_what_its_name_says_is_not_disguised(tmp_path):

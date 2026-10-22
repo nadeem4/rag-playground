@@ -560,7 +560,8 @@ class IndexPipeline:
         A step that fails is reported, not raised, and the steps after it are
         skipped. A file the parser cannot read, such as a Word file given to
         pdfium, raises ValueError (`pandion.formats.UnreadableFormat`) before
-        the run starts.
+        the run starts. A PDF or an image behind a Word, PowerPoint, HTML,
+        Markdown or text file's name raises it too.
 
         `through` stops every document after that step: "parse", "clean" (the
         last cleaner, or parse when there are none), "clean.1", "clean.2" ...,
@@ -700,10 +701,13 @@ class IndexPipeline:
         was; evaluate's trace of a miss uses it so the pipeline is unchanged."""
         # A PDF or an image renamed to a text or office format is refused here,
         # before docling reads it by its bytes and runs its layout or OCR models.
+        # A stored file that is gone is not read: a cached index runs without it.
         if self._uploads():
             for doc_id in sorted(documents):
                 file = documents[doc_id]
-                check_contents(self.sources.path(file.sha, file.filename), file.filename)
+                path = self.sources.path(file.sha, file.filename)
+                if path.is_file():
+                    check_contents(path, file.filename)
         graph, roles = self.graph(documents)
         targets = {f"{doc_id}::{stop}" for doc_id in documents} if stop else None
         result = self.execute(

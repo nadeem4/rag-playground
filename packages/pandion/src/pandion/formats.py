@@ -89,9 +89,10 @@ NAMED_FORMATS = ("docx", "pptx", "html", "md", "txt")
 
 def disguised(path: str | Path, filename: str | None = None) -> str | None:
     """"a PDF" or "an image" when a Word, PowerPoint, HTML, Markdown or text
-    file (by `filename`, the path's own name by default) holds one, else None. The first 8 KB are sniffed the way docling
-    sniffs them (`filetype`, docling's own sniffer); without it, only a PDF's
-    `%PDF` start is seen."""
+    file (by `filename`, the path's own name by default) holds one, else
+    None. The first 8 KB are sniffed the way docling sniffs them
+    (`filetype`, docling's own sniffer); without it, only a PDF's `%PDF`
+    start is seen."""
     path = Path(path)
     if format_of(filename or path.name) not in NAMED_FORMATS:
         return None

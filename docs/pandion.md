@@ -140,7 +140,8 @@ error is `pandion.extend.UnreadableFormat`, a `ValueError`, so a server can catc
 An index run also reads the first 8 KB of each Word, PowerPoint, HTML, Markdown and text
 file before any step runs. Docling picks its reader by the bytes before the name, so a PDF
 or an image renamed `.md` would run its layout or OCR models. Such a file fails with the
-same error: `this file is named .md but holds a PDF`. A server can make the same check
+same error: `this file is named .md but holds a PDF`. A stored file that is gone is not
+read, so an index whose steps are all cached still runs without it. A server can make the same check
 itself with `pandion.extend.check_contents(path, filename)`.
 
 Word, HTML, Markdown and text files load no model, so Docling reads them quickly.

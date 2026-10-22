@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { PROVIDER_INFO } from "@/api/apiKey"
 import { ApiError, api } from "@/api/client"
 import { useSampleQuestions, useSamples } from "@/api/samples"
-import type { ProjectPreview, ProjectRequest } from "@/api/types"
+import type { ProjectPreview, ProjectRequest, Registry } from "@/api/types"
 import { useQuestionSet } from "@/api/useQuestionSet"
 import { SideSheet } from "@/components/SideSheet"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import { documentsOf, type DocRef } from "@/state/document"
 import { questionsKey, readPreviousEvaluation } from "@/state/evaluate"
 import { questionsFromSample, questionsFromSet, sampleFor } from "@/state/goldSet"
 import type { PipelineGraph } from "@/state/graph"
+import { evaluateTopK } from "@/state/pandionDefaults"
 
 /** What each file in the project is for, in the order the list shows them. */
 const FILE_NOTE: Record<string, string> = {
@@ -44,14 +45,14 @@ const shownName = (path: string) => (path === DOCS ? "docs/" : path)
  * them for this pipeline; and the settings the demo capped. The server writes
  * every file (`POST /api/project.zip`), so the preview is exactly the zip.
  */
-export function TakeHome({ graph, name, pipelineKey }: { graph: PipelineGraph; name: string; pipelineKey: string | null }) {
+export function TakeHome({ graph, name, pipelineKey, registry }: { graph: PipelineGraph; name: string; pipelineKey: string | null; registry: Registry }) {
   const [open, setOpen] = useState(false)
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         Take it home
       </Button>
-      {open ? <TakeHomeSheet graph={graph} name={name} pipelineKey={pipelineKey} onClose={() => setOpen(false)} /> : null}
+      {open ? <TakeHomeSheet graph={graph} name={name} pipelineKey={pipelineKey} topK={evaluateTopK(registry)} onClose={() => setOpen(false)} /> : null}
     </>
   )
 }
@@ -77,24 +78,23 @@ function useHomeQuestions(doc: DocRef | null): { set: unknown; count: number; ke
   }
 }
 
-/** The pieces run.py checks: `pandion.evaluate`'s default top k. The registry has no evaluation step to read it from. */
-export const HOME_TOP_K = 5
-
 /**
  * The Evaluate result for this exact pipeline and question set, as one line,
- * or null. It must be scored at the top k run.py uses, with the same pipeline
- * config and the same questions (id, text and gold passages).
+ * or null. It must be scored at the top k run.py uses (`topK`, `pandion.evaluate`'s
+ * default), with the same pipeline config and the same questions (id, text and
+ * gold passages).
  */
 function scoresToBeat(
   doc: DocRef | null,
   config: PipelineConfig | null,
   pipelineKey: string | null,
   questions: { key: string } | null,
+  topK: number | null,
 ): string | null {
-  if (!doc || !config || !questions) return null
+  if (!doc || !config || !questions || topK === null) return null
   for (const key of new Set([pipelineKey ?? "working", "working"])) {
     const p = readPreviousEvaluation(doc.sha, key)
-    if (!p || p.k !== HOME_TOP_K || !p.config || p.questions !== questions.key) continue
+    if (!p || p.k !== topK || !p.config || p.questions !== questions.key) continue
     if (!sameConfig(p.config as unknown as PipelineConfig, config)) continue
     const mrr = p.totals.mrr === null ? "" : `, MRR ${p.totals.mrr.toFixed(2)}`
     return `${p.totals.found} of ${p.totals.total} found${mrr}`
@@ -106,11 +106,14 @@ function TakeHomeSheet({
   graph,
   name,
   pipelineKey,
+  topK,
   onClose,
 }: {
   graph: PipelineGraph
   name: string
   pipelineKey: string | null
+  /** How many pieces run.py checks: `pandion.evaluate`'s default, from the catalog. */
+  topK: number | null
   onClose: () => void
 }) {
   const made = graphToConfig(graph)
@@ -119,7 +122,7 @@ function TakeHomeSheet({
   const doc = documents.length === 1 ? documents[0] : null
   const questions = useHomeQuestions(doc)
   const config = made.ok ? made.pipeline.config : null
-  const scores = scoresToBeat(doc, config, pipelineKey, questions)
+  const scores = scoresToBeat(doc, config, pipelineKey, questions, topK)
   const [withQuestions, setWithQuestions] = useState(true)
   const [withScores, setWithScores] = useState(true)
   const [preview, setPreview] = useState<ProjectPreview | null>(null)

@@ -118,7 +118,7 @@ function scored(change: Partial<PreviousEvaluation> = {}) {
 }
 
 async function open() {
-  render(<TakeHome graph={graph} name="My pipeline" pipelineKey={null} />)
+  render(<TakeHome graph={graph} name="My pipeline" pipelineKey={null} registry={registryFixture as unknown as Registry} />)
   fireEvent.click(screen.getByRole("button", { name: "Take it home" }))
   const sheet = await screen.findByRole("dialog", { name: "Take this pipeline home" })
   await within(sheet).findByRole("button", { name: /README\.md/ })

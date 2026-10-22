@@ -102,6 +102,7 @@ import { recipeSentence } from "@/state/recipeSentence"
 import { cardOfProblem, cardOfStepIn, goldsOf, graphToConfig, stepOfCardIn } from "@/state/config"
 import { CACHE_NOTE, cachedOnly, costValues, estimateLine, sharedLine, sharedStages } from "@/state/cost"
 import { errorHeadline, problemDetails, routeRunError } from "@/state/pipeline"
+import { evaluateTopK, sizeFields } from "@/state/pandionDefaults"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
 import { RegistryScreen } from "./Shell"
@@ -252,18 +253,9 @@ function ComparePage({ registry }: { registry: Registry }) {
   )
 }
 
-/** Per chunker: its size field, then its overlap field when it has one. */
-const SIZE_FIELDS: Record<string, string[]> = {
-  recursive_character: ["chunk_size", "chunk_overlap"],
-  token_based: ["max_tokens", "overlap"],
-  sentence_window: ["sentences_per_chunk", "overlap_sentences"],
-  layout_blocks: ["max_tokens"],
-  markdown_header: ["max_tokens"],
-}
-
 /** The config with its size halved (at least 1) and its overlap halved (at least 0); null when a field is not a number. */
-function halved(transform: string, config: Record<string, unknown>): Record<string, unknown> | null {
-  const [size, overlap] = SIZE_FIELDS[transform] ?? []
+function halved(chunker: TransformInfo | undefined, config: Record<string, unknown>): Record<string, unknown> | null {
+  const { size, overlap } = sizeFields(chunker)
   if (!size || typeof config[size] !== "number") return null
   const next = { ...config, [size]: Math.max(1, Math.floor((config[size] as number) / 2)) }
   if (overlap && typeof config[overlap] === "number") next[overlap] = Math.max(0, Math.floor((config[overlap] as number) / 2))
@@ -282,7 +274,7 @@ export function seedVariants(target: GraphNode, transforms: TransformInfo[]): Va
   // Enrich is compared on against off.
   if (target.stage === "enrich") return [own, { transform: ENRICH_OFF, config: {} }]
   if (target.stage === "chunk") {
-    const half = halved(target.transform, target.config)
+    const half = halved(transforms.find((t) => t.name === target.transform), target.config)
     const third = transforms.find((t) => t.name === (target.transform === "sentence_window" ? "recursive_character" : "sentence_window"))
     if (half && third) return [own, { transform: target.transform, config: half }, { transform: third.name, config: defaultConfig(third) }]
   }
@@ -463,6 +455,8 @@ function Sweep({
 }) {
   const throughId = useId()
   const transforms = transformsFor(registry, target.stage)
+  // How many pieces count: `pandion.evaluate`'s default, as Pandion's catalog says it.
+  const topK = evaluateTopK(registry) ?? undefined
   const order = useMemo(() => columnOrder(graph), [graph])
   // The target and every card that depends on it: where a sweep can stop.
   const downstream = useMemo(() => order.filter((n) => n.id === target.id || ancestors(graph, n.id, registry).has(target.id)), [order, graph, registry, target.id])
@@ -623,7 +617,7 @@ function Sweep({
       return chunkFinding(
         sets.map(({ i, set }) => {
           const v = submitted.variants[i]
-          const field = SIZE_FIELDS[v.transform]?.[0]
+          const field = sizeFields(registry.chunk?.[v.transform]).size
           const size = field && typeof v.config[field] === "number" ? (v.config[field] as number) : null
           return { short: submittedNames[i].short, transform: v.transform, size, stats: set.stats, own: i === submitted.base }
         }).flatMap((x) => (x.stats ? [{ ...x, stats: x.stats }] : [])),
@@ -653,7 +647,7 @@ function Sweep({
       const c = graphToConfig(graph)
       if (!c.ok) throw new Error(c.problem)
       const p = comparePipeline({ ...c.pipeline, question: { ...c.pipeline.question, gold_answers: golds } }, graph, through)
-      const req = compareRequest(p, target, variants, throughOf(graph, target, through), 5, stepOfCardIn(graph, through), graph)
+      const req = compareRequest(p, target, variants, throughOf(graph, target, through), topK, stepOfCardIn(graph, through), graph)
       if ("problem" in req) throw new Error(req.problem)
       const { run_id } = await v2.createComparison(req, { keys })
       setSubmitted({ variants, through, sha, base: variants.findIndex(own), scored: req.questions !== undefined, shared: sharedStages(req.config, req.stage) })
@@ -790,7 +784,7 @@ function Sweep({
   // When no recipe was the pipeline's own, the first is the baseline, named by its phrase everywhere.
   const runBase = submittedOwn === -1 ? (submittedPhrases[0]?.phrase ?? "Your pipeline") : "Your pipeline"
   const baseTop = hitLists[baseAt] ?? []
-  const top = Math.min(5, baseTop.length) || 5
+  const top = Math.min(topK ?? baseTop.length, baseTop.length) || (topK ?? 1)
   const rows: OverviewRow[] = submitted.variants.map((v, i) => {
     const st = statuses[i]
     const set = payload(ids[i]?.through).data as ChunkSet | undefined
@@ -812,7 +806,7 @@ function Sweep({
       values: {
         ...(target.stage === "chunk"
           ? { pieces: stats?.pieces ?? null, tokens: stats?.tokens ?? null, median: stats?.median_tokens ?? null, p95: stats?.p95_tokens ?? null, uncovered: stats?.uncovered ?? null }
-          : { rank: ranks[i] ?? null, shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? []), returned: hits?.length ?? null }),
+          : { rank: ranks[i] ?? null, shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? [], top), returned: hits?.length ?? null }),
         ...costValues(variedCost(i)),
       },
       set,
@@ -916,6 +910,7 @@ function Sweep({
         goldKnown,
         side.fit,
         runBase,
+        top,
       )
     }
     return findingFor()

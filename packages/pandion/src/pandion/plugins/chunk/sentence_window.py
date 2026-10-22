@@ -25,6 +25,8 @@ from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.chunk import (
     DocView,
+    OVERLAP_ROLE,
+    SIZE_ROLE,
     Span,
     add_heading_context,
     build_chunk_set,
@@ -39,12 +41,14 @@ class SentenceWindowConfig(AddedSettings):
     added: ClassVar[tuple[str, ...]] = ("heading_context",)
 
     sentences_per_chunk: int = Field(
+        json_schema_extra=SIZE_ROLE,
         title="Sentences per piece",
         description="How many sentences go in each piece.",
         default=5,
         ge=1,
     )
     overlap_sentences: int = Field(
+        json_schema_extra=OVERLAP_ROLE,
         title="Overlap",
         description="How many sentences each piece repeats from the one before.",
         default=1,

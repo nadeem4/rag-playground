@@ -25,6 +25,12 @@ from pandion.ids import short_id
 from pandion.payloads import Chunk, ChunkSet, Element, ParsedDoc
 from pandion.tokenize import HeuristicTokenCounter, TokenCounter
 
+#: Marks a chunker's setting by what it does, in its JSON schema (`x-role`), so
+#: an app can halve the piece size or find the overlap of any chunker without
+#: knowing its settings' names.
+SIZE_ROLE = {"x-role": "size"}
+OVERLAP_ROLE = {"x-role": "overlap"}
+
 #: A half-open `[start, end)` range of `DocView.text`.
 Span = tuple[int, int]
 

@@ -85,3 +85,37 @@ def test_explain_refuses_what_does_not_exist():
         pandion.explain("chunk", "fixed")
     with pytest.raises(ConfigError, match="has no setting 'chunk_sise'"):
         pandion.explain("chunk", "recursive_character", {"chunk_sise": 100})
+
+
+def test_each_chunkers_size_and_overlap_settings_say_their_role():
+    roles = {
+        use: {f: p["x-role"] for f, p in info["config_schema"]["properties"].items() if "x-role" in p}
+        for use, info in pandion.catalog()["chunk"].items()
+    }
+    assert roles["recursive_character"] == {"chunk_size": "size", "chunk_overlap": "overlap"}
+    assert roles["token_based"] == {"max_tokens": "size", "overlap": "overlap"}
+    assert roles["sentence_window"] == {"sentences_per_chunk": "size", "overlap_sentences": "overlap"}
+    # Every chunker has exactly one size setting.
+    assert all(list(r.values()).count("size") == 1 for r in roles.values())
+
+
+def test_evaluate_and_compare_check_as_many_pieces_as_the_eval_step_by_default(monkeypatch):
+    import inspect
+
+    from pandion import cli
+
+    from pandion.evaluation import DEFAULT_TOP_K, compare, evaluate
+
+    eval_default = pandion.catalog()["use_case"]["eval"]["config_schema"]["properties"]["top_k"]["default"]
+    assert DEFAULT_TOP_K == eval_default
+    assert inspect.signature(evaluate).parameters["top_k"].default == DEFAULT_TOP_K
+    assert inspect.signature(compare).parameters["top_k"].default == DEFAULT_TOP_K
+
+    # The CLI's eval and compare follow it too, in their defaults and in what --help says.
+    monkeypatch.setattr(cli, "DEFAULT_TOP_K", 7, raising=False)
+    for argv in (["eval", "p.yaml", "qs.json"], ["compare", "p.yaml", "--vary", "chunk.chunk_size=1,2", "docs"]):
+        assert cli.parser().parse_args(argv).top_k == 7
+    subs = next(a for a in cli.parser()._actions if a.dest == "command").choices
+    for name in ("eval", "compare"):
+        top_k = next(a for a in subs[name]._actions if a.dest == "top_k")
+        assert "(default 7)" in top_k.help

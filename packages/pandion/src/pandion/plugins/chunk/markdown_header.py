@@ -23,6 +23,7 @@ from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.chunk import (
     DocView,
+    SIZE_ROLE,
     Span,
     build_chunk_set,
     count_tokens,
@@ -33,6 +34,7 @@ from pandion.plugins.chunk import (
 
 class MarkdownHeaderConfig(BaseModel):
     max_tokens: int = Field(
+        json_schema_extra=SIZE_ROLE,
         title="Largest piece",
         description="The largest a piece can be, in tokens. A longer section is split.",
         default=512,

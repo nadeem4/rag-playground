@@ -18,6 +18,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from pandion import Pipeline
+from pandion.extend import UnreadableFormat, check_contents
 from pandion_api import reports
 from pandion_api.jobs import documents_of, start
 from pandion_api.pipelines import prepare
@@ -48,12 +49,24 @@ def check_through(p: Pipeline, through: str | None) -> None:
         )
 
 
+def refuse_disguised(documents: dict[str, str]) -> None:
+    """A 415 before anything runs for a PDF or an image behind a Word,
+    PowerPoint, HTML, Markdown or text file's name, the check POST
+    /documents/{sha}/questions makes (`pandion.formats.check_contents`)."""
+    for name, path in documents.items():
+        try:
+            check_contents(path, name)
+        except UnreadableFormat as exc:
+            raise HTTPException(status_code=415, detail=f"{exc}, so it cannot be indexed") from exc
+
+
 @router.post("/runs", status_code=202)
 async def create_run(body: RunIn, request: Request) -> dict[str, str]:
     """Index the documents, or run them through one step (`through`)."""
     p = prepare(body.config, request)
     check_through(p, body.through)
     documents = documents_of(body.documents, request)
+    refuse_disguised(documents)
 
     def work(on_event, cancel, credentials):
         report = p.index.run(

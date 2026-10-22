@@ -50,7 +50,7 @@ from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.fetch import fetch_url, is_url
 from pandion.filters import check_where, resolve as _resolve_where
-from pandion.formats import check_readable
+from pandion.formats import check_contents, check_readable
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -698,6 +698,12 @@ class IndexPipeline:
     ) -> IndexReport:
         """Index `documents`. `remember=False` leaves `self.documents` as it
         was; evaluate's trace of a miss uses it so the pipeline is unchanged."""
+        # A PDF or an image renamed to a text or office format is refused here,
+        # before docling reads it by its bytes and runs its layout or OCR models.
+        if self._uploads():
+            for doc_id in sorted(documents):
+                file = documents[doc_id]
+                check_contents(self.sources.path(file.sha, file.filename), file.filename)
         graph, roles = self.graph(documents)
         targets = {f"{doc_id}::{stop}" for doc_id in documents} if stop else None
         result = self.execute(

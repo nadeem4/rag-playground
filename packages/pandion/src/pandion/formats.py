@@ -9,7 +9,7 @@ formats is not checked, and neither is a file with no extension.
 
 from __future__ import annotations
 
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 #: Each format: its short name, what one file of it is, and its extensions.
 FORMATS: dict[str, tuple[str, str, tuple[str, ...]]] = {
@@ -80,6 +80,44 @@ def check_readable(parser: str, filename: str) -> None:
     if others:
         message += f" Use {listed(others)}."
     raise UnreadableFormat(message)
+
+
+#: Formats docling reads by the bytes before the name, so a PDF or an image
+#: renamed to one of these would run docling's layout or OCR models.
+NAMED_FORMATS = ("docx", "pptx", "html", "md", "txt")
+
+
+def disguised(path: str | Path, filename: str | None = None) -> str | None:
+    """"a PDF" or "an image" when a Word, PowerPoint, HTML, Markdown or text
+    file (by `filename`, the path's own name by default) holds one, else None. The first 8 KB are sniffed the way docling
+    sniffs them (`filetype`, docling's own sniffer); without it, only a PDF's
+    `%PDF` start is seen."""
+    path = Path(path)
+    if format_of(filename or path.name) not in NAMED_FORMATS:
+        return None
+    with path.open("rb") as f:
+        head = f.read(8192)
+    try:
+        import filetype
+    except ImportError:
+        mime = ""
+    else:
+        mime = filetype.guess_mime(head) or ""
+    if head.startswith(b"%PDF") or mime == "application/pdf":
+        return "a PDF"
+    if mime.startswith("image/"):
+        return "an image"
+    return None
+
+
+def check_contents(path: str | Path, filename: str | None = None) -> None:
+    """Raise UnreadableFormat when the file at `path`, named `filename` (its
+    own name by default), holds a PDF or an image behind another format's
+    name: "this file is named .md but holds a PDF"."""
+    held = disguised(path, filename)
+    if held:
+        suffix = PurePosixPath((filename or Path(path).name).replace("\\", "/")).suffix.lower()
+        raise UnreadableFormat(f"this file is named {suffix} but holds {held}")
 
 
 def _parsers_reading(kind: str) -> list[str]:

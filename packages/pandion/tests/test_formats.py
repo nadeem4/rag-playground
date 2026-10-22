@@ -193,6 +193,48 @@ def test_an_unreadable_file_raises_its_own_value_error():
         check_readable("docling", "data.xlsx")
 
 
+def test_a_pdf_named_as_markdown_is_refused_before_any_step_runs(tmp_path, monkeypatch):
+    from pdfs import build_pdf
+
+    from pandion.plugins.parse.docling import DoclingParse
+
+    monkeypatch.setattr(DoclingParse, "apply", lambda *a, **k: (_ for _ in ()).throw(AssertionError("parsed")))
+    notes = tmp_path / "notes.md"
+    notes.write_bytes(build_pdf([["A PDF in disguise."]]))
+    p = _pipeline(tmp_path, parse="docling")
+
+    with pytest.raises(pandion.formats.UnreadableFormat) as caught:
+        p.index.run(notes)
+
+    assert str(caught.value) == "this file is named .md but holds a PDF"
+    store = tmp_path / "index" / "artifacts"
+    assert not store.exists() or not any(p for p in store.rglob("*") if p.is_file())
+
+
+@pytest.mark.parametrize(
+    ("name", "data", "held"),
+    [
+        ("notes.txt", b"\x89PNG\r\n\x1a\n" + bytes(64), "an image"),
+        ("notes.docx", b"%PDF-1.7\n", "a PDF"),
+    ],
+)
+def test_disguised_names_what_a_text_or_office_file_really_holds(tmp_path, name, data, held):
+    from pandion.formats import disguised
+
+    path = tmp_path / name
+    path.write_bytes(data)
+    assert disguised(path) == held
+
+
+def test_a_file_that_is_what_its_name_says_is_not_disguised(tmp_path):
+    from pandion.formats import disguised
+
+    (tmp_path / "notes.md").write_text("# Notes\n\nPlain text.\n")
+    (tmp_path / "report.pdf").write_bytes(b"%PDF-1.7\n")
+    assert disguised(tmp_path / "notes.md") is None
+    assert disguised(tmp_path / "report.pdf") is None
+
+
 def test_the_suffix_is_matched_without_case(tmp_path):
     from pandion.formats import check_readable
 

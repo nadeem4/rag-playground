@@ -66,6 +66,19 @@ def test_documents_are_checked_before_anything_runs(client):
     assert client.post("/runs", json={"config": bad, "documents": [sha]}).status_code == 422
 
 
+def test_a_pdf_named_as_markdown_is_refused_before_docling_reads_it(client, monkeypatch):
+    from pandion.plugins.parse.docling import DoclingParse
+
+    seen = []
+    monkeypatch.setattr(DoclingParse, "apply", lambda *a, **k: seen.append(a) or (_ for _ in ()).throw(AssertionError))
+    sha = upload(client, "notes.md", build_pdf([["A PDF in disguise."]]))["sha"]
+    docling = {**PIPELINE, "index": {**PIPELINE["index"], "parse": {"use": "docling"}}}
+    r = client.post("/runs", json={"config": docling, "documents": [sha]})
+    assert r.status_code == 415
+    assert r.json()["detail"] == "this file is named .md but holds a PDF, so it cannot be indexed"
+    assert seen == []
+
+
 def test_an_unknown_document_gets_a_fixed_sentence_that_never_echoes_the_id(client):
     for sha in ("0" * 64, "../../etc/passwd", "a" * 64 + "\n"):
         r = client.post("/runs", json={"config": PIPELINE, "documents": [sha]})

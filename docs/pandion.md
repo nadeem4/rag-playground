@@ -137,6 +137,12 @@ notes.docx is a Word file. Use docling.` The extension is matched without regard
 A file with no extension, and a parser that declares no formats, are not checked. The
 error is `pandion.extend.UnreadableFormat`, a `ValueError`, so a server can catch it alone.
 
+An index run also reads the first 8 KB of each Word, PowerPoint, HTML, Markdown and text
+file before any step runs. Docling picks its reader by the bytes before the name, so a PDF
+or an image renamed `.md` would run its layout or OCR models. Such a file fails with the
+same error: `this file is named .md but holds a PDF`. A server can make the same check
+itself with `pandion.extend.check_contents(path, filename)`.
+
 Word, HTML, Markdown and text files load no model, so Docling reads them quickly.
 Docling reads a `.txt` file with its Markdown reader, so a line that starts with
 `#` becomes a heading. Headings keep their levels: in HTML and Markdown, `h1` or `#` is

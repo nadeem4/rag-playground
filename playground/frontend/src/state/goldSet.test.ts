@@ -5,6 +5,8 @@ import type { GoldQuestion, QuestionSetUpload, SampleCard, SampleQuestion, Store
 import {
   acrossLine,
   clearTabSet,
+  joinedName,
+  readJoinedName,
   documentCounts,
   inUse,
   questionsFromAcross,
@@ -325,6 +327,24 @@ describe("one set across several documents", () => {
     expect(acrossLine(24, ["golden-set.csv"], 3, 3)).toBe("24 questions from golden-set.csv, covering all 3 documents")
     expect(acrossLine(5, ["a.json", "b.csv"], 1, 2)).toBe("5 questions from a.json and b.csv, covering 1 of 2 documents")
     expect(acrossLine(1, [], 0, 2)).toBe("1 question, found in any of the 2 documents")
+  })
+
+  it("says how many were written, beside where the rest came from", () => {
+    const uploaded = joinedName(null, ["golden-set.csv"], 6, "Claude Haiku 4.5")
+    expect(acrossLine(30, [uploaded], 3, 3)).toBe("30 questions: 24 from golden-set.csv and 6 written by Claude Haiku 4.5, covering all 3 documents")
+    const samples = joinedName(null, ["the samples"], 6, "Claude Haiku 4.5")
+    expect(acrossLine(30, [samples], 2, 2)).toBe("30 questions: 24 from the samples and 6 written by Claude Haiku 4.5, covering all 2 documents")
+    const only = joinedName(null, [], 6, "Claude Haiku 4.5")
+    expect(acrossLine(6, [only], 2, 2)).toBe("6 questions written by Claude Haiku 4.5, covering all 2 documents")
+  })
+
+  it("adds a second write to the written count, and keeps the first source", () => {
+    const first = joinedName(null, ["golden-set.csv"], 6, "Claude Haiku 4.5")
+    const second = joinedName(readJoinedName(first), [first], 4, "Claude Haiku 4.5")
+    expect(acrossLine(34, [second], 3, 3)).toBe("34 questions: 24 from golden-set.csv and 10 written by Claude Haiku 4.5, covering all 3 documents")
+    const other = joinedName(readJoinedName(second), [second], 2, "Claude Sonnet 5")
+    expect(acrossLine(36, [other], 3, 3)).toBe("36 questions: 24 from golden-set.csv and 12 written by more than one model, covering all 3 documents")
+    expect(readJoinedName("golden-set.csv")).toBeNull()
   })
 
   it("keeps a set for these documents in this tab only, and reads none for others", () => {

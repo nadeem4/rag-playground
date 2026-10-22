@@ -168,14 +168,6 @@ export function joinedSet(existing: readonly Question[], items: readonly ReviewI
   return { version: 1, document: "", questions }
 }
 
-/** The joined set's file name: the files it came from, then who wrote the rest, once. */
-export function joinedFilename(existing: readonly string[], writer: string): string {
-  const written = writtenFilename(writer)
-  if (!existing.length) return written
-  const base = existing.join(" and ")
-  return base.endsWith(written) ? base : `${base} and ${written}`
-}
-
 /** The uploaded file's name says who wrote the set, so the question-set line can say it after a reload too. */
 const WRITTEN = /^questions written by (.+)\.json$/
 

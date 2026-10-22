@@ -8,7 +8,6 @@ import {
   clampCount,
   keyNotice,
   defaultModel,
-  joinedFilename,
   joinedSet,
   keptSet,
   mergeWritten,
@@ -145,12 +144,5 @@ describe("writing for several documents", () => {
       { id: "u1", question: "Old unnamed?", gold_answers: ["b"], tags: [], answer: "", document: "" },
       { id: "q1-2", question: "What two steps does RAG use?", gold_answers: ["First it finds passages."], answer: "Find, then answer.", tags: [], document: "sha-b" },
     ])
-  })
-
-  it("names the joined file after what was there and who wrote the rest", () => {
-    expect(joinedFilename([], "Claude Haiku 4.5")).toBe("questions written by Claude Haiku 4.5.json")
-    expect(joinedFilename(["golden-set.csv"], "Claude Haiku 4.5")).toBe("golden-set.csv and questions written by Claude Haiku 4.5.json")
-    const once = joinedFilename(["golden-set.csv"], "Claude Haiku 4.5")
-    expect(joinedFilename([once], "Claude Haiku 4.5")).toBe(once)
   })
 })

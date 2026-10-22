@@ -125,7 +125,12 @@ export function documentCounts(
 /** The set in one line: `24 questions from golden-set.csv, covering all 3 documents`. */
 export function acrossLine(count: number, filenames: readonly string[], named: number, documents: number): string {
   const n = `${count} ${count === 1 ? "question" : "questions"}`
-  const from = filenames.length ? ` from ${filenames.length > 1 ? `${filenames.slice(0, -1).join(", ")} and ${filenames[filenames.length - 1]}` : filenames[0]}` : ""
+  const joined = filenames.length === 1 ? readJoinedName(filenames[0]) : null
+  const from = joined
+    ? joined.source
+      ? `: ${count - joined.written} from ${joined.source} and ${joined.written} written by ${joined.writer}`
+      : ` written by ${joined.writer}`
+    : filenames.length ? ` from ${filenames.length > 1 ? `${filenames.slice(0, -1).join(", ")} and ${filenames[filenames.length - 1]}` : filenames[0]}` : ""
   const covering =
     named === 0
       ? `found in any of the ${documents} documents`
@@ -133,6 +138,34 @@ export function acrossLine(count: number, filenames: readonly string[], named: n
         ? `covering all ${documents} documents`
         : `covering ${named} of ${documents} documents`
   return `${n}${from}, ${covering}`
+}
+
+/** Where a set with questions written for you came from: the rest's source (a file, or "the samples"), how many were written, and by which model. */
+export interface JoinedName {
+  source: string | null
+  written: number
+  writer: string
+}
+
+const JOINED = /^(?:(.*) \+ )?(\d+) written by (.+)\.json$/
+const SEVERAL_MODELS = "more than one model"
+
+/**
+ * The file name a set saved by Write questions for me goes up under, so the
+ * card can say it after a reload: `golden-set.csv + 6 written by Claude Haiku 4.5.json`.
+ * `before` is that name read back when the set was already one: its source is
+ * kept and the counts add up, so writing again never makes the name grow.
+ */
+export function joinedName(before: JoinedName | null, filenames: readonly string[], written: number, writer: string): string {
+  const source = before ? before.source : filenames.length ? filenames.join(" and ") : null
+  const total = (before?.written ?? 0) + written
+  const by = before && before.writer !== writer ? SEVERAL_MODELS : writer
+  return `${source ? `${source} + ` : ""}${total} written by ${by}.json`
+}
+
+export function readJoinedName(filename: string): JoinedName | null {
+  const m = JOINED.exec(filename)
+  return m ? { source: m[1] ?? null, written: Number(m[2]), writer: m[3] } : null
 }
 
 const TAB_ACROSS_KEY = "rag-playground:gold-set:across"

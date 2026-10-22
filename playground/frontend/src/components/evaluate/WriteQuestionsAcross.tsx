@@ -11,11 +11,10 @@ import { FileTag } from "@/components/FileTag"
 import { SideSheet } from "@/components/SideSheet"
 import { Button } from "@/components/ui/button"
 import type { FileInfo } from "@/lib/files"
-import { documentCounts, type Question } from "@/state/goldSet"
+import { documentCounts, joinedName, readJoinedName, type Question } from "@/state/goldSet"
 import {
   clampCount,
   DEFAULT_PER_DOCUMENT,
-  joinedFilename,
   joinedSet,
   keyNotice,
   MAX_PER_DOCUMENT,
@@ -54,7 +53,7 @@ export function WriteQuestionsAcross({
   files: readonly FileInfo[]
   /** The set as it is now, every question; null while it is read. */
   questions: readonly Question[] | null
-  /** The files it was read from, which the joined set's name keeps. */
+  /** Where the set came from (its files, or "the samples"), which the joined set's name keeps. */
   filenames: readonly string[]
   registry: Registry
   locked: boolean
@@ -155,7 +154,9 @@ export function WriteQuestionsAcross({
   const save = async () => {
     setSaving(true)
     setSaveFailed(false)
-    const file = new File([JSON.stringify(joinedSet(questions ?? [], items), null, 2)], joinedFilename(filenames, writer), { type: "application/json" })
+    const before = filenames.length === 1 ? readJoinedName(filenames[0]) : null
+    const name = joinedName(before, filenames, reviewSummary(items).keep, writer)
+    const file = new File([JSON.stringify(joinedSet(questions ?? [], items), null, 2)], name, { type: "application/json" })
     const ok = await onSave(file)
     setSaving(false)
     if (ok) discard()

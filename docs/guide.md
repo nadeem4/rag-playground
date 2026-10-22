@@ -462,7 +462,9 @@ it is on, and **Stop** cancels that one and starts no other, keeping what was al
 written. The review is grouped by document, with Keep, Edit and Drop as for one document.
 **Save** adds the kept questions to the one set: it sends the set as it is, every question
 with its tags, answer and document, plus the new ones, each naming its document, so nothing
-in it is lost. **Start from the template** downloads the CSV template,
+in it is lost. The card then says what was written: "30 questions: 24 from golden-set.csv
+and 6 written by Claude Haiku 4.5" (or "from the samples"), and writing again adds to the
+written count. **Start from the template** downloads the CSV template,
 whose `document` column names each question's file. A question that names its document must
 find its evidence in that document; one naming none is found in any. With nothing kept,
 the bundled samples among the documents lend their own sets, each question naming its

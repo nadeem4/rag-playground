@@ -112,7 +112,7 @@ export function QuestionSetAcross({
         <WriteQuestionsAcross
           files={files}
           questions={questions}
-          filenames={fromSamples ? [] : filenames}
+          filenames={fromSamples ? (questions?.length ? ["the samples"] : []) : filenames}
           registry={registry}
           locked={locked}
           onSave={onUpload}

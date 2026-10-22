@@ -12,6 +12,10 @@ from pandion_api import Policy, create_app
 from pandion_api.pipelines import PLUGINS_REFUSED
 
 
+def NO_STEP(message):
+    return {"message": message, "step": None, "use": None, "settings": []}
+
+
 def test_strategies_list_every_stage_and_the_defaults(client):
     body = client.get("/strategies").json()
     assert body["stages"] == pandion.catalog()
@@ -66,7 +70,7 @@ def test_any_shape_is_a_problem_never_a_500(client, config):
 
 def test_a_request_cannot_load_plugins(client):
     body = client.post("/pipelines/validate", json={"config": {**PIPELINE, "plugins": ["os"]}}).json()
-    assert body == {"ok": False, "problems": [PLUGINS_REFUSED]}
+    assert body == {"ok": False, "problems": [PLUGINS_REFUSED], "details": [NO_STEP(PLUGINS_REFUSED)]}
 
 
 def test_the_server_decides_the_folder_and_the_models(tmp_path):
@@ -110,7 +114,7 @@ def test_plugins_are_refused_before_anything_is_imported(tmp_path):
     with make_client(tmp_path) as c:
         for plugins in (["spy_plugin"], None, "spy_plugin"):
             body = c.post("/pipelines/validate", json={"config": {**PIPELINE, "plugins": plugins}}).json()
-            assert body == {"ok": False, "problems": [PLUGINS_REFUSED]}
+            assert body == {"ok": False, "problems": [PLUGINS_REFUSED], "details": [NO_STEP(PLUGINS_REFUSED)]}
     assert not marker.exists() and "spy_plugin" not in sys.modules
 
 
@@ -201,3 +205,40 @@ def test_the_pipeline_file_keeps_a_changed_prompt_and_revision(client, tmp_path)
     again = Pipeline.from_dict(data, base=tmp_path).to_dict()
     assert again["retrieve"]["rerank"][0]["revision"] == revision
     assert again["answer"]["prompt"] == "Be brief."
+
+
+def test_validate_says_which_step_and_setting_a_problem_belongs_to(client):
+    config = {**PIPELINE, "index": {**PIPELINE["index"], "chunk": {"use": "recursive_character", "chunk_size": -1}}}
+    body = client.post("/pipelines/validate", json={"config": config}).json()
+    assert body["ok"] is False and len(body["details"]) == 1
+    detail = body["details"][0]
+    assert detail["message"] == body["problems"][0]
+    assert (detail["step"], detail["use"]) == ("index.chunk", "recursive_character")
+    assert [s["field"] for s in detail["settings"]] == ["chunk_size"]
+
+
+def test_a_refused_run_carries_the_same_details(client):
+    config = {**PIPELINE, "index": {**PIPELINE["index"], "clean": [{"use": "dedupe_blocks"}, {"use": "drop_matching", "mode": "x"}]}}
+    r = client.post("/runs", json={"config": config, "documents": ["0" * 64]})
+    assert r.status_code == 422
+    (detail,) = r.json()["detail"]["details"]
+    assert (detail["step"], detail["use"]) == ("index.clean.2", "drop_matching")
+
+
+def test_explain_says_which_setting_it_refused(client):
+    r = client.post("/explain", json={"stage": "chunk", "use": "recursive_character", "settings": {"chunk_size": "x"}})
+    assert r.status_code == 422
+    (detail,) = r.json()["detail"]["details"]
+    assert detail["use"] == "recursive_character" and [s["field"] for s in detail["settings"]] == ["chunk_size"]
+
+
+def test_every_sentence_in_the_details_is_scrubbed(tmp_path):
+    class Scrub(Policy):
+        def scrub(self, text):
+            return text.replace("chunk_size", "[size]")
+
+    with make_client(tmp_path, Scrub()) as c:
+        config = {**PIPELINE, "index": {**PIPELINE["index"], "chunk": {"use": "recursive_character", "chunk_size": -1}}}
+        (detail,) = c.post("/pipelines/validate", json={"config": config}).json()["details"]
+    assert "chunk_size" not in detail["message"]
+    assert all("chunk_size" not in s["message"] for s in detail["settings"])

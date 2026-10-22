@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import type { GraphNode } from "@/api/types"
 
 import {
-  cardNamedIn,
+  cardOfProblem,
   cardOfStep,
   cardOfStepIn,
   columnOf,
@@ -128,10 +128,9 @@ describe("an Enrich step in the pipeline file", () => {
     expect(isConfigShape({ ...p.config, index: { ...p.config.index, enrich: "llm_context" } })).toBe(false)
   })
 
-  it("puts the server's sentence about it on the Enrich card", () => {
+  it("puts a problem Pandion placed on it on the Enrich card", () => {
     const g = addEnrich(sampleGraph(R, DOC), R)
-    const said = "index.enrich.max_pieces is 201; the demo writes context for at most 200 pieces in one run. Lower it, or run the playground locally for more."
-    expect(cardNamedIn(said, g)).toBe("enrich")
+    expect(cardOfProblem({ step: "index.enrich" }, g)).toBe("enrich")
     expect(stepOfCardIn(g, "enrich")).toBe("enrich")
   })
 })
@@ -217,20 +216,21 @@ describe("card ids and step names", () => {
   })
 
   it.each([
-    ["index.chunk: chunk_overlap must be smaller than chunk_size.", "chunk"],
-    ["index.clean.2 uses 'nope', which is not registered.", "clean_2"],
-    ["retrieve.search: top_k must be at least 1.", "retrieve"],
-    ["index.embed: unknown embedder", "index"],
-    ["answer uses 'x'", "use_case"],
-    ["The pipeline must be a mapping.", null],
-    ["Settings: answer: max_snippet_chars must be at least 1.", "use_case"],
-    ["A search step is needed to answer the question.", null],
-    ["It needs an answer step.", null],
-    // Pandion's own wording (pandion/config.py) names a stacked step as "step N".
-    ["index.clean step 2 uses 'nope', which is not registered.", "clean_2"],
-    ["retrieve.rerank step 3: top_n must be at least 1.", "rerank_3"],
-  ])("finds the card in %s", (sentence, card) => {
-    expect(cardNamedIn(sentence)).toBe(card)
+    ["index.parse", "parse"],
+    ["index.source", "source"],
+    ["index.clean.2", "clean_2"],
+    ["index.chunk", "chunk"],
+    ["index.enrich", "enrich"],
+    ["index.embed", "index"],
+    ["index.store", "index"],
+    ["retrieve.rewrite", "query"],
+    ["retrieve.search", "retrieve"],
+    ["retrieve.rerank", "rerank_1"],
+    ["retrieve.rerank.3", "rerank_3"],
+    ["answer", "use_case"],
+    [null, null],
+  ])("the problem Pandion placed at %s is card %s", (step, card) => {
+    expect(cardOfProblem({ step })).toBe(card)
   })
 })
 
@@ -265,12 +265,12 @@ describe("stacked cards by their place in the column", () => {
     expect(cardOfStepIn(swapped, "search")).toBe("retrieve")
   })
 
-  it("a problem sentence names the card at that place", () => {
-    expect(cardNamedIn("index.clean step 2 uses 'nope', which is not registered.", swapped)).toBe("clean_1")
-    expect(cardNamedIn("index.clean.1: bad", swapped)).toBe("clean_2")
-    expect(cardNamedIn("index.clean step 2: bad", gap)).toBeNull()
-    expect(cardNamedIn("index.chunk: bad", swapped)).toBe("chunk")
-    expect(cardNamedIn("index.store: bad", swapped)).toBe("index")
+  it("a problem Pandion placed names the card at that place", () => {
+    expect(cardOfProblem({ step: "index.clean.2" }, swapped)).toBe("clean_1")
+    expect(cardOfProblem({ step: "index.clean.1" }, swapped)).toBe("clean_2")
+    expect(cardOfProblem({ step: "index.clean.2" }, gap)).toBeNull()
+    expect(cardOfProblem({ step: "index.chunk" }, swapped)).toBe("chunk")
+    expect(cardOfProblem({ step: "index.store" }, swapped)).toBe("index")
   })
 })
 

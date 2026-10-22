@@ -2085,7 +2085,13 @@ Every problem in a pipeline file or dict is a `ConfigError` whose message is one
 unknown strategy names the strategies there are, and a value a setting does not accept
 names the step, the strategy and the setting, for example
 `index.chunk (recursive_character): chunk_size: Input should be a valid integer.` An app can
-show the message as it is. Calling one stage with a bad value (`pandion.chunk(doc,
+show the message as it is. It need not read the message to place it: when the problem is one
+step's, `exc.step` is that step's place in the pipeline file (`index.chunk`,
+`index.clean.2`, `retrieve.rerank`, `index.store`, `answer`). Run events name steps by role
+instead (`chunk`, `clean.2`, `rerank.1`, and `index` for embed and store), so the two are not
+the same text. `exc.use` is its strategy, and `exc.settings` lists
+each refused setting with its own sentence, as `{"field", "message"}`. `exc.to_dict()`
+gives all of it as JSON. A problem that is no one step's has `step` and `use` None. Calling one stage with a bad value (`pandion.chunk(doc,
 use="recursive_character", chunk_size="big")`) raises a `ValueError` with the same kind of
 sentence.
 

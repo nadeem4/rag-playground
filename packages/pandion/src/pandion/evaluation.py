@@ -900,7 +900,7 @@ def compare(
         try:
             pipelines.append(Pipeline._of(from_dict(data, base=p.config.path)))
         except ConfigError as exc:
-            raise ConfigError(f"variant {n}: {exc}") from None
+            raise ConfigError(f"variant {n}: {exc}", step=exc.step, use=exc.use, settings=exc.settings) from None
     if through is not None:
         for pipeline in pipelines:
             _check_through(pipeline, stage, through)

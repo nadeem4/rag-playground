@@ -1,4 +1,4 @@
-import type { GraphNode, Registry, Stage } from "@/api/types"
+import type { GraphNode, ProblemDetail, Registry, Stage } from "@/api/types"
 
 import { documentsOf, type DocRef } from "./document"
 import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, strategyIn, titleFor, wire, type PipelineGraph } from "./graph"
@@ -87,30 +87,22 @@ export function cardOfStepIn(graph: PipelineGraph, step: string): string | null 
   return columnOrder(graph).filter((n) => n.stage === m[1])[Number(m[2] ?? "1") - 1]?.id ?? null
 }
 
-/** A stacked step is numbered as `index.clean.2` in run events and as `index.clean step 2` in Pandion's problem sentences. */
-const WHERE = /\b(?:index\.(parse|clean|chunk|enrich|embed|store|source)(?:(?:\.| step )(\d+))?|retrieve\.(rewrite|search|rerank)(?:(?:\.| step )(\d+))?)\b/
-/** `answer` names the step only where a sentence or a clause starts, so "to answer the question" is not it. */
-const ANSWER = /(?:^|[.:;]\s+)answer\b/
-
-/** The step a Pandion problem sentence is about (`clean.2`, `chunk`, `index`), from the place it names. */
-function stepNamedIn(sentence: string): string | null {
-  const m = WHERE.exec(sentence)
-  if (!m) return ANSWER.test(sentence) ? "answer" : null
-  const name = m[1] ?? m[3]
-  const n = m[2] ?? m[4]
+/** A step's place as Pandion names it (`index.clean.2`, `retrieve.search`) as the step a card runs as (`clean.2`, `search`). */
+function stepOfPlace(place: string): string {
+  const [section, name, n] = place.split(".")
+  if (section === "answer") return "answer"
   if (name === "embed" || name === "store") return "index"
-  if (name === "clean" || name === "rerank") return `${name}.${n ?? "1"}`
-  return name
+  return n ? `${name}.${n}` : name
 }
 
 /**
- * The card a Pandion problem sentence is about, from the place it names
- * (`index.chunk`, `index.clean step 2`). Given the column, a stacked step is
- * the card at that place, or null when the column has none there.
+ * The card a problem Pandion placed belongs to (`ProblemDetail.step`). Given
+ * the column, a stacked step is the card at that place, or null when the
+ * column has none there. Null for a problem that is no one step's.
  */
-export function cardNamedIn(sentence: string, graph?: PipelineGraph): string | null {
-  const step = stepNamedIn(sentence)
-  if (step === null) return null
+export function cardOfProblem(problem: Pick<ProblemDetail, "step">, graph?: PipelineGraph): string | null {
+  if (!problem.step) return null
+  const step = stepOfPlace(problem.step)
   return graph ? cardOfStepIn(graph, step) : cardOfStep(step)
 }
 

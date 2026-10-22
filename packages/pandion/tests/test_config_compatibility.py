@@ -87,6 +87,7 @@ def test_dense_on_a_store_that_is_not_lancedb_is_refused_at_load(tmp_path):
         "format lancedb, but index.store uses 'test_dense_only_store', which has "
         "backends dense."
     )
+    assert (caught.value.step, caught.value.use) == ("retrieve.search", "dense")
 
 
 def test_the_store_s_own_retriever_on_it_is_fine(tmp_path):

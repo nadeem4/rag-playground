@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 import pandion
 from pandion import ConfigError
 from pandion_api.deps import get_policy
-from pandion_api.pipelines import as_yaml, prepare, problems, public
+from pandion_api.pipelines import as_yaml, prepare, public, refused
 from pandion_api.policy import Policy
 
 router = APIRouter()
@@ -37,7 +37,7 @@ def explain(body: ExplainIn, policy: Policy = Depends(get_policy)) -> dict[str, 
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=policy.scrub(str(exc.args[0]))) from None
     except ConfigError as exc:
-        raise problems(policy.scrub(str(exc))) from None
+        raise refused(exc, policy) from None
 
 
 class ValidateIn(BaseModel):
@@ -54,7 +54,7 @@ def validate(body: ValidateIn, request: Request) -> dict[str, Any]:
         # Only prepare's own problems become a 200; anything else a Policy
         # raised, even a 422, keeps its status and detail.
         if exc.status_code == 422 and isinstance(exc.detail, dict) and "problems" in exc.detail:
-            return {"ok": False, "problems": exc.detail["problems"]}
+            return {"ok": False, "problems": exc.detail["problems"], "details": exc.detail.get("details", [])}
         raise
     config = public(p)
-    return {"ok": True, "problems": [], "config": config, "yaml": as_yaml(config)}
+    return {"ok": True, "problems": [], "details": [], "config": config, "yaml": as_yaml(config)}

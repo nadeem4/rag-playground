@@ -33,8 +33,22 @@ def as_yaml(config: dict[str, Any]) -> str:
 
 
 def problems(*sentences: str) -> HTTPException:
-    """A 422 whose detail lists what is wrong, one sentence each."""
-    return HTTPException(status_code=422, detail={"problems": list(sentences)})
+    """A 422 whose detail lists what is wrong, one sentence each, and in
+    `details` each one again as `{"message", "step", "use", "settings"}`,
+    here about no one step."""
+    details = [{"message": s, "step": None, "use": None, "settings": []} for s in sentences]
+    return HTTPException(status_code=422, detail={"problems": list(sentences), "details": details})
+
+
+def refused(exc: ConfigError, policy: Any) -> HTTPException:
+    """The 422 for a pipeline Pandion refused: its sentence in `problems`, and
+    in `details` where it belongs (`ConfigError.to_dict`): the step's place in
+    the pipeline file (not the run event's step name), its strategy, and each refused setting with its own
+    sentence. Every sentence goes through the policy's scrub."""
+    detail = exc.to_dict()
+    detail["message"] = policy.scrub(detail["message"])
+    detail["settings"] = [{**s, "message": policy.scrub(s["message"])} for s in detail["settings"]]
+    return HTTPException(status_code=422, detail={"problems": [detail["message"]], "details": [detail]})
 
 
 def prepare(config: Any, request: Request) -> Pipeline:
@@ -57,7 +71,7 @@ def prepare(config: Any, request: Request) -> Pipeline:
     try:
         p = Pipeline.from_dict(data, base=settings.data_dir)
     except ConfigError as exc:
-        raise problems(policy.scrub(str(exc))) from None
+        raise refused(exc, policy) from None
     policy.check_run(p.to_dict(), request)
     return p
 

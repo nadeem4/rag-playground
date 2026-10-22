@@ -1,9 +1,9 @@
 import { ApiError } from "@/api/client"
 import type { NodeState } from "@/api/runState"
-import type { V2AskRequest, V2RunRequest } from "@/api/types"
+import type { ProblemDetail, V2AskRequest, V2RunRequest } from "@/api/types"
 import { errorsFromPydantic, type FieldErrors, type PydanticError } from "@/components/fields/schema"
 
-import { cardNamedIn, stepOfCardIn, type WorkingPipeline } from "./config"
+import { cardOfProblem, stepOfCardIn, type WorkingPipeline } from "./config"
 import type { PipelineGraph } from "./graph"
 
 /**
@@ -66,18 +66,14 @@ function sentenceOf(e: PydanticError): string {
 }
 
 /**
- * The settings a Pandion problem sentence is about, as `pandion.stages` words it:
- * "index.chunk (sentence_window): overlap_sentences: Overlap must be ...", with
- * several settings joined by "; ". Each comes back with its own sentence. Null
- * for a sentence about anything else, or about the whole step ("settings: ..."),
- * which no one setting owns.
+ * The problems of a 422 as Pandion placed them (`detail.details`), or null for
+ * a refusal that carries none: an older server, or a site rule's own words.
  */
-export function settingProblems(sentence: string): { transform: string; settings: { field: string; message: string }[] } | null {
-  const m = /^[\w.]+(?: step \d+)? \(([\w-]+)\): (.+?)\.?$/.exec(sentence)
-  if (!m) return null
-  const settings = m[2].split("; ").map((part) => /^([\w.]+): (.+?)\.?$/.exec(part))
-  if (settings.some((x) => !x || x[1] === "settings")) return null
-  return { transform: m[1], settings: settings.map((x) => ({ field: x![1], message: `${x![2]}.` })) }
+export function problemDetails(detail: unknown): ProblemDetail[] | null {
+  const details = (detail as { details?: unknown } | null)?.details
+  const isDetail = (d: unknown): d is ProblemDetail =>
+    typeof (d as ProblemDetail | null)?.message === "string" && Array.isArray((d as ProblemDetail).settings)
+  return Array.isArray(details) && details.length > 0 && details.every(isDetail) ? details : null
 }
 
 /** A refusal's detail as sentences: FastAPI's own list, a string, or null for any other shape. */
@@ -101,8 +97,8 @@ export function routeRunError(err: unknown, graph: PipelineGraph): RoutedError {
   if (err instanceof ApiError) {
     if (isProblems(err.detail)) {
       const message = err.detail.problems.join(" ")
-      // On one card only when every problem names that card and the column has it.
-      const cards = new Set(err.detail.problems.map((problem) => cardNamedIn(problem, graph)))
+      // On one card only when Pandion placed every problem on that card and the column has it.
+      const cards = new Set((problemDetails(err.detail) ?? [{ step: null }]).map((problem) => cardOfProblem(problem, graph)))
       const [card] = cards
       return cards.size === 1 && card && graph.nodes.some((n) => n.id === card) ? { kind: "node", nodeId: card, message } : { kind: "column", message }
     }

@@ -63,7 +63,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /health` | `{"status": "ok", "pandion": <version>, "pandion_api": <version>}` |
 | `GET /strategies` | `{"stages": ..., "defaults": ...}`: every strategy by stage with its settings as a JSON schema (`pandion.catalog()`, as the Policy shows it), and the strategy a new pipeline starts with per part (`pandion.defaults()`) |
 | `POST /explain` | `{"stage", "use", "settings"}` gives what that strategy will do with those settings, in plain words (`pandion.explain`). Nothing runs. |
-| `POST /pipelines/validate` | `{"config": <pipeline>}` gives `{"ok": true, "problems": [], "config": <the pipeline in the file's shape>, "yaml": <text>}` or `{"ok": false, "problems": [<sentence>]}`, where `yaml` is the pipeline as a file Pandion reads, with `path: ./pandion-index`. The file holds the pipeline as it ran; a site rule may refuse changed prompts before any file is made |
+| `POST /pipelines/validate` | `{"config": <pipeline>}` gives `{"ok": true, "problems": [], "details": [], "config": <the pipeline in the file's shape>, "yaml": <text>}` or `{"ok": false, "problems": [<sentence>], "details": [...]}` (see [Errors](#errors)), where `yaml` is the pipeline as a file Pandion reads, with `path: ./pandion-index`. The file holds the pipeline as it ran; a site rule may refuse changed prompts before any file is made |
 | `GET /documents` | the documents this caller may read, by name: `sha`, `filename`, `size`, `content_type`, `origin_url` for a URL document, plus what the Policy's `describe` adds. Never cached. |
 | `POST /documents` | multipart `file`: keeps it by its fingerprint and returns its record. The same bytes twice are one document. A file whose extension no parser here reads (such as `.xlsx`) is a 415 before anything is kept; the formats are the ones the parsers declare (`provides["formats"]`): PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG. |
 | `POST /documents/url` | `{"url"}` (at most 2,000 characters): fetches the page once (`pandion.extend.fetch_url`), then keeps it exactly like an upload and returns the same record plus `origin_url`. See [URL documents](#url-documents). |
@@ -431,9 +431,15 @@ variant stops after the card it shows. These are still open:
 
 ## Errors
 
-- A pipeline Pandion refuses is a 422 whose detail is `{"problems": [<sentence>]}`, the
-  `ConfigError`'s one-line message. `POST /pipelines/validate` gives the same problems in
-  a 200. A pipeline that is not a mapping, lists `plugins` or has a `models` that is not a
+- A pipeline Pandion refuses is a 422 whose detail is `{"problems": [<sentence>],
+  "details": [{"message", "step", "use", "settings"}]}`: the `ConfigError`'s one-line
+  message, and the same problem placed (`ConfigError.to_dict()`), so a client shows it on
+  the step and under the setting it belongs to without reading the sentence. `step` is the
+  step's place in the pipeline file, such as `index.clean.2` or `retrieve.rerank`, or null.
+  Run events name steps by role instead (`clean.2`, `rerank.1`, and `index` for embed and
+  store), so the two are not the same text; `settings` lists
+  each refused setting with its own sentence. `POST /pipelines/validate` gives the same
+  problems and details in a 200. A pipeline that is not a mapping, lists `plugins` or has a `models` that is not a
   mapping is refused the same way, before Pandion reads it.
 - A site rule's refusal is the status and sentence the Policy raised, usually 403.
 - A refused URL document is a 400, 403, 413, 415, 502 or 504 with the fetch guard's own

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 
 import type { FieldErrors } from "@/components/fields/schema"
-import { detailSentences, settingProblems } from "@/state/pipeline"
+import { detailSentences, problemDetails } from "@/state/pipeline"
 
 import { api, ApiError } from "./client"
 import type { Explanation, GraphNode, StageInfo } from "./types"
@@ -87,10 +87,11 @@ export function refusal(err: unknown, node: GraphNode): ExplainState | null {
     const said = detailSentences(err.detail)
     return { data: refused(said ? `This server refused these settings. ${said}` : "This server refused these settings.") }
   }
-  const parsed = problems.map(settingProblems)
-  if (parsed.every((p) => p !== null && p.transform === node.transform)) {
+  // Under each setting when Pandion placed every problem on a setting of this strategy.
+  const placed = problemDetails(err.detail)
+  if (placed?.every((p) => p.use === node.transform && p.settings.length > 0)) {
     const fields: FieldErrors = {}
-    for (const p of parsed) for (const { field, message } of p!.settings) (fields[field] ??= []).push(message)
+    for (const p of placed) for (const { field, message } of p.settings) (fields[field] ??= []).push(message)
     const one = Object.keys(fields).length === 1
     return { data: refused(one ? "Fix the setting marked below." : "Fix the settings marked below."), fields }
   }

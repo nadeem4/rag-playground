@@ -48,7 +48,8 @@ function samePipeline(a: WorkingPipeline, b: WorkingPipeline): boolean {
  * Take it home, next to Copy as YAML, opens a sheet that downloads the
  * pipeline as a ready-to-run project zip (`TakeHome`).
  *
- * Start from a template opens the template picker. Using a template replaces
+ * Start from a template opens the template picker, and so does opening Build
+ * at /build?templates=1 (the query is then dropped). Using a template replaces
  * the pipeline with an unsaved one and shows a status line whose Undo puts
  * back the pipeline, and the picker's selection, exactly as they were. Any
  * later change to the pipeline removes the line, so Undo never drops an edit.
@@ -84,7 +85,15 @@ export function PipelineBar({
   const [nameError, setNameError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [linkText, setLinkText] = useState<string | null>(null)
-  const [choosing, setChoosing] = useState(false)
+  // /build?templates=1 (Home's "Start from a template") opens the picker once.
+  const [choosing, setChoosing] = useState(() => new URLSearchParams(window.location.search).get("templates") === "1")
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has("templates")) return
+    params.delete("templates")
+    const rest = params.toString()
+    window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
+  }, [])
   const [applied, setApplied] = useState<{ line: string; graph: PipelineGraph; id: string | null; used: WorkingPipeline | null } | null>(null)
   const working = graphToConfig(graph)
 

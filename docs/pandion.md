@@ -726,7 +726,7 @@ sits near a sentence of the source, not that the source supports it.
 With several documents in the index, `chat` finds its citations in the first document by
 name, the same rule as for a rewrite. A citation from another document is kept: its
 `source_sha` names its own piece's document, its quote is checked against that piece's
-text, and its page is the piece's first page. Its offsets are in its own document's text.
+text, and its page is the piece's page when the piece is on one page (none when it spans several). Its offsets are in its own document's text.
 
 ## Evaluate a pipeline
 

@@ -274,7 +274,7 @@ Found 2026-10-21 in review of the several-documents Ask (PR #185); fixed the sam
 
 **Why it was broken.** The chat step reads one parsed document, the first by name, to place and check its citations. Each citation took its `source_sha` from that document, not from the piece it cited. The offsets and page of a piece from the other document were also looked up in the first document's text, where they mean nothing.
 
-**What fixed it.** A citation now takes `source_sha` from its own piece's `doc_id` (`_citation` in `packages/pandion/src/pandion/plugins/answer/chat.py`). When that document is not the one the step reads, the quote is checked against the piece's own text, the offsets stay in its own document, and the page is the piece's first page, so a correct citation is verified and opens its own file.
+**What fixed it.** A citation now takes `source_sha` from its own piece's `doc_id` (`_citation` in `packages/pandion/src/pandion/plugins/answer/chat.py`). When that document is not the one the step reads, the quote is checked against the piece's own text, the offsets stay in its own document, and the page is the piece's page when it is on one page (none when it spans several), so a correct citation is verified and opens its own file.
 
 **Why the fix worked.** Every piece already records which document it was cut from, so the citation can name it without reading that document. The piece carries its own text, offsets and pages, so a citation can be checked and placed without reading its document; looking it up in another document's text would open the wrong place.
 

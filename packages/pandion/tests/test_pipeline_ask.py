@@ -243,3 +243,21 @@ def test_a_citation_names_the_document_its_piece_came_from(tmp_path, monkeypatch
         assert c["verified"] and c["cited_text"] in piece.text
         assert c["page"] == piece.page_span[0] == 1
         assert c["doc_start"] == piece.start_char + piece.text.index(c["cited_text"])
+
+
+@pytest.mark.parametrize(("span", "page"), [((2, 2), 2), ((2, 3), None), (None, None)])
+def test_another_documents_citation_takes_a_page_only_when_its_piece_is_on_one(span, page):
+    """A quote further into a piece over two pages may sit on either, so no page is guessed."""
+    from types import SimpleNamespace
+
+    from pandion.plugins.answer.chat import _citation
+
+    piece = SimpleNamespace(id="c1", doc_id="b" * 64, text="Paris is the capital.", start_char=100, page_span=span)
+    quote = SimpleNamespace(cited_text="Paris", start_char_index=0, end_char_index=5)
+    first = SimpleNamespace(source_id="a" * 64)
+
+    entry = _citation(1, quote, piece, first, "", {}, {})
+
+    assert entry["source_sha"] == "b" * 64 and entry["verified"]
+    assert (entry["doc_start"], entry["doc_end"]) == (100, 105)
+    assert entry["page"] == page

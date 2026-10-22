@@ -705,10 +705,12 @@ def _citation(n, c, chunk, doc, doc_md, spans, elements) -> dict[str, Any]:
     end = chunk.start_char + c.end_char_index
     if own != doc.source_id:
         # Another document's piece: its text and offsets are its own document's,
-        # so the quote is checked against the piece and the page is the piece's first.
+        # so the quote is checked against the piece. Its page is the piece's only
+        # when the piece is on one page; across pages the quote could be on any.
         entry["doc_start"], entry["doc_end"] = start, end
         entry["verified"] = chunk.text[c.start_char_index : c.end_char_index] == c.cited_text
-        entry["page"] = chunk.page_span[0] if chunk.page_span else None
+        span = chunk.page_span
+        entry["page"] = span[0] if span and span[0] == span[1] else None
         return entry
     entry["doc_start"], entry["doc_end"] = start, end
     entry["verified"] = doc_md[start:end] == c.cited_text

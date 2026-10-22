@@ -125,7 +125,9 @@ export function documentCounts(
 /** The set in one line: `24 questions from golden-set.csv, covering all 3 documents`. */
 export function acrossLine(count: number, filenames: readonly string[], named: number, documents: number): string {
   const n = `${count} ${count === 1 ? "question" : "questions"}`
-  const joined = filenames.length === 1 ? readJoinedName(filenames[0]) : null
+  // A joined name is believed only when its count fits the set: a file of the user's own can look like one, and removing a document drops questions.
+  const read = filenames.length === 1 ? readJoinedName(filenames[0]) : null
+  const joined = read && (read.source ? read.written > 0 && read.written < count : read.written === count) ? read : null
   const from = joined
     ? joined.source
       ? `: ${count - joined.written} from ${joined.source} and ${joined.written} written by ${joined.writer}`

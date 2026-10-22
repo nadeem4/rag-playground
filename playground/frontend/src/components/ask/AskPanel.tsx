@@ -79,6 +79,8 @@ export interface AskPanelProps {
   /** Search in, with several documents: the one document Ask searches, by sha, or null for all of them. */
   searchIn?: string | null
   onSearchIn?: (sha: string | null) => void
+  /** Where the results on show were searched: a document's sha, null for all of them, undefined when not known. */
+  askedIn?: string | null
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -231,6 +233,7 @@ export function AskPanel(p: AskPanelProps) {
             reranker: snap.reranker,
             rows: rows.map((r) => ({ rank: r.rank, text: r.text })),
             found: null,
+            ...(snap.searchIn ? { searchIn: snap.searchIn } : {}),
           }
         : null)
     if (!entry || entry.found !== null) return
@@ -262,6 +265,12 @@ export function AskPanel(p: AskPanelProps) {
   const searched = fileOf(outputs.files, p.searchIn)
   const searchedChunks = useArtifactPayload(searched?.chunksId).data as ChunkSet | undefined
   const searchedPieces = Array.isArray(searchedChunks?.chunks) ? `, ${plural(searchedChunks.chunks.length, "piece", "pieces")}` : ""
+  // Search in moved after the results were searched: they no longer answer what the header says, so they go, as after a settings change.
+  const scopeMoved = several > 1 && !p.busy && p.askedIn !== undefined && (p.askedIn ?? null) !== (searched?.sha ?? null)
+  const movedLine = scopeMoved
+    ? `You changed where to search. Ask again to search ${searched ? `${searched.filename} only` : `all ${several} documents`}.`
+    : undefined
+  const outOfDate = askStale || movedLine !== undefined
   const ready = [
     several > 1 ? plural(several, "document", "documents") : filename,
     // A document without pages (Word, a web page) says nothing of them.
@@ -318,7 +327,7 @@ export function AskPanel(p: AskPanelProps) {
                 disabled={askDisabled}
                 title={askDisabled ? undefined : ASK_TITLE}
                 // A setting changed since the answer: a soft ring says Ask is the next step.
-                className={cn(askStale && !askDisabled && "ring-[3px] ring-accent-wash")}
+                className={cn(outOfDate && !askDisabled && "ring-[3px] ring-accent-wash")}
                 onClick={ask}
               >
                 {p.asking ? "Asking" : "Ask"}
@@ -327,7 +336,7 @@ export function AskPanel(p: AskPanelProps) {
           />
         ) : null}
         {p.needsDocument ? <p className="text-xs text-fg-muted">Needs a document.</p> : null}
-        {askStale ? null : <SearchedFor outputs={outputs} />}
+        {outOfDate ? null : <SearchedFor outputs={outputs} />}
         {queryErrors?.message ? <p className="text-xs break-words text-danger">{queryErrors.message}</p> : null}
         {indexId && blocker ? <p className="text-xs text-danger">Fix the {titleFor(blocker)} settings to ask.</p> : null}
         {p.runError ? (
@@ -350,6 +359,7 @@ export function AskPanel(p: AskPanelProps) {
             outputs={outputs}
             comparisonHidden={p.comparisonHidden}
             stale={askStale}
+            moved={movedLine}
             questions={questions}
             onComparison={p.onComparison}
             invite={

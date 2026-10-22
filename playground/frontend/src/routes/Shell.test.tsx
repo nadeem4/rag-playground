@@ -1724,6 +1724,21 @@ describe("the Ask panel results on Build", () => {
     expect(panel().getByText("Working copy, no rerank: 5 pieces")).toBeTruthy()
   })
 
+  it("results searched over every document go out of date when Search in moves to one, and come back when it moves back", async () => {
+    const NOTES = { sha: "cd".repeat(32), filename: "notes.md" }
+    storeGraph(withDocuments(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), [{ sha: SOURCE.sha, filename: SOURCE.filename }, NOTES]))
+    await buildAndAsk()
+    const searchIn = () => within(panel().getByRole("group", { name: "Search in" }))
+    fireEvent.click(searchIn().getByRole("button", { name: "notes.md" }))
+    expect(panel().getByTestId("stale-results").textContent).toBe("You changed where to search. Ask again to search notes.md only.")
+    expect(panel().queryByText("Hybrid search returned 6 candidates. These are the top 5, in search order.")).toBeNull()
+    fireEvent.click(searchIn().getByRole("button", { name: "All 2 documents" }))
+    expect(await waitFor(() => panel().getByText("Hybrid search returned 6 candidates. These are the top 5, in search order."))).toBeTruthy()
+    expect(panel().queryByTestId("stale-results")).toBeNull()
+    // The transcript says the earlier question searched every document: no file named.
+    expect(panel().getByText("Working copy, no rerank: 5 pieces")).toBeTruthy()
+  })
+
   it("a hidden comparison stays hidden across closing and opening Ask", async () => {
     storeGraph(setReranker(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), liveRegistry as never, "cross_encoder"))
     render(<Shell />)

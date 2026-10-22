@@ -199,3 +199,40 @@ describe("a model answer over several documents", () => {
     expect(screen.queryByTestId("answer-sources")).toBeNull()
   })
 })
+
+describe("Search in moved after the results", () => {
+  const shown = () => document.querySelectorAll("[data-hit-row]").length
+
+  it("marks results searched over all documents out of date once one file is chosen", async () => {
+    render(<AskPanel {...props(both(), { ...perDocument(both(), true), ...SEARCHED })} searchIn={GUIDE.sha} askedIn={null} />)
+    const note = await screen.findByTestId("stale-results")
+    expect(note.textContent).toBe("You changed where to search. Ask again to search field-guide.docx only.")
+    expect(shown()).toBe(0)
+    expect(screen.getByRole("button", { name: "Ask" }).className.split(/\s+/)).toContain("ring-accent-wash")
+  })
+
+  it("marks results from one file out of date once all documents are chosen again", async () => {
+    render(<AskPanel {...props(both(), { ...perDocument(both(), true), ...SEARCHED })} searchIn={null} askedIn={GUIDE.sha} />)
+    expect((await screen.findByTestId("stale-results")).textContent).toBe("You changed where to search. Ask again to search all 2 documents.")
+  })
+
+  it("keeps results searched where Search in still points", async () => {
+    render(<AskPanel {...props(both(), { ...perDocument(both(), true), ...SEARCHED })} searchIn={GUIDE.sha} askedIn={GUIDE.sha} />)
+    await waitFor(() => expect(shown()).toBe(5))
+    expect(screen.queryByTestId("stale-results")).toBeNull()
+  })
+
+  it("logs which file an earlier question searched, and the transcript says so", async () => {
+    const onLog = vi.fn()
+    const asked = { runId: "r1", question: "q", pipeline: "Working copy", reranker: "no rerank", signature: "", searchIn: GUIDE.filename }
+    const p = props(both("q"), { ...perDocument(both(), true), ...SEARCHED })
+    const { rerender } = render(<AskPanel {...p} onLog={onLog} asked={{ ...asked, signature: "x" }} />)
+    // The snapshot's signature must match the settings for the run to be logged: take it from the panel's own graph.
+    const { askSignature } = await import("./Transcript")
+    rerender(<AskPanel {...p} onLog={onLog} asked={{ ...asked, signature: askSignature(p.graph, p.registry) }} />)
+    await waitFor(() => expect(onLog).toHaveBeenCalledWith(expect.objectContaining({ runId: "r1", searchIn: GUIDE.filename })))
+    cleanup()
+    render(<AskPanel {...p} transcript={[{ runId: "r1", question: "q", pipeline: "Working copy", reranker: "no rerank", rows: [{ rank: 1, text: "t" }], found: null, searchIn: GUIDE.filename }]} />)
+    expect(screen.getByTestId("transcript-line").textContent).toBe("Working copy, no rerank, in field-guide.docx only: 1 piece")
+  })
+})

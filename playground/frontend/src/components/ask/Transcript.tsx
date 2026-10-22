@@ -24,6 +24,8 @@ export interface TranscriptEntry {
   rows: { rank: number; text: string }[]
   /** The rank of the first piece holding the gold, when the question is the sample's. */
   found: number | null
+  /** The one file Search in searched, by its filename; absent when the run searched every document. */
+  searchIn?: string
 }
 
 /**
@@ -37,6 +39,10 @@ export interface AskSnapshot {
   reranker: string
   /** The question's path through the graph (`askSignature`) when Ask was pressed. */
   signature: string
+  /** The one file Search in searched, by its filename; absent for every document. */
+  searchIn?: string
+  /** The same file by its sha, null for every document: whether Search in has moved since. */
+  searchSha?: string | null
 }
 
 /** The use case's signature: its settings and those of every step above it, the question included. */
@@ -46,13 +52,14 @@ export function askSignature(graph: PipelineGraph, registry: Registry): string {
 }
 
 /** The snapshot of the graph as Ask is pressed, without the run id the server will give. */
-export function askSnapshot(graph: PipelineGraph, registry: Registry, pipeline: string): Omit<AskSnapshot, "runId"> {
+export function askSnapshot(graph: PipelineGraph, registry: Registry, pipeline: string, searchIn?: string | null): Omit<AskSnapshot, "runId"> {
   const { query, rerank } = askNodes(graph)
   return {
     question: String(query?.config.text ?? ""),
     pipeline,
     reranker: rerank ? rerankLabel(rerank.transform) : "no rerank",
     signature: askSignature(graph, registry),
+    ...(searchIn ? { searchIn } : {}),
   }
 }
 
@@ -108,8 +115,8 @@ export async function findGold(
   return found ? { rank: rows[found.index].rank, gold: found.gold } : null
 }
 
-export function transcriptLine(pipeline: string, reranker: string, found: number | null, pieces: number): string {
-  return `${pipeline}, ${reranker}: ${found === null ? `${pieces} ${pieces === 1 ? "piece" : "pieces"}` : `found at #${found}`}`
+export function transcriptLine(pipeline: string, reranker: string, found: number | null, pieces: number, searchIn?: string): string {
+  return `${pipeline}, ${reranker}${searchIn ? `, in ${searchIn} only` : ""}: ${found === null ? `${pieces} ${pieces === 1 ? "piece" : "pieces"}` : `found at #${found}`}`
 }
 
 export function Transcript({ entries, onAskAgain }: { entries: TranscriptEntry[]; onAskAgain: (question: string) => void }) {
@@ -123,7 +130,7 @@ export function Transcript({ entries, onAskAgain }: { entries: TranscriptEntry[]
             <div className="flex min-w-0 flex-col gap-1">
               <p className="text-sm text-fg">{e.question}</p>
               <p data-testid="transcript-line" className="text-xs text-fg-muted">
-                {transcriptLine(e.pipeline, e.reranker, e.found, e.rows.length)
+                {transcriptLine(e.pipeline, e.reranker, e.found, e.rows.length, e.searchIn)
                   .split(/(#\d+)/)
                   .map((part, i) => (i % 2 === 1 ? <span key={i} className="font-mono">{part}</span> : part))}
               </p>

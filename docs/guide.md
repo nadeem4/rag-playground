@@ -344,7 +344,10 @@ the question box.
 - With two or more documents, **Search in** above the question chooses what Ask searches:
   **All N documents**, or one file. One file sends `where: {document: [sha]}` with the
   question, the header reads "Searching report.pdf only, 31 pieces" and the question box
-  invites a question about that file. Each piece then names its file on its meta line, a
+  invites a question about that file. Changing Search in after a question has run puts the
+  results away with "You changed where to search. Ask again to search report.pdf only.",
+  since they no longer match it, and the earlier questions list says which file each one
+  searched ("Working copy, no rerank, in report.pdf only: 5 pieces"). Each piece then names its file on its meta line, a
   coloured dot beside the filename; each document keeps its colour by its place in the
   pipeline's list, and the name is always there, so colour is never the only cue. The
   sentence above the pieces names the file too ("Found in the 2nd piece, from

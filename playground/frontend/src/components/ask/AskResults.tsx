@@ -195,6 +195,8 @@ export interface AskResultsProps {
   questions?: readonly SampleQuestion[]
   /** A line shown right under a fresh answer's headline, inviting the reader to change a setting and ask again. */
   invite?: ReactNode
+  /** Set when Search in moved past the results: this sentence stands in for them until the next Ask. */
+  moved?: string
 }
 
 export const STALE_LINE = "Settings changed. Ask again to see what changed."
@@ -220,7 +222,7 @@ export function resetMotionMemory(): void {
   slopesDrawn.clear()
 }
 
-export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [], invite }: AskResultsProps) {
+export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [], invite, moved }: AskResultsProps) {
   const { query, retrieve, rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
   // The reranker's run note is the sub line; its meta is fetched once and What it did reads the same cache.
@@ -287,6 +289,15 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
     }
   }
   if (!o.failed && !chat && !lists && !stale) return null
+  if (moved) {
+    return (
+      <section aria-label="Results" className="flex flex-col gap-3 border-t border-hairline pt-3">
+        <p data-testid="stale-results" className="rounded-control bg-stale-wash px-2 py-1 text-xs text-stale">
+          {moved}
+        </p>
+      </section>
+    )
+  }
   return (
     <section aria-label="Results" className="flex flex-col gap-3 border-t border-hairline pt-3">
       {stale ? (

@@ -710,9 +710,10 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             onSweep={(id) => void openSweep(id)}
             searchIn={searchIn}
             onSearchIn={setSearchSha}
+            askedIn={asked ? (asked.searchSha ?? null) : undefined}
             onAsk={() => {
               setComparisonHidden(null)
-              const snap = askSnapshot(graph, registry, pipelineName)
+              const snap = { ...askSnapshot(graph, registry, pipelineName, pipelineDocs.find((d) => d.sha === searchIn)?.filename), searchSha: searchIn }
               void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
             }}
           />

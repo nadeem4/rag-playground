@@ -8,6 +8,7 @@ import type { PipelineConfig } from "@/state/config"
 
 import { jsonInit, keyHeaders, requestFrom, type KeyOpts } from "./client"
 import type {
+  Against,
   CancelResponse,
   ComparisonRequest,
   EvaluationRequest,
@@ -22,6 +23,7 @@ import type {
   ResultInfo,
   RunCreated,
   RunSnapshot,
+  ScoredRun,
   Source,
   StoredQuestionSet,
   Strategies,
@@ -71,6 +73,8 @@ export const v2 = {
 
   createRun: (body: V2RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", jsonInit(body, keyHeaders(opts.keys))),
   ask: (body: V2AskRequest, opts: KeyOpts = {}) => request<RunCreated>("/ask", jsonInit(body, keyHeaders(opts.keys))),
+  /** A run compared with a baseline by Pandion: lost and won questions by id, its notes, and which is better. Nothing runs. */
+  against: (report: ScoredRun, baseline: ScoredRun) => request<Against>("/evaluations/against", jsonInit({ report, baseline })),
   createEvaluation: (body: EvaluationRequest, opts: KeyOpts = {}) =>
     request<RunCreated>("/evaluations", jsonInit(body, keyHeaders(opts.keys))),
   createComparison: (body: ComparisonRequest, opts: KeyOpts = {}) =>

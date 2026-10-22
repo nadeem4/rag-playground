@@ -137,6 +137,9 @@ async function resync(c: Connection, dispatch: (a: RunAction) => void) {
 export function useRun(runId: string | null, cardOf?: CardOf): UseRun {
   const [state, dispatch] = useReducer(runReducer, initialRunState)
   const conn = useRef<Connection | null>(null)
+  // The run the state belongs to. The reset for a new run happens in the effect below, so on
+  // the render where `runId` changes the state is still the last run's; it is not handed out.
+  const owner = useRef<string | null>(runId)
   const cardOfNow = useRef(cardOf)
   cardOfNow.current = cardOf
 
@@ -153,6 +156,7 @@ export function useRun(runId: string | null, cardOf?: CardOf): UseRun {
       current.closeTimer = undefined
     } else {
       if (current) shutdown(current)
+      owner.current = runId
       dispatch({ type: "reset" })
       const c: Connection = { runId, es: null, dead: false, attempts: 0, lastSeq: -1, cardOf: cardOfNow.current }
       conn.current = c
@@ -169,6 +173,7 @@ export function useRun(runId: string | null, cardOf?: CardOf): UseRun {
     }
   }, [runId])
 
+  if (runId !== null && owner.current !== runId) return { ...initialRunState, nodes: NO_NODES }
   const latest = state.variants[state.variants.length - 1]
   return { ...state, nodes: latest?.nodes ?? NO_NODES }
 }

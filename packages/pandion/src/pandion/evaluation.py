@@ -67,6 +67,7 @@ __all__ = [
     "load_questions",
     "paragraph_spans",
     "parse_question_set",
+    "regression",
     "trace",
     "write_questions",
 ]
@@ -248,7 +249,7 @@ class EvaluationReport:
         """This run compared with `baseline`: an earlier report, its `to_dict()`,
         or the path of a file `pandion eval --json` wrote. Questions are paired
         by id, or by their text when the set gave them no id. See `Regression`."""
-        return _regression(self.to_dict(), load_baseline(baseline))
+        return regression(self, baseline)
 
 
 @dataclass
@@ -302,25 +303,41 @@ def load_baseline(baseline: EvaluationReport | dict[str, Any] | str | Path) -> d
     """A baseline for `against` as a report's dict: from a report, a dict, or
     a file `pandion eval --json` wrote. A missing or wrong file is a
     ValueError with a plain sentence."""
-    if isinstance(baseline, EvaluationReport):
-        return baseline.to_dict()
-    name = "The baseline"
-    if isinstance(baseline, (str, Path)):
-        name = str(baseline)
+    return _report(baseline, "The baseline")
+
+
+def _report(report: EvaluationReport | dict[str, Any] | str | Path, name: str) -> dict[str, Any]:
+    """`load_report` for a report `name` names in its refusal."""
+    if isinstance(report, EvaluationReport):
+        return report.to_dict()
+    if isinstance(report, (str, Path)):
+        name = str(report)
         try:
-            baseline = json.loads(Path(baseline).read_text(encoding="utf-8"))
+            report = json.loads(Path(report).read_text(encoding="utf-8"))
         except FileNotFoundError:
             raise ValueError(
                 f"There is no baseline file at {name}. Save one with pandion eval ... --json > {name}."
             ) from None
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ValueError(f"{name} cannot be read as JSON: {exc}") from None
-    if not isinstance(baseline, dict) or not isinstance(baseline.get("questions"), list):
+    if not isinstance(report, dict) or not isinstance(report.get("questions"), list):
         raise ValueError(
             f"{name} is not an evaluation report. Save one with pandion eval ... --json, "
             "or pass a report or its to_dict()."
         )
-    return baseline
+    return report
+
+
+def regression(
+    now: EvaluationReport | dict[str, Any], baseline: EvaluationReport | dict[str, Any] | str | Path
+) -> Regression:
+    """`now` compared with `baseline`, as `EvaluationReport.against` compares
+    them: each a report or its `to_dict()`, and the baseline also the path of
+    a file `pandion eval --json` wrote. A dict needs only what the comparison
+    reads: `top_k`, and each question's `id`, `question`, `found` and `error`,
+    with the set's `questions_fingerprint` or every question's `golds`. A
+    report that is not one is a ValueError with a plain sentence."""
+    return _regression(_report(now, "The run to compare"), load_baseline(baseline))
 
 
 def _key(q: dict[str, Any]) -> tuple[str, str]:
@@ -356,18 +373,18 @@ def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
             f"{'is' if errored == 1 else 'are'} left out."
         )
     fingerprint = before.get("questions_fingerprint") or _fingerprint(before["questions"])
-    partial = fingerprint != now["questions_fingerprint"]
+    partial = fingerprint != (now.get("questions_fingerprint") or _fingerprint(now["questions"]))
     if partial:
         notes.append(
             f"The question sets differ, so only the {len(pairs)} questions both runs share are compared."
         )
-    if before.get("top_k") != now["top_k"]:
+    if before.get("top_k") != now.get("top_k"):
         partial = True
         notes.append(
             f"The baseline checked the top {before.get('top_k')} pieces and this run the top "
-            f"{now['top_k']}, so the counts are not like for like."
+            f"{now.get('top_k')}, so the counts are not like for like."
         )
-    if before.get("document_shas") and before["document_shas"] != now["document_shas"]:
+    if before.get("document_shas") and before["document_shas"] != now.get("document_shas"):
         notes.append("The documents differ from the baseline's.")
     shaky = sorted({*now.get("nondeterministic", []), *before.get("nondeterministic", [])})
     if shaky:
@@ -387,18 +404,19 @@ def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
     )
 
 
-def best(reports: list[EvaluationReport]) -> list[int]:
+def best(reports: list[EvaluationReport] | list[dict[str, Any]]) -> list[int]:
     """The places of the best reports, every one tied for first: the highest
     hit rate (found out of scored), then the highest mean reciprocal rank.
-    Empty when no report was scored or none found an answer. `compare` names
-    its best variant by this rule."""
-    scored = [n for n, r in enumerate(reports) if r.totals()["scored"]]
-    if not any(reports[n].found for n in scored):
+    Each is a report or its `to_dict()` (only its totals are read). Empty
+    when no report was scored or none found an answer. `compare` names its
+    best variant by this rule."""
+    totals = [r.totals() if isinstance(r, EvaluationReport) else r for r in reports]
+    scored = [n for n, t in enumerate(totals) if t.get("scored")]
+    if not any(totals[n].get("found") for n in scored):
         return []
 
     def key(n: int) -> tuple[float, float]:
-        t = reports[n].totals()
-        return (t["hit_rate"], t["mrr"])
+        return (totals[n].get("hit_rate") or 0.0, totals[n].get("mrr") or 0.0)
 
     top = key(max(scored, key=key))
     return [n for n in scored if key(n) == top]

@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from fastapi import HTTPException
 
 from apihelpers import PIPELINE, finish, make_client, upload
@@ -414,3 +415,67 @@ def test_the_policy_refuses_a_comparison_by_its_variants_times_its_questions(tmp
         assert r.status_code == 413 and r.json()["detail"] == "At most so many, not 4."
         finish(c, c.post("/comparisons", json={**body, "variants": VARIANTS[:1], "questions": QUESTIONS * 2}))
     assert policy.asked == [("comparison", 4), ("comparison", 2)]
+
+
+def _run(*found: bool, top_k: int = 5, **kw):
+    questions = [{"id": f"q{n}", "question": f"Question {n}?", "found": f, "golds": [f"Gold {n}."]} for n, f in enumerate(found)]
+    n = sum(found)
+    return {"top_k": top_k, "questions": questions, "scored": len(found), "found": n, "hit_rate": n / len(found), "mrr": n / len(found), **kw}
+
+
+def test_against_compares_a_run_with_its_baseline_as_the_package_does(client):
+    r = client.post("/evaluations/against", json={"report": _run(True, False, True), "baseline": _run(True, True, False)})
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["found_before"], body["found_now"], body["compared"]) == (2, 2, 3)
+    assert body["newly_missed"] == ["q1"] and body["newly_found"] == ["q2"]
+    assert body["partial"] is False and body["ok"] is False
+    assert body["best"] == [0, 1]
+
+
+def test_against_names_the_better_run_and_says_what_was_not_like_for_like(client):
+    body = client.post(
+        "/evaluations/against",
+        json={"report": _run(True, True, top_k=3, nondeterministic=["llm_rerank"]), "baseline": _run(True, False)},
+    ).json()
+    assert body["best"] == [1]
+    assert body["partial"] is True
+    assert any("top 5" in n and "top 3" in n for n in body["notes"])
+    assert any("llm_rerank" in n for n in body["notes"])
+
+
+def test_against_refuses_what_is_not_a_report(client):
+    assert client.post("/evaluations/against", json={"report": {"top_k": 5}, "baseline": _run(True)}).status_code == 422
+    too_many = _run(*([True] * 501))
+    assert client.post("/evaluations/against", json={"report": too_many, "baseline": _run(True)}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda q: q.update(question="x" * 2001),
+        lambda q: q.update(id="x" * 501),
+        lambda q: q.update(error="x" * 10_001),
+        lambda q: q.update(golds=["x" * 10_001]),
+    ],
+)
+def test_against_caps_each_text_as_the_other_routes_do(client, change):
+    report = _run(True)
+    change(report["questions"][0])
+    assert client.post("/evaluations/against", json={"report": report, "baseline": _run(True)}).status_code == 422
+
+
+def test_against_takes_a_long_error_line_so_the_comparison_still_shows(client):
+    # A failed step's last line can be a whole HTTP body: the run is still compared.
+    report = _run(True, True)
+    report["questions"][1]["error"] = "The search step (dense) failed: " + "x" * 5000
+    assert client.post("/evaluations/against", json={"report": report, "baseline": _run(True, True)}).status_code == 200
+
+
+def test_against_caps_the_gold_passages_together_at_a_sets_size(client):
+    report = _run(*([True] * 6))
+    for q in report["questions"]:
+        q["golds"] = ["x" * 10_000] * 20
+    r = client.post("/evaluations/against", json={"report": report, "baseline": _run(True)})
+    assert r.status_code == 422
+    assert "gold passages together" in json.dumps(r.json())

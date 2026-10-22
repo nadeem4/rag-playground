@@ -728,8 +728,14 @@ function Evaluation({
     const input = bestInput.current
     if (!input || stored === null || judged.current === stored) return
     judged.current = stored
-    const { key, outcome } = afterRun(input.result, input.name, input.pipeline)
-    setBest(key === null ? null : { key, outcome })
+    // Only the answer for the run judged last is shown. No cleanup cancels it: StrictMode's
+    // second pass returns above, so a cancel there would drop the only answer.
+    const current = () => judged.current === stored
+    afterRun(input.result, input.name, input.pipeline).then(
+      ({ key, outcome }) => current() && setBest(key === null ? null : { key, outcome }),
+      // Without Pandion's verdict there is nothing true to say about the best: the box stays away.
+      () => current() && setBest(null),
+    )
   }, [stored])
 
   async function evaluate() {
@@ -739,6 +745,8 @@ function Evaluation({
     setDetail(null)
     const before = finishedRun
     setBest(null)
+    // The last run's verdict, if it comes back now, belongs to no run on the page.
+    judged.current = null
     setStartedAt(Date.now())
     setTookMs(null)
     try {

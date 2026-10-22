@@ -38,6 +38,18 @@ function Changed({ kind, questions }: { kind: "lost" | "won"; questions: string[
   )
 }
 
+/** Pandion's notes on the comparison, such as a partial set or a step that can miss by chance. */
+function Notes({ notes }: { notes: string[] }) {
+  if (!notes.length) return null
+  return (
+    <ul aria-label="About this comparison" data-testid="best-notes" className="m-0 flex list-none flex-col gap-1 p-0 text-xs">
+      {notes.map((n) => (
+        <li key={n}>{n}</li>
+      ))}
+    </ul>
+  )
+}
+
 export function BestSoFar({
   outcome,
   problem,
@@ -64,9 +76,12 @@ export function BestSoFar({
             it gets better or worse.
           </p>
         ) : outcome.kind === "equal" ? (
-          <p>
-            <MonoNumbers text={bestHeadline(outcome)} />
-          </p>
+          <>
+            <p>
+              <MonoNumbers text={bestHeadline(outcome)} />
+            </p>
+            <Notes notes={outcome.notes} />
+          </>
         ) : outcome.kind === "better" ? (
           <>
             <p>
@@ -74,6 +89,7 @@ export function BestSoFar({
               <MonoNumbers text={`${betterLine(outcome)} (${scoreOf(outcome.before)}). This pipeline is now your best for these questions.`} />
             </p>
             <Changed kind="won" questions={outcome.won} />
+            <Notes notes={outcome.notes} />
           </>
         ) : (
           <>
@@ -85,6 +101,7 @@ export function BestSoFar({
               <strong className="font-semibold">{outcome.best.name}</strong>, {whenText(outcome.best.at)}.
             </p>
             <Changed kind="lost" questions={outcome.lost} />
+            <Notes notes={outcome.notes} />
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={onLoad}>
                 Load the best pipeline

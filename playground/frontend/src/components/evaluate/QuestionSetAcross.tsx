@@ -4,22 +4,24 @@ import { Upload } from "lucide-react"
 import { api } from "@/api/client"
 import { FileTag } from "@/components/FileTag"
 import { Button } from "@/components/ui/button"
+import type { Registry } from "@/api/types"
 import type { FileInfo } from "@/lib/files"
 import { acrossLine, documentCounts, type Question, type Report } from "@/state/goldSet"
 
 import { NoDocument } from "./ByDocument"
 import { UploadReport } from "./QuestionSetPanel"
+import { WriteQuestionsAcross } from "./WriteQuestionsAcross"
 
 /**
  * The question set of a pipeline with several documents (spec "Evaluate
  * (part 4a)"): one set for all of them. It says where the questions came from
  * and how many name each document, then how many name none, which count as
- * found in any document. Upload another set replaces it for every document.
- * Write questions for me is left out for now: it writes for one document and
- * would replace that document's part of the set. With one document,
+ * found in any document. Upload another set replaces it for every document;
+ * Write questions for me (`WriteQuestionsAcross`) adds to it. With one document,
  * `QuestionSetPanel` is shown instead.
  */
 export function QuestionSetAcross({
+  registry,
   files,
   questions,
   filenames,
@@ -32,6 +34,7 @@ export function QuestionSetAcross({
   onUpload,
   extra,
 }: {
+  registry: Registry
   files: readonly FileInfo[]
   questions: readonly Question[] | null
   filenames: readonly string[]
@@ -106,6 +109,15 @@ export function QuestionSetAcross({
           <Upload aria-hidden strokeWidth={1.75} />
           {questions?.length && !fromSamples ? "Upload another set" : "Upload a question set"}
         </Button>
+        <WriteQuestionsAcross
+          files={files}
+          questions={questions}
+          filenames={fromSamples ? (questions?.length ? ["the samples"] : []) : filenames}
+          registry={registry}
+          locked={locked}
+          onSave={onUpload}
+          saveError={error}
+        />
         <a className="inline-flex min-h-[28px] items-center text-sm text-fg underline underline-offset-4" href={api.questionTemplateUrl("csv")} download>
           Start from the template
         </a>

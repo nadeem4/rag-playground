@@ -453,8 +453,18 @@ the pipeline: "24 questions from golden-set.csv, covering all 3 documents", then
 questions name each document and how many name none (**no document named**, found in any
 document). **Upload another set** replaces the set for every document at once
 (`POST /api/v2/questions`); on the demo it is kept whole in the tab, tags and answers too.
-**Write questions for me** is not offered with several documents yet, because it writes
-for one document and would replace that document's questions. **Start from the template** downloads the CSV template,
+**Write questions for me** asks which documents to write for (**Write for**, one checkbox
+per document with how many questions it already has) and how many **Questions per
+document** (at most 25): "6 for each of 2 documents: 12 questions, written one document at a
+time. They join your set; nothing in it is replaced." A model writes them one document at a
+time, on your key, through each document's own generate run; the sheet says which document
+it is on, and **Stop** cancels that one and starts no other, keeping what was already
+written. The review is grouped by document, with Keep, Edit and Drop as for one document.
+**Save** adds the kept questions to the one set: it sends the set as it is, every question
+with its tags, answer and document, plus the new ones, each naming its document, so nothing
+in it is lost. The card then says what was written: "30 questions: 24 from golden-set.csv
+and 6 written by Claude Haiku 4.5" (or "from the samples"), and writing again adds to the
+written count. **Start from the template** downloads the CSV template,
 whose `document` column names each question's file. A question that names its document must
 find its evidence in that document; one naming none is found in any. With nothing kept,
 the bundled samples among the documents lend their own sets, each question naming its

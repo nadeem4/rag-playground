@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 import { PROVIDER_INFO, useApiKey } from "@/api/apiKey"
@@ -41,7 +41,28 @@ import {
  * neither cancels the run nor loses the review: opening it again shows them.
  */
 
-const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
+export const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
+
+/** The models the visitor's keys can use, which one is picked, and which keys the server has. */
+export function useWriteModel(registry: Registry) {
+  const { keys, setPanelOpen } = useApiKey()
+  // Which keys the server has, as Shell asks. Null until it answers, or when it cannot.
+  const [server, setServer] = useState<LlmSettings | null>(null)
+  useEffect(() => {
+    let live = true
+    v2.modelSources().then(
+      (s) => live && setServer(s),
+      () => live && setServer(null),
+    )
+    return () => {
+      live = false
+    }
+  }, [])
+  const models = chatModels(registry, keys, server)
+  const [picked, setPicked] = useState<string | null>(null)
+  const model = models.find((m) => m.id === picked) ?? models.find((m) => m.id === defaultModel(models)) ?? null
+  return { keys, setPanelOpen, server, models, model, setPicked }
+}
 
 export function WriteQuestions({
   sha,
@@ -63,23 +84,8 @@ export function WriteQuestions({
   saveError: string | null
 }) {
   const [open, setOpen] = useState(false)
-  const { keys, setPanelOpen } = useApiKey()
+  const { keys, setPanelOpen, server, models, model, setPicked } = useWriteModel(registry)
   const demo = useDemo()
-  // Which keys the server has, as Shell asks. Null until it answers, or when it cannot.
-  const [server, setServer] = useState<LlmSettings | null>(null)
-  useEffect(() => {
-    let live = true
-    v2.modelSources().then(
-      (s) => live && setServer(s),
-      () => live && setServer(null),
-    )
-    return () => {
-      live = false
-    }
-  }, [])
-  const models = chatModels(registry, keys, server)
-  const [picked, setPicked] = useState<string | null>(null)
-  const model = models.find((m) => m.id === picked) ?? models.find((m) => m.id === defaultModel(models)) ?? null
   const max = demo ? DEMO_MAX_COUNT : LOCAL_MAX_COUNT
   const [countText, setCountText] = useState(String(DEFAULT_COUNT))
   const count = clampCount(Number(countText), max)
@@ -244,7 +250,7 @@ export function WriteQuestions({
   )
 }
 
-function SetUp({
+export function SetUp({
   models,
   model,
   onModel,
@@ -255,6 +261,9 @@ function SetUp({
   provider,
   keyLine,
   onAddKey,
+  countLabel = "Questions",
+  before,
+  after,
 }: {
   models: ReturnType<typeof chatModels>
   model: string
@@ -267,6 +276,11 @@ function SetUp({
   /** Where the key comes from, as the notice's last sentence. */
   keyLine: string
   onAddKey: () => void
+  countLabel?: string
+  /** Shown above the model and count, such as which documents to write for. */
+  before?: ReactNode
+  /** Shown under them, such as the total line. */
+  after?: ReactNode
 }) {
   const id = useId()
   return (
@@ -291,6 +305,7 @@ function SetUp({
           </Button>
         </div>
       )}
+      {before}
       <div className="flex flex-wrap gap-4">
         {models.length ? (
           <div className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1">
@@ -309,7 +324,7 @@ function SetUp({
         ) : null}
         <div className="flex flex-col gap-1">
           <label htmlFor={`${id}-count`} className="text-sm font-semibold text-fg">
-            Questions
+            {countLabel}
           </label>
           <input
             id={`${id}-count`}
@@ -323,6 +338,7 @@ function SetUp({
           <span className="text-xs text-fg-muted">{demo ? `At most ${max} here.` : `At most ${max} at a time.`}</span>
         </div>
       </div>
+      {after}
       <div className="flex flex-col gap-1 rounded-control bg-surface-elevated px-3 py-2 text-xs text-fg">
         <p>
           <strong className="font-semibold">What gets checked for you.</strong> Every question must come with a passage copied word for word from the document. A
@@ -334,11 +350,12 @@ function SetUp({
   )
 }
 
-function Writing({ done, total, queued }: { done: number; total: number | null; queued: boolean }) {
+export function Writing({ done, total, queued, document }: { done: number; total: number | null; queued: boolean; document?: ReactNode }) {
   const id = useId()
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-sm font-semibold text-fg">Writing questions</h3>
+      {document}
       <div
         role="progressbar"
         aria-labelledby={id}
@@ -359,29 +376,32 @@ function Writing({ done, total, queued }: { done: number; total: number | null; 
 
 const TAG = "rounded-full px-2 text-xs whitespace-nowrap"
 
-function Review({
+export function Review({
   items,
   written,
   writer,
   update,
   saveError,
+  groupOf,
 }: {
   items: ReviewItem[]
   written: WrittenSet
   writer: string
   update: (i: number, patch: Partial<ReviewItem>) => void
   saveError: string | null
+  /** With several documents: the heading of the question's document. The list is then grouped by it. */
+  groupOf?: (item: ReviewItem) => ReactNode
 }) {
   const sum = reviewSummary(items)
   const [editing, setEditing] = useState<{ i: number; text: string } | null>(null)
   // After an action the row's own button takes focus, since the one pressed is gone.
-  const listRef = useRef<HTMLOListElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const focusRow = useRef<number | null>(null)
   useEffect(() => {
     const i = focusRow.current
     if (i === null) return
     focusRow.current = null
-    listRef.current?.children[i]?.querySelector<HTMLElement>("textarea, button")?.focus()
+    listRef.current?.querySelector(`[data-row="${i}"]`)?.querySelector<HTMLElement>("textarea, button")?.focus()
   }, [items, editing])
   const act = (i: number, f: () => void) => {
     focusRow.current = i
@@ -408,86 +428,101 @@ function Review({
         </p>
       ) : null}
       {items.length === 0 ? <p className="text-sm text-fg">The model wrote no question that passed the checks.</p> : null}
-      <ol ref={listRef} data-testid="review-list" className="flex flex-col gap-2">
-        {items.map((it, i) => {
-          const isEditing = editing?.i === i
-          return (
-            <li
-              key={it.id || i}
-              className={cn("flex flex-col gap-1 rounded-panel border border-hairline px-3 py-2", it.dropped ? "bg-surface-elevated" : "bg-surface-raised")}
-            >
-              <div className="flex items-baseline gap-2">
-                <span className="w-6 shrink-0 font-mono text-xs text-fg-muted">{i + 1}</span>
-                {isEditing ? (
-                  <textarea
-                    aria-label={`Question ${i + 1}`}
-                    className={cn(CONTROL, "h-auto min-h-16 py-1")}
-                    value={editing.text}
-                    onChange={(e) => setEditing({ i, text: e.target.value })}
-                  />
-                ) : (
-                  <span className={cn("min-w-0 flex-1 text-sm font-medium break-words", it.dropped ? "text-fg-muted line-through" : "text-fg")}>{it.question}</span>
-                )}
-                <span className="flex flex-wrap gap-1">
-                  {it.tags.includes("copied") ? (
-                    <span className={cn(TAG, "bg-warn text-warn-text")} title="Most of its words come from the passage">
-                      copied
-                    </span>
-                  ) : null}
-                  {it.question !== it.original ? <span className={cn(TAG, "bg-accent-wash text-fg")}>edited</span> : null}
-                  {it.dropped ? <span className={cn(TAG, "bg-removed text-removed-text")}>dropped</span> : null}
-                </span>
-              </div>
-              <p className={cn("border-l-2 border-hairline pl-2 font-serif text-sm break-words text-fg-muted md:ml-8", it.dropped && "line-through")}>
-                <span className="font-sans text-xs">Answered by:</span> {it.gold_answers[0]}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 md:ml-8">
-                {isEditing ? (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        act(i, () => {
-                          const text = editing.text.trim()
-                          if (text) update(i, { question: text })
-                          setEditing(null)
-                        })
-                      }
-                    >
-                      Done
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        act(i, () => {
-                          update(i, { question: it.original })
-                          setEditing(null)
-                        })
-                      }
-                    >
-                      Put back the original
-                    </Button>
-                  </>
-                ) : it.dropped ? (
-                  <Button size="sm" variant="outline" onClick={() => act(i, () => update(i, { dropped: false }))}>
-                    Keep after all
-                  </Button>
-                ) : (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => act(i, () => setEditing({ i, text: it.question }))}>
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => act(i, () => update(i, { dropped: true }))}>
-                      Drop
-                    </Button>
-                  </>
-                )}
-              </div>
-            </li>
+      <div ref={listRef} className="flex flex-col gap-4">
+        {groupsOf(items, groupOf).map((g) => {
+          const list = (
+            <ol data-testid="review-list" className="flex flex-col gap-2">
+              {g.rows.map(({ it, i }) => {
+                const isEditing = editing?.i === i
+                return (
+                  <li
+                    key={it.id || i}
+                    data-row={i}
+                    className={cn("flex flex-col gap-1 rounded-panel border border-hairline px-3 py-2", it.dropped ? "bg-surface-elevated" : "bg-surface-raised")}
+                  >
+                    <div className="flex items-baseline gap-2">
+                      <span className="w-6 shrink-0 font-mono text-xs text-fg-muted">{i + 1}</span>
+                      {isEditing ? (
+                        <textarea
+                          aria-label={`Question ${i + 1}`}
+                          className={cn(CONTROL, "h-auto min-h-16 py-1")}
+                          value={editing.text}
+                          onChange={(e) => setEditing({ i, text: e.target.value })}
+                        />
+                      ) : (
+                        <span className={cn("min-w-0 flex-1 text-sm font-medium break-words", it.dropped ? "text-fg-muted line-through" : "text-fg")}>{it.question}</span>
+                      )}
+                      <span className="flex flex-wrap gap-1">
+                        {it.tags.includes("copied") ? (
+                          <span className={cn(TAG, "bg-warn text-warn-text")} title="Most of its words come from the passage">
+                            copied
+                          </span>
+                        ) : null}
+                        {it.question !== it.original ? <span className={cn(TAG, "bg-accent-wash text-fg")}>edited</span> : null}
+                        {it.dropped ? <span className={cn(TAG, "bg-removed text-removed-text")}>dropped</span> : null}
+                      </span>
+                    </div>
+                    <p className={cn("border-l-2 border-hairline pl-2 font-serif text-sm break-words text-fg-muted md:ml-8", it.dropped && "line-through")}>
+                      <span className="font-sans text-xs">Answered by:</span> {it.gold_answers[0]}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 md:ml-8">
+                      {isEditing ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              act(i, () => {
+                                const text = editing.text.trim()
+                                if (text) update(i, { question: text })
+                                setEditing(null)
+                              })
+                            }
+                          >
+                            Done
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              act(i, () => {
+                                update(i, { question: it.original })
+                                setEditing(null)
+                              })
+                            }
+                          >
+                            Put back the original
+                          </Button>
+                        </>
+                      ) : it.dropped ? (
+                        <Button size="sm" variant="outline" onClick={() => act(i, () => update(i, { dropped: false }))}>
+                          Keep after all
+                        </Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => act(i, () => setEditing({ i, text: it.question }))}>
+                            Edit
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => act(i, () => update(i, { dropped: true }))}>
+                            Drop
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+          )
+          return g.head === undefined ? (
+            <Fragment key={g.key}>{list}</Fragment>
+          ) : (
+            <section key={g.key} data-testid="review-group" className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold text-fg">{g.head}</h3>
+              {list}
+            </section>
           )
         })}
-      </ol>
+      </div>
       {written.dropped.length ? (
         <details className="text-xs">
           <summary className="cursor-pointer text-fg-muted">{plural(written.dropped.length, "question")} dropped by the checks</summary>
@@ -503,4 +538,18 @@ function Review({
       ) : null}
     </div>
   )
+}
+
+/** The review's rows, each with its place in the whole list: one group, or one per document in the order they were written. */
+function groupsOf(items: ReviewItem[], groupOf?: (item: ReviewItem) => ReactNode) {
+  const rows = items.map((it, i) => ({ it, i }))
+  if (!groupOf) return [{ key: "all", head: undefined as ReactNode, rows }]
+  const out: { key: string; head: ReactNode; rows: typeof rows }[] = []
+  for (const r of rows) {
+    const key = r.it.document ?? ""
+    const last = out[out.length - 1]
+    if (last && last.key === key) last.rows.push(r)
+    else out.push({ key, head: groupOf(r.it), rows: [r] })
+  }
+  return out
 }

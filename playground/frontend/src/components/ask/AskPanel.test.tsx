@@ -231,6 +231,51 @@ describe("the Ask panel header", () => {
     await waitFor(() => expect(screen.getByTestId("index-status").textContent).toBe("Index ready: 2 documents, 42 pieces"))
   })
 
+  it("offers no Search in choice with one document", async () => {
+    setup()
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toContain("Index ready"))
+    expect(screen.queryByRole("group", { name: "Search in" })).toBeNull()
+  })
+
+  it("asks about all the documents, or one of them, with Search in", async () => {
+    const graph = withDocuments(sampleGraph(LIVE, SAMPLE), [SAMPLE, UPLOAD])
+    const onSearchIn = vi.fn()
+    setup({ graph, onSearchIn })
+    const group = screen.getByRole("group", { name: "Search in" })
+    const all = within(group).getByRole("button", { name: "All 2 documents" })
+    expect(all.getAttribute("aria-pressed")).toBe("true")
+    expect(within(group).getByRole("button", { name: SAMPLE.filename }).getAttribute("aria-pressed")).toBe("false")
+    // Colour is never the only cue: each file's pill names it, beside its dot.
+    expect(within(group).getByRole("button", { name: UPLOAD.filename }).querySelector("[data-file-dot]")).toBeTruthy()
+    expect(question().placeholder).toBe("Ask something about these 2 documents.")
+    fireEvent.click(within(group).getByRole("button", { name: UPLOAD.filename }))
+    expect(onSearchIn).toHaveBeenCalledWith(UPLOAD.sha)
+    fireEvent.click(all)
+    expect(onSearchIn).toHaveBeenLastCalledWith(null)
+  })
+
+  it("says which document it searches, and how many pieces that one has", async () => {
+    const graph = withDocuments(sampleGraph(LIVE, SAMPLE), [SAMPLE, UPLOAD])
+    const chunk = graph.nodes.find((n) => n.stage === "chunk")!
+    const results: Record<string, NodeState> = {
+      ...INDEX_DONE,
+      [chunk.id]: {
+        id: chunk.id,
+        status: "done",
+        artifact_id: "chA",
+        documents: { [SAMPLE.filename]: { status: "done", artifact_id: "chA" }, report_pdf: { status: "done", artifact_id: "chB" } },
+      },
+    }
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      url === "/api/v2/results/chB/payload" ? new Response(JSON.stringify({ doc_id: UPLOAD.sha, source_text: "", chunks: [{}, {}, {}] }), { status: 200 }) : base(url, init),
+    )
+    setup({ graph, results, searchIn: UPLOAD.sha })
+    expect(screen.getByRole("button", { name: UPLOAD.filename }).getAttribute("aria-pressed")).toBe("true")
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toBe("Searching report.pdf only, 3 pieces"))
+    expect(question().placeholder).toBe("Ask something about report.pdf.")
+  })
+
   it("says the index is ready, with the file, its pages and its pieces", async () => {
     setup()
     expect(screen.getByRole("heading", { name: "Ask" })).toBeTruthy()

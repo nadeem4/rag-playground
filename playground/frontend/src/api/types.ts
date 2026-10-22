@@ -816,6 +816,8 @@ export interface V2AskRequest {
   k?: number
   answer?: boolean
   force?: boolean
+  /** Search only these documents, by sha (pandion-api's `WhereIn`). */
+  where?: { document?: string[] }
 }
 export interface EvalQuestion {
   id: string

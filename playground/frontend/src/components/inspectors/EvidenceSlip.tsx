@@ -1,5 +1,7 @@
 import { useState, type HTMLAttributes } from "react"
 
+import { FileTag } from "@/components/FileTag"
+import type { FileInfo } from "@/lib/files"
 import { passageBlocks, plainPassage } from "@/lib/passage"
 import { cn } from "@/lib/utils"
 import { CHUNK_CLASSES } from "@/styles/dataClasses"
@@ -10,8 +12,8 @@ import { chunkSlot } from "./spans"
 /**
  * One piece of evidence (spec section 5): the piece's swatch on the left, and
  * on the right the finding line in the tool's voice, the passage in the
- * document voice, and a meta line with the page, the section, the scores with
- * their scales named, and Show in PDF. A Not kept slip is faint, says why it
+ * document voice, and a meta line with the file (when there are several), the
+ * page, the section, the scores with their scales named, and Show in PDF. A Not kept slip is faint, says why it
  * fell out, and carries no scores. A bare slip is the swatch and the passage,
  * with the page and section only when they are known: for a text that has no
  * rank and no score (Evaluate's closest text).
@@ -41,6 +43,8 @@ export interface EvidenceSlipProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   keys?: string[]
   /** The heading path as one line. */
   section?: string | null
+  /** The file the piece came from, when the pipeline has several: first on the meta line. */
+  file?: Pick<FileInfo, "filename" | "slot">
   /** The retriever, when the list mixes them. */
   retriever?: string | null
   onShowInPdf?: () => void
@@ -74,6 +78,7 @@ export function EvidenceSlip({
   keys,
   section,
   retriever,
+  file,
   onShowInPdf,
   showLabel = "Show in PDF",
   bare = false,
@@ -98,9 +103,10 @@ export function EvidenceSlip({
   const where = section ?? row.section
   const [more, setMore] = useState(false)
   const clamped = compact ? !more : clamp
-  const meta = Boolean(page || where || retriever || scores.length || onShowInPdf || compact)
+  const meta = Boolean(file || page || where || retriever || scores.length || onShowInPdf || compact)
   const place = (
     <>
+      {file ? <FileTag file={file} /> : null}
       {page ? <span className="tabular-nums">{page}</span> : null}
       {where ? <span>{where}</span> : null}
       {retriever ? <span className="font-mono">{retriever}</span> : null}
@@ -217,7 +223,7 @@ export function EvidenceSlip({
             {compact ? (
               <>
                 {/* Below md, where the piece is takes one line and its score and the two buttons the next. */}
-                {page || where || retriever ? <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-x-3 md:basis-auto">{place}</span> : null}
+                {file || page || where || retriever ? <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-x-3 md:basis-auto">{place}</span> : null}
                 <span className="flex flex-wrap items-baseline gap-x-3">{tail}</span>
               </>
             ) : (

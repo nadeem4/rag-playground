@@ -281,4 +281,12 @@ describe("a run over several documents", () => {
     expect(runsAs("my report.pdf", "my report_pdf")).toBe(true)
     expect(runsAs("my report.pdf", "other.pdf")).toBe(false)
   })
+
+  it("finds a document the run names by its sha, when the server kept no name for it", () => {
+    const sha = "2a".repeat(32)
+    expect(runsAs("chunking-primer.pdf", `${sha}.pdf`, sha)).toBe(true)
+    expect(runsAs("chunking-primer.pdf", `${"3b".repeat(32)}.pdf`, sha)).toBe(false)
+    const nodes = { parse: { id: "parse", status: "done" as const, artifact_id: "p2", documents: { [`${sha}.pdf`]: { status: "done" as const, artifact_id: "p1" }, "b.pdf": { status: "done" as const, artifact_id: "p2" } } } }
+    expect(forDocument(nodes, "chunking-primer.pdf", sha).parse.artifact_id).toBe("p1")
+  })
 })

@@ -1784,6 +1784,16 @@ describe("the Ask panel results on Build", () => {
     expect((posts[1].body as { config: { retrieve?: unknown } }).config.retrieve).toBeTruthy()
   })
 
+  it("Search in one of several documents sends that document only, as where.document", async () => {
+    const NOTES = { sha: "cd".repeat(32), filename: "notes.md" }
+    storeGraph(withDocuments(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), [{ sha: SOURCE.sha, filename: SOURCE.filename }, NOTES]))
+    const ask = await built()
+    fireEvent.click(within(panel().getByRole("group", { name: "Search in" })).getByRole("button", { name: "notes.md" }))
+    fireEvent.click(ask)
+    await waitFor(() => expect(posts).toHaveLength(2))
+    expect(posts[1].body).toMatchObject({ documents: [SOURCE.sha, NOTES.sha], where: { document: [NOTES.sha] } })
+  })
+
   it("a reranker changed while an Ask runs leaves no mislabelled transcript entry", async () => {
     storeGraph(setReranker(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), liveRegistry as never, "cross_encoder"))
     fireEvent.click(await built())

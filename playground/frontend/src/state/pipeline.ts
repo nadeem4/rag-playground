@@ -23,14 +23,18 @@ export function cardRun(p: WorkingPipeline, card: string, force: boolean, graph:
   return { config: p.config, documents: p.documents.map((d) => d.sha), through, ...(force ? { force: true } : {}) }
 }
 
-/** What Ask sends: the question on the pipeline's documents, through the answer or only the search. */
-export function askRun(p: WorkingPipeline, opts: { answer: boolean; force: boolean }): V2AskRequest {
+/**
+ * What Ask sends: the question on the pipeline's documents, through the answer
+ * or only the search. `document`, Search in's one file, searches that one only.
+ */
+export function askRun(p: WorkingPipeline, opts: { answer: boolean; force: boolean; document?: string | null }): V2AskRequest {
   return {
     config: p.config,
     documents: p.documents.map((d) => d.sha),
     question: p.question.text,
     answer: opts.answer,
     ...(opts.force ? { force: true } : {}),
+    ...(opts.document ? { where: { document: [opts.document] } } : {}),
   }
 }
 

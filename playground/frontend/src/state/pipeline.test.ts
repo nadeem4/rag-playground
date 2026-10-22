@@ -109,6 +109,11 @@ describe("askRun", () => {
   it("stops before the answer when told to", () => {
     expect(askRun(working(), { answer: false, force: true })).toMatchObject({ answer: false, force: true })
   })
+
+  it("searches one document only when Search in names it", () => {
+    expect(askRun(working(), { answer: true, force: false, document: DOC.sha })).toMatchObject({ where: { document: [DOC.sha] } })
+    expect(askRun(working(), { answer: true, force: false, document: null })).not.toHaveProperty("where")
+  })
 })
 
 describe("routeRunError", () => {

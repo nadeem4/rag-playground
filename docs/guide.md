@@ -341,6 +341,17 @@ the question box.
   "No source" tag, because nothing in the retrieved pieces backs it. A similarity match
   only means a shown sentence is close in meaning, not that it proves the part. Untick
   **Mark parts with no source** to hide those marks; this browser remembers the choice.
+- With two or more documents, **Search in** above the question chooses what Ask searches:
+  **All N documents**, or one file. One file sends `where: {document: [sha]}` with the
+  question, the header reads "Searching report.pdf only, 31 pieces" and the question box
+  invites a question about that file. Each piece then names its file on its meta line, a
+  coloured dot beside the filename; each document keeps its colour by its place in the
+  pipeline's list, and the name is always there, so colour is never the only cue. The
+  sentence above the pieces names the file too ("Found in the 2nd piece, from
+  report.pdf"). Clicking a piece, or its **Show in PDF** or **Show in text**, opens that
+  piece's own file with the piece marked, and a **Showing** picker there switches to the
+  best piece of another file. Under a Chat answer, a **Sources** line names the files its
+  cited pieces came from. With one document none of this shows.
 - A piece that holds a table shows it as a table when the piece is open, and says each row
   in words (Measure: Before, After) when it is cut to two lines, as on Compare.
 - The questions asked earlier in the tab stay in a list below.

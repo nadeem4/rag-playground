@@ -306,7 +306,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
         </p>
       ) : null}
       {o.failed ? <Failed node={o.failed.node} error={o.failed.error} /> : null}
-      {chat ? <ChatInspector payload={chat} chunkSet={o.chunkSet} /> : null}
+      {chat ? <ChatInspector payload={chat} chunkSet={o.chunkSet} files={o.files} /> : null}
       {chat ? <Sources payload={chat} files={o.files} /> : null}
       {kept ? (
         <Finding question={String(query?.config.text ?? "")} rows={kept} questions={questions} chat={Boolean(chat) || useCase?.transform === "chat"} files={o.files} />

@@ -354,7 +354,8 @@ the question box.
   report.pdf"). Clicking a piece, or its **Show in PDF** or **Show in text**, opens that
   piece's own file with the piece marked, and a **Showing** picker there switches to the
   best piece of another file. Under a Chat answer, a **Sources** line names the files its
-  cited pieces came from. With one document none of this shows.
+  cited pieces came from, and a citation opens its own file, its page or, for a file
+  without pages, its text with the cited words marked. With one document none of this shows.
 - A piece that holds a table shows it as a table when the piece is open, and says each row
   in words (Measure: Before, After) when it is cut to two lines, as on Compare.
 - The questions asked earlier in the tab stay in a list below.

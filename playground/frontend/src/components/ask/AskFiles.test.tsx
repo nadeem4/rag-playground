@@ -216,6 +216,20 @@ describe("a model answer over several documents", () => {
     expect(answer.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it("opens a citation's own document, here a Word file without pages, with the cited words marked", async () => {
+    const g = setUseCase(both(), LIVE, "chat")
+    render(<AskPanel {...props(g, { ...perDocument(g, true), retrieve: done("retrieve", "ret2"), use_case: done("use_case", "chat2") })} />)
+    const row = await waitFor(() => {
+      const li = document.querySelector<HTMLElement>('li[data-citation="4"]')
+      expect(li).toBeTruthy()
+      return li!
+    })
+    fireEvent.click(await waitFor(() => within(row).getByRole("button", { name: "Show in text" })))
+    expect(await screen.findByText("Citation 4")).toBeTruthy()
+    // Its piece is only in the Word file's own chunks: before, the answer view read the first file's and showed nothing.
+    expect(screen.getByText(/This document has no pages, so its text is shown with the cited words marked/)).toBeTruthy()
+  })
+
   it("has no Sources line with one document", async () => {
     const g = setUseCase(one(), LIVE, "chat")
     render(<AskPanel {...props(g, { ...perDocument(g, false), retrieve: done("retrieve", "ret1"), use_case: done("use_case", "chat2") })} />)

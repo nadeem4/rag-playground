@@ -5,8 +5,12 @@ the same scrub, the same queue.
 
 An evaluation's question set comes from the request, held to the same caps as
 an uploaded one, or, when the request sends none, from the sets kept against
-its documents (POST /documents/{id}/questions). A comparison asks only the
-questions the request sends; without them it is index only, as `pandion.compare` is.
+its documents (POST /documents/{id}/questions or POST /questions). A question
+that names its document (by filename or sha) is found only in that document;
+one naming a document the request does not send is a 400 before anything runs.
+A question kept against a document that names a document is about that one.
+A comparison asks only the questions the request sends; without them it is
+index only, as `pandion.compare` is.
 With one question and no gold passage (`question`), each variant searches (or
 answers) it and the results come back unscored.
 """
@@ -34,7 +38,15 @@ from pandion_api import reports
 from pandion_api.jobs import documents_of, start
 from pandion_api.pipelines import NOT_A_MAPPING, prepare, problems, variant_config
 from pandion_api.routes.ask import NO_ANSWER, NO_SEARCH
-from pandion_api.routes.questions import MAX_GOLDS, MAX_QUESTIONS, MAX_SET_BYTES, MAX_TEXT_CHARS, TOO_BIG
+from pandion_api.routes.questions import (
+    MAX_GOLDS,
+    MAX_QUESTIONS,
+    MAX_SET_BYTES,
+    MAX_TEXT_CHARS,
+    TOO_BIG,
+    kept_questions,
+    named_documents,
+)
 
 router = APIRouter()
 
@@ -78,32 +90,16 @@ def _checked(questions: QuestionSet) -> list[dict[str, Any]]:
 
 
 def _kept(shas: list[str], names: list[str], request: Request) -> list[dict[str, Any]]:
-    """The questions of the sets kept against these documents, in their order.
-    An id two documents' sets both use is prefixed with each document's name,
-    so every question stays apart; together they hold at most MAX_QUESTIONS."""
-    store = request.app.state.documents
-    sets: list[tuple[str, list[dict[str, Any]]]] = []
-    for sha, name in zip(shas, names):
-        kept = store.questions(sha)
-        if kept.is_file():
-            sets.append((name, json.loads(kept.read_text(encoding="utf-8"))["set"]["questions"]))
-    total = sum(len(qs) for _, qs in sets)
-    if total > MAX_QUESTIONS:
+    """The questions kept against these documents (`kept_questions`); together
+    they hold at most MAX_QUESTIONS."""
+    questions = kept_questions(request.app.state.documents, shas, names)
+    if len(questions) > MAX_QUESTIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"The sets kept against these documents hold {total} questions together; "
+            detail=f"The sets kept against these documents hold {len(questions)} questions together; "
             f"at most {MAX_QUESTIONS} fit in one run, so evaluate fewer documents at once.",
         )
-    owners: dict[str, set[str]] = {}
-    for name, qs in sets:
-        for q in qs:
-            if q.get("id"):
-                owners.setdefault(q["id"], set()).add(name)
-    return [
-        {**q, "id": f"{name}: {q['id']}"} if q.get("id") and len(owners[q["id"]]) > 1 else q
-        for name, qs in sets
-        for q in qs
-    ]
+    return questions
 
 
 class EvaluationIn(BaseModel):
@@ -128,6 +124,7 @@ async def create_evaluation(body: EvaluationIn, request: Request) -> dict[str, s
         questions = await run_in_threadpool(_kept, body.documents, list(documents), request)
     if not questions:
         raise HTTPException(status_code=400, detail=NO_QUESTIONS)
+    named_documents(questions, documents, body.documents)
     request.app.state.policy.check_question_count("evaluation", len(questions), request)
 
     def work(on_event, cancel, credentials):
@@ -215,6 +212,7 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
     documents = documents_of(body.documents, request)
     questions = await run_in_threadpool(_checked, body.questions) if body.questions is not None else None
     if questions is not None:
+        named_documents(questions, documents, body.documents)
         request.app.state.policy.check_question_count("comparison", len(body.variants) * len(questions), request)
     if body.question is not None:
         return start(request, "comparison", _compare_on_one_question(body, prepared, documents))

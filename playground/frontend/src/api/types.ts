@@ -691,7 +691,11 @@ export interface GoldQuestion {
   gold_answers: string[]
   answer: string
   tags: string[]
-  /** The document its evidence is in; empty means the set's only document. Carried, not yet scored on. */
+  /**
+   * The document its evidence is in, by filename or sha; empty means none is
+   * named. With several documents, a named question is found only in a piece
+   * from its own document, an unnamed one in a piece from any.
+   */
   document: string
 }
 
@@ -709,6 +713,8 @@ export interface GoldCheck {
   status: GoldCheckStatus
   document_text: string
   closest: string
+  /** `POST /questions` only: the sha of the document the passage was found in, null when it was not. */
+  document?: string | null
 }
 
 /** `status` is the worst of the question's passages. */
@@ -718,6 +724,8 @@ export interface GoldQuestionCheck {
   question: string
   status: GoldCheckStatus
   golds: GoldCheck[]
+  /** `POST /questions` only: the sha of the document the question names, null when it names none. */
+  document?: string | null
 }
 
 /** `GET /api/v2/documents/{sha}/questions`: the record the server keeps. */
@@ -742,6 +750,33 @@ export interface QuestionSetUpload extends StoredQuestionSet {
   summary: { questions: number; found: number; found_normalized: number; not_found: number }
   /** The check, one row per question. Not the questions themselves: those are `set.questions`. */
   questions: GoldQuestionCheck[]
+}
+
+/**
+ * `POST /api/v2/questions`: one set for several documents, checked and kept
+ * split by document (each document's named questions against it, the
+ * questions naming none against the first). Each row names its document.
+ */
+export interface QuestionSetAcrossUpload {
+  /** The documents the set is for, by sha, in the order sent. */
+  documents: string[]
+  filename: string
+  format: "json" | "csv"
+  count: number
+  stored: boolean
+  note: string
+  parser: string
+  parser_note: string
+  summary: { questions: number; found: number; found_normalized: number; not_found: number }
+  questions: GoldQuestionCheck[]
+}
+
+/** `GET /api/v2/questions?documents=...`: the sets kept against several documents as one. */
+export interface QuestionSetAcross {
+  documents: string[]
+  count: number
+  /** A named question's `document` is its document's sha; empty for one naming none. */
+  questions: GoldQuestion[]
 }
 
 /** `POST /api/v2/explain`: what a transform will do with THESE settings. */
@@ -873,11 +908,19 @@ export interface EvalQuestionResult {
   score: EvalPayload
   error: string | null
   result_id: string | null
+  /** The sha of the document the question names, null when it names none. Absent from an older server. */
+  document?: string | null
+}
+/** One document's totals in an evaluation: `document` is its sha, null for the questions naming none. */
+export interface DocumentTotals extends Totals {
+  document: string | null
 }
 export interface EvaluationResult extends Totals {
   top_k: number
   cancelled: boolean
   by_tag: Record<string, Totals>
+  /** The totals for the questions naming each document, then for those naming none. Absent from an older server. */
+  by_document?: DocumentTotals[]
   questions: EvalQuestionResult[]
   /** A hash of the questions and their gold passages, whatever their order. Absent from an older server. */
   questions_fingerprint?: string

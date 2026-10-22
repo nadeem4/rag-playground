@@ -487,3 +487,16 @@ def test_the_cli_exits_1_and_writes_nothing_when_nothing_was_kept(fake, tmp_path
     assert code == 1 and not out.exists(), printed
     assert "\x1b" not in printed.out + printed.err
     assert "No question was kept" in printed.out + printed.err
+
+
+def test_each_written_question_carries_the_document_it_was_written_for(fake):
+    fake(GOOD)
+    result = write_questions(TEXT, model="claude-haiku-4-5", count=4, credentials=CREDS, document="a" * 64)
+    assert {q["document"] for q in result["questions"]} == {"a" * 64}
+
+
+def test_without_a_document_the_written_questions_name_none(fake):
+    fake(GOOD)
+    result = write_questions(TEXT, model="claude-haiku-4-5", count=4, credentials=CREDS)
+    assert {q["document"] for q in result["questions"]} == {""}
+    assert result["document"] == ""

@@ -684,11 +684,14 @@ def _stats(
 
 
 def _citation(n, c, chunk, doc, doc_md, spans, elements) -> dict[str, Any]:
+    # With several documents the step reads one of them (`doc`). A piece from
+    # another names its own document and is not located in this one's text.
+    own = chunk.doc_id if chunk is not None and chunk.doc_id else doc.source_id
     entry: dict[str, Any] = {
         "n": n,
         "cited_text": c.cited_text,
         "chunk_id": chunk.id if chunk else None,
-        "source_sha": doc.source_id,
+        "source_sha": own,
         "doc_start": None,
         "doc_end": None,
         "page": None,
@@ -700,6 +703,15 @@ def _citation(n, c, chunk, doc, doc_md, spans, elements) -> dict[str, Any]:
         return entry
     start = chunk.start_char + c.start_char_index
     end = chunk.start_char + c.end_char_index
+    if own != doc.source_id:
+        # Another document's piece: its text and offsets are its own document's,
+        # so the quote is checked against the piece. Its page is the piece's only
+        # when the piece is on one page; across pages the quote could be on any.
+        entry["doc_start"], entry["doc_end"] = start, end
+        entry["verified"] = chunk.text[c.start_char_index : c.end_char_index] == c.cited_text
+        span = chunk.page_span
+        entry["page"] = span[0] if span and span[0] == span[1] else None
+        return entry
     entry["doc_start"], entry["doc_end"] = start, end
     entry["verified"] = doc_md[start:end] == c.cited_text
     element_id = next((eid for eid, (s, e) in spans.items() if s <= start < e), None)

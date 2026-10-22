@@ -45,6 +45,33 @@ const twoDocSearch = (): SearchOutput => ({
   payload: { ...search.payload, results: search.payload.results!.map((r) => (FROM_GUIDE.has(r.rank) ? { ...r, chunk_id: `g${r.chunk_id}`, doc_id: GUIDE.sha } : r)) },
 })
 
+/**
+ * The Chat output as Pandion writes it over these two documents: each citation
+ * names its own piece's document, and a piece from the file the answer step did
+ * not read is checked against its own text and placed on its own first page (chat.py `_citation`).
+ */
+const chatOverTwo = (): ChatOutput => {
+  const hits = twoDocs().hits
+  const original = new Map(hybrid.hits.map((h, i) => [h.chunk.id, hits[i].chunk]))
+  return {
+    ...chat,
+    payload: {
+      ...chat.payload,
+      citations: chat.payload.citations.map((c) => {
+        const piece = c.chunk_id ? original.get(c.chunk_id) : undefined
+        if (!piece) return c
+        const elsewhere = piece.doc_id !== PRIMER.sha
+        return {
+          ...c,
+          chunk_id: piece.id,
+          source_sha: piece.doc_id,
+          ...(elsewhere ? { page: piece.page_span?.[0] ?? null, element_id: null, bbox: null } : {}),
+        }
+      }),
+    },
+  }
+}
+
 let payloads: Record<string, unknown>
 
 beforeEach(() => {
@@ -60,10 +87,7 @@ beforeEach(() => {
     docB: { ...parsedJson, filename: GUIDE.filename, source_id: GUIDE.sha },
     chA: chunkJson,
     chB: { ...chunkJson, doc_id: GUIDE.sha, chunks: chunkJson.chunks.map((c) => ({ ...c, id: `g${c.id}`, doc_id: GUIDE.sha })) },
-    chat2: {
-      ...chat,
-      payload: { ...chat.payload, citations: chat.payload.citations.map((c) => (c.n === 2 ? { ...c, source_sha: GUIDE.sha } : c)) },
-    },
+    chat2: chatOverTwo(),
   }
   vi.stubGlobal(
     "fetch",
@@ -190,6 +214,20 @@ describe("a model answer over several documents", () => {
     expect(sources.textContent).toBe("Sources: chunking-notes.pdf field-guide.docx")
     const answer = document.querySelector("[data-chat-inspector]") as HTMLElement
     expect(answer.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("opens a citation's own document, here a Word file without pages, with the cited words marked", async () => {
+    const g = setUseCase(both(), LIVE, "chat")
+    render(<AskPanel {...props(g, { ...perDocument(g, true), retrieve: done("retrieve", "ret2"), use_case: done("use_case", "chat2") })} />)
+    const row = await waitFor(() => {
+      const li = document.querySelector<HTMLElement>('li[data-citation="4"]')
+      expect(li).toBeTruthy()
+      return li!
+    })
+    fireEvent.click(await waitFor(() => within(row).getByRole("button", { name: "Show in text" })))
+    expect(await screen.findByText("Citation 4")).toBeTruthy()
+    // Its piece is only in the Word file's own chunks: before, the answer view read the first file's and showed nothing.
+    expect(screen.getByText(/This document has no pages, so its text is shown with the cited words marked/)).toBeTruthy()
   })
 
   it("has no Sources line with one document", async () => {

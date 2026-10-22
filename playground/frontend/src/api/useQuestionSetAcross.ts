@@ -4,7 +4,6 @@ import {
   questionsFromAcross,
   questionsFromChecks,
   questionsFromSamples,
-  questionsFromSet,
   readTabAcross,
   report,
   sampleFor,
@@ -24,7 +23,9 @@ import { v2 } from "./v2"
  * by sha, or none. An upload goes through `POST /api/v2/questions` and
  * replaces the whole set. With nothing kept, the bundled samples among the
  * documents lend their own sets, each question naming its sample. A hosted
- * demo keeps nothing, so an upload lives in this browser tab.
+ * demo keeps nothing, so an upload lives in this browser tab, whole. Write
+ * questions for me is not offered with several documents yet: it writes for
+ * one document and would replace that document's part of the set.
  *
  * `shas` empty means one document: nothing is asked, and `useQuestionSet`
  * does the work as before.
@@ -43,8 +44,6 @@ export interface QuestionSetAcrossState {
   busy: boolean
   /** Replace the set with this file, for every document. True when it was taken. */
   upload: (file: File) => Promise<boolean>
-  /** Save a set written for the first document (Write questions for me), as that sheet does today. */
-  saveWritten: (file: File) => Promise<boolean>
 }
 
 const DEMO_REFUSED = "This hosted demo does not store question sets. Run the playground locally to evaluate your own document."
@@ -116,7 +115,8 @@ export function useQuestionSetAcross(shas: readonly string[], samples: SampleCar
         const s = await v2.uploadQuestionSetAcross(list, file)
         setRep(report(s))
         if (s.stored === false) {
-          const questions = questionsFromChecks(s.questions)
+          // The whole set as read, tags and answers too; an older server sends only the check rows.
+          const questions = s.set ? questionsFromAcross({ documents: list, count: s.count, questions: s.set.questions }) : questionsFromChecks(s.questions)
           storeTabAcross(list, s.filename, questions)
           setKept({ questions, filenames: [s.filename] })
           setTabOnly(true)
@@ -132,36 +132,7 @@ export function useQuestionSetAcross(shas: readonly string[], samples: SampleCar
     [key],
   )
 
-  const saveWritten = useCallback(
-    async (file: File): Promise<boolean> => {
-      setBusy(true)
-      setError(null)
-      try {
-        const list = key.split(",")
-        const first = list[0]
-        const s = await v2.uploadQuestionSet(first, file)
-        setRep(report(s))
-        if (s.stored === false) {
-          // As the server would keep it: the first document's set is replaced, the rest stay.
-          const written = questionsFromSet(s).map((q) => ({ ...q, document: first }))
-          const rest = (kept?.questions ?? []).filter((q) => q.document !== first)
-          const questions = [...rest, ...written]
-          storeTabAcross(list, s.filename, questions)
-          setKept({ questions, filenames: [...new Set([...(kept?.filenames ?? []), s.filename])] })
-          setTabOnly(true)
-        } else setReads((n) => n + 1)
-        return true
-      } catch (err) {
-        setError(err instanceof ApiError && err.status === 403 ? DEMO_REFUSED : plainMessage(err))
-        return false
-      } finally {
-        setBusy(false)
-      }
-    },
-    [key, kept],
-  )
-
   const fromSamples = !kept && !loading
   const questions = loading ? null : kept ? kept.questions : sampleQs
-  return { questions, filenames: kept?.filenames ?? [], fromSamples, report: rep, tabOnly, error, busy, upload, saveWritten }
+  return { questions, filenames: kept?.filenames ?? [], fromSamples, report: rep, tabOnly, error, busy, upload }
 }

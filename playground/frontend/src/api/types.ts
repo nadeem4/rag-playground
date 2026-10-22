@@ -769,6 +769,8 @@ export interface QuestionSetAcrossUpload {
   parser_note: string
   summary: { questions: number; found: number; found_normalized: number; not_found: number }
   questions: GoldQuestionCheck[]
+  /** The set as read, each question's `document` its sha or empty. Absent from an older server. */
+  set?: { version: number; document: string; questions: GoldQuestion[] }
 }
 
 /** `GET /api/v2/questions?documents=...`: the sets kept against several documents as one. */

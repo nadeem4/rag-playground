@@ -18,7 +18,9 @@ Work = Callable[[Callable[[dict[str, Any]], None], threading.Event, dict[str, st
 
 def documents_of(shas: list[str], request: Request) -> dict[str, str]:
     """{document name: stored file} for a run, named as each was uploaded, so
-    the same bytes under the same name always give the same result ids."""
+    the same bytes under the same name always give the same result ids. A file
+    with no record takes the name `Policy.document_name` gives it, else its
+    stored file's name."""
     store = request.app.state.documents
     policy = request.app.state.policy
     out: dict[str, str] = {}
@@ -31,7 +33,8 @@ def documents_of(shas: list[str], request: Request) -> dict[str, str]:
         if path is None:
             raise HTTPException(status_code=404, detail=NO_SUCH_DOCUMENT)
         document = store.get(sha)
-        name = safe_name(document.filename) if document is not None else path.name
+        given = policy.document_name(sha, request) if document is None else None
+        name = safe_name(document.filename) if document is not None else safe_name(given) if given else path.name
         if name in out:
             raise HTTPException(
                 status_code=400,

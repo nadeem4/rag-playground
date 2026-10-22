@@ -565,3 +565,23 @@ def test_deeply_nested_json_is_400(client):
     sha = upload_doc(client)["sha"]
     r = post_set(client, sha, "[" * 100_000 + "]" * 100_000)
     assert r.status_code == 400 and "nested" in r.json()["detail"]
+
+
+def test_a_set_across_samples_names_them_by_filename_on_a_fresh_store(dirs):
+    """The samples are seeded at startup with no record, so before anyone loads one
+    its name comes from the sample catalog: a golden set naming chunking-primer.pdf
+    is taken, not refused."""
+    from playground.backend import sample_set
+
+    with make_client(dirs) as c:
+        primer = sample_set.get_sample("chunking-primer")
+        report = sample_set.get_sample("two-column-report")
+        gold = primer.questions()[0]
+        blob = json.dumps([{"id": "p", "question": gold["question"], "gold_answers": [gold["gold_answer"]], "document": "chunking-primer.pdf"}])
+        r = c.post(
+            "/api/v2/questions",
+            data={"documents": [primer.sha, report.sha]},
+            files={"file": ("golden.json", blob.encode("utf-8"), "application/json")},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["questions"][0]["document"] == primer.sha

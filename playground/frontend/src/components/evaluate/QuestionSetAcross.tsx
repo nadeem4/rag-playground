@@ -2,7 +2,6 @@ import { useRef, type ReactNode } from "react"
 import { Upload } from "lucide-react"
 
 import { api } from "@/api/client"
-import type { Registry } from "@/api/types"
 import { FileTag } from "@/components/FileTag"
 import { Button } from "@/components/ui/button"
 import type { FileInfo } from "@/lib/files"
@@ -10,29 +9,27 @@ import { acrossLine, documentCounts, type Question, type Report } from "@/state/
 
 import { NoDocument } from "./ByDocument"
 import { UploadReport } from "./QuestionSetPanel"
-import { WriteQuestions } from "./WriteQuestions"
 
 /**
  * The question set of a pipeline with several documents (spec "Evaluate
  * (part 4a)"): one set for all of them. It says where the questions came from
  * and how many name each document, then how many name none, which count as
  * found in any document. Upload another set replaces it for every document.
- * Write questions for me opens the same sheet as with one document, for the
- * first document. With one document, `QuestionSetPanel` is shown instead.
+ * Write questions for me is left out for now: it writes for one document and
+ * would replace that document's part of the set. With one document,
+ * `QuestionSetPanel` is shown instead.
  */
 export function QuestionSetAcross({
   files,
   questions,
   filenames,
   fromSamples,
-  registry,
   report,
   tabOnly,
   error,
   busy,
   disabled,
   onUpload,
-  onSaveWritten,
   extra,
 }: {
   files: readonly FileInfo[]
@@ -40,7 +37,6 @@ export function QuestionSetAcross({
   filenames: readonly string[]
   /** The questions are the bundled samples' own sets. */
   fromSamples: boolean
-  registry: Registry
   report: Report | null
   tabOnly: boolean
   error: string | null
@@ -48,7 +44,6 @@ export function QuestionSetAcross({
   /** A run is in flight, so the set must not change under it. */
   disabled: boolean
   onUpload: (file: File) => Promise<boolean>
-  onSaveWritten: (file: File) => Promise<boolean>
   /** A quiet sentence under the list, such as what found means at this k. */
   extra?: ReactNode
 }) {
@@ -111,7 +106,6 @@ export function QuestionSetAcross({
           <Upload aria-hidden strokeWidth={1.75} />
           {questions?.length && !fromSamples ? "Upload another set" : "Upload a question set"}
         </Button>
-        <WriteQuestions sha={files[0].sha} filename={files[0].filename} registry={registry} locked={locked} saveError={error} onSave={onSaveWritten} />
         <a className="inline-flex min-h-[28px] items-center text-sm text-fg underline underline-offset-4" href={api.questionTemplateUrl("csv")} download>
           Start from the template
         </a>

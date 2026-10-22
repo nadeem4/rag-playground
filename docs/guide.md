@@ -452,8 +452,9 @@ file tags; add or remove documents on Build. The **Question set** card holds one
 the pipeline: "24 questions from golden-set.csv, covering all 3 documents", then how many
 questions name each document and how many name none (**no document named**, found in any
 document). **Upload another set** replaces the set for every document at once
-(`POST /api/v2/questions`). **Write questions for me** opens the same sheet as with one
-document, for the first document. **Start from the template** downloads the CSV template,
+(`POST /api/v2/questions`); on the demo it is kept whole in the tab, tags and answers too.
+**Write questions for me** is not offered with several documents yet, because it writes
+for one document and would replace that document's questions. **Start from the template** downloads the CSV template,
 whose `document` column names each question's file. A question that names its document must
 find its evidence in that document; one naming none is found in any. With nothing kept,
 the bundled samples among the documents lend their own sets, each question naming its

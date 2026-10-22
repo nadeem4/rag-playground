@@ -275,3 +275,42 @@ def test_unnamed_questions_stay_when_the_first_document_goes(client):
     store.remove(first)
     body = client.get("/questions", params={"documents": [second]}).json()
     assert [q["id"] for q in body["questions"]] == ["any"]
+
+
+def test_a_seeded_file_with_no_record_takes_the_name_the_policy_gives_it(tmp_path):
+    """A site can put files in a fresh store with no record (the playground seeds its
+    samples so). A set across documents names such a file by the name the Policy gives."""
+
+    class Named(Policy):
+        def document_name(self, sha, request):
+            return "seeded.pdf" if sha == seeded else None
+
+    with make_client(tmp_path, Named()) as c:
+        first = upload(c)["sha"]
+        store = c.app.state.documents
+        seeded = store.save(build_pdf([[BEES]]), "anything.pdf")
+        assert store.get(seeded) is None
+        body = post_across(c, [first, seeded], [
+            {"id": "bees", "question": "Bees?", "gold_answers": [BEES], "document": "seeded.pdf"},
+        ]).json()
+        assert body["summary"]["found"] == 1 and body["questions"][0]["document"] == seeded
+
+
+def test_one_set_for_several_documents_comes_back_whole_with_each_question_naming_its_sha(tmp_path):
+    """A server that keeps nothing hands the set back whole, tags and answers too,
+    so the page can keep it in the browser as it does one document's set."""
+
+    class Keepless(Policy):
+        def keeps_question_sets(self, request):
+            return False
+
+    with make_client(tmp_path, Keepless()) as c:
+        first, second = two(c)
+        body = post_across(c, [first, second], [
+            {"id": "bees", "question": "Bees?", "gold_answers": [BEES], "answer": "They dance.", "tags": ["insects"], "document": "bees.pdf"},
+            {"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]},
+        ]).json()
+        assert body["stored"] is False
+        kept = {q["id"]: q for q in body["set"]["questions"]}
+        assert (kept["bees"]["document"], kept["bees"]["tags"], kept["bees"]["answer"]) == (second, ["insects"], "They dance.")
+        assert kept["any"]["document"] == ""

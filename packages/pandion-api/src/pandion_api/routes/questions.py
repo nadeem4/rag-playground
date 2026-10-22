@@ -227,8 +227,9 @@ async def upload_questions_across(
     removing one document loses none of them (`kept_questions` asks each one
     once). Each question's row names its document's sha (`document`, null when
     it names none) and each gold passage the sha of the document it was found
-    in. A document the set has no question for loses the set it had: the new
-    set replaces the old."""
+    in. `set` is the set as read, each question's `document` its sha or empty,
+    for a page to keep when the server does not. A document the set has no
+    question for loses the set it had: the new set replaces the old."""
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     parsed = await read_set(file, one_document=False)
@@ -268,6 +269,7 @@ async def upload_questions_across(
         "parser_note": parser_note(parsers),
         "summary": _summary(rows),
         "questions": rows,
+        "set": {"version": parsed["version"], "document": "", "questions": own},
     }
 
 

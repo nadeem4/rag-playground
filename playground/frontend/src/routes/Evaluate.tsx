@@ -884,14 +884,12 @@ function Evaluation({
             questions={questions}
             filenames={across.filenames}
             fromSamples={across.fromSamples}
-            registry={registry}
             report={across.report}
             tabOnly={across.tabOnly}
             error={across.error}
             busy={across.busy}
             disabled={busy}
             onUpload={across.upload}
-            onSaveWritten={across.saveWritten}
             extra={setExtra}
           />
         ) : (

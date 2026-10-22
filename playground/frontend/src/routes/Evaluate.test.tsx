@@ -1770,7 +1770,8 @@ describe("with several documents", () => {
     const rows = within(card).getAllByRole("listitem").map((li) => li.textContent)
     expect(rows).toEqual(["chunking-primer.pdf1 question", "field-guide.docx1 question", "no document named1 question, found in any document"])
     expect(within(card).getByRole("button", { name: "Upload another set" })).toBeTruthy()
-    expect(within(card).getByRole("button", { name: "Write questions for me" })).toBeTruthy()
+    // Writing for one document would replace that document's part of the set, so it waits for writing that joins it.
+    expect(within(card).queryByRole("button", { name: "Write questions for me" })).toBeNull()
     expect(within(card).getByRole("link", { name: "Start from the template" }).getAttribute("href")).toBe("/api/questions/template?format=csv")
     expect(screen.getByText(/3 questions ready, across 2 documents\. Press Evaluate to score this pipeline\./)).toBeTruthy()
   })
@@ -1794,6 +1795,45 @@ describe("with several documents", () => {
     chooseFile(within(card).getByLabelText("Upload a question set"), "golden-set.csv")
     await waitFor(() => expect(served.acrossUploads).toHaveLength(1))
     expect(served.acrossUploads[0].getAll("documents")).toEqual([SOURCE.sha, GUIDE.sha])
+  })
+
+  it("keeps a set the server would not keep in this tab, tags and answers too, and reads it back", async () => {
+    open({
+      across: null,
+      acrossUpload: {
+        documents: [SOURCE.sha, GUIDE.sha],
+        filename: "golden-set.csv",
+        format: "csv",
+        count: 2,
+        stored: false,
+        note: "Checked, not kept.",
+        parser: "docling, pdfium",
+        parser_note: "Checked.",
+        summary: { questions: 2, found: 2, found_normalized: 0, not_found: 0 },
+        questions: [],
+        set: {
+          version: 1,
+          document: "",
+          questions: [
+            question({ id: "units", question: "What unit are depths in?", gold_answers: ["Depths are in metres."], tags: ["units"], answer: "Metres.", document: GUIDE.sha }),
+            question({ id: "page", question: "What is a page?", gold_answers: ["A page is a page."] }),
+          ],
+        },
+      },
+    })
+    const card = await screen.findByTestId("question-set-across")
+    chooseFile(within(card).getByLabelText("Upload a question set"), "golden-set.csv")
+    await waitFor(() => expect(within(card).getByTestId("set-line").textContent).toBe("2 questions from golden-set.csv, covering 1 of 2 documents"))
+    expect(within(card).getByTestId("tab-only")).toBeTruthy()
+    const row = () => document.querySelector<HTMLElement>('[data-question="units"]')!
+    expect(row().textContent).toContain("units")
+    expect(row().textContent).toContain("Metres.")
+    // A fresh page in the same tab reads it back.
+    cleanup()
+    open({ across: null })
+    const again = await screen.findByTestId("question-set-across")
+    await waitFor(() => expect(within(again).getByTestId("set-line").textContent).toBe("2 questions from golden-set.csv, covering 1 of 2 documents"))
+    expect(row().textContent).toContain("Metres.")
   })
 
   it("uses the samples' own sets when none is kept, each naming its sample", async () => {

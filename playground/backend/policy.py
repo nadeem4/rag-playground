@@ -396,6 +396,12 @@ class PlaygroundPolicy(Policy):
         """On the demo an upload is one browser's own: no shared cache may keep it."""
         return demo.enabled() and sha not in sample_set.readable_shas()
 
+    def document_name(self, sha: str, request: Request) -> str | None:
+        """A bundled sample is seeded at startup with no record, so until a
+        visitor loads it, its name comes from the sample catalog: a golden set
+        naming chunking-primer.pdf then finds it."""
+        return next((s.pdf.name for s in sample_set.all_samples() if s.sha == sha), None)
+
     def keeps_question_sets(self, request: Request) -> bool:
         """The demo checks a set and hands the result back, but keeps nothing, so
         one visitor's questions never reach another's browser."""

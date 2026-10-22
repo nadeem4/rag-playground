@@ -2,7 +2,7 @@ import type { VariantState } from "@/api/runState"
 import type { CompareStage, ComparisonRequest, ComparisonResult, GraphNode, Registry, Stage, Variant } from "@/api/types"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
 import { compareLists, ordinal, type ListChange } from "@/components/inspectors/hits"
-import type { ChunkStats } from "@/components/inspectors/spans"
+import type { ChunkStats } from "@/api/types"
 import { strategyLabel } from "@/learn/challenges"
 
 import type { Step, WorkingPipeline } from "./config"

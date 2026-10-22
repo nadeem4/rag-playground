@@ -2,7 +2,6 @@ import type { ArtifactType, ChunkSet, CleanReportEntry, ElementType, ParsedDoc, 
 import { chatStats, isChatOutput } from "@/components/inspectors/chat"
 import { movement, rowsFromResult, type SearchOutput } from "@/components/inspectors/hits"
 import type { IndexDescriptor } from "@/components/inspectors/IndexInspector"
-import { chunkSizes, median, overlapPairs, projectSpans } from "@/components/inspectors/spans"
 import { fmt } from "@/components/inspectors/status"
 
 /**
@@ -83,8 +82,10 @@ function cleanOutcome(entry: CleanReportEntry): Outcome {
 function chunkOutcome(set: ChunkSet): Outcome {
   const n = set.chunks.length
   if (n === 0) return { headline: 0, lead: "Made 0 chunks", tail: ". The document produced no text to cut." }
-  // The same projection the chunk inspector counts overlaps with.
-  const overlapsLine = () => count(overlapPairs(projectSpans(set.source_text, set.chunks)).length, "overlap", "overlaps")
+  // Pandion's numbers for the set, the ones the chunk inspector shows.
+  const stats = set.stats
+  if (!stats) return { headline: n, lead: `Made ${count(n, "chunk", "chunks")}`, tail: "." }
+  const overlapsLine = () => count(stats.overlaps, "overlap", "overlaps")
   // The sentence chunker is set in sentences: say how many there were and how many go in a piece.
   const meta = set.chunker_meta ?? {}
   if (meta.chunker === "sentence_window" && typeof meta.sentences === "number" && typeof meta.sentences_per_chunk === "number") {
@@ -95,11 +96,10 @@ function chunkOutcome(set: ChunkSet): Outcome {
     }
   }
   // Sizes in the unit the chunk size is set in, so the card and the setting agree.
-  const { sizes, unit } = chunkSizes(set)
   return {
     headline: n,
     lead: `Made ${count(n, "chunk", "chunks")}`,
-    tail: `. Median ${fmt(Math.round(median(sizes) ?? 0))} ${unit}, largest ${fmt(Math.max(...sizes))}. ${overlapsLine()}.`,
+    tail: `. Median ${fmt(Math.round(stats.median ?? 0))} ${stats.unit}, largest ${fmt(stats.largest ?? 0)}. ${overlapsLine()}.`,
   }
 }
 

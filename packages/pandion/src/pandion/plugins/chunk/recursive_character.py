@@ -145,6 +145,8 @@ class RecursiveCharacterChunker(Transform[RecursiveCharacterConfig]):
     name = "recursive_character"
     version = "2"
     stage = Stage.CHUNK
+    #: chunk_size counts characters, so a piece's size is said in characters.
+    size_unit = "characters"
     inputs = {"doc": PortSpec(ArtifactType.PARSED_DOC)}
     output = ArtifactType.CHUNK_SET
     config_model = RecursiveCharacterConfig

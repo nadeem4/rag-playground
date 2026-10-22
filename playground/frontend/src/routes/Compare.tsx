@@ -29,7 +29,7 @@ import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { agreementText, compareLists, hitRows, type HitRowData } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
-import { chunkSlot, chunkStats } from "@/components/inspectors/spans"
+import { chunkSlot } from "@/components/inspectors/spans"
 import type { InspectorStatus } from "@/components/inspectors/status"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
@@ -625,8 +625,8 @@ function Sweep({
           const v = submitted.variants[i]
           const field = SIZE_FIELDS[v.transform]?.[0]
           const size = field && typeof v.config[field] === "number" ? (v.config[field] as number) : null
-          return { short: submittedNames[i].short, transform: v.transform, size, stats: chunkStats(set), own: i === submitted.base }
-        }),
+          return { short: submittedNames[i].short, transform: v.transform, size, stats: set.stats, own: i === submitted.base }
+        }).flatMap((x) => (x.stats ? [{ ...x, stats: x.stats }] : [])),
       )
     }
     if (base === null) return null
@@ -794,7 +794,7 @@ function Sweep({
   const rows: OverviewRow[] = submitted.variants.map((v, i) => {
     const st = statuses[i]
     const set = payload(ids[i]?.through).data as ChunkSet | undefined
-    const stats = target.stage === "chunk" && typeof set?.source_text === "string" && Array.isArray(set.chunks) ? chunkStats(set) : null
+    const stats = target.stage === "chunk" ? (set?.stats ?? null) : null
     const hits = hitRowLists[i]
     const searchedSet = (payload(ids[i]?.chunks).data as ChunkSet | undefined)?.chunks
     const answer = answerId(i, hits)
@@ -811,7 +811,7 @@ function Sweep({
       cost: variedCost(i),
       values: {
         ...(target.stage === "chunk"
-          ? { pieces: stats?.pieces ?? null, tokens: stats?.tokens ?? null, median: stats?.median ?? null, p95: stats?.p95 ?? null, uncovered: stats?.uncovered ?? null }
+          ? { pieces: stats?.pieces ?? null, tokens: stats?.tokens ?? null, median: stats?.median_tokens ?? null, p95: stats?.p95_tokens ?? null, uncovered: stats?.uncovered ?? null }
           : { rank: ranks[i] ?? null, shared: i === baseAt ? null : sharedTop(baseTop, hitLists[i] ?? []), returned: hits?.length ?? null }),
         ...costValues(variedCost(i)),
       },
@@ -884,7 +884,8 @@ function Sweep({
     const r = rows[i]
     const b = rows[baseAt]
     if (!r?.done || !b?.done) return null
-    if (target.stage === "chunk") return columnDelta({ kind: "chunk", stats: chunkStats(r.set as ChunkSet), base: chunkStats(b.set as ChunkSet), baseName: runBase })
+    const [now, was] = [(r.set as ChunkSet | undefined)?.stats, (b.set as ChunkSet | undefined)?.stats]
+    if (target.stage === "chunk") return now && was ? columnDelta({ kind: "chunk", stats: now, base: was, baseName: runBase }) : null
     if (target.stage === "retrieve")
       return columnDelta({ kind: "retrieve", shared: r.values.shared ?? 0, top, rank: r.values.rank ?? null, goldKnown, returned: r.values.returned ?? 0, topK: topKOf(i), baseName: runBase })
     return null
@@ -893,7 +894,10 @@ function Sweep({
     const doneRows = rows.filter((r) => r.done)
     if (target.stage === "chunk") {
       return chunkManyFinding(
-        doneRows.map((r) => ({ i: r.i, phrase: submittedPhrases[r.i].phrase, stats: chunkStats(r.set as ChunkSet) })),
+        doneRows.flatMap((r) => {
+          const stats = (r.set as ChunkSet | undefined)?.stats
+          return stats ? [{ i: r.i, phrase: submittedPhrases[r.i].phrase, stats }] : []
+        }),
         side.fit,
       )
     }

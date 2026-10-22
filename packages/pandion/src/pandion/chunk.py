@@ -3,12 +3,14 @@
 `pandion.chunk(doc, use="recursive_character", chunk_size=400)` cuts one parsed
 document into pieces (`pandion.stages.chunk`). `RecursiveCharacter(chunk_size=400)`
 is the same settings for a pipeline written in code (`pandion.config.step_class`).
+`pandion.chunk.stats(chunks)` sums up a chunk set: its pieces, their sizes in the
+unit the chunker counts in, overlaps and the text no piece covers.
 """
 
 import sys
 
 from pandion.config import step_class
-from pandion.plugins.chunk import count_tokens
+from pandion.plugins.chunk import count_tokens, stats
 from pandion.ports import Stage
 from pandion.stages import StageModule
 from pandion.stages import chunk as run
@@ -19,6 +21,6 @@ MarkdownHeader = step_class(Stage.CHUNK, "markdown_header", __name__)
 TokenBased = step_class(Stage.CHUNK, "token_based", __name__)
 SentenceWindow = step_class(Stage.CHUNK, "sentence_window", __name__)
 
-__all__ = ["LayoutBlocks", "MarkdownHeader", "RecursiveCharacter", "SentenceWindow", "TokenBased", "count_tokens"]
+__all__ = ["LayoutBlocks", "MarkdownHeader", "RecursiveCharacter", "SentenceWindow", "TokenBased", "count_tokens", "stats"]
 
 sys.modules[__name__].__class__ = StageModule

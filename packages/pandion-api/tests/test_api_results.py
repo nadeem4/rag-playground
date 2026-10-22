@@ -24,6 +24,16 @@ def test_a_result_is_described_and_read_by_id(client):
     assert client.get(f"/results/{chunk}/payload").json()["chunks"]
 
 
+def test_a_chunk_set_comes_with_its_numbers_as_pandion_sums_them_up(client):
+    import pandion
+
+    chunk = indexed(client)["documents"]["report.pdf"]["chunk"]["result_id"]
+    body = client.get(f"/results/{chunk}/payload").json()
+    stats = body.pop("stats")
+    assert stats == pandion.chunk.stats(body)
+    assert stats["unit"] == "characters" and stats["pieces"] == len(body["chunks"])
+
+
 def test_an_index_payload_is_its_descriptor(client):
     index = indexed(client)["index"]["result_id"]
     body = client.get(f"/results/{index}/payload").json()

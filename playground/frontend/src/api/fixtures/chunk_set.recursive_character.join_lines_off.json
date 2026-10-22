@@ -195,5 +195,17 @@
     "chunk_size": 400,
     "chunk_overlap": 80,
     "heading_context": true
+  },
+  "stats": {
+    "pieces": 7,
+    "tokens": 467,
+    "unit": "characters",
+    "median": 370.0,
+    "p95": 400,
+    "largest": 400,
+    "median_tokens": 69.0,
+    "p95_tokens": 75,
+    "overlaps": 6,
+    "uncovered": 0
   }
 }

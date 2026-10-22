@@ -74,7 +74,9 @@ describe("ChunkSetInspector", () => {
     expect(screen.getByTestId("summary-median").nextElementSibling!.textContent).toBe("median characters")
     expect(screen.getByTestId("summary-p95").nextElementSibling!.textContent).toBe("p95 characters")
     cleanup()
-    render(<ChunkSetInspector chunkSet={{ ...recursive, chunker_meta: { chunker: "token_based", max_tokens: 96, overlap: 16 } }} />)
+    // The unit is Pandion's to say, with the set's stats.
+    render(<ChunkSetInspector chunkSet={{ ...recursive, stats: { ...recursive.stats!, unit: "tokens", median: 67 } }} />)
+    expect(screen.getByTestId("summary-median").textContent).toBe("67")
     expect(screen.getByTestId("summary-median").nextElementSibling!.textContent).toBe("median tokens")
   })
 
@@ -171,8 +173,15 @@ describe("ChunkSetInspector", () => {
     expect(root.dataset.hover).toBeUndefined()
   })
 
+  it("shows no numbers for a set without Pandion's stats, rather than working them out", () => {
+    const { stats: _gone, ...bare } = recursive
+    render(<ChunkSetInspector chunkSet={bare} />)
+    expect(screen.queryByTestId("summary-chunks")).toBeNull()
+  })
+
   it("has an empty state for a zero-chunk set with no text", () => {
-    render(<ChunkSetInspector chunkSet={{ chunks: [], source_text: "", doc_id: "d", chunker_meta: {} }} />)
+    const stats = { pieces: 0, tokens: 0, unit: "tokens", median: null, p95: null, largest: null, median_tokens: null, p95_tokens: null, overlaps: 0, uncovered: 0 } as const
+    render(<ChunkSetInspector chunkSet={{ chunks: [], source_text: "", doc_id: "d", chunker_meta: {}, stats }} />)
     expect(screen.getByText("No chunks")).toBeTruthy()
     expect(screen.getByTestId("summary-chunks").textContent).toBe("0")
   })

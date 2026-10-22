@@ -132,5 +132,17 @@
     "chunker": "token_based",
     "max_tokens": 96,
     "overlap": 16
+  },
+  "stats": {
+    "pieces": 5,
+    "tokens": 452,
+    "unit": "tokens",
+    "median": 96.0,
+    "p95": 96,
+    "largest": 96,
+    "median_tokens": 96.0,
+    "p95_tokens": 96,
+    "overlaps": 4,
+    "uncovered": 0
   }
 }

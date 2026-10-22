@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react"
 
-import type { Chunk, ChunkSet, ParsedDoc } from "@/api/types"
+import type { Chunk, ChunkSet, ChunkStats, ParsedDoc } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
 import { ElementsInPdf } from "@/components/pdf/ElementsInPdf"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 
 import "./inspectors.css"
 import { useSpineLayout } from "./spine"
-import { assignLanes, chunkSizes, chunkSlot, chunkStats, median, p95, projectSpans, type Segment } from "./spans"
+import { assignLanes, chunkSlot, projectSpans, type Segment } from "./spans"
 import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
 
 /**
@@ -89,18 +89,8 @@ function ChunkSetView({
         last[i] = k
       }
     })
-    const { pieces, tokens, ...rest } = chunkStats({ source_text: source, chunks }, segments)
-    // The median and the largest 5% in the unit the chunk size is set in, as the card says them.
-    const { sizes, unit } = chunkSizes({ chunks, chunker_meta: set.chunker_meta })
-    return {
-      lanes,
-      laneCount,
-      first,
-      last,
-      maxTokens: Math.max(1, ...chunks.map((c) => c.token_count)),
-      stats: { chunks: pieces, total: tokens, ...rest, median: median(sizes), p95: p95(sizes), unit },
-    }
-  }, [chunks, segments, source, set.chunker_meta])
+    return { lanes, laneCount, first, last, maxTokens: Math.max(1, ...chunks.map((c) => c.token_count)) }
+  }, [chunks, segments])
 
   useSpineLayout(rootRef, [segments])
 
@@ -143,7 +133,7 @@ function ChunkSetView({
 
   return (
     <Frame>
-      <Summary stats={derived.stats} meta={set.chunker_meta} />
+      {set.stats ? <Summary stats={set.stats} meta={set.chunker_meta} /> : null}
       {/* Layout follows the inspector's own width (a container query in
           inspectors.css), never the viewport's: beside the pipeline column or
           in a Compare column the viewport is wide and the inspector is not. */}
@@ -227,7 +217,8 @@ function Summary({
   stats,
   meta,
 }: {
-  stats: { chunks: number; total: number; median: number | null; p95: number | null; unit: string; overlaps: number; uncovered: number }
+  /** Pandion's numbers for the set: the median and the largest 5% in the unit the chunk size is set in. */
+  stats: ChunkStats
   meta: Record<string, unknown>
 }) {
   const dash = (n: number | null) => (n === null ? "n/a" : fmt(Math.round(n)))
@@ -237,15 +228,15 @@ function Summary({
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 bg-surface-elevated px-3 py-2">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <Stat id="chunks" label="chunks" value={fmt(stats.chunks)} />
-        <Stat id="total" label="tokens" value={fmt(stats.total)} />
+        <Stat id="chunks" label="chunks" value={fmt(stats.pieces)} />
+        <Stat id="total" label="tokens" value={fmt(stats.tokens)} />
         <Stat id="median" label={`median ${stats.unit}`} value={dash(stats.median)} />
         <Stat id="p95" label={`p95 ${stats.unit}`} value={dash(stats.p95)} />
         <Stat id="overlaps" label="overlaps" value={fmt(stats.overlaps)} />
         <Stat id="uncovered" label="chars uncovered" value={fmt(stats.uncovered)} />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {stats.chunks > 0 ? (
+        {stats.pieces > 0 ? (
           <>
             <span className="flex items-center gap-1 text-xs text-fg-muted">
               <span aria-hidden className="ci-key-overlap block h-[12px] w-[20px]" />

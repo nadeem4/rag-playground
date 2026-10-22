@@ -71,6 +71,17 @@ function problemsOf(detail: unknown): string[] | null {
   return Array.isArray(problems) && problems.every((p) => typeof p === "string") ? problems : null
 }
 
+/**
+ * A step's settings as Pandion's strategy takes them. A source node also keeps
+ * the pipeline's list of documents (`state/sourceDocs.ts`), which is the web's
+ * own and no setting of the upload step, so it is not sent.
+ */
+export function explainedSettings(node: Pick<GraphNode, "stage" | "config">): Record<string, unknown> {
+  if (node.stage !== "source") return node.config
+  const { documents: _list, ...settings } = node.config
+  return settings
+}
+
 const refused = (warning: string): Explanation => ({ settings: "", tradeoff: null, warning, blocking: true })
 
 /**
@@ -135,7 +146,7 @@ export function useExplanations(nodes: readonly GraphNode[]): Record<string, Exp
       const ctrl = new AbortController()
       const current = () => map.get(node.id)?.ctrl === ctrl && !ctrl.signal.aborted
       const send = () => {
-        v2.explain({ stage: node.stage, use: node.transform, settings: node.config }, ctrl.signal).then(
+        v2.explain({ stage: node.stage, use: node.transform, settings: explainedSettings(node) }, ctrl.signal).then(
           (res) => {
             if (!current() || !isExplanation(res)) return
             setState((s) => ({ ...s, [node.id]: { data: res } }))

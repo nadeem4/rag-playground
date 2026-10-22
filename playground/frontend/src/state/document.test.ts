@@ -5,11 +5,13 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
 import {
+  addDocument,
   chooseDocument,
   docStatus,
   documentOf,
   documentsOf,
   loadSampleDocument,
+  removeDocument,
   resetDocumentForTests,
   setUploadState,
   useDocument,
@@ -100,6 +102,52 @@ describe("docStatus", () => {
   })
   it("is missing once both lists answered without it, a failed samples list counting as none", () => {
     expect(docStatus(ref("ef".repeat(32)), [UP], null, true, new Set())).toBe("missing")
+  })
+})
+
+describe("addDocument and removeDocument", () => {
+  const NOTES = ref("ee".repeat(32), "notes.md")
+
+  it("adds a document after the pipeline's own, keeping every setting, and keeps each once", async () => {
+    const before = sampleGraph(registry, ref(SAMPLE_SHA, "chunking-primer.pdf"))
+    storeGraph(before)
+    await addDocument(NOTES)
+    await addDocument(NOTES)
+    const after = readStoredGraph(registry)!
+    expect(documentsOf(after)).toEqual([ref(SAMPLE_SHA, "chunking-primer.pdf"), NOTES])
+    const rest = (g: PipelineGraph) => g.nodes.filter((n) => n.stage !== "source")
+    expect(rest(after)).toEqual(rest(before))
+  })
+
+  it("refuses another document with the same name: the server tells documents apart by their names", async () => {
+    storeGraph(sampleGraph(registry, ref(SAMPLE_SHA, "chunking-primer.pdf")))
+    await addDocument(NOTES)
+    await expect(addDocument(ref("ff".repeat(32), "chunking-primer.pdf"))).rejects.toThrow(/already has a document named chunking-primer.pdf/)
+    expect(documentsOf(readStoredGraph(registry))).toEqual([ref(SAMPLE_SHA, "chunking-primer.pdf"), NOTES])
+  })
+
+  it("replaces the only document when the new one has its name, as an edited file uploaded again", async () => {
+    storeGraph(sampleGraph(registry, ref(UP.sha, "report.pdf"), "Who wrote this?"))
+    const edited = ref("ff".repeat(32), "report.pdf")
+    await addDocument(edited)
+    const after = readStoredGraph(registry)!
+    expect(documentsOf(after)).toEqual([edited])
+    expect(after.nodes.find((n) => n.stage === "query")!.config.text).toBe("Who wrote this?")
+  })
+
+  it("picks, as chooseDocument does, when the pipeline has no document yet", async () => {
+    await addDocument(ref(SAMPLE_SHA, "chunking-primer.pdf"))
+    expect(documentsOf(readStoredGraph(registry))).toEqual([ref(SAMPLE_SHA, "chunking-primer.pdf")])
+  })
+
+  it("removes one document and keeps the rest in order", async () => {
+    storeGraph(sampleGraph(registry, ref(SAMPLE_SHA, "chunking-primer.pdf")))
+    await addDocument(NOTES)
+    await addDocument(ref(UP.sha, UP.filename))
+    removeDocument(NOTES.sha)
+    expect(documentsOf(readStoredGraph(registry))).toEqual([ref(SAMPLE_SHA, "chunking-primer.pdf"), ref(UP.sha, UP.filename)])
+    removeDocument("nope")
+    expect(documentsOf(readStoredGraph(registry))).toHaveLength(2)
   })
 })
 
@@ -286,6 +334,22 @@ describe("a sample saved with an old fingerprint", () => {
     const { result } = renderHook(() => useDocument())
     await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
     expect(documentsOf(readStoredGraph(registry))).toEqual(order(ref(SAMPLE_SHA, "chunking-primer.pdf"), notes))
+  })
+
+  it("swaps every stale sample of a pipeline at once, and names them all", async () => {
+    const OTHER_OLD = "ef".repeat(32)
+    const OTHER = { ...SAMPLE, name: "tables", filename: "tables.pdf", sha: "fe".repeat(32), default: false }
+    answers["/api/samples"] = [SAMPLE, OTHER]
+    const notes = ref(UP.sha, UP.filename)
+    storeGraph(withDocuments(sampleGraph(registry, notes), [ref(OLD, "chunking-primer.pdf"), notes, ref(OTHER_OLD, "tables.pdf")]))
+    const { saved } = savePipeline("Two samples", readStoredGraph(registry)!)!
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.recoveredNote).not.toBeNull())
+    const now = [ref(SAMPLE_SHA, "chunking-primer.pdf"), notes, ref(OTHER.sha, "tables.pdf")]
+    expect(documentsOf(readStoredGraph(registry))).toEqual(now)
+    expect(result.current.status).toBe("ready")
+    expect(result.current.recoveredNote).toBe("The samples chunking-primer.pdf and tables.pdf were updated, so this page now uses their current copies.")
+    expect(readPipelines().find((x) => x.id === saved.id)!.documents).toEqual(now)
   })
 
   it("does nothing while the lists are still loading", async () => {

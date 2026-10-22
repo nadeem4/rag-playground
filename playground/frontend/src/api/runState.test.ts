@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import fixtureEvents from "./fixtures/run_events.json"
-import { cardEvent, initialRunState, reduceEvents, runReducer } from "./runState"
+import { cardEvent, forDocument, initialRunState, reduceEvents, runReducer, runsAs } from "./runState"
 import type { RunEvent } from "./types"
 import { cardOfStepIn } from "@/state/config"
 import { addCleaner, initialGraph, removeNode } from "@/state/graph"
@@ -232,5 +232,53 @@ describe("runReducer: questions written for you", () => {
     ] as RunEvent[])
     expect(state.parts).toEqual({ number: 2, total: 4 })
     expect(state.status).toBe("running")
+  })
+})
+
+describe("a run over several documents", () => {
+  /** A /api/v2 step event for one document, as the server sends it. */
+  const step = (event: string, name: string, document: string, more: Record<string, unknown> = {}) =>
+    cardEvent(e({ event, step: name, document, node_id: `${document}::${name}`, ...more }))
+  const started = cardEvent(e({ event: "run_started", steps: [{ step: "parse" }, { step: "parse" }, { step: "index" }], selected_steps: [{ step: "parse" }, { step: "index" }] }))
+
+  it("keeps each document's run of a step, and the step runs while one of them does", () => {
+    const state = reduceEvents([
+      started,
+      step("node_started", "parse", "manual.pdf", { artifact_id: "p1" }),
+      step("node_finished", "parse", "manual.pdf", { artifact_id: "p1", cache_hit: false, duration_ms: 40 }),
+      step("node_started", "parse", "faq.md", { artifact_id: "p2" }),
+    ])
+    const parse = state.variants[0].nodes.parse
+    expect(parse.status).toBe("running")
+    expect(parse.documents?.["manual.pdf"]).toMatchObject({ status: "done", artifact_id: "p1", duration_ms: 40 })
+    expect(parse.documents?.["faq.md"]).toMatchObject({ status: "running", artifact_id: "p2" })
+  })
+
+  it("is done when every document is, cached when every one came from the cache, failed when one failed", () => {
+    const run = (b: RunEvent) =>
+      reduceEvents([started, step("node_finished", "parse", "manual.pdf", { artifact_id: "p1", cache_hit: true }), b]).variants[0].nodes.parse
+    expect(run(step("node_finished", "parse", "faq.md", { artifact_id: "p2", cache_hit: false })).status).toBe("done")
+    expect(run(step("node_finished", "parse", "faq.md", { artifact_id: "p2", cache_hit: true })).status).toBe("cached")
+    expect(run(step("node_failed", "parse", "faq.md", { error: "faq.md could not be read" }))).toMatchObject({ status: "failed", error: "faq.md could not be read" })
+  })
+
+  it("shows one document's result on each step, and leaves the rest as it is", () => {
+    const state = reduceEvents([
+      started,
+      step("node_finished", "parse", "manual.pdf", { artifact_id: "p1", duration_ms: 40 }),
+      step("node_finished", "parse", "faq.md", { artifact_id: "p2", duration_ms: 9 }),
+    ])
+    const nodes = { ...state.variants[0].nodes, index: { id: "index", status: "done" as const, artifact_id: "i1" } }
+    expect(forDocument(nodes, "faq.md").parse).toMatchObject({ status: "done", artifact_id: "p2", duration_ms: 9 })
+    expect(forDocument(nodes, "manual.pdf").parse.artifact_id).toBe("p1")
+    expect(forDocument(nodes, "faq.md").index).toBe(nodes.index)
+    expect(forDocument(nodes, null)).toBe(nodes)
+    expect(forDocument(nodes, "other.pdf")).toBe(nodes)
+  })
+
+  it("finds a document under the name the run gives it, dots and all", () => {
+    expect(runsAs("my report.pdf", "my report.pdf")).toBe(true)
+    expect(runsAs("my report.pdf", "my report_pdf")).toBe(true)
+    expect(runsAs("my report.pdf", "other.pdf")).toBe(false)
   })
 })

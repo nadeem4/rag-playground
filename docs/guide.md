@@ -37,8 +37,9 @@ picture, and a document from a link takes the link's host, such as en.wikipedia.
 title.
 
 - On **Build** the documents belong to the pipeline, so they are in its first step, the
-  **Document** card. Its **Add or change** link opens a menu with the bundled samples, your
-  uploads, **Upload a document** and **Or add a link**.
+  **Document** card. Its **Add a document** link opens a menu with the bundled samples, your
+  uploads, **Upload a document** and **Or add a link**. What you pick joins the pipeline's
+  documents. With two or more, each has a **Remove** button; a pipeline keeps at least one.
 - On **Evaluate** they are listed under **Documents**, with **Change**.
 - **Compare** stays document first: a **Document** line above the recipes shows the
   picture and the title, with **Preview** and **Change**. It works on the pipeline on Build.
@@ -118,7 +119,7 @@ note with a **Pick a document** button, and their run buttons wait and say "Need
 document." A sample saved with an older copy of its PDF is not missing: when its filename
 is exactly a current sample's, and no upload in this browser has that filename, the page
 switches to the sample's current copy and says so once. In a pipeline with several
-documents, only that sample changes; the other documents stay. Uploads are never matched by
+documents, every such sample changes at once and the other documents stay. Uploads are never matched by
 filename.
 
 ## Home
@@ -161,9 +162,16 @@ pipeline from the Starter's settings on the documents in use.
 
 The column on the left of Build is the index pipeline: Document, Parse, Clean, Chunk and
 Index, one card each with its own settings. The Document card lists the pipeline's
-documents, each with **Preview**, and its **Add or change** link picks another. On a first
-visit with no document, the first-visit card offers the samples, **Upload a document**, and
-**Pick a document** for your earlier uploads.
+documents, each with **Preview**. Its **Add a document** link adds one more: every step
+runs on each document, and the index and Ask cover them all. With two or more documents,
+each has **Remove**, and a **Showing the steps for** picker above the column chooses which
+document's results the cards show. To replace the only document, add the new one, then
+remove the old one. Two documents with the same name cannot run together, since the server
+tells them apart by their names: with several documents, adding one whose name is taken is
+refused, and you remove the old one first or upload the new one under another name. With
+only one document, a new file of the same name, such as an edited report.pdf uploaded
+again, replaces it. On a first visit with no document, the first-visit card offers the
+samples, **Upload a document**, and **Pick a document** for your earlier uploads.
 
 - **Build the index** runs the steps. Each card also has its own **Run**. Each card runs
   the pipeline only as far as itself (`through` in `POST /api/v2/runs`); what is already

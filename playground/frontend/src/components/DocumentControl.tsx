@@ -8,6 +8,7 @@ import { api, ApiError } from "@/api/client"
 import type { SampleCard } from "@/api/types"
 import { useDemo } from "@/api/useDemo"
 import {
+  addDocument,
   chooseDocument,
   documentBusy,
   loadSampleDocument,
@@ -31,6 +32,9 @@ const ITEM =
 
 const HEADING = "px-2 pt-2 pb-1 text-2xs text-fg-muted"
 
+/** What a document already in the pipeline says in the adding menu. */
+const IN_PIPELINE = "In this pipeline"
+
 /**
  * The Document control: a link that opens a menu to change the document (the
  * samples, this browser's uploads, Upload a document and a link box). It sits beside the
@@ -50,6 +54,7 @@ export function DocumentControl({
   value,
   onChoose,
   foot,
+  adds,
 }: {
   /** The link's words, such as "Add or change" on Build. */
   label?: string
@@ -59,11 +64,20 @@ export function DocumentControl({
   onChoose?: (doc: DocRef) => Promise<void> | void
   /** The menu's first foot line, instead of the default. */
   foot?: string
+  /**
+   * Build's control, given the pipeline's documents: a pick is added to them
+   * (`addDocument`) instead of replacing them. With none yet it picks, as the
+   * plain control does, sample pipeline and all.
+   */
+  adds?: readonly DocRef[]
 } = {}) {
   const store = useDocument()
   const { samples, uploads, listError, menuOpen, sampleLoading, recoveredNote } = store
   const own = value !== undefined
   const doc = own ? value : store.doc
+  // Adding: the pipeline already has a document, so a pick joins it.
+  const adding = adds !== undefined && adds.length > 0 && !own
+  const inPipeline = new Set(adding ? adds.map((d) => d.sha) : [])
   const ownStatus = useDocStatus(value ?? null)
   const status = own ? ownStatus : store.status
   const demo = useDemo()
@@ -78,15 +92,19 @@ export function DocumentControl({
   // While an upload, a sample or a pick is in flight, every other choice waits, so two cannot race.
   const waiting = loading !== null || busy !== null || sampleLoading !== null
   const empty = !doc
+  const count = adds?.length ?? 0
   const name = busy
     ? busy
-    : missing
-      ? `Document ${doc?.filename} is missing. Pick another or upload it again.`
-      : empty
-        ? "Pick a document"
-        : `${label} the document. Now ${doc.filename}.`
-  // Nothing is ticked while the file is missing: the menu is there to pick another.
-  const current = !missing && doc ? doc.sha : ""
+    : adding
+      ? `Add a document. This pipeline reads ${count} ${count === 1 ? "document" : "documents"}.`
+      : missing
+        ? `Document ${doc?.filename} is missing. Pick another or upload it again.`
+        : empty
+          ? "Pick a document"
+          : `${label} the document. Now ${doc.filename}.`
+  // Nothing is ticked while the file is missing: the menu is there to pick another. Adding, none is:
+  // the ones already in the pipeline say so instead.
+  const current = !adding && !missing && doc ? doc.sha : ""
 
   async function pick(key: string, run: () => Promise<void>) {
     if (documentBusy()) return
@@ -101,14 +119,17 @@ export function DocumentControl({
     }
   }
 
-  /** A picked document: to the page that keeps its own, else to the working pipeline. */
-  const use = (d: DocRef) => (onChoose ? Promise.resolve(onChoose(d)).then(() => setDocumentMenuOpen(false)) : chooseDocument(d))
+  /** A picked document: added to the working pipeline's, to the page that keeps its own, else to the working pipeline. */
+  const use = (d: DocRef) =>
+    adding ? addDocument(d) : onChoose ? Promise.resolve(onChoose(d)).then(() => setDocumentMenuOpen(false)) : chooseDocument(d)
+  /** A document already in the pipeline is not picked again: the menu just closes. */
+  const already = (sha: string) => sha === current || inPipeline.has(sha)
 
   function pickSample(card: SampleCard) {
     void pick(card.sha, async () => {
       try {
-        if (onChoose) {
-          // Make sure the server has the sample, then hand it to the page.
+        if (onChoose || adding) {
+          // Make sure the server has the sample, then hand it to the page or add it.
           const src = await api.sampleSource(card.name)
           await use({ sha: src.sha, filename: src.filename })
         } else await loadSampleDocument(card)
@@ -122,7 +143,7 @@ export function DocumentControl({
 
   function submitLink() {
     if (waiting || !link.trim()) return
-    void addLink(link, onChoose ? use : undefined).then((ok) => ok && setLink(""))
+    void addLink(link, onChoose || adding ? use : undefined).then((ok) => ok && setLink(""))
   }
   const errorRef = useRef<HTMLParagraphElement>(null)
   // The menu scrolls: a refusal under the link box is brought into view.
@@ -143,7 +164,7 @@ export function DocumentControl({
         onChange={(e) => {
           const file = e.target.files?.[0]
           e.target.value = ""
-          void upload(file, onChoose ? use : undefined)
+          void upload(file, onChoose || adding ? use : undefined)
         }}
       />
       <DropdownMenu.Root open={menuOpen} onOpenChange={setDocumentMenuOpen}>
@@ -154,7 +175,7 @@ export function DocumentControl({
           aria-busy={busy ? true : undefined}
           className="inline-flex min-h-[1.5rem] items-center text-sm font-semibold text-primary underline underline-offset-4 outline-none hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
         >
-          {busy ?? (empty ? "Pick a document" : label)}
+          {busy ?? (adding ? "Add a document" : empty ? "Pick a document" : label)}
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
@@ -193,7 +214,7 @@ export function DocumentControl({
                       className={ITEM}
                       onSelect={(e) => {
                         e.preventDefault()
-                        if (s.sha !== current) pickSample(s)
+                        if (!already(s.sha)) pickSample(s)
                         else setDocumentMenuOpen(false)
                       }}
                     >
@@ -201,7 +222,9 @@ export function DocumentControl({
                       <DropdownMenu.ItemIndicator className="row-span-2 text-primary">
                         <Check aria-hidden strokeWidth={2} className="size-4" />
                       </DropdownMenu.ItemIndicator>
-                      <span className="col-start-1 min-w-0 truncate text-xs text-fg-muted">{sampleLoading === s.name ? "Loading this sample." : s.blurb}</span>
+                      <span className="col-start-1 min-w-0 truncate text-xs text-fg-muted">
+                        {sampleLoading === s.name ? "Loading this sample." : inPipeline.has(s.sha) ? IN_PIPELINE : s.blurb}
+                      </span>
                     </DropdownMenu.RadioItem>
                   ))}
                   <DropdownMenu.Separator className="my-1 h-[1px] bg-hairline" />
@@ -234,7 +257,7 @@ export function DocumentControl({
                     className={ITEM}
                     onSelect={(e) => {
                       e.preventDefault()
-                      if (u.sha !== current) void pick(u.sha, () => use({ sha: u.sha, filename: u.filename }))
+                      if (!already(u.sha)) void pick(u.sha, () => use({ sha: u.sha, filename: u.filename }))
                       else setDocumentMenuOpen(false)
                     }}
                   >
@@ -246,6 +269,7 @@ export function DocumentControl({
                       <Check aria-hidden strokeWidth={2} className="size-4" />
                     </DropdownMenu.ItemIndicator>
                     <span className="col-start-1 text-2xs text-fg-muted">
+                      {inPipeline.has(u.sha) ? `${IN_PIPELINE}, ` : null}
                       {u.origin_url ? "From a link, " : null}
                       <span className="font-mono">{Math.max(1, Math.round(u.size / 1024))} KB</span>
                     </span>
@@ -314,7 +338,7 @@ export function DocumentControl({
               </p>
             ) : null}
             <p className="px-2 pt-1 text-2xs text-fg-muted">
-              {foot ?? "The pipeline runs on this document."}{" "}
+              {foot ?? (adding ? "Each document you add is indexed with the others, and Ask searches them all." : "The pipeline runs on this document.")}{" "}
               {demo ? "Uploads on the demo are private to this browser and expire." : "Your files stay on this machine."}
             </p>
             <p className="px-2 text-2xs text-fg-muted" data-testid="upload-limits">

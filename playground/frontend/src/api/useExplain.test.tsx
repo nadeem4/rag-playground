@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { refusedDetail } from "@/api/fixtures/problems"
 
 import type { GraphNode } from "./types"
-import { EXPLAIN_DEBOUNCE_MS, useExplanations } from "./useExplain"
+import { EXPLAIN_DEBOUNCE_MS, explainedSettings, useExplanations } from "./useExplain"
 
 interface Call {
   url: string
@@ -156,5 +156,14 @@ describe("useExplanations", () => {
     calls[1].resolve(new Response("boom", { status: 500 }))
     await flush()
     expect(result.current.chunk.data?.settings).toBe("Pieces of 400")
+  })
+})
+
+describe("explainedSettings", () => {
+  it("sends a source node's settings without the pipeline's list of documents", () => {
+    const docs = [{ sha: "a".repeat(64), filename: "a.pdf" }, { sha: "b".repeat(64), filename: "b.md" }]
+    expect(explainedSettings({ stage: "source", config: { sha: docs[0].sha, filename: "a.pdf", documents: docs } })).toEqual({ sha: docs[0].sha, filename: "a.pdf" })
+    const chunk = { chunk_size: 400 }
+    expect(explainedSettings({ stage: "chunk", config: chunk })).toBe(chunk)
   })
 })

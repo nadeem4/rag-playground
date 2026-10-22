@@ -40,7 +40,16 @@ export interface NodeState {
   error?: string
   /** `node_started` time, epoch seconds (the event's `ts`). */
   started_at?: number
+  /**
+   * A step that runs once per document (source to enrich), each document's own
+   * state, by the name the run gives the document. The node's own fields are
+   * then all of them together: running while one runs, failed when one failed.
+   */
+  documents?: Record<string, DocNodeState>
 }
+
+/** One document's run of a step. */
+export type DocNodeState = Omit<NodeState, "id" | "documents">
 
 export interface VariantState {
   /** The comparison variant's index, from 0; `null` for a plain run. */
@@ -112,11 +121,31 @@ function withCurrent(state: RunState, update: (v: VariantState) => VariantState)
   return { ...state, variants: [...variants.slice(0, last), update(variants[last])] }
 }
 
-function patchNode(state: RunState, id: string, patch: Partial<NodeState>): RunState {
-  return withCurrent(state, (v) => ({
-    ...v,
-    nodes: { ...v.nodes, [id]: { ...(v.nodes[id] ?? { id, status: "pending" }), ...patch } },
-  }))
+function patchNode(state: RunState, id: string, patch: Partial<NodeState>, document?: string): RunState {
+  return withCurrent(state, (v) => {
+    const node = { ...(v.nodes[id] ?? { id, status: "pending" as NodeStatus }), ...patch }
+    if (document === undefined) return { ...v, nodes: { ...v.nodes, [id]: node } }
+    const docs = { ...node.documents, [document]: { ...(node.documents?.[document] ?? { status: "pending" as NodeStatus }), ...patch } }
+    return { ...v, nodes: { ...v.nodes, [id]: { ...node, ...together(docs), documents: docs } } }
+  })
+}
+
+/** A step's documents' states as the step's own: running while one runs, failed when one failed, cached when all were. */
+function together(docs: Record<string, DocNodeState>): Pick<NodeState, "status" | "error"> {
+  const all = Object.values(docs)
+  const failed = all.find((d) => d.status === "failed")
+  if (all.some((d) => d.status === "running")) return { status: "running" }
+  if (failed) return { status: "failed", error: failed.error }
+  if (all.length && all.every((d) => d.status === "cached")) return { status: "cached" }
+  if (all.length && all.every((d) => d.status === "done" || d.status === "cached")) return { status: "done" }
+  if (all.some((d) => d.status === "skipped")) return { status: "skipped" }
+  return { status: all[0]?.status ?? "pending" }
+}
+
+/** The document a /api/v2 event names, for a step that runs once per document. */
+const documentOf = (e: RunEvent): string | undefined => {
+  const d = (e as { document?: unknown }).document
+  return typeof d === "string" && d ? d : undefined
 }
 
 type Named = { step?: unknown; steps?: unknown; selected_steps?: unknown; skipped_steps?: unknown }
@@ -191,23 +220,33 @@ function applyEvent(prev: RunState, e: RunEvent): RunState {
     case "part_finished":
       return { ...state, parts: { number: e.number, total: e.total } }
     case "node_started":
-      return patchNode(state, e.node_id, {
-        status: "running",
-        started_at: e.ts,
-        transform: e.transform,
-        artifact_id: e.artifact_id,
-      })
+      return patchNode(
+        state,
+        e.node_id,
+        {
+          status: "running",
+          started_at: e.ts,
+          transform: e.transform,
+          artifact_id: e.artifact_id,
+        },
+        documentOf(e),
+      )
     case "node_finished":
-      return patchNode(state, e.node_id, {
-        status: e.cache_hit ? "cached" : "done",
-        artifact_id: e.artifact_id,
-        cache_hit: e.cache_hit,
-        duration_ms: e.duration_ms,
-      })
+      return patchNode(
+        state,
+        e.node_id,
+        {
+          status: e.cache_hit ? "cached" : "done",
+          artifact_id: e.artifact_id,
+          cache_hit: e.cache_hit,
+          duration_ms: e.duration_ms,
+        },
+        documentOf(e),
+      )
     case "node_failed":
-      return patchNode(state, e.node_id, { status: "failed", error: e.error })
+      return patchNode(state, e.node_id, { status: "failed", error: e.error }, documentOf(e))
     case "node_skipped":
-      return patchNode(state, e.node_id, { status: "skipped" })
+      return patchNode(state, e.node_id, { status: "skipped" }, documentOf(e))
     case "run_cancelled":
       return (e.skipped ?? []).reduce((s, id) => patchNode(s, id, { status: "skipped" }), state)
     case "run_finished":
@@ -263,4 +302,32 @@ export function reduceEvents(events: RunEvent[], cardOf?: CardOf): RunState {
     (s, event, seq) => runReducer(s, { type: "event", event, seq, cardOf }),
     initialRunState,
   )
+}
+
+/**
+ * The name a run gives a document (pandion-api's `safe_name`): its filename,
+ * or, when the server could not keep the name's suffix, the filename with
+ * every dot as `_`. A document matches either.
+ */
+export function runsAs(filename: string, name: string): boolean {
+  return name === filename || name === filename.replaceAll(".", "_")
+}
+
+/**
+ * Every node as one document's run shows it: a step that ran once per
+ * document takes that document's result and timing, and keeps the status of
+ * all of them together, so a card still runs while another document does.
+ * `filename` null, or a node with no run for it, leaves the node as it is.
+ */
+export function forDocument(results: Record<string, NodeState>, filename: string | null): Record<string, NodeState> {
+  if (filename === null) return results
+  let out = results
+  for (const [id, node] of Object.entries(results)) {
+    const name = node.documents ? Object.keys(node.documents).find((n) => runsAs(filename, n)) : undefined
+    if (!name) continue
+    const own = node.documents![name]
+    if (out === results) out = { ...results }
+    out[id] = { ...node, artifact_id: own.artifact_id, cache_hit: own.cache_hit, duration_ms: own.duration_ms, started_at: own.started_at }
+  }
+  return out
 }

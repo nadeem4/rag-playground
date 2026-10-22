@@ -302,13 +302,25 @@ describe("click to close, and scroll into view", () => {
     const source = initialGraph(R).nodes.find((n) => n.stage === "source")!
     const withFile = { ...source, config: { sha: "ab".repeat(32), filename: "report.pdf" } }
 
-    it("lists the pipeline's documents with the full element and offers Add or change, with nothing to edit when open", () => {
+    it("lists every document of a pipeline that reads several, each with Remove", () => {
+      const notes = { sha: "cd".repeat(32), filename: "notes.md" }
+      const both = { ...source, config: { sha: "ab".repeat(32), filename: "report.pdf", documents: [{ sha: "ab".repeat(32), filename: "report.pdf" }, notes] } }
+      const card = renderCard({ node: both, title: "Document", transforms: transformsFor(R, "source"), selected: true })
+      expect(within(card).getAllByTestId("document-item")).toHaveLength(2)
+      expect(within(card).getByText(/The 2 documents this pipeline reads/)).toBeTruthy()
+      expect(within(card).getAllByRole("button", { name: /^Remove .* from this pipeline$/ })).toHaveLength(2)
+      expect(within(card).getByTestId("document-trigger").getAttribute("aria-label")).toBe("Add a document. This pipeline reads 2 documents.")
+    })
+
+    it("lists the pipeline's document with the full element and offers Add a document, with nothing to edit when open", () => {
       const card = renderCard({ node: withFile, title: "Document", transforms: transformsFor(R, "source"), selected: true })
       const items = within(card).getAllByTestId("document-item")
       expect(items).toHaveLength(1)
       expect(within(items[0]).getByText("report.pdf")).toBeTruthy()
       expect(within(items[0]).getByRole("button", { name: "Preview Report" })).toBeTruthy()
-      expect(within(card).getByTestId("document-trigger").textContent).toBe("Add or change")
+      expect(within(card).getByTestId("document-trigger").textContent).toBe("Add a document")
+      // One document stays: there is nothing to remove it for.
+      expect(within(card).queryByRole("button", { name: /^Remove .* from this pipeline$/ })).toBeNull()
       expect(within(card).queryByRole("textbox")).toBeNull()
       expect(within(card).queryByRole("button", { name: /^Transform/ })).toBeNull()
     })

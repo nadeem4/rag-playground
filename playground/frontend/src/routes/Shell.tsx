@@ -185,7 +185,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const shownRunSha = pipelineDocs.length > 1 ? shownDoc?.sha : undefined
   const shown = useMemo(() => forDocument(results, shownFilename, shownRunSha), [results, shownFilename, shownRunSha])
   // Ask's Search in: one of the documents, by sha, or null for all of them. A document no longer in the pipeline means all.
-  const [searchSha, setSearchSha] = useState<string | null>(null)
+  // It starts where the last Ask searched, so a reload does not call its results out of date.
+  const [searchSha, setSearchSha] = useState<string | null>(() => session?.asked?.searchSha ?? null)
   const searchIn = pipelineDocs.length > 1 && pipelineDocs.some((d) => d.sha === searchSha) ? searchSha : null
   const [sigs, setSigs] = useState<Record<string, string>>(() => session?.sigs ?? {})
   const [selected, setSelected] = useState<string | null>(null)

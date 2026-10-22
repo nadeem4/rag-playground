@@ -7,6 +7,7 @@ they are) or `chat` (an answer whose claims cite the pieces).
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -205,3 +206,34 @@ def test_install_adds_the_sdk_the_chat_model_needs(tmp_path):
 
     assert "anthropic" in extras_for(claude)
     assert "openai" in extras_for(openai) and "anthropic" not in extras_for(openai)
+
+
+def test_a_citation_names_the_document_its_piece_came_from(tmp_path, monkeypatch):
+    """With several documents, each citation's `source_sha` is its own piece's document, not the first one's."""
+
+    def complete(model, **kwargs):
+        return Completion(text="One [1.1]. Two [2.1]. Three [3.1]. Four [4.1].", usage={}, stop_reason="end_turn")
+
+    monkeypatch.setattr(llm, "complete", complete)
+    config = write(tmp_path, "answer: {use: chat, model: gpt-6-astra}\n")
+    (config.parent / "docs" / "guides" / "short.pdf").write_bytes(
+        build_pdf([["Paris is the capital of France. France has a capital city."]])
+    )
+    (config.parent / "docs" / "report.pdf").write_bytes(
+        build_pdf([["The capital of France is Paris, a large city. What is France known for?"]])
+    )
+    p = Pipeline.from_yaml(config)
+    assert p.index.run(config.parent / "docs").ok
+
+    answer = p.ask(QUESTION, credentials={"openai_api_key": "sk-test"})
+
+    assert answer.ok, answer.stages["answer"].error
+    own = {h.chunk.id: h.chunk.doc_id for h in answer.hits}
+    citations = answer.output.payload["citations"]
+    assert len({own[c["chunk_id"]] for c in citations}) == 2, "the test needs pieces from both documents"
+    assert all(c["source_sha"] == own[c["chunk_id"]] for c in citations)
+    # The step reads the first document by id (guides/short.pdf): a piece from the other one is kept,
+    # never placed on the first one's pages, and not verified.
+    first = hashlib.sha256((config.parent / "docs" / "guides" / "short.pdf").read_bytes()).hexdigest()
+    other = [c for c in citations if c["source_sha"] != first]
+    assert other and all(c["page"] is None and c["doc_start"] is None and not c["verified"] for c in other)

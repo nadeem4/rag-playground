@@ -45,6 +45,33 @@ const twoDocSearch = (): SearchOutput => ({
   payload: { ...search.payload, results: search.payload.results!.map((r) => (FROM_GUIDE.has(r.rank) ? { ...r, chunk_id: `g${r.chunk_id}`, doc_id: GUIDE.sha } : r)) },
 })
 
+/**
+ * The Chat output as Pandion writes it over these two documents: each citation
+ * names its own piece's document, and a piece from the file the answer step did
+ * not read is kept but not placed or verified (chat.py `_citation`).
+ */
+const chatOverTwo = (): ChatOutput => {
+  const hits = twoDocs().hits
+  const original = new Map(hybrid.hits.map((h, i) => [h.chunk.id, hits[i].chunk]))
+  return {
+    ...chat,
+    payload: {
+      ...chat.payload,
+      citations: chat.payload.citations.map((c) => {
+        const piece = c.chunk_id ? original.get(c.chunk_id) : undefined
+        if (!piece) return c
+        const elsewhere = piece.doc_id !== PRIMER.sha
+        return {
+          ...c,
+          chunk_id: piece.id,
+          source_sha: piece.doc_id,
+          ...(elsewhere ? { doc_start: null, doc_end: null, page: null, element_id: null, bbox: null, verified: false } : {}),
+        }
+      }),
+    },
+  }
+}
+
 let payloads: Record<string, unknown>
 
 beforeEach(() => {
@@ -60,10 +87,7 @@ beforeEach(() => {
     docB: { ...parsedJson, filename: GUIDE.filename, source_id: GUIDE.sha },
     chA: chunkJson,
     chB: { ...chunkJson, doc_id: GUIDE.sha, chunks: chunkJson.chunks.map((c) => ({ ...c, id: `g${c.id}`, doc_id: GUIDE.sha })) },
-    chat2: {
-      ...chat,
-      payload: { ...chat.payload, citations: chat.payload.citations.map((c) => (c.n === 2 ? { ...c, source_sha: GUIDE.sha } : c)) },
-    },
+    chat2: chatOverTwo(),
   }
   vi.stubGlobal(
     "fetch",

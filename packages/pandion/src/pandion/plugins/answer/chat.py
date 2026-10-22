@@ -684,11 +684,14 @@ def _stats(
 
 
 def _citation(n, c, chunk, doc, doc_md, spans, elements) -> dict[str, Any]:
+    # With several documents the step reads one of them (`doc`). A piece from
+    # another names its own document and is not located in this one's text.
+    own = chunk.doc_id if chunk is not None and chunk.doc_id else doc.source_id
     entry: dict[str, Any] = {
         "n": n,
         "cited_text": c.cited_text,
         "chunk_id": chunk.id if chunk else None,
-        "source_sha": doc.source_id,
+        "source_sha": own,
         "doc_start": None,
         "doc_end": None,
         "page": None,
@@ -696,7 +699,7 @@ def _citation(n, c, chunk, doc, doc_md, spans, elements) -> dict[str, Any]:
         "bbox": None,
         "verified": False,
     }
-    if chunk is None:
+    if chunk is None or own != doc.source_id:
         return entry
     start = chunk.start_char + c.start_char_index
     end = chunk.start_char + c.end_char_index

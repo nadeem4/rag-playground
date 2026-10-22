@@ -1739,6 +1739,39 @@ describe("the Ask panel results on Build", () => {
     expect(panel().getByText("Working copy, no rerank: 5 pieces")).toBeTruthy()
   })
 
+  it("a reload after a one-file Ask keeps Search in on that file, so its results are not out of date", async () => {
+    const NOTES = { sha: "cd".repeat(32), filename: "notes.md" }
+    storeGraph(withDocuments(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), [{ sha: SOURCE.sha, filename: SOURCE.filename }, NOTES]))
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(streams).toHaveLength(1))
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "stream_end", status: "finished", ok: true }, "2")
+    fireEvent.click(within(panel().getByRole("group", { name: "Search in" })).getByRole("button", { name: "notes.md" }))
+    const askButton = panel().getByRole("button", { name: "Ask" }) as HTMLButtonElement
+    await waitFor(() => expect(askButton.disabled).toBe(false))
+    fireEvent.click(askButton)
+    await waitFor(() => expect(streams).toHaveLength(2))
+    emit({ event: "node_finished", node_id: "retrieve", artifact_id: "ret1", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "node_finished", node_id: "use_case", artifact_id: "out1", cache_hit: false, duration_ms: 1 }, "2")
+    emit({ event: "stream_end", status: "finished", ok: true }, "3")
+    await waitFor(() => expect(panel().getByText("Hybrid search returned 6 candidates. These are the top 5, in search order.")).toBeTruthy())
+    // A reload: the page comes back from this tab's session, whose results the server still has.
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      /^\/api\/v2\/results\/[^/]+$/.test(String(url)) ? new Response(JSON.stringify({ meta: {} }), { status: 200 }) : base(url, init),
+    )
+    cleanup()
+    render(<Shell />)
+    const notes = await waitFor(() => within(panel().getByRole("group", { name: "Search in" })).getByRole("button", { name: "notes.md" }))
+    expect(notes.getAttribute("aria-pressed")).toBe("true")
+    expect(await waitFor(() => panel().getByText("Hybrid search returned 6 candidates. These are the top 5, in search order."))).toBeTruthy()
+    expect(panel().queryByTestId("stale-results")).toBeNull()
+  })
+
   it("a hidden comparison stays hidden across closing and opening Ask", async () => {
     storeGraph(setReranker(sampleGraph(liveRegistry as never, SOURCE, "What does overlap cost?"), liveRegistry as never, "cross_encoder"))
     render(<Shell />)

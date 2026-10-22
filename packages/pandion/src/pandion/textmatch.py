@@ -80,8 +80,68 @@ def loosen(text: str) -> str:
     are layout, not words of the answer. Set aside on both sides of a comparison,
     they cannot make different words match: every other word and number stays.
     """
+    return _loosen_normalised(normalise(text))
+
+
+def _loosen_normalised(normalised: str) -> str:
+    """`loosen` for text `normalise` already made."""
     return " ".join(
         word
-        for word in normalise(text).split(" ")
+        for word in normalised.split(" ")
         if not (_MARKER.match(word) or (len(word) == 1 and word.isalpha()))
     )
+
+
+class Text:
+    """A text, a piece or a gold passage, with its two looser forms made once, when first needed."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self._normalised: str | None = None
+        self._loosened: str | None = None
+
+    @property
+    def normalised(self) -> str:
+        if self._normalised is None:
+            self._normalised = normalise(self.text)
+        return self._normalised
+
+    @property
+    def loosened(self) -> str:
+        if self._loosened is None:
+            self._loosened = _loosen_normalised(self.normalised)
+        return self._loosened
+
+
+def match(gold: str | Text, text: str | Text) -> str | None:
+    """How `text` holds the passage `gold`: "exact", "normalized" or
+    "reworded", the strictest that holds, or None when it does not. Pass
+    `Text`s to reuse their looser forms across many comparisons."""
+    gold = gold if isinstance(gold, Text) else Text(gold)
+    text = text if isinstance(text, Text) else Text(text)
+    if gold.text in text.text:
+        return "exact"
+    if gold.normalised in text.normalised:
+        return "normalized"
+    if gold.loosened and gold.loosened in text.loosened:
+        return "reworded"
+    return None
+
+
+def first_matches(golds: list[str], texts: list[str]) -> list[tuple[int, str] | None]:
+    """For each gold passage, the place in `texts` of the first text that
+    holds it and how (`match`), or None when none does. Stops reading once
+    every passage is placed. Each passage and each text is normalised once."""
+    passages = [Text(gold) for gold in golds]
+    found: list[tuple[int, str] | None] = [None] * len(golds)
+    left = set(range(len(golds)))
+    for i, raw in enumerate(texts):
+        if not left:
+            break
+        text = Text(raw)
+        for n in sorted(left):
+            kind = match(passages[n], text)
+            if kind is not None:
+                found[n] = (i, kind)
+                left.discard(n)
+    return found

@@ -1,4 +1,5 @@
-import type { Registry } from "@/api/types"
+import type { Registry, SampleQuestion } from "@/api/types"
+import { v2 } from "@/api/v2"
 import type { HitRowData } from "@/components/inspectors/hits"
 import { Button } from "@/components/ui/button"
 import { askNodes, signature, terminalNode, type PipelineGraph } from "@/state/graph"
@@ -68,18 +69,43 @@ export function logEntry(list: TranscriptEntry[], entry: TranscriptEntry): Trans
   return list.map((e, i) => (i === at ? { ...old, found: entry.found } : e))
 }
 
-/** The same passage as a parser with other habits would have written it, as the eval step reads it. */
-const normalise = (text: string) => text.replace(/-\s*\n\s*/g, "").split(/\s+/).filter(Boolean).join(" ").toLowerCase()
+/** The gold passages of the sample's question that was asked, or none for any other question. */
+export function goldsOf(question: string, questions: readonly SampleQuestion[]): string[] {
+  const q = questions.find((s) => s.question.trim() === question.trim())
+  return q ? [q.gold_answer, ...(q.gold_answers ?? [])].filter(Boolean) : []
+}
 
-/** The rank of the first piece that holds any gold passage, or null. */
-export function goldRank(rows: readonly Pick<HitRowData, "rank" | "text">[], golds: readonly string[]): number | null {
-  const wanted = golds.map(normalise).filter(Boolean)
-  if (!wanted.length) return null
-  const hit = rows.find((r) => {
-    const text = normalise(r.text)
-    return wanted.some((g) => text.includes(g))
-  })
-  return hit ? hit.rank : null
+/** The most pieces `POST /api/v2/golds/find` looks through (its MAX_PIECES). */
+export const MAX_PIECES = 100
+/** The most characters one gold passage may be there (its MAX_TEXT_CHARS). */
+export const MAX_TEXT_CHARS = 10_000
+/** The most characters all the pieces sent may be together (its MAX_TOTAL_CHARS). */
+export const MAX_TOTAL_CHARS = 1_000_000
+
+/**
+ * The rank of the first piece that holds any gold passage, and the passage, or
+ * null. Pandion decides (`POST /api/v2/golds/find`), by the eval step's own
+ * rule, so Ask never says "not found" where Evaluate scores a hit. Only what
+ * the route takes is sent, so it never refuses: the passages of at most
+ * MAX_TEXT_CHARS, and the first pieces, each whole, up to MAX_PIECES of them
+ * and MAX_TOTAL_CHARS together. A gold only in a piece past those reads as not found.
+ */
+export async function findGold(
+  rows: readonly Pick<HitRowData, "rank" | "text">[],
+  golds: readonly string[],
+  signal?: AbortSignal,
+): Promise<{ rank: number; gold: string } | null> {
+  const passages = golds.filter((g) => g.length <= MAX_TEXT_CHARS)
+  if (!passages.length || !rows.length) return null
+  const texts: string[] = []
+  let total = 0
+  for (const { text } of rows.slice(0, MAX_PIECES)) {
+    if ((total += text.length) > MAX_TOTAL_CHARS) break
+    texts.push(text)
+  }
+  if (!texts.length) return null
+  const { found } = await v2.findGold({ golds: passages, texts }, signal)
+  return found ? { rank: rows[found.index].rank, gold: found.gold } : null
 }
 
 export function transcriptLine(pipeline: string, reranker: string, found: number | null, pieces: number): string {

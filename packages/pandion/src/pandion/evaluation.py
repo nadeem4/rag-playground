@@ -43,6 +43,7 @@ from pandion.questions import (
 from pandion.question_writer import write_questions
 from pandion.registry import registry
 from pandion.results import StageResult
+from pandion.textmatch import first_matches
 from pandion.trace import StepInput, _holds, trace
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     "Comparisons",
     "EvaluationReport",
     "GOLD_SEPARATOR",
+    "GoldFound",
     "QuestionResult",
     "QuestionSetError",
     "Regression",
@@ -60,6 +62,7 @@ __all__ = [
     "compare",
     "document_text",
     "evaluate",
+    "find_gold",
     "load_baseline",
     "load_questions",
     "paragraph_spans",
@@ -83,6 +86,29 @@ def paragraph_spans(doc: Any) -> list[tuple[int, int]]:
     if isinstance(doc, StageResult):
         doc = doc.output
     return [(e.md_start, e.md_end) for e in DocView.of(doc).rendered if e.type == "paragraph"]
+
+
+@dataclass(frozen=True)
+class GoldFound:
+    """Where `find_gold` found a gold passage: the place of the first text that
+    holds any of them, the passage it holds, and how it matched ("exact",
+    "normalized" or "reworded", as the eval step reports it)."""
+
+    index: int
+    gold: str
+    match: str
+
+
+def find_gold(golds: list[str], texts: list[str]) -> GoldFound | None:
+    """The first of `texts` that holds any of the gold passages, by the eval
+    step's own rule, or None when none does. `texts` are pieces in the order a
+    reader meets them, such as a retrieval's hits; where one piece holds
+    several passages, the first passage in `golds` is the one named."""
+    placed = sorted((first[0], n, first[1]) for n, first in enumerate(first_matches(golds, texts)) if first)
+    if not placed:
+        return None
+    index, n, kind = placed[0]
+    return GoldFound(index=index, gold=golds[n], match=kind)
 
 
 @dataclass

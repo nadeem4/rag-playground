@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react"
+
 import type { SampleQuestion } from "@/api/types"
 import { ordinal, type HitRowData } from "@/components/inspectors/hits"
 import { flatRow, isTableRow } from "@/lib/passage"
 import { firstSentence } from "@/lib/sentence"
 
-import { goldRank } from "./Transcript"
+import { findGold, goldsOf } from "./Transcript"
 
 /**
  * The finding sentence above the Ask results. A sample's own question whose
@@ -12,16 +14,27 @@ import { goldRank } from "./Transcript"
  * for word. With Chat the written answer stands in, so it says nothing.
  */
 
-/** Where a sample question's gold answer was found: the piece's rank and the answer it holds. */
-function goldFound(question: string, rows: readonly HitRowData[], questions: readonly SampleQuestion[]): { rank: number; gold: string } | null {
-  const q = questions.find((s) => s.question.trim() === question.trim())
-  if (!q) return null
-  const golds = [q.gold_answer, ...(q.gold_answers ?? [])]
-  const rank = goldRank(rows, golds)
-  if (rank === null) return null
-  const row = rows.filter((r) => r.rank === rank)
-  const gold = golds.find((g) => goldRank(row, [g]) !== null)
-  return gold ? { rank, gold } : null
+/**
+ * Where a sample question's gold answer was found among `rows`: the piece's
+ * rank and the answer it holds, null when no piece holds one, and undefined
+ * while Pandion is asked.
+ */
+export function useGoldFound(question: string, rows: readonly HitRowData[], questions: readonly SampleQuestion[]) {
+  const golds = goldsOf(question, questions)
+  const key = JSON.stringify([golds, rows.map((r) => [r.rank, r.text])])
+  const [result, setResult] = useState<{ key: string; found: { rank: number; gold: string } | null }>()
+  useEffect(() => {
+    if (!golds.length) return
+    const abort = new AbortController()
+    findGold(rows, golds, abort.signal).then(
+      (found) => setResult({ key, found }),
+      () => !abort.signal.aborted && setResult({ key, found: null }),
+    )
+    return () => abort.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` holds everything the request reads
+  }, [key])
+  if (!golds.length) return null
+  return result?.key === key ? result.found : undefined
 }
 
 export interface FindingProps {
@@ -36,8 +49,9 @@ export interface FindingProps {
 }
 
 export function Finding({ question, rows, questions, chat }: FindingProps) {
-  if (chat || !rows.length) return null
-  const found = goldFound(question, rows, questions)
+  const found = useGoldFound(question, rows, questions)
+  // Until Pandion says where the gold is, say nothing rather than the wrong thing.
+  if (chat || !rows.length || found === undefined) return null
   return (
     <p data-testid="finding-sentence" className="m-0 max-w-[46ch] font-sans text-lg text-balance">
       {found ? (

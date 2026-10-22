@@ -54,6 +54,7 @@ Each path is under `prefix`.
 | `POST /documents/{id}/questions` | Checks a question set against the document, and keeps it if the Policy says so. |
 | `GET /documents/{id}/questions` | Returns the question set kept for a document. |
 | `DELETE /documents/{id}/questions` | Removes that question set. |
+| `POST /golds/find` | Says which piece first holds a gold passage, by the eval step's rule. |
 | `POST /runs` | Starts a run that indexes documents, or stops after one step. |
 | `GET /runs/{run_id}` | Returns a run's status, its events and its result. |
 | `GET /runs/{run_id}/events` | Streams a run's events as server-sent events. |

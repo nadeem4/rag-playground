@@ -16,15 +16,22 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import pypdfium2 as pdfium
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 import pandion
-from pandion.evaluation import QuestionSetError, check_questions, document_text, parse_question_set, write_questions
+from pandion.evaluation import (
+    QuestionSetError,
+    check_questions,
+    document_text,
+    find_gold,
+    parse_question_set,
+    write_questions,
+)
 from pandion.extend import EndpointRefused, UnreadableFormat, guard_endpoint
 from pandion_api.checks import chat_providers
 from pandion_api.credentials import PROVIDERS
@@ -211,3 +218,38 @@ async def generate_questions(
         return True, False, result
 
     return start(request, "questions", work)
+
+
+#: The most pieces one /golds/find looks through: the most hits one ask keeps.
+MAX_PIECES = 100
+#: The most characters one gold passage may be.
+MAX_TEXT_CHARS = 10_000
+#: The most characters all the pieces together may be. A piece has no cap of
+#: its own, so one long piece is looked through whole. With MAX_GOLDS and
+#: MAX_TEXT_CHARS it bounds one call's work to under half a second, so the
+#: route needs no rate limit of its own.
+MAX_TOTAL_CHARS = 1_000_000
+
+TOO_LONG = f"The pieces may be at most {MAX_TOTAL_CHARS:,} characters together. Send fewer."
+
+
+class FindGoldIn(BaseModel):
+    golds: list[Annotated[str, Field(max_length=MAX_TEXT_CHARS)]] = Field(min_length=1, max_length=MAX_GOLDS)
+    texts: list[str] = Field(max_length=MAX_PIECES)
+
+    @field_validator("texts")
+    @classmethod
+    def _within_total(cls, texts: list[str]) -> list[str]:
+        if sum(len(t) for t in texts) > MAX_TOTAL_CHARS:
+            raise ValueError(TOO_LONG)
+        return texts
+
+
+@router.post("/golds/find")
+def find_golds(body: FindGoldIn) -> dict[str, Any]:
+    """Which of `texts`, pieces in the order a reader meets them, first holds
+    any of the gold passages, by the eval step's own rule
+    (`pandion.evaluation.find_gold`): `found` is its place, the passage and the
+    kind of match, or null. Nothing is stored and nothing runs."""
+    found = find_gold(body.golds, body.texts)
+    return {"found": None if found is None else {"index": found.index, "gold": found.gold, "match": found.match}}

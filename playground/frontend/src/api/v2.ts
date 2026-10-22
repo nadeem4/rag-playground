@@ -12,6 +12,7 @@ import type {
   ComparisonRequest,
   EvaluationRequest,
   Explanation,
+  FindGoldResult,
   FindResult,
   LlmCheck,
   LlmProvider,
@@ -60,6 +61,9 @@ export const v2 = {
   questionSet: (sha: string) => request<StoredQuestionSet | null>(`/documents/${id(sha)}/questions`),
   uploadQuestionSet: (sha: string, file: File) =>
     request<QuestionSetUpload>(`/documents/${id(sha)}/questions`, { method: "POST", body: form(file) }),
+  /** Which piece first holds a gold passage, by the eval step's own rule: `found` is null when none does. */
+  findGold: (body: { golds: string[]; texts: string[] }, signal?: AbortSignal) =>
+    request<FindGoldResult>("/golds/find", { ...jsonInit(body), signal }),
   deleteQuestionSet: (sha: string) => request<unknown>(`/documents/${id(sha)}/questions`, { method: "DELETE" }),
   /** A model writes a question set for the document, as a run of kind `questions`. The set is handed back, never kept. */
   generateQuestions: (sha: string, body: { model: string; count: number }, opts: KeyOpts = {}) =>

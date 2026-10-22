@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { FIND_GOLD_URL, findGoldResponse } from "@/api/fixtures/findGold"
 import liveRegistry from "@/api/fixtures/registry.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchJson from "@/api/fixtures/output.search.json"
@@ -14,7 +15,7 @@ import { sampleGraph, setReranker, setRewrite, type PipelineGraph } from "@/stat
 import { resetPipelinesForTests, savePipeline, setCurrentId } from "@/state/pipelines"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
-import { askSnapshot, goldRank, logEntry, type AskSnapshot, type TranscriptEntry } from "./Transcript"
+import { askSnapshot, findGold, goldsOf, logEntry, MAX_PIECES, MAX_TOTAL_CHARS, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
 const LIVE = liveRegistry as unknown as Registry
 const NO_KEYS: Keys = { anthropic: null, openai: null, custom: null, openrouter: null }
@@ -49,8 +50,9 @@ beforeEach(() => {
   const payloads: Record<string, unknown> = { idx1: { doc_count: 6 }, ret1: hybrid, rr1: reranked(), out1: searchJson }
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+      if (url === FIND_GOLD_URL) return findGoldResponse(init)
       const payload = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (payload && payloads[payload[1]] !== undefined) return ok(payloads[payload[1]])
       if (url === "/api/samples") return ok([CARD])
@@ -65,12 +67,50 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("goldRank", () => {
-  it("finds the first piece that holds the gold, whitespace and case aside", () => {
-    expect(goldRank(rowsFromResult(hybrid), ["overlap protects answers that straddle a boundary"])).toBe(1)
-    expect(goldRank(rowsFromResult(reranked()), ["Overlap protects answers"])).toBe(2)
-    expect(goldRank(rowsFromResult(hybrid), ["not in the document"])).toBeNull()
-    expect(goldRank(rowsFromResult(hybrid), [])).toBeNull()
+describe("goldsOf", () => {
+  it("gives the sample question's gold passages, the single one first, and none for another question", () => {
+    const qs = [{ id: "a", question: "Why overlap?", gold_answer: "one", gold_answers: ["two"] }]
+    expect(goldsOf("  Why overlap? ", qs)).toEqual(["one", "two"])
+    expect(goldsOf("Something else?", qs)).toEqual([])
+  })
+})
+
+describe("findGold", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("asks Pandion and gives the rank of the piece it names, not its place in the list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ found: { index: 1, gold: "b", match: "exact" } }))))
+    const rows = rowsFromResult(reranked())
+    expect(await findGold(rows, ["b"])).toEqual({ rank: rows[1].rank, gold: "b" })
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("/api/v2/golds/find")
+  })
+
+  it("asks nothing without golds or pieces, and is null when no piece holds one", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ found: null }))))
+    expect(await findGold(rowsFromResult(hybrid), [])).toBeNull()
+    expect(await findGold([], ["x"])).toBeNull()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(await findGold(rowsFromResult(hybrid), ["x"])).toBeNull()
+  })
+
+  it("sends no more than the route takes, so a long list still gets its rank", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ found: { index: 2, gold: "g", match: "exact" } }))))
+    const rows = Array.from({ length: 150 }, (_, i) => ({ rank: i + 1, text: i === 0 ? "x".repeat(12_000) : `piece ${i}` }))
+    expect(await findGold(rows, ["g", "y".repeat(10_001)])).toEqual({ rank: 3, gold: "g" })
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body)) as { golds: string[]; texts: string[] }
+    expect(body.texts).toHaveLength(MAX_PIECES)
+    // A long piece goes whole: a gold near its end is still found.
+    expect(body.texts[0]).toBe(rows[0].text)
+    expect(body.golds).toEqual(["g"])
+  })
+
+  it("keeps within the route's total by dropping later pieces, never cutting one", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ found: null }))))
+    const rows = [600_000, 300_000, 200_000, 10].map((n, i) => ({ rank: i + 1, text: "x".repeat(n) }))
+    await findGold(rows, ["g"])
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body)) as { golds: string[]; texts: string[] }
+    expect(body.texts.map((t) => t.length)).toEqual([600_000, 300_000])
+    expect(MAX_TOTAL_CHARS).toBe(1_000_000)
   })
 })
 

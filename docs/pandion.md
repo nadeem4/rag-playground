@@ -790,6 +790,9 @@ text gold passages are looked for in, and
 `pandion.evaluation.check_questions(questions, text)` says, per gold passage, whether it
 is really in that text. `pandion.evaluation.paragraph_spans(doc)` says where each
 paragraph starts and ends in that text, as (start, end) pairs in order.
+`pandion.evaluation.find_gold(golds, texts)` says which of `texts` (pieces in the order
+a reader meets them) first holds any gold passage, by the same rule the `eval` step
+scores with: a `GoldFound(index, gold, match)`, or None.
 
 **How a question is scored.** By the `eval` step, the same one the playground's
 Evaluate page runs. A piece holds the answer when it contains a gold passage exactly,

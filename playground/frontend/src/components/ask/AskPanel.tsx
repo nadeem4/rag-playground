@@ -18,7 +18,7 @@ import { ASK_STAGES, askNodes, indexNode, infoFor, rewriteOf, terminalNode, titl
 
 import { AskResults, finalRows, fresh, rerankLabel, SearchedFor, useAskOutputs } from "./AskResults"
 import { AskSettings, RETRIEVAL_LABEL } from "./AskSettings"
-import { askSignature, goldRank, Transcript, type AskSnapshot, type TranscriptEntry } from "./Transcript"
+import { askSignature, findGold, goldsOf, Transcript, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
 /**
  * The Ask panel, docked at the edge of Build (a bottom sheet on a phone). It holds the
@@ -182,6 +182,7 @@ export function AskPanel(p: AskPanelProps) {
   // means the rows on screen are not that run's, so the run is not logged at all.
   const current = askSignature(p.graph, p.registry)
   const { onLog, asked: snap, transcript } = p
+  const goldAsked = useRef(new Set<string>())
   useEffect(() => {
     if (!snap) return
     // A logged run is frozen: its own question and pieces are read again, never the current settings.
@@ -199,10 +200,16 @@ export function AskPanel(p: AskPanelProps) {
           }
         : null)
     if (!entry || entry.found !== null) return
-    const sampleQ = questions.find((q) => q.question.trim() === entry.question.trim())
-    const found = sampleQ ? goldRank(entry.rows, [sampleQ.gold_answer, ...(sampleQ.gold_answers ?? [])]) : null
-    if (logged && found === null) return
-    onLog({ ...entry, found })
+    if (!logged) onLog(entry)
+    // Pandion says where the gold is; each run is asked once per question set.
+    const golds = goldsOf(entry.question, questions)
+    const asked = JSON.stringify([entry.runId, golds])
+    if (!golds.length || goldAsked.current.has(asked)) return
+    goldAsked.current.add(asked)
+    findGold(entry.rows, golds).then(
+      (found) => found && onLog({ ...entry, found: found.rank }),
+      () => goldAsked.current.delete(asked),
+    )
   }, [snap, transcript, rows, questions, current, onLog])
 
   // A result on an Ask step that the settings have moved past: the lists are gone until the next Ask.

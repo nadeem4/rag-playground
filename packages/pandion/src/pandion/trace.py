@@ -25,8 +25,7 @@ from typing import Any
 
 from pandion.payloads import ChunkSet, RetrievalResult
 from pandion.plugins.chunk import DocView
-from pandion.textmatch import loosen
-from pandion.textmatch import normalise as _normalise
+from pandion.textmatch import Text, match
 
 #: How far apart the answer's words may be spread and still count as one
 #: broken sentence, as a multiple of the answer's own length in words.
@@ -69,9 +68,8 @@ def ordinal(n: int) -> str:
 
 def _holds(text: str, golds: list[str]) -> bool:
     """The eval step's three tiers: exact, normalised, then reworded (list markers and lone letters set aside)."""
-    normalised = _normalise(text)
-    loosened = loosen(text)
-    return any(g in text or _normalise(g) in normalised or (loosen(g) and loosen(g) in loosened) for g in golds)
+    held = Text(text)
+    return any(match(g, held) is not None for g in golds)
 
 
 def _word(w: str) -> str:

@@ -46,7 +46,7 @@ from pandion.artifacts import ArtifactType
 from pandion.payloads import Output, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
-from pandion.textmatch import loosen, normalise
+from pandion.textmatch import first_matches, normalise
 from pandion.transform import Explanation, Transform
 
 NO_GOLD = (
@@ -174,61 +174,30 @@ class EvalUseCase(Transform[EvalConfig]):
             raise ValueError(NO_GOLD)
 
         considered = result.hits[: max(config.top_k, 0)]
-        normalised = [_normalise(gold) for gold in golds]
-        loosened = [loosen(gold) for gold in golds]
         # Which passage each gold is a form of. A table row given with and
         # without its | bars is one passage written two ways, so whichever way
         # the parser wrote the table, finding either form finds the passage,
         # and recall counts it once.
-        passage = [_normalise(gold.replace("|", " ")) for gold in golds]
-        found: set[int] = set()
+        passage = [normalise(gold.replace("|", " ")) for gold in golds]
+        firsts = first_matches(golds, [hit.chunk.text for hit in result.hits])
+        found = {n for n, first in enumerate(firsts) if first is not None and first[0] < len(considered)}
         rank: int | None = None
         matched_chunk_id = ""
         match = "none"
-
-        for hit in considered:
-            text = hit.chunk.text
-            normalised_text: str | None = None
-            loosened_text: str | None = None
-            for n, gold in enumerate(golds):
-                if n in found:
-                    continue
-                if gold in text:
-                    kind = "exact"
-                else:
-                    if normalised_text is None:
-                        normalised_text = _normalise(text)
-                    if normalised[n] in normalised_text:
-                        kind = "normalized"
-                    else:
-                        if loosened_text is None:
-                            loosened_text = loosen(text)
-                        if not loosened[n] or loosened[n] not in loosened_text:
-                            continue
-                        kind = "reworded"
-                found.add(n)
-                if rank is None:
-                    # The first piece the reader would have reached that holds
-                    # any of the gold passages.
-                    rank, matched_chunk_id, match = hit.rank, hit.chunk.id, kind
-            if len(found) == len(golds):
-                break
+        # The first piece the reader would have reached that holds any of the
+        # gold passages, and how the first of those passages matched there.
+        placed = sorted((first[0], n, first[1]) for n, first in enumerate(firsts) if n in found)
+        if placed:
+            i, _, match = placed[0]
+            rank, matched_chunk_id = considered[i].rank, considered[i].chunk.id
 
         # For a miss, say whether the answer was there at all, just lower down,
         # so a learner can tell "ranked too low" from "never retrieved".
         found_at: int | None = None
         if match == "none":
-            for hit in result.hits[len(considered) :]:
-                normalised_text = _normalise(hit.chunk.text)
-                loosened_text = loosen(hit.chunk.text)
-                if any(
-                    gold in hit.chunk.text
-                    or normalised[n] in normalised_text
-                    or (loosened[n] and loosened[n] in loosened_text)
-                    for n, gold in enumerate(golds)
-                ):
-                    found_at = hit.rank
-                    break
+            below = [first[0] for first in firsts if first is not None]
+            if below:
+                found_at = result.hits[min(below)].rank
 
         return Output(
             kind="eval",
@@ -249,6 +218,6 @@ class EvalUseCase(Transform[EvalConfig]):
         ).model_dump(mode="json")
 
 
-#: The shared matching rule (pandion.textmatch), under the name the miss trace
-#: imports it by.
+#: The shared matching rule (pandion.textmatch), under the name this module
+#: has always had for it.
 _normalise = normalise

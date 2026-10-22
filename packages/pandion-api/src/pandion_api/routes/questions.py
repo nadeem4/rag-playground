@@ -158,7 +158,9 @@ async def upload_questions(
     store: DocumentStore = Depends(get_documents),
     policy: Policy = Depends(get_policy),
 ) -> dict[str, Any]:
-    """Check every gold passage, and keep the set if the Policy keeps sets."""
+    """Check every gold passage, and keep the set if the Policy keeps sets,
+    in place of the document's old one. A set across documents that the
+    document was part of is removed from all of them (`replace_overlapping`)."""
     path = document_file(request, sha)
     parsed = await read_set(file)
     text, parser = await run_in_threadpool(_read, path)
@@ -172,6 +174,7 @@ async def upload_questions(
     }
     keep = policy.keeps_question_sets(request)
     if keep:
+        replace_overlapping(store, [sha])
         target = store.questions(sha)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(record), encoding="utf-8")
@@ -200,6 +203,27 @@ def named_documents(questions: list[dict[str, Any]], documents: dict[str, str], 
     return [None if name is None else files[name].sha for name in named]
 
 
+def replace_overlapping(store: DocumentStore, shas: list[str]) -> None:
+    """Before a set is kept against `shas`, remove in full every older set it
+    overlaps: every kept part of a set across documents (POST /questions)
+    whose `across` names any of `shas` is removed, from whichever document
+    holds it. The kept sets are scanned by their `across` lists, so this does
+    not depend on the shared document's part still being there (it may have
+    been deleted, or its document removed and uploaded again). A set kept for
+    one document alone overlaps only that document, which the new set
+    replaces anyway."""
+    folder = store.questions(shas[0]).parent
+    if not folder.is_dir():
+        return
+    new = set(shas)
+    for part in folder.glob("*.json"):
+        if part.stem in new:
+            continue
+        across = json.loads(part.read_text(encoding="utf-8")).get("across") or []
+        if new.intersection(across):
+            part.unlink()
+
+
 @router.post("/questions")
 async def upload_questions_across(
     request: Request,
@@ -217,7 +241,9 @@ async def upload_questions_across(
     it names none) and each gold passage the sha of the document it was found
     in. `set` is the set as read, each question's `document` its sha or empty,
     for a page to keep when the server does not. A document the set has no
-    question for loses the set it had: the new set replaces the old."""
+    question for loses the set it had: the new set replaces the old. Every
+    older set across documents it overlaps is removed in full, from every
+    document it was kept against (`replace_overlapping`)."""
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     parsed = await read_set(file, one_document=False)
@@ -231,6 +257,7 @@ async def upload_questions_across(
     split = {sha: [q for q, owner in zip(parsed["questions"], owners) if owner in (sha, None)] for sha in shas}
     keep = policy.keeps_question_sets(request)
     if keep:
+        replace_overlapping(store, shas)
         for sha, questions in split.items():
             target = store.questions(sha)
             if not questions:

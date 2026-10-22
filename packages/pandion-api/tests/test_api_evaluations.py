@@ -535,6 +535,15 @@ def test_one_kept_set_across_documents_runs_as_one(client):
     ]
 
 
+def test_an_evaluation_never_asks_a_set_a_newer_one_replaced(client):
+    first, second = _two(client)
+    old = json.dumps([{**QUESTIONS[0], "id": "old"}]).encode()
+    client.post("/questions", data={"documents": [first, second]}, files={"file": ("old.json", old, "application/json")})
+    keep(client, second, [{**BEES, "id": "new"}])
+    state, _ = finish(client, client.post("/evaluations", json={"config": PIPELINE, "documents": [first, second]}))
+    assert [q["id"] for q in state["result"]["questions"]] == ["new"]
+
+
 def test_an_unnamed_question_kept_with_the_first_document_is_found_in_any_of_them(client):
     first, second = _two(client)
     data = json.dumps([{**BEES, "id": "any"}]).encode()   # its evidence is only in the second document

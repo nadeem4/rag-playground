@@ -10,23 +10,24 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { refreshUploads, useDocument } from "@/state/document"
 import { storeGraph } from "@/state/graph"
-import { experimentDocuments } from "@/state/experiments"
 import {
   base64ToBytes,
   buildExport,
   bytesToBase64,
-  docState,
   experimentSummary,
   exportFileName,
   importResultLine,
   isSoon,
+  itemDocState,
   keptLine,
   libraryItems,
   listWords,
   parseImport,
   pipelineSummary,
   savedWhen,
+  soonHoursOf,
   uploadsOf,
+  type DocRef,
   type DocState,
   type ExportedDocument,
   type LibraryItem,
@@ -70,8 +71,8 @@ function reason(err: unknown): string {
   return "the server did not answer. Try again in a moment."
 }
 
-function DocLine({ item, state, demo }: { item: LibraryItem; state: DocState; demo: boolean }) {
-  const f = item.doc?.filename || "The document"
+function DocLine({ doc, state, demo }: { doc: DocRef | null; state: DocState; demo: boolean }) {
+  const f = doc?.filename || "The document"
   let dot = "bg-primary"
   let text: string
   switch (state.kind) {
@@ -119,8 +120,10 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
   const items = libraryItems(pipelines, experiments)
   const now = Date.now()
   const ctx = { demo, ttlHours, now, samples, sources: settings ? uploads : null }
-  const states = new Map(items.map((i) => [i.id + i.kind, docState(i.doc, ctx)]))
-  const stateOf = (i: LibraryItem) => states.get(i.id + i.kind) ?? { kind: "checking" as const }
+  // An item with several documents is flagged when any one is gone or leaving soon.
+  const states = new Map(items.map((i) => [i.id + i.kind, itemDocState(i.documents, ctx)]))
+  const docOf = (i: LibraryItem) => states.get(i.id + i.kind) ?? { doc: null, state: { kind: "checking" as const } }
+  const stateOf = (i: LibraryItem): DocState => docOf(i).state
 
   const [filter, setFilter] = useState<Filter>("all")
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -138,8 +141,10 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
     pipeline: items.filter((i) => i.kind === "pipeline").length,
     experiment: items.filter((i) => i.kind === "experiment").length,
   }
-  const soon = items.filter((i) => isSoon(stateOf(i)))
-  const soonHours = Math.min(...soon.map((i) => { const s = stateOf(i); return s.kind === "upload" && s.hoursLeft !== null ? s.hoursLeft : Infinity }))
+  // Every document counts here, so an item with one document gone and another leaving soon is still offered.
+  const hoursOf = new Map(items.map((i) => [key(i), soonHoursOf(i.documents, ctx)]))
+  const soon = items.filter((i) => hoursOf.get(key(i)) != null)
+  const soonHours = Math.min(...soon.map((i) => hoursOf.get(key(i))!))
 
   const startExport = (keys: string[], includeDoc = demo) => {
     setExporting(keys)
@@ -389,8 +394,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
             {shown.map((item) => {
               const k = key(item)
               const state = stateOf(item)
-              // A pipeline owns a list of documents; an experiment keeps its one, or all of them when it ran on several.
-              const docs = item.kind === "pipeline" ? item.documents : experimentDocuments(item.experiment)
+              const docs = item.documents
               // A kept item, saved by an older version, is listed with the reason and never opened.
               const kept = item.kind === "pipeline" ? keptLine(item.pipeline) : null
               const summary =
@@ -434,7 +438,7 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
                         ))}
                       </div>
                     ) : null}
-                    <DocLine item={item} state={state} demo={demo} />
+                    <DocLine doc={docOf(item).doc} state={state} demo={demo} />
                   </div>
                   <div className="col-start-2 flex flex-wrap gap-2 md:col-start-3 md:justify-end">
                     {kept ? null : <Button onClick={() => void open(item)}>Open in {item.kind === "experiment" ? "Compare" : "Build"}</Button>}

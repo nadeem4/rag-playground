@@ -98,8 +98,8 @@ interface State {
   uploadError: string | null
   /** The sample being loaded now, by name. */
   sampleLoading: string | null
-  /** A sample's filename when its old fingerprint was swapped for the current one, until the next choice. */
-  recovered: string | null
+  /** The filenames of the samples whose old fingerprints were swapped for the current ones, until the next choice. */
+  recovered: string[] | null
 }
 
 const FRESH: State = {
@@ -175,34 +175,41 @@ export function staleSample(
 let recovering = false
 
 /**
- * Switch a working pipeline's sample that has an old fingerprint to that
+ * Switch a working pipeline's samples that have an old fingerprint to each
  * sample's current copy, and say so once. With one document this is a pick;
- * with several, only the stale one is swapped, in place, and the others stay.
+ * with several, every stale one is swapped in place, in one store, and the
+ * others stay.
  */
 function recoverStaleSample(): void {
   if (recovering) return
   const working = readWorking()
   const docs = working?.documents ?? []
-  const old = docs.find((d) => staleSample(d, state.sources, state.samples, state.known))
-  const card = old ? staleSample(old, state.sources, state.samples, state.known) : null
-  if (!working || !card || !old) return
-  const now = { sha: card.sha, filename: card.filename }
+  const swaps = docs.flatMap((d) => {
+    const card = staleSample(d, state.sources, state.samples, state.known)
+    return card ? [{ old: d, now: { sha: card.sha, filename: card.filename } }] : []
+  })
+  if (!working || !swaps.length) return
+  const names = swaps.map((x) => x.now.filename)
+  // A saved pipeline on an old fingerprint follows too, so it does not open as edited.
+  const follow = () => swaps.forEach((x) => followSample(x.old.sha, x.now))
   if (docs.length > 1) {
-    set({ known: new Set(state.known).add(now.sha) })
-    storeWorking({ ...working, documents: docsOfSource({ documents: docs.map((d) => (d.sha === old.sha ? now : d)) }) })
-    // A saved pipeline on the old fingerprint follows too, so it does not open as edited.
-    followSample(old.sha, now)
-    set({ recovered: card.filename })
+    const known = new Set(state.known)
+    swaps.forEach((x) => known.add(x.now.sha))
+    set({ known })
+    const nowOf = (d: DocRef) => swaps.find((x) => x.old.sha === d.sha)?.now ?? d
+    storeWorking({ ...working, documents: docsOfSource({ documents: docs.map(nowOf) }) })
+    follow()
+    set({ recovered: names })
     return
   }
   recovering = true
   const gen = generation
   // No question: only the fingerprint changes, so the query text the visitor typed stays.
-  chooseDocument(now)
+  chooseDocument(swaps[0].now)
     .then(
       () => {
-        followSample(old.sha, now)
-        if (gen === generation) set({ recovered: card.filename })
+        follow()
+        if (gen === generation) set({ recovered: names })
       },
       () => {},
     )
@@ -271,9 +278,9 @@ export function openDocumentMenu(event?: { currentTarget: EventTarget | null }):
   opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
 }
 
-/** The stored working pipeline's first document, without the registry. */
-function storedDocument(json: string | null): DocRef | null {
-  return parseWorking(json)?.documents[0] ?? null
+/** The stored working pipeline's documents, without the registry. */
+function storedDocuments(json: string | null): DocRef[] {
+  return parseWorking(json)?.documents ?? []
 }
 
 /**
@@ -303,6 +310,38 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
   setDocumentMenuOpen(false)
 }
 
+/** The server indexes documents by their names, so two with one name cannot run together. */
+export const sameName = (filename: string) =>
+  `This pipeline already has a document named ${filename}. Remove it first, or upload the new one under another name.`
+
+/**
+ * Add `doc` to the working pipeline's documents, at the end. A pipeline with
+ * none takes it as `chooseDocument` does, sample pipeline and all; one that
+ * has it already stays as it is. When the pipeline's only document has the
+ * same name, the new one replaces it (an edited file uploaded again). With
+ * several, another document with the same name is refused with `sameName`:
+ * the server tells documents apart by their names.
+ */
+export async function addDocument(doc: DocRef): Promise<void> {
+  const current = readWorking()
+  if (!current?.documents.length) return chooseDocument(doc)
+  set({ known: new Set(state.known).add(doc.sha), uploadError: null, recovered: null })
+  if (!current.documents.some((d) => d.sha === doc.sha)) {
+    // One document of that name: an edited file uploaded again replaces it, as a pick always did.
+    if (current.documents.length === 1 && current.documents[0].filename === doc.filename) return chooseDocument(doc)
+    if (current.documents.some((d) => d.filename === doc.filename)) throw new Error(sameName(doc.filename))
+    storeWorking({ ...current, documents: addedDocument(current.documents, doc) })
+  }
+  setDocumentMenuOpen(false)
+}
+
+/** Take the document `sha` out of the working pipeline. Its file stays on the server and in the menu. */
+export function removeDocument(sha: string): void {
+  const current = readWorking()
+  if (!current || !current.documents.some((d) => d.sha === sha)) return
+  storeWorking({ ...current, documents: removedDocument(current.documents, sha) })
+}
+
 /** True when `from` is a sample other than `next` and `text` is one of that sample's own questions. */
 function isSampleQuestion(from: DocRef, text: string, next: DocRef): boolean | Promise<boolean> {
   const card = state.samples?.find((c) => c.sha === from.sha)
@@ -327,7 +366,10 @@ export async function loadSampleDocument(card: Pick<SampleCard, "name" | "questi
 }
 
 export interface DocumentState {
+  /** The working pipeline's first document, or null. */
   doc: DocRef | null
+  /** Every document of the working pipeline, in order. */
+  documents: DocRef[]
   status: DocStatus
   samples: SampleCard[] | null
   /** True when the samples list could not be read. */
@@ -344,10 +386,19 @@ export interface DocumentState {
   recoveredNote: string | null
 }
 
+/** The one-time note for the samples that were switched to their current copies. */
+function recoveredNote(names: string[] | null): string | null {
+  if (!names?.length) return null
+  if (names.length === 1) return `The sample ${names[0]} was updated, so this page now uses its current copy.`
+  const list = `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`
+  return `The samples ${list} were updated, so this page now uses their current copies.`
+}
+
 export function useDocument(): DocumentState {
   const json = useSyncExternalStore(subscribeGraph, storedGraphJson)
   const s = useSyncExternalStore(subscribe, getState)
-  const doc = useMemo(() => storedDocument(json), [json])
+  const documents = useMemo(() => storedDocuments(json), [json])
+  const doc = documents[0] ?? null
   const uploads = useMemo(
     () => (s.sources ? s.sources.filter((x) => !(s.samples?.some((c) => c.sha === x.sha) ?? false)) : null),
     [s.sources, s.samples],
@@ -358,6 +409,7 @@ export function useDocument(): DocumentState {
   const stable = useMemo(() => (sha ? { sha, filename: filename ?? "" } : null), [sha, filename])
   return {
     doc: stable,
+    documents,
     status: docStatus(stable, s.sources, s.samples, s.samplesFailed, s.known),
     samples: s.samples,
     samplesFailed: s.samplesFailed,
@@ -367,7 +419,7 @@ export function useDocument(): DocumentState {
     uploading: s.uploading,
     uploadError: s.uploadError,
     sampleLoading: s.sampleLoading,
-    recoveredNote: s.recovered ? `The sample ${s.recovered} was updated, so this page now uses its current copy.` : null,
+    recoveredNote: recoveredNote(s.recovered),
   }
 }
 

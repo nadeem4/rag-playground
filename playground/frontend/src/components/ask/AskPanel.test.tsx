@@ -8,6 +8,7 @@ import type { Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry } from "@/api/types"
+import { withDocuments } from "@/state/document"
 import { e2eSampleGraph, sampleGraph, setReranker, setRewrite, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
@@ -223,6 +224,11 @@ describe("the Ask panel header", () => {
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => String(c[0]) === "/api/v2/results/doc1/payload")).toBe(true))
     await act(async () => {})
     await waitFor(() => expect(screen.getByTestId("index-status").textContent).toBe("Index ready: field-guide.docx, 42 pieces"))
+  })
+
+  it("names how many documents an index over several holds, and leaves out the pages", async () => {
+    setup({ graph: withDocuments(sampleGraph(LIVE, SAMPLE), [SAMPLE, UPLOAD]) })
+    await waitFor(() => expect(screen.getByTestId("index-status").textContent).toBe("Index ready: 2 documents, 42 pieces"))
   })
 
   it("says the index is ready, with the file, its pages and its pieces", async () => {

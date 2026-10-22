@@ -14,6 +14,7 @@ import { useElapsed } from "@/components/pipeline/useElapsed"
 import { Button } from "@/components/ui/button"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { cn } from "@/lib/utils"
+import { documentsOf } from "@/state/document"
 import { ASK_STAGES, askNodes, indexNode, infoFor, rewriteOf, terminalNode, titleFor, upstreamOfStage, type PipelineGraph, type RewriteMode } from "@/state/graph"
 
 import { AskResults, finalRows, fresh, rerankLabel, SearchedFor, useAskOutputs } from "./AskResults"
@@ -222,10 +223,12 @@ export function AskPanel(p: AskPanelProps) {
 
   const buildElapsed = useElapsed(p.buildingStep?.startedAt)
 
+  // An index over several documents names how many; their pages are each document's own.
+  const several = documentsOf(p.graph).length
   const ready = [
-    filename,
+    several > 1 ? plural(several, "document", "documents") : filename,
     // A document without pages (Word, a web page) says nothing of them.
-    typeof pages === "number" && pages > 0 ? plural(pages, "page", "pages") : null,
+    several < 2 && typeof pages === "number" && pages > 0 ? plural(pages, "page", "pages") : null,
     typeof pieces === "number" ? plural(pieces, "piece", "pieces") : null,
   ].filter(Boolean)
 

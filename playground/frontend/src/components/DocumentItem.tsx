@@ -1,5 +1,5 @@
 import { useState, type MouseEvent } from "react"
-import { Eye } from "lucide-react"
+import { Eye, X } from "lucide-react"
 
 import { v2 } from "@/api/v2"
 import { usePageSizes } from "@/api/usePdf"
@@ -97,11 +97,14 @@ export function DocumentItem({
   doc,
   size = "full",
   missing,
+  onRemove,
 }: {
   doc: DocRef
   size?: "full" | "compact"
   /** The page already knows whether the file is gone (Build's Document step). Left out, the element asks the store. */
   missing?: boolean
+  /** Take this document out of the pipeline (Build, when it reads several). Left out, there is no Remove button. */
+  onRemove?: () => void
 }) {
   const facts = useDocumentFacts(doc, missing)
   const [open, setOpen] = useState(false)
@@ -139,7 +142,21 @@ export function DocumentItem({
             <span className="text-sm font-semibold [overflow-wrap:anywhere] text-fg">{facts.title}</span>
             <FactsLine facts={facts} />
           </span>
-          <span className="ml-auto">{button}</span>
+          <span className="ml-auto flex items-center gap-1">
+            {button}
+            {onRemove ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-[36px] text-fg-muted hover:text-fg"
+                aria-label={`Remove ${facts.title} from this pipeline`}
+                title="Remove from this pipeline"
+                onClick={onRemove}
+              >
+                <X aria-hidden strokeWidth={1.75} className="size-4" />
+              </Button>
+            ) : null}
+          </span>
         </div>
       ) : (
         <span data-testid="document-item" className="inline-flex max-w-full min-w-0 items-center gap-1">

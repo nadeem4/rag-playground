@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
-import { documentOf, openDocumentMenu, resetDocumentForTests } from "@/state/document"
+import { documentOf, documentsOf, openDocumentMenu, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph } from "@/state/graph"
 
 import { DocumentControl } from "./DocumentControl"
@@ -440,5 +440,28 @@ describe("DocumentControl", () => {
     expect(document.activeElement).toBe(box)
     await act(async () => releaseLink())
     await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(LINK.sha))
+  })
+})
+
+describe("adding to a pipeline's documents (Build)", () => {
+  const primer = { sha: SAMPLE_SHA, filename: "chunking-primer.pdf" }
+
+  it("adds a picked upload after the pipeline's documents, and says which ones it has", async () => {
+    serve({ sources: [UP], samples: [SAMPLE] })
+    stored(primer.sha, primer.filename)
+    render(<DocumentControl adds={[primer]} />)
+    expect(trigger().textContent).toBe("Add a document")
+    fireEvent.keyDown(trigger(), { key: "Enter" })
+    const menu = await screen.findByRole("menu")
+    await waitFor(() => expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(2))
+    expect(within(menu).getByRole("menuitemradio", { name: /A primer on chunking/ }).textContent).toContain("In this pipeline")
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /my-notes\.pdf/ }))
+    await waitFor(() => expect(documentsOf(readStoredGraph(registry))).toEqual([primer, { sha: UP.sha, filename: UP.filename }]))
+  })
+
+  it("picks as the plain control does when the pipeline has no document yet", async () => {
+    serve({ sources: [UP], samples: [SAMPLE] })
+    render(<DocumentControl adds={[]} />)
+    expect(trigger().textContent).toBe("Pick a document")
   })
 })

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 
 import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { v2 } from "@/api/v2"
-import type { NodeState } from "@/api/runState"
+import { forDocument, type NodeState } from "@/api/runState"
 import type { GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
@@ -23,6 +23,7 @@ import { FirstRun } from "@/components/pipeline/FirstRun"
 import { KeptNotice } from "@/components/pipeline/KeptNotice"
 import { fmtMs, plainName } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
+import { ShowingDocument } from "@/components/pipeline/ShowingDocument"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
 import { Button } from "@/components/ui/button"
@@ -52,7 +53,7 @@ import {
   useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
-import { documentOf, useDocument } from "@/state/document"
+import { documentOf, documentsOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
 import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
 import { cardOfStepIn, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
@@ -175,6 +176,13 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const [session] = useState(readBuildSession)
   const [tracked, setTracked] = useState<Tracked>(() => session?.tracked ?? { results: {}, history: {} })
   const results: Record<string, NodeState> = tracked.results
+  // A pipeline on several documents shows one document's results at a time: each step's card and
+  // inspector read that document's run. The strip and the run's status count them all.
+  const pipelineDocs = documentsOf(graph)
+  const [shownSha, setShownSha] = useState<string | null>(null)
+  const shownDoc = pipelineDocs.find((d) => d.sha === shownSha) ?? pipelineDocs[0] ?? null
+  const shownFilename = pipelineDocs.length > 1 ? (shownDoc?.filename ?? null) : null
+  const shown = useMemo(() => forDocument(results, shownFilename), [results, shownFilename])
   const [sigs, setSigs] = useState<Record<string, string>>(() => session?.sigs ?? {})
   const [selected, setSelected] = useState<string | null>(null)
   // The step whose output is on show: the pane beside the cards, or the sheet on a phone.
@@ -604,10 +612,13 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             <FirstRun />
           ) : (
             <>
+              {pipelineDocs.length > 1 ? (
+                <ShowingDocument documents={pipelineDocs} value={shownDoc?.sha ?? ""} onChange={setShownSha} />
+              ) : null}
               <PipelineColumn
                 graph={graph}
                 registry={registry}
-                results={results}
+                results={shown}
                 stale={stale}
                 selected={selected}
                 busy={busy}
@@ -644,14 +655,14 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         // On a phone the output opens in a sheet over the cards, not in a pane far below them.
         outputOpen && inspectedNode ? (
           <OutputSheet title={titleFor(inspectedNode)} sub={`${plainName(inspectedNode.transform)}, ${inspectedNode.transform}`} onClose={closeOutput}>
-            <InspectorPanel graph={graph} registry={registry} results={results} stale={stale} selected={inspected} roomForButton={false} inSheet />
+            <InspectorPanel graph={graph} registry={registry} results={shown} stale={stale} selected={inspected} roomForButton={false} inSheet />
           </OutputSheet>
         ) : null
       ) : (
         <InspectorPanel
           graph={graph}
           registry={registry}
-          results={results}
+          results={shown}
           stale={stale}
           selected={inspected}
           failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
@@ -665,7 +676,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             head={head}
             graph={graph}
             registry={registry}
-            results={results}
+            results={shown}
             stale={stale}
             busy={busy}
             asking={asking}

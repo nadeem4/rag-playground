@@ -8,7 +8,7 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
-import { chooseDocument, loadSampleDocument, resetDocumentForTests } from "@/state/document"
+import { chooseDocument, documentsOf, loadSampleDocument, resetDocumentForTests, withDocuments } from "@/state/document"
 import { addCleaner, addEnrich, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { graphToConfig } from "@/state/config"
 import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID, usableGraph } from "@/state/pipelines"
@@ -995,7 +995,7 @@ describe("Build is pipeline first", () => {
     expect(readStoredGraph(TEST_REGISTRY)!.nodes.find((n) => n.stage === "chunk")!.config).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
     expect((screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement).disabled).toBe(false)
     // The document is changed in the pipeline's Document step, not in the header or the pipeline bar.
-    expect(within(card("source")).getByRole("button", { name: "Add or change the document. Now chunking-primer.pdf." })).toBeTruthy()
+    expect(within(card("source")).getByRole("button", { name: "Add a document. This pipeline reads 1 document." })).toBeTruthy()
     expect(screen.getAllByTestId("document-trigger")).toHaveLength(1)
     expect(screen.queryByTestId("documents-line")).toBeNull()
   })
@@ -2036,7 +2036,7 @@ describe("the document comes with the pipeline", () => {
   const stored = (sha: string, filename = "chunking-primer.pdf") => storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha, filename }))
   const cardWarning = () => card("source")?.querySelector("[data-testid=document-removed]") ?? null
 
-  it("shows the document in use on the Document card, with Add or change and no file picker of its own", async () => {
+  it("shows the document in use on the Document card, with Add a document and no file picker of its own", async () => {
     stored(SAMPLE_SHA)
     setup()
     const doc = await waitFor(() => {
@@ -2045,7 +2045,7 @@ describe("the document comes with the pipeline", () => {
     })
     expect(within(doc).getByText("Document")).toBeTruthy()
     await waitFor(() => expect(within(doc).getByTestId("document-item").textContent).toContain("chunking-primer.pdf"))
-    expect(within(doc).getByTestId("document-trigger").textContent).toBe("Add or change")
+    expect(within(doc).getByTestId("document-trigger").textContent).toBe("Add a document")
     fireEvent.click(within(doc).getByText("Document"))
     expect(within(doc).queryByRole("combobox")).toBeNull()
     expect(within(doc).queryByRole("button", { name: /upload/i })).toBeNull()
@@ -2123,5 +2123,33 @@ describe("the document comes with the pipeline", () => {
     await act(async () => settle.resolve(new Response(JSON.stringify([]), { status: 200 })))
     await screen.findByRole("button", { name: "Upload a document" })
     expect(screen.queryByTestId("document-note")).toBeNull()
+  })
+})
+
+describe("a pipeline on several documents", () => {
+  const NOTES = { sha: "cd".repeat(32), filename: "notes.md" }
+  const both = () => withDocuments(initialGraph(TEST_REGISTRY), [{ sha: SOURCE.sha, filename: SOURCE.filename }, NOTES])
+
+  it("builds one index over every document, and lets you pick whose steps the cards show", async () => {
+    storeGraph(both())
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    const showing = screen.getByLabelText("Showing the steps for") as HTMLSelectElement
+    expect([...showing.options].map((o) => o.textContent)).toEqual(["report.pdf", "notes.md"])
+    expect(showing.value).toBe(SOURCE.sha)
+    fireEvent.change(showing, { target: { value: NOTES.sha } })
+    expect(showing.value).toBe(NOTES.sha)
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect((posts[0].body as { documents: string[] }).documents).toEqual([SOURCE.sha, NOTES.sha])
+  })
+
+  it("removes a document from the Document card, and with one left there is nothing to pick", async () => {
+    storeGraph(both())
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    fireEvent.click(within(card("source")).getByRole("button", { name: /^Remove .*notes.* from this pipeline$/i }))
+    await waitFor(() => expect(screen.queryByLabelText("Showing the steps for")).toBeNull())
+    expect(documentsOf(readStoredGraph(TEST_REGISTRY))).toEqual([{ sha: SOURCE.sha, filename: SOURCE.filename }])
   })
 })

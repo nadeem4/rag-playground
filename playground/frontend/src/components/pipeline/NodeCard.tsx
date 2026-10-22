@@ -18,7 +18,7 @@ import { strategyLabel } from "@/learn/challenges"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { formatOf } from "@/lib/formats"
 import { cn } from "@/lib/utils"
-import { documentsOf } from "@/state/document"
+import { documentsOf, removeDocument } from "@/state/document"
 import { STAGE_VERB } from "@/state/graph"
 import { CHUNK_CLASSES } from "@/styles/dataClasses"
 import { errorHeadline } from "@/state/pipeline"
@@ -563,11 +563,18 @@ export function NodeCard(p: NodeCardProps) {
         // A click in here (the Preview, the menu) is not a click on the card.
         <div className="mt-1 flex min-w-0 flex-col gap-2" onClick={(e) => e.stopPropagation()}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="m-0 text-xs text-fg-muted">{docs.length ? "The documents this pipeline reads. Every step below runs on them." : "None yet."}</p>
-            <DocumentControl label="Add or change" value={docs[0] ?? null} />
+            <p className="m-0 text-xs text-fg-muted">
+              {docs.length > 1
+                ? `The ${docs.length} documents this pipeline reads. Every step below runs on each, and Ask searches them all.`
+                : docs.length
+                  ? "The document this pipeline reads. Every step below runs on it."
+                  : "None yet."}
+            </p>
+            <DocumentControl adds={docs} />
           </div>
           {docs.map((d) => (
-            <DocumentItem key={d.sha} doc={d} missing={Boolean(p.missing)} />
+            // Only one of several can be removed: a pipeline keeps at least one document.
+            <DocumentItem key={d.sha} doc={d} missing={docs.length === 1 ? Boolean(p.missing) : undefined} onRemove={docs.length > 1 ? () => removeDocument(d.sha) : undefined} />
           ))}
         </div>
       ) : (

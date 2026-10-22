@@ -140,7 +140,7 @@ describe("no em-dashes or en-dashes in visible text", () => {
     render(<Shell />)
     // A first visit opens the ready-made Starter pipeline on the default sample.
     await waitFor(() => expect(visibleText()).toMatch(/Starter pipeline/))
-    await waitFor(() => expect(visibleText()).toMatch(/The documents this pipeline reads/))
+    await waitFor(() => expect(visibleText()).toMatch(/The document this pipeline reads/))
     expect(visibleText()).not.toMatch(DASH)
   })
 

@@ -48,7 +48,7 @@ const twoDocSearch = (): SearchOutput => ({
 /**
  * The Chat output as Pandion writes it over these two documents: each citation
  * names its own piece's document, and a piece from the file the answer step did
- * not read is kept but not placed or verified (chat.py `_citation`).
+ * not read is checked against its own text and placed on its own first page (chat.py `_citation`).
  */
 const chatOverTwo = (): ChatOutput => {
   const hits = twoDocs().hits
@@ -65,7 +65,7 @@ const chatOverTwo = (): ChatOutput => {
           ...c,
           chunk_id: piece.id,
           source_sha: piece.doc_id,
-          ...(elsewhere ? { doc_start: null, doc_end: null, page: null, element_id: null, bbox: null, verified: false } : {}),
+          ...(elsewhere ? { page: piece.page_span?.[0] ?? null, element_id: null, bbox: null } : {}),
         }
       }),
     },

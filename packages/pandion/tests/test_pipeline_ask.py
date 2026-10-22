@@ -232,8 +232,14 @@ def test_a_citation_names_the_document_its_piece_came_from(tmp_path, monkeypatch
     citations = answer.output.payload["citations"]
     assert len({own[c["chunk_id"]] for c in citations}) == 2, "the test needs pieces from both documents"
     assert all(c["source_sha"] == own[c["chunk_id"]] for c in citations)
-    # The step reads the first document by id (guides/short.pdf): a piece from the other one is kept,
-    # never placed on the first one's pages, and not verified.
+    # The step reads the first document by id (guides/short.pdf). A correct quote of a piece from the
+    # other one is still verified, against that piece, and placed on its own first page.
     first = hashlib.sha256((config.parent / "docs" / "guides" / "short.pdf").read_bytes()).hexdigest()
+    pieces = {h.chunk.id: h.chunk for h in answer.hits}
     other = [c for c in citations if c["source_sha"] != first]
-    assert other and all(c["page"] is None and c["doc_start"] is None and not c["verified"] for c in other)
+    assert other
+    for c in other:
+        piece = pieces[c["chunk_id"]]
+        assert c["verified"] and c["cited_text"] in piece.text
+        assert c["page"] == piece.page_span[0] == 1
+        assert c["doc_start"] == piece.start_char + piece.text.index(c["cited_text"])

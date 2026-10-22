@@ -307,10 +307,11 @@ export function reduceEvents(events: RunEvent[], cardOf?: CardOf): RunState {
 /**
  * The name a run gives a document (pandion-api's `safe_name`): its filename,
  * or, when the server could not keep the name's suffix, the filename with
- * every dot as `_`. A document matches either.
+ * every dot as `_`. When the server kept no name for the file at all, the run
+ * names it as it is stored, `<sha><suffix>`, so a known `sha` matches that too.
  */
-export function runsAs(filename: string, name: string): boolean {
-  return name === filename || name === filename.replaceAll(".", "_")
+export function runsAs(filename: string, name: string, sha?: string): boolean {
+  return name === filename || name === filename.replaceAll(".", "_") || (Boolean(sha) && (name === sha || name.startsWith(`${sha}.`)))
 }
 
 /**
@@ -319,11 +320,11 @@ export function runsAs(filename: string, name: string): boolean {
  * all of them together, so a card still runs while another document does.
  * `filename` null, or a node with no run for it, leaves the node as it is.
  */
-export function forDocument(results: Record<string, NodeState>, filename: string | null): Record<string, NodeState> {
+export function forDocument(results: Record<string, NodeState>, filename: string | null, sha?: string): Record<string, NodeState> {
   if (filename === null) return results
   let out = results
   for (const [id, node] of Object.entries(results)) {
-    const name = node.documents ? Object.keys(node.documents).find((n) => runsAs(filename, n)) : undefined
+    const name = node.documents ? Object.keys(node.documents).find((n) => runsAs(filename, n, sha)) : undefined
     if (!name) continue
     const own = node.documents![name]
     if (out === results) out = { ...results }

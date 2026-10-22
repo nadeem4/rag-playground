@@ -30,6 +30,15 @@ const hybrid = hybridJson as unknown as RetrievalResult
 const mmr = mmrJson as unknown as RetrievalResult
 const search = searchJson as unknown as SearchOutput
 
+describe("which document a hit came from", () => {
+  const sha = hybrid.hits[0].chunk.doc_id
+  it("keeps the hit's document, the source sha, from a retrieval result, a Search output and a chunk", () => {
+    expect(rowsFromResult(hybrid).map((r) => r.doc_id)).toEqual(hybrid.hits.map(() => sha))
+    expect(rowsFromSearch(search).every((r) => r.doc_id === sha)).toBe(true)
+    expect(rowFromChunk(chunkSet.chunks[0]).doc_id).toBe(sha)
+  })
+})
+
 describe("rank movement", () => {
   it("says where a reranked hit was, and nothing when it did not move", () => {
     expect(movement({ rank: 2, prior_rank: 5 })).toEqual({ kind: "up", from: 5 })

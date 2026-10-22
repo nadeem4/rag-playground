@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 
 import type { SampleQuestion } from "@/api/types"
+import { FileTag } from "@/components/FileTag"
 import { ordinal, type HitRowData } from "@/components/inspectors/hits"
+import { fileOf, type FileInfo } from "@/lib/files"
 import { flatRow, isTableRow } from "@/lib/passage"
 import { firstSentence } from "@/lib/sentence"
 
@@ -12,6 +14,7 @@ import { findGold, goldsOf } from "./Transcript"
  * gold answer sits in a kept piece names that piece and quotes the answer;
  * any other question quotes the first sentence of the top kept piece, word
  * for word. With Chat the written answer stands in, so it says nothing.
+ * With several documents it also names the piece's file.
  */
 
 /**
@@ -46,24 +49,42 @@ export interface FindingProps {
   questions: readonly SampleQuestion[]
   /** True when Chat answered: its written answer replaces this sentence. */
   chat: boolean
+  /** The pipeline's files when it has several; empty or left out with one. */
+  files?: readonly FileInfo[]
 }
 
-export function Finding({ question, rows, questions, chat }: FindingProps) {
+export function Finding({ question, rows, questions, chat, files = [] }: FindingProps) {
   const found = useGoldFound(question, rows, questions)
   // Until Pandion says where the gold is, say nothing rather than the wrong thing.
   if (chat || !rows.length || found === undefined) return null
+  const file = fileOf(files, (found ? rows.find((r) => r.rank === found.rank) : rows[0])?.doc_id)
+  // The tag and the mark after it stay on one line, so a comma never starts a line.
+  const from = (after: string) =>
+    file ? (
+      <>
+        {", from "}
+        <span className="whitespace-nowrap">
+          <FileTag file={file} />
+          {after}
+        </span>
+      </>
+    ) : null
   return (
     <p data-testid="finding-sentence" className="m-0 max-w-[46ch] font-sans text-lg text-balance">
       {found ? (
         <>
-          {`Found in the ${ordinal(found.rank)} piece: `}
+          {`Found in the ${ordinal(found.rank)} piece`}
+          {file ? from(":") : ":"}
+          {" "}
           <q className="font-serif italic" style={{ quotes: '"“" "”"' }}>
             {isTableRow(found.gold) ? flatRow(found.gold) : found.gold}
           </q>
         </>
       ) : (
         <>
-          {"The closest piece says: "}
+          {"The closest piece"}
+          {file ? from(",") : null}
+          {" says: "}
           <span className="font-serif">{firstSentence(rows[0].text)}</span>
         </>
       )}

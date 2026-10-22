@@ -4,15 +4,17 @@ import { hasAnyKey, type Keys } from "@/api/apiKey"
 import { QUEUED_LINE } from "@/api/runState"
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions, useSamples } from "@/api/samples"
-import type { LlmProvider, LlmSettings, Registry } from "@/api/types"
+import type { ChunkSet, LlmProvider, LlmSettings, Registry } from "@/api/types"
 import { useArtifactPayload } from "@/api/useArtifact"
 import type { ExplainState } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
+import { FileDot } from "@/components/FileTag"
 import { blockingNode, type NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { QuestionField } from "@/components/pipeline/QuestionField"
 import { useElapsed } from "@/components/pipeline/useElapsed"
 import { Button } from "@/components/ui/button"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
+import { fileOf, type FileInfo } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { documentsOf } from "@/state/document"
 import { ASK_STAGES, askNodes, indexNode, infoFor, rewriteOf, terminalNode, titleFor, upstreamOfStage, type PipelineGraph, type RewriteMode } from "@/state/graph"
@@ -74,6 +76,11 @@ export interface AskPanelProps {
   queued?: boolean
   /** The dock's buttons (side switch and close), shown at the end of the panel's head. */
   head?: ReactNode
+  /** Search in, with several documents: the one document Ask searches, by sha, or null for all of them. */
+  searchIn?: string | null
+  onSearchIn?: (sha: string | null) => void
+  /** Where the results on show were searched: a document's sha, null for all of them, undefined when not known. */
+  askedIn?: string | null
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -104,6 +111,34 @@ export function recipeLine(graph: PipelineGraph, registry: Registry): string {
     parts.push(`Answer: ${titleFor(useCase)}.`)
   }
   return parts.join(" ")
+}
+
+/**
+ * Search in, with several documents: all of them, or one file. One file sends
+ * `where: {document: [sha]}` with the next Ask.
+ */
+function SearchIn({ files, value, onChange }: { files: readonly FileInfo[]; value: string | null; onChange: (sha: string | null) => void }) {
+  const pill = (on: boolean) =>
+    cn(
+      "inline-flex min-h-[28px] max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-full border px-3 text-xs text-fg transition-colors duration-(--dur-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)",
+      on ? "border-primary bg-accent-wash" : "border-hairline bg-surface-raised hover:bg-surface-hover",
+    )
+  return (
+    <div role="group" aria-labelledby="search-in" className="flex flex-wrap items-center gap-2">
+      <span id="search-in" className="text-xs font-medium">
+        Search in
+      </span>
+      <button type="button" aria-pressed={value === null} className={pill(value === null)} onClick={() => onChange(null)}>
+        {`All ${files.length} documents`}
+      </button>
+      {files.map((f) => (
+        <button key={f.sha} type="button" aria-pressed={value === f.sha} className={pill(value === f.sha)} onClick={() => onChange(f.sha)}>
+          <FileDot slot={f.slot} />
+          <span className="truncate">{f.filename}</span>
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** Smooth unless the visitor asked for less motion. */
@@ -198,6 +233,7 @@ export function AskPanel(p: AskPanelProps) {
             reranker: snap.reranker,
             rows: rows.map((r) => ({ rank: r.rank, text: r.text })),
             found: null,
+            ...(snap.searchIn ? { searchIn: snap.searchIn } : {}),
           }
         : null)
     if (!entry || entry.found !== null) return
@@ -225,6 +261,16 @@ export function AskPanel(p: AskPanelProps) {
 
   // An index over several documents names how many; their pages are each document's own.
   const several = documentsOf(p.graph).length
+  // Search in one of them: its own chunk set counts its pieces.
+  const searched = fileOf(outputs.files, p.searchIn)
+  const searchedChunks = useArtifactPayload(searched?.chunksId).data as ChunkSet | undefined
+  const searchedPieces = Array.isArray(searchedChunks?.chunks) ? `, ${plural(searchedChunks.chunks.length, "piece", "pieces")}` : ""
+  // Search in moved after the results were searched: they no longer answer what the header says, so they go, as after a settings change.
+  const scopeMoved = several > 1 && !p.busy && p.askedIn !== undefined && (p.askedIn ?? null) !== (searched?.sha ?? null)
+  const movedLine = scopeMoved
+    ? `You changed where to search. Ask again to search ${searched ? `${searched.filename} only` : `all ${several} documents`}.`
+    : undefined
+  const outOfDate = askStale || movedLine !== undefined
   const ready = [
     several > 1 ? plural(several, "document", "documents") : filename,
     // A document without pages (Word, a web page) says nothing of them.
@@ -245,7 +291,9 @@ export function AskPanel(p: AskPanelProps) {
                 ? `Building the index: ${p.buildingStep.title}${buildElapsed !== undefined ? `, ${buildElapsed} s` : ""}`
                 : "Building the index"
               : indexId
-              ? `Index ready: ${ready.join(", ")}`
+              ? searched
+                ? `Searching ${searched.filename} only${searchedPieces}`
+                : `Index ready: ${ready.join(", ")}`
               : sha
                 ? "Build the index first."
                 : "Pick a document in the Document step, then build the index."}
@@ -255,12 +303,21 @@ export function AskPanel(p: AskPanelProps) {
       </div>
       {/* Scrolls on its own: the panel is a docked column or a bottom sheet, never part of the page's scroll. */}
       <div ref={scrollBox} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+        {outputs.files.length ? <SearchIn files={outputs.files} value={searched?.sha ?? null} onChange={(sha) => p.onSearchIn?.(sha)} /> : null}
         {query ? (
           <QuestionField
             value={String(query.config.text ?? "")}
             errors={queryErrors?.fields?.text}
             disabled={askDisabled}
-            placeholder={filename ? `Ask something about ${filename}.` : undefined}
+            placeholder={
+              searched
+                ? `Ask something about ${searched.filename}.`
+                : several > 1
+                  ? `Ask something about these ${several} documents.`
+                  : filename
+                    ? `Ask something about ${filename}.`
+                    : undefined
+            }
             onChange={setText}
             onSubmit={ask}
             action={
@@ -270,7 +327,7 @@ export function AskPanel(p: AskPanelProps) {
                 disabled={askDisabled}
                 title={askDisabled ? undefined : ASK_TITLE}
                 // A setting changed since the answer: a soft ring says Ask is the next step.
-                className={cn(askStale && !askDisabled && "ring-[3px] ring-accent-wash")}
+                className={cn(outOfDate && !askDisabled && "ring-[3px] ring-accent-wash")}
                 onClick={ask}
               >
                 {p.asking ? "Asking" : "Ask"}
@@ -279,7 +336,7 @@ export function AskPanel(p: AskPanelProps) {
           />
         ) : null}
         {p.needsDocument ? <p className="text-xs text-fg-muted">Needs a document.</p> : null}
-        {askStale ? null : <SearchedFor outputs={outputs} />}
+        {outOfDate ? null : <SearchedFor outputs={outputs} />}
         {queryErrors?.message ? <p className="text-xs break-words text-danger">{queryErrors.message}</p> : null}
         {indexId && blocker ? <p className="text-xs text-danger">Fix the {titleFor(blocker)} settings to ask.</p> : null}
         {p.runError ? (
@@ -302,6 +359,7 @@ export function AskPanel(p: AskPanelProps) {
             outputs={outputs}
             comparisonHidden={p.comparisonHidden}
             stale={askStale}
+            moved={movedLine}
             questions={questions}
             onComparison={p.onComparison}
             invite={

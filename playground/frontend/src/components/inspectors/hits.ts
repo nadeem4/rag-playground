@@ -28,6 +28,8 @@ export interface HitRowData {
   ordinal: number | null
   /** The chunk's heading path as one line, `Methods > Survey`, when the chunker gave it one. */
   section: string | null
+  /** The document the piece was cut from, by its source sha: which file a hit came from when there are several. */
+  doc_id?: string | null
 }
 
 /** A heading path as one line, or null when it is empty. */
@@ -47,6 +49,7 @@ export function rowsFromResult(r: RetrievalResult): HitRowData[] {
     element_ids: h.chunk.source_element_ids ?? null,
     ordinal: typeof h.chunk.ordinal === "number" ? h.chunk.ordinal : null,
     section: sectionOf(h.chunk.heading_path),
+    doc_id: h.chunk.doc_id || null,
   }))
 }
 
@@ -68,6 +71,7 @@ export function rowFromChunk(c: Chunk): HitRowData {
     element_ids: c.source_element_ids ?? null,
     ordinal: c.ordinal,
     section: sectionOf(c.heading_path),
+    doc_id: c.doc_id || null,
   }
 }
 
@@ -93,6 +97,7 @@ export interface SearchRow {
   retriever?: string
   snippet?: string
   chunk_id: string
+  doc_id?: string
   page_span?: [number, number] | null
 }
 
@@ -115,6 +120,7 @@ export function rowsFromSearch(out: SearchOutput): HitRowData[] {
     element_ids: null,
     ordinal: null,
     section: null,
+    doc_id: r.doc_id || null,
   }))
 }
 

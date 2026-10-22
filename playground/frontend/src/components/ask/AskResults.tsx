@@ -1,17 +1,20 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 
 import { needsKey } from "@/api/apiKey"
-import type { NodeState } from "@/api/runState"
+import { runsAs, type NodeState } from "@/api/runState"
 import type { ChatOutput, ChunkSet, GraphNode, ParsedDoc, Query, Registry, RetrievalResult, SampleQuestion } from "@/api/types"
 import { loadMeta, useArtifactPayload } from "@/api/useArtifact"
 import { KeyHint } from "@/components/ApiKeyControl"
+import { FileTag } from "@/components/FileTag"
 import { ChatInspector } from "@/components/inspectors/ChatInspector"
 import { movement, reorderedOnly, rowsFromResult, rowsFromSearch, type HitRowData, type SearchOutput } from "@/components/inspectors/hits"
-import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
+import { RetrievalView, type HitFile } from "@/components/inspectors/RetrievalResultInspector"
 import { WhatItDid } from "@/components/pipeline/WhatItDid"
 import { Button } from "@/components/ui/button"
+import { fileOf, filesOf } from "@/lib/files"
 import { DRAW_MS, drawSlope, reducedMotion, type SlopeKind } from "@/lib/slope"
-import { askNodes, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
+import { documentsOf } from "@/state/document"
+import { askNodes, indexNode, infoFor, titleFor, upstreamOfStage, type PipelineGraph } from "@/state/graph"
 import { errorHeadline } from "@/state/pipeline"
 
 import { RERANKERS, RETRIEVAL_LABEL } from "./AskSettings"
@@ -47,6 +50,35 @@ export interface AskOutputs {
   chunkSet?: ChunkSet
   doc?: ParsedDoc
   failed?: { node: GraphNode; error: string }
+  /**
+   * The pipeline's files when it has several, each with its colour and its own
+   * parsed document and chunk set: a hit opens its own file. Empty with one.
+   */
+  files: AskFile[]
+}
+
+/** One of several documents, with the results of its own Parse (or Clean) and Chunk. */
+export type AskFile = HitFile
+
+/** One document's own result of a step that ran once per document, while it still matches the graph. */
+function ownResult(results: Record<string, NodeState>, stale: Set<string>, node: GraphNode | undefined, file: AskFile): string | undefined {
+  const r = node ? results[node.id] : undefined
+  if (!r?.documents || stale.has(r.id)) return undefined
+  const name = Object.keys(r.documents).find((n) => runsAs(file.filename, n, file.sha))
+  const own = name ? r.documents[name] : undefined
+  return own && (own.status === "done" || own.status === "cached") ? own.artifact_id : undefined
+}
+
+/** The pipeline's files, each with its own parsed document and chunk set; none with one document. */
+export function askFiles(graph: PipelineGraph, results: Record<string, NodeState>, stale: Set<string>): AskFile[] {
+  const index = indexNode(graph)
+  const chunkNode = index ? upstreamOfStage(graph, index.id, "chunk") : undefined
+  const docNode = index ? upstreamOfStage(graph, index.id, ["clean", "parse"]) : undefined
+  return filesOf(documentsOf(graph)).map((f) => ({
+    ...f,
+    docId: ownResult(results, stale, docNode, f),
+    chunksId: ownResult(results, stale, chunkNode, f),
+  }))
 }
 
 const asResult = (d: unknown) => (d && Array.isArray((d as RetrievalResult).hits) ? (d as RetrievalResult) : undefined)
@@ -77,6 +109,7 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
     chunkSet: chunks.data as ChunkSet | undefined,
     doc: doc.data as ParsedDoc | undefined,
     failed: failedNode ? { node: failedNode, error: results[failedNode.id].error ?? "" } : undefined,
+    files: askFiles(graph, results, stale),
   }
 }
 
@@ -84,7 +117,7 @@ export function useAskOutputs(graph: PipelineGraph, results: Record<string, Node
  * The list a reader ends with: the reranked order when a reranker ran, else
  * the Search output, else the retrieval result. Null until it has loaded.
  */
-export function finalRows(o: AskOutputs, reranked: boolean): HitRowData[] | null {
+export function finalRows(o: Pick<AskOutputs, "rerank" | "output" | "retrieve">, reranked: boolean): HitRowData[] | null {
   if (reranked) return o.rerank ? rowsFromResult(o.rerank) : null
   if (isSearch(o.output)) return rowsFromSearch(o.output)
   return o.retrieve ? rowsFromResult(o.retrieve) : null
@@ -162,6 +195,8 @@ export interface AskResultsProps {
   questions?: readonly SampleQuestion[]
   /** A line shown right under a fresh answer's headline, inviting the reader to change a setting and ask again. */
   invite?: ReactNode
+  /** Set when Search in moved past the results: this sentence stands in for them until the next Ask. */
+  moved?: string
 }
 
 export const STALE_LINE = "Settings changed. Ask again to see what changed."
@@ -187,7 +222,7 @@ export function resetMotionMemory(): void {
   slopesDrawn.clear()
 }
 
-export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [], invite }: AskResultsProps) {
+export function AskResults({ graph, registry, outputs: o, comparisonHidden, onComparison, stale = false, questions = [], invite, moved }: AskResultsProps) {
   const { query, retrieve, rerank, useCase } = askNodes(graph)
   const chat = useCase?.transform === "chat" && isChat(o.output) ? o.output.payload : undefined
   // The reranker's run note is the sub line; its meta is fetched once and What it did reads the same cache.
@@ -245,6 +280,7 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
           rows={rows}
           chunkSet={o.chunkSet}
           doc={o.doc}
+          files={o.files}
           showDetail={false}
           flat
           facts={null}
@@ -253,6 +289,15 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
     }
   }
   if (!o.failed && !chat && !lists && !stale) return null
+  if (moved) {
+    return (
+      <section aria-label="Results" className="flex flex-col gap-3 border-t border-hairline pt-3">
+        <p data-testid="stale-results" className="rounded-control bg-stale-wash px-2 py-1 text-xs text-stale">
+          {moved}
+        </p>
+      </section>
+    )
+  }
   return (
     <section aria-label="Results" className="flex flex-col gap-3 border-t border-hairline pt-3">
       {stale ? (
@@ -261,8 +306,11 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
         </p>
       ) : null}
       {o.failed ? <Failed node={o.failed.node} error={o.failed.error} /> : null}
-      {chat ? <ChatInspector payload={chat} chunkSet={o.chunkSet} /> : null}
-      {kept ? <Finding question={String(query?.config.text ?? "")} rows={kept} questions={questions} chat={Boolean(chat) || useCase?.transform === "chat"} /> : null}
+      {chat ? <ChatInspector payload={chat} chunkSet={o.chunkSet} files={o.files} /> : null}
+      {chat ? <Sources payload={chat} files={o.files} /> : null}
+      {kept ? (
+        <Finding question={String(query?.config.text ?? "")} rows={kept} questions={questions} chat={Boolean(chat) || useCase?.transform === "chat"} files={o.files} />
+      ) : null}
       {sub !== null ? (
         <p data-testid="sub-line" className="m-0 min-h-[1lh] text-xs text-fg-muted">
           {sub}
@@ -271,6 +319,27 @@ export function AskResults({ graph, registry, outputs: o, comparisonHidden, onCo
       {kept && !stale ? invite : null}
       {lists}
     </section>
+  )
+}
+
+/**
+ * Under a model answer over several documents: the files its cited pieces came
+ * from, in the order the citations first name them. Nothing with one document.
+ */
+function Sources({ payload, files }: { payload: ChatOutput["payload"]; files: readonly AskFile[] }) {
+  const cited = [...new Set(payload.citations.map((c) => c.source_sha))].map((sha) => fileOf(files, sha)).filter((f) => f !== undefined)
+  if (!cited.length) return null
+  return (
+    <p data-testid="answer-sources" className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
+      {"Sources:"}
+      {cited.map((f) => (
+        // The space keeps the line's text readable as words; the flex gap spaces it on screen.
+        <Fragment key={f.sha}>
+          {" "}
+          <FileTag file={f} />
+        </Fragment>
+      ))}
+    </p>
   )
 }
 
@@ -415,6 +484,7 @@ function Comparison({
         rows={[...after, ...dropped]}
         chunkSet={o.chunkSet}
         doc={o.doc}
+        files={o.files}
         showDetail={false}
         side="reranked"
         flat
@@ -450,6 +520,7 @@ function Comparison({
         rows={before}
         chunkSet={o.chunkSet}
         doc={o.doc}
+        files={o.files}
         showDetail={false}
         side="search"
         flat

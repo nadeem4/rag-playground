@@ -83,6 +83,16 @@ describe("Finding", () => {
     expect(q.style.quotes).toContain("“")
   })
 
+  it("names the file of the piece that holds the gold answer, with several documents", async () => {
+    const files = [
+      { sha: "a".repeat(64), filename: "primer.pdf", slot: 1 },
+      { sha: "b".repeat(64), filename: "guide.docx", slot: 2 },
+    ]
+    const rows = ROWS.map((r) => ({ ...r, doc_id: r.rank === 2 ? files[1].sha : files[0].sha }))
+    render(<Finding question="How fast were readers on one column?" rows={rows} questions={QUESTIONS} chat={false} files={files} />)
+    expect((await found()).textContent).toBe("Found in the 2nd piece, from guide.docx: the average time per page fell by a fifth")
+  })
+
   it("matches one of the further gold answers too, and quotes the one found", async () => {
     render(<Finding question="  What caused the errors? " rows={ROWS} questions={QUESTIONS} chat={false} />)
     expect((await found()).textContent).toBe("Found in the 3rd piece: the cause was the jump")

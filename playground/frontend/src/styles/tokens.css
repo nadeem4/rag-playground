@@ -115,6 +115,15 @@
 
   /* Channel B: weak support, a flag for a person to read (chat claims). */
   --warn: oklch(0.86 0.08 75);      --warn-text: oklch(0.38 0.08 75);
+
+  /* Channel B: which file, by the document's place in the pipeline (lib/files.ts). A dot
+     beside the filename, never the only cue. Marks, not text: >= 3:1 on the page. */
+  --file-1: oklch(0.55 0.09 250);
+  --file-2: oklch(0.55 0.09 60);
+  --file-3: oklch(0.55 0.09 320);
+  --file-4: oklch(0.55 0.09 200);
+  --file-5: oklch(0.55 0.09 20);
+  --file-6: oklch(0.55 0.09 120);
 }
 
 /* ----------------------------------------------------------------- dark -- */
@@ -158,6 +167,12 @@
   --kept-mark: oklch(0.66 0.1 190);
   --removed-mark: oklch(0.66 0.14 25);
   --warn: oklch(0.42 0.07 75);      --warn-text: oklch(0.92 0.06 75);
+  --file-1: oklch(0.75 0.09 250);
+  --file-2: oklch(0.75 0.09 60);
+  --file-3: oklch(0.75 0.09 320);
+  --file-4: oklch(0.75 0.09 200);
+  --file-5: oklch(0.75 0.09 20);
+  --file-6: oklch(0.75 0.09 120);
 }
 
 /* Block 2 of 2: the OS preference, unless the toggle pinned light. */
@@ -201,6 +216,12 @@
     --kept-mark: oklch(0.66 0.1 190);
     --removed-mark: oklch(0.66 0.14 25);
     --warn: oklch(0.42 0.07 75);      --warn-text: oklch(0.92 0.06 75);
+    --file-1: oklch(0.75 0.09 250);
+    --file-2: oklch(0.75 0.09 60);
+    --file-3: oklch(0.75 0.09 320);
+    --file-4: oklch(0.75 0.09 200);
+    --file-5: oklch(0.75 0.09 20);
+    --file-6: oklch(0.75 0.09 120);
   }
 }
 

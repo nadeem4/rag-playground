@@ -182,7 +182,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const [shownSha, setShownSha] = useState<string | null>(null)
   const shownDoc = pipelineDocs.find((d) => d.sha === shownSha) ?? pipelineDocs[0] ?? null
   const shownFilename = pipelineDocs.length > 1 ? (shownDoc?.filename ?? null) : null
-  const shown = useMemo(() => forDocument(results, shownFilename), [results, shownFilename])
+  const shownRunSha = pipelineDocs.length > 1 ? shownDoc?.sha : undefined
+  const shown = useMemo(() => forDocument(results, shownFilename, shownRunSha), [results, shownFilename, shownRunSha])
+  // Ask's Search in: one of the documents, by sha, or null for all of them. A document no longer in the pipeline means all.
+  // It starts where the last Ask searched, so a reload does not call its results out of date.
+  const [searchSha, setSearchSha] = useState<string | null>(() => session?.asked?.searchSha ?? null)
+  const searchIn = pipelineDocs.length > 1 && pipelineDocs.some((d) => d.sha === searchSha) ? searchSha : null
   const [sigs, setSigs] = useState<Record<string, string>>(() => session?.sigs ?? {})
   const [selected, setSelected] = useState<string | null>(null)
   // The step whose output is on show: the pane beside the cards, or the sheet on a phone.
@@ -407,7 +412,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       const { run_id } =
         stage !== undefined && INDEX_STAGES.includes(stage)
           ? await v2.createRun(cardRun(c.pipeline, target!, force, graph), { keys })
-          : await v2.ask(askRun(c.pipeline, { answer: stage === undefined || stage === "use_case", force }), { keys })
+          : await v2.ask(askRun(c.pipeline, { answer: stage === undefined || stage === "use_case", force, document: searchIn }), { keys })
       setKeyNotice(notice)
       setKeyNoticeProvider(noticeProvider)
       setRunSteps({ ids: new Set(covered), runId: run_id })
@@ -704,9 +709,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             onUseCase={(t) => edit(setUseCase(graph, registry, t), ...ids(askNodes(graph).useCase))}
             onRewrite={(m) => edit(setRewrite(graph, registry, m), ...ids(askNodes(graph).query), ...ids(askNodes(graph).retrieve))}
             onSweep={(id) => void openSweep(id)}
+            searchIn={searchIn}
+            onSearchIn={setSearchSha}
+            askedIn={asked ? (asked.searchSha ?? null) : undefined}
             onAsk={() => {
               setComparisonHidden(null)
-              const snap = askSnapshot(graph, registry, pipelineName)
+              const snap = { ...askSnapshot(graph, registry, pipelineName, pipelineDocs.find((d) => d.sha === searchIn)?.filename), searchSha: searchIn }
               void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
             }}
           />

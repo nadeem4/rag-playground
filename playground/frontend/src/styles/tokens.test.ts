@@ -203,6 +203,21 @@ describe("surfaces", () => {
   })
 })
 
+describe("file colours (Channel B)", () => {
+  it.each([
+    ["light", light],
+    ["dark", darkToggle],
+    ["dark, the OS", darkMedia],
+  ])("%s: six distinct hues, each a dot that clears 3:1 on the page and the panel", (_, tokens) => {
+    const fills = [1, 2, 3, 4, 5, 6].map((i) => tokens.get(`--file-${i}`)!)
+    expect(new Set(fills.map((f) => parseOklch(f).h)).size).toBe(6)
+    for (const f of fills) {
+      expect(inGamut(parseOklch(f)), f).toBe(true)
+      for (const surface of ["--surface", "--surface-elevated"]) expect(contrast(f, tokens.get(surface)!), `${f} on ${surface}`).toBeGreaterThanOrEqual(3)
+    }
+  })
+})
+
 describe("ink and lines", () => {
   it.each([
     ["light", light, ["#d6d9d3", "#838882", "#161917", "#545a55"]],

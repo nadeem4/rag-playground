@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import type { ChatCitation, ChatPayload, ChatSegment, ChunkSet, Grounding } from "@/api/types"
+import { useArtifactPayload } from "@/api/useArtifact"
 import { useFind } from "@/api/usePdf"
 import { EmptyState } from "@/components/EmptyState"
 import { citationHighlight, highlightWords } from "@/components/pdf/geometry"
 import { PdfPageView } from "@/components/pdf/PdfPageView"
 import { TextView } from "@/components/pdf/TextView"
 import { Button } from "@/components/ui/button"
+import { fileOf } from "@/lib/files"
+import { hasPages as filePaged } from "@/lib/formats"
 import { cn } from "@/lib/utils"
 import { useHasPages } from "@/state/document"
 
@@ -27,6 +30,7 @@ import {
   unverifiedReason,
 } from "./chat"
 import "./inspectors.css"
+import type { HitFile } from "./RetrievalResultInspector"
 import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
 
 /**
@@ -53,7 +57,18 @@ import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
  * Clicking a number, or a claim, opens the page it cites, with the quote found on it.
  */
 
-export function ChatInspector({ payload, status, chunkSet }: { payload?: ChatPayload; status?: InspectorStatus; chunkSet?: ChunkSet }) {
+export function ChatInspector({
+  payload,
+  status,
+  chunkSet,
+  files = [],
+}: {
+  payload?: ChatPayload
+  status?: InspectorStatus
+  chunkSet?: ChunkSet
+  /** The pipeline's files when it has several: a citation from another file opens that file, with its own chunks. */
+  files?: readonly HitFile[]
+}) {
   const screen = statusScreen(status, "answer")
   if (screen) return <Frame><div className="bg-surface">{screen}</div></Frame>
   if (!payload) {
@@ -65,7 +80,7 @@ export function ChatInspector({ payload, status, chunkSet }: { payload?: ChatPay
       </Frame>
     )
   }
-  return <ChatView payload={payload} chunkSet={chunkSet} />
+  return <ChatView payload={payload} chunkSet={chunkSet} files={files} />
 }
 
 function toneOf(slot: number | null): CSSProperties {
@@ -84,7 +99,7 @@ function readMarks(): boolean {
   }
 }
 
-function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: ChunkSet }) {
+function ChatView({ payload, chunkSet, files }: { payload: ChatPayload; chunkSet?: ChunkSet; files: readonly HitFile[] }) {
   const [open, setOpen] = useState<number | null>(null)
   const [marks, setMarksState] = useState(readMarks)
   const setMarks = (on: boolean) => {
@@ -102,12 +117,25 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
   const byN = new Map(payload.citations.map((c) => [c.n, c]))
   const stats = chatStats(payload)
   const note = stopNote(payload.stop_reason, payload.answer.every((s) => !s.text.trim()))
-  const hasPages = useHasPages()
+  const knownPages = useHasPages()
+  // With several files, a citation's own file says whether it has pages; else the documents list does.
+  const hasPages = (sha: string) => {
+    const file = fileOf(files, sha)
+    return file ? filePaged(file.filename) : knownPages(sha)
+  }
+  // A citation from another of several files is read against that file's own chunks.
+  const elsewhere = (sha: string) => {
+    const file = fileOf(files, sha)
+    return file && file.sha !== chunkSet?.doc_id ? file : undefined
+  }
   const current = open === null ? undefined : byN.get(open)
+  const ownFile = current ? elsewhere(current.source_sha) : undefined
+  const ownChunks = useArtifactPayload(ownFile?.chunksId).data as ChunkSet | undefined
+  const cited = ownFile ? ownChunks : chunkSet
   // A document without pages (Word, a web page, Markdown, text) shows its text instead of a page.
   const paged = current ? hasPages(current.source_sha) : true
-  const range = current && !paged ? citationRange(current, chunkSet) : null
-  const place = current && paged ? citationPage(current, chunkSet) : range ? { page: 0, from: "text" as const } : null
+  const range = current && !paged ? citationRange(current, cited) : null
+  const place = current && paged ? citationPage(current, cited) : range ? { page: 0, from: "text" as const } : null
   const method = methodCaption(payload.citation_method)
 
   // A discrete click: bring the page, or the citation when it has no page, into view.
@@ -200,7 +228,15 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
       {payload.citations.length ? (
         <ol ref={listRef} aria-label="Citations" className="flex flex-col bg-surface">
           {payload.citations.map((c) => (
-            <CitationRow key={c.n} c={c} chunkSet={chunkSet} paged={hasPages(c.source_sha)} selected={open === c.n} onOpen={() => setOpen(c.n)} />
+            <CitationRow
+              key={c.n}
+              c={c}
+              chunkSet={chunkSet}
+              paged={hasPages(c.source_sha)}
+              ownFile={Boolean(elsewhere(c.source_sha)?.chunksId)}
+              selected={open === c.n}
+              onOpen={() => setOpen(c.n)}
+            />
           ))}
         </ol>
       ) : (
@@ -209,14 +245,14 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         </div>
       )}
 
-      {current && range && chunkSet ? (
+      {current && range && cited ? (
         <div ref={pdfRef}>
           <TextView
             key={current.n}
             title={`Citation ${current.n}`}
-            text={chunkSet.source_text}
+            text={cited.source_text}
             marks={[range]}
-            slot={citationSlot(current, chunkSet)}
+            slot={citationSlot(current, cited)}
             notice={
               current.verified
                 ? "This document has no pages, so its text is shown with the cited words marked."
@@ -227,7 +263,7 @@ function ChatView({ payload, chunkSet }: { payload: ChatPayload; chunkSet?: Chun
         </div>
       ) : current && place && paged ? (
         <div ref={pdfRef}>
-          <CitationInPdf key={current.n} c={current} page={place.page} fromChunk={place.from === "chunk"} chunkSet={chunkSet} onClose={() => setOpen(null)} />
+          <CitationInPdf key={current.n} c={current} page={place.page} fromChunk={place.from === "chunk"} chunkSet={cited} onClose={() => setOpen(null)} />
         </div>
       ) : null}
     </Frame>
@@ -411,6 +447,7 @@ function CitationRow({
   c,
   chunkSet,
   paged,
+  ownFile = false,
   selected,
   onOpen,
 }: {
@@ -418,11 +455,13 @@ function CitationRow({
   chunkSet?: ChunkSet
   /** False for a document without pages: the row opens its text. */
   paged: boolean
+  /** True when the citation is from another of several files, whose own chunks open it. */
+  ownFile?: boolean
   selected: boolean
   onOpen: () => void
 }) {
   const place = paged ? citationPage(c, chunkSet) : null
-  const inText = !paged && citationRange(c, chunkSet) !== null
+  const inText = !paged && (ownFile ? c.chunk_id !== null : citationRange(c, chunkSet) !== null)
   return (
     <li
       data-citation={c.n}

@@ -7,6 +7,7 @@ they are) or `chat` (an answer whose claims cite the pieces).
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -205,3 +206,58 @@ def test_install_adds_the_sdk_the_chat_model_needs(tmp_path):
 
     assert "anthropic" in extras_for(claude)
     assert "openai" in extras_for(openai) and "anthropic" not in extras_for(openai)
+
+
+def test_a_citation_names_the_document_its_piece_came_from(tmp_path, monkeypatch):
+    """With several documents, each citation's `source_sha` is its own piece's document, not the first one's."""
+
+    def complete(model, **kwargs):
+        return Completion(text="One [1.1]. Two [2.1]. Three [3.1]. Four [4.1].", usage={}, stop_reason="end_turn")
+
+    monkeypatch.setattr(llm, "complete", complete)
+    config = write(tmp_path, "answer: {use: chat, model: gpt-6-astra}\n")
+    (config.parent / "docs" / "guides" / "short.pdf").write_bytes(
+        build_pdf([["Paris is the capital of France. France has a capital city."]])
+    )
+    (config.parent / "docs" / "report.pdf").write_bytes(
+        build_pdf([["The capital of France is Paris, a large city. What is France known for?"]])
+    )
+    p = Pipeline.from_yaml(config)
+    assert p.index.run(config.parent / "docs").ok
+
+    answer = p.ask(QUESTION, credentials={"openai_api_key": "sk-test"})
+
+    assert answer.ok, answer.stages["answer"].error
+    own = {h.chunk.id: h.chunk.doc_id for h in answer.hits}
+    citations = answer.output.payload["citations"]
+    assert len({own[c["chunk_id"]] for c in citations}) == 2, "the test needs pieces from both documents"
+    assert all(c["source_sha"] == own[c["chunk_id"]] for c in citations)
+    # The step reads the first document by id (guides/short.pdf). A correct quote of a piece from the
+    # other one is still verified, against that piece, and placed on its own first page.
+    first = hashlib.sha256((config.parent / "docs" / "guides" / "short.pdf").read_bytes()).hexdigest()
+    pieces = {h.chunk.id: h.chunk for h in answer.hits}
+    other = [c for c in citations if c["source_sha"] != first]
+    assert other
+    for c in other:
+        piece = pieces[c["chunk_id"]]
+        assert c["verified"] and c["cited_text"] in piece.text
+        assert c["page"] == piece.page_span[0] == 1
+        assert c["doc_start"] == piece.start_char + piece.text.index(c["cited_text"])
+
+
+@pytest.mark.parametrize(("span", "page"), [((2, 2), 2), ((2, 3), None), (None, None)])
+def test_another_documents_citation_takes_a_page_only_when_its_piece_is_on_one(span, page):
+    """A quote further into a piece over two pages may sit on either, so no page is guessed."""
+    from types import SimpleNamespace
+
+    from pandion.plugins.answer.chat import _citation
+
+    piece = SimpleNamespace(id="c1", doc_id="b" * 64, text="Paris is the capital.", start_char=100, page_span=span)
+    quote = SimpleNamespace(cited_text="Paris", start_char_index=0, end_char_index=5)
+    first = SimpleNamespace(source_id="a" * 64)
+
+    entry = _citation(1, quote, piece, first, "", {}, {})
+
+    assert entry["source_sha"] == "b" * 64 and entry["verified"]
+    assert (entry["doc_start"], entry["doc_end"]) == (100, 105)
+    assert entry["page"] == page

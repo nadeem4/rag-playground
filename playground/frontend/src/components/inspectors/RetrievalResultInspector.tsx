@@ -1,9 +1,11 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react"
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react"
 
 import type { ChunkSet, ParsedDoc, RetrievalResult } from "@/api/types"
+import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { EmptyState } from "@/components/EmptyState"
 import { ElementsInPdf } from "@/components/pdf/ElementsInPdf"
 import { fmtMs } from "@/components/pipeline/NodeCard"
+import { fileOf, type FileInfo } from "@/lib/files"
 import { showLabel } from "@/lib/formats"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +43,14 @@ import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
  * inspector gives that chunk, so one chunk is one colour everywhere.
  */
 
+/** One of a pipeline's several documents, with the result ids of its own parsed document and chunk set. */
+export interface HitFile extends FileInfo {
+  /** Its parsed document's result id. */
+  docId?: string
+  /** Its chunk set's result id. */
+  chunksId?: string
+}
+
 export interface RetrievalViewProps {
   rows: HitRowData[]
   chunkSet?: ChunkSet
@@ -50,6 +60,12 @@ export interface RetrievalViewProps {
   showDetail?: boolean
   /** The parsed document the chunks were cut from: enables "Show in PDF". */
   doc?: ParsedDoc
+  /**
+   * The pipeline's files, when it has several: each slip names its file, and a
+   * piece (clicked, or Show in PDF) opens its own file's document, with a
+   * Showing picker. With one document, or none given, nothing of it shows.
+   */
+  files?: readonly HitFile[]
   /**
    * Which list this is: one list (the default), or the search or reranked side
    * of the comparison. The search side says each piece's place in search; the
@@ -180,7 +196,7 @@ const LABEL = 20 // px for the rank numbers on the spine
 
 export type ListSide = "single" | "search" | "reranked"
 
-export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, side = "single", kept, keepLimit, reranker, flat = false, enter = false, compact = false, lit = null, answer = null }: RetrievalViewProps) {
+export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, files = [], side = "single", kept, keepLimit, reranker, flat = false, enter = false, compact = false, lit = null, answer = null }: RetrievalViewProps) {
   const Box = flat ? FlatFrame : Frame
   const [entering] = useState(enter)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -193,7 +209,11 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
     if (pdfRow !== null) pdfRef.current?.scrollIntoView?.({ block: "nearest" })
   }, [pdfRow])
   const target = pdfRow === null || !rows[pdfRow] ? null : pdfTarget(rows[pdfRow], chunkSet?.chunks)
-  const canPdf = (row: number) => doc !== undefined && pdfTarget(rows[row], chunkSet?.chunks) !== null
+  // With several documents a hit opens its own file, so it needs only that file's parsed document.
+  const several = files.length > 1
+  const fileOfRow = (r: HitRowData) => (several ? fileOf(files, r.doc_id) : undefined)
+  const canPdf = (row: number) =>
+    several ? Boolean(fileOfRow(rows[row])?.docId) : doc !== undefined && pdfTarget(rows[row], chunkSet?.chunks) !== null
 
   const keys = useMemo(() => componentKeys(rows), [rows])
   const layout = useMemo(
@@ -205,6 +225,7 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
   const sections = useMemo(() => new Map(chunkSet?.chunks.map((c) => [c.id, sectionOf(c.heading_path)]) ?? []), [chunkSet])
   // The piece's index in its chunk set is its number and colour everywhere; the row's own ordinal when the set is not at hand.
   const pieces = useMemo(() => new Map(chunkSet?.chunks.map((c, i) => [c.id, i]) ?? []), [chunkSet])
+  const ownPieces = useOwnPieces(files)
 
   // Hover: a data attribute written through the ref, never state (contract §7).
   const onPointerOver = (e: PointerEvent) => {
@@ -221,6 +242,8 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
   // A discrete click: select the hit and bring its text into the document box.
   const select = (row: number) => {
     setSelected(row)
+    // With several documents, a piece opens in its own file, as Show in PDF does.
+    if (several && canPdf(row)) setPdfRow(row)
     const k = markOf.get(row)
     const first = k === undefined ? undefined : layout?.marks[k].first
     const el = first === undefined ? null : docRef.current?.querySelector<HTMLElement>(`[data-target="${first}"]`)
@@ -259,9 +282,13 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
             markOf={markOf}
             selected={selected}
             onSelect={select}
-            onShowPdf={doc ? setPdfRow : undefined}
+            onShowPdf={doc || several ? setPdfRow : undefined}
             canPdf={canPdf}
-            showLabel={doc ? showLabel(doc.filename) : undefined}
+            labelOf={(r) => {
+              const own = several ? fileOfRow(r)?.filename : doc?.filename
+              return own === undefined ? undefined : showLabel(own)
+            }}
+            fileOf={fileOfRow}
             showRetriever={new Set(rows.map((r) => r.retriever)).size > 1}
             kept={kept}
             keepLimit={keepLimit}
@@ -271,7 +298,8 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
             compact={compact}
             lit={lit}
             answer={answer}
-            pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? null) : r.ordinal)}
+            // A piece from another of several documents is not in this chunk set: its own ordinal is its number there.
+            pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? (fileOfRow(r) ? (ownPieces.get(r.chunk_id) ?? r.ordinal) : null)) : r.ordinal)}
             sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
           />
           {layout && chunkSet ? (
@@ -279,7 +307,11 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
           ) : null}
         </div>
       </div>
-      {doc && target && pdfRow !== null ? (
+      {several && pdfRow !== null && rows[pdfRow] && fileOfRow(rows[pdfRow]) ? (
+        <div ref={pdfRef}>
+          <OwnDocument files={files} rows={rows} row={pdfRow} onPick={setPdfRow} onClose={() => setPdfRow(null)} />
+        </div>
+      ) : !several && doc && target && pdfRow !== null ? (
         <div ref={pdfRef}>
           <ElementsInPdf
             doc={doc}
@@ -293,6 +325,98 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, s
       ) : null}
     </Box>
   )
+}
+
+/**
+ * A hit's own document, when the pipeline has several: its file's parsed
+ * document with the piece marked, and a Showing picker that opens the best
+ * piece of another file in these results.
+ */
+function OwnDocument({
+  files,
+  rows,
+  row,
+  onPick,
+  onClose,
+}: {
+  files: readonly HitFile[]
+  rows: readonly HitRowData[]
+  row: number
+  onPick: (row: number) => void
+  onClose: () => void
+}) {
+  const hit = rows[row]
+  const file = fileOf(files, hit.doc_id)!
+  const doc = useArtifactPayload(file.docId).data as ParsedDoc | undefined
+  const chunks = useArtifactPayload(file.chunksId).data as ChunkSet | undefined
+  const target = pdfTarget(hit, chunks?.chunks)
+  // The rows come in the order the list shows them, so a file's first row is its best piece here.
+  const best = (sha: string) => rows.findIndex((r) => r.doc_id === sha)
+  const id = useId()
+  return (
+    <div className="flex min-w-0 flex-col gap-2 pt-2">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+        <label htmlFor={id}>Showing</label>
+        <select
+          id={id}
+          value={file.sha}
+          onChange={(e) => {
+            const i = best(e.target.value)
+            if (i !== -1) onPick(i)
+          }}
+          className="min-h-[32px] max-w-full min-w-0 rounded-control border border-field-border bg-surface px-2 text-sm text-fg outline-none focus-visible:outline-2 focus-visible:outline-(--focus-ring)"
+        >
+          {files.map((f) => {
+            const open = Boolean(f.docId) && best(f.sha) !== -1
+            return (
+              <option key={f.sha} value={f.sha} disabled={!open}>
+                {open ? f.filename : `${f.filename}, no piece in these results`}
+              </option>
+            )
+          })}
+        </select>
+      </div>
+      {doc && target ? (
+        <ElementsInPdf
+          doc={doc}
+          elementIds={target.elementIds}
+          pageSpan={target.pageSpan}
+          slot={target.chunkIndex === null ? null : chunkSlot(target.chunkIndex)}
+          title={`Rank ${hit.rank}`}
+          onClose={onClose}
+        />
+      ) : (
+        <p role="status" className="text-xs text-fg-muted">
+          {doc ? `This piece is not among the chunks of ${file.filename}, so nothing can be marked.` : `Opening ${file.filename}`}
+        </p>
+      )}
+    </div>
+  )
+}
+
+const NO_PIECES = new Map<string, number>()
+
+/**
+ * With several documents, each piece's index in its own file's chunk set, so a
+ * hit from another file keeps the number and colour it has there. Empty with one.
+ */
+function useOwnPieces(files: readonly HitFile[]): ReadonlyMap<string, number> {
+  const ids = files.length > 1 ? files.flatMap((f) => (f.chunksId ? [f.chunksId] : [])).join(",") : ""
+  const [state, setState] = useState<{ ids: string; map: Map<string, number> }>({ ids: "", map: NO_PIECES })
+  useEffect(() => {
+    if (!ids) return
+    let live = true
+    Promise.all(ids.split(",").map((id) => loadPayload(id).catch(() => null))).then((sets) => {
+      if (!live) return
+      const map = new Map<string, number>()
+      for (const set of sets as (ChunkSet | null)[]) set?.chunks?.forEach((c, i) => map.set(c.id, i))
+      setState({ ids, map })
+    })
+    return () => {
+      live = false
+    }
+  }, [ids])
+  return state.ids === ids ? state.map : NO_PIECES
 }
 
 /** A flat list: no border, no radius, no tinted gaps. */
@@ -329,7 +453,8 @@ function HitList({
   onSelect,
   onShowPdf,
   canPdf,
-  showLabel,
+  labelOf,
+  fileOf: fileOfRow,
   showRetriever,
   kept,
   keepLimit,
@@ -349,7 +474,10 @@ function HitList({
   onSelect: (row: number) => void
   onShowPdf?: (row: number) => void
   canPdf: (row: number) => boolean
-  showLabel?: string
+  /** The words on a slip's Show button: Show in PDF, or Show in text for a file without pages. */
+  labelOf: (row: HitRowData) => string | undefined
+  /** The row's file, when the pipeline has several documents. */
+  fileOf: (row: HitRowData) => FileInfo | undefined
   /** Per row only when the rows mix retrievers; otherwise the summary names it once. */
   showRetriever: boolean
   kept?: ReadonlySet<string>
@@ -398,7 +526,8 @@ function HitList({
             section={section(r)}
             retriever={showRetriever && r.retriever ? r.retriever : null}
             onShowInPdf={onShowPdf && canPdf(i) ? () => onShowPdf(i) : undefined}
-            showLabel={showLabel}
+            showLabel={labelOf(r)}
+            file={fileOfRow(r)}
             data-hit-row={r.rank}
             data-flip-key={r.chunk_id}
             data-hits={k === undefined ? undefined : `h${k}`}

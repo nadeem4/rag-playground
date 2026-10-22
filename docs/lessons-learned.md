@@ -265,3 +265,17 @@ Found 2026-10-12 on a sample auto insurance policy PDF; fixed the same day.
 **Why the fix worked.** List markers and watermark letters are layout, not words of the answer. Setting them aside on both sides lets the policy's passage match, while every other word and number must still be there, in order: a passage with "$3,000" instead of "$2,000" is still a miss. Reporting `reworded` as its own kind keeps the score honest about how loose the match was.
 
 **What we learned.** A text-match evaluation measures the parser as well as the search. When search looks right but the score says miss, read the piece itself. Parsers reword more than spacing: list markers and watermarks change the text too. Loosen a match only by things you can name, apply it to both sides, and say when it was used.
+
+### A citation named the wrong document
+
+Found 2026-10-21 in review of the several-documents Ask (PR #185); fixed the same day.
+
+**The problem.** With two documents in one index, a Chat answer that cited a piece from the second document said the citation came from the first. The new "Sources" line under the answer would have named only the first file.
+
+**Why it was broken.** The chat step reads one parsed document, the first by name, to place and check its citations. Each citation took its `source_sha` from that document, not from the piece it cited. The offsets and page of a piece from the other document were also looked up in the first document's text, where they mean nothing.
+
+**What fixed it.** A citation now takes `source_sha` from its own piece's `doc_id` (`_citation` in `packages/pandion/src/pandion/plugins/answer/chat.py`). When that document is not the one the step reads, the quote is checked against the piece's own text, the offsets stay in its own document, and the page is the piece's page when it is on one page (none when it spans several), so a correct citation is verified and opens its own file.
+
+**Why the fix worked.** Every piece already records which document it was cut from, so the citation can name it without reading that document. The piece carries its own text, offsets and pages, so a citation can be checked and placed without reading its document; looking it up in another document's text would open the wrong place.
+
+**What we learned.** With several documents, any field that says "where" must come from the piece itself, not from whichever document a step happened to read. Test with pieces from two documents, not one.

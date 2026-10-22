@@ -205,22 +205,23 @@ def named_documents(questions: list[dict[str, Any]], documents: dict[str, str], 
 
 def replace_overlapping(store: DocumentStore, shas: list[str]) -> None:
     """Before a set is kept against `shas`, remove in full every older set it
-    overlaps: a set kept across documents (POST /questions) that any of `shas`
-    holds is removed from every document it was kept against, so no part of
-    it is left to be asked with the new set. A set kept for one document
-    alone overlaps only that document, which the new set replaces anyway."""
-    for sha in shas:
-        kept = store.questions(sha)
-        if not kept.is_file():
+    overlaps: every kept part of a set across documents (POST /questions)
+    whose `across` names any of `shas` is removed, from whichever document
+    holds it. The kept sets are scanned by their `across` lists, so this does
+    not depend on the shared document's part still being there (it may have
+    been deleted, or its document removed and uploaded again). A set kept for
+    one document alone overlaps only that document, which the new set
+    replaces anyway."""
+    folder = store.questions(shas[0]).parent
+    if not folder.is_dir():
+        return
+    new = set(shas)
+    for part in folder.glob("*.json"):
+        if part.stem in new:
             continue
-        across = json.loads(kept.read_text(encoding="utf-8")).get("across")
-        for other in across or []:
-            if other in shas:
-                continue
-            part = store.questions(other)
-            # Only the same save's part: a document saved again since keeps its newer set.
-            if part.is_file() and json.loads(part.read_text(encoding="utf-8")).get("across") == across:
-                part.unlink()
+        across = json.loads(part.read_text(encoding="utf-8")).get("across") or []
+        if new.intersection(across):
+            part.unlink()
 
 
 @router.post("/questions")

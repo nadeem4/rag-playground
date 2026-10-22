@@ -292,6 +292,26 @@ def test_a_newer_set_replaces_every_older_set_it_overlaps_in_full(client):
     assert [q["id"] for q in body["questions"]] == ["new-any"] and body["filenames"] == ["new.json"]
 
 
+def test_an_older_set_goes_even_when_the_shared_documents_part_was_deleted_first(client):
+    first, second, third = three(client)
+    post_across(client, [first, second], [{"id": "old-any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    assert client.delete(f"/documents/{second}/questions").status_code == 204
+    post_across(client, [second, third], [{"id": "new-any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    assert client.get(f"/documents/{first}/questions").json() is None
+    assert asked(client, [first, third]) == ["new-any"]
+
+
+def test_an_older_set_goes_even_when_the_shared_document_was_deleted_and_uploaded_again(client):
+    first, second, third = three(client)
+    post_across(client, [first, second], [{"id": "old-any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    assert client.delete(f"/documents/{second}").status_code in (200, 204)
+    again = upload(client, "bees.pdf", build_pdf([[BEES], ["Honey keeps for years."]]))["sha"]
+    assert again == second
+    post_across(client, [second, third], [{"id": "new-any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    assert client.get(f"/documents/{first}/questions").json() is None
+    assert asked(client, [first, third]) == ["new-any"]
+
+
 def test_a_newer_set_with_no_questions_for_a_shared_document_still_replaces_the_older_set(client):
     first, second, third = three(client)
     post_across(client, [first, second], [{"id": "old-any", "question": "Bees anywhere?", "gold_answers": [BEES]}])

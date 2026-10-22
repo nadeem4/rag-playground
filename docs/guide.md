@@ -460,7 +460,8 @@ each with **Preview**. **Change** tries the pipeline on another document; a save
 its own, and the page says so. A document of your own needs your own questions, under
 **Use your own questions**: a JSON or CSV file, started from the template, with a question and
 the sentence that answers it on each line. On the hosted demo an uploaded set lasts until you
-close the browser tab; run the playground locally to keep your sets.
+close the browser tab; run the playground locally to keep your sets. If that document
+was part of an older set for several documents, that set is removed from all of them.
 
 With two or more documents the page speaks of all of them: "How often the pipeline finds
 the answer in 3 documents." **Documents** lists the pipeline's documents, all of them, as

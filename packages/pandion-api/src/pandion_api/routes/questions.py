@@ -1,8 +1,11 @@
 """A question set kept against one document, keyed by its id, so a set written
 for one document can never be applied to another by accident.
 
-Every set is checked against the document as the pdfium parser reads it, and
-the report says so: another parser can put the text together differently. A
+Every set is checked against the document's text: a PDF as the pdfium parser
+reads it, and Word, PowerPoint, HTML, Markdown and text as docling reads them
+(the one parser here that reads them, and with no model for these formats).
+The report names the parser: another parser can put the text together
+differently. An image would need OCR models, so its set cannot be checked. A
 set with passages that were not found is kept anyway; a partly good set is
 still useful, and refusing it would leave the reader nothing to fix.
 
@@ -43,7 +46,7 @@ from pandion.evaluation import (
     parse_question_set,
     write_questions,
 )
-from pandion.extend import EndpointRefused, UnreadableFormat, guard_endpoint
+from pandion.extend import EndpointRefused, UnreadableFormat, format_of, guard_endpoint
 from pandion_api.checks import chat_providers
 from pandion_api.credentials import PROVIDERS
 from pandion_api.deps import get_documents, get_policy
@@ -56,8 +59,14 @@ from pandion_api.routes.documents import document_file
 
 router = APIRouter()
 
-#: The parser the check reads the document with: fast, and no model.
+#: The parser the check reads a PDF with: fast, and no model.
 PARSER = "pdfium"
+#: The parser for every other format it checks; for these formats it needs no model.
+OTHER_PARSER = "docling"
+#: The formats OTHER_PARSER reads here. Images are left out: they need OCR models.
+OTHER_FORMATS = ("docx", "pptx", "html", "md", "txt")
+#: Docling's converter is shared, so one conversion runs at a time.
+DOCLING_LOCK = threading.Lock()
 PARSER_NOTE = (
     "The gold passages were looked for in the document as the pdfium parser "
     "reads it. Another parser can put the same text together differently, so a "
@@ -90,14 +99,40 @@ async def read_set(file: UploadFile, *, one_document: bool = True) -> dict[str, 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _text(path: Path) -> str:
-    """The document as pdfium reads it. pdfium is not thread-safe, so the parse
-    holds the same lock as the page routes."""
+def parser_note(parsers: list[str]) -> str:
+    """PARSER_NOTE for the parser that read the document, or for several."""
+    if len(set(parsers)) == 1:
+        return PARSER_NOTE.replace(PARSER, parsers[0], 1)
+    return (
+        f"The gold passages were looked for in each document as {PARSER} for a PDF, "
+        f"{OTHER_PARSER} for the others, reads it. " + PARSER_NOTE.split(". ", 1)[1]
+    )
+
+
+def _read(path: Path) -> tuple[str, str]:
+    """The document's text and the parser that read it: pdfium for a PDF (or a
+    file with no known format, as before), docling for Word, PowerPoint, HTML,
+    Markdown and text. pdfium is not thread-safe, so its parse holds the same
+    lock as the page routes. A file that cannot be read, or an image, is a 415."""
+    kind = format_of(path.name)
+    if kind == "png" or kind == "jpg":
+        raise HTTPException(status_code=415, detail="this source is an image, so its text cannot be checked")
+    if kind in OTHER_FORMATS:
+        try:
+            with DOCLING_LOCK:
+                return document_text(pandion.parse(path, use=OTHER_PARSER)), OTHER_PARSER
+        except Exception as exc:  # noqa: BLE001 - docling's errors vary by format; the file cannot be read
+            raise HTTPException(status_code=415, detail="this source cannot be read, so its text cannot be checked") from exc
     try:
         with PDFIUM_LOCK:
-            return document_text(pandion.parse(path, use=PARSER))
+            return document_text(pandion.parse(path, use=PARSER)), PARSER
     except (pdfium.PdfiumError, UnreadableFormat) as exc:
         raise HTTPException(status_code=415, detail="this source is not a PDF, so its text cannot be checked") from exc
+
+
+def _text(path: Path) -> str:
+    """The document's text, as `_read` reads it."""
+    return _read(path)[0]
 
 
 @router.post("/documents/{sha}/questions")
@@ -111,7 +146,7 @@ async def upload_questions(
     """Check every gold passage, and keep the set if the Policy keeps sets."""
     path = document_file(request, sha)
     parsed = await read_set(file)
-    text = await run_in_threadpool(_text, path)
+    text, parser = await run_in_threadpool(_read, path)
     rows = await run_in_threadpool(check_questions, parsed["questions"], text)
     record = {
         "sha": sha,
@@ -129,8 +164,8 @@ async def upload_questions(
         **record,
         "stored": keep,
         "note": "" if keep else policy.not_keeping_note,
-        "parser": PARSER,
-        "parser_note": PARSER_NOTE,
+        "parser": parser,
+        "parser_note": parser_note([parser]),
         "summary": _summary(rows),
         "questions": rows,
     }
@@ -168,7 +203,9 @@ async def upload_questions_across(
     names = documents_of(shas, request)
     parsed = await read_set(file, one_document=False)
     owners = named_documents(parsed["questions"], names, shas)
-    texts = {sha: await run_in_threadpool(_text, Path(path)) for sha, path in zip(shas, names.values())}
+    read = {sha: await run_in_threadpool(_read, Path(path)) for sha, path in zip(shas, names.values())}
+    texts = {sha: text for sha, (text, _) in read.items()}
+    parsers = [parser for _, parser in read.values()]
     own = [{**q, "document": owner or ""} for q, owner in zip(parsed["questions"], owners)]
     rows = await run_in_threadpool(check_questions_across, own, texts)
     filename = Path(file.filename or "questions.json").name
@@ -199,8 +236,8 @@ async def upload_questions_across(
         "count": len(parsed["questions"]),
         "stored": keep,
         "note": "" if keep else policy.not_keeping_note,
-        "parser": PARSER,
-        "parser_note": PARSER_NOTE,
+        "parser": ", ".join(sorted(set(parsers))),
+        "parser_note": parser_note(parsers),
         "summary": _summary(rows),
         "questions": rows,
     }
@@ -300,7 +337,7 @@ async def generate_questions(
             )
         except _Cancelled:
             return False, True, None
-        except HTTPException as exc:  # the document is not a PDF
+        except HTTPException as exc:  # the document cannot be read
             return False, False, {"error": exc.detail}
         except Exception as exc:  # noqa: BLE001 - the first call failed; scrubbed by jobs.start
             return False, False, {"error": str(exc)}

@@ -1,11 +1,23 @@
 """A question set kept against its document, checked against the document's text."""
 
+import io
 import json
 
 from apihelpers import make_client, upload
 from pandion_api import Policy
 
 PASSAGE = "The capital of France is Paris."
+
+
+def docx_bytes() -> bytes:
+    import docx
+
+    document = docx.Document()
+    document.add_heading("Ferns", 1)
+    document.add_paragraph("Ferns need water weekly.")
+    out = io.BytesIO()
+    document.save(out)
+    return out.getvalue()
 
 
 def post_set(client, sha, questions, filename="q.json"):
@@ -39,12 +51,27 @@ def test_a_bad_set_is_400_with_its_sentence(client):
     assert r.status_code == 400 and r.json()["detail"]
 
 
-def test_a_document_that_is_not_a_pdf_is_415(client):
+def test_a_text_document_is_read_by_docling_and_checked(client):
     sha = client.post("/documents", files={"file": ("a.txt", b"hello there", "text/plain")}).json()["sha"]
-    assert post_set(client, sha, [{"question": "Q?", "gold_answers": ["hello there"]}]).status_code == 415
+    body = post_set(client, sha, [{"question": "Q?", "gold_answers": ["hello there"]}]).json()
+    assert body["summary"]["found"] == 1
+    assert body["parser"] == "docling" and "docling parser" in body["parser_note"]
 
 
-def test_a_word_document_is_415_because_pdfium_cannot_read_it(client):
+def test_a_word_document_is_checked_as_docling_reads_it(client):
+    sha = client.post("/documents", files={"file": ("field-guide.docx", docx_bytes(), "application/octet-stream")}).json()["sha"]
+    body = post_set(client, sha, [{"question": "Water?", "gold_answers": ["Ferns need water weekly."]}]).json()
+    assert body["summary"] == {"questions": 1, "found": 1, "found_normalized": 0, "not_found": 0}
+    assert body["parser"] == "docling"
+
+
+def test_an_image_is_415_because_reading_it_needs_ocr_models(client):
+    sha = client.post("/documents", files={"file": ("scan.png", b"PNG not really", "image/png")}).json()["sha"]
+    r = post_set(client, sha, [{"question": "Q?", "gold_answers": ["hello there"]}])
+    assert r.status_code == 415 and "image" in r.json()["detail"]
+
+
+def test_a_broken_word_file_is_415_because_it_cannot_be_read(client):
     sha = client.post(
         "/documents", files={"file": ("notes.docx", b"PK not really a word file", "application/octet-stream")}
     ).json()["sha"]
@@ -183,3 +210,15 @@ def test_a_set_naming_a_document_it_is_not_for_is_400_and_nothing_is_kept(client
         "searched: bees.pdf, report.pdf."
     )
     assert client.get(f"/documents/{first}/questions").json() is None
+
+
+def test_one_set_across_a_pdf_and_a_markdown_file_is_checked_in_each(client):
+    pdf = upload(client)["sha"]
+    md = client.post("/documents", files={"file": ("notes.md", f"# Notes\n\n{BEES}\n".encode(), "text/markdown")}).json()["sha"]
+    body = post_across(client, [pdf, md], [
+        {"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
+        {"id": "bees", "question": "Bees?", "gold_answers": [BEES], "document": "notes.md"},
+    ]).json()
+    assert body["summary"]["found"] == 2
+    assert [r["golds"][0]["document"] for r in body["questions"]] == [pdf, md]
+    assert body["parser"] == "docling, pdfium" and "pdfium for a PDF, docling for the others" in body["parser_note"]

@@ -195,12 +195,12 @@ def test_cancelling_the_run_stops_further_model_calls(client, monkeypatch):
     assert model.calls == 1
 
 
-def test_a_document_that_is_not_a_pdf_ends_the_run_with_a_plain_error(client, monkeypatch):
+def test_a_document_whose_text_cannot_be_read_ends_the_run_with_a_plain_error(client, monkeypatch):
     model = FakeModel()
     monkeypatch.setattr(llm, "complete", model)
-    sha = client.post("/documents", files={"file": ("a.txt", b"hello there", "text/plain")}).json()["sha"]
+    sha = client.post("/documents", files={"file": ("scan.png", b"PNG not really", "image/png")}).json()["sha"]
     state, _ = finish(client, generate(client, sha))
-    assert state["ok"] is False and state["result"]["error"] == "this source is not a PDF, so its text cannot be checked"
+    assert state["ok"] is False and state["result"]["error"] == "this source is an image, so its text cannot be checked"
     assert model.calls == 0
 
 
@@ -220,3 +220,12 @@ def test_each_written_question_names_the_document_it_was_written_for(client, mon
     sha = upload(client)["sha"]
     state, _ = finish(client, generate(client, sha, count=1))
     assert [q["document"] for q in state["result"]["questions"]] == [sha]
+
+
+def test_questions_can_be_written_for_a_markdown_document(client, monkeypatch):
+    monkeypatch.setattr(llm, "complete", FakeModel())
+    text = "# Notes\n\nThe capital of France is Paris.\n"
+    sha = client.post("/documents", files={"file": ("notes.md", text.encode(), "text/markdown")}).json()["sha"]
+    state, _ = finish(client, generate(client, sha, count=1))
+    assert state["ok"] is True, state
+    assert [q["gold_answers"] for q in state["result"]["questions"]] == [["The capital of France is Paris."]]

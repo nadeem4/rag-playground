@@ -4,7 +4,7 @@ import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
 import markdownJson from "@/api/fixtures/chunk_set.markdown_header.json"
 import type { ChunkSet } from "@/api/types"
 
-import { assignLanes, chunkSlot, chunkStats, median, overlapPairs, p95, projectSpans, type SpanChunk } from "./spans"
+import { assignLanes, chunkSlot, projectSpans, type SpanChunk } from "./spans"
 
 const recursive = recursiveJson as unknown as ChunkSet
 const markdown = markdownJson as unknown as ChunkSet
@@ -126,7 +126,6 @@ describe("projectSpans", () => {
     ])
     // chunk 2 is 745-1134 and chunk 3 starts at 1112: the overlap is exactly that span.
     expect(overlaps[0]).toMatchObject({ start: 1112, end: 1134 })
-    expect(overlapPairs(segs)).toHaveLength(3)
     // The first two boundaries fall on paragraph breaks: a clean cut, no overlap.
     expect(segs.filter((s) => s.chunks.length === 0).map((s) => [s.start, s.end])).toEqual([
       [366, 368],
@@ -143,7 +142,6 @@ describe("projectSpans", () => {
       [1134, 1136],
       [1759, 1761],
     ])
-    expect(overlapPairs(segs)).toHaveLength(0)
   })
 })
 
@@ -158,30 +156,5 @@ describe("assignLanes", () => {
     expect(assignLanes([c("a", 0, 10), c("b", 5, 15), c("c", 12, 20), c("d", 16, 30)])).toEqual([0, 1, 0, 1])
     expect(assignLanes([c("a", 0, 10), c("b", 10, 20)])).toEqual([0, 0])
     expect(assignLanes([c("a", 0, 10), c("b", 1, 9), c("c", 2, 8)])).toEqual([0, 1, 2])
-  })
-})
-
-describe("median and p95", () => {
-  it("uses the midpoint for median and nearest rank for p95", () => {
-    expect(median([])).toBeNull()
-    expect(p95([])).toBeNull()
-    expect(median([3, 1, 2])).toBe(2)
-    expect(median([4, 1, 2, 3])).toBe(2.5)
-    expect(p95([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])).toBe(19)
-    expect(p95([69, 69, 75, 69, 73, 75, 37])).toBe(75)
-  })
-})
-
-describe("chunkStats", () => {
-  it("gives the numbers the chunk inspector showed for the recursive fixture", () => {
-    expect(chunkStats(recursive)).toEqual({ pieces: 6, tokens: 399, median: 67, p95: 76, overlaps: 3, uncovered: 4 })
-  })
-
-  it("gives the numbers the chunk inspector showed for the markdown_header fixture", () => {
-    expect(chunkStats(markdown)).toEqual({ pieces: 5, tokens: 388, median: 70, p95: 119, overlaps: 0, uncovered: 8 })
-  })
-
-  it("counts the whole text as left out when there are no pieces", () => {
-    expect(chunkStats({ ...markdown, chunks: [] })).toEqual({ pieces: 0, tokens: 0, median: null, p95: null, overlaps: 0, uncovered: markdown.source_text.length })
   })
 })

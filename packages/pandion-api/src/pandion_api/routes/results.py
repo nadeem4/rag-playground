@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+import pandion
 from pandion import ResultStore
 from pandion.evaluation import StepInput, trace
 from pandion_api.deps import get_policy, get_runs, get_settings
@@ -37,7 +38,8 @@ def get_result(result_id: str, settings: ApiSettings = Depends(get_settings)) ->
 @router.get("/results/{result_id}/payload")
 def get_payload(result_id: str, settings: ApiSettings = Depends(get_settings)) -> Any:
     """The result itself. An index is a folder of files, so its payload is the
-    description its store left in its meta, when it left one."""
+    description its store left in its meta, when it left one. A chunk set
+    comes with `stats`, its numbers as `pandion.chunk.stats` sums them up."""
     store = _results(settings)
     info = _info(store, result_id)
     if info["type"] == "index":
@@ -45,7 +47,10 @@ def get_payload(result_id: str, settings: ApiSettings = Depends(get_settings)) -
         if descriptor is None:
             raise HTTPException(status_code=404, detail="This index result has no description to show.")
         return descriptor
-    return store.get(result_id)
+    payload = store.get(result_id)
+    if info["type"] == "chunk_set" and isinstance(payload, dict):
+        return {**payload, "stats": pandion.chunk.stats(payload)}
+    return payload
 
 
 @router.delete("/cache")

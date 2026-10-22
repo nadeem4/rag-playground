@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
-import type { Chunk, ChunkSet } from "@/api/types"
+import type { Chunk, ChunkSet, ChunkStats } from "@/api/types"
 
 import { ChunkEvidence } from "./ChunkEvidence"
 
@@ -33,7 +33,12 @@ function chunk(i: number, tokens: number): Chunk {
   }
 }
 
-const set: ChunkSet = { doc_id: "d", source_text: SOURCE, chunker_meta: {}, chunks: TOKENS.map((t, i) => chunk(i, t)) }
+/** Pandion's numbers for these pieces, as pandion-api sends them with the set. */
+const STATS: ChunkStats = {
+  pieces: 6, tokens: 351, unit: "tokens", median: 54, p95: 84, largest: 84, median_tokens: 54, p95_tokens: 84, overlaps: 0, uncovered: 596,
+}
+
+const set: ChunkSet = { doc_id: "d", source_text: SOURCE, chunker_meta: {}, chunks: TOKENS.map((t, i) => chunk(i, t)), stats: STATS }
 
 const withHeading: ChunkSet = {
   ...set,
@@ -47,7 +52,7 @@ describe("ChunkEvidence", () => {
     render(<ChunkEvidence set={set} />)
     const dl = screen.getByTestId("chunk-numbers")
     expect([...dl.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["pieces", "tokens", "median tokens", "largest 5%", "characters left out"])
-    expect(dl.querySelector("dd")!.textContent).toBe("6")
+    expect([...dl.querySelectorAll("dd")].map((d) => d.textContent)).toEqual(["6", "351", "54", "84", "596"])
     expect(screen.getByText("The document as 6 pieces, drawn to scale by tokens.")).toBeTruthy()
     expect(screen.getAllByTestId("passage")).toHaveLength(4)
     expect(screen.getByText(/2 more pieces\./)).toBeTruthy()

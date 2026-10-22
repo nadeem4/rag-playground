@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { ComparisonResult, Registry } from "@/api/types"
+import type { ChunkStats, ComparisonResult, Registry } from "@/api/types"
 
 import type { NodeState, VariantState } from "@/api/runState"
 
@@ -112,7 +112,9 @@ describe("recipeNames for many recipes", () => {
 })
 
 // With the numbers measured on the live sample.
-const s = (pieces: number, tokens: number, uncovered: number) => ({ pieces, tokens, median: null, p95: null, overlaps: 0, uncovered })
+const s = (pieces: number, tokens: number, uncovered: number): ChunkStats => ({
+  pieces, tokens, uncovered, unit: "tokens", median: null, p95: null, largest: null, median_tokens: null, p95_tokens: null, overlaps: 0,
+})
 
 describe("chunkFinding", () => {
   it("says halving the size doubles the pieces, and names the recipe that leaves nothing out", () => {
@@ -292,7 +294,7 @@ describe("statusText", () => {
 })
 
 describe("the many-recipe findings", () => {
-  const st = (pieces: number, uncovered: number) => ({ pieces, tokens: 345, median: 14, p95: 30, overlaps: 0, uncovered })
+  const st = (pieces: number, uncovered: number): ChunkStats => ({ ...s(pieces, 345, uncovered), median: 14, p95: 30 })
   const seven = [
     { i: 0, phrase: "Your pipeline", stats: st(6, 10) },
     { i: 1, phrase: "Recursive at 200 characters", stats: st(12, 17) },
@@ -362,7 +364,7 @@ describe("sortRecipes and sharedTop", () => {
 })
 
 describe("columnDelta", () => {
-  const st = (pieces: number, uncovered: number) => ({ pieces, tokens: 345, median: 14, p95: 30, overlaps: 0, uncovered })
+  const st = (pieces: number, uncovered: number): ChunkStats => ({ ...s(pieces, 345, uncovered), median: 14, p95: 30 })
 
   it("says a chunk column against Your pipeline", () => {
     expect(columnDelta({ kind: "chunk", stats: st(24, 34), base: st(6, 8) })).toBe("18 more pieces than Your pipeline, and 26 more characters left out.")
@@ -382,7 +384,7 @@ describe("the baseline's name when no recipe is the pipeline's own", () => {
     const f = retrieveManyFinding([item(0, "Dense", null, 20), item(1, "BM25", 5, 20), item(2, "Dense with top 1", 1, 20), item(3, "Hybrid (RRF)", 5, 20)], false, 3, "Dense")!
     expect(f.finding).toMatch(/^Three of four share all 5 pieces with Dense\./)
     expect(f.link).toBe("Read Dense beside Dense with top 1")
-    const st = (pieces: number, uncovered: number) => ({ pieces, tokens: 1, median: 1, p95: 1, overlaps: 0, uncovered })
+    const st = (pieces: number, uncovered: number): ChunkStats => ({ ...s(pieces, 1, uncovered), median: 1, p95: 1 })
     expect(columnDelta({ kind: "chunk", stats: st(3, 0), base: st(6, 0), baseName: "Recursive at 300 characters" })).toBe("3 fewer pieces than Recursive at 300 characters.")
     expect(columnDelta({ kind: "retrieve", shared: 1, top: 1, rank: null, goldKnown: false, returned: 1, topK: 1, baseName: "Dense" })).toBe("Shares 1 of 1 piece with Dense.")
   })

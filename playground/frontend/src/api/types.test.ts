@@ -27,8 +27,9 @@ const CHUNK_KEYS: (keyof Chunk)[] = [
   "doc_id", "embed_text", "end_char", "heading_path", "id", "kind", "level", "metadata",
   "ordinal", "page_span", "parent_id", "source_element_ids", "start_char", "text", "token_count",
 ]
+// As pandion-api serves a chunk set: with its stats.
 const CHUNK_SET_KEYS: (keyof ChunkSet)[] = [
-  "chunker_meta", "chunks", "doc_id", "source_text",
+  "chunker_meta", "chunks", "doc_id", "source_text", "stats",
 ]
 
 describe("types mirror the engine's real payloads", () => {

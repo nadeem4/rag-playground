@@ -44,8 +44,9 @@ describe("what it did, per artifact type", () => {
     const bySentences = { ...chunkRecursive, chunker_meta: { chunker: "sentence_window", sentences_per_chunk: 5, overlap_sentences: 1, sentences: 37 } }
     expect(text("chunk", "chunk_set", bySentences)).toBe("Made 6 chunks from 37 sentences, up to 5 in each. 3 overlaps.")
     // A chunker set in tokens counts tokens: 69 76 73 65 62 54, median 67, largest 76.
-    const byTokens = { ...chunkRecursive, chunker_meta: { chunker: "token_based", max_tokens: 96, overlap: 16 } }
-    expect(text("chunk", "chunk_set", byTokens)).toMatch(/^Made 6 chunks\. Median 67 tokens, largest 76\. \d+ overlaps?\.$/)
+    // Pandion says the unit with the set's stats.
+    const byTokens = { ...chunkRecursive, stats: { ...chunkRecursive.stats!, unit: "tokens" as const, median: 67, largest: 76 } }
+    expect(text("chunk", "chunk_set", byTokens)).toBe("Made 6 chunks. Median 67 tokens, largest 76. 3 overlaps.")
     expect(text("chunk", "chunk_set", { ...chunkRecursive, chunks: [] })).toBe("Made 0 chunks. The document produced no text to cut.")
   })
 

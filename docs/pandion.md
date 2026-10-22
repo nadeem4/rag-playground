@@ -91,7 +91,14 @@ print(cleaned.note)
 chunks = pandion.chunk(cleaned, use="recursive_character", chunk_size=400)
 print(len(chunks.output.chunks), "pieces")
 print(chunks.output.chunks[0].text)
+print(pandion.chunk.stats(chunks.output))  # pieces, sizes, overlaps, text left out
 ```
+
+`pandion.chunk.stats(chunk_set)` sums up a chunk set as an app shows it: `pieces` and
+`tokens`; `median`, `p95` and `largest`, each piece's size in `unit`, the unit the
+chunker's size setting counts in (`characters` for `recursive_character`, `tokens` for
+the rest); `median_tokens` and `p95_tokens`; `overlaps`, pairs of pieces that share text;
+and `uncovered`, characters of the text no piece covers.
 
 The sample PDFs live in `samples/`, one folder each: `chunking-primer`,
 `two-column-report`, `table-of-figures`, `scanned-notes` and `station-manual`.

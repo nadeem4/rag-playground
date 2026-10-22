@@ -134,6 +134,10 @@ model, so a new strategy needs no frontend change.
      comment saying why;
    - for a chunk strategy, `learn`: a one-sentence `hint` and more paragraphs for the
      strategy itself (the key `_strategy`) and for every setting. Build shows them;
+   - for a chunk strategy whose size setting does not count tokens, `size_unit`
+     (`"characters"`), so `pandion.chunk.stats` and the app say each piece's size the
+     way the setting does. `"characters"` and `"tokens"` are the only two values; any
+     other is treated as `"tokens"`;
    - if it needs something from the step above it, `requires`, keyed by input port, for
      example `{"index": {"backends": ["fts"]}}`, and `provides` on the producer, for
      example `{"backends": ["dense", "fts"]}`. An unmet requirement is a hard lock: the

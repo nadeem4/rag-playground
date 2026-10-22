@@ -233,3 +233,97 @@ def build_chunk_set(
         source_text=view.text,
         chunker_meta={"chunker": chunker, **(meta or {})},
     )
+
+
+#: The unit a chunker's pieces are measured in when its class says none.
+DEFAULT_SIZE_UNIT = "tokens"
+#: The only units a piece's size can be measured in.
+SIZE_UNITS = ("characters", "tokens")
+
+
+def size_unit(chunker: str) -> str:
+    """The unit `chunker`'s size setting counts in, so a piece's size is said
+    the way the setting is: its class's `size_unit`, else tokens. An unknown
+    chunker, or a `size_unit` other than "characters" or "tokens", counts in
+    tokens, so the label always matches how the size was measured."""
+    from pandion.ports import Stage
+    from pandion.registry import UnknownTransformError, registry
+
+    try:
+        cls = registry.get(Stage.CHUNK, chunker)
+    except (UnknownTransformError, KeyError):
+        return DEFAULT_SIZE_UNIT
+    unit = getattr(cls, "size_unit", DEFAULT_SIZE_UNIT)
+    return unit if unit in SIZE_UNITS else DEFAULT_SIZE_UNIT
+
+
+def stats(chunks: ChunkSet | dict[str, Any]) -> dict[str, Any]:
+    """The numbers that sum up a chunk set, as an app shows them:
+
+    - `pieces`, and `tokens` in all of them;
+    - `unit`, what the chunker's size setting counts ("characters" or
+      "tokens"), and `median`, `p95` (the nearest-rank 95th percentile: a
+      size that occurs) and `largest`, each piece's size in that unit;
+    - `median_tokens` and `p95_tokens`, the same in tokens whatever the unit;
+    - `overlaps`, distinct pairs of pieces that share text, and `uncovered`,
+      characters of `source_text` that no piece covers.
+
+    A size is None when there are no pieces."""
+    if not isinstance(chunks, ChunkSet):
+        chunks = ChunkSet.model_validate(chunks)
+    unit = size_unit(str(chunks.chunker_meta.get("chunker", "")))
+    tokens = [c.token_count for c in chunks.chunks]
+    sizes = [len(c.text) for c in chunks.chunks] if unit == "characters" else tokens
+    covered, overlaps = _coverage(chunks)
+    return {
+        "pieces": len(chunks.chunks),
+        "tokens": sum(tokens),
+        "unit": unit,
+        "median": _median(sizes),
+        "p95": _p95(sizes),
+        "largest": max(sizes, default=None),
+        "median_tokens": _median(tokens),
+        "p95_tokens": _p95(tokens),
+        "overlaps": overlaps,
+        "uncovered": len(chunks.source_text) - covered,
+    }
+
+
+def _coverage(chunks: ChunkSet) -> tuple[int, int]:
+    """Characters of the source some piece covers, and distinct pairs of
+    pieces that share at least one character. Offsets are clamped to the
+    source, and an empty piece covers nothing."""
+    n = len(chunks.source_text)
+    spans = sorted(
+        (start, end, i)
+        for i, c in enumerate(chunks.chunks)
+        for start, end in [(max(0, min(c.start_char, n)), max(0, min(c.end_char, n)))]
+        if end > start
+    )
+    covered, reach = 0, 0
+    for start, end, _ in spans:
+        if end > reach:
+            covered += end - max(start, reach)
+            reach = end
+    pairs = 0
+    for a, (_, end_a, _) in enumerate(spans):
+        for start_b, _, _ in spans[a + 1 :]:
+            if start_b >= end_a:
+                break
+            pairs += 1
+    return covered, pairs
+
+
+def _median(values: list[int]) -> float | None:
+    if not values:
+        return None
+    s = sorted(values)
+    mid = len(s) // 2
+    return float(s[mid]) if len(s) % 2 else (s[mid - 1] + s[mid]) / 2
+
+
+def _p95(values: list[int]) -> int | None:
+    if not values:
+        return None
+    s = sorted(values)
+    return s[max(0, -(-95 * len(s) // 100) - 1)]

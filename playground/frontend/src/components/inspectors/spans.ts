@@ -73,23 +73,6 @@ export function projectSpans(source: string, chunks: readonly SpanChunk[]): Segm
   return out
 }
 
-/** Distinct chunk pairs that share at least one character. */
-export function overlapPairs(segments: readonly Segment[]): [number, number][] {
-  const seen = new Set<string>()
-  const pairs: [number, number][] = []
-  for (const s of segments) {
-    for (let a = 0; a < s.chunks.length; a++) {
-      for (let b = a + 1; b < s.chunks.length; b++) {
-        const key = `${s.chunks[a]}:${s.chunks[b]}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        pairs.push([s.chunks[a], s.chunks[b]])
-      }
-    }
-  }
-  return pairs
-}
-
 /**
  * Greedy interval lanes for the spine: overlapping chunks get different
  * lanes, so an overlap shows as two bands side by side, never one hiding the other.
@@ -106,60 +89,4 @@ export function assignLanes(chunks: readonly SpanChunk[]): number[] {
     lanes[i] = lane
   }
   return lanes
-}
-
-export function median(values: readonly number[]): number | null {
-  if (values.length === 0) return null
-  const s = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(s.length / 2)
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
-}
-
-/** Nearest-rank 95th percentile: a value that actually occurs in the data. */
-/** Chunkers whose size setting counts characters; the rest count tokens. */
-const BY_CHARACTERS = new Set(["recursive_character"])
-
-/**
- * Each piece's size in the unit its chunker's size setting uses, so a card, a
- * view and the setting agree: characters for Recursive, tokens otherwise.
- */
-export function chunkSizes(set: {
-  chunks: readonly { text: string; token_count: number }[]
-  chunker_meta?: Record<string, unknown>
-}): { sizes: number[]; unit: "characters" | "tokens" } {
-  const chars = BY_CHARACTERS.has(String(set.chunker_meta?.chunker ?? ""))
-  return { sizes: set.chunks.map((c) => (chars ? c.text.length : c.token_count)), unit: chars ? "characters" : "tokens" }
-}
-
-export function p95(values: readonly number[]): number | null {
-  if (values.length === 0) return null
-  const s = [...values].sort((a, b) => a - b)
-  return s[Math.max(0, Math.ceil(0.95 * s.length) - 1)]
-}
-
-/** The numbers that sum up a chunk set, as the chunk inspector and Compare show them. */
-export interface ChunkStats {
-  pieces: number
-  tokens: number
-  median: number | null
-  /** The largest 5%: the nearest-rank 95th percentile of the token counts. */
-  p95: number | null
-  /** Distinct pairs of pieces that share text. */
-  overlaps: number
-  /** Characters of the source that no piece covers. */
-  uncovered: number
-}
-
-/** A chunk set's numbers, from its pieces' token counts and their spans over the source. */
-export function chunkStats(set: { source_text: string; chunks: readonly (SpanChunk & { token_count: number })[] }, segments?: readonly Segment[]): ChunkStats {
-  const segs = segments ?? projectSpans(set.source_text, set.chunks)
-  const tokens = set.chunks.map((c) => c.token_count)
-  return {
-    pieces: set.chunks.length,
-    tokens: tokens.reduce((a, b) => a + b, 0),
-    median: median(tokens),
-    p95: p95(tokens),
-    overlaps: overlapPairs(segs).length,
-    uncovered: segs.filter((s) => s.chunks.length === 0).reduce((n, s) => n + s.end - s.start, 0),
-  }
 }

@@ -124,5 +124,17 @@
   "chunker_meta": {
     "chunker": "markdown_header",
     "max_tokens": 120
+  },
+  "stats": {
+    "pieces": 5,
+    "tokens": 388,
+    "unit": "tokens",
+    "median": 70.0,
+    "p95": 119,
+    "largest": 119,
+    "median_tokens": 70.0,
+    "p95_tokens": 119,
+    "overlaps": 0,
+    "uncovered": 8
   }
 }

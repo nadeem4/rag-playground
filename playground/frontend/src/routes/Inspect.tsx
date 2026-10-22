@@ -28,7 +28,25 @@ const parsed = parsedDoc as unknown as ParsedDoc
 const cleaned = cleanedDoc as unknown as ParsedDoc
 const chat = chatOutput as unknown as ChatOutput
 const refusal = { ...chat.payload, answer: [], citations: [], stop_reason: "refusal", usage: { input_tokens: 1612, output_tokens: 4 } }
-const emptySet: ChunkSet = { chunks: [], source_text: "", doc_id: recursive.doc_id, chunker_meta: { chunker: "recursive_character" } }
+const emptySet: ChunkSet = {
+  chunks: [],
+  source_text: "",
+  doc_id: recursive.doc_id,
+  chunker_meta: { chunker: "recursive_character" },
+  // What pandion.chunk.stats returns for an empty set, so the summary row still shows.
+  stats: {
+    pieces: 0,
+    tokens: 0,
+    unit: "characters",
+    median: null,
+    p95: null,
+    largest: null,
+    median_tokens: null,
+    p95_tokens: null,
+    overlaps: 0,
+    uncovered: 0,
+  },
+}
 
 function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (

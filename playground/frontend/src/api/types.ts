@@ -186,11 +186,31 @@ export interface Chunk {
   metadata: Record<string, unknown>
 }
 
+/** A chunk set's numbers as Pandion sums them up (`pandion.chunk.stats`), sent with every chunk set. */
+export interface ChunkStats {
+  pieces: number
+  tokens: number
+  /** What the chunker's size setting counts in; `median`, `p95` and `largest` are in it. */
+  unit: "characters" | "tokens"
+  median: number | null
+  /** The nearest-rank 95th percentile: a size that occurs. */
+  p95: number | null
+  largest: number | null
+  median_tokens: number | null
+  p95_tokens: number | null
+  /** Distinct pairs of pieces that share text. */
+  overlaps: number
+  /** Characters of the source that no piece covers. */
+  uncovered: number
+}
+
 export interface ChunkSet {
   chunks: Chunk[]
   doc_id: string
   source_text: string
   chunker_meta: Record<string, unknown>
+  /** Sent by pandion-api with the payload; a chunk set from elsewhere may not have it. */
+  stats?: ChunkStats
 }
 
 export interface Hit {

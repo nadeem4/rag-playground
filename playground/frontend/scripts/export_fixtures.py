@@ -58,6 +58,7 @@ sys.path.insert(0, str(ROOT))
 
 from unittest.mock import patch  # noqa: E402
 
+import pandion  # noqa: E402
 from pandion import Pipeline, ResultStore  # noqa: E402
 from scripts.lesson_runs import run_pipeline  # noqa: E402
 from tests.steps.conftest import build_paragraph_pdf  # noqa: E402
@@ -229,6 +230,11 @@ class FakeOpenAI:
         )
 
 
+def served_chunks(chunks: dict) -> dict:
+    """A chunk set as pandion-api's GET /results/{id}/payload serves it: with its stats."""
+    return {**chunks, "stats": pandion.chunk.stats(chunks)}
+
+
 def dump(name: str, data: object) -> None:
     path = OUT / name
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
@@ -317,7 +323,7 @@ def main() -> None:
 
         for chunker in CHUNKERS:
             out = run_pipeline(variant(chunk=chunker), pdf, root)
-            dump(f"chunk_set.{chunker}.json", out["chunk"])
+            dump(f"chunk_set.{chunker}.json", served_chunks(out["chunk"]))
             if chunker == "recursive_character":
                 dump("parsed_doc.json", out["parse"])
                 dump("parsed_doc_cleaned.json", out["clean.2"])
@@ -326,7 +332,7 @@ def main() -> None:
         # extracted line.
         out = run_pipeline(variant(parse={"use": "pdfium", "join_lines": False}), pdf, root)
         dump("parsed_doc.join_lines_off.json", out["parse"])
-        dump("chunk_set.recursive_character.join_lines_off.json", out["chunk"])
+        dump("chunk_set.recursive_character.join_lines_off.json", served_chunks(out["chunk"]))
 
         # Retrieval: the descriptor, three searches, MMR after hybrid, and Search.
         for r in RETRIEVERS:

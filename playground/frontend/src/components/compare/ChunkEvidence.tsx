@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 import type { Chunk, ChunkSet } from "@/api/types"
 import { EvidenceSlip, LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { rowFromChunk, type FindingPart } from "@/components/inspectors/hits"
-import { chunkStats } from "@/components/inspectors/spans"
 import { fmt } from "@/components/inspectors/status"
 import { ChunkBar } from "@/components/pipeline/NodeCard"
 import { cn } from "@/lib/utils"
@@ -34,18 +33,18 @@ function pieceFinding(c: Chunk, index: number): FindingPart[] {
 }
 
 export function ChunkEvidence({ set }: { set: ChunkSet }) {
-  const stats = useMemo(() => chunkStats(set), [set])
+  const stats = set.stats
   const [all, setAll] = useState(false)
   const n = set.chunks.length
   const shown = all ? set.chunks : set.chunks.slice(0, FIRST)
   const rest = n - shown.length
   const value = (v: number | null) => (v === null ? "none" : fmt(v))
   const numbers: [string, string][] = [
-    ["pieces", value(stats.pieces)],
-    ["tokens", value(stats.tokens)],
-    ["median tokens", value(stats.median)],
-    ["largest 5%", value(stats.p95)],
-    ["characters left out", value(stats.uncovered)],
+    ["pieces", value(stats?.pieces ?? null)],
+    ["tokens", value(stats?.tokens ?? null)],
+    ["median tokens", value(stats?.median_tokens ?? null)],
+    ["largest 5%", value(stats?.p95_tokens ?? null)],
+    ["characters left out", value(stats?.uncovered ?? null)],
   ]
   return (
     <div className="flex min-w-0 flex-col gap-3">

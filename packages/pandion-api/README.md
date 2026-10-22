@@ -65,6 +65,7 @@ Each path is under `prefix`.
 | `POST /comparisons` | Runs one step's variants side by side and names the best. |
 | `GET /results/{id}` | Returns a stored result's type and details. |
 | `GET /results/{id}/payload` | Returns the stored result itself. |
+| `POST /chunk-stats` | Sums up several chunk sets, one chunker's over several documents, as one. |
 | `DELETE /cache` | Removes every stored result and the embedding cache, and keeps the documents. |
 | `GET /settings/models` | Says where the server's own key for each provider comes from, never the key. |
 | `POST /settings/models/check` | Checks that the key a request would use works. |

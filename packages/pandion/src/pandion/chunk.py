@@ -4,7 +4,8 @@
 document into pieces (`pandion.stages.chunk`). `RecursiveCharacter(chunk_size=400)`
 is the same settings for a pipeline written in code (`pandion.config.step_class`).
 `pandion.chunk.stats(chunks)` sums up a chunk set: its pieces, their sizes in the
-unit the chunker counts in, overlaps and the text no piece covers.
+unit the chunker counts in, overlaps and the text no piece covers;
+`pandion.chunk.stats(a, b, ...)` sums up one chunker's sets for several documents as one.
 """
 
 import sys

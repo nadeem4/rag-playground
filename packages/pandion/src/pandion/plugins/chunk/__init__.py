@@ -263,7 +263,7 @@ def size_unit(chunker: str) -> str:
     return unit if unit in SIZE_UNITS else DEFAULT_SIZE_UNIT
 
 
-def stats(chunks: ChunkSet | dict[str, Any]) -> dict[str, Any]:
+def stats(chunks: ChunkSet | dict[str, Any], *more: ChunkSet | dict[str, Any]) -> dict[str, Any]:
     """The numbers that sum up a chunk set, as an app shows them:
 
     - `pieces`, and `tokens` in all of them;
@@ -274,15 +274,19 @@ def stats(chunks: ChunkSet | dict[str, Any]) -> dict[str, Any]:
     - `overlaps`, distinct pairs of pieces that share text, and `uncovered`,
       characters of `source_text` that no piece covers.
 
+    Several chunk sets (one chunker over several documents) sum up as one:
+    counts, overlaps and `uncovered` are totals, and the sizes are over every
+    piece of every set. The unit is the first set's chunker's.
+
     A size is None when there are no pieces."""
-    if not isinstance(chunks, ChunkSet):
-        chunks = ChunkSet.model_validate(chunks)
-    unit = size_unit(str(chunks.chunker_meta.get("chunker", "")))
-    tokens = [c.token_count for c in chunks.chunks]
-    sizes = [len(c.text) for c in chunks.chunks] if unit == "characters" else tokens
-    covered, overlaps = _coverage(chunks)
+    sets = [c if isinstance(c, ChunkSet) else ChunkSet.model_validate(c) for c in (chunks, *more)]
+    unit = size_unit(str(sets[0].chunker_meta.get("chunker", "")))
+    pieces = [c for s in sets for c in s.chunks]
+    tokens = [c.token_count for c in pieces]
+    sizes = [len(c.text) for c in pieces] if unit == "characters" else tokens
+    coverage = [_coverage(s) for s in sets]
     return {
-        "pieces": len(chunks.chunks),
+        "pieces": len(pieces),
         "tokens": sum(tokens),
         "unit": unit,
         "median": _median(sizes),
@@ -290,8 +294,8 @@ def stats(chunks: ChunkSet | dict[str, Any]) -> dict[str, Any]:
         "largest": max(sizes, default=None),
         "median_tokens": _median(tokens),
         "p95_tokens": _p95(tokens),
-        "overlaps": overlaps,
-        "uncovered": len(chunks.source_text) - covered,
+        "overlaps": sum(pairs for _, pairs in coverage),
+        "uncovered": sum(len(s.source_text) - covered for s, (covered, _) in zip(sets, coverage, strict=True)),
     }
 
 

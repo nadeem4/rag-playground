@@ -1,4 +1,4 @@
-"""A stored result by its id, clearing every stored result, and the miss trace."""
+"""A stored result by its id, several chunk sets summed up, clearing every stored result, and the miss trace."""
 
 from __future__ import annotations
 
@@ -51,6 +51,22 @@ def get_payload(result_id: str, settings: ApiSettings = Depends(get_settings)) -
     if info["type"] == "chunk_set" and isinstance(payload, dict):
         return {**payload, "stats": pandion.chunk.stats(payload)}
     return payload
+
+
+class ChunkStatsIn(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=50)
+
+
+@router.post("/chunk-stats")
+def post_chunk_stats(body: ChunkStatsIn, settings: ApiSettings = Depends(get_settings)) -> dict[str, Any]:
+    """Several chunk sets, one chunker's over several documents, summed up as one
+    by `pandion.chunk.stats`: counts are totals, sizes are over every piece."""
+    store = _results(settings)
+    for result_id in body.ids:
+        found = _info(store, result_id)["type"]
+        if found != "chunk_set":
+            raise HTTPException(status_code=422, detail=f"{result_id} is a {found}, not a chunk_set.")
+    return pandion.chunk.stats(*(store.get(i) for i in body.ids))
 
 
 @router.delete("/cache")

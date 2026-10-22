@@ -1,6 +1,6 @@
 import type { ChunkSet } from "@/api/types"
 import type { HitRowData } from "@/components/inspectors/hits"
-import { RetrievalView } from "@/components/inspectors/RetrievalResultInspector"
+import { RetrievalView, type HitFile } from "@/components/inspectors/RetrievalResultInspector"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 
 /**
@@ -14,6 +14,7 @@ export function RetrieveEvidence({
   chunkSet,
   agreement,
   answer,
+  files,
 }: {
   rows: HitRowData[]
   /** The chunk set searched: each slip's piece number and colour. */
@@ -21,6 +22,8 @@ export function RetrieveEvidence({
   agreement: string | null
   /** The chunk id of the piece that holds the sample's gold answer, or null when it is not known. */
   answer: string | null
+  /** With several documents, each file with its chunk set: each slip names its file and is numbered in it. */
+  files?: readonly HitFile[]
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -29,7 +32,7 @@ export function RetrieveEvidence({
           <MonoNumbers text={agreement} />
         </p>
       ) : null}
-      <RetrievalView rows={rows} chunkSet={chunkSet} facts={null} showDetail={false} flat compact answer={answer} />
+      <RetrievalView rows={rows} chunkSet={chunkSet} facts={null} showDetail={false} flat compact answer={answer} files={files} />
     </div>
   )
 }

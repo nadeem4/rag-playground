@@ -7,7 +7,7 @@ import type { DocRef } from "./document"
 import { strategyIn } from "./graph"
 
 /**
- * Saved Compare experiments: a step, its recipes and the document, by name,
+ * Saved Compare experiments: a step, its recipes and the documents, by name,
  * kept in this browser as saved pipelines are. Nothing about a run is kept:
  * no run id, no artifact ids, no results. Running again is quick, because
  * finished steps come from the server's cache.
@@ -18,7 +18,10 @@ export interface SavedExperiment {
   name: string
   stage: Stage
   recipes: Variant[]
+  /** The first document, as an experiment always kept it. */
   doc: DocRef | null
+  /** Every document, kept only when there were several: an experiment on one has no `docs`. */
+  docs?: DocRef[]
   savedAt: string
 }
 
@@ -27,6 +30,8 @@ export interface ExperimentBody {
   stage: Stage
   recipes: Variant[]
   doc: DocRef | null
+  /** Every document of the pipeline, when it has several. */
+  docs?: readonly DocRef[]
 }
 
 export const MAX_EXPERIMENTS = 20
@@ -75,9 +80,13 @@ export const isExperiment = (e: unknown): e is SavedExperiment => {
     x.recipes.length >= 1 &&
     x.recipes.length <= MAX_RECIPES &&
     x.recipes.every(isVariant) &&
-    isDoc(x.doc)
+    isDoc(x.doc) &&
+    (x.docs === undefined || (Array.isArray(x.docs) && x.docs.every((d) => d !== null && isDoc(d))))
   )
 }
+
+/** The documents an experiment ran on, in order: all of them, or its one. */
+export const experimentDocuments = (e: Pick<SavedExperiment, "doc" | "docs">): DocRef[] => (e.docs?.length ? e.docs : e.doc ? [e.doc] : [])
 
 export function readExperiments(): SavedExperiment[] {
   if (cache === null) {
@@ -120,6 +129,7 @@ const entry = (id: string, name: string, b: ExperimentBody): SavedExperiment => 
   stage: b.stage,
   recipes: structuredClone(b.recipes),
   doc: b.doc ? { sha: b.doc.sha, filename: b.doc.filename } : null,
+  ...(b.docs && b.docs.length > 1 ? { docs: b.docs.map((d) => ({ sha: d.sha, filename: d.filename })) } : {}),
   savedAt: new Date().toISOString(),
 })
 

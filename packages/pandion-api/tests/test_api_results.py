@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 
 from apihelpers import PIPELINE, finish, make_client, upload
+from pdfs import build_pdf
 from pandion import IndexPipeline
 from pandion_api import Policy
 
@@ -118,3 +119,23 @@ def test_trace_caps_its_lists_and_top_k_and_refuses_a_result_of_the_wrong_kind(c
     assert r.status_code == 422 and "retrieve" in r.json()["detail"]
     r = client.post("/trace", json={**body, "chunk": result["index"]["result_id"]})
     assert r.status_code == 422 and "chunk" in r.json()["detail"]
+
+
+def test_chunk_stats_sums_up_several_chunk_sets_as_one(client):
+    import pandion
+
+    sha = upload(client)["sha"]
+    other = upload(client, "notes.pdf", build_pdf([["Another report, with a few more words in it."]]))["sha"]
+    state, _ = finish(client, client.post("/runs", json={"config": PIPELINE, "documents": [sha, other]}))
+    ids = [d["chunk"]["result_id"] for d in state["result"]["documents"].values()]
+    assert len(ids) == 2
+    stats = client.post("/chunk-stats", json={"ids": ids}).json()
+    sets = [client.get(f"/results/{i}/payload").json() for i in ids]
+    assert stats == pandion.chunk.stats(*sets)
+    assert stats["pieces"] == sum(len(s["chunks"]) for s in sets)
+
+
+def test_chunk_stats_refuses_a_result_that_is_not_a_chunk_set(client):
+    index = indexed(client)["index"]["result_id"]
+    assert client.post("/chunk-stats", json={"ids": [index]}).status_code == 422
+    assert client.post("/chunk-stats", json={"ids": []}).status_code == 422

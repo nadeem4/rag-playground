@@ -4,9 +4,9 @@ import { useApiKey } from "@/api/apiKey"
 import { ApiError } from "@/api/client"
 import { v2 } from "@/api/v2"
 import { useSampleQuestions, useSamples } from "@/api/samples"
-import { QUEUED_LINE, type NodeState, type VariantState } from "@/api/runState"
-import type { ChunkSet, ComparisonResult, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
-import { usePayloads } from "@/api/usePayloads"
+import { QUEUED_LINE, runsAs, type NodeState, type VariantState } from "@/api/runState"
+import type { ChunkSet, ChunkStats, ComparisonResult, GraphNode, Registry, TransformInfo, Variant } from "@/api/types"
+import { useChunkTotals, usePayloads } from "@/api/usePayloads"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { RETRIEVAL_LABEL } from "@/components/ask/AskSettings"
@@ -24,10 +24,12 @@ import { DocumentControl } from "@/components/DocumentControl"
 import { DocumentItem } from "@/components/DocumentItem"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
+import { FileTag } from "@/components/FileTag"
 import { CONTROL } from "@/components/fields/types"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { agreementText, compareLists, hitRows, type HitRowData } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
+import type { HitFile } from "@/components/inspectors/RetrievalResultInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { chunkSlot } from "@/components/inspectors/spans"
 import type { InspectorStatus } from "@/components/inspectors/status"
@@ -51,12 +53,14 @@ import {
   useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
-import { chooseDocument, documentOf, useDocument, type DocRef } from "@/state/document"
+import { chooseDocuments, documentsOf, sameDocuments, useDocument, type DocRef } from "@/state/document"
+import { fileOf, filesOf, type FileInfo } from "@/lib/files"
 import { setCurrentId, STARTER_ID } from "@/state/pipelines"
 import { useStarter } from "@/state/starter"
 import {
   deleteExperiment,
   droppedText,
+  experimentDocuments,
   readExperiments,
   saveExperiment,
   takeOpenRequest,
@@ -133,14 +137,14 @@ export function Compare() {
 export interface OpenExperiment {
   id: string
   name: string
-  /** The step, the recipes and the document as saved, in one string. */
+  /** The step, the recipes and the documents as saved, in one string. */
   sig: string
   /** Saved just now: the line says Saved until something changes. */
   justSaved: boolean
 }
 
-/** The step, the recipes and the document, in one string, to tell whether the page differs from a saved experiment. */
-export const experimentSig = (stage: string, recipes: Variant[], doc: DocRef | null) => JSON.stringify({ stage, recipes, doc: doc?.sha ?? null })
+/** The step, the recipes and the documents, in one string, to tell whether the page differs from a saved experiment. */
+export const experimentSig = (stage: string, recipes: Variant[], docs: readonly DocRef[]) => JSON.stringify({ stage, recipes, docs: docs.map((d) => d.sha) })
 
 function ComparePage({ registry }: { registry: Registry }) {
   // The node under comparison: from the URL on arrival, then from the picker.
@@ -183,7 +187,7 @@ function ComparePage({ registry }: { registry: Registry }) {
     window.addEventListener("popstate", onPop)
     return () => window.removeEventListener("popstate", onPop)
   }, [])
-  /** Open a saved experiment: its step, its recipes on the cards, and its document. */
+  /** Open a saved experiment: its step, its recipes on the cards, and its documents. */
   const openExperiment = (e: SavedExperiment) => {
     const node = graph?.nodes.find((n) => n.stage === e.stage)
     if (!graph || !node) {
@@ -194,8 +198,9 @@ function ComparePage({ registry }: { registry: Registry }) {
     opens.current += 1
     setOpening({ n: opens.current, recipes: structuredClone(e.recipes) })
     setNode(node.id)
-    if (e.doc && e.doc.sha !== documentOf(graph)?.sha) void chooseDocument(e.doc)
-    setExperiment({ id: e.id, name: e.name, sig: experimentSig(e.stage, e.recipes, e.doc), justSaved: false })
+    const docs = experimentDocuments(e)
+    if (docs.length && !sameDocuments(docs, documentsOf(graph))) void chooseDocuments(docs)
+    setExperiment({ id: e.id, name: e.name, sig: experimentSig(e.stage, e.recipes, docs), justSaved: false })
   }
   // Another page (the Library) may have asked for an experiment: open it once, as Your experiments does.
   const asked = useRef(false)
@@ -530,9 +535,14 @@ function Sweep({
   const labels = variantLabels(submitted.variants, registry, target.stage)
   const upstream = order.filter((n) => n.stage !== "source" && ancestors(graph, target.id, registry).has(n.id) && n.stage !== "query")
   const filename = String(graph.nodes.find((n) => n.stage === "source")?.config.filename ?? "")
+  // With several documents each has its colour, and the page speaks of all of them; with one, nothing changes.
+  const docs = documentsOf(graph)
+  const files = filesOf(docs)
+  const several = files.length > 1
+  const docsKey = docs.map((d) => d.sha).join(",")
   // The document is the working pipeline's, changed on the Document line. Missing or none blocks a run; a new one leaves the results on the old.
-  const { status: docStatus } = useDocument()
-  const noDocument = needsDocument(docStatus)
+  const { status: docStatus, missing: missingDoc } = useDocument()
+  const noDocument = needsDocument(docStatus) || missingDoc !== null
 
   // Per variant: the through node's output, the chunk set to place hits on,
   // and the index descriptor (for its embedding counts).
@@ -540,12 +550,51 @@ function Sweep({
   const chunkNode = shownThrough.stage === "chunk" ? undefined : upstreamOfStage(graph, shownThrough.id, "chunk")
   const indexNode = target.stage === "index" ? target : upstreamOfStage(graph, shownThrough.id, "index")
   const artifact = (s: VariantState | undefined, id: string | undefined) => (id && finished(s?.nodes[id]) ? s!.nodes[id].artifact_id : undefined)
+  /** With several documents, each file's own result of a step that ran once per document; null until every file has one. */
+  const perFile = (s: VariantState | undefined, id: string): string[] | null => {
+    const node = s?.nodes[id]
+    if (!several || !node?.documents || !finished(node)) return null
+    const own = files.map((f) => {
+      const name = Object.keys(node.documents!).find((n) => runsAs(f.filename, n, f.sha))
+      const d = name ? node.documents![name] : undefined
+      return d && (d.status === "done" || d.status === "cached") ? d.artifact_id : undefined
+    })
+    return own.every(Boolean) ? (own as string[]) : null
+  }
   const ids = submitted.variants.map((_, i) => ({
     through: artifact(stateOf(i), shownThrough.id),
     chunks: artifact(stateOf(i), chunkNode?.id),
     index: artifact(stateOf(i), indexNode?.id),
+    // A chunk run over several documents: each file's chunk set, for the scale lines and the totals.
+    files: shownThrough.stage === "chunk" ? perFile(stateOf(i), shownThrough.id) : null,
   }))
-  const payload = usePayloads(ids.flatMap((x) => [x.through, x.chunks, x.index]))
+  const payload = usePayloads(ids.flatMap((x) => [x.through, x.chunks, x.index, ...(x.files ?? [])]))
+  const totals = useChunkTotals(ids.map((x) => x.files ?? []))
+  // A chunk run over several documents: its numbers are only ever Pandion's totals, never one file's.
+  const severalChunk = several && shownThrough.stage === "chunk"
+  /** A recipe's chunk numbers: Pandion's totals over every document with several (undefined until they arrive), its one set's otherwise. */
+  const statsOf = (i: number): ChunkStats | undefined => {
+    if (!severalChunk) return (payload(ids[i]?.through).data as ChunkSet | undefined)?.stats
+    const own = ids[i]?.files
+    return own ? totals(own).stats : undefined
+  }
+  /** The totals for this recipe could not be read. */
+  const totalsFailed = (i: number) => {
+    const own = severalChunk ? ids[i]?.files : null
+    return own ? totals(own).failed : false
+  }
+  /** With several documents, a search column's files with each one's own chunk set. */
+  const hitFiles = (i: number): HitFile[] | undefined => {
+    if (!several || shownThrough.stage === "chunk") return undefined
+    const own = chunkNode ? perFile(stateOf(i), chunkNode.id) : null
+    return files.map((f, k) => ({ ...f, chunksId: own?.[k] }))
+  }
+  /** Each file's chunk set with its file, for the scale lines; undefined with one document or until all arrived. */
+  const linesOf = (i: number): { file: FileInfo; set: ChunkSet }[] | undefined => {
+    const own = ids[i]?.files
+    const sets = own?.map((id) => payload(id).data as ChunkSet | undefined)
+    return sets?.every((x) => Array.isArray(x?.chunks)) ? files.map((file, k) => ({ file, set: sets[k]! })) : undefined
+  }
   const hitRowLists = ids.map((x) => hitRows(payload(x.through).data))
   const hitLists = hitRowLists.map((rows) => rows?.map((h) => h.chunk_id) ?? null)
   const base = run.closed ? baselineIndex(submitted.variants, (i) => (hitLists[i]?.length ?? 0) > 0) : null
@@ -604,7 +653,8 @@ function Sweep({
     recipeStatus(stateOf(i), i, { targetId: target.id, throughId: shownThrough.id, upstream: upstreamIds, stopped: run.closed, titles }),
   )
   const finishedCount = statuses.filter((x) => x.kind === "done" || x.kind === "failed").length
-  const searched = (payload(ids[base ?? 0]?.chunks).data as ChunkSet | undefined)?.chunks?.length ?? null
+  // With several documents the search's pieces come from every file, so no one chunk set counts them.
+  const searched = several ? null : ((payload(ids[base ?? 0]?.chunks).data as ChunkSet | undefined)?.chunks?.length ?? null)
 
   /** The finding over the recipes that finished, the baseline first; null until there are two. */
   function findingFor(): Finding | null {
@@ -615,11 +665,11 @@ function Sweep({
     })
     if (shownThrough.stage === "chunk" && sets.length === done.length) {
       return chunkFinding(
-        sets.map(({ i, set }) => {
+        sets.map(({ i }) => {
           const v = submitted.variants[i]
           const field = sizeFields(registry.chunk?.[v.transform]).size
           const size = field && typeof v.config[field] === "number" ? (v.config[field] as number) : null
-          return { short: submittedNames[i].short, transform: v.transform, size, stats: set.stats, own: i === submitted.base }
+          return { short: submittedNames[i].short, transform: v.transform, size, stats: statsOf(i), own: i === submitted.base }
         }).flatMap((x) => (x.stats ? [{ ...x, stats: x.stats }] : [])),
       )
     }
@@ -650,7 +700,7 @@ function Sweep({
       const req = compareRequest(p, target, variants, throughOf(graph, target, through), topK, stepOfCardIn(graph, through), graph)
       if ("problem" in req) throw new Error(req.problem)
       const { run_id } = await v2.createComparison(req, { keys })
-      setSubmitted({ variants, through, sha, base: variants.findIndex(own), scored: req.questions !== undefined, shared: sharedStages(req.config, req.stage) })
+      setSubmitted({ variants, through, sha: docsKey, base: variants.findIndex(own), scored: req.questions !== undefined, shared: sharedStages(req.config, req.stage) })
       setRunId(run_id)
       setChosen(0)
       setSort({ key: "order", dir: 1 })
@@ -730,17 +780,18 @@ function Sweep({
 
   // Experiments: the step, the recipes and the document, saved by name in this browser.
   const experiments = useExperiments()
-  const doc = documentOf(graph)
-  const sig = experimentSig(target.stage, variants, doc)
+  const doc = docs[0] ?? null
+  const sig = experimentSig(target.stage, variants, docs)
   const expEdited = experiment !== null && experiment.sig !== sig
-  const body = () => ({ stage: target.stage, recipes: variants, doc })
+  const body = () => ({ stage: target.stage, recipes: variants, doc, docs })
+  const onWhat = several ? `${files.length} documents` : filename || "this document"
   const sizeShared = target.stage === "chunk" && variants.some((v, i) => variants.some((w, j) => j !== i && w.transform === v.transform && !same(w.config, v.config)))
   const suggestedName = (
     target.stage === "chunk"
-      ? `${sizeShared ? "Chunk sizes" : "Chunkers"} on ${filename || "this document"}`
+      ? `${sizeShared ? "Chunk sizes" : "Chunkers"} on ${onWhat}`
       : target.stage === "retrieve" && question
         ? `Searches for ${question}`
-        : `${titleFor(target)} recipes on ${filename || "this document"}`
+        : `${titleFor(target)} recipes on ${onWhat}`
   ).slice(0, 80)
   const saveAs = (name: string) => {
     const r = saveExperiment(name, body())
@@ -788,11 +839,12 @@ function Sweep({
   const rows: OverviewRow[] = submitted.variants.map((v, i) => {
     const st = statuses[i]
     const set = payload(ids[i]?.through).data as ChunkSet | undefined
-    const stats = target.stage === "chunk" ? (set?.stats ?? null) : null
+    const stats = target.stage === "chunk" ? (statsOf(i) ?? null) : null
     const hits = hitRowLists[i]
     const searchedSet = (payload(ids[i]?.chunks).data as ChunkSet | undefined)?.chunks
     const answer = answerId(i, hits)
-    const ready = st.kind === "done" && (target.stage !== "chunk" || stats !== null) && (target.stage !== "retrieve" || hits !== null)
+    const lines = target.stage === "chunk" ? linesOf(i) : undefined
+    const ready = st.kind === "done" && (target.stage !== "chunk" || stats !== null || totalsFailed(i)) && (target.stage !== "retrieve" || hits !== null)
     return {
       i,
       name: submittedNames[i].name,
@@ -810,9 +862,13 @@ function Sweep({
         ...costValues(variedCost(i)),
       },
       set,
+      ...(lines ? { scale: lines } : {}),
+      ...(several && answer ? { answerFile: fileOf(files, hits?.find((h) => h.chunk_id === answer)?.doc_id) } : {}),
       pieces: hits?.slice(0, 5).flatMap((h) => {
-        const at = h.ordinal ?? searchedSet?.findIndex((c) => c.id === h.chunk_id) ?? -1
-        return at >= 0 ? [{ piece: at + 1, slot: chunkSlot(at), answer: h.chunk_id === answer }] : []
+        // With several documents a swatch takes its file's colour, and its number is its place in that file.
+        const file = several ? fileOf(files, h.doc_id) : undefined
+        const at = h.ordinal ?? (file ? -1 : (searchedSet?.findIndex((c) => c.id === h.chunk_id) ?? -1))
+        return at >= 0 ? [{ piece: at + 1, slot: chunkSlot(at), answer: h.chunk_id === answer, ...(file ? { file } : {}) }] : []
       }),
     }
   })
@@ -878,7 +934,7 @@ function Sweep({
     const r = rows[i]
     const b = rows[baseAt]
     if (!r?.done || !b?.done) return null
-    const [now, was] = [(r.set as ChunkSet | undefined)?.stats, (b.set as ChunkSet | undefined)?.stats]
+    const [now, was] = [statsOf(i), statsOf(baseAt)]
     if (target.stage === "chunk") return now && was ? columnDelta({ kind: "chunk", stats: now, base: was, baseName: runBase }) : null
     if (target.stage === "retrieve")
       return columnDelta({ kind: "retrieve", shared: r.values.shared ?? 0, top, rank: r.values.rank ?? null, goldKnown, returned: r.values.returned ?? 0, topK: topKOf(i), baseName: runBase })
@@ -889,7 +945,7 @@ function Sweep({
     if (target.stage === "chunk") {
       return chunkManyFinding(
         doneRows.flatMap((r) => {
-          const stats = (r.set as ChunkSet | undefined)?.stats
+          const stats = statsOf(r.i)
           return stats ? [{ i: r.i, phrase: submittedPhrases[r.i].phrase, stats }] : []
         }),
         side.fit,
@@ -991,6 +1047,10 @@ function Sweep({
           embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
           hits={hitRowLists[i]}
           answer={answerId(i, hitRowLists[i])}
+          files={severalChunk ? (linesOf(i) ?? null) : undefined}
+          stats={statsOf(i)}
+          statsFailed={totalsFailed(i)}
+          hitFiles={hitFiles(i)}
         />
         )}
       </section>
@@ -1004,13 +1064,24 @@ function Sweep({
           <h1 className="text-xl font-semibold">Compare</h1>
           {/* Compare works on a document first: it is named once, above the recipes, with a way to change it. */}
           <div data-testid="document-line" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-xs text-fg-muted">Document</span>
-            {doc ? <DocumentItem doc={doc} size="compact" /> : null}
-            <DocumentControl foot="Every page uses this document." />
+            {several ? (
+              <>
+                <span className="text-xs text-fg-muted">Every page uses these documents</span>
+                {files.map((f) => (
+                  <FileTag key={f.sha} file={f} />
+                ))}
+              </>
+            ) : (
+              <>
+                <span className="text-xs text-fg-muted">Document</span>
+                {doc ? <DocumentItem doc={doc} size="compact" /> : null}
+              </>
+            )}
+            <DocumentControl foot={several ? "Every page uses these documents." : "Every page uses this document."} />
           </div>
           {/* Wraps rather than truncates, as on Evaluate: the filename stays whole at phone width. */}
           <p className="text-sm text-fg-muted">
-            The {verb} step over {filename ? <span className="font-mono">{filename}</span> : "no document yet"}
+            The {verb} step over {several ? `${files.length} documents` : filename ? <span className="font-mono">{filename}</span> : "no document yet"}
             {upstream.length ? (
               <>
                 , after <span className="font-mono">{upstream.map((n) => n.transform).join(", ")}</span>
@@ -1117,7 +1188,7 @@ function Sweep({
           </div>
         </div>
 
-        <DocumentNote action="run these recipes" changed={runId !== null && submitted.sha !== "" && submitted.sha !== sha} className="mx-3 mt-3" />
+        <DocumentNote action="run these recipes" changed={runId !== null && submitted.sha !== "" && submitted.sha !== docsKey} className="mx-3 mt-3" />
 
         {phase === "setup" ? (
           <>
@@ -1275,6 +1346,11 @@ function Sweep({
                 </div>
               </OpenView>
             ) : null}
+            {overview && rows.some((r) => totalsFailed(r.i)) ? (
+              <p role="alert" className="m-0 px-3 pt-3 text-sm text-danger">
+                The numbers over every document could not be read. Run again to try once more.
+              </p>
+            ) : null}
             {overview ? (
               <div hidden={openIds !== null}>
               <Overview
@@ -1295,6 +1371,7 @@ function Sweep({
                 baseAt={baseAt}
                 baseName={runBase}
                 variedFrom={variedFrom}
+                several={several}
               />
               </div>
             ) : null}
@@ -1339,6 +1416,10 @@ export function VariantResult({
   embeddings,
   hits,
   answer = null,
+  files,
+  stats,
+  statsFailed = false,
+  hitFiles,
 }: {
   state?: VariantState
   pending: boolean
@@ -1355,6 +1436,12 @@ export function VariantResult({
   hits?: HitRowData[] | null
   /** The chunk id of the piece that holds the known answer. */
   answer?: string | null
+  /** A chunk run over several documents: each file's chunk set (null while they load), and the totals over them all. */
+  files?: { file: FileInfo; set: ChunkSet }[] | null
+  stats?: ChunkStats
+  statsFailed?: boolean
+  /** A search over several documents: each file, with its own chunk set. */
+  hitFiles?: readonly HitFile[]
 }) {
   const n = state?.nodes[node.id]
   const failed = state ? Object.values(state.nodes).find((x) => x.status === "failed") : undefined
@@ -1383,10 +1470,19 @@ export function VariantResult({
   } else if (n.status === "skipped") {
     body = <EmptyState title="Skipped">A step above it failed, or the run was cancelled.</EmptyState>
   } else if (type === "chunk_set" && status.kind === "ready" && Array.isArray((data as ChunkSet | undefined)?.chunks)) {
-    body = <ChunkEvidence set={data as ChunkSet} />
+    body =
+      files === null ? (
+        <p role="status" className="text-sm text-fg-muted">
+          Loading each document's pieces.
+        </p>
+      ) : files ? (
+        <ChunkEvidence set={data as ChunkSet} files={files} stats={stats} statsFailed={statsFailed} />
+      ) : (
+        <ChunkEvidence set={data as ChunkSet} />
+      )
   } else if (hits && status.kind === "ready") {
     evidence = true
-    body = <RetrieveEvidence rows={hits} chunkSet={chunks as ChunkSet | undefined} agreement={agreement} answer={answer} />
+    body = <RetrieveEvidence rows={hits} chunkSet={chunks as ChunkSet | undefined} agreement={agreement} answer={answer} files={hitFiles} />
   } else {
     body = <ArtifactInspector type={type} data={data} status={status} context={chunks ? { chunks: chunks as never } : undefined} />
   }

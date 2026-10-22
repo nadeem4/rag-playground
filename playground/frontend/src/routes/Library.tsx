@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { refreshUploads, useDocument } from "@/state/document"
 import { storeGraph } from "@/state/graph"
+import { experimentDocuments } from "@/state/experiments"
 import {
   base64ToBytes,
   buildExport,
@@ -388,8 +389,8 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
             {shown.map((item) => {
               const k = key(item)
               const state = stateOf(item)
-              // A pipeline owns a list of documents; an experiment has one.
-              const docs = item.kind === "pipeline" ? item.documents : item.doc ? [item.doc] : []
+              // A pipeline owns a list of documents; an experiment keeps its one, or all of them when it ran on several.
+              const docs = item.kind === "pipeline" ? item.documents : experimentDocuments(item.experiment)
               // A kept item, saved by an older version, is listed with the reason and never opened.
               const kept = item.kind === "pipeline" ? keptLine(item.pipeline) : null
               const summary =

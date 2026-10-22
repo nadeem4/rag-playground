@@ -93,3 +93,20 @@ def test_a_unit_other_than_characters_or_tokens_is_said_as_tokens(monkeypatch):
     monkeypatch.setattr(registry, "get", lambda stage, name: Words)
     s = pandion.chunk.stats(chunk_set(SOURCE, [(0, 3), (4, 13)], chunker="words_plugin"))
     assert (s["unit"], s["median"], s["largest"]) == ("tokens", 1.5, 2)
+
+
+def test_several_chunk_sets_sum_up_as_one_with_sizes_over_every_piece():
+    # One chunker over two documents: counts are totals, sizes are over all pieces.
+    a = chunk_set(SOURCE, [(0, 3), (4, 13)])  # 1 and 2 tokens, 37 characters left out
+    b = chunk_set("alpha beta gamma delta", [(0, 16), (6, 22)])  # 3 and 3 tokens, one overlap
+    s = pandion.chunk.stats(a, b)
+    assert (s["pieces"], s["tokens"]) == (4, 9)
+    assert (s["median"], s["largest"], s["median_tokens"]) == (2.5, 3, 2.5)
+    assert s["overlaps"] == 1  # within b only; pieces of different documents never overlap
+    assert s["uncovered"] == pandion.chunk.stats(a)["uncovered"] + pandion.chunk.stats(b)["uncovered"]
+    assert s["unit"] == "tokens"
+
+
+def test_one_chunk_set_sums_up_as_before():
+    one = chunk_set(SOURCE, [(0, 13), (8, 23)])
+    assert pandion.chunk.stats(one) == pandion.chunk.stats(one.model_dump())

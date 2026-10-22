@@ -220,9 +220,10 @@ function ResultLine({
 /**
  * The pieces to scale by tokens, in their chunk colours. Thin, 4 px, under the
  * Chunk card's result; a bar, 12 px with 2 px gaps and 3 px corners, in a
- * Compare column.
+ * Compare column. `fill`, one colour for every piece (a file's, on Compare's
+ * scale lines for several documents), in place of the chunk colours.
  */
-export function ChunkBar({ data, size = "thin" }: { data: unknown; size?: "thin" | "bar" }) {
+export function ChunkBar({ data, size = "thin", fill }: { data: unknown; size?: "thin" | "bar"; fill?: string }) {
   const chunks = (data as { chunks?: { token_count?: number }[] } | null)?.chunks
   if (!Array.isArray(chunks) || chunks.length === 0) return null
   return (
@@ -230,8 +231,8 @@ export function ChunkBar({ data, size = "thin" }: { data: unknown; size?: "thin"
       {chunks.map((c, i) => (
         <span
           key={i}
-          className={cn(CHUNK_CLASSES[i % CHUNK_CLASSES.length], size === "bar" && "min-w-[3px] rounded-[3px]")}
-          style={{ flexGrow: c.token_count ?? 1, flexBasis: 0 }}
+          className={cn(!fill && CHUNK_CLASSES[i % CHUNK_CLASSES.length], size === "bar" && "min-w-[3px] rounded-[3px]")}
+          style={{ flexGrow: c.token_count ?? 1, flexBasis: 0, ...(fill ? { background: fill } : {}) }}
         />
       ))}
     </div>

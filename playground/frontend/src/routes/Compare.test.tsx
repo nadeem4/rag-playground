@@ -11,8 +11,8 @@ import bm25Json from "@/api/fixtures/retrieval_result.bm25.json"
 import denseJson from "@/api/fixtures/retrieval_result.dense.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import type { Registry } from "@/api/types"
-import { chooseDocument, resetDocumentForTests } from "@/state/document"
-import { requestOpenExperiment, resetExperimentsForTests, saveExperiment } from "@/state/experiments"
+import { chooseDocument, documentsOf, resetDocumentForTests, withDocuments } from "@/state/document"
+import { experimentDocuments, readExperiments, requestOpenExperiment, resetExperimentsForTests, saveExperiment } from "@/state/experiments"
 import { addEnrich, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, transformsFor } from "@/state/graph"
 import { readCurrentId, resetPipelinesForTests, STARTER_ID } from "@/state/pipelines"
 
@@ -151,7 +151,8 @@ const statusOf = (i: number) => within(column(i)).getByTestId("recipe-status").t
  * suggestion, then a run in which the first `finish` recipes finish (the next
  * one is left running), served from the three fixtures.
  */
-async function runFive(stage: "chunk" | "retrieve", finish = 5, before?: () => void) {
+/** `hit` names the searches' results, so a test that serves its own is not read from the cache of another. */
+async function runFive(stage: "chunk" | "retrieve", finish = 5, before?: () => void, hit = "h") {
   if (stage === "retrieve") {
     serve({ c: recursiveJson, i: indexJson, h0: hybridJson, h1: denseJson, h2: bm25Json, h3: hybridJson, h4: denseJson })
     openAt("?node=retrieve")
@@ -176,7 +177,7 @@ async function runFive(stage: "chunk" | "retrieve", finish = 5, before?: () => v
     else {
       es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", artifact_id: "c", cache_hit: false, duration_ms: 1 })
       es.emit(seq++, { event: "node_finished", node_id: "index", step: "index", artifact_id: "i", cache_hit: false, duration_ms: 1 })
-      es.emit(seq++, { event: "node_finished", node_id: "retrieve", step: "search", artifact_id: `h${i}`, cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "retrieve", step: "search", artifact_id: `${hit}${i}`, cache_hit: false, duration_ms: 1 })
     }
   }
   if (finish >= 5) es.emit(seq, { event: "stream_end", status: "finished", ok: true })
@@ -1371,5 +1372,171 @@ describe("a Compare run waiting its turn on the busy demo", () => {
     es.emit(3, { event: "node_started", node_id: "chunk", step: "chunk", transform: "x", artifact_id: "x" })
     await waitFor(() => expect(screen.getByTestId("tally").textContent).toContain("Running recipe 1 of"))
     expect(screen.getByTestId("tally").textContent).not.toContain("The demo is busy")
+  })
+})
+
+describe("a pipeline with several documents", () => {
+  const OTHER = { sha: "ab".repeat(32), filename: "field-guide.docx" }
+  const rowOf = (i: number) => document.querySelector<HTMLElement>(`[data-recipe="${i}"]`)!
+  /** What `POST /api/v2/chunk-stats` sums up, told apart by the first id it was sent. */
+  const totals = (ids: string[]) => ({ pieces: 200 + Number(ids[0].slice(1)), tokens: 9000, unit: "tokens", median: 96, p95: 121, largest: 130, median_tokens: 96, p95_tokens: 121, overlaps: 0, uncovered: 0 })
+  /** Each hit from the primer or the guide, by its place, as Pandion's chunk `doc_id` says. */
+  const fromBoth = <C extends object>(r: { hits: { chunk: C }[] }) => ({ ...r, hits: r.hits.map((h, k) => ({ ...h, chunk: { ...h.chunk, doc_id: k % 2 ? OTHER.sha : SOURCE.sha } })) })
+
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    storeGraph(withDocuments(sampleGraph(registry, SOURCE), [SOURCE, OTHER]))
+  })
+
+  /** Answer `POST /api/v2/chunk-stats` on top of what `serve` set up. */
+  function serveTotals() {
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      url === "/api/v2/chunk-stats" ? new Response(JSON.stringify(totals(JSON.parse(String(init!.body)).ids)), { status: 200 }) : base(url, init),
+    )
+  }
+
+  it("says every page uses these documents, with a file tag for each, and names an experiment by how many", async () => {
+    render(<Compare />)
+    const line = await screen.findByTestId("document-line")
+    expect(line.textContent).toContain("Every page uses these documents")
+    expect(Array.from(line.querySelectorAll("[data-file-tag]")).map((t) => t.textContent)).toEqual([SOURCE.filename, OTHER.filename])
+    expect(text()).toContain("The Chunk step over 2 documents")
+    fireEvent.click(screen.getByRole("button", { name: "Save experiment" }))
+    expect(screen.getByLabelText<HTMLInputElement>("Name this experiment").value).toBe("Chunk sizes on 2 documents")
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Save experiment" })).getByRole("button", { name: "Save experiment" }))
+    expect(experimentDocuments(readExperiments()[0])).toEqual([SOURCE, OTHER])
+  })
+
+  it("says a saved document that is gone is missing when the experiment reopens, and holds the run", async () => {
+    const card = { name: "chunking-primer", title: "A primer on chunking", blurb: "", shows: "", stresses: "chunk", pages: 3, default: true, filename: SOURCE.filename, sha: SOURCE.sha, question: "Why?" }
+    serve({}, { "/api/v2/documents": [], "/api/samples": [card] })
+    storeGraph(sampleGraph(registry, SOURCE))
+    saveExperiment("Both", { stage: "chunk", recipes: [{ transform: "token_based", config: {} }], doc: SOURCE, docs: [SOURCE, OTHER] })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Your experiments (1)" }))
+    fireEvent.click(screen.getByRole("button", { name: "Both" }))
+    await waitFor(() => expect(screen.getByTestId("document-note").textContent).toContain(`${OTHER.filename} is missing.`))
+    expect((screen.getByRole("button", { name: "Run 1 recipe" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("numbers every search hit in its own file and names its file in the columns", async () => {
+    // The guide's pieces have their own ids (Pandion's chunk ids include the document), in another order.
+    const reversed = { ...recursiveJson, chunks: [...recursiveJson.chunks].reverse().map((c) => ({ ...c, id: `${c.id}-g` })) }
+    const guideIds = (r: { hits: { chunk: { id: string } }[] }) => {
+      const both = fromBoth(r)
+      return { ...both, hits: both.hits.map((h, k) => (k % 2 ? { ...h, chunk: { ...h.chunk, id: `${h.chunk.id}-g` } } : h)) }
+    }
+    serve({ pc: recursiveJson, gc: reversed, i: indexJson, n0: guideIds(hybridJson), n1: guideIds(denseJson), n2: guideIds(bm25Json) })
+    openAt("?node=retrieve")
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    let seq = 1
+    for (let i = 0; i < 3; i++) {
+      es.emit(seq++, begin(i))
+      for (const [document, id] of [[SOURCE.filename, "pc"], [OTHER.filename, "gc"]])
+        es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", document, artifact_id: id, cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "index", step: "index", artifact_id: "i", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "retrieve", step: "search", artifact_id: `n${i}`, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(seq, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(column(0).querySelectorAll("[data-file-tag]").length).toBe(hybridJson.hits.length), { timeout: 10000 })
+    const tags = Array.from(column(0).querySelectorAll("[data-file-tag]")).map((t) => t.textContent)
+    expect(tags.slice(0, 2)).toEqual([SOURCE.filename, OTHER.filename])
+    // Each hit is numbered by its place in its own file: the guide's set is the primer's, reversed.
+    const own = (k: number) => {
+      const id = hybridJson.hits[k].chunk.id + (k % 2 ? "-g" : "")
+      const set = k % 2 ? reversed : recursiveJson
+      return String(set.chunks.findIndex((c) => c.id === id) + 1)
+    }
+    await waitFor(() => expect(within(column(0)).getAllByRole("img").map((s) => s.textContent).slice(0, 2)).toEqual([own(0), own(1)]), { timeout: 10000 })
+    expect(text()).not.toMatch(/The colours are piece numbers/)
+  })
+
+  it("says the totals could not be read when Pandion cannot sum them up, and never shows one file's numbers", async () => {
+    serve({ p0: recursiveJson, g0: tokenJson, p1: markdownJson, g1: tokenJson, p2: recursiveJson, g2: markdownJson }, { "/api/v2/chunk-stats": new Response("{}", { status: 500 }) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    let seq = 1
+    for (let i = 0; i < 3; i++) {
+      es.emit(seq++, begin(i))
+      for (const [document, id] of [[SOURCE.filename, `p${i}`], [OTHER.filename, `g${i}`]])
+        es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", document, artifact_id: id, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(seq, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(screen.getAllByRole("alert").filter((a) => a.textContent?.startsWith("The numbers over every document could not be read"))).toHaveLength(3), { timeout: 10000 })
+    expect(screen.queryAllByTestId("chunk-numbers")).toHaveLength(0)
+  })
+
+  it("reopens an experiment on all of its documents", async () => {
+    storeGraph(sampleGraph(registry, SOURCE))
+    saveExperiment("Both", { stage: "chunk", recipes: [{ transform: "token_based", config: {} }], doc: SOURCE, docs: [SOURCE, OTHER] })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Your experiments (1)" }))
+    fireEvent.click(screen.getByRole("button", { name: "Both" }))
+    await waitFor(() => expect(documentsOf(readStoredGraph(registry))).toEqual([SOURCE, OTHER]))
+    expect(screen.getByTestId("experiment-line").textContent).not.toContain("Edited since saved")
+  })
+
+  it("counts pieces over every document, and draws each document on its own line in its colour", async () => {
+    FakeResizeObserver.width = 1409
+    serve({ p0: recursiveJson, g0: tokenJson, p1: markdownJson, g1: tokenJson, p2: recursiveJson, g2: markdownJson, p3: tokenJson, g3: tokenJson, p4: recursiveJson, g4: recursiveJson })
+    serveTotals()
+    render(<Compare />)
+    const add = await screen.findByRole("region", { name: "Add a recipe" })
+    for (let k = 0; k < 2; k++) {
+      fireEvent.click(within(add).getAllByRole("button")[0])
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" })
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Run 5 recipes" }))
+    const es = await driven()
+    let seq = 1
+    for (let i = 0; i < 5; i++) {
+      es.emit(seq++, begin(i))
+      for (const [document, id] of [[SOURCE.filename, `p${i}`], [OTHER.filename, `g${i}`]])
+        es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", document, artifact_id: id, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(seq, { event: "stream_end", status: "finished", ok: true })
+    const table = await screen.findByRole("table", { name: "Results for five recipes" })
+    expect(within(table).getAllByRole("columnheader").at(-1)!.textContent).toBe("The documents, to scale")
+    await waitFor(() => expect(within(rowOf(3)).getByText("203")).toBeTruthy(), { timeout: 10000 })
+    const sent = vi.mocked(fetch).mock.calls.filter(([u]) => u === "/api/v2/chunk-stats").map(([, init]) => JSON.parse(String(init!.body)).ids)
+    expect(sent).toContainEqual(["p3", "g3"])
+    const lines = within(rowOf(3)).getAllByTestId("file-scale-line")
+    expect(lines.map((l) => l.querySelector("[data-file-tag]")!.textContent)).toEqual([SOURCE.filename, OTHER.filename])
+    await waitFor(() => expect(screen.getByTestId("compare-finding").textContent).toMatch(/^From 200 to 204 pieces\./))
+  })
+
+  it("names the answer's file and colours the top 5 by file", async () => {
+    FakeResizeObserver.width = 1409
+    const g = sampleGraph(registry, SOURCE)
+    const query = g.nodes.find((n) => n.stage === "query")!
+    storeGraph(withDocuments(setConfig(g, query.id, { ...query.config, gold_answers: ["Overlap protects answers that straddle"] }), [SOURCE, OTHER]))
+    const hits = { c: recursiveJson, i: indexJson, m0: fromBoth(hybridJson), m1: fromBoth(denseJson), m2: fromBoth(bm25Json), m3: fromBoth(hybridJson), m4: fromBoth(denseJson) }
+    await runFive("retrieve", 5, () => serve(hits, { "/api/v2/runs/r1": snapshot(scored([2, 1, null, 2, 1], [1, 4])) }), "m")
+    const table = await screen.findByRole("table")
+    await waitFor(() => expect(rowOf(0).textContent).toContain(`Found 2nd, ${OTHER.filename}`), { timeout: 10000 })
+    expect(rowOf(1).textContent).toContain(`Found 1st, ${SOURCE.filename}`)
+    const top = within(rowOf(0)).getByRole("img")
+    expect(top.getAttribute("aria-label")).toMatch(new RegExp(`^Top 5: piece \\d+ from ${SOURCE.filename}, piece \\d+ from ${OTHER.filename} \\(the answer\\)`))
+    expect(top.querySelector<HTMLElement>("span")!.style.background).toBe("var(--file-1)")
+    expect(table.textContent).not.toContain("The document, to scale")
+  })
+
+  it("changes nothing with one document: no file tags, the same names and words", async () => {
+    storeGraph(sampleGraph(registry, SOURCE))
+    render(<Compare />)
+    const line = await screen.findByTestId("document-line")
+    expect(line.querySelector("[data-file-tag]")).toBeNull()
+    expect(line.textContent).not.toContain("these documents")
+    expect(text()).toContain(`The Chunk step over ${SOURCE.filename}`)
+    fireEvent.click(screen.getByRole("button", { name: "Save experiment" }))
+    expect(screen.getByLabelText<HTMLInputElement>("Name this experiment").value).toBe(`Chunk sizes on ${SOURCE.filename}`)
   })
 })

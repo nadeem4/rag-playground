@@ -310,6 +310,19 @@ export async function chooseDocument(doc: DocRef, question?: string): Promise<vo
   setDocumentMenuOpen(false)
 }
 
+/**
+ * Make `docs` the working graph's documents, in this order: a saved Compare
+ * experiment on several reopens on all of them. One document is `chooseDocument`.
+ */
+export async function chooseDocuments(docs: readonly DocRef[]): Promise<void> {
+  if (!docs.length) return
+  await chooseDocument(docs[0])
+  const current = readWorking()
+  if (docs.length < 2 || !current) return
+  // Not marked known: each file is checked against the lists, so one that expired since the save shows as missing.
+  storeWorking({ ...current, documents: docs.map((d) => ({ sha: d.sha, filename: d.filename })) })
+}
+
 /** The server indexes documents by their names, so two with one name cannot run together. */
 export const sameName = (filename: string) =>
   `This pipeline already has a document named ${filename}. Remove it first, or upload the new one under another name.`
@@ -371,6 +384,8 @@ export interface DocumentState {
   /** Every document of the working pipeline, in order. */
   documents: DocRef[]
   status: DocStatus
+  /** The first of the pipeline's documents the lists say is gone, or null. */
+  missing: DocRef | null
   samples: SampleCard[] | null
   /** True when the samples list could not be read. */
   samplesFailed: boolean
@@ -411,6 +426,7 @@ export function useDocument(): DocumentState {
     doc: stable,
     documents,
     status: docStatus(stable, s.sources, s.samples, s.samplesFailed, s.known),
+    missing: documents.find((d) => docStatus(d, s.sources, s.samples, s.samplesFailed, s.known) === "missing") ?? null,
     samples: s.samples,
     samplesFailed: s.samplesFailed,
     uploads,

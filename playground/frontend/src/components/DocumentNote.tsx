@@ -33,8 +33,9 @@ export function DocumentNote({
 }) {
   const store = useDocument()
   const ownStatus = useDocStatus(own ?? null)
-  const doc = own !== undefined ? own : store.doc
-  const status = own !== undefined ? ownStatus : store.status
+  // Any of the pipeline's documents that is gone blocks the run, and the note names it.
+  const doc = own !== undefined ? own : (store.missing ?? store.doc)
+  const status = own !== undefined ? ownStatus : store.missing ? "missing" : store.status
   const recoveredNote = store.recoveredNote
   const demo = useDemo()
   const blocked = needsDocument(status)

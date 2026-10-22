@@ -98,7 +98,9 @@ print(pandion.chunk.stats(chunks.output))  # pieces, sizes, overlaps, text left 
 `tokens`; `median`, `p95` and `largest`, each piece's size in `unit`, the unit the
 chunker's size setting counts in (`characters` for `recursive_character`, `tokens` for
 the rest); `median_tokens` and `p95_tokens`; `overlaps`, pairs of pieces that share text;
-and `uncovered`, characters of the text no piece covers.
+and `uncovered`, characters of the text no piece covers. `pandion.chunk.stats(a, b, ...)` sums up one
+chunker's chunk sets for several documents as one: counts, overlaps and `uncovered` are
+totals, and the sizes are over every piece of every set.
 
 The sample PDFs live in `samples/`, one folder each: `chunking-primer`,
 `two-column-report`, `table-of-figures`, `scanned-notes` and `station-manual`.

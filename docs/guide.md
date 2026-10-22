@@ -411,14 +411,27 @@ results are shown unscored.
   finding already says so. With any other question, or through a chat answer, the Answer
   column is hidden and no recipe is marked. A stopped run names no best, and when the
   scores cannot be read, the page says so and does not say where the answer is.
+- With several documents, every recipe runs on all of them, and the line under the title
+  reads "Every page uses these documents" with a file tag (colour dot and filename) for
+  each. On Chunk the counts are totals and the median and largest 5% are over every piece
+  from every file, as Pandion sums them up; the picture becomes **The documents, to
+  scale**, one line per file in its colour, and a column lists each piece with its file.
+  On Retrieve the Answer cell names the file the answer came from ("Found 1st," and its
+  file tag), and each square in **Top 5, by piece** takes its file's colour, with the file
+  in its name and on hover. With three recipes or fewer, each search column's pieces name
+  their file and are numbered by their place in it. While Pandion adds up the totals a
+  chunk column says so, and if they cannot be read it says that, rather than show one
+  file's numbers. With one document nothing changes.
 - A setting the server refuses is said under the recipe it belongs to, each setting under
   its own name, with the first one's editor open. A problem with the whole step is said
   above the cards in the server's words.
 
 ### Experiments
 
-**Save experiment** keeps the step, the recipes and the document by name in this browser,
-without the results. **Your experiments** opens one again. You can keep up to 20; saving
+**Save experiment** keeps the step, the recipes and the documents (all of them, when the
+pipeline has several) by name in this browser, without the results; opening it puts them
+all back. A suggested name says how many, such as "Chunkers on 3 documents". If one of them
+is gone since (an upload on the demo expires), the page says it is missing and holds the run. **Your experiments** opens one again. You can keep up to 20; saving
 another removes the oldest.
 
 **Use on Build** puts a finished recipe on your pipeline.

@@ -153,6 +153,20 @@ describe("Library", () => {
     await waitFor(() => expect(within(row("Resume, sections whole")).getByRole("button", { name: "Preview A primer on chunking" })).toBeTruthy())
   })
 
+  it("lists every document of an experiment saved on several", async () => {
+    seed()
+    const saved = JSON.parse(window.localStorage.getItem(EXPERIMENTS_KEY)!)
+    saved[0].docs = [{ sha: SAMPLE, filename: "chunking-primer.pdf" }, { sha: UP, filename: "NK_Resume.pdf" }]
+    window.localStorage.setItem(EXPERIMENTS_KEY, JSON.stringify(saved))
+    resetExperimentsForTests()
+    render(<Library go={vi.fn()} />)
+    const files = () =>
+      within(within(row("Chunk sizes on the primer")).getByTestId("item-documents"))
+        .getAllByTestId("document-item")
+        .map((i) => within(i).getByTestId("document-facts").firstElementChild!.textContent)
+    await waitFor(() => expect(files()).toEqual(["chunking-primer.pdf", "NK_Resume.pdf"]))
+  })
+
   it("an experiment's document has the element too, and a removed upload says so and cannot be previewed", async () => {
     seed()
     await ready()

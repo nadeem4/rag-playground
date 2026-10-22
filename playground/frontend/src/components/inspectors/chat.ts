@@ -105,9 +105,12 @@ export function isLabelled(p: ChatPayload): boolean {
   return typeof p.stats?.claims === "number"
 }
 
-/** "2 of 3 parts cite a piece." Null on payloads that do not count claims. */
+/**
+ * "2 of 3 parts cite a piece." Null on payloads that do not count claims, and
+ * when there are none (an answer that only says the documents do not answer).
+ */
 export function checkLine(s: GroundingStats | undefined): string | null {
-  if (typeof s?.claims !== "number") return null
+  if (typeof s?.claims !== "number" || s.claims === 0) return null
   const verb = s.claims === 1 ? "part cites" : "parts cite"
   return `${s.citing ?? 0} of ${s.claims} ${verb} a piece.`
 }

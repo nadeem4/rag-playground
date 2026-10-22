@@ -553,7 +553,8 @@ export interface ChatCitation {
 /**
  * Plan I-20: claim counts per label, and marker ids that named no sentence.
  * Pandion #164 adds `claims` (parts that say something) and `citing` (those
- * that cite a piece: cited or weak); older payloads lack both.
+ * that cite a piece: cited or weak); older payloads lack both. A `not_found`
+ * part (chat version 4) is counted in `not_found` only, never in `claims`.
  */
 export interface GroundingStats {
   cited: number

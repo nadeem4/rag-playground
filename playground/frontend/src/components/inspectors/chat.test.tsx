@@ -299,6 +299,8 @@ describe("sentence-id grounding helpers", () => {
     expect(checkLine({ ...SID.stats!, claims: 3, citing: 2 })).toBe("2 of 3 parts cite a piece.")
     expect(checkLine({ ...SID.stats!, claims: 1, citing: 0 })).toBe("0 of 1 part cites a piece.")
     expect(checkLine(SID.stats!)).toBeNull()
+    // An answer that is only "The documents do not ..." has no claims, so no line.
+    expect(checkLine({ ...SID.stats!, cited: 0, weak: 0, similarity: 0, none: 0, not_found: 1, claims: 0, citing: 0 })).toBeNull()
     expect(checkLine(undefined)).toBeNull()
   })
 

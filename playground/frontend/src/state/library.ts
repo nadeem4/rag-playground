@@ -2,6 +2,7 @@ import type { SampleCard, Source } from "@/api/types"
 
 import { STAGE_VERB, type PipelineGraph } from "./graph"
 import { pipelineSteps } from "./evaluate"
+import { experimentDocuments } from "./experiments"
 import { asIncomingExperiment, MAX_EXPERIMENTS, rawExperiment, type SavedExperiment } from "./libraryExperiments"
 import { asIncoming, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
 
@@ -14,8 +15,8 @@ import { asIncoming, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
 export type DocRef = { sha: string; filename: string }
 
 export type LibraryItem =
-  | { kind: "pipeline"; id: string; name: string; savedAt: string; doc: DocRef | null; documents: DocRef[]; pipeline: SavedPipeline }
-  | { kind: "experiment"; id: string; name: string; savedAt: string; doc: DocRef | null; experiment: SavedExperiment }
+  | { kind: "pipeline"; id: string; name: string; savedAt: string; documents: DocRef[]; pipeline: SavedPipeline }
+  | { kind: "experiment"; id: string; name: string; savedAt: string; documents: DocRef[]; experiment: SavedExperiment }
 
 /** Pipelines and experiments in one list, newest first. */
 export function libraryItems(pipelines: readonly SavedPipeline[], experiments: readonly SavedExperiment[]): LibraryItem[] {
@@ -25,12 +26,10 @@ export function libraryItems(pipelines: readonly SavedPipeline[], experiments: r
       id: p.id,
       name: p.name,
       savedAt: p.savedAt,
-      // The first document decides the item's state; every one is named.
-      doc: p.documents[0] ?? null,
       documents: p.documents,
       pipeline: p,
     })),
-    ...experiments.map((e) => ({ kind: "experiment" as const, id: e.id, name: e.name, savedAt: e.savedAt, doc: e.doc, experiment: e })),
+    ...experiments.map((e) => ({ kind: "experiment" as const, id: e.id, name: e.name, savedAt: e.savedAt, documents: experimentDocuments(e), experiment: e })),
   ]
   return items.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
 }
@@ -108,11 +107,26 @@ export function docState(doc: DocRef | null, ctx: DocContext): DocState {
 
 export const isSoon = (s: DocState) => s.kind === "upload" && s.hoursLeft !== null && s.hoursLeft < SOON_HOURS
 
-/** Each upload the items use, once. A sample is always on the server, so it is never one. */
+/**
+ * The state of an item with several documents, and the document it is about:
+ * the first one gone, else the one leaving the demo soonest, else the first.
+ * With one document, that document's state.
+ */
+export function itemDocState(docs: readonly DocRef[], ctx: DocContext): { doc: DocRef | null; state: DocState } {
+  const all = docs.map((doc) => ({ doc, state: docState(doc, ctx) }))
+  const gone = all.find((d) => d.state.kind === "gone")
+  if (gone) return gone
+  const soon = all
+    .filter((d) => isSoon(d.state))
+    .sort((a, b) => (a.state.kind === "upload" && b.state.kind === "upload" ? (a.state.hoursLeft ?? 0) - (b.state.hoursLeft ?? 0) : 0))
+  return soon[0] ?? all[0] ?? { doc: null, state: { kind: "none" } }
+}
+
+/** Each upload the items use, every document of each, once. A sample is always on the server, so it is never one. */
 export function uploadsOf(items: readonly LibraryItem[], samples: readonly Pick<SampleCard, "sha">[] | null): DocRef[] {
   const seen = new Map<string, DocRef>()
-  for (const i of items) {
-    if (i.doc && !samples?.some((s) => s.sha === i.doc!.sha) && !seen.has(i.doc.sha)) seen.set(i.doc.sha, i.doc)
+  for (const d of items.flatMap((i) => i.documents)) {
+    if (!samples?.some((s) => s.sha === d.sha) && !seen.has(d.sha)) seen.set(d.sha, d)
   }
   return [...seen.values()]
 }

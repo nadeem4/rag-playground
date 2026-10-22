@@ -639,7 +639,9 @@ Experiments filters. Each row says what it runs, when it was saved and where its
 stands: a sample (always there), an upload and how many hours it has left on the demo,
 gone, or on this machine when you run locally. A pipeline's row also names every document
 it owns. Exported files carry that list, and a file exported before the list existed is
-read as a pipeline with its one document.
+read as a pipeline with its one document. When an item has several documents, the row
+speaks for the one that needs you: the first one gone, else the one leaving the demo
+soonest, else the first.
 
 Export writes version 2 files: each pipeline as its settings, documents and question.
 Files from older versions still import. A pipeline in one that cannot be opened here is
@@ -660,7 +662,8 @@ Export one item, the ones you tick, or everything, as one
 `rag-playground-<name>.ragplayground.json` file.
 
 - **With the document:** **Include the document** puts the PDF in the file, so the items
-  still work after the upload expires. On the demo it is on for uploads.
+  still work after the upload expires. On the demo it is on for uploads. Every upload an
+  item uses goes in, not only its first document.
 - **Without the document:** the file holds only the settings. A sample is always there, so
   items on a sample need nothing more. Items on an upload ask for the PDF again when opened.
 

@@ -10,6 +10,7 @@ import {
   bytesToBase64,
   docState,
   experimentSummary,
+  itemDocState,
   exportFileName,
   importResultLine,
   libraryItems,
@@ -66,7 +67,8 @@ describe("the library list", () => {
   it("puts pipelines and experiments in one list, newest first", () => {
     const items = libraryItems([pipeline("p1", "2026-10-01T00:00:00Z")], [experiment("e1", "2026-10-02T00:00:00Z")])
     expect(items.map((i) => [i.kind, i.id])).toEqual([["experiment", "e1"], ["pipeline", "p1"]])
-    expect(items[1].doc).toEqual({ sha: UP, filename: "notes.pdf" })
+    expect(items[1].documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
+    expect(items[0].documents).toEqual([{ sha: SAMPLE, filename: "primer.pdf" }])
   })
 
   it("sums up a pipeline by its steps and an experiment by its step and recipe count", () => {
@@ -109,6 +111,34 @@ describe("the document state", () => {
       [experiment("e1", "2026-10-02T00:00:00Z")],
     )
     expect(uploadsOf(items, samples)).toEqual([{ sha: UP, filename: "notes.pdf" }])
+  })
+
+  const OTHER = "ef".repeat(32)
+  const two = (): SavedPipeline => ({ ...pipeline("p2", "2026-10-01T00:00:00Z"), documents: [{ sha: UP, filename: "notes.pdf" }, { sha: OTHER, filename: "second.pdf" }] })
+
+  it("lists every upload of an item with several documents, a pipeline's and an experiment's", () => {
+    const e = { ...experiment("e2", "2026-10-02T00:00:00Z"), docs: [{ sha: SAMPLE, filename: "primer.pdf" }, { sha: OTHER, filename: "second.pdf" }] }
+    expect(uploadsOf(libraryItems([two()], []), samples)).toEqual([{ sha: UP, filename: "notes.pdf" }, { sha: OTHER, filename: "second.pdf" }])
+    expect(uploadsOf(libraryItems([], [e]), samples)).toEqual([{ sha: OTHER, filename: "second.pdf" }])
+  })
+
+  it("flags an item when any of its documents is gone or leaving soon, naming that document", () => {
+    const [item] = libraryItems([two()], [])
+    const fresh = "2026-10-04T11:00:00+00:00"
+    const gone = itemDocState(item.documents, { ...ctx, sources: [source(UP, fresh)] })
+    expect(gone).toEqual({ doc: { sha: OTHER, filename: "second.pdf" }, state: { kind: "gone" } })
+    const soon = itemDocState(item.documents, { ...ctx, sources: [source(UP, fresh), source(OTHER, "2026-10-03T14:30:00+00:00")] })
+    expect(soon).toEqual({ doc: { sha: OTHER, filename: "second.pdf" }, state: { kind: "upload", hoursLeft: 3 } })
+    const fine = itemDocState(item.documents, { ...ctx, sources: [source(UP, fresh), source(OTHER, fresh)] })
+    expect(fine).toEqual({ doc: { sha: UP, filename: "notes.pdf" }, state: { kind: "upload", hoursLeft: 23 } })
+  })
+
+  it("with one document, the item's state is that document's state", () => {
+    const one = { sha: UP, filename: "notes.pdf" }
+    for (const sources of [[], null, [source(UP, "2026-10-04T00:00:00+00:00")], [source(UP, "2026-10-03T14:30:00+00:00")]]) {
+      expect(itemDocState([one], { ...ctx, sources })).toEqual({ doc: one, state: docState(one, { ...ctx, sources }) })
+    }
+    expect(itemDocState([], { ...ctx, sources: [] })).toEqual({ doc: null, state: { kind: "none" } })
   })
 })
 
@@ -158,8 +188,7 @@ describe("export and import", () => {
 
   it("lists a pipeline with every one of its documents", () => {
     const [item] = libraryItems([pipeline("p1", "2026-10-01T00:00:00Z")], [])
-    expect(item.kind === "pipeline" && item.documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
-    expect(item.doc).toEqual({ sha: UP, filename: "notes.pdf" })
+    expect(item.documents).toEqual([{ sha: UP, filename: "notes.pdf" }])
   })
 
   it("refuses a file that is not a library export, in plain words", () => {

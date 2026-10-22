@@ -153,6 +153,18 @@ describe("Library", () => {
     await waitFor(() => expect(within(row("Resume, sections whole")).getByRole("button", { name: "Preview A primer on chunking" })).toBeTruthy())
   })
 
+  it("flags a pipeline whose second document is gone, by that document's name", async () => {
+    seed()
+    const listed = JSON.parse(window.localStorage.getItem("rag-playground:pipelines:v1")!)
+    listed[0].documents = [{ sha: UP, filename: "NK_Resume.pdf" }, { sha: GONE, filename: "my-notes.pdf" }]
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(listed))
+    resetPipelinesForTests()
+    render(<Library go={vi.fn()} />)
+    await waitFor(() =>
+      expect(within(row("Resume, sections whole")).getByText("my-notes.pdf is no longer on the demo. Opening this asks you to upload it again.")).toBeTruthy(),
+    )
+  })
+
   it("lists every document of an experiment saved on several", async () => {
     seed()
     const saved = JSON.parse(window.localStorage.getItem(EXPERIMENTS_KEY)!)

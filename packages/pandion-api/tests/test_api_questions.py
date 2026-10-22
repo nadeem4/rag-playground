@@ -268,6 +268,32 @@ def test_the_set_for_several_documents_names_each_file_its_questions_came_from(c
     assert client.get("/questions", params={"documents": [first]}).json()["filenames"] == ["report-set.json"]
 
 
+def test_a_newer_set_across_some_of_the_documents_is_never_merged_with_the_older_set(client):
+    first, second = two(client)
+    third = upload(client, "ferns.pdf", build_pdf([["Ferns need water weekly."]]))["sha"]
+    post_across(client, [first, second], [
+        {"id": "old-capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
+        {"id": "old-any", "question": "Bees anywhere?", "gold_answers": [BEES]},
+    ], filename="old.json")
+    post_across(client, [second, third], [
+        {"id": "new-any", "question": "Bees anywhere?", "gold_answers": [BEES]},
+    ], filename="new.json")
+    body = client.get("/questions", params={"documents": [first, second, third]}).json()
+    assert [q["id"] for q in body["questions"]] == ["new-any"]
+    assert body["filenames"] == ["new.json"]
+    # On its own, the first document still asks what it kept.
+    alone = client.get("/questions", params={"documents": [first]}).json()
+    assert [q["id"] for q in alone["questions"]] == ["old-capital", "old-any"]
+
+
+def test_a_set_kept_for_one_document_leaves_the_rest_of_its_older_set_across_documents_unasked(client):
+    first, second = two(client)
+    post_across(client, [first, second], [{"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    post_set(client, second, [{"id": "bees", "question": "Bees?", "gold_answers": [BEES]}])
+    body = client.get("/questions", params={"documents": [first, second]}).json()
+    assert [q["id"] for q in body["questions"]] == ["bees"]
+
+
 def test_unnamed_questions_stay_when_the_first_document_goes(client):
     first, second = two(client)
     post_across(client, [first, second], [{"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]}])

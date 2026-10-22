@@ -273,20 +273,40 @@ async def upload_questions_across(
     }
 
 
+def kept_sets(store: DocumentStore, shas: list[str]) -> dict[str, dict[str, Any]]:
+    """The set kept against each of these documents that has one, by sha.
+    Only sets saved together are merged: a set kept by POST /questions across
+    documents is left out when another of these documents it was saved across
+    now keeps a different set (a newer one saved across other documents, or a
+    set kept for that document alone), since that part of it was replaced."""
+    records: dict[str, dict[str, Any]] = {}
+    for sha in shas:
+        kept = store.questions(sha)
+        if kept.is_file():
+            records[sha] = json.loads(kept.read_text(encoding="utf-8"))
+    return {
+        sha: record
+        for sha, record in records.items()
+        if "across" not in record
+        or all(records[other].get("across") == record["across"] for other in record["across"] if other in records)
+    }
+
+
 def kept_questions(store: DocumentStore, shas: list[str], names: list[str]) -> list[dict[str, Any]]:
     """The questions of the sets kept against these documents, in their order.
     A question that names a document names the one it is kept against, by
     sha; one naming none is found in any of them. A question naming none from
     one set across documents (POST /questions) is kept against each of them
-    and asked once. An id two documents' sets both use is prefixed with each
-    document's name, so every question stays apart."""
+    and asked once. Only sets saved together are merged (`kept_sets`). An id
+    two documents' sets both use is prefixed with each document's name, so
+    every question stays apart."""
     sets: list[tuple[str, list[dict[str, Any]]]] = []
     shared: set[str] = set()
+    records = kept_sets(store, shas)
     for sha, name in zip(shas, names):
-        kept = store.questions(sha)
-        if not kept.is_file():
+        record = records.get(sha)
+        if record is None:
             continue
-        record = json.loads(kept.read_text(encoding="utf-8"))
         questions = []
         for q in record["set"]["questions"]:
             if q.get("document"):
@@ -325,11 +345,7 @@ def get_questions_across(
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     questions = kept_questions(store, shas, list(names))
-    filenames: list[str] = []
-    for sha in shas:
-        kept = store.questions(sha)
-        if kept.is_file():
-            filenames.append(json.loads(kept.read_text(encoding="utf-8"))["filename"])
+    filenames = [record["filename"] for record in kept_sets(store, shas).values()]
     return {"documents": shas, "count": len(questions), "questions": questions, "filenames": list(dict.fromkeys(filenames))}
 
 

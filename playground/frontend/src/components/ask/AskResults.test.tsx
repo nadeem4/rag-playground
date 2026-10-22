@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
+import { FIND_GOLD_URL, findGoldResponse } from "@/api/fixtures/findGold"
 import liveRegistry from "@/api/fixtures/registry.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchJson from "@/api/fixtures/output.search.json"
@@ -46,8 +47,9 @@ beforeEach(() => {
   }
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
+      if (url === FIND_GOLD_URL) return findGoldResponse(init)
       const payload = /^\/api\/v2\/results\/([^/]+)\/payload$/.exec(url)
       if (payload && payloads[payload[1]] !== undefined) return ok(await payloads[payload[1]])
       if (url === "/api/v2/results/rr1" || url === "/api/v2/results/rr2") {
@@ -775,11 +777,11 @@ describe("the finding sentence", () => {
     const card = { name: "primer", title: "t", blurb: "b", shows: "s", stresses: "chunk", pages: 3, default: false, filename: UPLOAD.filename, sha: UPLOAD.sha, question: "q" }
     const golds = [{ id: "q1", question: "What should I measure?", gold_answer: "compare strategies on the same parsed document" }]
     const base = vi.mocked(fetch).getMockImplementation()!
-    vi.mocked(fetch).mockImplementation(async (url) => {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/samples") return ok([card])
       if (url === "/api/samples/primer/questions") return ok(golds)
-      return base(url)
+      return base(url, init)
     })
     render(<AskPanel {...props(sampleGraph(LIVE, UPLOAD, "What should I measure?"), SEARCH_ONLY)} />)
     await waitFor(() => expect(screen.getByTestId("finding-sentence").textContent).toBe("Found in the 3rd piece: compare strategies on the same parsed document"))
@@ -845,11 +847,11 @@ describe("the Searched for line", () => {
     const card = { name: "primer", title: "t", blurb: "b", shows: "s", stresses: "chunk", pages: 3, default: false, filename: UPLOAD.filename, sha: UPLOAD.sha, question: "q" }
     const golds = [{ id: "q1", question: "What should I measure?", gold_answer: "compare strategies on the same parsed document" }]
     const base = vi.mocked(fetch).getMockImplementation()!
-    vi.mocked(fetch).mockImplementation(async (url) => {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === "/api/samples") return ok([card])
       if (url === "/api/samples/primer/questions") return ok(golds)
-      return base(url)
+      return base(url, init)
     })
     payloads.q3 = { text: "measure compare strategies", original: "What should I measure?" }
     const g = setRewrite(sampleGraph(LIVE, UPLOAD, "What should I measure?"), LIVE, "llm")

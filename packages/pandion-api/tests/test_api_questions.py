@@ -78,3 +78,36 @@ def test_a_policy_can_check_a_set_without_keeping_it(tmp_path):
         assert body["summary"]["found"] == 1
         assert c.get(f"/documents/{sha}/questions").json() is None
     assert not (tmp_path / "data" / "sources" / "questions").exists()
+
+
+def test_find_gold_places_a_passage_by_the_eval_steps_rule(client):
+    pieces = ["Nothing here.", "the capital of france is “paris.”", PASSAGE]
+    r = client.post("/golds/find", json={"golds": ['The capital of France is "Paris."'], "texts": pieces})
+    assert r.status_code == 200
+    assert r.json() == {"found": {"index": 1, "gold": 'The capital of France is "Paris."', "match": "normalized"}}
+
+
+def test_find_gold_says_null_when_no_piece_holds_one(client):
+    assert client.post("/golds/find", json={"golds": [PASSAGE], "texts": ["Lyon."]}).json() == {"found": None}
+    assert client.post("/golds/find", json={"golds": [PASSAGE], "texts": []}).json() == {"found": None}
+
+
+def test_find_gold_refuses_what_it_does_not_look_through(client):
+    assert client.post("/golds/find", json={"golds": [], "texts": ["x"]}).status_code == 422
+    assert client.post("/golds/find", json={"golds": ["x"], "texts": ["y"] * 101}).status_code == 422
+    assert client.post("/golds/find", json={"golds": ["x" * 10_001], "texts": []}).status_code == 422
+    assert client.post("/golds/find", json={"golds": ["x"], "texts": ["y" * 500_000, "y" * 500_001]}).status_code == 422
+
+
+def test_find_gold_caps_keep_one_call_small(client):
+    """The caps bound one call's work: 20 passages of at most 10,000 characters,
+    and 100 pieces of at most 1,000,000 characters together. One long piece
+    is looked through whole."""
+    from pandion_api.routes.questions import MAX_GOLDS, MAX_PIECES, MAX_TEXT_CHARS, MAX_TOTAL_CHARS
+
+    assert (MAX_GOLDS, MAX_PIECES, MAX_TEXT_CHARS, MAX_TOTAL_CHARS) == (20, 100, 10_000, 1_000_000)
+    body = {"golds": ["g" * MAX_TEXT_CHARS] * MAX_GOLDS, "texts": ["t" * 10_000] * MAX_PIECES}
+    assert client.post("/golds/find", json=body).json() == {"found": None}
+    long = "t" * 900_000 + " the gold passage"
+    found = client.post("/golds/find", json={"golds": ["the gold passage"], "texts": [long]}).json()["found"]
+    assert found == {"index": 0, "gold": "the gold passage", "match": "exact"}

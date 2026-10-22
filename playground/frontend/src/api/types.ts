@@ -606,6 +606,11 @@ export interface LearnDocument {
 // Plan I-24 and I-25: the question set and the `use_case/eval` output.
 
 /** One entry of `GET /api/samples/questions`, which returns a bare array. */
+/** `POST /api/v2/golds/find`: the place of the first piece holding a gold passage, the passage, and how it matched. */
+export interface FindGoldResult {
+  found: { index: number; gold: string; match: "exact" | "normalized" | "reworded" } | null
+}
+
 export interface SampleQuestion {
   id: string
   question: string

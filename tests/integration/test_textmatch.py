@@ -42,7 +42,7 @@ def test_offsets_point_back_into_the_original_text() -> None:
 
 
 def test_eval_keeps_its_old_name_for_the_shared_rule() -> None:
-    # The miss trace imports `_normalise` from the eval step.
+    # Older code imports `_normalise` from the eval step.
     assert _normalise("“A”") == normalise("“A”")
 
 

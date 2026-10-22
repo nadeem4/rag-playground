@@ -76,6 +76,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `GET /documents/{id}/questions` | the set kept for the document, or `null` |
 | `DELETE /documents/{id}/questions` | remove it: 204 |
 | `POST /documents/{id}/questions/generate` | `{"model", "count"?, "model_name"?, "base_url"?}`: a model writes up to `count` test questions (default 15) for the document, as pdfium reads it, one call a part (`pandion.evaluation.write_questions`). A run: 202 `{"run_id"}`. See [Questions written for you](#questions-written-for-you). |
+| `POST /golds/find` | `{"golds": [...], "texts": [...]}`: which of `texts`, pieces in the order a reader meets them, first holds any gold passage, by the eval step's own rule (`pandion.evaluation.find_gold`): `{"found": {"index", "gold", "match"}}`, or `{"found": null}`. At most 20 golds of up to 10,000 characters each, and 100 pieces of up to 1,000,000 characters together (a 422 past them). A single piece has no cap of its own, so a long one is looked through whole. These caps keep one call under about half a second of work, so the route needs no rate limit. Nothing runs or is kept. |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. |
 | `GET /runs/{run_id}` | the run's status, its whole event log, and once it ended its `result` |
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |

@@ -145,6 +145,7 @@ function serve({
   resultFails = 0,
   across = null,
   acrossUpload,
+  acrossAfter,
 }: {
   reg?: unknown
   sampleSha?: string | null
@@ -161,8 +162,10 @@ function serve({
   across?: QuestionSetAcross | null
   /** What `POST /api/v2/questions` answers. */
   acrossUpload?: QuestionSetAcrossUpload
+  /** What `GET /api/v2/questions?documents=...` has once a set was posted. */
+  acrossAfter?: QuestionSetAcross
 } = {}): Served {
-  const served: Served = { evaluations: [], cancelled: [], reads: 0, urls: [], acrossUploads: [] }
+  const served: Served = { evaluations: [], cancelled: [], reads: 0, urls: [], acrossUploads: [], generated: [] }
   let fails = resultFails
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
   const missing = () => new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
@@ -215,7 +218,13 @@ function serve({
             ])
           : missing()
       if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)
-      if (url.startsWith("/api/v2/questions?")) return ok(across ?? { documents: [], count: 0, questions: [] })
+      if (url.startsWith("/api/v2/questions?"))
+        return ok((served.acrossUploads.length && acrossAfter) || across || { documents: [], count: 0, questions: [] })
+      const generate = /^\/api\/v2\/documents\/([^/]+)\/questions\/generate$/.exec(url)
+      if (generate && init?.method === "POST") {
+        served.generated.push({ sha: generate[1], body: JSON.parse(String(init.body)) })
+        return ok({ run_id: `w${served.generated.length}` })
+      }
       if (url === "/api/v2/questions" && init?.method === "POST") {
         served.acrossUploads.push(init.body as FormData)
         return acrossUpload ? ok(acrossUpload) : missing()
@@ -242,6 +251,8 @@ interface Served {
   urls: string[]
   /** Each `POST /api/v2/questions` body. */
   acrossUploads: FormData[]
+  /** Each `POST /api/v2/documents/{sha}/questions/generate`, in order. */
+  generated: { sha: string; body: unknown }[]
 }
 
 /** Serves the default registry, stores the sample graph for `SOURCE`, and renders Evaluate. */
@@ -1770,10 +1781,117 @@ describe("with several documents", () => {
     const rows = within(card).getAllByRole("listitem").map((li) => li.textContent)
     expect(rows).toEqual(["chunking-primer.pdf1 question", "field-guide.docx1 question", "no document named1 question, found in any document"])
     expect(within(card).getByRole("button", { name: "Upload another set" })).toBeTruthy()
-    // Writing for one document would replace that document's part of the set, so it waits for writing that joins it.
-    expect(within(card).queryByRole("button", { name: "Write questions for me" })).toBeNull()
+    expect(within(card).getByRole("button", { name: "Write questions for me" })).toBeTruthy()
     expect(within(card).getByRole("link", { name: "Start from the template" }).getAttribute("href")).toBe("/api/questions/template?format=csv")
     expect(screen.getByText(/3 questions ready, across 2 documents\. Press Evaluate to score this pipeline\./)).toBeTruthy()
+  })
+
+  it("writes for each document picked, one at a time, and saving keeps every question already in the set", async () => {
+    const kept: QuestionSetAcross = {
+      ...ACROSS,
+      questions: [
+        question({ id: "overlap", question: "What does overlap do?", gold_answers: ["Overlap keeps context."], tags: ["hard"], answer: "It keeps context.", document: SOURCE.sha }),
+        question({ id: "units", question: "What unit are depths in?", gold_answers: ["Depths are in metres."], document: GUIDE.sha }),
+        question({ id: "page", question: "What is a page?", gold_answers: ["A page is a page."] }),
+      ],
+    }
+    const written = {
+      questions: [{ id: "q1", question: "What is written here?", gold_answers: ["This is written here."], answer: "", tags: [], document: "x" }],
+      dropped: [],
+      usage: { input_tokens: 10, output_tokens: 5, model: "claude-haiku-4-5" },
+    }
+    const after: QuestionSetAcross = {
+      ...kept,
+      count: 5,
+      filenames: ["golden-set.csv + 2 written by Claude Haiku 4.5.json"],
+      questions: [
+        ...kept.questions,
+        question({ id: "q1", question: "What is written here?", gold_answers: ["This is written here."], document: SOURCE.sha }),
+        question({ id: "q1-2", question: "What is written here?", gold_answers: ["This is written here."], document: GUIDE.sha }),
+      ],
+    }
+    const served = serve({
+      across: kept,
+      acrossAfter: after,
+      result: written as unknown as EvaluationResult,
+      acrossUpload: {
+        documents: [SOURCE.sha, GUIDE.sha],
+        filename: "golden-set.csv + 2 written by Claude Haiku 4.5.json",
+        format: "json",
+        count: 5,
+        stored: true,
+        note: "",
+        parser: "docling, pdfium",
+        parser_note: "Checked.",
+        summary: { questions: 5, found: 5, found_normalized: 0, not_found: 0 },
+        questions: [],
+      },
+    })
+    storeGraph(graph)
+    function WithKey() {
+      const { setKey } = useApiKey()
+      useEffect(() => setKey("anthropic", "sk-ant-test"), [setKey])
+      return null
+    }
+    render(
+      <ApiKeyProvider>
+        <WithKey />
+        <Evaluate />
+      </ApiKeyProvider>,
+    )
+    const card = await screen.findByTestId("question-set-across")
+    await waitFor(() => expect(within(card).getByTestId("set-line").textContent).toMatch(/^3 questions/))
+    fireEvent.click(within(card).getByRole("button", { name: "Write questions for me" }))
+    const sheet = await screen.findByRole("dialog")
+    const writeFor = within(sheet).getByRole("group", { name: "Documents to write for" })
+    expect(within(writeFor).getByRole("checkbox", { name: /chunking-primer\.pdf/ })).toBeTruthy()
+    expect(writeFor.textContent).toContain("1 in your set")
+    fireEvent.change(within(sheet).getByLabelText("Questions per document"), { target: { value: "1" } })
+    expect(sheet.textContent).toContain(
+      "1 for each of 2 documents: 2 questions, written one document at a time. They join your set; nothing in it is replaced.",
+    )
+    fireEvent.click(within(sheet).getByRole("button", { name: "Write 2 questions" }))
+
+    // One document at a time: the second starts only when the first has ended.
+    await waitFor(() => expect(served.generated).toHaveLength(1))
+    expect(served.generated[0]).toEqual({ sha: SOURCE.sha, body: { model: expect.any(String), count: 1 } })
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBeGreaterThan(0))
+    expect(sheet.textContent).toContain("Document 1 of 2")
+    DrivenEventSource.instances[DrivenEventSource.instances.length - 1].emit(1, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(served.generated).toHaveLength(2))
+    expect(served.generated[1].sha).toBe(GUIDE.sha)
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBeGreaterThan(1))
+    DrivenEventSource.instances[DrivenEventSource.instances.length - 1].emit(1, { event: "stream_end", status: "finished", ok: true })
+
+    // The review, grouped by document.
+    const groups = await within(sheet).findAllByTestId("review-group")
+    expect(groups.map((g) => g.querySelector("[data-file-tag]")!.textContent)).toEqual(["chunking-primer.pdf", "field-guide.docx"])
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save 2 questions" }))
+
+    await waitFor(() => expect(served.acrossUploads).toHaveLength(1))
+    const body = served.acrossUploads[0]
+    expect(body.getAll("documents")).toEqual([SOURCE.sha, GUIDE.sha])
+    const file = body.get("file") as File
+    expect(file.name).toBe("golden-set.csv + 2 written by Claude Haiku 4.5.json")
+    expect(JSON.parse(await file.text()).questions).toEqual([
+      { id: "overlap", question: "What does overlap do?", gold_answers: ["Overlap keeps context."], tags: ["hard"], answer: "It keeps context.", document: SOURCE.sha },
+      { id: "units", question: "What unit are depths in?", gold_answers: ["Depths are in metres."], tags: [], answer: "", document: GUIDE.sha },
+      { id: "page", question: "What is a page?", gold_answers: ["A page is a page."], tags: [], answer: "", document: "" },
+      { id: "q1", question: "What is written here?", gold_answers: ["This is written here."], tags: [], answer: "", document: SOURCE.sha },
+      { id: "q1-2", question: "What is written here?", gold_answers: ["This is written here."], tags: [], answer: "", document: GUIDE.sha },
+    ])
+    // The sheet closes and the card counts the new questions.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    await waitFor(() =>
+      expect(within(card).getByTestId("set-line").textContent).toBe(
+        "5 questions: 3 from golden-set.csv and 2 written by Claude Haiku 4.5, covering all 2 documents",
+      ),
+    )
+    expect(within(card).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "chunking-primer.pdf2 questions",
+      "field-guide.docx2 questions",
+      "no document named1 question, found in any document",
+    ])
   })
 
   it("uploads another set for every document at once", async () => {
@@ -1834,6 +1952,73 @@ describe("with several documents", () => {
     const again = await screen.findByTestId("question-set-across")
     await waitFor(() => expect(within(again).getByTestId("set-line").textContent).toBe("2 questions from golden-set.csv, covering 1 of 2 documents"))
     expect(row().textContent).toContain("Metres.")
+  })
+
+  it("saving questions written beside the samples' sets says which came from the samples", async () => {
+    const written = {
+      questions: [{ id: "w", question: "What is written here?", gold_answers: ["This is written here."], answer: "", tags: [], document: "x" }],
+      dropped: [],
+      usage: { input_tokens: 10, output_tokens: 5, model: "claude-haiku-4-5" },
+    }
+    const name = "the samples + 2 written by Claude Haiku 4.5.json"
+    const served = serve({
+      across: null,
+      result: written as unknown as EvaluationResult,
+      acrossAfter: {
+        documents: [SOURCE.sha, GUIDE.sha],
+        count: 4,
+        filenames: [name],
+        questions: [
+          question({ id: "s1", question: "One?", gold_answers: ["One."], document: SOURCE.sha }),
+          question({ id: "s2", question: "Two?", gold_answers: ["Two."], document: SOURCE.sha }),
+          question({ id: "w", question: "What is written here?", gold_answers: ["This is written here."], document: SOURCE.sha }),
+          question({ id: "w-2", question: "What is written here?", gold_answers: ["This is written here."], document: GUIDE.sha }),
+        ],
+      },
+      acrossUpload: {
+        documents: [SOURCE.sha, GUIDE.sha],
+        filename: name,
+        format: "json",
+        count: 4,
+        stored: true,
+        note: "",
+        parser: "docling, pdfium",
+        parser_note: "Checked.",
+        summary: { questions: 4, found: 4, found_normalized: 0, not_found: 0 },
+        questions: [],
+      },
+    })
+    storeGraph(graph)
+    function WithKey() {
+      const { setKey } = useApiKey()
+      useEffect(() => setKey("anthropic", "sk-ant-test"), [setKey])
+      return null
+    }
+    render(
+      <ApiKeyProvider>
+        <WithKey />
+        <Evaluate />
+      </ApiKeyProvider>,
+    )
+    const card = await screen.findByTestId("question-set-across")
+    await waitFor(() => expect(within(card).getByTestId("set-line").textContent).toBe("2 questions from the samples, covering 1 of 2 documents"))
+    fireEvent.click(within(card).getByRole("button", { name: "Write questions for me" }))
+    const sheet = await screen.findByRole("dialog")
+    fireEvent.change(within(sheet).getByLabelText("Questions per document"), { target: { value: "1" } })
+    fireEvent.click(within(sheet).getByRole("button", { name: "Write 2 questions" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBeGreaterThan(0))
+    DrivenEventSource.instances[DrivenEventSource.instances.length - 1].emit(1, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBeGreaterThan(1))
+    DrivenEventSource.instances[DrivenEventSource.instances.length - 1].emit(1, { event: "stream_end", status: "finished", ok: true })
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Save 2 questions" }))
+
+    await waitFor(() => expect(served.acrossUploads).toHaveLength(1))
+    const file = served.acrossUploads[0].get("file") as File
+    expect(file.name).toBe(name)
+    expect(JSON.parse(await file.text()).questions).toHaveLength(4)
+    await waitFor(() =>
+      expect(within(card).getByTestId("set-line").textContent).toBe("4 questions: 2 from the samples and 2 written by Claude Haiku 4.5, covering all 2 documents"),
+    )
   })
 
   it("uses the samples' own sets when none is kept, each naming its sample", async () => {

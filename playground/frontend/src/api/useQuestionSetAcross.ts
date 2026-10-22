@@ -24,8 +24,8 @@ import { v2 } from "./v2"
  * replaces the whole set. With nothing kept, the bundled samples among the
  * documents lend their own sets, each question naming its sample. A hosted
  * demo keeps nothing, so an upload lives in this browser tab, whole. Write
- * questions for me is not offered with several documents yet: it writes for
- * one document and would replace that document's part of the set.
+ * questions for me saves through the same upload, the set as it is plus the
+ * questions written, so it adds to the set.
  *
  * `shas` empty means one document: nothing is asked, and `useQuestionSet`
  * does the work as before.

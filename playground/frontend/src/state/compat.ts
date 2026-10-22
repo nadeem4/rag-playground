@@ -41,12 +41,14 @@ function list(items: string[]): string {
 
 /** `upstream` maps each of the candidate's input ports to the transform wired into it, when known. */
 export function compatibility(candidate: TransformInfo, upstream: Record<string, TransformInfo | undefined>): Compat {
-  // A parser that declares its formats, behind a source whose document is another one (`upstreamFor` adds `format`).
+  // A parser that declares its formats, behind a source with a document of another one (`upstreamFor` adds
+  // `format`: one format, or the list when the documents are of several).
   const formats = candidate.provides?.formats
   if (Array.isArray(formats)) {
     for (const up of Object.values(upstream)) {
       const format = up?.provides?.format
-      if (typeof format === "string" && !formats.includes(format)) return { kind: "hard", reason: readsLine(candidate.name, formats.map(String)) }
+      const seen = typeof format === "string" ? [format] : Array.isArray(format) ? format.map(String) : []
+      if (seen.some((f) => !formats.includes(f))) return { kind: "hard", reason: readsLine(candidate.name, formats.map(String)) }
     }
   }
   for (const [port, need] of Object.entries(candidate.requires ?? {})) {

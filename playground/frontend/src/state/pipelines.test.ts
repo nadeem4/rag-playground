@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { graphToConfig } from "./config"
-import { withDocument } from "./document"
+import { documentsOf, withDocument, withDocuments } from "./document"
 import { addEnrich, initialGraph, sampleGraph, setConfig, setTransform } from "./graph"
 import { buildExport, libraryItems, parseImport } from "./library"
 import {
@@ -405,6 +405,36 @@ describe("the Library list as configs", () => {
     expect(p.documents).toEqual([now])
     expect(p.savedAt).toBe(saved.savedAt)
     expect(isEdited(p, withDocument(usableGraph(saved, R)!, now))).toBe(false)
+  })
+
+  it("a saved pipeline keeps every document, and a sample's new fingerprint replaces only its own", () => {
+    const old = { sha: "9".repeat(64), filename: "primer.pdf" }
+    const now = { sha: "2".repeat(64), filename: "primer.pdf" }
+    const notes = { sha: "3".repeat(64), filename: "notes.md" }
+    const { saved } = savePipeline("Two", withDocuments(sampleGraph(R, DOC), [notes, old]))!
+    expect(saved.documents).toEqual([notes, old])
+    expect(documentsOf(usableGraph(saved, R)!)).toEqual([notes, old])
+    followSample(old.sha, now)
+    expect(readPipelines().find((x) => x.id === saved.id)!.documents).toEqual([notes, now])
+  })
+
+  it("a saved pipeline that holds the old and the new copy of a sample keeps the new one once", () => {
+    const old = { sha: "9".repeat(64), filename: "primer.pdf" }
+    const now = { sha: "2".repeat(64), filename: "primer.pdf" }
+    const notes = { sha: "3".repeat(64), filename: "notes.md" }
+    const { saved } = savePipeline("Both", withDocuments(sampleGraph(R, DOC), [old, notes, now]))!
+    followSample(old.sha, now)
+    const p = readPipelines().find((x) => x.id === saved.id)!
+    expect(p.documents).toEqual([now, notes])
+    expect(isEdited(p, usableGraph(p, R)!)).toBe(false)
+  })
+
+  it("a share link keeps every document of the pipeline it carries", () => {
+    const notes = { sha: "3".repeat(64), filename: "notes.md" }
+    const shared = decodePipeline(encodePipeline("Two", withDocuments(sampleGraph(R, DOC), [DOC, notes])), R)
+    if (!shared?.ok) throw new Error("the link did not open")
+    expect(shared.documents).toEqual([DOC, notes])
+    expect(documentsOf(shared.graph)).toEqual([DOC, notes])
   })
 
   it("fromOld keeps the old documents list only when it agrees with the graph's document", () => {

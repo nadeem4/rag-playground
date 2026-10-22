@@ -5,6 +5,7 @@ import { defaultsFor } from "@/components/fields/schema"
 import { formatOf } from "@/lib/formats"
 
 import { columnOf, graphToConfig, unknownStrategy } from "./config"
+import { docsOfSource } from "./sourceDocs"
 import { keepUndrawn, parseWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
 
 /**
@@ -398,9 +399,9 @@ export function upstreamFor(g: PipelineGraph, registry: Registry, id: string): R
     const info = srcNode ? infoFor(registry, srcNode) : undefined
     if (!srcNode || !info) continue
     const provides = effectiveProvides(g, registry, srcNode.id)
-    // The document's format, so a parser that cannot read it is judged before it runs.
-    const format = srcNode.stage === "source" ? formatOf(String(srcNode.config?.filename ?? "")) : null
-    out[port] = { ...info, provides: format ? { ...provides, format } : provides }
+    // Every document's format, so a parser that cannot read one of them is judged before it runs.
+    const formats = srcNode.stage === "source" ? [...new Set(docsOfSource(srcNode.config).flatMap((d) => formatOf(d.filename) ?? []))] : []
+    out[port] = { ...info, provides: formats.length ? { ...provides, format: formats.length === 1 ? formats[0] : formats } : provides }
   }
   return out
 }

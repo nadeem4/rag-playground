@@ -41,14 +41,18 @@ function pieceFinding(c: Chunk, index: number, file?: FileInfo): FindingPart[] {
 export function ChunkEvidence({
   set,
   files,
-  stats = set.stats,
+  stats: given,
+  statsFailed = false,
 }: {
   set: ChunkSet
   /** With several documents: each file's own chunk set, in the pipeline's order. */
   files?: { file: FileInfo; set: ChunkSet }[]
-  /** The numbers to show: with several documents, the totals over all of them. */
+  /** With several documents: Pandion's totals over all of them, undefined until they arrive (never one file's numbers). */
   stats?: ChunkStats
+  /** With several documents: the totals could not be read. */
+  statsFailed?: boolean
 }) {
+  const stats = files ? given : (given ?? set.stats)
   const [all, setAll] = useState(false)
   // Every piece, with its number in its own document and, with several, its file.
   const pieces = files ? files.flatMap(({ file, set: s }) => s.chunks.map((c, k) => ({ c, k, file }))) : set.chunks.map((c, k) => ({ c, k, file: undefined }))
@@ -65,14 +69,26 @@ export function ChunkEvidence({
   ]
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <dl data-testid="chunk-numbers" className="m-0 grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-x-3 gap-y-2">
-        {numbers.map(([label, v]) => (
-          <div key={label} className="flex flex-col">
-            <dt className="order-2 text-xs text-fg-muted">{label}</dt>
-            <dd className="m-0 font-mono text-lg font-semibold tabular-nums">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      {files && !stats ? (
+        statsFailed ? (
+          <p role="alert" className="m-0 text-sm text-danger">
+            The numbers over every document could not be read. Run again to try once more.
+          </p>
+        ) : (
+          <p role="status" className="m-0 text-sm text-fg-muted">
+            Adding up the numbers over every document.
+          </p>
+        )
+      ) : (
+        <dl data-testid="chunk-numbers" className="m-0 grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-x-3 gap-y-2">
+          {numbers.map(([label, v]) => (
+            <div key={label} className="flex flex-col">
+              <dt className="order-2 text-xs text-fg-muted">{label}</dt>
+              <dd className="m-0 font-mono text-lg font-semibold tabular-nums">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {n ? (
         <div className="flex flex-col gap-1">
           {files ? <FileScale lines={files} /> : <ChunkBar data={set} size="bar" />}

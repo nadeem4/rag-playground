@@ -29,6 +29,7 @@ import { CONTROL } from "@/components/fields/types"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { agreementText, compareLists, hitRows, type HitRowData } from "@/components/inspectors/hits"
 import { embeddingCounts, type IndexDescriptor } from "@/components/inspectors/IndexInspector"
+import type { HitFile } from "@/components/inspectors/RetrievalResultInspector"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { chunkSlot } from "@/components/inspectors/spans"
 import type { InspectorStatus } from "@/components/inspectors/status"
@@ -540,8 +541,8 @@ function Sweep({
   const several = files.length > 1
   const docsKey = docs.map((d) => d.sha).join(",")
   // The document is the working pipeline's, changed on the Document line. Missing or none blocks a run; a new one leaves the results on the old.
-  const { status: docStatus } = useDocument()
-  const noDocument = needsDocument(docStatus)
+  const { status: docStatus, missing: missingDoc } = useDocument()
+  const noDocument = needsDocument(docStatus) || missingDoc !== null
 
   // Per variant: the through node's output, the chunk set to place hits on,
   // and the index descriptor (for its embedding counts).
@@ -569,10 +570,24 @@ function Sweep({
   }))
   const payload = usePayloads(ids.flatMap((x) => [x.through, x.chunks, x.index, ...(x.files ?? [])]))
   const totals = useChunkTotals(ids.map((x) => x.files ?? []))
-  /** A recipe's chunk numbers: Pandion's totals over every document with several, its one set's otherwise. */
+  // A chunk run over several documents: its numbers are only ever Pandion's totals, never one file's.
+  const severalChunk = several && shownThrough.stage === "chunk"
+  /** A recipe's chunk numbers: Pandion's totals over every document with several (undefined until they arrive), its one set's otherwise. */
   const statsOf = (i: number): ChunkStats | undefined => {
+    if (!severalChunk) return (payload(ids[i]?.through).data as ChunkSet | undefined)?.stats
     const own = ids[i]?.files
-    return own ? totals(own) : (payload(ids[i]?.through).data as ChunkSet | undefined)?.stats
+    return own ? totals(own).stats : undefined
+  }
+  /** The totals for this recipe could not be read. */
+  const totalsFailed = (i: number) => {
+    const own = severalChunk ? ids[i]?.files : null
+    return own ? totals(own).failed : false
+  }
+  /** With several documents, a search column's files with each one's own chunk set. */
+  const hitFiles = (i: number): HitFile[] | undefined => {
+    if (!several || shownThrough.stage === "chunk") return undefined
+    const own = chunkNode ? perFile(stateOf(i), chunkNode.id) : null
+    return files.map((f, k) => ({ ...f, chunksId: own?.[k] }))
   }
   /** Each file's chunk set with its file, for the scale lines; undefined with one document or until all arrived. */
   const linesOf = (i: number): { file: FileInfo; set: ChunkSet }[] | undefined => {
@@ -829,7 +844,7 @@ function Sweep({
     const searchedSet = (payload(ids[i]?.chunks).data as ChunkSet | undefined)?.chunks
     const answer = answerId(i, hits)
     const lines = target.stage === "chunk" ? linesOf(i) : undefined
-    const ready = st.kind === "done" && (target.stage !== "chunk" || stats !== null) && (target.stage !== "retrieve" || hits !== null)
+    const ready = st.kind === "done" && (target.stage !== "chunk" || stats !== null || totalsFailed(i)) && (target.stage !== "retrieve" || hits !== null)
     return {
       i,
       name: submittedNames[i].name,
@@ -1032,8 +1047,10 @@ function Sweep({
           embeddings={target.stage === "index" ? embeddingCounts(descriptor) : null}
           hits={hitRowLists[i]}
           answer={answerId(i, hitRowLists[i])}
-          files={linesOf(i)}
+          files={severalChunk ? (linesOf(i) ?? null) : undefined}
           stats={statsOf(i)}
+          statsFailed={totalsFailed(i)}
+          hitFiles={hitFiles(i)}
         />
         )}
       </section>
@@ -1329,6 +1346,11 @@ function Sweep({
                 </div>
               </OpenView>
             ) : null}
+            {overview && rows.some((r) => totalsFailed(r.i)) ? (
+              <p role="alert" className="m-0 px-3 pt-3 text-sm text-danger">
+                The numbers over every document could not be read. Run again to try once more.
+              </p>
+            ) : null}
             {overview ? (
               <div hidden={openIds !== null}>
               <Overview
@@ -1396,6 +1418,8 @@ export function VariantResult({
   answer = null,
   files,
   stats,
+  statsFailed = false,
+  hitFiles,
 }: {
   state?: VariantState
   pending: boolean
@@ -1412,9 +1436,12 @@ export function VariantResult({
   hits?: HitRowData[] | null
   /** The chunk id of the piece that holds the known answer. */
   answer?: string | null
-  /** A chunk run over several documents: each file's chunk set, and the totals over them all. */
-  files?: { file: FileInfo; set: ChunkSet }[]
+  /** A chunk run over several documents: each file's chunk set (null while they load), and the totals over them all. */
+  files?: { file: FileInfo; set: ChunkSet }[] | null
   stats?: ChunkStats
+  statsFailed?: boolean
+  /** A search over several documents: each file, with its own chunk set. */
+  hitFiles?: readonly HitFile[]
 }) {
   const n = state?.nodes[node.id]
   const failed = state ? Object.values(state.nodes).find((x) => x.status === "failed") : undefined
@@ -1443,10 +1470,19 @@ export function VariantResult({
   } else if (n.status === "skipped") {
     body = <EmptyState title="Skipped">A step above it failed, or the run was cancelled.</EmptyState>
   } else if (type === "chunk_set" && status.kind === "ready" && Array.isArray((data as ChunkSet | undefined)?.chunks)) {
-    body = files ? <ChunkEvidence set={data as ChunkSet} files={files} stats={stats} /> : <ChunkEvidence set={data as ChunkSet} />
+    body =
+      files === null ? (
+        <p role="status" className="text-sm text-fg-muted">
+          Loading each document's pieces.
+        </p>
+      ) : files ? (
+        <ChunkEvidence set={data as ChunkSet} files={files} stats={stats} statsFailed={statsFailed} />
+      ) : (
+        <ChunkEvidence set={data as ChunkSet} />
+      )
   } else if (hits && status.kind === "ready") {
     evidence = true
-    body = <RetrieveEvidence rows={hits} chunkSet={chunks as ChunkSet | undefined} agreement={agreement} answer={answer} />
+    body = <RetrieveEvidence rows={hits} chunkSet={chunks as ChunkSet | undefined} agreement={agreement} answer={answer} files={hitFiles} />
   } else {
     body = <ArtifactInspector type={type} data={data} status={status} context={chunks ? { chunks: chunks as never } : undefined} />
   }

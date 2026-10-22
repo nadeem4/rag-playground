@@ -298,8 +298,8 @@ export function RetrievalView({ rows, chunkSet, facts, showDetail = true, doc, f
             compact={compact}
             lit={lit}
             answer={answer}
-            // A piece from another of several documents is not in this chunk set: its own ordinal is its number there.
-            pieceOf={(r) => (chunkSet ? (pieces.get(r.chunk_id) ?? (fileOfRow(r) ? (ownPieces.get(r.chunk_id) ?? r.ordinal) : null)) : r.ordinal)}
+            // With several documents a piece's number is its place in its own file's chunk set (its ordinal until that loads).
+            pieceOf={(r) => (fileOfRow(r) ? (ownPieces.get(r.chunk_id) ?? r.ordinal) : chunkSet ? (pieces.get(r.chunk_id) ?? null) : r.ordinal)}
             sectionOf={(r) => r.section ?? sections.get(r.chunk_id) ?? null}
           />
           {layout && chunkSet ? (

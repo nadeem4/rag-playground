@@ -319,7 +319,7 @@ export async function chooseDocuments(docs: readonly DocRef[]): Promise<void> {
   await chooseDocument(docs[0])
   const current = readWorking()
   if (docs.length < 2 || !current) return
-  set({ known: new Set([...state.known, ...docs.map((d) => d.sha)]) })
+  // Not marked known: each file is checked against the lists, so one that expired since the save shows as missing.
   storeWorking({ ...current, documents: docs.map((d) => ({ sha: d.sha, filename: d.filename })) })
 }
 
@@ -384,6 +384,8 @@ export interface DocumentState {
   /** Every document of the working pipeline, in order. */
   documents: DocRef[]
   status: DocStatus
+  /** The first of the pipeline's documents the lists say is gone, or null. */
+  missing: DocRef | null
   samples: SampleCard[] | null
   /** True when the samples list could not be read. */
   samplesFailed: boolean
@@ -424,6 +426,7 @@ export function useDocument(): DocumentState {
     doc: stable,
     documents,
     status: docStatus(stable, s.sources, s.samples, s.samplesFailed, s.known),
+    missing: documents.find((d) => docStatus(d, s.sources, s.samples, s.samplesFailed, s.known) === "missing") ?? null,
     samples: s.samples,
     samplesFailed: s.samplesFailed,
     uploads,

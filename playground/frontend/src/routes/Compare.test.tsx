@@ -1381,7 +1381,7 @@ describe("a pipeline with several documents", () => {
   /** What `POST /api/v2/chunk-stats` sums up, told apart by the first id it was sent. */
   const totals = (ids: string[]) => ({ pieces: 200 + Number(ids[0].slice(1)), tokens: 9000, unit: "tokens", median: 96, p95: 121, largest: 130, median_tokens: 96, p95_tokens: 121, overlaps: 0, uncovered: 0 })
   /** Each hit from the primer or the guide, by its place, as Pandion's chunk `doc_id` says. */
-  const fromBoth = (r: { hits: { chunk: object }[] }) => ({ ...r, hits: r.hits.map((h, k) => ({ ...h, chunk: { ...h.chunk, doc_id: k % 2 ? OTHER.sha : SOURCE.sha } })) })
+  const fromBoth = <C extends object>(r: { hits: { chunk: C }[] }) => ({ ...r, hits: r.hits.map((h, k) => ({ ...h, chunk: { ...h.chunk, doc_id: k % 2 ? OTHER.sha : SOURCE.sha } })) })
 
   beforeEach(() => {
     DrivenEventSource.instances = []
@@ -1408,6 +1408,70 @@ describe("a pipeline with several documents", () => {
     expect(screen.getByLabelText<HTMLInputElement>("Name this experiment").value).toBe("Chunk sizes on 2 documents")
     fireEvent.click(within(screen.getByRole("dialog", { name: "Save experiment" })).getByRole("button", { name: "Save experiment" }))
     expect(experimentDocuments(readExperiments()[0])).toEqual([SOURCE, OTHER])
+  })
+
+  it("says a saved document that is gone is missing when the experiment reopens, and holds the run", async () => {
+    const card = { name: "chunking-primer", title: "A primer on chunking", blurb: "", shows: "", stresses: "chunk", pages: 3, default: true, filename: SOURCE.filename, sha: SOURCE.sha, question: "Why?" }
+    serve({}, { "/api/v2/documents": [], "/api/samples": [card] })
+    storeGraph(sampleGraph(registry, SOURCE))
+    saveExperiment("Both", { stage: "chunk", recipes: [{ transform: "token_based", config: {} }], doc: SOURCE, docs: [SOURCE, OTHER] })
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: "Your experiments (1)" }))
+    fireEvent.click(screen.getByRole("button", { name: "Both" }))
+    await waitFor(() => expect(screen.getByTestId("document-note").textContent).toContain(`${OTHER.filename} is missing.`))
+    expect((screen.getByRole("button", { name: "Run 1 recipe" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("numbers every search hit in its own file and names its file in the columns", async () => {
+    // The guide's pieces have their own ids (Pandion's chunk ids include the document), in another order.
+    const reversed = { ...recursiveJson, chunks: [...recursiveJson.chunks].reverse().map((c) => ({ ...c, id: `${c.id}-g` })) }
+    const guideIds = (r: { hits: { chunk: { id: string } }[] }) => {
+      const both = fromBoth(r)
+      return { ...both, hits: both.hits.map((h, k) => (k % 2 ? { ...h, chunk: { ...h.chunk, id: `${h.chunk.id}-g` } } : h)) }
+    }
+    serve({ pc: recursiveJson, gc: reversed, i: indexJson, n0: guideIds(hybridJson), n1: guideIds(denseJson), n2: guideIds(bm25Json) })
+    openAt("?node=retrieve")
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    let seq = 1
+    for (let i = 0; i < 3; i++) {
+      es.emit(seq++, begin(i))
+      for (const [document, id] of [[SOURCE.filename, "pc"], [OTHER.filename, "gc"]])
+        es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", document, artifact_id: id, cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "index", step: "index", artifact_id: "i", cache_hit: false, duration_ms: 1 })
+      es.emit(seq++, { event: "node_finished", node_id: "retrieve", step: "search", artifact_id: `n${i}`, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(seq, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(column(0).querySelectorAll("[data-file-tag]").length).toBe(hybridJson.hits.length), { timeout: 10000 })
+    const tags = Array.from(column(0).querySelectorAll("[data-file-tag]")).map((t) => t.textContent)
+    expect(tags.slice(0, 2)).toEqual([SOURCE.filename, OTHER.filename])
+    // Each hit is numbered by its place in its own file: the guide's set is the primer's, reversed.
+    const own = (k: number) => {
+      const id = hybridJson.hits[k].chunk.id + (k % 2 ? "-g" : "")
+      const set = k % 2 ? reversed : recursiveJson
+      return String(set.chunks.findIndex((c) => c.id === id) + 1)
+    }
+    await waitFor(() => expect(within(column(0)).getAllByRole("img").map((s) => s.textContent).slice(0, 2)).toEqual([own(0), own(1)]), { timeout: 10000 })
+    expect(text()).not.toMatch(/The colours are piece numbers/)
+  })
+
+  it("says the totals could not be read when Pandion cannot sum them up, and never shows one file's numbers", async () => {
+    serve({ p0: recursiveJson, g0: tokenJson, p1: markdownJson, g1: tokenJson, p2: recursiveJson, g2: markdownJson }, { "/api/v2/chunk-stats": new Response("{}", { status: 500 }) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))
+    const es = await driven()
+    let seq = 1
+    for (let i = 0; i < 3; i++) {
+      es.emit(seq++, begin(i))
+      for (const [document, id] of [[SOURCE.filename, `p${i}`], [OTHER.filename, `g${i}`]])
+        es.emit(seq++, { event: "node_finished", node_id: "chunk", step: "chunk", document, artifact_id: id, cache_hit: false, duration_ms: 1 })
+    }
+    es.emit(seq, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(screen.getAllByRole("alert").filter((a) => a.textContent?.startsWith("The numbers over every document could not be read"))).toHaveLength(3), { timeout: 10000 })
+    expect(screen.queryAllByTestId("chunk-numbers")).toHaveLength(0)
   })
 
   it("reopens an experiment on all of its documents", async () => {

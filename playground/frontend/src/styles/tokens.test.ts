@@ -216,6 +216,14 @@ describe("file colours (Channel B)", () => {
       for (const surface of ["--surface", "--surface-elevated"]) expect(contrast(f, tokens.get(surface)!), `${f} on ${surface}`).toBeGreaterThanOrEqual(3)
     }
   })
+
+  it.each([
+    ["light", light],
+    ["dark", darkToggle],
+    ["dark, the OS", darkMedia],
+  ])("%s: a piece number in --surface on each file colour (Compare's top 5) clears 4.5:1", (_, tokens) => {
+    for (const i of [1, 2, 3, 4, 5, 6]) expect(contrast(tokens.get(`--file-${i}`)!, tokens.get("--surface")!), `file-${i}`).toBeGreaterThanOrEqual(4.5)
+  })
 })
 
 describe("ink and lines", () => {

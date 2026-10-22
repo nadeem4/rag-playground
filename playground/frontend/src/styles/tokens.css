@@ -118,12 +118,12 @@
 
   /* Channel B: which file, by the document's place in the pipeline (lib/files.ts). A dot
      beside the filename, never the only cue. Marks, not text: >= 3:1 on the page. */
-  --file-1: oklch(0.55 0.09 250);
-  --file-2: oklch(0.55 0.09 60);
-  --file-3: oklch(0.55 0.09 320);
-  --file-4: oklch(0.55 0.09 200);
-  --file-5: oklch(0.55 0.09 20);
-  --file-6: oklch(0.55 0.09 120);
+  --file-1: oklch(0.52 0.09 250);
+  --file-2: oklch(0.52 0.09 60);
+  --file-3: oklch(0.52 0.09 320);
+  --file-4: oklch(0.52 0.08 200);
+  --file-5: oklch(0.52 0.09 20);
+  --file-6: oklch(0.52 0.09 120);
 }
 
 /* ----------------------------------------------------------------- dark -- */

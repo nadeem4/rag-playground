@@ -35,25 +35,36 @@ export function usePayloads(ids: (string | undefined)[]): (id: string | undefine
   }
 }
 
+/** A list's totals once they arrive, and whether `POST /api/v2/chunk-stats` failed for it. */
+export interface ChunkTotals {
+  stats?: ChunkStats
+  failed: boolean
+}
+
 /**
  * The totals of each list of chunk sets (one recipe's, one per document), as
  * Pandion sums them up (`POST /api/v2/chunk-stats`), by the list's ids joined
  * with commas. Loaded once each; a list with fewer than two ids is not asked.
+ * A failed request is kept as failed, so the page can say so.
  */
-export function useChunkTotals(lists: string[][]): (ids: string[]) => ChunkStats | undefined {
+export function useChunkTotals(lists: string[][]): (ids: string[]) => ChunkTotals {
   const [data, setData] = useState<Record<string, ChunkStats>>({})
+  const [failed, setFailed] = useState<Record<string, true>>({})
   const key = lists.filter((l) => l.length > 1).map((l) => l.join(",")).join(";")
   useEffect(() => {
     let live = true
     for (const joined of new Set(key.split(";").filter(Boolean))) {
       v2.chunkStats(joined.split(",")).then(
         (s) => live && setData((m) => (joined in m ? m : { ...m, [joined]: s })),
-        () => undefined,
+        () => live && setFailed((m) => ({ ...m, [joined]: true })),
       )
     }
     return () => {
       live = false
     }
   }, [key])
-  return (ids) => data[ids.join(",")]
+  return (ids) => {
+    const k = ids.join(",")
+    return { stats: data[k], failed: !(k in data) && k in failed }
+  }
 }

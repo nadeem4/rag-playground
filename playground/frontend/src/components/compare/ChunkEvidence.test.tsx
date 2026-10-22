@@ -115,6 +115,19 @@ describe("ChunkEvidence", () => {
     expect(findings[6]).toBe("Piece 1 of field-guide.docx, 58 tokens")
   })
 
+  it("with several documents, never shows one file's numbers as the totals: it waits for them, or says they could not be read", () => {
+    const primer = { sha: "cd".repeat(32), filename: "chunking-primer.pdf", slot: 1 }
+    const guide = { sha: "ab".repeat(32), filename: "field-guide.docx", slot: 2 }
+    const files = [{ file: primer, set }, { file: guide, set }]
+    const { rerender } = render(<ChunkEvidence set={set} files={files} stats={undefined} />)
+    expect(screen.queryByTestId("chunk-numbers")).toBeNull()
+    expect(screen.getByRole("status").textContent).toBe("Adding up the numbers over every document.")
+    rerender(<ChunkEvidence set={set} files={files} stats={undefined} statsFailed />)
+    expect(screen.queryByTestId("chunk-numbers")).toBeNull()
+    expect(screen.getByRole("alert").textContent).toBe("The numbers over every document could not be read. Run again to try once more.")
+    expect(screen.getAllByTestId("file-scale-line")).toHaveLength(2)
+  })
+
   it("never puts the column in a scrolling box of its own", () => {
     const { container } = render(<ChunkEvidence set={set} />)
     expect(container.innerHTML).not.toMatch(/overflow-(y-)?(auto|scroll)|max-h-/)

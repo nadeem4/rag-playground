@@ -23,7 +23,7 @@ import re
 import statistics
 import threading
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from pandion.config import ConfigError, _block, from_dict, to_dict
@@ -515,8 +515,9 @@ def evaluate(
     and its miss is traced there; one naming a document that is not searched
     is a QuestionSetError before anything runs. A question naming none is
     found in a piece from any document. (With a source other than upload, a
-    document's content is not known before it is read, so there a named
-    question is found in any document too.) A model's key goes in
+    question names a document by its location or the location's last part,
+    but the content is not known before it is read, so there a named question
+    is found in any document too.) A model's key goes in
     `credentials`, as for `p.retrieve`.
 
     `on_event` gets every event of every search, with the question's id under
@@ -646,8 +647,9 @@ def documents_named(questions: list[dict[str, Any]], documents: dict[str, Any]) 
     """The document each question names, as its id in `documents` ({document
     id: stored file or location}, what `p.index.indexed()` returns), or None
     for a question naming none. A question names a document by its id, its
-    filename or its content hash. A name that is none of `documents`, or a
-    filename two of them share, is a QuestionSetError naming the question."""
+    filename (for a location, its last part) or its content hash (for a stored
+    file). A name that is none of `documents`, or a filename two of them
+    share, is a QuestionSetError naming the question."""
     out: list[str | None] = []
     for n, question in enumerate(questions, start=1):
         name = question.get("document") or ""
@@ -658,7 +660,7 @@ def documents_named(questions: list[dict[str, Any]], documents: dict[str, Any]) 
             out.append(name)
             continue
         hits = [d for d, f in documents.items() if getattr(f, "sha", None) == name]
-        hits = hits or [d for d, f in documents.items() if getattr(f, "filename", None) == name]
+        hits = hits or [d for d, f in documents.items() if _filename(f) == name]
         if len(hits) > 1:
             raise QuestionSetError(
                 f"Question {n} names the document {name}, and {len(hits)} of the documents searched "
@@ -671,6 +673,13 @@ def documents_named(questions: list[dict[str, Any]], documents: dict[str, Any]) 
             )
         out.append(hits[0])
     return out
+
+
+def _filename(document: Any) -> str:
+    """A stored file's name, or the last part of a location."""
+    if isinstance(document, str):
+        return PurePosixPath(document.replace("\\", "/")).name
+    return getattr(document, "filename", "")
 
 
 def _only(result: Any, sha: str | None) -> Any:

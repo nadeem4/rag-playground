@@ -179,7 +179,7 @@ def test_one_set_for_several_documents_is_checked_each_question_in_its_own_docum
     assert (rows["any"]["document"], rows["any"]["golds"][0]["document"]) == (None, second)
 
 
-def test_one_set_is_kept_split_by_document_with_unnamed_questions_in_the_first(client):
+def test_one_set_is_kept_split_by_document_with_unnamed_questions_in_each(client):
     first, second = two(client)
     post_across(client, [first, second], [
         {"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
@@ -188,14 +188,16 @@ def test_one_set_is_kept_split_by_document_with_unnamed_questions_in_the_first(c
     ])
     kept = {sha: client.get(f"/documents/{sha}/questions").json() for sha in (first, second)}
     assert [(q["id"], q["document"]) for q in kept[first]["set"]["questions"]] == [("capital", "report.pdf"), ("any", "")]
-    assert [(q["id"], q["document"]) for q in kept[second]["set"]["questions"]] == [("bees", "bees.pdf")]
+    assert [(q["id"], q["document"]) for q in kept[second]["set"]["questions"]] == [("bees", "bees.pdf"), ("any", "")]
     assert kept[first]["filename"] == kept[second]["filename"] == "golden.json"
 
 
 def test_a_document_the_new_set_has_no_questions_for_loses_its_old_set(client):
     first, second = two(client)
     post_set(client, second, [{"id": "old", "question": "Old?", "gold_answers": [BEES]}])
-    post_across(client, [first, second], [{"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE]}])
+    post_across(client, [first, second], [
+        {"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
+    ])
     assert client.get(f"/documents/{second}/questions").json() is None
 
 
@@ -222,3 +224,44 @@ def test_one_set_across_a_pdf_and_a_markdown_file_is_checked_in_each(client):
     assert body["summary"]["found"] == 2
     assert [r["golds"][0]["document"] for r in body["questions"]] == [pdf, md]
     assert body["parser"] == "docling, pdfium" and "pdfium for a PDF, docling for the others" in body["parser_note"]
+
+
+def test_a_pdf_named_as_markdown_is_415_and_never_reaches_docling(client, monkeypatch):
+    import pandion
+
+    seen = []
+    monkeypatch.setattr(pandion, "parse", lambda *a, **k: seen.append(k) or (_ for _ in ()).throw(AssertionError))
+    sha = client.post("/documents", files={"file": ("notes.md", build_pdf([[PASSAGE]]), "text/markdown")}).json()["sha"]
+    r = post_set(client, sha, [{"question": "Q?", "gold_answers": [PASSAGE]}])
+    assert r.status_code == 415
+    assert r.json()["detail"] == "this file is named .md but holds a PDF, so its text cannot be checked"
+    assert seen == []
+
+
+def test_an_image_named_as_text_is_415(client):
+    png = b"\x89PNG\r\n\x1a\n" + bytes(64)
+    sha = client.post("/documents", files={"file": ("notes.txt", png, "text/plain")}).json()["sha"]
+    r = post_set(client, sha, [{"question": "Q?", "gold_answers": ["hello"]}])
+    assert r.status_code == 415
+    assert r.json()["detail"] == "this file is named .txt but holds an image, so its text cannot be checked"
+
+
+def test_the_set_for_several_documents_comes_back_as_one(client):
+    first, second = two(client)
+    post_across(client, [first, second], [
+        {"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE], "document": "report.pdf"},
+        {"id": "bees", "question": "Bees?", "gold_answers": [BEES], "document": "bees.pdf"},
+        {"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]},
+    ])
+    body = client.get("/questions", params={"documents": [first, second]}).json()
+    assert body["documents"] == [first, second] and body["count"] == 3
+    assert [(q["id"], q["document"]) for q in body["questions"]] == [("capital", first), ("any", ""), ("bees", second)]
+
+
+def test_unnamed_questions_stay_when_the_first_document_goes(client):
+    first, second = two(client)
+    post_across(client, [first, second], [{"id": "any", "question": "Bees anywhere?", "gold_answers": [BEES]}])
+    store = client.app.state.documents
+    store.remove(first)
+    body = client.get("/questions", params={"documents": [second]}).json()
+    assert [q["id"] for q in body["questions"]] == ["any"]

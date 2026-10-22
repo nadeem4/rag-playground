@@ -771,6 +771,14 @@ export interface QuestionSetAcrossUpload {
   questions: GoldQuestionCheck[]
 }
 
+/** `GET /api/v2/questions?documents=...`: the sets kept against several documents as one. */
+export interface QuestionSetAcross {
+  documents: string[]
+  count: number
+  /** A named question's `document` is its document's sha; empty for one naming none. */
+  questions: GoldQuestion[]
+}
+
 /** `POST /api/v2/explain`: what a transform will do with THESE settings. */
 export interface Explanation {
   settings: string

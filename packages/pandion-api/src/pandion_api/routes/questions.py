@@ -5,7 +5,9 @@ Every set is checked against the document's text: a PDF as the pdfium parser
 reads it, and Word, PowerPoint, HTML, Markdown and text as docling reads them
 (the one parser here that reads them, and with no model for these formats).
 The report names the parser: another parser can put the text together
-differently. An image would need OCR models, so its set cannot be checked. A
+differently. An image would need OCR models, so its set cannot be checked, nor
+can a PDF or an image behind another format's name, which docling would read
+by its bytes with those models. A
 set with passages that were not found is kept anyway; a partly good set is
 still useful, and refusing it would leave the reader nothing to fix.
 
@@ -13,8 +15,9 @@ One set can also cover several documents (POST /questions). Each question may
 name its `document`, by filename or sha: it is checked in that document only,
 and one naming none is checked in every one. The set is kept split by document,
 each document's named questions against it and the questions naming none
-against the first document, so a run over those documents (POST /evaluations
-without questions) asks every question once.
+against every one, so removing a document loses none of them.
+GET /questions returns the sets of several documents as one, and a run over
+them (POST /evaluations without questions) asks every question once.
 
 A set can also be written for a document by a model
 (POST /documents/{sha}/questions/generate), as a run. That set is handed back,
@@ -31,7 +34,7 @@ from types import SimpleNamespace
 from typing import Annotated, Any
 
 import pypdfium2 as pdfium
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 
@@ -118,6 +121,7 @@ def _read(path: Path) -> tuple[str, str]:
     if kind == "png" or kind == "jpg":
         raise HTTPException(status_code=415, detail="this source is an image, so its text cannot be checked")
     if kind in OTHER_FORMATS:
+        _refuse_disguised(path)
         try:
             with DOCLING_LOCK:
                 return document_text(pandion.parse(path, use=OTHER_PARSER)), OTHER_PARSER
@@ -128,6 +132,29 @@ def _read(path: Path) -> tuple[str, str]:
             return document_text(pandion.parse(path, use=PARSER)), PARSER
     except (pdfium.PdfiumError, UnreadableFormat) as exc:
         raise HTTPException(status_code=415, detail="this source is not a PDF, so its text cannot be checked") from exc
+
+
+def _refuse_disguised(path: Path) -> None:
+    """A 415 for a PDF or an image behind a Word, PowerPoint, HTML, Markdown
+    or text file's name. Docling picks its reader by the bytes before the
+    name, so such a file would run its layout or OCR models inside the
+    request. The bytes are sniffed the way docling sniffs them (`filetype`)."""
+    try:
+        import filetype  # docling's own sniffer; without docling, the parse below fails as a 415
+    except ImportError:
+        return
+    with path.open("rb") as f:
+        head = f.read(8192)
+    mime = filetype.guess_mime(head) or ""
+    if head.startswith(b"%PDF") or mime == "application/pdf":
+        held = "a PDF"
+    elif mime.startswith("image/"):
+        held = "an image"
+    else:
+        return
+    raise HTTPException(
+        status_code=415, detail=f"this file is named {path.suffix.lower()} but holds {held}, so its text cannot be checked"
+    )
 
 
 def _text(path: Path) -> str:
@@ -195,10 +222,13 @@ async def upload_questions_across(
 ) -> dict[str, Any]:
     """One set for several documents: check each gold passage in the document
     its question names, or in every one for a question naming none, and keep
-    the set split by document if the Policy keeps sets. Each question's row
-    names its document's sha (`document`, null when it names none) and each
-    gold passage the sha of the document it was found in. A document the set
-    has no question for loses the set it had: the new set replaces the old."""
+    the set split by document if the Policy keeps sets: each document's named
+    questions, and every question naming none, against each document, so
+    removing one document loses none of them (`kept_questions` asks each one
+    once). Each question's row names its document's sha (`document`, null when
+    it names none) and each gold passage the sha of the document it was found
+    in. A document the set has no question for loses the set it had: the new
+    set replaces the old."""
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     parsed = await read_set(file, one_document=False)
@@ -209,10 +239,7 @@ async def upload_questions_across(
     own = [{**q, "document": owner or ""} for q, owner in zip(parsed["questions"], owners)]
     rows = await run_in_threadpool(check_questions_across, own, texts)
     filename = Path(file.filename or "questions.json").name
-    split = {
-        sha: [q for q, owner in zip(parsed["questions"], owners) if owner == sha or (owner is None and sha == shas[0])]
-        for sha in shas
-    }
+    split = {sha: [q for q, owner in zip(parsed["questions"], owners) if owner in (sha, None)] for sha in shas}
     keep = policy.keeps_question_sets(request)
     if keep:
         for sha, questions in split.items():
@@ -226,6 +253,7 @@ async def upload_questions_across(
                 "format": parsed["format"],
                 "count": len(questions),
                 "set": {"version": parsed["version"], "document": "", "questions": questions},
+                "across": shas,
             }
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(record), encoding="utf-8")
@@ -241,6 +269,59 @@ async def upload_questions_across(
         "summary": _summary(rows),
         "questions": rows,
     }
+
+
+def kept_questions(store: DocumentStore, shas: list[str], names: list[str]) -> list[dict[str, Any]]:
+    """The questions of the sets kept against these documents, in their order.
+    A question that names a document names the one it is kept against, by
+    sha; one naming none is found in any of them. A question naming none from
+    one set across documents (POST /questions) is kept against each of them
+    and asked once. An id two documents' sets both use is prefixed with each
+    document's name, so every question stays apart."""
+    sets: list[tuple[str, list[dict[str, Any]]]] = []
+    shared: set[str] = set()
+    for sha, name in zip(shas, names):
+        kept = store.questions(sha)
+        if not kept.is_file():
+            continue
+        record = json.loads(kept.read_text(encoding="utf-8"))
+        questions = []
+        for q in record["set"]["questions"]:
+            if q.get("document"):
+                questions.append({**q, "document": sha})
+                continue
+            if "across" in record:
+                key = json.dumps(q, sort_keys=True)
+                if key in shared:
+                    continue
+                shared.add(key)
+            questions.append(q)
+        sets.append((name, questions))
+    owners: dict[str, set[str]] = {}
+    for name, qs in sets:
+        for q in qs:
+            if q.get("id"):
+                owners.setdefault(q["id"], set()).add(name)
+    return [
+        {**q, "id": f"{name}: {q['id']}"} if q.get("id") and len(owners[q["id"]]) > 1 else q
+        for name, qs in sets
+        for q in qs
+    ]
+
+
+@router.get("/questions")
+def get_questions_across(
+    request: Request,
+    documents: Annotated[list[str], Query(min_length=1)],
+    store: DocumentStore = Depends(get_documents),
+) -> dict[str, Any]:
+    """The sets kept against these documents as one, as an evaluation without
+    questions asks them (`kept_questions`): each question's `document` is the
+    sha of the document it names, or empty when it names none."""
+    shas = list(dict.fromkeys(documents))
+    names = documents_of(shas, request)
+    questions = kept_questions(store, shas, list(names))
+    return {"documents": shas, "count": len(questions), "questions": questions}
 
 
 def _summary(rows: list[dict[str, Any]]) -> dict[str, int]:

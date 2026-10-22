@@ -545,3 +545,13 @@ def test_an_unnamed_question_kept_with_the_first_document_is_found_in_any_of_the
     q = state["result"]["questions"][0]
     assert (q["id"], q["found"], q["document"]) == ("any", True, None)
     assert [(d["document"], d["found"]) for d in state["result"]["by_document"]] == [(None, 1)]
+
+
+def test_an_unnamed_question_from_one_set_is_asked_once_however_many_documents_keep_it(client):
+    first, second = _two(client)
+    data = json.dumps([{**BEES, "id": "any"}]).encode()
+    client.post("/questions", data={"documents": [first, second]}, files={"file": ("g.json", data, "application/json")})
+    state, _ = finish(client, client.post("/evaluations", json={"config": PIPELINE, "documents": [first, second]}))
+    assert [q["id"] for q in state["result"]["questions"]] == ["any"]
+    state, _ = finish(client, client.post("/evaluations", json={"config": PIPELINE, "documents": [second]}))
+    assert [(q["id"], q["found"]) for q in state["result"]["questions"]] == [("any", True)]

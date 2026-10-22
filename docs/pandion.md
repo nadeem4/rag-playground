@@ -794,9 +794,10 @@ from that document holds a gold passage in the top `top_k`, and its miss is trac
 that document. A question that names none counts as found when a piece from any document
 does. A question naming a document that is not searched is refused before anything
 runs: "Question 3 names the document annex.pdf, which is not one of the documents
-searched: handbook.pdf, report.pdf." (With a source other than upload, a document's
-content is not known before it is read, so there a named question counts in any document
-too.) `report.by_document()` gives the totals for the questions naming each document, in
+searched: handbook.pdf, report.pdf." (With a source other than upload, a question names a
+document by its location or the location's last part, such as `report.pdf` for
+`s3://bucket/report.pdf`; the content is not known before it is read, so there a named
+question counts in any document too.) `report.by_document()` gives the totals for the questions naming each document, in
 the order the set first names them, as `{"document": its content hash, ...the totals}`,
 then one entry with `"document": None` for the questions naming none; each
 `q.document` (also in `q.to_dict()`) says which, and `report.to_dict()` carries

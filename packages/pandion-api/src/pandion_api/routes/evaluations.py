@@ -44,6 +44,7 @@ from pandion_api.routes.questions import (
     MAX_SET_BYTES,
     MAX_TEXT_CHARS,
     TOO_BIG,
+    kept_questions,
     named_documents,
 )
 
@@ -89,35 +90,16 @@ def _checked(questions: QuestionSet) -> list[dict[str, Any]]:
 
 
 def _kept(shas: list[str], names: list[str], request: Request) -> list[dict[str, Any]]:
-    """The questions of the sets kept against these documents, in their order.
-    An id two documents' sets both use is prefixed with each document's name,
-    so every question stays apart; together they hold at most MAX_QUESTIONS.
-    A question that names a document names the one it is kept against, by
-    sha; one naming none is found in any of them."""
-    store = request.app.state.documents
-    sets: list[tuple[str, list[dict[str, Any]]]] = []
-    for sha, name in zip(shas, names):
-        kept = store.questions(sha)
-        if kept.is_file():
-            questions = json.loads(kept.read_text(encoding="utf-8"))["set"]["questions"]
-            sets.append((name, [{**q, "document": sha} if q.get("document") else q for q in questions]))
-    total = sum(len(qs) for _, qs in sets)
-    if total > MAX_QUESTIONS:
+    """The questions kept against these documents (`kept_questions`); together
+    they hold at most MAX_QUESTIONS."""
+    questions = kept_questions(request.app.state.documents, shas, names)
+    if len(questions) > MAX_QUESTIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"The sets kept against these documents hold {total} questions together; "
+            detail=f"The sets kept against these documents hold {len(questions)} questions together; "
             f"at most {MAX_QUESTIONS} fit in one run, so evaluate fewer documents at once.",
         )
-    owners: dict[str, set[str]] = {}
-    for name, qs in sets:
-        for q in qs:
-            if q.get("id"):
-                owners.setdefault(q["id"], set()).add(name)
-    return [
-        {**q, "id": f"{name}: {q['id']}"} if q.get("id") and len(owners[q["id"]]) > 1 else q
-        for name, qs in sets
-        for q in qs
-    ]
+    return questions
 
 
 class EvaluationIn(BaseModel):

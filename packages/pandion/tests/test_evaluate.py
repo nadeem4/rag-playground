@@ -354,3 +354,13 @@ def test_with_one_document_naming_it_changes_nothing(tmp_path, docs):
             q.pop("document")
             q.pop("result_id")
     assert named == plain
+
+
+def test_with_a_source_other_than_upload_a_question_names_its_document_by_id_or_filename():
+    from pandion.evaluation import documents_named
+
+    locations = {"s3://b/report.pdf": "s3://b/report.pdf", "s3://b/annex.pdf": "s3://b/annex.pdf"}
+    asked = [{"document": "report.pdf"}, {"document": "s3://b/annex.pdf"}, {"document": ""}]
+    assert documents_named(asked, locations) == ["s3://b/report.pdf", "s3://b/annex.pdf", None]
+    with pytest.raises(QuestionSetError, match="names the document nope.pdf"):
+        documents_named([{"document": "nope.pdf"}], locations)

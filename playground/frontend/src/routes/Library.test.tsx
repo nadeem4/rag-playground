@@ -153,6 +153,18 @@ describe("Library", () => {
     await waitFor(() => expect(within(row("Resume, sections whole")).getByRole("button", { name: "Preview A primer on chunking" })).toBeTruthy())
   })
 
+  it("flags a pipeline whose second document is gone, by that document's name", async () => {
+    seed()
+    const listed = JSON.parse(window.localStorage.getItem("rag-playground:pipelines:v1")!)
+    listed[0].documents = [{ sha: UP, filename: "NK_Resume.pdf" }, { sha: GONE, filename: "my-notes.pdf" }]
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(listed))
+    resetPipelinesForTests()
+    render(<Library go={vi.fn()} />)
+    await waitFor(() =>
+      expect(within(row("Resume, sections whole")).getByText("my-notes.pdf is no longer on the demo. Opening this asks you to upload it again.")).toBeTruthy(),
+    )
+  })
+
   it("lists every document of an experiment saved on several", async () => {
     seed()
     const saved = JSON.parse(window.localStorage.getItem(EXPERIMENTS_KEY)!)
@@ -191,6 +203,21 @@ describe("Library", () => {
     const sheet = screen.getByRole("dialog", { name: /Export/ })
     expect(within(sheet).getByRole("checkbox", { name: /Include the document/ })).toHaveProperty("checked", true)
     expect(within(sheet).getByText("rag-playground-resume-sections-whole.ragplayground.json")).toBeTruthy()
+  })
+
+  it("warns about an item whose one document is gone and whose other is leaving soon", async () => {
+    seed()
+    const listed = JSON.parse(window.localStorage.getItem("rag-playground:pipelines:v1")!)
+    listed[0].documents = [{ sha: UP, filename: "NK_Resume.pdf" }, { sha: GONE, filename: "my-notes.pdf" }]
+    window.localStorage.setItem("rag-playground:pipelines:v1", JSON.stringify(listed))
+    resetPipelinesForTests()
+    uploads = [{ sha: UP, filename: "NK_Resume.pdf", uploaded_at: iso(22 * H) }]
+    render(<Library go={vi.fn()} />)
+    await waitFor(() => expect(within(row("Resume, sections whole")).getByText(/my-notes\.pdf is no longer on the demo/)).toBeTruthy())
+    const warn = screen.getByTestId("upload-warning")
+    expect(warn.textContent).toContain("1 saved item uses an upload that is deleted from the demo in 2 hours.")
+    fireEvent.click(within(warn).getByRole("button", { name: "Export them with the document" }))
+    expect(within(screen.getByRole("dialog", { name: /Export/ })).getByText("rag-playground-resume-sections-whole.ragplayground.json")).toBeTruthy()
   })
 
   it("gives no warning when every upload has time left", async () => {

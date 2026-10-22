@@ -49,7 +49,7 @@ from pandion.evaluation import (
     parse_question_set,
     write_questions,
 )
-from pandion.extend import EndpointRefused, UnreadableFormat, format_of, guard_endpoint
+from pandion.extend import EndpointRefused, UnreadableFormat, check_contents, format_of, guard_endpoint
 from pandion_api.checks import chat_providers
 from pandion_api.credentials import PROVIDERS
 from pandion_api.deps import get_documents, get_policy
@@ -136,25 +136,13 @@ def _read(path: Path) -> tuple[str, str]:
 
 def _refuse_disguised(path: Path) -> None:
     """A 415 for a PDF or an image behind a Word, PowerPoint, HTML, Markdown
-    or text file's name. Docling picks its reader by the bytes before the
-    name, so such a file would run its layout or OCR models inside the
-    request. The bytes are sniffed the way docling sniffs them (`filetype`)."""
+    or text file's name (`pandion.formats.check_contents`, the same check an
+    index run makes). Docling picks its reader by the bytes before the name,
+    so such a file would run its layout or OCR models inside the request."""
     try:
-        import filetype  # docling's own sniffer; without docling, the parse below fails as a 415
-    except ImportError:
-        return
-    with path.open("rb") as f:
-        head = f.read(8192)
-    mime = filetype.guess_mime(head) or ""
-    if head.startswith(b"%PDF") or mime == "application/pdf":
-        held = "a PDF"
-    elif mime.startswith("image/"):
-        held = "an image"
-    else:
-        return
-    raise HTTPException(
-        status_code=415, detail=f"this file is named {path.suffix.lower()} but holds {held}, so its text cannot be checked"
-    )
+        check_contents(path)
+    except UnreadableFormat as exc:
+        raise HTTPException(status_code=415, detail=f"{exc}, so its text cannot be checked") from exc
 
 
 def _text(path: Path) -> str:

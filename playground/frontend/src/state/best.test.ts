@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { EvalQuestionResult, EvaluationResult } from "@/api/types"
+import type { Against, EvalQuestionResult, EvaluationResult } from "@/api/types"
+import { v2 } from "@/api/v2"
 
-import { afterRun, best, BEST_KEY, bestHeadline, bestKey, forgetBest, readBest, whenText, type BestPipeline } from "./best"
+import { afterRun, BEST_KEY, bestHeadline, bestKey, forgetBest, readBest, scoredRun, whenText, type BestPipeline } from "./best"
 
 const PIPELINE: BestPipeline = {
   config: { index: { parse: { use: "docling" }, chunk: { use: "recursive_character" }, store: { use: "lancedb" } } },
@@ -38,25 +39,14 @@ function report(questions: EvalQuestionResult[], over: Partial<EvaluationResult>
 
 const run = (r: EvaluationResult, name = "Mine", at = new Date("2026-10-16T21:40:00")) => afterRun(r, name, PIPELINE, at)
 
+/** Pandion's verdict, as `POST /api/v2/evaluations/against` gives it. The pairing itself is Pandion's and tested there. */
+const verdict = (over: Partial<Against> = {}): Against => ({
+  found_before: 0, found_now: 0, compared: 0, newly_missed: [], newly_found: [], unmatched: [], partial: false, notes: [], ok: true, best: [0, 1], ...over,
+})
+const judge = (over: Partial<Against> = {}) => vi.spyOn(v2, "against").mockResolvedValue(verdict(over))
+
 beforeEach(() => window.localStorage.clear())
 afterEach(() => vi.restoreAllMocks())
-
-describe("best, the rule from pandion.evaluation.best", () => {
-  const t = (found: number, scored: number, mrr: number | null = scored ? found / scored : null) => ({ found, scored, hit_rate: scored ? found / scored : null, mrr })
-
-  it("matches the package's cases", () => {
-    const two = t(2, 2)
-    const one = t(1, 2)
-    expect(best([one, two])).toEqual([1])
-    expect(best([two, two])).toEqual([0, 1])
-    expect(best([t(0, 1)])).toEqual([])
-  })
-
-  it("breaks a tie on hit rate by MRR, and skips a run that scored nothing", () => {
-    expect(best([t(1, 2, 0.5), t(1, 2, 0.4)])).toEqual([0])
-    expect(best([t(0, 0), t(1, 2)])).toEqual([1])
-  })
-})
 
 describe("Best so far", () => {
   it("keys a run by its question set, its documents and its pieces checked, and has none without a fingerprint", () => {
@@ -68,132 +58,112 @@ describe("Best so far", () => {
     expect(bestKey(report([q("a", true)], { questions_fingerprint: undefined }))).toBeNull()
   })
 
-  it("makes the first run with a question set the best, and stores only what it needs", () => {
-    const r = report([q("a", true), q("b", false)])
-    expect(run(r).outcome).toEqual({ kind: "first" })
+  it("makes the first run with a question set the best, keeping what Pandion compares, and asks nothing", async () => {
+    const against = judge()
+    const r = report([q("a", true), q("b", false, { error: "boom" })], { nondeterministic: ["llm_rerank"] })
+    expect((await run(r)).outcome).toEqual({ kind: "first" })
     const stored = readBest(bestKey(r)!)!
-    expect(stored).toEqual({ found: 1, scored: 2, mrr: 0.5, hit_rate: 0.5, name: "Mine", pipeline: PIPELINE, at: expect.any(String),
+    expect(stored).toEqual({ found: 1, scored: 1, mrr: 1, hit_rate: 1, name: "Mine", pipeline: PIPELINE, at: expect.any(String), report: scoredRun(r) })
+    expect(stored.report).toEqual({
+      top_k: 5, questions_fingerprint: "f1", document_shas: ["cd".repeat(32)], nondeterministic: ["llm_rerank"], scored: 1, found: 1, hit_rate: 1, mrr: 1,
       questions: [
-        { id: "a", text: "Question a?", found: true, errored: false },
-        { id: "b", text: "Question b?", found: false, errored: false },
+        { id: "a", question: "Question a?", found: true, error: null },
+        { id: "b", question: "Question b?", found: false, error: "boom" },
       ],
     })
     expect(new Date(stored.at).getTime()).toBe(new Date("2026-10-16T21:40:00").getTime())
+    expect(against).not.toHaveBeenCalled()
   })
 
-  it("says a worse run, with the lost questions, and keeps the best", () => {
-    run(report([q("a", true), q("b", true), q("c", false)]), "Best one")
-    const { outcome } = run(report([q("a", false), q("b", true), q("c", false)]), "Worse one")
-    expect(outcome.kind).toBe("worse")
+  it("asks Pandion with this run and the best as kept", async () => {
+    await run(report([q("a", true)]), "Best one")
+    const kept = readBest(bestKey(report([]))!)!.report
+    const against = judge({ best: [0] })
+    const now = report([q("a", false)])
+    await run(now)
+    expect(against).toHaveBeenCalledWith(scoredRun(now), kept)
+  })
+
+  it("says a worse run, with the lost questions by their text and Pandion's notes, and keeps the best", async () => {
+    await run(report([q("a", true), q("b", true)]), "Best one")
+    judge({ best: [0], newly_missed: ["a"], notes: ["llm_rerank can give a different result each run."] })
+    const { outcome } = await run(report([q("a", false), q("b", true)]), "Worse one")
+    expect(outcome).toMatchObject({ kind: "worse", fewer: 1, lost: ["Question a?"], notes: ["llm_rerank can give a different result each run."] })
     if (outcome.kind !== "worse") return
     expect(outcome.best.name).toBe("Best one")
-    expect(outcome.fewer).toBe(1)
-    expect(outcome.lost).toEqual(["Question a?"])
+    expect(bestHeadline(outcome)).toBe("1 fewer found than your best.")
     expect(readBest(bestKey(report([]))!)!.name).toBe("Best one")
   })
 
-  it("says a better run, with the won questions, and makes it the best", () => {
-    run(report([q("a", true), q("b", false), q("c", false)]), "Old")
-    const { outcome } = run(report([q("a", true), q("b", true), q("c", true)]), "New")
-    expect(outcome.kind).toBe("better")
-    if (outcome.kind !== "better") return
-    expect(outcome.before.name).toBe("Old")
-    expect(outcome.more).toBe(2)
-    expect(outcome.won).toEqual(["Question b?", "Question c?"])
+  it("says a better run, with the won questions, and makes it the best", async () => {
+    await run(report([q("a", true), q("b", false), q("c", false)]), "Old")
+    judge({ best: [1], newly_found: ["b", "c"] })
+    const { outcome } = await run(report([q("a", true), q("b", true), q("c", true)]), "New")
+    expect(outcome).toMatchObject({ kind: "better", more: 2, won: ["Question b?", "Question c?"], tie: false })
+    if (outcome.kind === "better") expect(outcome.before.name).toBe("Old")
     expect(readBest(bestKey(report([]))!)!.name).toBe("New")
   })
 
-  it("says an equal run and keeps the best as it was", () => {
-    run(report([q("a", true), q("b", false)]), "First")
-    const { outcome } = run(report([q("a", false), q("b", true)]), "Second")
-    expect(outcome.kind).toBe("equal")
+  it("says an equal run and keeps the best as it was", async () => {
+    await run(report([q("a", true), q("b", false)]), "First")
+    judge({ best: [0, 1] })
+    const { outcome } = await run(report([q("a", false), q("b", true)]), "Second")
+    expect(outcome).toMatchObject({ kind: "equal", found: 1, scored: 2, notes: [] })
     expect(readBest(bestKey(report([]))!)!.name).toBe("First")
   })
 
-  it("leaves errored questions out of lost and won", () => {
-    run(report([q("a", true), q("b", false, { error: "boom" }), q("c", false)]), "Best")
-    const { outcome } = run(report([q("a", false, { error: "boom" }), q("b", true), q("c", true)]))
-    // a errored now, so it is not lost; b errored before, so it is not won.
-    expect(outcome.kind).toBe("better")
-    if (outcome.kind === "better") expect(outcome.won).toEqual(["Question c?"])
+  it("says a lower hit rate when Pandion names no lost question", async () => {
+    await run(report([q("a", true)]), "Best")
+    judge({ best: [0] })
+    const { outcome } = await run(report([q("a", true), q("b", false)]))
+    expect(outcome.kind === "worse" && bestHeadline(outcome)).toBe("A lower hit rate than your best.")
   })
 
-  it("counts fewer over the questions both runs scored: a best of 9 of 9 (3 errored) against 11 of 12", () => {
-    const ids = "abcdefghijkl".split("")
-    // The best: the first nine found, the last three errored.
-    run(report(ids.map((id, n) => (n < 9 ? q(id, true) : q(id, false, { error: "boom" })))), "Best")
-    // This run: every question scored, and only "a" missed.
-    const { outcome } = run(report(ids.map((id) => q(id, id !== "a"))))
-    expect(outcome.kind).toBe("worse")
-    if (outcome.kind !== "worse") return
-    expect(outcome.fewer).toBe(1)
-    expect(outcome.lost).toEqual(["Question a?"])
-    expect(bestHeadline(outcome)).toBe("1 fewer found than your best.")
+  it("says the best ranks higher only when the hit rates are equal", async () => {
+    await run(report([q("a", true), q("b", false)], { mrr: 0.5 }), "Best")
+    judge({ best: [0] })
+    const { outcome } = await run(report([q("a", true), q("b", false)], { mrr: 0.25 }))
+    expect(outcome.kind === "worse" && bestHeadline(outcome)).toBe("Your best ranks the answers higher.")
   })
 
-  it("says a lower hit rate when no question both runs scored was lost", () => {
-    const ids = "abcd".split("")
-    run(report(ids.map((id, n) => (n < 3 ? q(id, true) : q(id, false, { error: "boom" })))), "Best")
-    // Only "d" missed, and the best could not score "d": nothing paired was lost, yet 3 of 4 is below 3 of 3.
-    const { outcome } = run(report(ids.map((id) => q(id, id !== "d"))))
-    expect(outcome.kind).toBe("worse")
-    if (outcome.kind !== "worse") return
-    expect(outcome.fewer).toBe(0)
-    expect(outcome.lost).toEqual([])
-    expect(bestHeadline(outcome)).toBe("A lower hit rate than your best.")
+  it("does not compare with another question set's or another top_k's best", async () => {
+    await run(report([q("a", true), q("b", true)]))
+    const against = judge()
+    expect((await run(report([q("a", false), q("b", false)], { questions_fingerprint: "other" }))).outcome).toEqual({ kind: "first" })
+    expect((await run(report([q("a", false), q("b", false)], { top_k: 3 }))).outcome).toEqual({ kind: "first" })
+    expect(against).not.toHaveBeenCalled()
   })
 
-  it("says the best ranks higher only when the hit rates are equal", () => {
-    run(report([q("a", true), q("b", false)], { mrr: 0.5 }), "Best")
-    const { outcome } = run(report([q("a", true), q("b", false)], { mrr: 0.25 }))
-    expect(outcome.kind).toBe("worse")
-    if (outcome.kind === "worse") expect(bestHeadline(outcome)).toBe("Your best ranks the answers higher.")
+  it("reads a best kept before Pandion compared runs, positional questions by their place", async () => {
+    const key = bestKey(report([]))!
+    const old = {
+      found: 1, scored: 1, hit_rate: 1, mrr: 1, name: "Old", pipeline: PIPELINE, at: "2026-10-01T10:00:00.000Z",
+      questions: [
+        { id: null, text: "Where?", found: true, errored: false },
+        { id: "b", text: "Why?", found: false, errored: true },
+      ],
+    }
+    window.localStorage.setItem(BEST_KEY, JSON.stringify({ [key]: old }))
+    expect(readBest(key)!.report).toEqual({
+      top_k: 5, questions_fingerprint: "f1", document_shas: ["cd".repeat(32)], nondeterministic: [], scored: 1, found: 1, hit_rate: 1, mrr: 1,
+      questions: [
+        { id: "question 1", question: "Where?", found: true, error: null },
+        { id: "b", question: "Why?", found: false, error: "not scored" },
+      ],
+    })
   })
 
-  it("has no false lost or won when the same set gains ids", () => {
-    run(report([q("question 1", true, { question: "One?" }), q("question 2", false, { question: "Two?" })]), "Best")
-    const same = run(report([q("one", true, { question: "One?" }), q("two", false, { question: "Two?" })])).outcome
-    expect(same.kind).toBe("equal")
-    // Better: only Two? is won; One? was found in both, under no id and then under its new one.
-    const { outcome } = run(report([q("one", true, { question: "One?" }), q("two", true, { question: "Two?" })]))
-    expect(outcome.kind === "better" && outcome.won).toEqual(["Two?"])
-    expect(outcome.kind === "better" && outcome.more).toBe(1)
-  })
-
-  it("pairs by real id first, then by text for what is left", () => {
-    // The best: "x" (found) and "y" (missed). This run: "x" under new text, missed, so it pairs by id;
-    // and "Why?", which had the id "y" in the best, now with no id of its own, so it pairs by text.
-    run(report([q("x", true, { question: "Same?" }), q("y", true, { question: "Why?" }), q("z", false, { question: "Gone?" })]), "Best")
-    const { outcome } = run(report([q("x", false, { question: "Changed?" }), q("question 2", false, { question: "Why?" }), q("question 3", true, { question: "New?" })]))
-    expect(outcome.kind === "worse" && outcome.lost).toEqual(["Changed?", "Why?"])
-    // "New?" pairs with nothing, so it is never won.
-    expect(outcome.kind === "worse" && outcome.fewer).toBe(2)
-  })
-
-  it("pairs a question with no id of its own by its text", () => {
-    run(report([q("question 1", true, { question: "Where?" })]))
-    const { outcome } = run(report([q("question 2", false, { question: "Where?" }), q("question 1", false, { question: "Elsewhere?" })]))
-    expect(outcome.kind).toBe("worse")
-    if (outcome.kind === "worse") expect(outcome.lost).toEqual(["Where?"])
-  })
-
-  it("does not compare with another question set's or another top_k's best", () => {
-    run(report([q("a", true), q("b", true)]))
-    expect(run(report([q("a", false), q("b", false)], { questions_fingerprint: "other" })).outcome).toEqual({ kind: "first" })
-    expect(run(report([q("a", false), q("b", false)], { top_k: 3 })).outcome).toEqual({ kind: "first" })
-  })
-
-  it("forgets the best for one key only", () => {
+  it("forgets the best for one key only", async () => {
     const r = report([q("a", true)])
     const other = report([q("a", true)], { top_k: 3 })
-    run(r)
-    run(other)
+    await run(r)
+    await run(other)
     forgetBest(bestKey(r)!)
     expect(readBest(bestKey(r)!)).toBeNull()
     expect(readBest(bestKey(other)!)).not.toBeNull()
   })
 
-  it("keeps working when storage throws: every run reads as a first run", () => {
+  it("keeps working when storage throws: every run reads as a first run", async () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked")
     })
@@ -201,16 +171,22 @@ describe("Best so far", () => {
       throw new Error("blocked")
     })
     const r = report([q("a", true)])
-    expect(run(r).outcome).toEqual({ kind: "first" })
+    expect((await run(r)).outcome).toEqual({ kind: "first" })
     expect(readBest(bestKey(r)!)).toBeNull()
     expect(() => forgetBest(bestKey(r)!)).not.toThrow()
   })
 
-  it("reads anything else under its key as no best", () => {
+  it("reads anything else under its key as no best", async () => {
     window.localStorage.setItem(BEST_KEY, "not json")
-    expect(run(report([q("a", true)])).outcome).toEqual({ kind: "first" })
+    expect((await run(report([q("a", true)]))).outcome).toEqual({ kind: "first" })
     window.localStorage.setItem(BEST_KEY, JSON.stringify({ [bestKey(report([]))!]: { found: "x" } }))
-    expect(run(report([q("a", true)])).outcome).toEqual({ kind: "first" })
+    expect((await run(report([q("a", true)]))).outcome).toEqual({ kind: "first" })
+  })
+
+  it("passes on Pandion's refusal: the page then shows no box", async () => {
+    await run(report([q("a", true)]))
+    vi.spyOn(v2, "against").mockRejectedValue(new Error("down"))
+    await expect(run(report([q("a", false)]))).rejects.toThrow("down")
   })
 })
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
 import { resetAppSettingsForTests } from "@/api/useDemo"
 import { resetWriteSessionsForTests } from "@/state/writeQuestions"
+import { AGAINST_URL, againstResponse } from "@/api/fixtures/against"
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { EvalPayload, EvalQuestionResult, EvaluationRequest, EvaluationResult, GoldQuestion, QuestionSetUpload, Registry, SampleQuestion, Totals } from "@/api/types"
 import { afterRun, BEST_KEY, bestKey, readBest } from "@/state/best"
@@ -151,6 +152,7 @@ function serve({
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       served.urls.push(url)
+      if (url === AGAINST_URL) return againstResponse(init)
       if (url === "/api/v2/evaluations" && init?.method === "POST") {
         served.evaluations.push(JSON.parse(String(init.body)) as EvaluationRequest)
         return ok({ run_id: `e${served.evaluations.length}` })
@@ -1518,6 +1520,45 @@ describe("Best so far", { timeout: 15000 }, () => {
     await screen.findByTestId("summary", {}, { timeout: 4000 })
     return navigate
   }
+
+  it("never shows a run's late verdict on the next run, which started before it came back", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    // The first run misses B; the second finds both, so each verdict says which run it judged.
+    serve({ result: report([found("a", A), missed("b", B)], KEYED) })
+    const second = report([found("a", A), found("b", B)], KEYED)
+    // Every comparison waits until released, so the first run's verdict can land while the second runs.
+    const held: (() => void)[] = []
+    const base = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (url === AGAINST_URL) await new Promise<void>((release) => held.push(release))
+      const res = await base(url, init)
+      if (url !== "/api/v2/runs/e2") return res
+      return new Response(JSON.stringify({ ...(await res.json()), result: second }), { status: 200 })
+    })
+    storeGraph(graph)
+    render(<Evaluate navigate={vi.fn()} />)
+    const evaluate = () => screen.getByRole("button", { name: /^Evaluate( again)?$/ }) as HTMLButtonElement
+    await waitFor(() => expect(evaluate().disabled).toBe(false), { timeout: 4000 })
+    fireEvent.click(evaluate())
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    DrivenEventSource.instances[0].emit(1, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(held).toHaveLength(1))
+    // The second run starts; then the first run's verdict comes back.
+    await waitFor(() => expect(evaluate().disabled).toBe(false))
+    fireEvent.click(evaluate())
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(2))
+    await act(async () => held[0]())
+    DrivenEventSource.instances[1].emit(1, { event: "stream_end", status: "finished", ok: true })
+    await waitFor(() => expect(held).toHaveLength(2))
+    // Let the second run's result settle on the page.
+    await act(async () => new Promise((settle) => setTimeout(settle, 100)))
+    expect(screen.getByRole("button", { name: "Evaluate again" })).toBeTruthy()
+    // The second run's own verdict is still on its way: nothing is said, and never the first run's.
+    expect(screen.queryByTestId("best-so-far")).toBeNull()
+    await act(async () => held[1]())
+    // Judged on the second run's own result: it found both, as the best did.
+    expect((await screen.findByTestId("best-so-far")).textContent).toContain("Same as your best: 2 of 2.")
+  })
 
   it("makes the first run with these questions the best so far", async () => {
     await runOnce(report([found("a", A), missed("b", B)], KEYED))

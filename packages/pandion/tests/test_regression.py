@@ -263,3 +263,82 @@ def test_the_baseline_is_read_once_before_the_run(cli_run, monkeypatch):
 def test_allow_needs_a_baseline(cli_run):
     code, _, err = cli_run("--allow", "1")
     assert code == 2 and "--allow" in err
+
+
+# --------------------------------------------------------------------------
+# regression(now, baseline) and best() on plain dicts, as pandion-api serves them
+# --------------------------------------------------------------------------
+
+
+def _slim(r: EvaluationReport) -> dict:
+    """Only what the comparison reads, as a browser keeps a run."""
+    d = r.to_dict()
+    keep = ("top_k", "questions_fingerprint", "document_shas", "nondeterministic", "scored", "found", "hit_rate", "mrr")
+    return {
+        **{k: d[k] for k in keep},
+        "questions": [{k: x[k] for k in ("id", "question", "found", "error")} for x in d["questions"]],
+    }
+
+
+def test_regression_on_dicts_agrees_with_against():
+    from pandion.evaluation import regression
+
+    now = report(q("q1", True), q("q2", False), q("q3", True), q("q4", False), nondeterministic=["llm_rerank"])
+    assert regression(_slim(now), _slim(BEFORE)) == now.against(BEFORE)
+    assert regression(now, BEFORE) == now.against(BEFORE)
+
+
+def test_regression_reads_the_golds_when_a_dict_has_no_fingerprint():
+    from pandion.evaluation import regression
+
+    now = {**now_dict(), "questions_fingerprint": None}
+    assert regression(now, BEFORE.to_dict()).partial is False
+
+
+def now_dict() -> dict:
+    return report(q("q1", True), q("q2", True), q("q3", False), q("q4", True)).to_dict()
+
+
+def test_regression_refuses_what_is_not_a_report_in_a_plain_sentence():
+    from pandion.evaluation import regression
+
+    with pytest.raises(ValueError, match="The run to compare is not an evaluation report"):
+        regression({"top_k": 5}, BEFORE)
+
+
+def test_best_reads_dicts_as_it_reads_reports():
+    from pandion.evaluation import best
+
+    worse = report(q("q1", True), q("q2", False))
+    better = report(q("q1", True), q("q2", True))
+    assert best([worse, better]) == best([worse.to_dict(), better.to_dict()]) == [1]
+    assert best([_slim(better), _slim(better)]) == [0, 1]
+    assert best([report(q("q1", False)).to_dict()]) == []
+
+
+def test_a_set_that_gains_ids_pairs_by_text_with_no_false_changes():
+    before = report(q("question 1", True, "One?"), q("question 2", False, "Two?"))
+    now = report(q("one", True, "One?"), q("two", True, "Two?"))
+    r = now.against(before)
+    assert (r.newly_missed, r.newly_found, r.unmatched) == ([], ["two"], [])
+
+
+def test_real_ids_pair_first_then_the_rest_by_text():
+    before = report(q("x", True, "Same?"), q("y", True, "Why?"), q("z", False, "Gone?"))
+    now = report(q("x", False, "Changed?"), q("question 2", False, "Why?"), q("question 3", True, "New?"))
+    r = now.against(before)
+    assert r.newly_missed == ["x", "question 2"]
+    assert r.newly_found == []
+    assert r.unmatched == ["question 3", "z"]
+
+
+def test_counts_are_over_the_questions_both_runs_scored():
+    ids = "abcdefghijkl"
+    broken = []
+    for n, i in enumerate(ids):
+        x = q(i, n < 9)
+        if n >= 9:
+            x.error = "boom"
+        broken.append(x)
+    r = report(*[q(i, i != "a") for i in ids]).against(report(*broken))
+    assert (r.compared, r.found_before, r.found_now, r.newly_missed) == (9, 9, 8, ["a"])

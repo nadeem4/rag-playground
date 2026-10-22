@@ -15,19 +15,19 @@ from __future__ import annotations
 
 import json
 import threading
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from pandion import compare, evaluate
-from pandion.evaluation import COMPARE_STAGES, QuestionSetError, parse_question_set
+from pandion.evaluation import COMPARE_STAGES, QuestionSetError, best, parse_question_set, regression
 from pandion_api import reports
 from pandion_api.jobs import documents_of, start
 from pandion_api.pipelines import NOT_A_MAPPING, prepare, problems, variant_config
 from pandion_api.routes.ask import NO_ANSWER, NO_SEARCH
-from pandion_api.routes.questions import MAX_GOLDS, MAX_QUESTIONS, MAX_SET_BYTES, TOO_BIG
+from pandion_api.routes.questions import MAX_GOLDS, MAX_QUESTIONS, MAX_SET_BYTES, MAX_TEXT_CHARS, TOO_BIG
 
 router = APIRouter()
 
@@ -258,3 +258,59 @@ def _compare_on_one_question(body: ComparisonIn, pipelines: list, documents: dic
         return ok, stopped, {"best": [], "cancelled": stopped, **reports.split(ran, out, body.stage)}
 
     return work
+
+
+#: A gold passage, held to the cap /golds/find uses.
+Passage = Annotated[str, Field(max_length=MAX_TEXT_CHARS)]
+#: A short name: a question's id, a document's sha, a step's use.
+Name = Annotated[str, Field(max_length=500)]
+
+
+class ScoredQuestion(BaseModel):
+    """One question of a report, as the comparison reads it."""
+
+    id: Name
+    question: str = Field(max_length=2000)
+    found: bool
+    error: str | None = Field(default=None, max_length=10_000)
+    golds: list[Passage] = Field(default_factory=list, max_length=MAX_GOLDS)
+
+
+class ScoredRun(BaseModel):
+    """An evaluation's result (POST /evaluations), or the part of it a
+    comparison reads: the totals, `top_k`, the documents and every question.
+    Held to an uploaded set's caps: the gold passages together fit in
+    MAX_SET_BYTES, as they do in any set that ran."""
+
+    top_k: int
+    questions: list[ScoredQuestion] = Field(max_length=MAX_QUESTIONS)
+    questions_fingerprint: Name | None = None
+    document_shas: list[Name] = Field(default_factory=list, max_length=MAX_QUESTIONS)
+    nondeterministic: list[Name] = Field(default_factory=list, max_length=50)
+    scored: int = 0
+    found: int = 0
+    hit_rate: float | None = None
+    mrr: float | None = None
+
+    @model_validator(mode="after")
+    def _golds_fit_in_a_set(self) -> ScoredRun:
+        if sum(len(g) for q in self.questions for g in q.golds) > MAX_SET_BYTES:
+            raise ValueError(f"the gold passages together hold more than {MAX_SET_BYTES} characters, more than any set that ran")
+        return self
+
+
+class AgainstIn(BaseModel):
+    report: ScoredRun
+    baseline: ScoredRun
+
+
+@router.post("/evaluations/against")
+def against(body: AgainstIn) -> dict[str, Any]:
+    """A run compared with a baseline, as `report.against(baseline)` compares
+    them (`pandion.evaluation.regression`): the counts, the questions newly
+    missed and newly found by id, and the notes, such as a partial set or a
+    step that can miss by chance. `best` is `pandion.evaluation.best` of
+    [baseline, report]: [1] when the run is better, [0] when the baseline is,
+    [0, 1] for a tie. Nothing runs."""
+    now, before = body.report.model_dump(), body.baseline.model_dump()
+    return {**regression(now, before).to_dict(), "best": best([before, now])}

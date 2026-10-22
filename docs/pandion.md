@@ -839,6 +839,12 @@ r.ok(allow=2)                    # True: up to 2 newly missed questions are allo
 print(r)                         # Found 8 of 12; the baseline found 9 of 12. Newly missed: q4, q7.
 ```
 
+`pandion.evaluation.regression(now, baseline)` does the same when both runs are plain
+dicts, such as reports kept as JSON: each needs only `top_k`, and each question's `id`,
+`question`, `found` and `error`, with the set's `questions_fingerprint` or every
+question's `golds`. `pandion.evaluation.best(reports)` takes reports or their dicts and
+gives the places of the best ones.
+
 The `Regression` it returns has these fields:
 
 - `compared` is how many questions both runs asked. `found_before` and `found_now`

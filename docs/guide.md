@@ -519,8 +519,11 @@ and names the questions it won. A worse run says how many fewer it found, names 
 it lost, and offers **Load the best pipeline**, which puts that pipeline on Build, and
 **Compare the two**, which opens Compare with the best pipeline loaded. Only questions decide
 better and worse: hit rate first, then mean reciprocal rank to break a tie, and a question
-either run could not score is left out. The best is kept in this browser only, and
-**Forget best** clears it.
+either run could not score is left out. Pandion makes the comparison
+(`report.against(baseline)`), and its notes show under the verdict when the two runs are not
+quite like for like, such as "llm_rerank can give a different result each run, so a newly
+missed question may be noise." If the comparison cannot be made, the box stays away for that
+run rather than guess. The best is kept in this browser only, and **Forget best** clears it.
 
 Changing Pieces checked after a run does not relabel the numbers: the page says "Scored at 5
 pieces. Evaluate again to use 3."

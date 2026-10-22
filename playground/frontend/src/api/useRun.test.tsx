@@ -222,3 +222,23 @@ describe("useRun", () => {
     expect(result.current.nodes).toEqual({})
   })
 })
+
+describe("a new run id", () => {
+  it("never hands out the last run's state, not even on the render where the id changes", () => {
+    const seen: { id: string; closed: boolean; nodes: string[] }[] = []
+    const { rerender } = renderHook(({ id }) => {
+      const run = useRun(id)
+      seen.push({ id, closed: run.closed, nodes: Object.keys(run.nodes) })
+      return run
+    }, { initialProps: { id: "old" } })
+    const es = FakeEventSource.instances[0]
+    es.emit(0, { event: "run_started", nodes: ["a"], selected: ["a"] })
+    es.emit(1, { event: "stream_end", status: "finished", ok: true })
+    expect(seen[seen.length - 1]).toMatchObject({ id: "old", closed: true, nodes: ["a"] })
+    seen.length = 0
+    rerender({ id: "new" })
+    // Every render of the new run, the first included, starts fresh.
+    expect(seen.length).toBeGreaterThan(0)
+    for (const s of seen) expect(s).toEqual({ id: "new", closed: false, nodes: [] })
+  })
+})

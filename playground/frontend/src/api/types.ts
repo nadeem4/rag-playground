@@ -846,6 +846,29 @@ export interface EvaluationResult extends Totals {
   questions_fingerprint?: string
   /** The searched documents' content hashes, sorted. Absent from an older server. */
   document_shas?: string[]
+  /** The steps that can give a different result each run, such as a model reranker. Absent from an older server. */
+  nondeterministic?: string[]
+}
+/** What Pandion's comparison of two runs reads of each (`POST /api/v2/evaluations/against`). */
+export interface ScoredRun extends Pick<Totals, "scored" | "found" | "hit_rate" | "mrr"> {
+  top_k: number
+  questions_fingerprint: string | null
+  document_shas: string[]
+  nondeterministic: string[]
+  questions: { id: string; question: string; found: boolean; error: string | null }[]
+}
+/** Pandion's `Regression.to_dict()` and `best([baseline, report])`: [1] the run is better, [0] the baseline, [0, 1] a tie. */
+export interface Against {
+  found_before: number
+  found_now: number
+  compared: number
+  newly_missed: string[]
+  newly_found: string[]
+  unmatched: string[]
+  partial: boolean
+  notes: string[]
+  ok: boolean
+  best: number[]
 }
 /** What one step's model call used (pandion-api, "Speed and cost"); a count is null when the server sent none. */
 export interface StepUsage {

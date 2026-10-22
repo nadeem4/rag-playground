@@ -9,47 +9,54 @@ import { hasPages } from "@/lib/formats"
 
 import { followSample, setCurrentId, STARTER_ID } from "./pipelines"
 import { initialGraph, readStoredGraph, sampleGraph, storedGraphJson, storeGraph, subscribeGraph, type PipelineGraph } from "./graph"
+import { docsOfSource, sourceConfigWith, type DocRef } from "./sourceDocs"
 import { parseWorking, readWorking, storeWorking } from "./working"
 
 /**
- * The document every page works on. The working pipeline holds it in its
- * `documents` (state/working.ts); a graph holds it in its source node
- * (`config.sha`, `config.filename`), so saved pipelines, share links and the
- * run request keep their shape. This module reads it from the stored working
+ * The documents every page works on. The working pipeline holds them in its
+ * `documents` (state/working.ts); a graph holds them in its source node
+ * (`state/sourceDocs.ts`: the first in `config.sha` and `config.filename`, all
+ * of them in `config.documents` when there are several), so saved pipelines,
+ * share links and the run request keep their shape. This module reads it from the stored working
  * pipeline, so the header needs no registry, and keeps
  * what is known about it for one page load: this browser's uploads, the
  * samples, the files chosen on this page, and whether the menu is open.
  */
 
-export type DocRef = { sha: string; filename: string }
+export type { DocRef }
 
 export type DocStatus = "empty" | "checking" | "ready" | "missing"
 
-/** The source node's file, or null when it has none. */
+/** The source node's first file, or null when it has none. */
 export function documentOf(g: Pick<PipelineGraph, "nodes"> | null | undefined): DocRef | null {
-  const source = g?.nodes?.find((n) => n.stage === "source")
-  const sha = source?.config?.sha
-  if (typeof sha !== "string" || !sha) return null
-  return { sha, filename: String(source?.config.filename ?? "") }
+  return documentsOf(g)[0] ?? null
 }
 
-/** The same graph on another file: only the source node's `sha` and `filename` change. */
+/** The same graph on this one file only: only the source node changes. */
 export function withDocument<G extends Pick<PipelineGraph, "nodes">>(g: G, doc: DocRef): G {
-  return {
-    ...g,
-    nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: { ...n.config, sha: doc.sha, filename: doc.filename } } : n)),
-  }
+  return withDocuments(g, [doc])
 }
 
-/** A pipeline's documents as a list: the source node's file, or none. One today; several later. */
+/** A pipeline's documents, in order: the source node's files (`state/sourceDocs.ts`), or none. */
 export function documentsOf(g: Pick<PipelineGraph, "nodes"> | null | undefined): DocRef[] {
-  const doc = documentOf(g)
-  return doc ? [doc] : []
+  return docsOfSource(g?.nodes?.find((n) => n.stage === "source")?.config)
 }
 
-/** The graph on these documents: its source node points at the first. With none, the graph as it is. */
+/** The graph on these documents, each once, in this order. With none, the graph as it is. */
 export function withDocuments<G extends Pick<PipelineGraph, "nodes">>(g: G, docs: readonly DocRef[]): G {
-  return docs[0] ? withDocument(g, docs[0]) : g
+  if (!docs.length) return g
+  const once = docsOfSource({ documents: docs })
+  return { ...g, nodes: g.nodes.map((n) => (n.stage === "source" ? { ...n, config: sourceConfigWith(n.config, once) } : n)) }
+}
+
+/** `docs` with `doc` added at the end, unless it is there already. */
+export function addedDocument(docs: readonly DocRef[], doc: DocRef): DocRef[] {
+  return docs.some((d) => d.sha === doc.sha) ? [...docs] : [...docs, { sha: doc.sha, filename: doc.filename }]
+}
+
+/** `docs` without the document `sha`. */
+export function removedDocument(docs: readonly DocRef[], sha: string): DocRef[] {
+  return docs.filter((d) => d.sha !== sha)
 }
 
 /** The same files in the same order. */
@@ -167,20 +174,33 @@ export function staleSample(
 
 let recovering = false
 
-/** Switch a working graph whose sample has an old fingerprint to that sample's current copy, and say so once. */
+/**
+ * Switch a working pipeline's sample that has an old fingerprint to that
+ * sample's current copy, and say so once. With one document this is a pick;
+ * with several, only the stale one is swapped, in place, and the others stay.
+ */
 function recoverStaleSample(): void {
   if (recovering) return
-  const old = storedDocument(storedGraphJson())
-  const card = staleSample(old, state.sources, state.samples, state.known)
-  if (!card || !old) return
+  const working = readWorking()
+  const docs = working?.documents ?? []
+  const old = docs.find((d) => staleSample(d, state.sources, state.samples, state.known))
+  const card = old ? staleSample(old, state.sources, state.samples, state.known) : null
+  if (!working || !card || !old) return
+  const now = { sha: card.sha, filename: card.filename }
+  if (docs.length > 1) {
+    set({ known: new Set(state.known).add(now.sha) })
+    storeWorking({ ...working, documents: docsOfSource({ documents: docs.map((d) => (d.sha === old.sha ? now : d)) }) })
+    // A saved pipeline on the old fingerprint follows too, so it does not open as edited.
+    followSample(old.sha, now)
+    set({ recovered: card.filename })
+    return
+  }
   recovering = true
   const gen = generation
-  const now = { sha: card.sha, filename: card.filename }
   // No question: only the fingerprint changes, so the query text the visitor typed stays.
   chooseDocument(now)
     .then(
       () => {
-        // A saved pipeline on the old fingerprint follows too, so it does not open as edited.
         followSample(old.sha, now)
         if (gen === generation) set({ recovered: card.filename })
       },

@@ -5,6 +5,7 @@ import type { Registry } from "@/api/types"
 import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, servedConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
+import { docsOfSource } from "./sourceDocs"
 
 /**
  * Form 2 of the owner's two: saved pipelines, named copies of the pipeline on
@@ -30,7 +31,7 @@ export interface SavedPipeline {
   savedAt: string
   /** Null when an older version saved it and it could not be converted. */
   config: PipelineConfig | null
-  /** The documents the pipeline runs on. One today. */
+  /** The documents the pipeline runs on, in order. */
   documents: DocRef[]
   question: AskQuestion
   /** An item kept as an older version saved it, with why it cannot be opened. Never deleted but by its owner. */
@@ -178,7 +179,7 @@ function newId(): string {
 
 /**
  * The new pipeline, and the oldest one if keeping twenty meant dropping it (I3), so the page can say so.
- * `documents` defaults to the graph's own, and the graph is pointed at the first. `select: false`
+ * `documents` defaults to the graph's own, and the graph is pointed at them. `select: false`
  * leaves Build's selection alone (a pipeline saved on Evaluate).
  */
 export function savePipeline(
@@ -278,12 +279,16 @@ export function cleanSavedPipeline(id: string, registry: Registry): string[] {
 /**
  * A sample's bytes changed, so its fingerprint did (state/document.ts). Saved
  * pipelines on the old fingerprint follow it to the current copy: only the
- * fingerprint changes, so a pipeline opened that way is not edited.
+ * fingerprint changes, so a pipeline opened that way is not edited. A pipeline
+ * that held both copies keeps the current one once.
  */
 export function followSample(oldSha: string, now: DocRef): void {
   const list = freshPipelines()
-  if (!list.some((p) => p.documents[0]?.sha === oldSha)) return
-  persist(list.map((p) => (p.documents[0]?.sha === oldSha ? { ...p, documents: [{ ...now }, ...p.documents.slice(1)] } : p)))
+  const has = (p: SavedPipeline) => p.documents.some((d) => d.sha === oldSha)
+  if (!list.some(has)) return
+  // A pipeline that already held the current copy too keeps it once, where it first stands.
+  const swapped = (p: SavedPipeline) => docsOfSource({ documents: p.documents.map((d) => (d.sha === oldSha ? { ...now } : d)) })
+  persist(list.map((p) => (has(p) ? { ...p, documents: swapped(p) } : p)))
 }
 
 export function renamePipeline(id: string, name: string): boolean {

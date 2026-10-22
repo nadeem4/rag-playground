@@ -8,11 +8,13 @@ import {
   chooseDocument,
   docStatus,
   documentOf,
+  documentsOf,
   loadSampleDocument,
   resetDocumentForTests,
   setUploadState,
   useDocument,
   withDocument,
+  withDocuments,
 } from "./document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, type PipelineGraph } from "./graph"
 import { isEdited, readCurrentId, readPipelines, resetPipelinesForTests, sameGraph, savePipeline, STARTER_ID } from "./pipelines"
@@ -272,6 +274,18 @@ describe("a sample saved with an old fingerprint", () => {
     const p = readPipelines().find((x) => x.id === saved.id)!
     expect(p.documents).toEqual([ref(SAMPLE_SHA, "chunking-primer.pdf")])
     expect(isEdited(p, readStoredGraph(registry)!)).toBe(false)
+  })
+
+  it.each([
+    ["first", (stale: { sha: string; filename: string }, other: { sha: string; filename: string }) => [stale, other]],
+    ["second", (stale: { sha: string; filename: string }, other: { sha: string; filename: string }) => [other, stale]],
+  ])("swaps a stale sample in %s place for its current copy and keeps the other documents", async (_place, order) => {
+    const stale = ref(OLD, "chunking-primer.pdf")
+    const notes = ref(UP.sha, UP.filename)
+    storeGraph(withDocuments(sampleGraph(registry, ref(UP.sha, UP.filename)), order(stale, notes)))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+    expect(documentsOf(readStoredGraph(registry))).toEqual(order(ref(SAMPLE_SHA, "chunking-primer.pdf"), notes))
   })
 
   it("does nothing while the lists are still loading", async () => {

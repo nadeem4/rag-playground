@@ -43,6 +43,7 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
 
 import { compatibility } from "./compat"
+import { withDocuments } from "./document"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const edgeSet = (g: { edges: { src: string; dst: string; port: string }[] }) =>
@@ -334,6 +335,19 @@ describe("upstreamFor", () => {
       reason: "pdfium reads PDF files only.",
     })
     expect(compatibility(LIVE.parse!.docling, upstreamFor(on("field-guide.docx"), LIVE, "parse")).kind).toBe("ok")
+  })
+
+  it("tells a parser every document's format, so pdfium is locked when one of several is not a PDF", () => {
+    const LIVE = liveRegistry as unknown as Registry
+    const g = initialGraph(LIVE)
+    const pdf = { sha: "a1".repeat(32), filename: "report.pdf" }
+    const docx = { sha: "b2".repeat(32), filename: "guide.docx" }
+    const pdf2 = { sha: "c3".repeat(32), filename: "notes.pdf" }
+    const mixed = upstreamFor(withDocuments(g, [pdf, docx]), LIVE, "parse")
+    expect(mixed.file?.provides.format).toEqual(["pdf", "docx"])
+    expect(compatibility(LIVE.parse!.pdfium, mixed).kind).toBe("hard")
+    expect(compatibility(LIVE.parse!.docling, mixed).kind).toBe("ok")
+    expect(upstreamFor(withDocuments(g, [pdf, pdf2]), LIVE, "parse").file?.provides.format).toBe("pdf")
   })
 
   it("resolves an ambient port from the column, the way the server binds it", () => {

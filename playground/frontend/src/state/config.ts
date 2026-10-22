@@ -1,6 +1,7 @@
 import type { GraphNode, ProblemDetail, Registry, Stage } from "@/api/types"
 
 import { documentsOf, type DocRef } from "./document"
+import { docsOfSource, sourceConfigWith } from "./sourceDocs"
 import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, strategyIn, titleFor, wire, type PipelineGraph } from "./graph"
 
 /**
@@ -279,8 +280,7 @@ export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph 
     const info = strategyIn(registry, stage, use)
     nodes.push({ id, stage, transform: use, config: { ...(info ? defaultConfig(info) : {}), ...settings, ...extra } })
   }
-  const doc = p.documents[0]
-  nodes.push({ id: "source", stage: "source", transform: index.source?.use ?? "upload", config: doc ? { sha: doc.sha, filename: doc.filename } : {} })
+  nodes.push({ id: "source", stage: "source", transform: index.source?.use ?? "upload", config: sourceConfigWith({}, docsOfSource({ documents: p.documents })) })
   add("parse", "parse", index.parse)
   index.clean?.forEach((s, i) => add(`clean_${i + 1}`, "clean", s))
   add("chunk", "chunk", index.chunk)

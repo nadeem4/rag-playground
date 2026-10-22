@@ -117,7 +117,8 @@ again. Build, Compare and Evaluate then say so in one
 note with a **Pick a document** button, and their run buttons wait and say "Needs a
 document." A sample saved with an older copy of its PDF is not missing: when its filename
 is exactly a current sample's, and no upload in this browser has that filename, the page
-switches to the sample's current copy and says so once. Uploads are never matched by
+switches to the sample's current copy and says so once. In a pipeline with several
+documents, only that sample changes; the other documents stay. Uploads are never matched by
 filename.
 
 ## Home

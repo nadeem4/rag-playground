@@ -20,6 +20,7 @@ import {
   type WorkingPipeline,
 } from "./config"
 import { addCleaner, addEnrich, addReranker, initialGraph, removeNode, sampleGraph, setConfig, setReranker, setTransform, type PipelineGraph } from "./graph"
+import { documentsOf, withDocuments } from "./document"
 import { sameGraph } from "./pipelines"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
@@ -352,5 +353,17 @@ describe("strategy names that are Object.prototype keys", () => {
       expect(r.problem).toContain("not fed")
       expect(r.problem.length).toBeLessThan(140)
     }
+  })
+})
+
+describe("several documents", () => {
+  const MD = { sha: "b".repeat(64), filename: "faq.md" }
+
+  it("a pipeline on several documents keeps all of them through the config and back", () => {
+    const g = withDocuments(sampleGraph(R, DOC), [DOC, MD])
+    const c = graphToConfig(g)
+    if (!c.ok) throw new Error(c.problem)
+    expect(c.pipeline.documents).toEqual([DOC, MD])
+    expect(documentsOf(columnOf(c.pipeline, R))).toEqual([DOC, MD])
   })
 })

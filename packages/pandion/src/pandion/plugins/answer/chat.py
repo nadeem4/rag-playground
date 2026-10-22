@@ -17,9 +17,10 @@ Both paths label every claim the same way: `cited`, `weak`, `similarity`,
 uncited one goes through the same `ground()` similarity check as the
 sentence-id path, with the index's embedder and no second model call. Without
 an index there is no embedder, so an uncited segment is `none`. On both paths
-a claim with no citation that starts "The documents do not" (the default
-prompts ask the model to say so that way) is `not_found`: the model says the
-retrieved pieces do not answer it, which is honest, not a fault. `stats` counts each label, plus
+a claim with no citation that is one sentence starting "The documents do not"
+(the default prompts ask the model to say so that way) is `not_found`: the
+model says the retrieved pieces do not answer it, which is honest, not a
+fault. It is not counted in `claims`. `stats` counts each label, plus
 `claims` (segments that say something) and `citing` (claims that cite a piece).
 
 Either way, adding the chunk's `start_char` turns an offset into the chunk into
@@ -60,6 +61,7 @@ Opus 5 and Fable 5.1, so Sonnet 5 and Haiku 4.5 are sent without. No
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, Mapping
@@ -114,9 +116,16 @@ LABELS = ("cited", "weak", "similarity", "none", "not_found")
 NOT_FOUND_START = "the documents do not"
 
 
+#: A sentence end followed by more words: the part holds more than one sentence.
+_MORE_SENTENCES = re.compile(r"[.!?]\s+\S")
+
+
 def says_not_found(text: str) -> bool:
-    """The model says, in this sentence, that the documents do not answer it."""
-    return text.strip().lower().startswith(NOT_FOUND_START)
+    """The part is one sentence in which the model says the documents do not
+    answer something. A part that goes on to say more keeps its usual label,
+    so a claim after the first sentence is still checked."""
+    text = text.strip()
+    return text.lower().startswith(NOT_FOUND_START) and not _MORE_SENTENCES.search(text)
 
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
 _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
@@ -700,8 +709,8 @@ def _stats(
     unknown_ids: int = 0,
 ) -> dict[str, int]:
     """Counts per label, plus the summary a reader sees: `claims` is how many
-    answer segments say something, and `citing` how many of those the model
-    cited a piece for (cited or weak)."""
+    answer segments say something (a `not_found` part does not count), and
+    `citing` how many of those the model cited a piece for (cited or weak)."""
     return {
         "cited": cited,
         "weak": weak,
@@ -709,7 +718,8 @@ def _stats(
         "none": none,
         "not_found": not_found,
         "unknown_ids": unknown_ids,
-        "claims": cited + weak + similarity + none + not_found,
+        # A part not in the documents is not a claim, so "1 of 1 part cites a piece".
+        "claims": cited + weak + similarity + none,
         "citing": cited + weak,
     }
 

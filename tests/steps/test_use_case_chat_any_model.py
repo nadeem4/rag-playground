@@ -275,7 +275,8 @@ def test_native_a_sentence_saying_the_documents_do_not_cover_it_is_not_found(fak
     assert payload["answer"][1]["citations"] == []
     assert payload["stats"] == {
         "cited": 1, "weak": 0, "similarity": 0, "none": 0, "not_found": 1, "unknown_ids": 0,
-        "claims": 2, "citing": 1,
+        # A part not in the documents is not a claim: "1 of 1 part cites a piece".
+        "claims": 1, "citing": 1,
     }
 
 
@@ -294,7 +295,37 @@ def test_sentence_ids_a_sentence_saying_the_documents_do_not_cover_it_is_not_fou
     assert [s["grounding"] for s in payload["answer"]] == ["cited", "not_found"]
     assert payload["answer"][1]["citations"] == []
     assert payload["stats"]["not_found"] == 1 and payload["stats"]["none"] == 0
-    assert (payload["stats"]["claims"], payload["stats"]["citing"]) == (2, 1)
+    assert (payload["stats"]["claims"], payload["stats"]["citing"]) == (1, 1)
+
+
+TWO = "The documents do not say the price. Shipping is free."
+
+
+def test_native_a_part_that_goes_on_after_saying_so_keeps_its_usual_label(fake, pipeline, index):
+    fake.reply = native_reply(pipeline, " " + TWO)
+    payload = ask(pipeline, index=index).payload
+    assert payload["answer"][1]["grounding"] != "not_found"
+    assert payload["stats"]["not_found"] == 0
+    fake.reply = native_reply(pipeline, " " + TWO)
+    assert ask(pipeline).payload["answer"][-1]["grounding"] == "none"
+
+
+def test_sentence_ids_a_tail_that_goes_on_after_saying_so_keeps_its_usual_label(openai_fake, pipeline, index):
+    table = table_for(pipeline)
+    sid = sid_containing(table, "passages")
+    openai_fake.answer = lambda prompt: f"{table[sid].text} [{sid}] {TWO}"
+    payload = ask(pipeline, index=index, model="gpt-6-astra").payload
+    assert payload["answer"][-1]["grounding"] != "not_found"
+    assert payload["stats"]["not_found"] == 0
+
+
+def test_says_not_found_needs_one_sentence():
+    from pandion.plugins.answer.chat import says_not_found
+
+    assert says_not_found(" The documents do not say the price.")
+    assert says_not_found("the documents do not say the price")
+    assert not says_not_found(TWO)
+    assert not says_not_found("Shipping is free. The documents do not say the price.")
 
 
 def test_a_cited_sentence_that_starts_the_same_way_keeps_its_label(openai_fake, pipeline, index):

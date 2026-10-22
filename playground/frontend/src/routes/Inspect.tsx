@@ -38,7 +38,7 @@ const labelled = {
     { text: " Most teams use 500 tokens.", citations: [], grounding: "none" },
     { text: " The documents do not say which chunk size is best for tables.", citations: [], grounding: "not_found" },
   ],
-  stats: { cited: 2, weak: 0, similarity: 0, none: 1, not_found: 1, unknown_ids: 0, claims: 4, citing: 2 },
+  stats: { cited: 2, weak: 0, similarity: 0, none: 1, not_found: 1, unknown_ids: 0, claims: 3, citing: 2 },
 } as ChatOutput["payload"]
 const emptySet: ChunkSet = {
   chunks: [],

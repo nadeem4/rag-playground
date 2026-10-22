@@ -329,7 +329,8 @@ button.chat-cite[aria-pressed="true"] {
 .chat-quote {
   quotes: "\201C" "\201D";
 }
-/* "No source" after a part nothing backs (Pandion #164), in danger ink like its rule. */
+/* "Not in the documents" after a part where the model says the documents do not
+   answer (chat version 4): plain secondary ink, because it is not a fault. */
 .chat-notfound {
   margin-left: 4px;
   padding: 0 6px;
@@ -342,6 +343,7 @@ button.chat-cite[aria-pressed="true"] {
   vertical-align: 2px;
   white-space: nowrap;
 }
+/* "No source" after a part nothing backs (Pandion #164), in danger ink like its rule. */
 .chat-nosource {
   margin-left: 4px;
   padding: 0 6px;

@@ -508,7 +508,7 @@ export interface FindResult {
  *   similarity  no ids, but one shown sentence matches above the threshold
  *   none        no ids and nothing matches
  */
-export type Grounding = "cited" | "weak" | "similarity" | "none"
+export type Grounding = "cited" | "weak" | "similarity" | "none" | "not_found"
 
 /** A run of answer text. No citations means the text is NOT grounded in a source. */
 export interface ChatSegment {
@@ -560,6 +560,8 @@ export interface GroundingStats {
   weak: number
   similarity: number
   none: number
+  /** Parts where the model says the documents do not answer (chat version 4); older payloads lack it. */
+  not_found?: number
   unknown_ids: number
   claims?: number
   citing?: number

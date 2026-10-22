@@ -70,8 +70,9 @@ def test_explain_names_the_model_id_and_the_key(cls, config_cls, base):
         assert "—" not in text and "–" not in text
 
 
+# Chat moved on to 4 for the not-in-documents prompt line, so its "old" is 3 now.
 @pytest.mark.parametrize(
-    "cls,old", [(ChatUseCase, "2"), (LlmRerank, "2"), (LlmRewrite, "1")], ids=IDS
+    "cls,old", [(ChatUseCase, "3"), (LlmRerank, "2"), (LlmRewrite, "1")], ids=IDS
 )
 def test_versions_are_bumped(cls, old):
     assert cls.version == str(int(old) + 1)

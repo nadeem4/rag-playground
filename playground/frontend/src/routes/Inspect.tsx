@@ -28,6 +28,18 @@ const parsed = parsedDoc as unknown as ParsedDoc
 const cleaned = cleanedDoc as unknown as ParsedDoc
 const chat = chatOutput as unknown as ChatOutput
 const refusal = { ...chat.payload, answer: [], citations: [], stop_reason: "refusal", usage: { input_tokens: 1612, output_tokens: 4 } }
+// A labelled answer (Pandion #164) with every label, `not_found` included (chat version 4).
+const labelled = {
+  ...chat.payload,
+  citation_method: "native",
+  answer: [
+    { text: "A retriever only returns what a chunk contains.", citations: [1], grounding: "cited" },
+    { text: " Boundaries decide recall.", citations: [2], grounding: "cited" },
+    { text: " Most teams use 500 tokens.", citations: [], grounding: "none" },
+    { text: " The documents do not say which chunk size is best for tables.", citations: [], grounding: "not_found" },
+  ],
+  stats: { cited: 2, weak: 0, similarity: 0, none: 1, not_found: 1, unknown_ids: 0, claims: 4, citing: 2 },
+} as ChatOutput["payload"]
 const emptySet: ChunkSet = {
   chunks: [],
   source_text: "",
@@ -69,6 +81,9 @@ export function Inspect() {
           note="Hand-written I-10 payload over the recursive chunks. Citation 3 fails verification; 4 fell between elements, so it has no page of its own; 5 cites a document outside the hits. The page views need the fixture PDF uploaded to the server."
         >
           <ArtifactInspector type="output" data={chat} context={{ chunks: recursive }} />
+        </Section>
+        <Section title="Chat answer with labels" note="Every part labelled: cited, no source in danger ink, and a part the model says the documents do not answer, in plain ink.">
+          <ChatInspector payload={labelled} chunkSet={recursive} />
         </Section>
         <Section title="Chat refusal">
           <ChatInspector payload={refusal} />

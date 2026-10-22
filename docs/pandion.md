@@ -722,14 +722,25 @@ same check. Claude often splits a sentence where a citation starts, as in "Accor
 the text, " followed by the cited part. A part like that, which leads into a cited part
 without ending a sentence, gets no label of its own. This check costs no second model
 call. Without an index there is nothing to compare with, so an uncited part is `none`.
-The output's `stats` counts each label, and also gives `claims`, how many parts say
+Both built-in prompts ask the model, when the documents do not answer the question or
+part of it, to say so in one sentence that starts "The documents do not". A part the
+model did not cite that starts that way, in any case, is `not_found` in both modes, with
+or without an index: the model honestly says the pieces do not answer it, which is not a
+fault. A part the model cited keeps its usual label however it starts. With your own
+prompt, ask for that sentence if you want the label.
+The output's `stats` counts each label, `not_found` too, and also gives `claims`, how many parts say
 something, and `citing`, how many of those cite a piece, so "2 of 3 parts cite a piece"
 is `citing` of `claims`. A part can hold more than one sentence, or only part of one.
 
 Read the labels with care. Closeness is not proof. The check measures how alike two texts
 are, not whether one follows from the other, so "X is not allowed" scores close to "X is
 allowed". A `none` label is the one to trust: nothing in the pieces is even close to that
-claim. A `cited` or `similarity` label claims more than it can prove. It says the claim
+claim.
+
+Chat's ids changed once in chat version 4 (Pandion after 0.5.0), when the built-in
+prompts gained the "The documents do not" line. Every built-in chat result id moved then,
+so a chat answer stored under an older id is not found by the new one; run the question
+again. A `cited` or `similarity` label claims more than it can prove. It says the claim
 sits near a sentence of the source, not that the source supports it.
 
 With several documents in the index, `chat` finds its citations in the first document by

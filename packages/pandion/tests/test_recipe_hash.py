@@ -242,16 +242,20 @@ ANSWER_INPUTS = {
     "name,config,expected",
     [
         ("search", {}, "5c77c85941c4fd54d1e0f2bc77f2c76c869977549725b312304b743df14fb631"),
-        ("chat", {}, "195d5a4f919e10750d3c3c52d4ad4590fbd4b0452aaea20334b7b466e8dd8756"),
+        # Chat's ids moved on purpose in chat version 4, when both default prompts
+        # gained the "The documents do not" line (the not_found label). They were
+        # 195d5a4f... and c236a346... before.
+        ("chat", {}, "6053b3d5e4b1eec0e4cb17f678bb706aec32a9625e48d3398526cb3421d41e58"),
         (
             "chat",
             {"model": "claude-haiku-4-5"},
-            "c236a3463fb1539bc70d622566a1fbc26db91ae766b4580f906ed1a136cc2347",
+            "4cd6c3da9a2cfec4f0750ccd3add795bac68d68651154b21621b24b69c68c15b",
         ),
     ],
 )
 def test_an_answer_node_keeps_its_id(name, config, expected):
-    """Computed on main at a274a19, while search and chat still lived in the app."""
+    """Computed on main at a274a19, while search and chat still lived in the app;
+    chat's re-pinned for chat version 4."""
     discover()
     cls = registry.get(Stage.USE_CASE, name)
     settings = cls.config_model(**config)

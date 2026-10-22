@@ -340,9 +340,12 @@ the question box.
   citation opens the PDF page with the sentence highlighted. For a document without
   pages it opens the document's text with the cited words marked instead.
 - Every part of a Chat answer gets a label, whichever model answered. A part is cited,
-  weak, matched by similarity, or has no source. A line above the answer counts them, for
+  weak, matched by similarity, has no source, or is not in the documents. A line above the answer counts them, for
   example "2 of 3 parts cite a piece." A part with no source is drawn in red with a small
-  "No source" tag, because nothing in the retrieved pieces backs it. A similarity match
+  "No source" tag, because nothing in the retrieved pieces backs it. A part where the
+  model says the documents do not answer something ("The documents do not say what the
+  warranty covers.") is drawn in plain ink with a "Not in the documents" tag: the model is
+  being honest, so it is not marked as a fault. A similarity match
   only means a shown sentence is close in meaning, not that it proves the part. Untick
   **Mark parts with no source** to hide those marks; this browser remembers the choice.
 - With two or more documents, **Search in** above the question chooses what Ask searches:

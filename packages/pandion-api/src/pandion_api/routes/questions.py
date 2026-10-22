@@ -317,11 +317,18 @@ def get_questions_across(
 ) -> dict[str, Any]:
     """The sets kept against these documents as one, as an evaluation without
     questions asks them (`kept_questions`): each question's `document` is the
-    sha of the document it names, or empty when it names none."""
+    sha of the document it names, or empty when it names none. `filenames`
+    names the files the kept sets were read from, each once, in the
+    documents' order."""
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     questions = kept_questions(store, shas, list(names))
-    return {"documents": shas, "count": len(questions), "questions": questions}
+    filenames: list[str] = []
+    for sha in shas:
+        kept = store.questions(sha)
+        if kept.is_file():
+            filenames.append(json.loads(kept.read_text(encoding="utf-8"))["filename"])
+    return {"documents": shas, "count": len(questions), "questions": questions, "filenames": list(dict.fromkeys(filenames))}
 
 
 def _summary(rows: list[dict[str, Any]]) -> dict[str, int]:

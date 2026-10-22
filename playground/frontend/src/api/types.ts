@@ -777,6 +777,8 @@ export interface QuestionSetAcross {
   count: number
   /** A named question's `document` is its document's sha; empty for one naming none. */
   questions: GoldQuestion[]
+  /** The files the kept sets were read from, each once. Absent from an older server. */
+  filenames?: string[]
 }
 
 /** `POST /api/v2/explain`: what a transform will do with THESE settings. */
@@ -859,6 +861,8 @@ export interface EvalQuestion {
   question: string
   gold_answers: string[]
   tags: string[]
+  /** The document its evidence is in, by sha or filename: found only there. Sent only with several documents. */
+  document?: string
 }
 export interface EvaluationRequest {
   config: PipelineConfig

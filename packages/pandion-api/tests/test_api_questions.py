@@ -256,6 +256,16 @@ def test_the_set_for_several_documents_comes_back_as_one(client):
     body = client.get("/questions", params={"documents": [first, second]}).json()
     assert body["documents"] == [first, second] and body["count"] == 3
     assert [(q["id"], q["document"]) for q in body["questions"]] == [("capital", first), ("any", ""), ("bees", second)]
+    assert body["filenames"] == ["golden.json"]
+
+
+def test_the_set_for_several_documents_names_each_file_its_questions_came_from(client):
+    first, second = two(client)
+    post_set(client, first, [{"id": "capital", "question": "Capital?", "gold_answers": [PASSAGE]}], filename="report-set.json")
+    post_set(client, second, [{"id": "bees", "question": "Bees?", "gold_answers": [BEES]}], filename="bees-set.json")
+    body = client.get("/questions", params={"documents": [first, second]}).json()
+    assert body["filenames"] == ["report-set.json", "bees-set.json"]
+    assert client.get("/questions", params={"documents": [first]}).json()["filenames"] == ["report-set.json"]
 
 
 def test_unnamed_questions_stay_when_the_first_document_goes(client):

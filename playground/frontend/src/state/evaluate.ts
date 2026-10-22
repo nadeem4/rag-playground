@@ -35,16 +35,28 @@ export function hasRetriever(g: PipelineGraph): boolean {
   return g.nodes.some((n) => n.stage === "retrieve")
 }
 
-/** What Evaluate sends: every question at once. The server scores them (pandion.evaluate). */
+/**
+ * What Evaluate sends: every question at once. The server scores them
+ * (pandion.evaluate). With several documents each question names its
+ * document, so it is found only in a piece from that one; with one document
+ * the request is as it always was.
+ */
 export function evaluationRequest(
   p: WorkingPipeline,
-  questions: readonly Pick<Question, "id" | "question" | "gold_answers" | "tags">[],
+  questions: readonly Pick<Question, "id" | "question" | "gold_answers" | "tags" | "document">[],
   topK: number,
 ): EvaluationRequest {
+  const several = p.documents.length > 1
   return {
     config: p.config,
     documents: p.documents.map((d) => d.sha),
-    questions: questions.map((q) => ({ id: q.id, question: q.question, gold_answers: [...q.gold_answers], tags: [...q.tags] })),
+    questions: questions.map((q) => ({
+      id: q.id,
+      question: q.question,
+      gold_answers: [...q.gold_answers],
+      tags: [...q.tags],
+      ...(several && q.document ? { document: q.document } : {}),
+    })),
     top_k: topK,
   }
 }
@@ -228,9 +240,14 @@ export function scoreFinding(
   rows: readonly { now?: EvalPayload; before?: EvalPayload }[],
   steps: readonly RecipeStep[],
   k: number,
+  /** `several`: the pipeline has several documents, so the line says the top k and the misses. */
+  { several = false }: { several?: boolean } = {},
 ): ScoreFinding {
   const noun = totals.total === 1 ? "question" : "questions"
-  const head = `${totals.found} of ${totals.total} ${noun} found the answer.`
+  const missed = totals.scored - totals.found
+  const head = several
+    ? `${totals.found} of ${totals.total} ${noun} found the answer in the top ${k}. ${missed ? `${missed} missed.` : "None missed."}`
+    : `${totals.found} of ${totals.total} ${noun} found the answer.`
   const finding = previous ? `${head} The last run found ${previous.totals.found} of ${previous.totals.total}.` : head
   const rate = percent(totals.hit_rate) ?? "not yet"
   const base = `Hit rate at ${k} ${k === 1 ? "piece" : "pieces"}: ${rate}.`

@@ -7,11 +7,23 @@ import { resetAppSettingsForTests } from "@/api/useDemo"
 import { resetWriteSessionsForTests } from "@/state/writeQuestions"
 import { AGAINST_URL, againstResponse } from "@/api/fixtures/against"
 import liveRegistry from "@/api/fixtures/registry.json"
-import type { EvalPayload, EvalQuestionResult, EvaluationRequest, EvaluationResult, GoldQuestion, QuestionSetUpload, Registry, SampleQuestion, Totals } from "@/api/types"
+import type {
+  EvalPayload,
+  EvalQuestionResult,
+  EvaluationRequest,
+  EvaluationResult,
+  GoldQuestion,
+  QuestionSetAcross,
+  QuestionSetAcrossUpload,
+  QuestionSetUpload,
+  Registry,
+  SampleQuestion,
+  Totals,
+} from "@/api/types"
 import { afterRun, BEST_KEY, bestKey, readBest } from "@/state/best"
 import { graphToConfig, stepOfCardIn } from "@/state/config"
 import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
-import { chooseDocument, resetDocumentForTests, withDocument } from "@/state/document"
+import { chooseDocument, resetDocumentForTests, withDocument, withDocuments } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID } from "@/state/pipelines"
 import { ON_BUILD } from "@/state/pipelineChoice"
@@ -131,6 +143,8 @@ function serve({
   artifacts = {},
   result = null,
   resultFails = 0,
+  across = null,
+  acrossUpload,
 }: {
   reg?: unknown
   sampleSha?: string | null
@@ -143,8 +157,12 @@ function serve({
   result?: EvaluationResult | null
   /** How many reads of the run fail before one succeeds. */
   resultFails?: number
+  /** What `GET /api/v2/questions?documents=...` has: the set kept across several documents. */
+  across?: QuestionSetAcross | null
+  /** What `POST /api/v2/questions` answers. */
+  acrossUpload?: QuestionSetAcrossUpload
 } = {}): Served {
-  const served: Served = { evaluations: [], cancelled: [], reads: 0, urls: [] }
+  const served: Served = { evaluations: [], cancelled: [], reads: 0, urls: [], acrossUploads: [] }
   let fails = resultFails
   const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
   const missing = () => new Response(JSON.stringify({ detail: "not found" }), { status: 404 })
@@ -197,6 +215,11 @@ function serve({
             ])
           : missing()
       if (url === "/api/samples/chunking-primer/questions") return ok(QUESTIONS)
+      if (url.startsWith("/api/v2/questions?")) return ok(across ?? { documents: [], count: 0, questions: [] })
+      if (url === "/api/v2/questions" && init?.method === "POST") {
+        served.acrossUploads.push(init.body as FormData)
+        return acrossUpload ? ok(acrossUpload) : missing()
+      }
       if (/^\/api\/v2\/documents\/[^/]+\/questions$/.test(url)) {
         if (init?.method === "POST") {
           if (!upload) return missing()
@@ -217,6 +240,8 @@ interface Served {
   cancelled: string[]
   reads: number
   urls: string[]
+  /** Each `POST /api/v2/questions` body. */
+  acrossUploads: FormData[]
 }
 
 /** Serves the default registry, stores the sample graph for `SOURCE`, and renders Evaluate. */
@@ -1690,5 +1715,134 @@ describe("Best so far", { timeout: 15000 }, () => {
   it("says nothing about a best when the server sends no fingerprint", async () => {
     await runOnce(report([found("a", A), missed("b", B)]))
     expect(screen.queryByTestId("best-so-far")).toBeNull()
+  })
+})
+
+describe("with several documents", () => {
+  const GUIDE = { sha: "ef".repeat(32), filename: "field-guide.docx" }
+  const graph = withDocuments(sampleGraph(registry, SOURCE), [SOURCE, GUIDE])
+  const ACROSS: QuestionSetAcross = {
+    documents: [SOURCE.sha, GUIDE.sha],
+    count: 3,
+    filenames: ["golden-set.csv"],
+    questions: [
+      question({ id: "overlap", question: "What does overlap do?", gold_answers: ["Overlap keeps context."], document: SOURCE.sha }),
+      question({ id: "units", question: "What unit are depths in?", gold_answers: ["Depths are in metres."], document: GUIDE.sha }),
+      question({ id: "page", question: "What is a page?", gold_answers: ["A page is a page."] }),
+    ],
+  }
+
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  function open(opts: Parameters<typeof serve>[0] = {}) {
+    const served = serve({ across: ACROSS, ...opts })
+    storeGraph(graph)
+    render(<Evaluate />)
+    return served
+  }
+
+  it("with one document asks nothing about a set across documents", async () => {
+    const served = setup()
+    await waitFor(() => expect(document.body.textContent).toMatch(/2 questions ready\. Press Evaluate/))
+    expect(served.urls.some((u) => u.startsWith("/api/v2/questions"))).toBe(false)
+    expect(document.querySelector("[data-file-tag]")).toBeNull()
+    expect(screen.queryByTestId("question-set-across")).toBeNull()
+  })
+
+  it("says how often the pipeline finds the answer in N documents, and lists them all on the right", async () => {
+    open()
+    const header = await screen.findByTestId("evaluate-header")
+    await waitFor(() => expect(header.textContent).toMatch(/How often the pipeline on Build finds the answer in 2 documents\./))
+    const line = screen.getByTestId("documents-line")
+    expect([...line.querySelectorAll("[data-file-tag]")].map((t) => t.textContent)).toEqual(["chunking-primer.pdf", "field-guide.docx"])
+    expect(screen.getByTestId("documents-hint").textContent).toBe("The pipeline's documents, all of them. Add or remove documents on Build.")
+    // Trying one other document would replace them all, so there is no Change here.
+    expect(within(header).queryByRole("button", { name: /Change/ })).toBeNull()
+  })
+
+  it("shows one question set with a count per document and for the questions naming none", async () => {
+    open()
+    const card = await screen.findByTestId("question-set-across")
+    await waitFor(() => expect(within(card).getByTestId("set-line").textContent).toBe("3 questions from golden-set.csv, covering all 2 documents"))
+    const rows = within(card).getAllByRole("listitem").map((li) => li.textContent)
+    expect(rows).toEqual(["chunking-primer.pdf1 question", "field-guide.docx1 question", "no document named1 question, found in any document"])
+    expect(within(card).getByRole("button", { name: "Upload another set" })).toBeTruthy()
+    expect(within(card).getByRole("button", { name: "Write questions for me" })).toBeTruthy()
+    expect(within(card).getByRole("link", { name: "Start from the template" }).getAttribute("href")).toBe("/api/questions/template?format=csv")
+    expect(screen.getByText(/3 questions ready, across 2 documents\. Press Evaluate to score this pipeline\./)).toBeTruthy()
+  })
+
+  it("uploads another set for every document at once", async () => {
+    const served = open({
+      acrossUpload: {
+        documents: [SOURCE.sha, GUIDE.sha],
+        filename: "golden-set.csv",
+        format: "csv",
+        count: 3,
+        stored: true,
+        note: "",
+        parser: "docling, pdfium",
+        parser_note: "Checked.",
+        summary: { questions: 3, found: 3, found_normalized: 0, not_found: 0 },
+        questions: [],
+      },
+    })
+    const card = await screen.findByTestId("question-set-across")
+    chooseFile(within(card).getByLabelText("Upload a question set"), "golden-set.csv")
+    await waitFor(() => expect(served.acrossUploads).toHaveLength(1))
+    expect(served.acrossUploads[0].getAll("documents")).toEqual([SOURCE.sha, GUIDE.sha])
+  })
+
+  it("uses the samples' own sets when none is kept, each naming its sample", async () => {
+    open({ across: null })
+    const card = await screen.findByTestId("question-set-across")
+    await waitFor(() => expect(within(card).getByTestId("set-line").textContent).toBe("2 questions from the samples, covering 1 of 2 documents"))
+  })
+
+  it("sends each question's document, then says the score, the misses and the totals by document", async () => {
+    const served = open({
+      result: report(
+        [
+          verdict("overlap", { document: SOURCE.sha }),
+          verdict("units", { document: GUIDE.sha, score: score({ hit: false, rank: null, matched_chunk_id: "", match: "none", found_at: 9 }) }),
+          verdict("page", { document: null }),
+        ],
+        {
+          questions_fingerprint: "f-several",
+          document_shas: [SOURCE.sha, GUIDE.sha],
+          by_document: [
+            { document: SOURCE.sha, ...totalsOf(1, 1) },
+            { document: GUIDE.sha, ...totalsOf(0, 1) },
+            { document: null, ...totalsOf(1, 1) },
+          ],
+        },
+      ),
+    })
+    await waitFor(() => expect((screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(1))
+    expect(served.evaluations[0].questions.map((q) => q.document)).toEqual([SOURCE.sha, GUIDE.sha, undefined])
+    const es = DrivenEventSource.instances[0]
+    es.emit(1, { event: "stream_end", status: "finished", ok: true })
+    const summary = await screen.findByTestId("summary")
+    expect(summary.textContent).toBe("2 of 3 questions found the answer in the top 5. 1 missed.")
+    const table = screen.getByRole("table", { name: "Found by document" })
+    expect(within(table).getAllByRole("row").slice(1).map((r) => r.textContent)).toEqual(["chunking-primer.pdf1 of 1", "field-guide.docx0 of 1", "no document named1 of 1"])
+    // Each question names its file, or says any document.
+    const tagOf = (id: string) => document.querySelector(`[data-question="${id}"] [data-question-file]`)!.textContent
+    expect([tagOf("overlap"), tagOf("units"), tagOf("page")]).toEqual(["chunking-primer.pdf", "field-guide.docx", "any document"])
+    // Show filters by document, and Missed.
+    const shown = () => [...document.querySelectorAll("[data-question]")].map((r) => r.getAttribute("data-question"))
+    const filters = screen.getByRole("group", { name: "Show questions from" })
+    fireEvent.click(within(filters).getByRole("button", { name: "field-guide.docx" }))
+    expect(shown()).toEqual(["units"])
+    fireEvent.click(within(filters).getByRole("button", { name: "All" }))
+    fireEvent.click(within(screen.getByRole("group", { name: "Verdict filter" })).getByRole("button", { name: "Missed" }))
+    expect(shown()).toEqual(["units"])
+    // The first best names the documents.
+    expect((await screen.findByTestId("best-so-far")).textContent).toMatch(/Your first run with these 2 documents and questions, so it is your best so far\./)
   })
 })

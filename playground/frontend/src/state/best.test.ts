@@ -58,6 +58,21 @@ describe("Best so far", () => {
     expect(bestKey(report([q("a", true)], { questions_fingerprint: undefined }))).toBeNull()
   })
 
+  it("keys a run on the document each question names too, and leaves a set naming none keyed as before", () => {
+    const plain = report([q("a", true)])
+    expect(bestKey(plain)).toBe(JSON.stringify(["f1", ["cd".repeat(32)], 5]))
+    expect(bestKey(report([q("a", true, { document: null })]))).toBe(bestKey(plain))
+    const one = bestKey(report([q("a", true, { document: "cd".repeat(32) })]))
+    expect(one).not.toBe(bestKey(plain))
+    expect(bestKey(report([q("a", true, { document: "ab".repeat(32) })]))).not.toBe(one)
+  })
+
+  it("names the documents in the first run's headline when there are several", () => {
+    expect(bestHeadline({ kind: "first" })).toBe("Your first run with these questions, so it is your best so far.")
+    expect(bestHeadline({ kind: "first" }, 1)).toBe("Your first run with these questions, so it is your best so far.")
+    expect(bestHeadline({ kind: "first" }, 3)).toBe("Your first run with these 3 documents and questions, so it is your best so far.")
+  })
+
   it("makes the first run with a question set the best, keeping what Pandion compares, and asks nothing", async () => {
     const against = judge()
     const r = report([q("a", true), q("b", false, { error: "boom" })], { nondeterministic: ["llm_rerank"] })

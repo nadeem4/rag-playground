@@ -193,6 +193,16 @@ describe("the score as a finding", () => {
     expect(f.note).toBe("Both misses are new since Parse changed to Fast text.")
   })
 
+  it("with several documents, says how many missed and at what top k", () => {
+    const now = [pay(true, 1), pay(true, 2), pay(false, null)]
+    const f = scoreFinding(totalsOf(now), prev(), now.map((p) => ({ now: p })), steps("docling", "Docling"), 5, { several: true })
+    expect(f.finding).toBe("2 of 3 questions found the answer in the top 5. 1 missed. The last run found 5 of 5.")
+    const all = [pay(true, 1), pay(true, 2)]
+    expect(scoreFinding(totalsOf(all), null, all.map((p) => ({ now: p })), steps("docling", "Docling"), 1, { several: true }).finding).toBe(
+      "2 of 2 questions found the answer in the top 1. None missed.",
+    )
+  })
+
   it("says every answer came back first on a clean first run", () => {
     const now = [pay(true, 1), pay(true, 1)]
     const f = scoreFinding(totalsOf(now), null, now.map((p) => ({ now: p })), steps("docling", "Docling"), 5)
@@ -467,6 +477,21 @@ describe("one evaluation request", () => {
       questions: QUESTIONS.map(({ id, question, gold_answers, tags }) => ({ id, question, gold_answers, tags })),
       top_k: 5,
     })
+  })
+
+  it("sends each question's document only when the pipeline has several", () => {
+    const c = graphToConfig(sampleGraph(R, DOC))
+    if (!c.ok) throw new Error(c.problem)
+    const named = [{ ...QUESTIONS[0], document: "e.pdf" }, { ...QUESTIONS[1], document: "" }]
+    // One document: the request is as it always was, whatever a question names.
+    expect(evaluationRequest(c.pipeline, named, 5).questions.every((q) => !("document" in q))).toBe(true)
+    const OTHER = { sha: "3".repeat(64), filename: "f.pdf" }
+    const two = { ...c.pipeline, documents: [DOC, OTHER] }
+    const several = [{ ...QUESTIONS[0], document: OTHER.sha }, { ...QUESTIONS[1], document: "" }]
+    expect(evaluationRequest(two, several, 5).questions).toEqual([
+      { id: "q1", question: "What is a chunk?", gold_answers: ["A chunk is a piece."], tags: ["easy"], document: OTHER.sha },
+      { id: "q2", question: "Why overlap?", gold_answers: ["Overlap keeps context."], tags: [] },
+    ])
   })
 
   it("reads each question's verdict from the server's result", () => {

@@ -52,6 +52,8 @@ function StoredBar() {
 }
 
 describe("PipelineBar: Start from a template", () => {
+  afterEach(() => window.history.replaceState(null, "", "/"))
+
   it("drops the Undo line once the pipeline is edited, and keeps the edit", async () => {
     render(<StoredBar />)
     fireEvent.click(screen.getByRole("button", { name: "Start from a template" }))
@@ -92,10 +94,12 @@ describe("PipelineBar: Start from a template", () => {
 
   it("opens the picker from /build?templates=1, and drops the query so a reload does not reopen it", async () => {
     window.history.replaceState(null, "", "/build?templates=1&keep=me")
+    const entries = window.history.length
     render(<Bar onLoad={vi.fn()} />)
     expect(await screen.findByRole("dialog", { name: "Start from a template" })).toBeTruthy()
     expect(window.location.pathname + window.location.search).toBe("/build?keep=me")
-    window.history.replaceState(null, "", "/")
+    // Replaced, not pushed: Back still goes to the page before Build.
+    expect(window.history.length).toBe(entries)
   })
 
   it("stays closed without the query", () => {

@@ -25,6 +25,7 @@ import {
   parseImport,
   pipelineSummary,
   savedWhen,
+  soonHoursOf,
   uploadsOf,
   type DocRef,
   type DocState,
@@ -140,8 +141,10 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
     pipeline: items.filter((i) => i.kind === "pipeline").length,
     experiment: items.filter((i) => i.kind === "experiment").length,
   }
-  const soon = items.filter((i) => isSoon(stateOf(i)))
-  const soonHours = Math.min(...soon.map((i) => { const s = stateOf(i); return s.kind === "upload" && s.hoursLeft !== null ? s.hoursLeft : Infinity }))
+  // Every document counts here, so an item with one document gone and another leaving soon is still offered.
+  const hoursOf = new Map(items.map((i) => [key(i), soonHoursOf(i.documents, ctx)]))
+  const soon = items.filter((i) => hoursOf.get(key(i)) != null)
+  const soonHours = Math.min(...soon.map((i) => hoursOf.get(key(i))!))
 
   const startExport = (keys: string[], includeDoc = demo) => {
     setExporting(keys)

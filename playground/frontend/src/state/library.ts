@@ -107,19 +107,31 @@ export function docState(doc: DocRef | null, ctx: DocContext): DocState {
 
 export const isSoon = (s: DocState) => s.kind === "upload" && s.hoursLeft !== null && s.hoursLeft < SOON_HOURS
 
+type Upload = { doc: DocRef; state: Extract<DocState, { kind: "upload" }> }
+
+/** Each upload with its hours left counted, fewest hours first. */
+function uploadsByHours(docs: readonly DocRef[], ctx: DocContext): Upload[] {
+  return docs
+    .map((doc) => ({ doc, state: docState(doc, ctx) }))
+    .filter((d): d is Upload => d.state.kind === "upload" && d.state.hoursLeft !== null)
+    .sort((a, b) => a.state.hoursLeft! - b.state.hoursLeft!)
+}
+
 /**
  * The state of an item with several documents, and the document it is about:
- * the first one gone, else the one leaving the demo soonest, else the first.
+ * the first one gone, else the upload with the fewest hours left (leaving
+ * soon or not, so a sample listed first never hides it), else the first.
  * With one document, that document's state.
  */
 export function itemDocState(docs: readonly DocRef[], ctx: DocContext): { doc: DocRef | null; state: DocState } {
   const all = docs.map((doc) => ({ doc, state: docState(doc, ctx) }))
-  const gone = all.find((d) => d.state.kind === "gone")
-  if (gone) return gone
-  const soon = all
-    .filter((d) => isSoon(d.state))
-    .sort((a, b) => (a.state.kind === "upload" && b.state.kind === "upload" ? (a.state.hoursLeft ?? 0) - (b.state.hoursLeft ?? 0) : 0))
-  return soon[0] ?? all[0] ?? { doc: null, state: { kind: "none" } }
+  return all.find((d) => d.state.kind === "gone") ?? uploadsByHours(docs, ctx)[0] ?? all[0] ?? { doc: null, state: { kind: "none" } }
+}
+
+/** The fewest hours left of an item's documents that are leaving the demo soon, even when another is gone; null for none. */
+export function soonHoursOf(docs: readonly DocRef[], ctx: DocContext): number | null {
+  const first = uploadsByHours(docs, ctx)[0]
+  return first && isSoon(first.state) ? first.state.hoursLeft : null
 }
 
 /** Each upload the items use, every document of each, once. A sample is always on the server, so it is never one. */

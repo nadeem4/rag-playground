@@ -11,6 +11,7 @@ import {
   docState,
   experimentSummary,
   itemDocState,
+  soonHoursOf,
   exportFileName,
   importResultLine,
   libraryItems,
@@ -131,6 +132,20 @@ describe("the document state", () => {
     expect(soon).toEqual({ doc: { sha: OTHER, filename: "second.pdf" }, state: { kind: "upload", hoursLeft: 3 } })
     const fine = itemDocState(item.documents, { ...ctx, sources: [source(UP, fresh), source(OTHER, fresh)] })
     expect(fine).toEqual({ doc: { sha: UP, filename: "notes.pdf" }, state: { kind: "upload", hoursLeft: 23 } })
+  })
+
+  it("with nothing gone or soon, speaks for the upload with the fewest hours left, not a sample before it", () => {
+    const docs = [{ sha: SAMPLE, filename: "primer.pdf" }, { sha: UP, filename: "notes.pdf" }]
+    const got = itemDocState(docs, { ...ctx, sources: [source(UP, "2026-10-04T08:00:00+00:00")] })
+    expect(got).toEqual({ doc: { sha: UP, filename: "notes.pdf" }, state: { kind: "upload", hoursLeft: 20 } })
+  })
+
+  it("counts the hours left of every document leaving soon, even when another is gone", () => {
+    const docs = [{ sha: OTHER, filename: "second.pdf" }, { sha: UP, filename: "notes.pdf" }]
+    const sources = [source(UP, "2026-10-03T14:00:00+00:00")]
+    expect(itemDocState(docs, { ...ctx, sources }).state).toEqual({ kind: "gone" })
+    expect(soonHoursOf(docs, { ...ctx, sources })).toBe(2)
+    expect(soonHoursOf(docs, { ...ctx, sources: [source(UP, "2026-10-04T11:00:00+00:00")] })).toBeNull()
   })
 
   it("with one document, the item's state is that document's state", () => {

@@ -99,9 +99,9 @@ import {
 import { firstSentence } from "@/lib/sentence"
 import { compatibility } from "@/state/compat"
 import { recipeSentence } from "@/state/recipeSentence"
-import { cardNamedIn, cardOfStepIn, goldsOf, graphToConfig, stepOfCardIn } from "@/state/config"
+import { cardOfProblem, cardOfStepIn, goldsOf, graphToConfig, stepOfCardIn } from "@/state/config"
 import { CACHE_NOTE, cachedOnly, costValues, estimateLine, sharedLine, sharedStages } from "@/state/cost"
-import { errorHeadline, routeRunError, settingProblems } from "@/state/pipeline"
+import { errorHeadline, problemDetails, routeRunError } from "@/state/pipeline"
 import { baselineIndex, matryoshkaVariants, tallyLine, tallySweep, variantLabels, variantName, type VariantLabel } from "@/state/sweep"
 
 import { RegistryScreen } from "./Shell"
@@ -666,13 +666,13 @@ function Sweep({
     } catch (err) {
       // The run never started: back on the cards, the message goes under the recipe it belongs to, with that editor open.
       setPhase("setup")
-      // Problems with settings of this step, as Pandion words them ("index.chunk (sentence_window): overlap_sentences: ...").
-      const sentences = err instanceof ApiError && Array.isArray((err.detail as { problems?: unknown } | null)?.problems) ? (err.detail as { problems: string[] }).problems : []
-      const problem = sentences.length === 1 && cardNamedIn(sentences[0], graph) === target.id ? settingProblems(sentences[0]) : null
-      if (problem) {
+      // A problem Pandion placed on settings of this step.
+      const placed = err instanceof ApiError ? (problemDetails(err.detail) ?? []) : []
+      const problem = placed.length === 1 && placed[0].use && placed[0].settings.length && cardOfProblem(placed[0], graph) === target.id ? placed[0] : null
+      if (problem?.use) {
         const fields = problem.settings.map((x) => x.field.split(".")[0])
-        const at = rejectedRecipe(variants, submitted.variants, fields, target.stage, registry, problem.transform)
-        const schema = infoFor(registry, { stage: target.stage, transform: problem.transform })?.config_schema
+        const at = rejectedRecipe(variants, submitted.variants, fields, target.stage, registry, problem.use)
+        const schema = infoFor(registry, { stage: target.stage, transform: problem.use })?.config_schema
         const title = (field: string) => RECIPE_TITLES[field] ?? schema?.properties?.[field]?.title ?? field
         // Each setting's sentence under its own setting's title.
         const said = problem.settings.map((x, k) => `${title(fields[k])}: ${x.message}`)

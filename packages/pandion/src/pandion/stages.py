@@ -202,7 +202,29 @@ def _strategy(stage: Stage, use: str, settings: dict[str, Any], *, where: str):
     try:
         return cls, cls.config_model(**settings)
     except ValidationError as exc:
-        raise ValueError(f"{where} ({use}): {_problems(exc)}.") from None
+        raise SettingsError(f"{where} ({use}): {_problems(exc)}.", _settings(exc)) from None
+
+
+class SettingsError(ValueError):
+    """A step's settings that its config model refused. `settings` holds each
+    refused setting with its own sentence, `{"field", "message"}`, or is empty
+    when a problem is the whole step's rather than one setting's."""
+
+    def __init__(self, message: str, settings: list[dict[str, str]]) -> None:
+        super().__init__(message)
+        self.settings = settings
+
+
+def _settings(exc: ValidationError) -> list[dict[str, str]]:
+    """Each refused setting and its sentence, as `_problems` words them; empty
+    when any error is about the whole step, which no one setting owns."""
+    out = []
+    for e in exc.errors():
+        field = ".".join(map(str, e["loc"]))
+        if not field:
+            return []
+        out.append({"field": field, "message": e["msg"].rstrip(".") + "."})
+    return out
 
 
 def _problems(exc: ValidationError) -> str:

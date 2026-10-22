@@ -5,7 +5,7 @@ import type { NodeState } from "@/api/runState"
 
 import { graphToConfig, type WorkingPipeline } from "./config"
 import { addCleaner, columnOrder, initialGraph, removeNode, sampleGraph, type PipelineGraph } from "./graph"
-import { askRun, cardRun, foldRun, mergeResults, routeRunError, settingProblems, type Tracked } from "./pipeline"
+import { askRun, cardRun, foldRun, mergeResults, problemDetails, routeRunError, type Tracked } from "./pipeline"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const DOC = { sha: "c".repeat(64), filename: "a.pdf" }
@@ -41,37 +41,44 @@ describe("cardRun", () => {
   })
 })
 
+/** A 422 as pandion-api sends it: each problem's sentence, and where Pandion placed it. */
+const refusal = (...placed: [message: string, step: string | null][]) =>
+  new ApiError(422, { problems: placed.map(([m]) => m), details: placed.map(([message, step]) => ({ message, step, use: null, settings: [] })) }, "/runs")
+
 describe("routeRunError on /api/v2", () => {
   const g = sampleGraph(R, DOC)
-  it("puts a problem on the card it names", () => {
-    const err = new ApiError(422, { problems: ["index.chunk: chunk_overlap must be smaller than chunk_size."] }, "/runs")
-    expect(routeRunError(err, g)).toEqual({ kind: "node", nodeId: "chunk", message: "index.chunk: chunk_overlap must be smaller than chunk_size." })
+  it("puts a problem on the card Pandion placed it on", () => {
+    expect(routeRunError(refusal(["chunk_overlap must be smaller than chunk_size.", "index.chunk"]), g)).toEqual({
+      kind: "node",
+      nodeId: "chunk",
+      message: "chunk_overlap must be smaller than chunk_size.",
+    })
   })
 
-  it("puts a problem that names no card on the column", () => {
-    const err = new ApiError(422, { problems: ["The pipeline must be a mapping of settings."] }, "/runs")
-    expect(routeRunError(err, g)).toEqual({ kind: "column", message: "The pipeline must be a mapping of settings." })
+  it("puts a problem that is no one step's on the column", () => {
+    expect(routeRunError(refusal(["The pipeline must be a mapping of settings.", null]), g)).toEqual({ kind: "column", message: "The pipeline must be a mapping of settings." })
+  })
+
+  it("never reads the sentence for a card: without a place it is the column's", () => {
+    const err = new ApiError(422, { problems: ["index.chunk: chunk_overlap must be smaller than chunk_size."] }, "/runs")
+    expect(routeRunError(err, g)).toMatchObject({ kind: "column" })
   })
 
   it("puts a problem with a stacked step on the card at that place", () => {
-    const err = new ApiError(422, { problems: ["index.clean step 2: similarity must be at most 1."] }, "/runs")
-    expect(routeRunError(err, swapped)).toEqual({ kind: "node", nodeId: "clean_1", message: "index.clean step 2: similarity must be at most 1." })
-    const first = new ApiError(422, { problems: ["index.clean step 1: similarity must be at most 1."] }, "/runs")
-    expect(routeRunError(first, gap)).toMatchObject({ kind: "node", nodeId: "clean_2" })
+    expect(routeRunError(refusal(["similarity must be at most 1.", "index.clean.2"]), swapped)).toEqual({ kind: "node", nodeId: "clean_1", message: "similarity must be at most 1." })
+    expect(routeRunError(refusal(["similarity must be at most 1.", "index.clean.1"]), gap)).toMatchObject({ kind: "node", nodeId: "clean_2" })
   })
 
-  it("puts a problem on the column when the card it names is not in the column", () => {
-    const err = new ApiError(422, { problems: ["index.clean step 2: similarity must be at most 1."] }, "/runs")
-    expect(routeRunError(err, gap)).toEqual({ kind: "column", message: "index.clean step 2: similarity must be at most 1." })
-    const noAnswer = removeNode(g, "use_case")
-    expect(routeRunError(new ApiError(422, { problems: ["answer: bad"] }, "/ask"), noAnswer)).toEqual({ kind: "column", message: "answer: bad" })
+  it("puts a problem on the column when the card it belongs to is not in the column", () => {
+    expect(routeRunError(refusal(["bad", "index.clean.2"]), gap)).toEqual({ kind: "column", message: "bad" })
+    expect(routeRunError(refusal(["answer: bad", "answer"]), removeNode(g, "use_case"))).toEqual({ kind: "column", message: "answer: bad" })
   })
 
-  it("puts problems that name different cards on the column, all of them", () => {
-    const problems = ["index.chunk: chunk_size must be at least 1.", "retrieve.search: top_k must be at least 1."]
-    expect(routeRunError(new ApiError(422, { problems }, "/runs"), g)).toEqual({ kind: "column", message: problems.join(" ") })
-    const same = ["index.chunk: chunk_size must be at least 1.", "index.chunk: chunk_overlap must be at least 0."]
-    expect(routeRunError(new ApiError(422, { problems: same }, "/runs"), g)).toEqual({ kind: "node", nodeId: "chunk", message: same.join(" ") })
+  it("puts problems placed on different cards on the column, all of them", () => {
+    const two = refusal(["chunk_size must be at least 1.", "index.chunk"], ["top_k must be at least 1.", "retrieve.search"])
+    expect(routeRunError(two, g)).toEqual({ kind: "column", message: "chunk_size must be at least 1. top_k must be at least 1." })
+    const same = refusal(["chunk_size must be at least 1.", "index.chunk"], ["chunk_overlap must be at least 0.", "index.chunk"])
+    expect(routeRunError(same, g)).toMatchObject({ kind: "node", nodeId: "chunk" })
   })
 
   it("says the demo's capacity refusals in their own sentence, above the column", () => {
@@ -179,37 +186,16 @@ describe("foldRun keeps the previous result of each card", () => {
   })
 })
 
-describe("settingProblems", () => {
-  it("reads the strategy, the setting and the sentence from a Pandion problem", () => {
-    expect(settingProblems("index.chunk (sentence_window): overlap_sentences: Overlap must be smaller than the number of sentences per chunk.")).toEqual({
-      transform: "sentence_window",
-      settings: [{ field: "overlap_sentences", message: "Overlap must be smaller than the number of sentences per chunk." }],
-    })
-    expect(settingProblems("index.clean step 2 (dedupe_blocks): similarity: Input should be less than or equal to 1.")).toMatchObject({
-      transform: "dedupe_blocks",
-      settings: [{ field: "similarity" }],
-    })
-    expect(settingProblems("The index has no embed step.")).toBeNull()
+describe("problemDetails", () => {
+  const detail = { message: "m", step: "index.chunk", use: "recursive_character", settings: [{ field: "chunk_size", message: "Too small." }] }
+  it("reads where Pandion placed each problem", () => {
+    expect(problemDetails({ problems: ["m"], details: [detail] })).toEqual([detail])
   })
 
-  it("gives each setting its own sentence when Pandion names several", () => {
-    expect(settingProblems("index.chunk (recursive_character): chunk_size: Input should be greater than or equal to 1; chunk_overlap: Input should be greater than or equal to 0.")).toEqual({
-      transform: "recursive_character",
-      settings: [
-        { field: "chunk_size", message: "Input should be greater than or equal to 1." },
-        { field: "chunk_overlap", message: "Input should be greater than or equal to 0." },
-      ],
-    })
-  })
-
-  it("never doubles the full stop when a setting's sentence already has one", () => {
-    expect(settingProblems("index.chunk (recursive_character): chunk_size: Too small.; chunk_overlap: Too big.")?.settings).toEqual([
-      { field: "chunk_size", message: "Too small." },
-      { field: "chunk_overlap", message: "Too big." },
-    ])
-  })
-
-  it("reads a problem with the whole step as no one setting's", () => {
-    expect(settingProblems("index.chunk (sentence_window): settings: Value error, overlap must be smaller.")).toBeNull()
+  it("is null for a refusal that carries none: an older server, or a site rule's own words", () => {
+    expect(problemDetails({ problems: ["m"] })).toBeNull()
+    expect(problemDetails({ problems: ["m"], details: [] })).toBeNull()
+    expect(problemDetails("Not allowed.")).toBeNull()
+    expect(problemDetails({ details: [{ step: "x" }] })).toBeNull()
   })
 })

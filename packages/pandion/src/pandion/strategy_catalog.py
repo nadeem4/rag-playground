@@ -63,5 +63,5 @@ def explain(stage: str, use: str, settings: dict[str, Any] | None = None) -> dic
     except UnknownTransformError as exc:
         raise KeyError(exc.args[0]) from None
     except ValueError as exc:
-        raise ConfigError(str(exc)) from None
+        raise ConfigError(str(exc), use=use, settings=getattr(exc, "settings", None)) from None
     return cls().explain(config).model_dump()

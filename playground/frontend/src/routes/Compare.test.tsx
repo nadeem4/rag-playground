@@ -5,6 +5,7 @@ import markdownJson from "@/api/fixtures/chunk_set.markdown_header.json"
 import recursiveJson from "@/api/fixtures/chunk_set.recursive_character.json"
 import tokenJson from "@/api/fixtures/chunk_set.token_based.json"
 import indexJson from "@/api/fixtures/index.lancedb.json"
+import { refusedDetail } from "@/api/fixtures/problems"
 import liveRegistry from "@/api/fixtures/registry.json"
 import bm25Json from "@/api/fixtures/retrieval_result.bm25.json"
 import denseJson from "@/api/fixtures/retrieval_result.dense.json"
@@ -1009,9 +1010,12 @@ describe("experiments", () => {
 })
 
 describe("a run the server rejects", () => {
-  /** A 422 as pandion-api says it: one Pandion problem sentence about one setting of the Chunk step. */
+  /** A 422 as pandion-api says it: one Pandion problem about one setting of the Chunk step, placed there. */
   const rejected = (transform: string, field: string, msg: string) =>
-    new Response(JSON.stringify({ detail: { problems: [`index.chunk (${transform}): ${field}: ${msg}`] } }), { status: 422 })
+    new Response(
+      JSON.stringify({ detail: refusedDetail(`index.chunk (${transform}): ${field}: ${msg}`, { step: "index.chunk", use: transform, settings: [{ field, message: msg }] }) }),
+      { status: 422 },
+    )
 
   it("puts the message under the recipe it belongs to, in plain words, with that field's editor open", async () => {
     serve({}, { "/api/v2/comparisons": rejected("sentence_window", "overlap_sentences", "Overlap must be smaller than the number of sentences per chunk.") })
@@ -1053,9 +1057,19 @@ describe("a run the server rejects", () => {
 
   it("gives each refused setting its own title under the recipe, and opens the first one's editor", async () => {
     serve({}, {
-      "/api/v2/comparisons": refused({
-        problems: ["index.chunk (sentence_window): sentences_per_chunk: Input should be greater than 0; overlap_sentences: Overlap must be smaller than the number of sentences per chunk."],
-      }),
+      "/api/v2/comparisons": refused(
+        refusedDetail(
+          "index.chunk (sentence_window): sentences_per_chunk: Input should be greater than 0; overlap_sentences: Overlap must be smaller than the number of sentences per chunk.",
+          {
+            step: "index.chunk",
+            use: "sentence_window",
+            settings: [
+              { field: "sentences_per_chunk", message: "Input should be greater than 0." },
+              { field: "overlap_sentences", message: "Overlap must be smaller than the number of sentences per chunk." },
+            ],
+          },
+        ),
+      ),
     })
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
@@ -1068,7 +1082,7 @@ describe("a run the server rejects", () => {
 
   it("says a problem with the whole step above the cards, in the server's own words", async () => {
     const sentence = "index.chunk (sentence_window): settings: Value error, overlap must be smaller."
-    serve({}, { "/api/v2/comparisons": refused({ problems: [sentence] }) })
+    serve({}, { "/api/v2/comparisons": refused(refusedDetail(sentence, { step: "index.chunk", use: "sentence_window" })) })
     render(<Compare />)
     await waitFor(() => expect(columns()).toHaveLength(3))
     fireEvent.click(screen.getByRole("button", { name: "Run 3 recipes" }))

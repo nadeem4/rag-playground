@@ -50,6 +50,7 @@ it accepts.
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -87,7 +88,48 @@ WHERE = {
 
 
 class ConfigError(ValueError):
-    """A pipeline file that cannot run, with what is wrong and where."""
+    """A pipeline file that cannot run, with what is wrong and where.
+
+    The message is one plain sentence. When the problem is one step's,
+    `step` is that step's place in the pipeline file (`index.chunk`,
+    `index.clean.2`, `retrieve.rerank`, `index.store`, `answer`). Run events
+    name steps by role instead (`chunk`, `clean.2`, `rerank.1`, and `index`
+    for embed and store), so the two are not the same text. `use` is its
+    strategy, and `settings` lists each refused setting with its own sentence, as
+    `{"field", "message"}`, so a caller can show each one where it belongs
+    without reading the sentence. Each is None (or empty) otherwise.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        step: str | None = None,
+        use: str | None = None,
+        settings: list[dict[str, str]] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.step = step
+        self.use = use
+        self.settings = list(settings or [])
+
+    def to_dict(self) -> dict[str, Any]:
+        """The message and where it belongs, as plain JSON."""
+        return {"message": str(self), "step": self.step, "use": self.use, "settings": list(self.settings)}
+
+
+#: "index.clean step 2", as a sentence says it, is "index.clean.2" as a place in the file.
+_STEP_N = re.compile(r"^(.+) step (\d+)$")
+
+
+def place(where: str) -> str | None:
+    """A step's place in the pipeline file, from where a sentence says it
+    is: "index.clean step 2" is "index.clean.2". None for a place that is not
+    one step, such as "index" or "models"."""
+    m = _STEP_N.match(where)
+    if m:
+        return f"{m.group(1)}.{m.group(2)}"
+    return where if "." in where or where == "answer" else None
 
 
 @dataclass
@@ -204,7 +246,9 @@ def _check_compatible(config: PipelineConfig) -> None:
             raise ConfigError(
                 f"retrieve.search uses '{search}', which needs a store with "
                 f"{_capabilities(needed)}, but index.store uses '{store}', which has "
-                f"{_capabilities(provided) or 'nothing in provides'}."
+                f"{_capabilities(provided) or 'nothing in provides'}.",
+                step="retrieve.search",
+                use=search,
             ) from None
         raise ConfigError(message) from None
 
@@ -324,7 +368,7 @@ def step_class(stage: Stage, use: str, module: str) -> type[BaseModel]:
         try:
             _strategy(stage, use, settings, where=where)
         except ValueError as exc:
-            raise ConfigError(str(exc)) from None
+            raise ConfigError(str(exc), step=place(where), use=use, settings=getattr(exc, "settings", None)) from None
         model.__init__(self, **settings)
 
     name = "".join(part.capitalize() for part in use.split("_"))
@@ -380,7 +424,9 @@ def _answer(answer: Any) -> tuple[str, dict[str, Any]]:
     if use == "eval":
         raise ConfigError(
             "answer uses 'eval', which scores retrieval rather than answering. "
-            "Use pandion.evaluate for scoring."
+            "Use pandion.evaluate for scoring.",
+            step="answer",
+            use=use,
         )
     discover()
     return _step(Stage.USE_CASE, answer, "answer")
@@ -423,13 +469,17 @@ def _source(step: Any) -> tuple[str, dict[str, Any]]:
         if settings:
             raise ConfigError(
                 "index.source uses 'upload', which takes no settings in a pipeline "
-                "file: the files are the ones given to index.run."
+                "file: the files are the ones given to index.run.",
+                step="index.source",
+                use=use,
             )
         return DEFAULT_SOURCE
     if "location" not in registry.get(Stage.SOURCE, use).config_model.model_fields:
         raise ConfigError(
             f"index.source uses '{use}', whose settings have no location field, "
-            "so it cannot be told which document to read."
+            "so it cannot be told which document to read.",
+            step="index.source",
+            use=use,
         )
     return use, settings
 
@@ -449,12 +499,14 @@ def _retrieve(retrieve: Any) -> RetrieveConfig:
         if isinstance(rewrite, dict) and "text" in rewrite:
             raise ConfigError(
                 "retrieve.rewrite sets text, but the question is not part of the "
-                "file: it is passed to p.retrieve."
+                "file: it is passed to p.retrieve.",
+                step="retrieve.rewrite",
             )
         if isinstance(rewrite, dict) and "filters" in rewrite:
             raise ConfigError(
                 "retrieve.rewrite sets filters, but a filter belongs to a "
-                "question, not to the file: pass where= to p.retrieve or p.ask."
+                "question, not to the file: pass where= to p.retrieve or p.ask.",
+                step="retrieve.rewrite",
             )
         rewrite = _step(Stage.QUERY, rewrite, "retrieve.rewrite")
     rerank = retrieve.get("rerank")
@@ -480,7 +532,8 @@ def _step(stage: Stage, step: Any, where: str) -> tuple[str, dict[str, Any]]:
         _strategy(stage, use, settings, where=where)
     except (UnknownTransformError, ValueError) as exc:
         # A KeyError's str() is its message in quotes; args[0] is the sentence.
-        raise ConfigError(exc.args[0] if isinstance(exc, KeyError) else str(exc)) from None
+        message = exc.args[0] if isinstance(exc, KeyError) else str(exc)
+        raise ConfigError(message, step=place(where), use=use, settings=getattr(exc, "settings", None)) from None
     return use, settings
 
 
@@ -492,13 +545,14 @@ def _store(embed: Any, store: Any) -> tuple[str, dict[str, Any]]:
     except UnknownTransformError:
         known = ", ".join(sorted(registry.all_for(Stage.INDEX)))
         raise ConfigError(
-            f"index.store uses '{kind}', which is not a store. The stores are: {known}."
+            f"index.store uses '{kind}', which is not a store. The stores are: {known}.", step="index.store", use=kind
         ) from None
     takes_embedder = "embedder" in cls.config_model.model_fields
     if not takes_embedder:
         if embed is not None:
             raise ConfigError(
-                f"index.store uses '{kind}', which embeds by itself, so index.embed must be left out."
+                f"index.store uses '{kind}', which embeds by itself, so index.embed must be left out.",
+                step="index.embed",
             )
         settings = dict(store_settings)
     else:
@@ -511,27 +565,27 @@ def _store(embed: Any, store: Any) -> tuple[str, dict[str, Any]]:
         if embedder not in embedder_names():
             raise ConfigError(
                 f"index.embed uses '{embedder}', which is not an embedder. "
-                f"The embedders are: {', '.join(embedder_names())}."
+                f"The embedders are: {', '.join(embedder_names())}.",
+                step="index.embed",
+                use=embedder,
             )
         _keys(embed_settings, EMBED_KEYS, "index.embed")
         misplaced = [key for key in store_settings if key == "embedder" or key in EMBED_KEYS]
         if misplaced:
             names = ", ".join(f"'{key}'" for key in misplaced)
-            raise ConfigError(
-                f"index.store sets {names}, which belongs under index.embed."
-            )
+            raise ConfigError(f"index.store sets {names}, which belongs under index.embed.", step="index.store", use=kind)
         settings = {"embedder": embedder, **embed_settings, **store_settings}
     try:
         _strategy(Stage.INDEX, kind, settings, where="index.store")
     except ValueError as exc:
-        raise ConfigError(str(exc)) from None
+        raise ConfigError(str(exc), step="index.store", use=kind, settings=getattr(exc, "settings", None)) from None
     return kind, settings
 
 
 def _use(step: Any, where: str) -> tuple[str, dict[str, Any]]:
     use = step.get("use") if isinstance(step, dict) else None
     if not isinstance(use, str) or not use:
-        raise ConfigError(f"{where} must say which strategy to use, as use: <name>.")
+        raise ConfigError(f"{where} must say which strategy to use, as use: <name>.", step=place(where))
     _named(step, where)
     settings = dict(step)
     return settings.pop("use"), settings
@@ -541,16 +595,16 @@ def _named(settings: dict[Any, Any], where: str) -> None:
     """Every setting is named by text: a Python caller could pass any key."""
     for key in settings:
         if not isinstance(key, str):
-            raise ConfigError(f"{where} has a setting whose name is not text: {key!r}.")
+            raise ConfigError(f"{where} has a setting whose name is not text: {key!r}.", step=place(where))
 
 
 def _keys(data: Any, valid: tuple[str, ...], where: str) -> None:
     if not isinstance(data, dict):
-        raise ConfigError(f"{where} must be a mapping of settings.")
+        raise ConfigError(f"{where} must be a mapping of settings.", step=place(where))
     unknown = [key for key in data if key not in valid]
     if unknown:
         names = ", ".join(f"'{key}'" for key in unknown)
-        raise ConfigError(f"{where} has no setting {names}. Its settings are: {', '.join(valid)}.")
+        raise ConfigError(f"{where} has no setting {names}. Its settings are: {', '.join(valid)}.", step=place(where))
 
 
 def _resolve(value: Any, base: Path) -> Path:

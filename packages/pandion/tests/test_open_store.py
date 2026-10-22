@@ -74,8 +74,9 @@ def test_a_custom_store_is_accepted_and_gets_the_embedder(tmp_path):
 
 
 def test_a_store_without_an_embedder_setting_refuses_embed(tmp_path):
-    with pytest.raises(ConfigError, match="embeds by itself"):
+    with pytest.raises(ConfigError, match="embeds by itself") as caught:
         from_dict(_config({"use": "test_self_embedding_store"}), base=tmp_path)
+    assert (caught.value.step, caught.value.use) == ("index.embed", None)
     assert from_dict(_config({"use": "test_self_embedding_store"}, embed=False), base=tmp_path)
 
 

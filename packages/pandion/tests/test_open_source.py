@@ -94,8 +94,9 @@ def test_each_item_becomes_a_document_read_by_the_source(tmp_path):
 
 
 def test_a_source_without_a_location_setting_is_refused(tmp_path):
-    with pytest.raises(ConfigError, match="no location field"):
+    with pytest.raises(ConfigError, match="no location field") as caught:
         from_dict(_config({"use": "test_bad_source"}), base=tmp_path)
+    assert (caught.value.step, caught.value.use) == ("index.source", "test_bad_source")
 
 
 def test_the_default_source_is_not_written_back(tmp_path):

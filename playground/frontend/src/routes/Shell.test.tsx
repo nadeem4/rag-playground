@@ -3,6 +3,7 @@ import { useEffect } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
+import { refusedDetail } from "@/api/fixtures/problems"
 import liveRegistry from "@/api/fixtures/registry.json"
 import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchOutput from "@/api/fixtures/output.search.json"
@@ -51,7 +52,7 @@ beforeEach(() => {
       if (RUN_ROUTES.includes(url) && init?.method === "POST") {
         const body = JSON.parse(String(init.body))
         posts.push({ path: url, body })
-        if (body.config?.index.chunk.chunk_size === 0) return ok({ detail: { problems: [CHUNK_PROBLEM] } }, 422)
+        if (body.config?.index.chunk.chunk_size === 0) return ok({ detail: refusedDetail(CHUNK_PROBLEM, { step: "index.chunk" }) }, 422)
         return ok({ run_id: "r1" }, 202)
       }
       if (url === "/api/v2/explain") return ok({ settings: "s", tradeoff: null, warning: null, blocking: false })
@@ -934,7 +935,7 @@ describe("picking a sample in the Document menu", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (RUN_ROUTES.includes(url) && init?.method === "POST") {
-          return new Response(JSON.stringify({ detail: { problems: [REWRITE_PROBLEM] } }), { status: 422 })
+          return new Response(JSON.stringify({ detail: refusedDetail(REWRITE_PROBLEM, { step: "retrieve.rewrite" }) }), { status: 422 })
         }
         return base(url, init)
       }),
@@ -1966,7 +1967,7 @@ describe("the Ask panel results on Build", () => {
 
   it("switching Answer to Search clears a problem with the chat model", async () => {
     storeGraph(chatSampleGraph(liveRegistry as never, SOURCE))
-    reply422 = { detail: { problems: ["answer: This model is not available"] } }
+    reply422 = { detail: refusedDetail("answer: This model is not available", { step: "answer" }) }
     render(<Shell />)
     const build = await screen.findByRole("button", { name: "Build the index" })
     await act(async () => {})

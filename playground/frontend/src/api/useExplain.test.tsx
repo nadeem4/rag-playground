@@ -1,6 +1,8 @@
 import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { refusedDetail } from "@/api/fixtures/problems"
+
 import type { GraphNode } from "./types"
 import { EXPLAIN_DEBOUNCE_MS, useExplanations } from "./useExplain"
 
@@ -88,8 +90,9 @@ describe("useExplanations", () => {
   it("a problem Pandion words about one setting goes under that setting, with a short warning", async () => {
     const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 0 })]))
     act(() => vi.advanceTimersByTime(0))
-    const problems = ["chunk (recursive_character): chunk_size: Input should be greater than or equal to 1."]
-    calls[0].resolve(new Response(JSON.stringify({ detail: { problems } }), { status: 422 }))
+    const sentence = "chunk (recursive_character): chunk_size: Input should be greater than or equal to 1."
+    const detail = refusedDetail(sentence, { use: "recursive_character", settings: [{ field: "chunk_size", message: "Input should be greater than or equal to 1." }] })
+    calls[0].resolve(new Response(JSON.stringify({ detail }), { status: 422 }))
     await flush()
     expect(result.current.chunk.data).toEqual({ settings: "", tradeoff: null, warning: "Fix the setting marked below.", blocking: true })
     expect(result.current.chunk.fields).toEqual({ chunk_size: ["Input should be greater than or equal to 1."] })
@@ -109,7 +112,8 @@ describe("useExplanations", () => {
     const { result } = renderHook(() => useExplanations([chunk({ chunk_size: 0 })]))
     act(() => vi.advanceTimersByTime(0))
     const problems = ["chunk (token_based): max_tokens: Too small."]
-    calls[0].resolve(new Response(JSON.stringify({ detail: { problems } }), { status: 422 }))
+    const detail = refusedDetail(problems[0], { use: "token_based", settings: [{ field: "max_tokens", message: "Too small." }] })
+    calls[0].resolve(new Response(JSON.stringify({ detail }), { status: 422 }))
     await flush()
     expect(result.current.chunk.data?.warning).toBe(problems[0])
     expect(result.current.chunk.fields).toBeUndefined()

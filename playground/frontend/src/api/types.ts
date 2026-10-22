@@ -767,7 +767,22 @@ export interface Strategies {
   stages: Registry
   defaults: Record<string, string>
 }
-export type Validated = { ok: true; problems: []; config: PipelineConfig; yaml: string } | { ok: false; problems: string[] }
+/**
+ * One problem Pandion refused a pipeline for, with where it belongs: `step` is
+ * the step's place in the pipeline file (`index.chunk`, `index.clean.2`,
+ * `retrieve.rerank`, `index.store`, `answer`), not the run event's step name
+ * (`chunk`, `clean.2`, `rerank.1`), `use` its strategy, and `settings` each refused
+ * setting with its own sentence. Null and empty when it is no one step's.
+ */
+export interface ProblemDetail {
+  message: string
+  step: string | null
+  use: string | null
+  settings: { field: string; message: string }[]
+}
+export type Validated =
+  | { ok: true; problems: []; details?: []; config: PipelineConfig; yaml: string }
+  | { ok: false; problems: string[]; details?: ProblemDetail[] }
 export interface V2RunRequest {
   config: PipelineConfig
   documents: string[]

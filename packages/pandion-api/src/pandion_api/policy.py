@@ -36,6 +36,13 @@ class Policy:
         its questions, or a run on it)?"""
         return True
 
+    def document_name(self, sha: str, request: Request) -> str | None:
+        """The name of a stored file that has no record, such as one a site
+        seeded into a fresh store, or None to name it by its stored file
+        (`<sha>.pdf`). A run and a question set across documents call it by this
+        name, so a question can name it."""
+        return None
+
     async def check_upload(self, file: UploadFile, request: Request) -> bytes:
         """Read the upload and return its bytes, or raise to refuse it. Read no
         more than you accept: `await file.read(limit + 1)`. What the bytes may

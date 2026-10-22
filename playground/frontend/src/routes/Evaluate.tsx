@@ -11,6 +11,7 @@ import { useSamples } from "@/api/samples"
 import { loadPayload } from "@/api/useArtifact"
 import { usePayloads } from "@/api/usePayloads"
 import { useQuestionSet } from "@/api/useQuestionSet"
+import { useQuestionSetAcross } from "@/api/useQuestionSetAcross"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
@@ -20,6 +21,10 @@ import { HowScored } from "@/components/evaluate/HowScored"
 import { SideSheet } from "@/components/SideSheet"
 import { MissTrace } from "@/components/evaluate/MissTrace"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
+import { QuestionSetAcross } from "@/components/evaluate/QuestionSetAcross"
+import { ByDocument, NoDocument } from "@/components/evaluate/ByDocument"
+import { FileDot, FileTag } from "@/components/FileTag"
+import { fileOf, filesOf, type FileInfo } from "@/lib/files"
 import { CONTROL } from "@/components/fields/types"
 import { EvidenceSlip, LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 // Two modules export rowsFromResult: the hits of one search here, the report's verdicts by id from state/evaluate.
@@ -75,7 +80,11 @@ import { RegistryScreen } from "./Shell"
  * help?" has a number behind it. The page is pipeline first: you pick a
  * pipeline (the ready-made Starter, a saved one, or the unsaved pipeline on
  * Build), and its documents come with it. Change tries it on another document
- * without altering a saved pipeline. Build your own makes a new one in a side
+ * without altering a saved pipeline. With several documents (spec "Evaluate
+ * (part 4a)") the page scores all of them with one question set: each
+ * question names its document or none, the score is also told by document,
+ * and the documents change only on Build. With one document the page is as it
+ * was. Build your own makes a new one in a side
  * sheet. Arriving with nothing chosen opens on the Starter, ready to score.
  *
  * It sends the chosen pipeline, as a Pandion config, with its documents and
@@ -137,6 +146,9 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
   const chosenId = choice ?? defaultChoice(choices, currentId, wanted)
   const chosen = choices.find((c) => c.id === chosenId && c.graph) ?? null
   const documents = trial && trial.id === chosen?.id ? trial.documents : (chosen?.documents ?? [])
+  // With several documents each has its colour, and the page speaks of all of them; with one, none.
+  const files = filesOf(documents)
+  const several = files.length > 1
   const graph = chosen?.graph ? withDocuments(chosen.graph, documents) : null
   const doc = documents[0] ?? null
   const status = useDocStatus(doc)
@@ -159,11 +171,13 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
     })),
     { value: BUILD_YOUR_OWN, name: "Build your own…", help: "Pick a setting for each step, starting from the one selected.", action: true },
   ]
-  const hint = tried
-    ? `Trying ${chosen!.label} on ${names(documents)}.${chosen!.kind === "saved" ? ` The saved pipeline keeps ${names(chosen!.documents)}.` : ""}`
-    : chosen?.kind === "ready"
-      ? "The Starter comes with the default sample. Change it to try another."
-      : null
+  const hint = several
+    ? "The pipeline's documents, all of them. Add or remove documents on Build."
+    : tried
+      ? `Trying ${chosen!.label} on ${names(documents)}.${chosen!.kind === "saved" ? ` The saved pipeline keeps ${names(chosen!.documents)}.` : ""}`
+      : chosen?.kind === "ready"
+        ? "The Starter comes with the default sample. Change it to try another."
+        : null
 
   function saveOwn(name: string, g: PipelineGraph): string | null {
     const result = savePipeline(name, g, { documents, select: false })
@@ -212,7 +226,11 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-2xl font-semibold">Evaluate</h1>
             <div className="flex max-w-[70ch] flex-col gap-1 text-sm text-fg-muted">
-              {chosen && documents.length ? (
+              {chosen && several ? (
+                <p>
+                  How often {chosen.label} finds the answer in <strong className="font-semibold text-fg">{files.length} documents</strong>.
+                </p>
+              ) : chosen && documents.length ? (
                 <p>
                   How often {chosen.label} finds the answer in <span className="font-mono break-words text-fg">{names(documents)}</span>.
                 </p>
@@ -247,7 +265,8 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <span className="text-xs text-fg-muted">Documents</span>
-                  {busy ? null : (
+                  {/* With several documents, trying one other would replace them all: they change on Build. */}
+                  {busy || several ? null : (
                     <DocumentControl
                       value={doc}
                       onChoose={(d) => setTrial({ id: chosen.id, documents: [d] })}
@@ -256,7 +275,13 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
                   )}
                 </div>
                 <div data-testid="documents-line" className="flex min-w-0 flex-col gap-2">
-                  {documents.length ? (
+                  {several ? (
+                    <div className="flex flex-wrap gap-2">
+                      {files.map((f) => (
+                        <FileTag key={f.sha} file={f} />
+                      ))}
+                    </div>
+                  ) : documents.length ? (
                     documents.map((d) => <DocumentItem key={d.sha} doc={d} />)
                   ) : (
                     <p className="text-sm text-fg-muted">None yet.</p>
@@ -288,12 +313,13 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
           )
         ) : null}
         {graph ? <DocumentNote action="run the evaluation" where="under Documents" doc={doc} /> : null}
-        {/* Keyed by what is scored: the pipeline and its document. A new document opens a fresh
+        {/* Keyed by what is scored: the pipeline and its documents. A new document opens a fresh
             body: its own question set and its own last run. */}
         {!graph || !sha ? null : (
           <EvaluateBody
-            key={`${chosen!.id}:${sha}`}
+            key={`${chosen!.id}:${documents.map((d) => d.sha).join(",")}`}
             graph={graph}
+            files={files}
             pipelineKey={chosen!.key}
             pipelineName={chosen!.name}
             onOpenBest={openBest}
@@ -340,6 +366,7 @@ const NOT_SAVED_TAG = { label: "Not saved", tone: "soft" as const }
  */
 function EvaluateBody({
   graph,
+  files,
   pipelineKey,
   pipelineName,
   onOpenBest,
@@ -352,6 +379,8 @@ function EvaluateBody({
   replacesUnsaved,
 }: {
   graph: PipelineGraph | null
+  /** The pipeline's documents with their colours when there are several; none with one. */
+  files: FileInfo[]
   pipelineKey: string
   /** The pipeline's name in the picker, kept with a best run. */
   pipelineName: string
@@ -398,6 +427,7 @@ function EvaluateBody({
       registry={registry}
       graph={graph}
       sourceSha={sourceSha}
+      files={files}
       pipelineKey={pipelineKey}
       pipelineName={pipelineName}
       onOpenBest={onOpenBest}
@@ -468,6 +498,7 @@ function Evaluation({
   registry,
   graph,
   sourceSha,
+  files,
   pipelineKey,
   pipelineName,
   onOpenBest,
@@ -481,6 +512,7 @@ function Evaluation({
   registry: Registry
   graph: PipelineGraph
   sourceSha: string
+  files: FileInfo[]
   pipelineKey: string
   pipelineName: string
   onOpenBest: OpenBest
@@ -507,7 +539,13 @@ function Evaluation({
   const [runId, setRunId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [previous, setPrevious] = useState<PreviousEvaluation | null>(() => readPreviousEvaluation(sourceSha, pipelineKey))
+  const several = files.length > 1
+  // What a last run is kept under: the documents scored, which with one document is its sha.
+  const docsKey = several ? files.map((f) => f.sha).join(",") : sourceSha
+  const [previous, setPrevious] = useState<PreviousEvaluation | null>(() => readPreviousEvaluation(docsKey, pipelineKey))
+  // With several documents, Show narrows the list to one document's questions, or to the misses.
+  const [showDoc, setShowDoc] = useState<string | null>(null)
+  const [showMissed, setShowMissed] = useState(false)
   // The question whose details are open in the side sheet.
   const [detail, setDetail] = useState<string | null>(null)
   const { keys } = useApiKey()
@@ -525,16 +563,22 @@ function Evaluation({
   // Which set is in use, and whether it belongs to the document on Build.
   const uploaded = useQuestionSet(sourceSha)
   const { samples, error: samplesError } = useSamples()
+  // With several documents: one set for all of them. Asks nothing with one.
+  const across = useQuestionSetAcross(several ? files.map((f) => f.sha) : [], samples)
   const matched = sampleFor(sourceSha, samples)
   const which = inUse(sourceSha, samples, uploaded.set)
-  const noBundledSet = samples !== null && !matched && !uploaded.set && !uploaded.loading
-  const questions: Question[] | null = uploaded.set
-    ? questionsFromSet(uploaded.set)
-    : uploaded.loading
-      ? null
-      : sample
-        ? questionsFromSample(sample)
-        : null
+  const noBundledSet = several
+    ? across.questions?.length === 0
+    : samples !== null && !matched && !uploaded.set && !uploaded.loading
+  const questions: Question[] | null = several
+    ? across.questions
+    : uploaded.set
+      ? questionsFromSet(uploaded.set)
+      : uploaded.loading
+        ? null
+        : sample
+          ? questionsFromSample(sample)
+          : null
 
   useEffect(() => {
     if (!matched) {
@@ -636,6 +680,7 @@ function Evaluation({
         (cancelled ? scoredRows.filter((r) => r.payload) : scoredRows).map((r) => ({ now: r.payload, before: compared?.byId[r.question.id] })),
         steps,
         shownK,
+        { several },
       )
     : null
   // A run stopped before any question was scored has no score to word, only the stop.
@@ -693,7 +738,7 @@ function Evaluation({
   const finishedRun: PreviousEvaluation | null =
     done && result && !result.cancelled
       ? {
-          sourceSha,
+          sourceSha: docsKey,
           pipelineKey,
           byId: Object.fromEntries(rows.flatMap((r) => (r.payload ? [[r.question.id, r.payload] as const] : []))),
           totals: totalsOf(result),
@@ -806,46 +851,66 @@ function Evaluation({
 
   const kLine = ran
     ? `Scored at ${shownK} ${shownK === 1 ? "piece" : "pieces"}.${pieces !== null ? ` The pipeline makes ${pieces} ${pieces === 1 ? "piece" : "pieces"}.` : ""}`
-    : `Found means the evidence is in the top ${topK} ${topK === 1 ? "piece" : "pieces"}.`
+    : `Found means the evidence is in the top ${topK} ${topK === 1 ? "piece" : "pieces"}.${several ? " A question that names its document must find it in that document." : ""}`
   const search = searchSteps(graph, registry)
   // Only a sample's own set plants misses, and says so in its tags.
-  const planted = !uploaded.set && questions ? plantedLine(questions) : null
+  const planted = (several ? across.fromSamples : !uploaded.set) && questions ? plantedLine(questions) : null
   const opened = detail ? rows.find((r) => r.question.id === detail) : undefined
+  // What found means at this k, after the set line.
+  const setExtra = questions?.length ? (
+    <>
+      <span data-testid="k-line">{kLine}</span>
+      {planted ? (
+        <>
+          {" "}
+          <span data-testid="planted-line">{planted}</span>
+        </>
+      ) : null}
+    </>
+  ) : null
+  // The rows Show leaves in: one document's questions ("" for those naming none), and only the misses.
+  const shownRows = rows.filter(
+    (r) => (showDoc === null || (r.question.document ?? "") === showDoc) && (!ran || !showMissed || verdictOf(r, ran, over) === "missed"),
+  )
 
   return (
     <div className="flex flex-col gap-6">
       {slot ? createPortal(controls, slot) : null}
 
       <div className="flex flex-col gap-2">
-        <QuestionSetPanel
-          sha={sourceSha}
-          registry={registry}
-          inUse={which}
-          set={uploaded.set}
-          count={questions?.length ?? null}
-          filename={filename}
-          sampleName={matched?.title ?? null}
-          report={uploaded.report}
-          tabOnly={uploaded.tabOnly}
-          error={uploaded.error}
-          busy={uploaded.busy}
-          disabled={busy}
-          onUpload={uploaded.upload}
-          onRemove={() => void uploaded.remove()}
-          extra={
-            questions?.length ? (
-              <>
-                <span data-testid="k-line">{kLine}</span>
-                {planted ? (
-                  <>
-                    {" "}
-                    <span data-testid="planted-line">{planted}</span>
-                  </>
-                ) : null}
-              </>
-            ) : null
-          }
-        />
+        {several ? (
+          <QuestionSetAcross
+            files={files}
+            questions={questions}
+            filenames={across.filenames}
+            fromSamples={across.fromSamples}
+            report={across.report}
+            tabOnly={across.tabOnly}
+            error={across.error}
+            busy={across.busy}
+            disabled={busy}
+            onUpload={across.upload}
+            extra={setExtra}
+          />
+        ) : (
+          <QuestionSetPanel
+            sha={sourceSha}
+            registry={registry}
+            inUse={which}
+            set={uploaded.set}
+            count={questions?.length ?? null}
+            filename={filename}
+            sampleName={matched?.title ?? null}
+            report={uploaded.report}
+            tabOnly={uploaded.tabOnly}
+            error={uploaded.error}
+            busy={uploaded.busy}
+            disabled={busy}
+            onUpload={uploaded.upload}
+            onRemove={() => void uploaded.remove()}
+            extra={setExtra}
+          />
+        )}
         {/* The recipe in two lines: the index side, then the search side. */}
         <p data-testid="recipe-line" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
           <span>Index side:</span>
@@ -890,11 +955,13 @@ function Evaluation({
         ) : !ran ? (
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <p className="text-sm text-fg-muted">
-              {questions
-                ? `${questions.length} ${questions.length === 1 ? "question" : "questions"} ready. Press Evaluate to score this pipeline.`
-                : noBundledSet
-                  ? "No question set for this document. Upload one to evaluate it."
-                  : "Loading the questions"}
+              {noBundledSet && several
+                ? "No question set for these documents. Upload one to evaluate them."
+                : questions
+                  ? `${questions.length} ${questions.length === 1 ? "question" : "questions"} ready${several ? `, across ${files.length} documents` : ""}. Press Evaluate to score this pipeline.`
+                  : noBundledSet
+                    ? "No question set for this document. Upload one to evaluate it."
+                    : "Loading the questions"}
             </p>
             {previous ? (
               <p data-testid="previous" className="text-sm text-fg-muted">
@@ -974,10 +1041,11 @@ function Evaluation({
 
         {/* Always mounted, so a screen reader hears the headline when it arrives; Forget best moves focus here. */}
         <p ref={bestLive} tabIndex={-1} aria-live="polite" data-testid="best-live" className="sr-only">
-          {showBest ? bestHeadline(best.outcome) : ""}
+          {showBest ? bestHeadline(best.outcome, files.length || 1) : ""}
         </p>
         {showBest ? (
           <BestSoFar
+            documents={files.length || 1}
             outcome={best.outcome}
             problem={best.problem ?? null}
             onLoad={() => openBestAt("/build?from=evaluate")}
@@ -1002,6 +1070,8 @@ function Evaluation({
         {ran && !busy && totals && totals.total > 0 ? (
           <EvalNumbers totals={totals} before={beforeTotals} byTag={byTag} topK={shownK} rerank={rerankText} onExplain={onExplain} />
         ) : null}
+
+        {several && ran && !busy && result?.by_document?.length ? <ByDocument rows={result.by_document} files={files} /> : null}
 
         {ran && !run.queued ? (
           <div role="list" aria-label="One mark per question" className="flex flex-wrap gap-2">
@@ -1037,11 +1107,16 @@ function Evaluation({
           <h2 id={questionsId} className="text-base font-semibold">
             Questions
           </h2>
+          {several ? (
+            <ShowFilters files={files} doc={showDoc} onDoc={setShowDoc} missed={ran ? showMissed : null} onMissed={setShowMissed} />
+          ) : null}
           <ol className="m-0 list-none border-t border-hairline p-0">
-            {rows.map((row) => (
+            {shownRows.length === 0 ? <li className="px-2 py-3 text-sm text-fg-muted">No questions match.</li> : null}
+            {shownRows.map((row) => (
               <QuestionRow
                 key={row.question.id}
                 row={row}
+                file={several ? (fileOf(files, row.question.document) ?? null) : undefined}
                 ran={ran}
                 over={over}
                 before={compared?.byId[row.question.id]}
@@ -1062,6 +1137,61 @@ function Evaluation({
           <QuestionDetail row={opened} graph={graph} />
         </SideSheet>
       ) : null}
+    </div>
+  )
+}
+
+const pill = (on: boolean) =>
+  cn(
+    "inline-flex min-h-[28px] max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-full border px-3 text-xs text-fg transition-colors duration-(--dur-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)",
+    on ? "border-primary bg-accent-wash" : "border-hairline bg-surface-raised hover:bg-surface-hover",
+  )
+
+/**
+ * Show, with several documents: the questions of one document ("" for those
+ * naming none) or all, and after a run all or only the misses.
+ */
+function ShowFilters({
+  files,
+  doc,
+  onDoc,
+  missed,
+  onMissed,
+}: {
+  files: readonly FileInfo[]
+  doc: string | null
+  onDoc: (doc: string | null) => void
+  /** Null before a run: there are no misses to show yet. */
+  missed: boolean | null
+  onMissed: (missed: boolean) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span className="text-xs font-medium">Show</span>
+      <div role="group" aria-label="Show questions from" className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-pressed={doc === null} className={pill(doc === null)} onClick={() => onDoc(null)}>
+          All
+        </button>
+        {files.map((f) => (
+          <button key={f.sha} type="button" aria-pressed={doc === f.sha} className={pill(doc === f.sha)} onClick={() => onDoc(f.sha)}>
+            <FileDot slot={f.slot} />
+            <span className="truncate">{f.filename}</span>
+          </button>
+        ))}
+        <button type="button" aria-pressed={doc === ""} className={pill(doc === "")} onClick={() => onDoc("")}>
+          Any document
+        </button>
+      </div>
+      {missed === null ? null : (
+        <div role="group" aria-label="Verdict filter" className="flex flex-wrap items-center gap-2">
+          <button type="button" aria-pressed={!missed} className={pill(!missed)} onClick={() => onMissed(false)}>
+            All
+          </button>
+          <button type="button" aria-pressed={missed} className={pill(missed)} onClick={() => onMissed(true)}>
+            Missed
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1187,6 +1317,7 @@ function Evidence({ gold }: { gold: string }) {
  */
 function QuestionRow({
   row,
+  file,
   ran,
   over,
   before,
@@ -1195,6 +1326,8 @@ function QuestionRow({
   rowRef,
 }: {
   row: Row
+  /** With several documents, the file the question names, or null for any document. Undefined with one. */
+  file?: FileInfo | null
   ran: boolean
   /** The run has ended, so a question it never got to reads Not run. */
   over: boolean
@@ -1226,6 +1359,7 @@ function QuestionRow({
           {row.question.question}
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
+          {file !== undefined ? <span data-question-file="">{file ? <FileTag file={file} /> : <NoDocument text="any document" />}</span> : null}
           <span className="font-mono">{row.question.id}</span>
           {row.question.tags.map((t) => (
             <span key={t} className="rounded-swatch bg-surface-elevated px-2">

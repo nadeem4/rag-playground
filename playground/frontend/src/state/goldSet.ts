@@ -1,4 +1,4 @@
-import type { GoldQuestionCheck, QuestionSetUpload, SampleCard, SampleQuestion, StoredQuestionSet } from "@/api/types"
+import type { GoldQuestionCheck, QuestionSetAcross, QuestionSetUpload, SampleCard, SampleQuestion, StoredQuestionSet } from "@/api/types"
 
 /**
  * Your own gold set (plan I-30, I-31, I-33), kept pure so the arithmetic and
@@ -20,10 +20,10 @@ export interface Question {
   /** The expected answer in words: shown beside the evidence, never scored. Empty when none was given. */
   answer: string
   /**
-   * The document its evidence is in, by filename: the question's own, else the
-   * set's only document. Carried, not yet sent: Pandion scores a named
-   * question in its own document, but Evaluate does not send `document` yet,
-   * so every question is found in any of the pipeline's documents.
+   * The document its evidence is in. With one document, by filename (the
+   * question's own, else the set's) and never sent. With several, its sha,
+   * empty when it names none: Evaluate sends it, so a named question is found
+   * only in its own document and an unnamed one in any.
    */
   document?: string
 }
@@ -71,6 +71,90 @@ export function questionsFromSet(stored: StoredQuestionSet): Question[] {
       document: q.document || stored.set?.document || "",
     })),
   )
+}
+
+// ------------------------------------------------ one set, several documents --
+
+/** The set kept against several documents (`GET /api/v2/questions`): each question's document is a sha, or empty. */
+export function questionsFromAcross(set: QuestionSetAcross): Question[] {
+  return uniqueIds(
+    set.questions.map((q) => ({
+      id: q.id,
+      question: q.question,
+      gold_answers: q.gold_answers ?? [],
+      tags: q.tags ?? [],
+      answer: q.answer ?? "",
+      document: q.document ?? "",
+    })),
+  )
+}
+
+/** The bundled samples' own sets, for a pipeline with several documents: each question names its sample. */
+export function questionsFromSamples(sets: readonly { sha: string; questions: readonly SampleQuestion[] }[]): Question[] {
+  return uniqueIds(sets.flatMap(({ sha, questions }) => questionsFromSample(questions).map((q) => ({ ...q, document: sha }))))
+}
+
+/** An upload's check rows as questions, for a set the server would not keep: the rows carry no answer or tags. */
+export function questionsFromChecks(rows: readonly GoldQuestionCheck[]): Question[] {
+  return uniqueIds(
+    rows.map((r) => ({
+      id: r.id,
+      question: r.question,
+      gold_answers: (r.golds ?? []).map((g) => g.gold),
+      tags: [],
+      answer: "",
+      document: r.document ?? "",
+    })),
+  )
+}
+
+/** How many questions name each of these documents (by sha), and how many name none. */
+export function documentCounts(
+  questions: readonly Pick<Question, "document">[],
+  shas: readonly string[],
+): { byDocument: Record<string, number>; unnamed: number } {
+  const byDocument: Record<string, number> = Object.fromEntries(shas.map((s) => [s, 0]))
+  let unnamed = 0
+  for (const q of questions) {
+    if (!q.document) unnamed += 1
+    else if (q.document in byDocument) byDocument[q.document] += 1
+  }
+  return { byDocument, unnamed }
+}
+
+/** The set in one line: `24 questions from golden-set.csv, covering all 3 documents`. */
+export function acrossLine(count: number, filenames: readonly string[], named: number, documents: number): string {
+  const n = `${count} ${count === 1 ? "question" : "questions"}`
+  const from = filenames.length ? ` from ${filenames.length > 1 ? `${filenames.slice(0, -1).join(", ")} and ${filenames[filenames.length - 1]}` : filenames[0]}` : ""
+  const covering =
+    named === 0
+      ? `found in any of the ${documents} documents`
+      : named === documents
+        ? `covering all ${documents} documents`
+        : `covering ${named} of ${documents} documents`
+  return `${n}${from}, ${covering}`
+}
+
+const TAB_ACROSS_KEY = "rag-playground:gold-set:across"
+
+/** A set for several documents the server would not keep, kept in this tab for exactly these documents. */
+export function readTabAcross(shas: readonly string[]): { filename: string; questions: Question[] } | null {
+  try {
+    const s = JSON.parse(window.sessionStorage.getItem(TAB_ACROSS_KEY) ?? "null") as { shas?: unknown; filename?: unknown; questions?: unknown } | null
+    const ok = Array.isArray(s?.shas) && s.shas.join(",") === shas.join(",") && typeof s.filename === "string" && Array.isArray(s.questions)
+    return ok ? { filename: s.filename as string, questions: s.questions as Question[] } : null
+  } catch {
+    // Blocked storage, or something else wrote the key: there is no set.
+    return null
+  }
+}
+
+export function storeTabAcross(shas: readonly string[], filename: string, questions: readonly Question[]): void {
+  try {
+    window.sessionStorage.setItem(TAB_ACROSS_KEY, JSON.stringify({ shas, filename, questions }))
+  } catch {
+    // Private window or blocked storage: the set lasts for the page instead.
+  }
 }
 
 // ------------------------------------------------- which set, whose document --
@@ -130,11 +214,14 @@ export interface Report {
   note: string
 }
 
-function checks(upload: QuestionSetUpload): GoldQuestionCheck[] {
+/** What an upload's check says, for one document's set or one set across several. */
+type Checked = Pick<QuestionSetUpload, "questions" | "parser" | "parser_note" | "filename" | "count">
+
+function checks(upload: Checked): GoldQuestionCheck[] {
   return Array.isArray(upload.questions) ? upload.questions : []
 }
 
-export function report(upload: QuestionSetUpload): Report {
+export function report(upload: Checked): Report {
   const problems: Problem[] = []
   let passages = 0
   let normalized = 0

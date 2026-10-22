@@ -3,8 +3,15 @@ import { beforeEach, describe, expect, it } from "vitest"
 import type { GoldQuestion, QuestionSetUpload, SampleCard, SampleQuestion, StoredQuestionSet } from "@/api/types"
 
 import {
+  acrossLine,
   clearTabSet,
+  documentCounts,
   inUse,
+  questionsFromAcross,
+  questionsFromChecks,
+  questionsFromSamples,
+  readTabAcross,
+  storeTabAcross,
   mismatch,
   questionsFromSample,
   questionsFromSet,
@@ -270,5 +277,60 @@ describe("a set the server would not store", () => {
     expect(readTabSet(SHA)).toBeNull()
     window.sessionStorage.setItem("rag-playground:gold-set", JSON.stringify({ sha: SHA, set: { questions: 7 } }))
     expect(readTabSet(SHA)).toBeNull()
+  })
+})
+
+describe("one set across several documents", () => {
+  const A = "a".repeat(64)
+  const B = "b".repeat(64)
+  const C = "c".repeat(64)
+  const gq = (over: Partial<GoldQuestion>): GoldQuestion => ({ id: "", question: "", gold_answers: [], answer: "", tags: [], document: "", ...over })
+
+  beforeEach(() => window.sessionStorage.clear())
+
+  it("reads the kept set with each question's document as a sha, empty when it names none", () => {
+    const qs = questionsFromAcross({
+      documents: [A, B],
+      count: 3,
+      questions: [gq({ id: "x", question: "X?", gold_answers: ["x"], document: A }), gq({ question: "Y?", document: "" }), gq({ id: "x", question: "Z?", document: B })],
+    })
+    expect(qs.map((q) => [q.id, q.document])).toEqual([["x", A], ["q2", ""], ["x-2", B]])
+  })
+
+  it("names each sample's questions after its sample, with ids kept apart", () => {
+    const qs = questionsFromSamples([
+      { sha: A, questions: [{ id: "x", question: "X?", gold_answer: "x" }] },
+      { sha: B, questions: [{ id: "x", question: "Y?", gold_answer: "y" }] },
+    ])
+    expect(qs.map((q) => [q.id, q.document])).toEqual([["x", A], ["x-2", B]])
+  })
+
+  it("makes questions of an upload's check rows, for a set only this tab keeps", () => {
+    const qs = questionsFromChecks([
+      { index: 0, id: "x", question: "X?", status: "found", document: A, golds: [{ gold: "x", status: "found", document_text: "", closest: "", document: A }] },
+      { index: 1, id: "", question: "Y?", status: "found", document: null, golds: [{ gold: "y", status: "found", document_text: "", closest: "", document: B }] },
+    ])
+    expect(qs).toEqual([
+      { id: "x", question: "X?", gold_answers: ["x"], tags: [], answer: "", document: A },
+      { id: "q2", question: "Y?", gold_answers: ["y"], tags: [], answer: "", document: "" },
+    ])
+  })
+
+  it("counts the questions for each document and those naming none", () => {
+    const qs = [{ document: A }, { document: A }, { document: "" }, { document: C }]
+    expect(documentCounts(qs, [A, B])).toEqual({ byDocument: { [A]: 2, [B]: 0 }, unnamed: 1 })
+  })
+
+  it("says where the questions came from and how many documents they cover", () => {
+    expect(acrossLine(24, ["golden-set.csv"], 3, 3)).toBe("24 questions from golden-set.csv, covering all 3 documents")
+    expect(acrossLine(5, ["a.json", "b.csv"], 1, 2)).toBe("5 questions from a.json and b.csv, covering 1 of 2 documents")
+    expect(acrossLine(1, [], 0, 2)).toBe("1 question, found in any of the 2 documents")
+  })
+
+  it("keeps a set for these documents in this tab only, and reads none for others", () => {
+    const qs = questionsFromChecks([{ index: 0, id: "x", question: "X?", status: "found", document: A, golds: [] }])
+    storeTabAcross([A, B], "golden.json", qs)
+    expect(readTabAcross([A, B])).toEqual({ filename: "golden.json", questions: qs })
+    expect(readTabAcross([A])).toBeNull()
   })
 })

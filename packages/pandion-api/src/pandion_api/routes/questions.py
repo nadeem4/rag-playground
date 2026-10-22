@@ -227,8 +227,9 @@ async def upload_questions_across(
     removing one document loses none of them (`kept_questions` asks each one
     once). Each question's row names its document's sha (`document`, null when
     it names none) and each gold passage the sha of the document it was found
-    in. A document the set has no question for loses the set it had: the new
-    set replaces the old."""
+    in. `set` is the set as read, each question's `document` its sha or empty,
+    for a page to keep when the server does not. A document the set has no
+    question for loses the set it had: the new set replaces the old."""
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     parsed = await read_set(file, one_document=False)
@@ -268,6 +269,7 @@ async def upload_questions_across(
         "parser_note": parser_note(parsers),
         "summary": _summary(rows),
         "questions": rows,
+        "set": {"version": parsed["version"], "document": "", "questions": own},
     }
 
 
@@ -317,11 +319,18 @@ def get_questions_across(
 ) -> dict[str, Any]:
     """The sets kept against these documents as one, as an evaluation without
     questions asks them (`kept_questions`): each question's `document` is the
-    sha of the document it names, or empty when it names none."""
+    sha of the document it names, or empty when it names none. `filenames`
+    names the files the kept sets were read from, each once, in the
+    documents' order."""
     shas = list(dict.fromkeys(documents))
     names = documents_of(shas, request)
     questions = kept_questions(store, shas, list(names))
-    return {"documents": shas, "count": len(questions), "questions": questions}
+    filenames: list[str] = []
+    for sha in shas:
+        kept = store.questions(sha)
+        if kept.is_file():
+            filenames.append(json.loads(kept.read_text(encoding="utf-8"))["filename"])
+    return {"documents": shas, "count": len(questions), "questions": questions, "filenames": list(dict.fromkeys(filenames))}
 
 
 def _summary(rows: list[dict[str, Any]]) -> dict[str, int]:

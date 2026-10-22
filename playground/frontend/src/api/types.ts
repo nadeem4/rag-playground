@@ -769,6 +769,8 @@ export interface QuestionSetAcrossUpload {
   parser_note: string
   summary: { questions: number; found: number; found_normalized: number; not_found: number }
   questions: GoldQuestionCheck[]
+  /** The set as read, each question's `document` its sha or empty. Absent from an older server. */
+  set?: { version: number; document: string; questions: GoldQuestion[] }
 }
 
 /** `GET /api/v2/questions?documents=...`: the sets kept against several documents as one. */
@@ -777,6 +779,8 @@ export interface QuestionSetAcross {
   count: number
   /** A named question's `document` is its document's sha; empty for one naming none. */
   questions: GoldQuestion[]
+  /** The files the kept sets were read from, each once. Absent from an older server. */
+  filenames?: string[]
 }
 
 /** `POST /api/v2/explain`: what a transform will do with THESE settings. */
@@ -859,6 +863,8 @@ export interface EvalQuestion {
   question: string
   gold_answers: string[]
   tags: string[]
+  /** The document its evidence is in, by sha or filename: found only there. Sent only with several documents. */
+  document?: string
 }
 export interface EvaluationRequest {
   config: PipelineConfig

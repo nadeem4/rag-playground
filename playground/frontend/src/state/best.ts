@@ -6,7 +6,7 @@ import { isConfigShape, type WorkingPipeline } from "./config"
 /**
  * Best so far: the best Evaluate run in this browser for one question set,
  * one set of documents and one Pieces checked (the key Pandion's
- * `report.against` compares by). After a run the page says whether it beat
+ * `report.against` compares by), and the document each question names. After a run the page says whether it beat
  * the best, fell short of it, or matched it, and names the questions that
  * changed. Kept in localStorage; a blocked or broken store reads as no best.
  */
@@ -53,10 +53,17 @@ export function scoredRun(r: EvaluationResult): ScoredRun {
   }
 }
 
-/** The key a run is compared under, or null when the server sent no fingerprint. */
+/**
+ * The key a run is compared under, or null when the server sent no
+ * fingerprint: the questions, the documents and the top k. When questions
+ * name their documents, which document each names is part of the key too,
+ * since it changes what counts as found; a set naming none keys as before.
+ */
 export function bestKey(r: EvaluationResult): string | null {
   if (!r.questions_fingerprint) return null
-  return JSON.stringify([r.questions_fingerprint, r.document_shas ?? [], r.top_k])
+  const named = r.questions.filter((q) => q.document).map((q) => JSON.stringify([q.question, q.document]))
+  const key = [r.questions_fingerprint, r.document_shas ?? [], r.top_k]
+  return JSON.stringify(named.length ? [...key, named.sort()] : key)
 }
 
 const isScoredRun = (x: ScoredRun | undefined): x is ScoredRun =>
@@ -187,11 +194,13 @@ export async function afterRun(
  * is the best forgotten. "Ranks higher" is said only when the hit rates are
  * equal, so MRR alone decided; a count is said only when it is above zero.
  */
-export function bestHeadline(o: Outcome | null): string {
+export function bestHeadline(o: Outcome | null, documents = 1): string {
   if (o === null) return "Best forgotten."
   switch (o.kind) {
     case "first":
-      return "Your first run with these questions, so it is your best so far."
+      return documents > 1
+        ? `Your first run with these ${documents} documents and questions, so it is your best so far.`
+        : "Your first run with these questions, so it is your best so far."
     case "equal":
       return `Same as your best: ${o.found} of ${o.scored}.`
     case "better":

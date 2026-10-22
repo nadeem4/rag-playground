@@ -40,7 +40,8 @@ title.
   **Document** card. Its **Add a document** link opens a menu with the bundled samples, your
   uploads, **Upload a document** and **Or add a link**. What you pick joins the pipeline's
   documents. With two or more, each has a **Remove** button; a pipeline keeps at least one.
-- On **Evaluate** they are listed under **Documents**, with **Change**.
+- On **Evaluate** they are listed under **Documents**, with **Change**. With two or more,
+  each shows as a file tag (its colour and its name) and they change only on Build.
 - **Compare** stays document first: a **Document** line above the recipes shows the
   picture and the title, with **Preview** and **Change**. It works on the pipeline on Build.
 - **Library** shows every saved document the same way.
@@ -445,6 +446,25 @@ its own, and the page says so. A document of your own needs your own questions, 
 the sentence that answers it on each line. On the hosted demo an uploaded set lasts until you
 close the browser tab; run the playground locally to keep your sets.
 
+With two or more documents the page speaks of all of them: "How often the pipeline finds
+the answer in 3 documents." **Documents** lists the pipeline's documents, all of them, as
+file tags; add or remove documents on Build. The **Question set** card holds one set for
+the pipeline: "24 questions from golden-set.csv, covering all 3 documents", then how many
+questions name each document and how many name none (**no document named**, found in any
+document). **Upload another set** replaces the set for every document at once
+(`POST /api/v2/questions`); on the demo it is kept whole in the tab, tags and answers too.
+**Write questions for me** is not offered with several documents yet, because it writes
+for one document and would replace that document's questions. **Start from the template** downloads the CSV template,
+whose `document` column names each question's file. A question that names its document must
+find its evidence in that document; one naming none is found in any. With nothing kept,
+the bundled samples among the documents lend their own sets, each question naming its
+sample. After a run the line reads "19 of 24 questions found the answer in the top 5. 5
+missed.", a **By document** table gives each document's found of total with a bar, then the
+questions naming none, and each question shows its file tag ("any document" when it names
+none). **Show** narrows the list to one document's questions, and after a run to the
+misses. Best so far is kept per set of documents and questions: adding or removing a
+document, or questions, starts a new best. With one document the page is as it was.
+
 **Build your own…** opens a side sheet with a name, the documents and one setting for each
 step (Parse, Clean, Chunk and Index on the index side, then Rewrite, Retrieve and Rerank),
 starting from the selected pipeline. **Save and select** saves it and scores it next; with
@@ -492,10 +512,10 @@ server scores them as one evaluation.
 
 The bundled sets are about the bundled samples. Each question may name the document its
 evidence is in, as `document` (a column in CSV). A question without one belongs to the set's
-own `document`, or the first document a question names. A pipeline runs on one document
-today, so a set covers one: a question that names another document is refused, with its
-row. Scoring later on several documents needs no change to the file. To score your own PDF,
-bring your own questions:
+own `document`, or the first document a question names. On a pipeline with one document a
+set covers one: a question that names another document is refused, with its row. On a
+pipeline with several, one set covers them all, and each question names its document or
+none (see [Evaluate](#evaluate)). To score your own PDF, bring your own questions:
 
 1. Download the template on the Evaluate page, as JSON or CSV. The API serves it at
    `GET /api/questions/template?format=json` (or `format=csv`).

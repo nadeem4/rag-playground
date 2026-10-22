@@ -51,12 +51,15 @@ function Notes({ notes }: { notes: string[] }) {
 }
 
 export function BestSoFar({
+  documents = 1,
   outcome,
   problem,
   onLoad,
   onCompare,
   onForget,
 }: {
+  /** How many documents the run searched: with several, the first best names them. */
+  documents?: number
   outcome: Outcome | null
   /** Why the best pipeline cannot open on this server, after a press of Load or Compare. */
   problem: string | null
@@ -71,10 +74,17 @@ export function BestSoFar({
         {outcome === null ? (
           <p>Best forgotten. Your next run with these questions becomes the best.</p>
         ) : outcome.kind === "first" ? (
-          <p>
-            <strong className="font-semibold">Your first run with these questions</strong>, so it is your best so far. Change a step and run again to see if
-            it gets better or worse.
-          </p>
+          documents > 1 ? (
+            <p>
+              <strong className="font-semibold">Your first run with these {documents} documents and questions</strong>, so it is your best so far. Adding or
+              removing a document, or questions, starts a new best.
+            </p>
+          ) : (
+            <p>
+              <strong className="font-semibold">Your first run with these questions</strong>, so it is your best so far. Change a step and run again to see if
+              it gets better or worse.
+            </p>
+          )
         ) : outcome.kind === "equal" ? (
           <>
             <p>

@@ -253,7 +253,7 @@ function closestRow(text: string): HitRowData {
  * What the upload check found. A set with problems can still be used, so this
  * is a report and not a refusal, and it stays on screen until the set changes.
  */
-function UploadReport({ report }: { report: Report }) {
+export function UploadReport({ report }: { report: Report }) {
   const lines = reportLines(report)
   return (
     <details open data-testid="upload-report" className="rounded-panel border border-hairline">

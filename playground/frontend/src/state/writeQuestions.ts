@@ -2,6 +2,7 @@ import { useCallback, useSyncExternalStore } from "react"
 
 import { hasKeyFor, keySourceLabel, type Keys } from "@/api/apiKey"
 import type { LlmSettings, Registry } from "@/api/types"
+import { uniqueIds, type Question } from "@/state/goldSet"
 
 /**
  * Questions written for you: the pure half of Evaluate's Write questions for me
@@ -15,6 +16,9 @@ export const DEFAULT_COUNT = 15
 /** The most one run may ask for: the hosted demo's cap, and pandion-api's own elsewhere. */
 export const DEMO_MAX_COUNT = 25
 export const LOCAL_MAX_COUNT = 50
+/** With several documents: how many questions per document at first, and at most. */
+export const DEFAULT_PER_DOCUMENT = 6
+export const MAX_PER_DOCUMENT = 25
 
 /** The providers a key alone is enough for. OpenRouter and a custom endpoint need a model name or an address too. */
 type KeyedProvider = "anthropic" | "openai"
@@ -33,6 +37,8 @@ export interface WrittenQuestion {
   gold_answers: string[]
   answer: string
   tags: string[]
+  /** The sha of the document it was written for. Only a set across documents sends it. */
+  document?: string
 }
 
 export interface WrittenUsage {
@@ -122,6 +128,54 @@ export function keptSet(items: ReviewItem[], document: string) {
   }
 }
 
+// ------------------------------------------------- for several documents --
+
+/** The line under Questions per document. */
+export function perDocumentLine(per: number, documents: number): string {
+  if (documents === 0) return "Pick at least one document."
+  const n = `${documents} document${documents === 1 ? "" : "s"}`
+  return `${per} for each of ${n}: ${per * documents} questions, written one document at a time. They join your set; nothing in it is replaced.`
+}
+
+/** One more document's written set after the ones before it: questions and drops in order, tokens summed while every run reported them. */
+export function mergeWritten(before: WrittenSet | null, next: WrittenSet): WrittenSet {
+  if (!before) return next
+  const sum = (a: number | null, b: number | null) => (a === null || b === null ? null : a + b)
+  return {
+    questions: [...before.questions, ...next.questions],
+    dropped: [...before.dropped, ...next.dropped],
+    usage: {
+      input_tokens: sum(before.usage.input_tokens, next.usage.input_tokens),
+      output_tokens: sum(before.usage.output_tokens, next.usage.output_tokens),
+      model: before.usage.model ?? next.usage.model,
+    },
+  }
+}
+
+/**
+ * The set as it is, every question with its tags, answer and document (a sha,
+ * or empty for one naming none), then the kept questions, each naming the
+ * document it was written for: the one set `POST /questions` reads, so saving
+ * adds and replaces nothing. A written id the set already uses gets a number.
+ */
+export function joinedSet(existing: readonly Question[], items: readonly ReviewItem[]) {
+  const kept: Question[] = items
+    .filter((x) => !x.dropped)
+    .map(({ id, question, gold_answers, answer, tags, document }) => ({ id, question, gold_answers, answer, tags, document: document ?? "" }))
+  const questions = uniqueIds([...existing.map((q) => ({ ...q, document: q.document ?? "" })), ...kept]).map(
+    ({ id, question, gold_answers, answer, tags, document }) => ({ id, question, gold_answers, answer, tags, document }),
+  )
+  return { version: 1, document: "", questions }
+}
+
+/** The joined set's file name: the files it came from, then who wrote the rest, once. */
+export function joinedFilename(existing: readonly string[], writer: string): string {
+  const written = writtenFilename(writer)
+  if (!existing.length) return written
+  const base = existing.join(" and ")
+  return base.endsWith(written) ? base : `${base} and ${written}`
+}
+
 /** The uploaded file's name says who wrote the set, so the question-set line can say it after a reload too. */
 const WRITTEN = /^questions written by (.+)\.json$/
 
@@ -134,7 +188,8 @@ export function writtenBy(filename: string): string | null {
 // ------------------------------------------------------------- the session --
 
 /**
- * One document's run and review, held in memory above the page, so leaving
+ * One document's run and review (or, keyed by several documents' shas, theirs),
+ * held in memory above the page, so leaving
  * Evaluate or switching the pipeline does not lose a run in flight or a review
  * that was paid for. Keyed by the document's fingerprint; a reload drops it.
  */
@@ -145,9 +200,14 @@ export interface WriteSession {
   error: string | null
   written: WrittenSet | null
   items: ReviewItem[]
+  /** With several documents: what to write, one document (`shas[at]`) at a time. Null with one. */
+  plan: { shas: string[]; count: number; model: string } | null
+  at: number
+  /** Stop was pressed: no further document is started. */
+  stopping: boolean
 }
 
-const EMPTY: WriteSession = { runId: null, writer: "", error: null, written: null, items: [] }
+const EMPTY: WriteSession = { runId: null, writer: "", error: null, written: null, items: [], plan: null, at: 0, stopping: false }
 let sessions: Record<string, WriteSession> = {}
 const listeners = new Set<() => void>()
 

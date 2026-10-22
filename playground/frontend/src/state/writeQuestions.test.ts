@@ -8,7 +8,11 @@ import {
   clampCount,
   keyNotice,
   defaultModel,
+  joinedFilename,
+  joinedSet,
   keptSet,
+  mergeWritten,
+  perDocumentLine,
   reviewItems,
   reviewSummary,
   usageLine,
@@ -104,5 +108,49 @@ describe("the written set's file name", () => {
     expect(writtenFilename("Claude Sonnet 5")).toBe("questions written by Claude Sonnet 5.json")
     expect(writtenBy(writtenFilename("Claude Sonnet 5"))).toBe("Claude Sonnet 5")
     expect(writtenBy("refunds.csv")).toBeNull()
+  })
+})
+
+describe("writing for several documents", () => {
+  it("says how many, for how many documents, and that nothing is replaced", () => {
+    expect(perDocumentLine(6, 2)).toBe(
+      "6 for each of 2 documents: 12 questions, written one document at a time. They join your set; nothing in it is replaced.",
+    )
+    expect(perDocumentLine(4, 1)).toBe("4 for each of 1 document: 4 questions, written one document at a time. They join your set; nothing in it is replaced.")
+    expect(perDocumentLine(6, 0)).toBe("Pick at least one document.")
+  })
+
+  it("adds one document's written set to the ones before, tokens summed", () => {
+    const more: WrittenSet = { questions: [written.questions[0]], dropped: [], usage: { input_tokens: 100, output_tokens: 20, model: "claude-sonnet-5" } }
+    const both = mergeWritten(written, more)
+    expect(both.questions).toHaveLength(3)
+    expect(both.dropped).toHaveLength(1)
+    expect(both.usage).toEqual({ input_tokens: 8774, output_tokens: 2697, model: "claude-sonnet-5" })
+    expect(mergeWritten(null, more)).toEqual(more)
+    expect(mergeWritten(more, { ...more, usage: { input_tokens: null, output_tokens: null, model: null } }).usage.input_tokens).toBeNull()
+  })
+
+  it("keeps every question already in the set, tags and answers too, and adds the kept ones with their document", () => {
+    const existing = [
+      { id: "q1", question: "Old named?", gold_answers: ["a"], tags: ["hard"], answer: "An answer.", document: "sha-a" },
+      { id: "u1", question: "Old unnamed?", gold_answers: ["b"], tags: [], answer: "", document: "" },
+    ]
+    const items = reviewItems(written).map((x) => ({ ...x, document: "sha-b" }))
+    items[1].dropped = true
+    const set = joinedSet(existing, items)
+    expect(set.version).toBe(1)
+    expect(set.document).toBe("")
+    expect(set.questions).toEqual([
+      { id: "q1", question: "Old named?", gold_answers: ["a"], tags: ["hard"], answer: "An answer.", document: "sha-a" },
+      { id: "u1", question: "Old unnamed?", gold_answers: ["b"], tags: [], answer: "", document: "" },
+      { id: "q1-2", question: "What two steps does RAG use?", gold_answers: ["First it finds passages."], answer: "Find, then answer.", tags: [], document: "sha-b" },
+    ])
+  })
+
+  it("names the joined file after what was there and who wrote the rest", () => {
+    expect(joinedFilename([], "Claude Haiku 4.5")).toBe("questions written by Claude Haiku 4.5.json")
+    expect(joinedFilename(["golden-set.csv"], "Claude Haiku 4.5")).toBe("golden-set.csv and questions written by Claude Haiku 4.5.json")
+    const once = joinedFilename(["golden-set.csv"], "Claude Haiku 4.5")
+    expect(joinedFilename([once], "Claude Haiku 4.5")).toBe(once)
   })
 })

@@ -33,7 +33,7 @@ export interface Question {
  * row through it: a missing id becomes `q` and its place, and a repeated one
  * gets the first free number after it (`same-2`, `same-3`).
  */
-function uniqueIds(questions: Question[]): Question[] {
+export function uniqueIds(questions: Question[]): Question[] {
   const taken = new Set(questions.map((q) => q.id).filter(Boolean))
   const seen = new Set<string>()
   return questions.map((q, i) => {

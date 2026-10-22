@@ -148,6 +148,20 @@ describe("Write questions for me: set up", () => {
   })
 })
 
+describe("Write questions for me: one document", () => {
+  it("stays as it was: no Write for, a plain Questions count, saved as this document's set", async () => {
+    const served = serve()
+    const { sheet } = setup()
+    await waitFor(() => expect(within(sheet()).getByText("This way, you're going to use your key.")).toBeTruthy())
+    expect(within(sheet()).queryByRole("group", { name: "Documents to write for" })).toBeNull()
+    expect(within(sheet()).queryByLabelText("Questions per document")).toBeNull()
+    expect(sheet().textContent).not.toMatch(/They join your set/)
+    await toReview(served)
+    expect(within(sheet()).queryByTestId("review-group")).toBeNull()
+    expect(sheet().textContent).toMatch(/Saved as your question set for this document/)
+  })
+})
+
 describe("Write questions for me: a key the server has", () => {
   it("counts a key from .env and says where it comes from", async () => {
     const served = serve({ server: { ...NO_SERVER_KEYS, anthropic: "dotenv" } })

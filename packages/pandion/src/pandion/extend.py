@@ -15,7 +15,9 @@ with `guard_endpoint` and builds the OpenAI client's arguments with
 `UnreadableFormat`, raised when the parser cannot read the file's format, and
 can judge a file before it keeps it with `format_of` (a file name's format by
 its extension, or None) and `FORMATS` (each format's name, what one file of it
-is, and its extensions). A server that takes a URL as a document fetches it
+is, and its extensions). `check_contents` raises `UnreadableFormat` for a PDF
+or an image behind a Word, PowerPoint, HTML, Markdown or text file's name,
+the check an index run makes before any step. A server that takes a URL as a document fetches it
 with `fetch_url` and catches `FetchRefused`, raised with a plain reason when
 the guard refuses it.
 """
@@ -26,7 +28,7 @@ from pandion.artifacts import ArtifactType
 from pandion.embeddings import Embedder, get_embedder, register_embedder
 from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.fetch import FetchRefused, fetch_url
-from pandion.formats import FORMATS, UnreadableFormat, format_of
+from pandion.formats import FORMATS, UnreadableFormat, check_contents, format_of
 from pandion.llm import openai_client_kwargs
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
@@ -37,7 +39,7 @@ from pandion.transform import Explanation, Transform
 __all__ = [
     "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "EndpointRefused",
     "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
-    "RunContext", "Stage", "Transform", "UnreadableFormat", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
+    "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
     "openai_client_kwargs", "raw_file", "register", "set_note", "set_usage",
 ]
 

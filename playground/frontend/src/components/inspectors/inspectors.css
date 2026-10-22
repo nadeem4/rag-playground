@@ -311,6 +311,12 @@ button.chat-cite[aria-pressed="true"] {
   color: var(--danger);
   border-bottom: 2px dotted var(--danger);
 }
+.chat-claim[data-grounding="not_found"] {
+  /* Plain ink: the model says the documents do not answer, which is honest, not a fault. */
+  background: transparent;
+  color: var(--text-primary);
+  border-bottom: none;
+}
 .chat-claim[role="button"] {
   cursor: pointer;
 }
@@ -322,6 +328,20 @@ button.chat-cite[aria-pressed="true"] {
 }
 .chat-quote {
   quotes: "\201C" "\201D";
+}
+/* "Not in the documents" after a part where the model says the documents do not
+   answer (chat version 4): plain secondary ink, because it is not a fault. */
+.chat-notfound {
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: 2px;
+  white-space: nowrap;
 }
 /* "No source" after a part nothing backs (Pandion #164), in danger ink like its rule. */
 .chat-nosource {

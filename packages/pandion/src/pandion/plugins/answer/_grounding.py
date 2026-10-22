@@ -61,7 +61,7 @@ class Claim:
 @dataclass
 class GroundedClaim:
     text: str
-    label: str | None  # "cited" | "weak" | "similarity" | "none" | None
+    label: str | None  # "cited" | "weak" | "similarity" | "none" | "not_found" (chat.py) | None
     #: (sentence id, cosine) per citation, in the order the model gave them.
     citations: list[tuple[str, float]] = field(default_factory=list)
 

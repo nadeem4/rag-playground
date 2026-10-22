@@ -508,7 +508,7 @@ export interface FindResult {
  *   similarity  no ids, but one shown sentence matches above the threshold
  *   none        no ids and nothing matches
  */
-export type Grounding = "cited" | "weak" | "similarity" | "none"
+export type Grounding = "cited" | "weak" | "similarity" | "none" | "not_found"
 
 /** A run of answer text. No citations means the text is NOT grounded in a source. */
 export interface ChatSegment {
@@ -553,13 +553,16 @@ export interface ChatCitation {
 /**
  * Plan I-20: claim counts per label, and marker ids that named no sentence.
  * Pandion #164 adds `claims` (parts that say something) and `citing` (those
- * that cite a piece: cited or weak); older payloads lack both.
+ * that cite a piece: cited or weak); older payloads lack both. A `not_found`
+ * part (chat version 4) is counted in `not_found` only, never in `claims`.
  */
 export interface GroundingStats {
   cited: number
   weak: number
   similarity: number
   none: number
+  /** Parts where the model says the documents do not answer (chat version 4); older payloads lack it. */
+  not_found?: number
   unknown_ids: number
   claims?: number
   citing?: number

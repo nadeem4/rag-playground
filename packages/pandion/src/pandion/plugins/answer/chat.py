@@ -12,11 +12,15 @@ Two ways to cite, chosen by `citation_method` (I-17):
   claim, and each claim is checked against its sentences with the index's own
   embedder (`_grounding`). The model points, and we quote.
 
-Both paths label every claim the same way: `cited`, `weak`, `similarity` or
-`none`. In native mode a segment Claude cited is `cited`, and an uncited one
-goes through the same `ground()` similarity check as the sentence-id path,
-with the index's embedder and no second model call. Without an index there is
-no embedder, so an uncited segment is `none`. `stats` counts each label, plus
+Both paths label every claim the same way: `cited`, `weak`, `similarity`,
+`none` or `not_found`. In native mode a segment Claude cited is `cited`, and an
+uncited one goes through the same `ground()` similarity check as the
+sentence-id path, with the index's embedder and no second model call. Without
+an index there is no embedder, so an uncited segment is `none`. On both paths
+a claim with no citation that is one sentence starting "The documents do not"
+(the default prompts ask the model to say so that way) is `not_found`: the
+model says the retrieved pieces do not answer it, which is honest, not a
+fault. It is not counted in `claims`. `stats` counts each label, plus
 `claims` (segments that say something) and `citing` (claims that cite a piece).
 
 Either way, adding the chunk's `start_char` turns an offset into the chunk into
@@ -57,6 +61,8 @@ Opus 5 and Fable 5.1, so Sonnet 5 and Haiku 4.5 are sent without. No
 
 from __future__ import annotations
 
+import re
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, Mapping
 
@@ -84,14 +90,18 @@ from pandion.llm import CHAT_MODELS, ChatModel
 SYSTEM_PROMPT = (
     "Answer the user's question using only the provided documents. "
     "If the documents do not contain the answer, say so plainly instead of "
-    "guessing or drawing on outside knowledge. Be concise."
+    "guessing or drawing on outside knowledge. Be concise. When the documents "
+    "do not answer the question or part of it, say so in one sentence that "
+    'starts "The documents do not".'
 )
 
 #: The sentence-id system prompt, identical for every provider (I-19).
 SENTENCE_PROMPT = (
     "Answer using only the sources below. After each claim, put the ids of the "
     "sentences that support it in brackets, like [2.2] or [2.2][4.1]. If the "
-    "sources do not support a claim, do not make it."
+    "sources do not support a claim, do not make it. When the sources do not "
+    "answer the question or part of it, say so in one sentence that starts "
+    '"The documents do not", with no ids.'
 )
 
 #: Enough room for adaptive thinking (or an OpenAI model's reasoning) plus a
@@ -99,7 +109,23 @@ SENTENCE_PROMPT = (
 MAX_TOKENS = 16000
 
 #: The claim labels `stats` counts, in order.
-LABELS = ("cited", "weak", "similarity", "none")
+LABELS = ("cited", "weak", "similarity", "none", "not_found")
+
+#: How an answer sentence starts when the model says the documents do not
+#: answer something; both default prompts ask for it. Matched without case.
+NOT_FOUND_START = "the documents do not"
+
+
+#: A sentence end followed by more words: the part holds more than one sentence.
+_MORE_SENTENCES = re.compile(r"[.!?]\s+\S")
+
+
+def says_not_found(text: str) -> bool:
+    """The part is one sentence in which the model says the documents do not
+    answer something. A part that goes on to say more keeps its usual label,
+    so a claim after the first sentence is still checked."""
+    text = text.strip()
+    return text.lower().startswith(NOT_FOUND_START) and not _MORE_SENTENCES.search(text)
 
 _SHOW_IF_CUSTOM = {"x-show-when": {"model": "custom"}}
 _SHOW_IF_OPENROUTER = {"x-show-when": {"model": "openrouter"}}
@@ -235,7 +261,9 @@ class ChatUseCase(Transform[ChatConfig]):
     """`retrieval_result (+ query, parsed_doc, index) -> output`."""
 
     name = "chat"
-    version = "3"
+    #: 4: both default prompts ask the model to say "The documents do not"
+    #: when they do not answer, so every built-in chat result id moved once.
+    version = "4"
     stage = Stage.USE_CASE
     inputs = {
         "result": PortSpec(ArtifactType.RETRIEVAL_RESULT),
@@ -512,8 +540,12 @@ def _check_uncited(
             and not a["text"].rstrip().endswith((".", "!", "?"))
         ):
             continue
-        a["grounding"] = "cited" if a["citations"] else "none"
-        if not a["citations"]:
+        if a["citations"]:
+            a["grounding"] = "cited"
+        elif says_not_found(a["text"]):
+            a["grounding"] = "not_found"
+        else:
+            a["grounding"] = "none"
             uncited.append(a)
     if index is None or not uncited:
         return
@@ -600,6 +632,13 @@ def _sentence_ids(
 
     claims, unknown = parse_answer(completion.text, table)
     grounded = ground(claims, table, _index_embed(inputs["index"], extras), config.support_threshold)
+    # A claim the model gave no valid id for, saying the documents do not answer it, is `not_found`.
+    grounded = [
+        replace(g, label="not_found", citations=[])
+        if g.label in ("similarity", "none") and says_not_found(g.text)
+        else g
+        for g in grounded
+    ]
     payload["answer"], payload["citations"] = _sentence_citations(grounded, table, hits, doc)
     counts = {label: sum(1 for g in grounded if g.label == label) for label in LABELS}
     payload["stats"] = _stats(**counts, unknown_ids=unknown)
@@ -662,17 +701,24 @@ def _sentence_entry(n, sentence: Sentence, hits, doc, doc_md, spans, elements):
 
 
 def _stats(
-    cited: int = 0, weak: int = 0, similarity: int = 0, none: int = 0, unknown_ids: int = 0
+    cited: int = 0,
+    weak: int = 0,
+    similarity: int = 0,
+    none: int = 0,
+    not_found: int = 0,
+    unknown_ids: int = 0,
 ) -> dict[str, int]:
     """Counts per label, plus the summary a reader sees: `claims` is how many
-    answer segments say something, and `citing` how many of those the model
-    cited a piece for (cited or weak)."""
+    answer segments say something (a `not_found` part does not count), and
+    `citing` how many of those the model cited a piece for (cited or weak)."""
     return {
         "cited": cited,
         "weak": weak,
         "similarity": similarity,
         "none": none,
+        "not_found": not_found,
         "unknown_ids": unknown_ids,
+        # A part not in the documents is not a claim, so "1 of 1 part cites a piece".
         "claims": cited + weak + similarity + none,
         "citing": cited + weak,
     }

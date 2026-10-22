@@ -439,19 +439,23 @@ checked against the parsed document; one that does not match is marked unverifie
   weak. A claim that cites nothing but matches a shown sentence is marked matched by
   similarity, and one with no match is not grounded. With Claude's own citations, a claim
   Claude cited counts as cited, and a claim it did not cite gets the same similarity check,
-  so it is matched by similarity or not grounded.
+  so it is matched by similarity or not grounded. A part the model did not cite that is
+  one sentence starting "The documents do not" is marked not in the documents: the model
+  says the pieces do not answer it, which is not a fault, and it does not count as a claim.
 - `max_chunks` (5): how many pieces the model reads.
 - `prompt`: the instructions with the model's own citations, by default:
 
   > Answer the user's question using only the provided documents. If the documents do
   > not contain the answer, say so plainly instead of guessing or drawing on outside
-  > knowledge. Be concise.
+  > knowledge. Be concise. When the documents do not answer the question or part of it,
+  > say so in one sentence that starts "The documents do not".
 
 - `sentence_prompt`: the instructions with numbered sentences, by default:
 
   > Answer using only the sources below. After each claim, put the ids of the sentences
   > that support it in brackets, like [2.2] or [2.2][4.1]. If the sources do not support
-  > a claim, do not make it.
+  > a claim, do not make it. When the sources do not answer the question or part of it,
+  > say so in one sentence that starts "The documents do not", with no ids.
 
   Neither can be empty. Both are read-only in the playground.
 - `max_tokens` (16000).

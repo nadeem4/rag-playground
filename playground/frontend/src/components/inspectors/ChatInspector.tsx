@@ -51,7 +51,9 @@ import { fmt, Frame, statusScreen, type InspectorStatus } from "./status"
  * in its chunk's hue with a solid rule, similarity in the same hue with a
  * dotted rule, weak on the warning fill with a dashed rule, and a part with no
  * source in danger ink with a dotted rule and a "No source" mark, which a
- * checkbox hides (remembered per browser). A part with no label is plain. An
+ * checkbox hides (remembered per browser). A part where the model says the
+ * documents do not answer (`not_found`) is plain ink with a plain "Not in the
+ * documents" mark: an honest answer, not a fault. A part with no label is plain. An
  * older native answer (no labels) is drawn exactly as above.
  *
  * Clicking a number, or a claim, opens the page it cites, with the quote found on it.
@@ -327,6 +329,7 @@ const CLAIM_TITLE: Record<Grounding, string> = {
   weak: "Weak support: the named sentences are not similar enough. Read them to judge.",
   similarity: "Similarity match: no id given, but a shown sentence matches",
   none: "No source: nothing in the retrieved pieces backs this",
+  not_found: "The model says the retrieved pieces do not answer this",
 }
 
 /** One sentence-id claim. It opens its first citation, like its number does. */
@@ -379,6 +382,10 @@ function Claim({
         <span data-no-source="" className="chat-nosource">
           No source
         </span>
+      ) : grounding === "not_found" ? (
+        <span data-not-found="" className="chat-notfound">
+          Not in the documents
+        </span>
       ) : null}
       {trail}
       {seg.citations.map((n) => (
@@ -416,6 +423,12 @@ function Legend({ claims, labelled }: { claims: boolean; labelled: boolean }) {
               text
             </span>
             no source
+          </span>
+          <span className="flex items-center gap-1">
+            <span aria-hidden className="chat-notfound">
+              Not in the documents
+            </span>
+            not in the documents
           </span>
         </>
       ) : null}

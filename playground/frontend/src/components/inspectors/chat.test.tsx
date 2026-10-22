@@ -299,6 +299,8 @@ describe("sentence-id grounding helpers", () => {
     expect(checkLine({ ...SID.stats!, claims: 3, citing: 2 })).toBe("2 of 3 parts cite a piece.")
     expect(checkLine({ ...SID.stats!, claims: 1, citing: 0 })).toBe("0 of 1 part cites a piece.")
     expect(checkLine(SID.stats!)).toBeNull()
+    // An answer that is only "The documents do not ..." has no claims, so no line.
+    expect(checkLine({ ...SID.stats!, cited: 0, weak: 0, similarity: 0, none: 0, not_found: 1, claims: 0, citing: 0 })).toBeNull()
     expect(checkLine(undefined)).toBeNull()
   })
 
@@ -383,6 +385,45 @@ describe("ChatInspector, the answer check", () => {
   const check = () => screen.getByTestId("chat-check")
   const box = () => screen.getByRole("checkbox", { name: "Mark parts with no source" }) as HTMLInputElement
   const noSource = () => answer().querySelector<HTMLElement>("[data-no-source]")
+
+  it("a part where the model says the documents do not answer reads Not in the documents, in plain ink", () => {
+    const payload: ChatPayload = {
+      ...NATIVE,
+      answer: [...NATIVE.answer, { text: " The documents do not say what the warranty covers.", citations: [], grounding: "not_found" }],
+      // Pandion leaves a part not in the documents out of `claims`.
+      stats: { ...NATIVE.stats!, not_found: 1, claims: 3 },
+    }
+    render(<ChatInspector payload={payload} chunkSet={chunks} />)
+    const part = claim("not_found")
+    expect(part.textContent).toBe("The documents do not say what the warranty covers.")
+    expect(part.getAttribute("title")).toBe("The model says the retrieved pieces do not answer this")
+    const mark = answer().querySelector<HTMLElement>("[data-not-found]")
+    expect(mark?.textContent).toBe("Not in the documents")
+    expect(mark?.className).toContain("chat-notfound")
+    // "No source" stays for the part with nothing behind it, and only for that one.
+    expect([...answer().querySelectorAll("[data-no-source]")].map((m) => m.textContent)).toEqual(["No source"])
+    expect(screen.getByTestId("chat-legend").textContent).toContain("not in the documents")
+    expect(screen.getByTestId("chat-check").textContent).toBe("2 of 3 parts cite a piece.")
+  })
+
+  it("one cited part and one part not in the documents read 1 of 1, not 1 of 2", () => {
+    const payload: ChatPayload = {
+      ...NATIVE,
+      answer: [
+        { text: "A retriever only returns what a chunk contains.", citations: [1], grounding: "cited" },
+        { text: " The documents do not say the price.", citations: [], grounding: "not_found" },
+      ],
+      stats: { cited: 1, weak: 0, similarity: 0, none: 0, not_found: 1, unknown_ids: 0, claims: 1, citing: 1 },
+    }
+    render(<ChatInspector payload={payload} chunkSet={chunks} />)
+    expect(screen.getByTestId("chat-check").textContent).toBe("1 of 1 part cites a piece.")
+  })
+
+  it("the stats line counts parts not in the documents when there are some", () => {
+    expect(groundingLine({ cited: 1, weak: 0, similarity: 0, none: 0, not_found: 2, unknown_ids: 0 })).toBe(
+      "1 cited, 0 weak, 0 similarity, 0 not grounded, 2 not in the documents, 0 invalid ids",
+    )
+  })
 
   it("a native answer says how many parts cite a piece, and marks the one with no source", () => {
     render(<ChatInspector payload={NATIVE} chunkSet={chunks} />)

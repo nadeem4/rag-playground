@@ -210,7 +210,7 @@ def test_native_path_adds_provider_method_and_stats(fake, pipeline):
     assert payload["provider"] == "anthropic"
     assert payload["citation_method"] == "native"
     assert payload["stats"] == {
-        "cited": 1, "weak": 0, "similarity": 0, "none": 1, "unknown_ids": 0,
+        "cited": 1, "weak": 0, "similarity": 0, "none": 1, "not_found": 0, "unknown_ids": 0,
         "claims": 2, "citing": 1,
     }
     # With no index there is no embedder to check against: uncited is "none".
@@ -244,7 +244,7 @@ def test_native_uncited_segment_gets_a_similarity_label(fake, pipeline, index):
     assert c["method"] == "similarity" and c["support"] == pytest.approx(1.0)
     assert c["cited_text"] == table[sid].text and c["verified"] is True
     assert payload["stats"] == {
-        "cited": 1, "weak": 0, "similarity": 1, "none": 0, "unknown_ids": 0,
+        "cited": 1, "weak": 0, "similarity": 1, "none": 0, "not_found": 0, "unknown_ids": 0,
         "claims": 2, "citing": 1,
     }
     # The check embeds; it never calls the model again.
@@ -258,6 +258,82 @@ def test_native_unrelated_segment_is_none(fake, pipeline, index):
     assert payload["answer"][1]["citations"] == []
     assert payload["stats"]["claims"] == 2 and payload["stats"]["citing"] == 1
     assert len(fake.client.requests) == 1
+
+
+NOT_FOUND = "The documents do not say what the warranty covers."
+
+
+def test_both_prompts_ask_the_model_to_say_what_the_documents_do_not_cover():
+    for prompt in (SYSTEM_PROMPT, SENTENCE_PROMPT):
+        assert '"The documents do not"' in prompt
+
+
+def test_native_a_sentence_saying_the_documents_do_not_cover_it_is_not_found(fake, pipeline, index):
+    fake.reply = native_reply(pipeline, " " + NOT_FOUND)
+    payload = ask(pipeline, index=index).payload
+    assert [s["grounding"] for s in payload["answer"]] == ["cited", "not_found"]
+    assert payload["answer"][1]["citations"] == []
+    assert payload["stats"] == {
+        "cited": 1, "weak": 0, "similarity": 0, "none": 0, "not_found": 1, "unknown_ids": 0,
+        # A part not in the documents is not a claim: "1 of 1 part cites a piece".
+        "claims": 1, "citing": 1,
+    }
+
+
+def test_native_without_an_index_still_labels_it_not_found(fake, pipeline):
+    fake.reply = native_reply(pipeline, " the DOCUMENTS do not mention a price.")
+    payload = ask(pipeline).payload
+    assert payload["answer"][-1]["grounding"] == "not_found"
+    assert payload["stats"]["not_found"] == 1 and payload["stats"]["none"] == 0
+
+
+def test_sentence_ids_a_sentence_saying_the_documents_do_not_cover_it_is_not_found(openai_fake, pipeline, index):
+    table = table_for(pipeline)
+    sid = sid_containing(table, "passages")
+    openai_fake.answer = lambda prompt: f"{table[sid].text} [{sid}] {NOT_FOUND}"
+    payload = ask(pipeline, index=index, model="gpt-6-astra").payload
+    assert [s["grounding"] for s in payload["answer"]] == ["cited", "not_found"]
+    assert payload["answer"][1]["citations"] == []
+    assert payload["stats"]["not_found"] == 1 and payload["stats"]["none"] == 0
+    assert (payload["stats"]["claims"], payload["stats"]["citing"]) == (1, 1)
+
+
+TWO = "The documents do not say the price. Shipping is free."
+
+
+def test_native_a_part_that_goes_on_after_saying_so_keeps_its_usual_label(fake, pipeline, index):
+    fake.reply = native_reply(pipeline, " " + TWO)
+    payload = ask(pipeline, index=index).payload
+    assert payload["answer"][1]["grounding"] != "not_found"
+    assert payload["stats"]["not_found"] == 0
+    fake.reply = native_reply(pipeline, " " + TWO)
+    assert ask(pipeline).payload["answer"][-1]["grounding"] == "none"
+
+
+def test_sentence_ids_a_tail_that_goes_on_after_saying_so_keeps_its_usual_label(openai_fake, pipeline, index):
+    table = table_for(pipeline)
+    sid = sid_containing(table, "passages")
+    openai_fake.answer = lambda prompt: f"{table[sid].text} [{sid}] {TWO}"
+    payload = ask(pipeline, index=index, model="gpt-6-astra").payload
+    assert payload["answer"][-1]["grounding"] != "not_found"
+    assert payload["stats"]["not_found"] == 0
+
+
+def test_says_not_found_needs_one_sentence():
+    from pandion.plugins.answer.chat import says_not_found
+
+    assert says_not_found(" The documents do not say the price.")
+    assert says_not_found("the documents do not say the price")
+    assert not says_not_found(TWO)
+    assert not says_not_found("Shipping is free. The documents do not say the price.")
+
+
+def test_a_cited_sentence_that_starts_the_same_way_keeps_its_label(openai_fake, pipeline, index):
+    table = table_for(pipeline)
+    sid = sid_containing(table, "passages")
+    openai_fake.answer = lambda prompt: f"The documents do not stop there: {table[sid].text} [{sid}]"
+    payload = ask(pipeline, index=index, model="gpt-6-astra").payload
+    assert payload["answer"][0]["grounding"] in ("cited", "weak")
 
 
 def test_native_every_segment_cited(fake, pipeline, index):
@@ -348,7 +424,7 @@ def test_openai_end_to_end_citation_slices_the_document(openai_fake, pipeline, i
     _, chunks = pipeline
     assert c["chunk_id"] == chunks[sentence.chunk_index].id
     assert payload["stats"] == {
-        "cited": 1, "weak": 0, "similarity": 0, "none": 0, "unknown_ids": 0,
+        "cited": 1, "weak": 0, "similarity": 0, "none": 0, "not_found": 0, "unknown_ids": 0,
         "claims": 1, "citing": 1,
     }
 
@@ -368,7 +444,7 @@ def test_every_label_and_unknown_ids(openai_fake, pipeline, index):
     labels = [s["grounding"] for s in payload["answer"]]
     assert labels == ["cited", "weak", "none", "similarity"]
     assert payload["stats"] == {
-        "cited": 1, "weak": 1, "similarity": 1, "none": 1, "unknown_ids": 1,
+        "cited": 1, "weak": 1, "similarity": 1, "none": 1, "not_found": 0, "unknown_ids": 1,
         "claims": 4, "citing": 2,
     }
     by_label = {s["grounding"]: s for s in payload["answer"] if s["grounding"]}
@@ -483,7 +559,7 @@ def test_a_refusal_is_one_ungrounded_segment(monkeypatch, pipeline, index):
     assert payload["answer"] == [{"text": "I can't help.", "citations": [], "grounding": None}]
     assert payload["citations"] == []
     assert payload["stats"] == {
-        "cited": 0, "weak": 0, "similarity": 0, "none": 0, "unknown_ids": 0,
+        "cited": 0, "weak": 0, "similarity": 0, "none": 0, "not_found": 0, "unknown_ids": 0,
         "claims": 0, "citing": 0,
     }
 

@@ -105,9 +105,12 @@ export function isLabelled(p: ChatPayload): boolean {
   return typeof p.stats?.claims === "number"
 }
 
-/** "2 of 3 parts cite a piece." Null on payloads that do not count claims. */
+/**
+ * "2 of 3 parts cite a piece." Null on payloads that do not count claims, and
+ * when there are none (an answer that only says the documents do not answer).
+ */
 export function checkLine(s: GroundingStats | undefined): string | null {
-  if (typeof s?.claims !== "number") return null
+  if (typeof s?.claims !== "number" || s.claims === 0) return null
   const verb = s.claims === 1 ? "part cites" : "parts cite"
   return `${s.citing ?? 0} of ${s.claims} ${verb} a piece.`
 }
@@ -136,7 +139,8 @@ export function claimKind(seg: ChatSegment): Grounding | null {
 /** "4 cited, 1 weak, 0 similarity, 1 not grounded, 0 invalid ids" */
 export function groundingLine(s: GroundingStats): string {
   const ids = s.unknown_ids === 1 ? "invalid id" : "invalid ids"
-  return `${s.cited} cited, ${s.weak} weak, ${s.similarity} similarity, ${s.none} not grounded, ${s.unknown_ids} ${ids}`
+  const notFound = s.not_found ? `${s.not_found} not in the documents, ` : ""
+  return `${s.cited} cited, ${s.weak} weak, ${s.similarity} similarity, ${s.none} not grounded, ${notFound}${s.unknown_ids} ${ids}`
 }
 
 export function methodCaption(method: ChatPayload["citation_method"]): string | null {

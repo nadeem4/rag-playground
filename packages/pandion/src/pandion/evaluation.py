@@ -31,6 +31,7 @@ from pandion.events import event
 from pandion.payloads import ChunkSet, Query
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
 from pandion.plugins import discover
+from pandion.plugins.answer.eval import EvalConfig
 from pandion.plugins.chunk import DocView
 from pandion.ports import Stage
 from pandion.questions import (
@@ -48,6 +49,7 @@ from pandion.trace import StepInput, _holds, trace
 
 __all__ = [
     "COMPARE_STAGES",
+    "DEFAULT_TOP_K",
     "Comparison",
     "Comparisons",
     "EvaluationReport",
@@ -71,6 +73,12 @@ __all__ = [
     "trace",
     "write_questions",
 ]
+
+
+#: How many of the top pieces count when looking for the answer, unless a
+#: caller says: the eval step's own default, so `evaluate`, `compare` and an
+#: app reading the catalog agree.
+DEFAULT_TOP_K: int = EvalConfig.model_fields["top_k"].default
 
 
 def document_text(doc: Any) -> str:
@@ -462,7 +470,7 @@ def _totals(questions: list[QuestionResult]) -> dict[str, Any]:
 def evaluate(
     p: Pipeline,
     questions: str | Path | list[dict] | dict,
-    top_k: int = 5,
+    top_k: int = DEFAULT_TOP_K,
     documents: Any = None,
     *,
     credentials: dict[str, str] | None = None,
@@ -843,7 +851,7 @@ def compare(
     documents: str | Path | list[str | Path],
     questions: str | Path | list[dict] | dict | None = None,
     *,
-    top_k: int = 5,
+    top_k: int = DEFAULT_TOP_K,
     credentials: dict[str, str] | None = None,
     on_event: Callable[[dict[str, Any]], None] | None = None,
     cancel: threading.Event | None = None,

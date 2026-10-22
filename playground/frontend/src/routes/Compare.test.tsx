@@ -20,6 +20,8 @@ import { Compare, seedVariants, VariantResult } from "./Compare"
 import { FakeResizeObserver } from "./fakeResizeObserver"
 
 const registry = liveRegistry as unknown as Registry
+/** The catalog `/api/v2/strategies` serves; a test may swap it for one with other defaults. */
+let servedRegistry: unknown = liveRegistry
 const SOURCE = { sha: "cd".repeat(32), filename: "chunking-primer.pdf" }
 
 class SilentEventSource {
@@ -36,7 +38,7 @@ function serve(artifacts: Record<string, unknown> = {}, extra: Record<string, un
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
+      if (url === "/api/v2/strategies") return ok({ stages: servedRegistry })
       if (url in extra) return extra[url] instanceof Response ? extra[url] : ok(extra[url])
       if (url === "/api/v2/comparisons") return ok({ run_id: "r1" })
       if (url === "/api/v2/runs/r1") return ok(snapshot(EMPTY_RESULT))
@@ -182,6 +184,7 @@ async function runFive(stage: "chunk" | "retrieve", finish = 5, before?: () => v
 }
 
 beforeEach(() => {
+  servedRegistry = liveRegistry
   window.localStorage.clear()
   window.sessionStorage.clear()
   resetStoredGraphForTests()
@@ -754,6 +757,18 @@ describe("four recipes or more", () => {
     expect(heads).toEqual(["Select", "Recipe", "Shared", "Returned", "Top 5, by piece"])
     expect(screen.getAllByRole("img", { name: /^Top \d+: piece \d+/ }).length).toBeGreaterThan(0)
     expect(text()).not.toMatch(/The colours are piece numbers/)
+  })
+
+  it("counts the Shared column in the same top k it counts out of, the eval step's default", async () => {
+    FakeResizeObserver.width = 1409
+    const three = structuredClone(liveRegistry)
+    three.use_case.eval.config_schema.properties.top_k.default = 3
+    servedRegistry = three
+    // Recipes 1 and 4 return the same list, so recipe 4 shares all of the top 3.
+    await runFive("retrieve")
+    const table = await screen.findByRole("table")
+    await waitFor(() => expect(within(table).getAllByText("3 of 3").length).toBeGreaterThan(0))
+    expect(table.textContent).not.toMatch(/[4-9] of 3/)
   })
 
   it("adds Time, Tokens and Cost to the table, and says once what the shared steps took", async () => {

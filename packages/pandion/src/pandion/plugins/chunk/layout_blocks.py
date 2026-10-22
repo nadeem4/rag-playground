@@ -38,6 +38,7 @@ from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.chunk import (
     DocView,
+    SIZE_ROLE,
     Span,
     add_heading_context,
     build_chunk_set,
@@ -54,6 +55,7 @@ _CAPTIONED = ("table", "figure")
 
 class LayoutBlocksConfig(BaseModel):
     max_tokens: int = Field(
+        json_schema_extra=SIZE_ROLE,
         title="Largest piece",
         description="The largest a piece can be, in tokens. A longer block is split.",
         default=400,

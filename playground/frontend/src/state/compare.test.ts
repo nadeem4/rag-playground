@@ -397,6 +397,21 @@ describe("the baseline's name when no recipe is the pipeline's own", () => {
   })
 })
 
+describe("a top k other than 5, the eval step's default", () => {
+  const item = (i: number, phrase: string, shared: number | null, returned: number) => ({ i, phrase, own: i === 0, rank: null, shared, returned, transform: "dense", topK: 20 })
+
+  it("counts the search finding, and a short list, in the same top k as the table", () => {
+    // Dense returns 4: short of 5, but not of 3.
+    const f = retrieveManyFinding([item(0, "Your pipeline", null, 20), item(1, "Dense", 3, 4), item(2, "BM25", 1, 20), item(3, "Hybrid (RRF)", 2, 2)], false, 3, "Your pipeline", 3)!
+    expect(f.finding).toBe("Two of four share all 3 pieces with Your pipeline. BM25 shares the fewest, 1 of 3, and Hybrid (RRF) returns only 2.")
+  })
+
+  it("says a column returned fewer than the same top k", () => {
+    expect(columnDelta({ kind: "retrieve", shared: 3, top: 3, rank: null, goldKnown: false, returned: 4, topK: 20 })).toBe("Shares 3 of 3 pieces with Your pipeline.")
+    expect(columnDelta({ kind: "retrieve", shared: 2, top: 3, rank: null, goldKnown: false, returned: 2, topK: 20 })).toBe("Shares 2 of 3 pieces with Your pipeline. Returns 2, not 3.")
+  })
+})
+
 describe("review wording", () => {
   it("counts every failed recipe in the finding", () => {
     expect(failureSentence(["BM25"], false)).toBe("BM25 failed, and its column says why.")
@@ -460,8 +475,12 @@ describe("comparisons on /api/v2", () => {
 
   it("scores searches when the question's gold passages are known", () => {
     const req = compareRequest(working(["A chunk is a piece."]), node("retrieve"), [{ transform: "dense", config: { top_k: 5 } }, { transform: "bm25", config: { top_k: 5 } }], "retrieval")
-    expect(req).toMatchObject({ stage: "search", questions: [{ id: "question", question: "What is a chunk?", gold_answers: ["A chunk is a piece."], tags: [] }], top_k: 5 })
+    expect(req).toMatchObject({ stage: "search", questions: [{ id: "question", question: "What is a chunk?", gold_answers: ["A chunk is a piece."], tags: [] }] })
     expect(req).not.toHaveProperty("question")
+    // Left out, the server checks as many pieces as pandion.evaluate does by default.
+    expect(req).not.toHaveProperty("top_k")
+    const three = compareRequest(working(["A chunk is a piece."]), node("retrieve"), [{ transform: "dense", config: {} }, { transform: "bm25", config: {} }], "retrieval", 3)
+    expect(three).toMatchObject({ top_k: 3 })
   })
 
   it("shows searches on one question, unscored, when no gold passage is known", () => {

@@ -138,6 +138,9 @@ model, so a new strategy needs no frontend change.
      (`"characters"`), so `pandion.chunk.stats` and the app say each piece's size the
      way the setting does. `"characters"` and `"tokens"` are the only two values; any
      other is treated as `"tokens"`;
+   - for a chunk strategy, `json_schema_extra=SIZE_ROLE` on its size setting and
+     `OVERLAP_ROLE` on its overlap setting (from `pandion.plugins.chunk`), so the app's
+     Compare can halve the size without knowing the settings' names;
    - if it needs something from the step above it, `requires`, keyed by input port, for
      example `{"index": {"backends": ["fts"]}}`, and `provides` on the producer, for
      example `{"backends": ["dense", "fts"]}`. An unmet requirement is a hard lock: the

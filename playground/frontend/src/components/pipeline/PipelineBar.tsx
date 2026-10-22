@@ -311,7 +311,7 @@ export function PipelineBar({
             </>
           ) : null}
           <CopyYaml graph={graph} />
-          {working.ok ? <TakeHome graph={graph} name={current?.name ?? ""} pipelineKey={current ? currentId : null} /> : null}
+          {working.ok ? <TakeHome graph={graph} name={current?.name ?? ""} pipelineKey={current ? currentId : null} registry={registry} /> : null}
           {flash ? (
             <span role="status" className="text-xs text-fg-muted">
               {flash}

@@ -23,6 +23,8 @@ from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.chunk import (
     DocView,
+    OVERLAP_ROLE,
+    SIZE_ROLE,
     Span,
     add_heading_context,
     build_chunk_set,
@@ -36,12 +38,14 @@ class TokenBasedConfig(AddedSettings):
     added: ClassVar[tuple[str, ...]] = ("heading_context",)
 
     max_tokens: int = Field(
+        json_schema_extra=SIZE_ROLE,
         title="Piece size",
         description="The size of each piece, in tokens.",
         default=512,
         ge=1,
     )
     overlap: int = Field(
+        json_schema_extra=OVERLAP_ROLE,
         title="Overlap",
         description="How many tokens each piece repeats from the end of the one before.",
         default=64,

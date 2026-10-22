@@ -9,6 +9,7 @@ import { EndToEndLesson } from "@/components/learn/EndToEndLesson"
 import { ParsingLesson } from "@/components/learn/ParsingLesson"
 import { chatSampleGraph, e2eSampleGraph, storeGraph, type PipelineGraph } from "@/state/graph"
 import { LESSONS, type Lesson } from "@/state/lessons"
+import { supportThreshold } from "@/state/pandionDefaults"
 
 import { RegistryScreen } from "./Shell"
 
@@ -72,7 +73,7 @@ export function Learn() {
         ) : topic === "chunking" ? (
           <ChunkingLesson registry={registry} sha={sample?.sha ?? null} />
         ) : (
-          <CitationsLesson sha={sample?.sha ?? null} onTry={build(chatSampleGraph)} />
+          <CitationsLesson sha={sample?.sha ?? null} onTry={build(chatSampleGraph)} passLine={supportThreshold(registry)} />
         )}
       </div>
     </main>

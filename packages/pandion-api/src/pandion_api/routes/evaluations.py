@@ -22,7 +22,14 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, model_validator
 
 from pandion import compare, evaluate
-from pandion.evaluation import COMPARE_STAGES, QuestionSetError, best, parse_question_set, regression
+from pandion.evaluation import (
+    COMPARE_STAGES,
+    DEFAULT_TOP_K,
+    QuestionSetError,
+    best,
+    parse_question_set,
+    regression,
+)
 from pandion_api import reports
 from pandion_api.jobs import documents_of, start
 from pandion_api.pipelines import NOT_A_MAPPING, prepare, problems, variant_config
@@ -104,7 +111,7 @@ class EvaluationIn(BaseModel):
     documents: list[str] = Field(min_length=1)
     #: Left out: the sets kept against the documents.
     questions: QuestionSet | None = None
-    top_k: int = Field(default=5, ge=1, le=50)
+    top_k: int = Field(default=DEFAULT_TOP_K, ge=1, le=50)
 
 
 @router.post("/evaluations", status_code=202)
@@ -158,7 +165,7 @@ class ComparisonIn(BaseModel):
     documents: list[str] = Field(min_length=1)
     #: Left out: index only, nothing is asked.
     questions: QuestionSet | None = None
-    top_k: int = Field(default=5, ge=1, le=50)
+    top_k: int = Field(default=DEFAULT_TOP_K, ge=1, le=50)
     #: Without questions, the step each variant's index run stops after, as for POST /runs.
     through: str | None = None
     #: One question with no gold passage: each variant's results, unscored.

@@ -38,7 +38,7 @@ const panel = () => screen.getByRole("region", { name: "The step" })
 
 describe("How citations work", () => {
   it("has six steps and a recap, and starts on the first, with every sentence numbered", () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     expect(steps()).toHaveLength(7)
     expect(steps()[0].getAttribute("aria-current")).toBe("step")
     expect(within(panel()).getByRole("heading", { level: 2, name: "We number every sentence" })).toBeTruthy()
@@ -47,7 +47,7 @@ describe("How citations work", () => {
   })
 
   it("moves with Next and Back, and jumps with a step", () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     fireEvent.click(within(panel()).getByRole("button", { name: "Next step" }))
     expect(within(panel()).getByRole("heading", { level: 2, name: "We ask the model to cite numbers" })).toBeTruthy()
     fireEvent.click(within(panel()).getByRole("button", { name: "Back" }))
@@ -58,7 +58,7 @@ describe("How citations work", () => {
   })
 
   it("shows each support score as a number against the pass line, with no filled bar", () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     fireEvent.click(steps()[3])
     expect(within(panel()).getByText("0.86")).toBeTruthy()
     expect(within(panel()).getAllByText(/above the pass line of 0.55/).length).toBe(3)
@@ -66,15 +66,26 @@ describe("How citations work", () => {
     expect(within(panel()).queryByRole("progressbar")).toBeNull()
   })
 
+  it("draws the pass line where Pandion's catalog puts it, and none without one", () => {
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.75} />)
+    fireEvent.click(steps()[3])
+    expect(within(panel()).getAllByText(/above the pass line of 0.75/).length).toBe(2)
+    cleanup()
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={null} />)
+    fireEvent.click(steps()[3])
+    expect(within(panel()).getByText("0.86")).toBeTruthy()
+    expect(within(panel()).queryByText(/pass line of/)).toBeNull()
+  })
+
   it("says Claude's API can return citations, without claiming only Claude can", () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     const text = document.body.textContent ?? ""
     expect(text).toContain("Claude's API can return citations for us. For other models, the model points, and we quote.")
     expect(text).not.toContain("Only Claude")
   })
 
   it("the scores step says a low score is marked weak support, and says what a claim that points at nothing scored", () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     fireEvent.click(steps()[3])
     expect(panel().textContent).toContain(
       "If the score is above the pass line, the claim is cited. If it is below, the citation is marked weak support, and you should read it yourself.",
@@ -86,13 +97,13 @@ describe("How citations work", () => {
   })
 
   it.each([3, 5])("step %i shows every label at least once", (n) => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     fireEvent.click(steps()[n])
     for (const l of ["Cited", "Weak support", "Similarity match", "Not grounded"]) expect(within(panel()).getAllByText(l).length).toBeGreaterThanOrEqual(1)
   })
 
   it("clicking a claim finds its real sentence on the sample page and boxes it", async () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     fireEvent.click(steps()[4])
     fireEvent.click(within(panel()).getByRole("button", { name: /A table can lose its caption/ }))
     await waitFor(() => expect(panel().querySelectorAll("[data-highlight]").length).toBe(1))
@@ -104,14 +115,14 @@ describe("How citations work", () => {
 
   it("ends with Try it yourself", () => {
     const onTry = vi.fn()
-    render(<CitationsLesson sha={SHA} onTry={onTry} />)
+    render(<CitationsLesson sha={SHA} onTry={onTry} passLine={0.55} />)
     fireEvent.click(steps()[5])
     fireEvent.click(within(panel()).getByRole("button", { name: "Try it yourself" }))
     expect(onTry).toHaveBeenCalled()
   })
 
   it("uses no em-dashes and at most one middle dot per line", () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     for (let i = 0; i < 7; i++) {
       fireEvent.click(steps()[i])
       const text = document.body.textContent ?? ""
@@ -121,7 +132,7 @@ describe("How citations work", () => {
   })
 
   it("recaps what the lesson showed, then Mark as done and Back to lessons", () => {
-    render(<CitationsLesson sha={SHA} onTry={() => {}} />)
+    render(<CitationsLesson sha={SHA} onTry={() => {}} passLine={0.55} />)
     fireEvent.click(steps()[6])
     expect(within(panel()).getByText("Every sentence in the retrieved chunks is given a number.")).toBeTruthy()
     expect(within(panel()).getByRole("link", { name: "Back to lessons" }).getAttribute("href")).toBe("/learn")

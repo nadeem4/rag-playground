@@ -21,6 +21,8 @@ export interface CitationsLessonProps {
   sha: string | null
   /** "Try it yourself": open Build with the sample and a chat step. */
   onTry: () => void
+  /** The chat step's default `support_threshold`, from Pandion's catalog; null draws no pass line. */
+  passLine: number | null
 }
 
 const SOURCES = [
@@ -43,9 +45,6 @@ const SOURCES = [
 const SENTENCE: Record<string, string> = Object.fromEntries(SOURCES.flatMap((c) => c.lines.map(([id, t]) => [id, t])))
 
 const QUESTION = "Why do chunk boundaries matter?"
-/** The chat step's default `support_threshold`. */
-const PASS = 0.55
-
 type Label = "cited" | "weak" | "similarity" | "none"
 const LABEL: Record<Label, string> = { cited: "Cited", weak: "Weak support", similarity: "Similarity match", none: "Not grounded" }
 
@@ -77,16 +76,17 @@ function Marker({ id, bad }: { id: string; bad?: boolean }) {
 }
 
 /** The score, and a small mark against the pass line on a hairline. No filled track. */
-function ScoreMark({ score, closest }: { score: number; closest?: boolean }) {
-  const above = score >= PASS
+function ScoreMark({ score, closest, pass }: { score: number; closest?: boolean; pass: number | null }) {
+  if (pass === null) return <span className="font-mono text-xs text-fg">{score.toFixed(2)}</span>
+  const above = score >= pass
   return (
     <span className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
       {closest ? <span>the closest sentence we found scored {score.toFixed(2)}</span> : <span className="font-mono text-fg">{score.toFixed(2)}</span>}
       <span aria-hidden className="relative inline-block h-[12px] w-[72px] border-b border-fg-muted">
-        <span className="absolute bottom-0 h-[12px] w-px bg-danger" style={{ left: `${PASS * 100}%` }} />
+        <span className="absolute bottom-0 h-[12px] w-px bg-danger" style={{ left: `${pass * 100}%` }} />
         <span className="absolute bottom-0 h-[8px] w-[3px] bg-fg" style={{ left: `calc(${score * 100}% - 1px)` }} />
       </span>
-      <span>{above ? `above the pass line of ${PASS}` : `below the pass line of ${PASS}`}</span>
+      <span>{above ? `above the pass line of ${pass}` : `below the pass line of ${pass}`}</span>
     </span>
   )
 }
@@ -128,7 +128,7 @@ function Answer() {
   )
 }
 
-function Scores() {
+function Scores({ pass }: { pass: number | null }) {
   return (
     <div className="flex flex-col gap-2">
       <ul className="m-0 flex list-none flex-col gap-px overflow-hidden rounded-panel border border-hairline bg-hairline p-0">
@@ -139,7 +139,7 @@ function Scores() {
               <span className="text-xs text-fg-muted">
                 Points at <span className="font-mono">{c.points}</span>
               </span>
-              {c.score !== null ? <ScoreMark score={c.score} closest={c.points === "nothing"} /> : null}
+              {c.score !== null ? <ScoreMark score={c.score} closest={c.points === "nothing"} pass={pass} /> : null}
             </div>
             <Chip label={c.label} />
           </li>
@@ -268,7 +268,7 @@ const STEPS: Step[] = [
       "If the score is above the pass line, the claim is cited. If it is below, the citation is marked weak support, and you should read it yourself.",
       "A claim that points at nothing gets the closest sentence we can find. Above the pass line that is a similarity match, and below it the claim is not grounded.",
     ],
-    visual: () => <Scores />,
+    visual: (p) => <Scores pass={p.passLine} />,
   },
   {
     title: "We find it on the page",

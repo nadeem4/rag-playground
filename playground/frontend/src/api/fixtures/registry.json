@@ -550,14 +550,16 @@
             "description": "The largest a piece can be, in characters.",
             "minimum": 1,
             "title": "Chunk size",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "size"
           },
           "chunk_overlap": {
             "default": 80,
             "description": "How many characters each piece repeats from the end of the one before, so a sentence cut at the edge is not lost.",
             "minimum": 0,
             "title": "Overlap",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "overlap"
           },
           "heading_context": {
             "default": true,
@@ -636,7 +638,8 @@
             "description": "The largest a piece can be, in tokens. A longer block is split.",
             "minimum": 1,
             "title": "Largest piece",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "size"
           },
           "keep_tables_whole": {
             "default": true,
@@ -737,7 +740,8 @@
             "description": "The largest a piece can be, in tokens. A longer section is split.",
             "minimum": 1,
             "title": "Largest piece",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "size"
           }
         },
         "title": "MarkdownHeaderConfig",
@@ -789,14 +793,16 @@
             "description": "The size of each piece, in tokens.",
             "minimum": 1,
             "title": "Piece size",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "size"
           },
           "overlap": {
             "default": 64,
             "description": "How many tokens each piece repeats from the end of the one before.",
             "minimum": 0,
             "title": "Overlap",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "overlap"
           },
           "heading_context": {
             "default": false,
@@ -867,14 +873,16 @@
             "description": "How many sentences go in each piece.",
             "minimum": 1,
             "title": "Sentences per piece",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "size"
           },
           "overlap_sentences": {
             "default": 1,
             "description": "How many sentences each piece repeats from the one before.",
             "minimum": 0,
             "title": "Overlap",
-            "type": "integer"
+            "type": "integer",
+            "x-role": "overlap"
           },
           "heading_context": {
             "default": false,

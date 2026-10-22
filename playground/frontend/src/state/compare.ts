@@ -543,7 +543,7 @@ export interface RetrieveManyItem {
   own: boolean
   /** Where the known answer sits, or null when it is not returned or not known. */
   rank: number | null
-  /** How many of its top 5 the baseline's top 5 holds; null on the baseline. */
+  /** How many of its top k the baseline's top k holds; null on the baseline. */
   shared: number | null
   returned: number
   transform: string
@@ -553,17 +553,25 @@ export interface RetrieveManyItem {
 /**
  * The search overview's finding. With a known answer: how many put it first,
  * then up to two notes (does not return it, puts it lower, returns fewer than
- * 5). Without one: how many share all of the baseline's top 5, then the one
- * that shares the fewest and one that returns fewer. The link reads Your
- * pipeline beside the recipe the finding names first.
+ * `top`). Without one: how many share all of the baseline's top `top`, then the
+ * one that shares the fewest and one that returns fewer. `top` is the table's
+ * top k, the eval step's default; left out, 5 or the baseline's length when
+ * shorter. The link reads Your pipeline beside the recipe the finding names first.
  */
-export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolean, fit = 3, baseName = "Your pipeline"): ManyFinding | null {
+export function retrieveManyFinding(
+  items: RetrieveManyItem[],
+  goldKnown: boolean,
+  fit = 3,
+  baseName = "Your pipeline",
+  top?: number,
+): ManyFinding | null {
   if (items.length < 2) return null
   const base = items.find((x) => x.own) ?? items[0]
   const others = items.filter((x) => x !== base)
   const n = items.length
-  // Short means fewer than both the 5 the page reads and the recipe's own top k.
-  const isShort = (x: RetrieveManyItem) => x.returned < Math.min(5, x.topK ?? 5)
+  const k = top ?? Math.min(5, base.returned)
+  // Short means fewer than both the top k the page reads and the recipe's own top k.
+  const isShort = (x: RetrieveManyItem) => x.returned < Math.min(top ?? 5, x.topK ?? top ?? 5)
   let finding: string
   let named: RetrieveManyItem | undefined
   if (goldKnown) {
@@ -577,14 +585,13 @@ export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolea
     if (notes.length) finding += ` ${cap(notes.slice(0, 2).map((x) => x.t).join(", and "))}.`
     named = notes.find((x) => x.x !== base)?.x
   } else {
-    const top = Math.min(5, base.returned)
-    const all = items.filter((x) => x === base || x.shared === top).length
-    finding = `${cap(word(all))} of ${word(n)} share ${top === 1 ? "its one piece" : `all ${top} pieces`} with ${baseName}.`
-    const least = Math.min(...others.map((x) => x.shared ?? top))
-    const fewest = least < top ? others.find((x) => (x.shared ?? top) === least) : undefined
+    const all = items.filter((x) => x === base || x.shared === k).length
+    finding = `${cap(word(all))} of ${word(n)} share ${k === 1 ? "its one piece" : `all ${k} pieces`} with ${baseName}.`
+    const least = Math.min(...others.map((x) => x.shared ?? k))
+    const fewest = least < k ? others.find((x) => (x.shared ?? k) === least) : undefined
     const short = others.find((x) => x !== fewest && isShort(x))
     const parts: string[] = []
-    if (fewest) parts.push(`${fewest.phrase} shares the fewest, ${least} of ${top}`)
+    if (fewest) parts.push(`${fewest.phrase} shares the fewest, ${least} of ${k}`)
     if (short) parts.push(`${short.phrase} returns only ${short.returned}`)
     if (parts.length) finding += ` ${cap(parts.join(", and "))}.`
     named = fewest ?? short
@@ -603,8 +610,8 @@ export function retrieveManyFinding(items: RetrieveManyItem[], goldKnown: boolea
 
 /**
  * What one open column says against Your pipeline: on Chunk, the change in
- * pieces and in characters left out; on Retrieve, how much of the top 5 it
- * shares, where it puts the known answer, and when it returned fewer than 5.
+ * pieces and in characters left out; on Retrieve, how much of the top `top` it
+ * shares, where it puts the known answer, and when it returned fewer than `top`.
  */
 export function columnDelta(
   d:
@@ -622,7 +629,8 @@ export function columnDelta(
   }
   let out = `Shares ${d.shared} of ${d.top} ${d.top === 1 ? "piece" : "pieces"} with ${baseName}.`
   if (d.goldKnown) out += d.rank ? ` Puts the answer ${ordinal(d.rank)}.` : " Does not return the answer."
-  if (d.returned < Math.min(5, d.topK ?? 5)) out += ` Returns ${d.returned}, not ${Math.min(5, d.topK ?? 5)}.`
+  const want = Math.min(d.top, d.topK ?? d.top)
+  if (d.returned < want) out += ` Returns ${d.returned}, not ${want}.`
   return out
 }
 
@@ -742,7 +750,8 @@ export function compareRequest(
   target: GraphNode,
   variants: Variant[],
   through: CompareThrough,
-  topK = 5,
+  /** How many pieces count; left out, the server uses `pandion.evaluate`'s own default. */
+  topK?: number,
   stopAfter?: string,
   graph?: PipelineGraph,
 ): ComparisonRequest | { problem: string } {
@@ -758,7 +767,7 @@ export function compareRequest(
   if (through === "step" && !retrievalStage) return stopAfter && stopAfter !== "index" ? { ...base, through: stopAfter } : base
   const golds = p.question.gold_answers
   if (through !== "answer" && golds.length) {
-    return { ...base, questions: [{ id: "question", question: p.question.text, gold_answers: [...golds], tags: [] }], top_k: topK }
+    return { ...base, questions: [{ id: "question", question: p.question.text, gold_answers: [...golds], tags: [] }], ...(topK === undefined ? {} : { top_k: topK }) }
   }
   return { ...base, question: p.question.text, answer: through === "answer" }
 }

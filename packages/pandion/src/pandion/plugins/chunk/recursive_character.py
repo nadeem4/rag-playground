@@ -27,6 +27,8 @@ from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.chunk import (
     DocView,
+    OVERLAP_ROLE,
+    SIZE_ROLE,
     Span,
     add_heading_context,
     build_chunk_set,
@@ -48,12 +50,14 @@ _SEPARATORS: tuple[tuple[str, int], ...] = (
 
 class RecursiveCharacterConfig(BaseModel):
     chunk_size: int = Field(
+        json_schema_extra=SIZE_ROLE,
         title="Chunk size",
         description="The largest a piece can be, in characters.",
         default=400,
         ge=1,
     )
     chunk_overlap: int = Field(
+        json_schema_extra=OVERLAP_ROLE,
         title="Overlap",
         description=(
             "How many characters each piece repeats from the end of the one "

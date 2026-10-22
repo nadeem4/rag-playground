@@ -32,7 +32,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.evaluation import COMPARE_STAGES
+from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K
 
 #: Pandion's name for each key, and the environment variable it is read from.
 ENV_KEYS = {
@@ -475,7 +475,9 @@ def parser() -> argparse.ArgumentParser:
     sub = command("eval", "evaluate a pipeline on a question set", cmd_eval)
     sub.add_argument("config")
     sub.add_argument("questions", help="a question set, JSON or CSV, in the samples' format")
-    sub.add_argument("--top-k", dest="top_k", type=int, default=5, help="how many of the top pieces are checked (default 5)")
+    sub.add_argument(
+        "--top-k", dest="top_k", type=int, default=DEFAULT_TOP_K, help=f"how many of the top pieces are checked (default {DEFAULT_TOP_K})"
+    )
     sub.add_argument("--documents", nargs="+", help="evaluate on exactly these documents, indexing them first if needed")
     sub.add_argument("--json", action="store_true", help="print the report as JSON; save it as a baseline with --json > base.json")
     sub.add_argument("--baseline", help="a report saved with --json: say which questions this run newly missed or newly found")
@@ -486,7 +488,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--vary", required=True, help="stage.setting=a,b,c, such as chunk.chunk_size=200,400,800")
     sub.add_argument("documents", nargs="+", help="files or folders to index")
     sub.add_argument("--questions", help="a question set: evaluate each variant and name the best")
-    sub.add_argument("--top-k", dest="top_k", type=int, default=5)
+    sub.add_argument(
+        "--top-k", dest="top_k", type=int, default=DEFAULT_TOP_K, help=f"how many of the top pieces are checked (default {DEFAULT_TOP_K})"
+    )
     sub.add_argument("--json", action="store_true", help="print the comparison as JSON")
 
     sub = command("install", "install the extras a pipeline file needs", cmd_install)

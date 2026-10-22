@@ -1687,7 +1687,7 @@ files remembers nothing from one command to the next, so name the documents agai
 `pandion.evaluate` on a question set (JSON or CSV, as in
 [Evaluate a pipeline](#evaluate-a-pipeline)) and prints the report as Pandion prints it:
 one line per question, then the totals. `--top-k` is how many of the top pieces are
-checked (5 when left out). A last line gives the run's cost (see
+checked; left out, it is the `eval` step's default `top_k` (5), as for `pandion.evaluate`. A last line gives the run's cost (see
 [Speed and cost](#speed-and-cost)), for example:
 
 ```text
@@ -1718,7 +1718,8 @@ With `--json`, the comparison is under `"regression"`.
 runs `pandion.compare`: the pipeline once per value of one setting, indexing `DOC...`
 each time, so every step above the changed one comes from the cache. It prints one line
 per variant, each followed by that variant's cost line, and, with `--questions`, the best
-one. `--json` prints `to_dict()`, with each variant's `cost()` under `"cost"`.
+one. `--top-k` is how many of the top pieces are checked, the `eval` step's default when
+left out, as for `pandion eval`. `--json` prints `to_dict()`, with each variant's `cost()` under `"cost"`.
 
 `--vary` takes `stage.setting=a,b,c`, and each value is read as YAML, so `200` is a
 number and `null` is no value:

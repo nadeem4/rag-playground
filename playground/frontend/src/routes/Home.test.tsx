@@ -248,7 +248,7 @@ describe("Home's starts", () => {
     expect(within(start).getByRole("heading", { level: 3, name: "A sample" })).toBeTruthy()
     expect(await within(start).findByText("Scanned notes")).toBeTruthy()
     expect(within(start).getByText("Two-column report")).toBeTruthy()
-    expect(within(start).getByRole("link", { name: "Start from a template" }).getAttribute("href")).toBe("/build")
+    expect(within(start).getByRole("link", { name: "Start from a template" }).getAttribute("href")).toBe("/build?templates=1")
     fireEvent.click(within(start).getByRole("button", { name: "Open a sample on Build" }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/build?starter=${FIRST.name}`))
   })

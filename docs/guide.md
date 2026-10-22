@@ -226,6 +226,9 @@ it uses. A card marked **Needs a key** calls a language model, so add your key i
 before you Ask. **Your pipeline** lists the steps the two cards make and names a sample to
 try them on.
 
+Home's **Start from a template** opens Build with these cards already open. The link is
+`/build?templates=1`; the cards open once, so reloading Build does not open them again.
+
 **Use this pipeline** puts that pipeline on Build as a new, unsaved pipeline, on the
 document and question you already have. A line then says what Build holds, with **Undo**,
 which puts your previous pipeline back exactly. **Keep my current pipeline** closes the

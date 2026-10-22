@@ -499,7 +499,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
               <p className="m-0 text-sm text-fg-muted">
                 Ready pipelines for manuals, reports, scans and tables. Pick the index half and the question half, then change one thing.
               </p>
-              <a href="/build" className={LINK}>
+              <a href="/build?templates=1" className={LINK}>
                 Start from a template
               </a>
             </div>

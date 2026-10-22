@@ -90,6 +90,20 @@ describe("PipelineBar: Start from a template", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Start from a template" }))
   })
 
+  it("opens the picker from /build?templates=1, and drops the query so a reload does not reopen it", async () => {
+    window.history.replaceState(null, "", "/build?templates=1&keep=me")
+    render(<Bar onLoad={vi.fn()} />)
+    expect(await screen.findByRole("dialog", { name: "Start from a template" })).toBeTruthy()
+    expect(window.location.pathname + window.location.search).toBe("/build?keep=me")
+    window.history.replaceState(null, "", "/")
+  })
+
+  it("stays closed without the query", () => {
+    window.history.replaceState(null, "", "/build")
+    render(<Bar onLoad={vi.fn()} />)
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
   it("Keep my current pipeline leaves it as it was", async () => {
     const onLoad = vi.fn()
     render(<Bar onLoad={onLoad} />)

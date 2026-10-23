@@ -67,7 +67,7 @@ const GLOSS = "text-xs leading-[1.5] text-fg-muted"
 
 /** Why LLM and Chat are off: shown under the group and as the option's title. */
 const LLM_REASON = "Add a key to use the LLM reranker"
-const CHAT_REASON = "Add a key to turn Chat on"
+export const CHAT_REASON = "Add a key to turn Chat on"
 
 /** The schema with only `keys` among its fields. */
 function pick(schema: JsonSchema, keys: string[]): JsonSchema {
@@ -258,16 +258,9 @@ function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
 }
 
 function Answer({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
-  const choices: SegmentedOption[] = [{ value: "search", label: "Search" }]
-  if (p.registry.use_case?.chat) {
-    const disabled = p.hasKey === false
-    choices.push({ value: "chat", label: "Chat with a model", disabled, title: disabled ? CHAT_REASON : undefined })
-  }
+  // Search or Chat is chosen above the question; this block holds the chosen one's fields.
   return (
-    <Block title="Answer" stage="use_case">
-      <SegmentedControl label="Answer with" options={choices} value={node.transform} onChange={(v) => p.onUseCase(v as "search" | "chat")} />
-      <p className={GLOSS}>Search shows the kept pieces. Chat writes an answer with citations.</p>
-      {p.hasKey === false && p.registry.use_case?.chat ? <p className={GLOSS}>{CHAT_REASON}</p> : null}
+    <Block title={`Answer: ${node.transform === "chat" ? "Chat" : "Search"}`} stage="use_case">
       <NodeForm
         node={node}
         registry={p.registry}

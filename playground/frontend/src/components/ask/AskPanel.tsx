@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
-import { hasAnyKey, type Keys } from "@/api/apiKey"
+import { hasAnyKey, keyNeedFor, PROVIDER_INFO, useApiKey, type Keys } from "@/api/apiKey"
 import { QUEUED_LINE } from "@/api/runState"
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions, useSamples } from "@/api/samples"
-import type { ChunkSet, LlmProvider, LlmSettings, Registry } from "@/api/types"
+import type { ChunkSet, GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
 import { useArtifactPayload } from "@/api/useArtifact"
 import type { ExplainState } from "@/api/useExplain"
 import { KeyHint } from "@/components/ApiKeyControl"
@@ -13,6 +13,7 @@ import { blockingNode, type NodeErrors } from "@/components/pipeline/PipelineCol
 import { QuestionField } from "@/components/pipeline/QuestionField"
 import { useElapsed } from "@/components/pipeline/useElapsed"
 import { Button } from "@/components/ui/button"
+import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { fileOf, type FileInfo } from "@/lib/files"
 import { cn } from "@/lib/utils"
@@ -20,7 +21,7 @@ import { documentsOf } from "@/state/document"
 import { ASK_STAGES, askNodes, indexNode, infoFor, rewriteOf, terminalNode, titleFor, upstreamOfStage, type PipelineGraph, type RewriteMode } from "@/state/graph"
 
 import { AskResults, finalRows, fresh, rerankLabel, SearchedFor, useAskOutputs } from "./AskResults"
-import { AskSettings, RETRIEVAL_LABEL } from "./AskSettings"
+import { AskSettings, CHAT_REASON, RETRIEVAL_LABEL } from "./AskSettings"
 import { askSignature, findGold, goldsOf, Transcript, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
 /**
@@ -141,6 +142,54 @@ function SearchIn({ files, value, onChange }: { files: readonly FileInfo[]; valu
   )
 }
 
+/**
+ * Search or Chat, above the question, with one muted line that says what the
+ * choice means: the missing key, what Search costs, or which model Chat uses.
+ */
+function AnswerMode({ useCase, registry, hasKey, onUseCase, onChangeModel }: {
+  useCase: GraphNode
+  registry: Registry
+  hasKey: boolean | null
+  onUseCase: (transform: "search" | "chat") => void
+  onChangeModel: () => void
+}) {
+  const { setPanelOpen } = useApiKey()
+  const chatInfo = registry.use_case?.chat
+  const chatOff = hasKey === false
+  const options: SegmentedOption[] = [{ value: "search", label: "Search" }]
+  if (chatInfo) options.push({ value: "chat", label: "Chat with a model", disabled: chatOff, title: chatOff ? CHAT_REASON : undefined })
+  const chat = useCase.transform === "chat"
+  const schema = chatInfo?.config_schema.properties?.model as Record<string, unknown> | undefined
+  const model = String(useCase.config.model ?? schema?.default ?? "")
+  const need = keyNeedFor(schema, useCase.config.model)
+  const whose = need.kind === "provider" ? `, your ${PROVIDER_INFO[need.provider].name} key` : need.kind === "none" ? ", your endpoint" : ""
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <SegmentedControl label="Answer with" options={options} value={useCase.transform} onChange={(v) => onUseCase(v as "search" | "chat")} />
+      <p data-testid="answer-mode-line" className="m-0 text-xs text-fg-muted">
+        {chat ? (
+          <>
+            Model <span className="font-mono">{model}</span>
+            {whose}{" "}
+            <button type="button" className={LINK_BUTTON} onClick={onChangeModel}>
+              Change model
+            </button>
+          </>
+        ) : chatInfo && chatOff ? (
+          <>
+            Chat needs an API key.{" "}
+            <button type="button" className={LINK_BUTTON} onClick={() => setPanelOpen(true)}>
+              Add a key
+            </button>
+          </>
+        ) : (
+          "Shows the pieces that match. No model, no cost."
+        )}
+      </p>
+    </div>
+  )
+}
+
 /** Smooth unless the visitor asked for less motion. */
 function motion(): ScrollBehavior {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
@@ -190,6 +239,10 @@ export function AskPanel(p: AskPanelProps) {
     settingsBox.current?.scrollIntoView?.({ behavior: motion(), block: "start" })
     setGoSettings(false)
   }, [goSettings])
+  // The key hint, once dismissed, stays dismissed for this tab.
+  const [hintDismissed, setHintDismissed] = useState(false)
+  const keyed = hasAnyKey(p.server, p.keys)
+  const offerChat = keyed === true && useCase?.transform === "search" && Boolean(p.registry.use_case?.chat) && !hintDismissed
   const answerBox = useRef<HTMLDivElement>(null)
   const wasAsking = useRef(Boolean(p.asking))
   useEffect(() => {
@@ -304,6 +357,7 @@ export function AskPanel(p: AskPanelProps) {
       {/* Scrolls on its own: the panel is a docked column or a bottom sheet, never part of the page's scroll. */}
       <div ref={scrollBox} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         {outputs.files.length ? <SearchIn files={outputs.files} value={searched?.sha ?? null} onChange={(sha) => p.onSearchIn?.(sha)} /> : null}
+        {useCase ? <AnswerMode useCase={useCase} registry={p.registry} hasKey={keyed} onUseCase={p.onUseCase} onChangeModel={toSettings} /> : null}
         {query ? (
           <QuestionField
             value={String(query.config.text ?? "")}
@@ -364,10 +418,24 @@ export function AskPanel(p: AskPanelProps) {
             onComparison={p.onComparison}
             invite={
               <p data-testid="ask-invite" className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control bg-accent-wash px-2 py-1 text-xs">
-                <span>Try another search or a reranker, and ask again.</span>
-                <button type="button" className={LINK_BUTTON} onClick={toSettings}>
-                  Change settings
-                </button>
+                {offerChat ? (
+                  <>
+                    <span>You have a key. Switch to Chat with a model for a written answer with citations.</span>
+                    <button type="button" className={LINK_BUTTON} onClick={() => p.onUseCase("chat")}>
+                      Use Chat
+                    </button>
+                    <button type="button" className={LINK_BUTTON} onClick={() => setHintDismissed(true)}>
+                      Dismiss
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span>Try another search or a reranker, and ask again.</span>
+                    <button type="button" className={LINK_BUTTON} onClick={toSettings}>
+                      Change settings
+                    </button>
+                  </>
+                )}
               </p>
             }
           />
@@ -424,7 +492,7 @@ export function AskPanel(p: AskPanelProps) {
             <AskSettings
               graph={p.graph}
               registry={p.registry}
-              hasKey={hasAnyKey(p.server, p.keys)}
+              hasKey={keyed}
               errors={p.errors}
               onConfig={p.onConfig}
               onTransform={p.onTransform}

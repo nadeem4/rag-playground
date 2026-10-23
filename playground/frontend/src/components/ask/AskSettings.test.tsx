@@ -34,7 +34,7 @@ function setup(over: Partial<AskSettingsProps> = {}) {
   return props
 }
 
-const block = (name: string) => within(screen.getByRole("region", { name }))
+const block = (name: string | RegExp) => within(screen.getByRole("region", { name }))
 const reranker = () => block("Rerank").getByRole("button", { name: /^Reranker/ })
 const segment = (group: string, name: string) => within(screen.getByRole("group", { name: group })).getByRole("button", { name }) as HTMLButtonElement
 
@@ -231,34 +231,31 @@ describe("the Rerank block", () => {
 })
 
 describe("the Answer block", () => {
-  it("switches between Search and Chat", () => {
-    const p = setup()
-    expect(segment("Answer with", "Search").getAttribute("aria-pressed")).toBe("true")
-    fireEvent.click(segment("Answer with", "Chat with a model"))
-    expect(p.onUseCase).toHaveBeenCalledWith("chat")
-    expect(block("Answer").getByText("use_case")).toBeTruthy()
+  it("no longer holds the Search / Chat switch, which sits above the question", () => {
+    setup()
+    expect(screen.queryByRole("group", { name: "Answer with" })).toBeNull()
+    expect(screen.queryByText(/Search shows the kept pieces/)).toBeNull()
+    expect(block(/^Answer/).getByText("use_case")).toBeTruthy()
   })
 
-  it("Chat is disabled without a key, with the reason", () => {
-    setup({ hasKey: false })
-    expect(segment("Answer with", "Chat with a model").disabled).toBe(true)
-    expect(screen.getByText("Add a key to turn Chat on")).toBeTruthy()
+  it("is titled by the mode", () => {
+    setup()
+    expect(block("Answer: Search").getByRole("heading", { name: "Answer: Search" })).toBeTruthy()
+    cleanup()
+    setup({ graph: setUseCase(sampleGraph(LIVE, SAMPLE), LIVE, "chat") })
+    expect(block("Answer: Chat").getByRole("heading", { name: "Answer: Chat" })).toBeTruthy()
   })
 
   it("with Chat, the chat model select appears", () => {
     setup({ graph: setUseCase(sampleGraph(LIVE, SAMPLE), LIVE, "chat") })
-    expect(block("Answer").getByLabelText("Model")).toBeTruthy()
+    expect(block(/^Answer/).getByLabelText("Model")).toBeTruthy()
   })
 
-  it("says what Search and Chat give", () => {
-    setup()
-    expect(block("Answer").getByText("Search shows the kept pieces. Chat writes an answer with citations.")).toBeTruthy()
-  })
 })
 
 /** The block's closed More disclosure, or null. */
-const more = (name: string) => screen.getByRole("region", { name }).querySelector("details") as HTMLDetailsElement | null
-const inMore = (name: string, label: string) => more(name)!.contains(block(name).getByLabelText(label))
+const more = (name: string | RegExp) => screen.getByRole("region", { name }).querySelector("details") as HTMLDetailsElement | null
+const inMore = (name: string | RegExp, label: string) => more(name)!.contains(block(name).getByLabelText(label))
 
 describe("primary fields and the More disclosure", () => {
   it("Retrieval shows Strategy and Candidates, with RRF k under a closed More", () => {
@@ -271,17 +268,17 @@ describe("primary fields and the More disclosure", () => {
 
   it("Answer with Search puts its top k and snippet length under More, in sentence case", () => {
     const p = setup()
-    expect(inMore("Answer", "Show, top k")).toBe(true)
-    expect(inMore("Answer", "Snippet length")).toBe(true)
+    expect(inMore(/^Answer/, "Show, top k")).toBe(true)
+    expect(inMore(/^Answer/, "Snippet length")).toBe(true)
     // A field under More still edits the whole config.
-    fireEvent.change(block("Answer").getByLabelText("Snippet length"), { target: { value: "200" } })
+    fireEvent.change(block(/^Answer/).getByLabelText("Snippet length"), { target: { value: "200" } })
     expect(p.onConfig).toHaveBeenCalledWith("use_case", expect.objectContaining({ max_snippet_chars: 200, top_k: 5 }))
   })
 
   it("Answer with Chat keeps the model in front and the rest under More", () => {
     setup({ graph: setUseCase(sampleGraph(LIVE, SAMPLE), LIVE, "chat") })
-    expect(inMore("Answer", "Model")).toBe(false)
-    expect(inMore("Answer", "Citations")).toBe(true)
+    expect(inMore(/^Answer/, "Model")).toBe(false)
+    expect(inMore(/^Answer/, "Citations")).toBe(true)
   })
 
   it("Rerank keeps the model and Keep, top k in front; MMR's lambda goes under More", () => {
@@ -301,7 +298,7 @@ describe("primary fields and the More disclosure", () => {
     }
     const base = () => sampleGraph(LIVE, SAMPLE, "Who is my current employer?")
     setup({ graph: toOpenRouter(setUseCase(base(), LIVE, "chat"), "useCase") })
-    expect(inMore("Answer", "OpenRouter model")).toBe(false)
+    expect(inMore(/^Answer/, "OpenRouter model")).toBe(false)
     cleanup()
     setup({ graph: toOpenRouter(setReranker(base(), LIVE, "llm_rerank"), "rerank") })
     expect(more("Rerank") === null || !inMore("Rerank", "OpenRouter model")).toBe(true)
@@ -329,20 +326,19 @@ describe("primary fields and the More disclosure", () => {
 describe("the pressed segment", () => {
   it("takes the accent border and text of the primary button; the others do not", () => {
     setup()
-    expect(segment("Answer with", "Search").className).toContain("border-primary")
-    expect(segment("Answer with", "Search").className).toContain("text-primary")
+    expect(segment("Rewrite", "None").className).toContain("border-primary")
+    expect(segment("Rewrite", "None").className).toContain("text-primary")
     expect(segment("Rewrite", "PRF").className).not.toContain("border-primary")
   })
 
   it("is the shared segmented control: the accent wash fill on the pressed option only", () => {
     setup()
-    expect(segment("Answer with", "Search").className).toContain("bg-accent-wash")
+    expect(segment("Rewrite", "None").className).toContain("bg-accent-wash")
     expect(segment("Rewrite", "PRF").className).not.toContain("bg-accent-wash")
   })
 
-  it("a disabled Chat carries its reason as a title; the LLM reranker is tagged in its picker instead", () => {
+  it("the LLM reranker is tagged in its picker when there is no key", () => {
     setup({ hasKey: false })
-    expect(segment("Answer with", "Chat with a model").title).toBe("Add a key to turn Chat on")
     expect(optionOf(reranker(), "LLM").textContent).toContain("Needs a key")
   })
 })

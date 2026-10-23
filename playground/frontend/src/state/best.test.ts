@@ -110,6 +110,13 @@ describe("Best so far", () => {
     expect(readBest(bestKey(report([]))!)!.name).toBe("Best one")
   })
 
+  it("names the questions a better run lost too", async () => {
+    await run(report([q("a", true), q("b", false), q("c", false)]), "Old")
+    judge({ best: [1], newly_found: ["b", "c"], newly_missed: ["a"] })
+    const { outcome } = await run(report([q("a", false), q("b", true), q("c", true)]), "New")
+    expect(outcome).toMatchObject({ kind: "better", more: 1, won: ["Question b?", "Question c?"], lost: ["Question a?"] })
+  })
+
   it("says a better run, with the won questions, and makes it the best", async () => {
     await run(report([q("a", true), q("b", false), q("c", false)]), "Old")
     judge({ best: [1], newly_found: ["b", "c"] })

@@ -71,6 +71,7 @@ import { DocumentControl } from "@/components/DocumentControl"
 import { DocumentItem } from "@/components/DocumentItem"
 import { BuildYourOwn } from "@/components/evaluate/BuildYourOwn"
 import { BestSoFar } from "@/components/evaluate/BestSoFar"
+import { CompareWithBest } from "@/components/evaluate/CompareWithBest"
 import { afterRun, bestHeadline, forgetBest, type BestPipeline, type Outcome } from "@/state/best"
 
 import { RegistryScreen } from "./Shell"
@@ -760,12 +761,14 @@ function Evaluation({
   const [best, setBest] = useState<{ key: string; outcome: Outcome | null; problem?: string } | null>(null)
   const bestLive = useRef<HTMLParagraphElement>(null)
   const showBest = ran && !busy && score !== null && best !== null
-  /** Open the best pipeline on Build or Compare, or say why it cannot open here. */
+  /** Open the best pipeline on Build, or say why it cannot open here. */
   function openBestAt(href: string) {
     if (best?.outcome?.kind !== "worse") return
     const problem = onOpenBest(best.outcome.best.name, best.outcome.best.pipeline, href)
     if (problem) setBest({ ...best, problem })
   }
+  // What Compare the two sets this run against: the best, or on a better run the best it replaced.
+  const bestOther = best?.outcome?.kind === "worse" ? best.outcome.best : best?.outcome?.kind === "better" ? best.outcome.before : null
   const bestInput = useRef<{ result: EvaluationResult; pipeline: BestPipeline; name: string } | null>(null)
   bestInput.current = finishedRun && result && scoredMade.ok ? { result, pipeline: scoredMade.pipeline, name: pipelineName } : null
   const judged = useRef<string | null>(null)
@@ -1050,7 +1053,19 @@ function Evaluation({
             outcome={best.outcome}
             problem={best.problem ?? null}
             onLoad={() => openBestAt("/build?from=evaluate")}
-            onCompare={() => openBestAt("/compare")}
+            compare={
+              bestOther && result && scoredMade.ok ? (
+                <CompareWithBest
+                  now={result}
+                  nowConfig={scoredMade.pipeline.config}
+                  otherConfig={bestOther.pipeline.config}
+                  otherName={bestOther.name}
+                  label={best.outcome?.kind === "better" ? "the last best" : "your best"}
+                  registry={registry}
+                  start={() => v2.createEvaluation(evaluationRequest(bestOther.pipeline, asked, shownK), { keys }).then((r) => r.run_id)}
+                />
+              ) : null
+            }
             onForget={() => {
               forgetBest(best.key)
               setBest({ key: best.key, outcome: null })

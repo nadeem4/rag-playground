@@ -18,6 +18,8 @@ export interface SegmentedControlProps {
   /** The group's accessible name. */
   label: string
   size?: "sm" | "default"
+  /** The id of text that explains the group, such as why an option is off. */
+  describedBy?: string
   /**
    * Show `label` as a small caption before the options, naming the group:
    * "md" from md up only (hidden from sight, still read, below md), "always"
@@ -32,13 +34,14 @@ export interface SegmentedControlProps {
  * the accent wash fill, accent text and a 1px accent ring (the border). The
  * others are flat. Used for Rerank, Answer with, the theme and the contrast.
  */
-export function SegmentedControl({ options, value, onChange, label, size = "sm", caption, className }: SegmentedControlProps) {
+export function SegmentedControl({ options, value, onChange, label, size = "sm", caption, className, describedBy }: SegmentedControlProps) {
   const captionId = useId()
   return (
     <div
       role="group"
       aria-label={caption ? undefined : label}
       aria-labelledby={caption ? captionId : undefined}
+      aria-describedby={describedBy}
       className={cn("flex flex-wrap items-center gap-1", className)}
     >
       {caption ? (

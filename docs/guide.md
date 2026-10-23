@@ -302,9 +302,9 @@ Above the question, **Answer with** chooses **Search** or **Chat with a model**.
 shows the kept pieces and costs nothing. **Chat with a model** writes an answer with
 citations, and needs a key. A short line beside the choice says what it means: with no key,
 Chat is off and **Add a key** opens the key panel; on Chat, it names the model and whose key
-it uses, and **Change model** opens the settings. With a key set, Search on and an answer
-showing, a hint under the answer offers **Use Chat**; **Dismiss** hides it until you reload
-the page.
+it uses, and **Change model** opens the settings at the Answer card. With a key set, Search on and an answer
+showing, a hint under the answer offers **Use Chat**; **Dismiss** hides it until you leave
+the page or reload. The choice is locked while a question is running.
 
 - **Retrieval.** The search strategy: Hybrid (RRF), Dense or BM25, and how many candidates
   it hands on (20 by default). **Compare searches** opens Compare on this step, with the
@@ -333,7 +333,9 @@ again to see the pieces move. Picking one of the sample's questions takes you ba
 the question box.
 
 - Under a fresh answer, a line reads "Try another search or a reranker, and ask again."
-  Its **Change settings** button opens the settings and scrolls to them.
+  Its **Change settings** button opens the settings and scrolls to them. When a key is
+  set and Search is on, the line is the Chat hint instead (**Use Chat**, **Dismiss**), until
+  you dismiss it.
 - Change a setting and an amber note reads "Settings changed. Ask again to see what
   changed." The Ask button gets a soft ring until you press it.
 

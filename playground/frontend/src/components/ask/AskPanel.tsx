@@ -21,7 +21,7 @@ import { documentsOf } from "@/state/document"
 import { ASK_STAGES, askNodes, indexNode, infoFor, rewriteOf, terminalNode, titleFor, upstreamOfStage, type PipelineGraph, type RewriteMode } from "@/state/graph"
 
 import { AskResults, finalRows, fresh, rerankLabel, SearchedFor, useAskOutputs } from "./AskResults"
-import { AskSettings, CHAT_REASON, RETRIEVAL_LABEL } from "./AskSettings"
+import { ANSWER_CARD, AskSettings, CHAT_REASON, RETRIEVAL_LABEL } from "./AskSettings"
 import { askSignature, findGold, goldsOf, Transcript, type AskSnapshot, type TranscriptEntry } from "./Transcript"
 
 /**
@@ -146,18 +146,20 @@ function SearchIn({ files, value, onChange }: { files: readonly FileInfo[]; valu
  * Search or Chat, above the question, with one muted line that says what the
  * choice means: the missing key, what Search costs, or which model Chat uses.
  */
-function AnswerMode({ useCase, registry, hasKey, onUseCase, onChangeModel }: {
+function AnswerMode({ useCase, registry, hasKey, locked, onUseCase, onChangeModel }: {
   useCase: GraphNode
   registry: Registry
   hasKey: boolean | null
+  /** A question is running: the choice waits. */
+  locked: boolean
   onUseCase: (transform: "search" | "chat") => void
   onChangeModel: () => void
 }) {
   const { setPanelOpen } = useApiKey()
   const chatInfo = registry.use_case?.chat
   const chatOff = hasKey === false
-  const options: SegmentedOption[] = [{ value: "search", label: "Search" }]
-  if (chatInfo) options.push({ value: "chat", label: "Chat with a model", disabled: chatOff, title: chatOff ? CHAT_REASON : undefined })
+  const options: SegmentedOption[] = [{ value: "search", label: "Search", disabled: locked }]
+  if (chatInfo) options.push({ value: "chat", label: "Chat with a model", disabled: chatOff || locked, title: chatOff ? CHAT_REASON : undefined })
   const chat = useCase.transform === "chat"
   const schema = chatInfo?.config_schema.properties?.model as Record<string, unknown> | undefined
   const model = String(useCase.config.model ?? schema?.default ?? "")
@@ -165,12 +167,21 @@ function AnswerMode({ useCase, registry, hasKey, onUseCase, onChangeModel }: {
   const whose = need.kind === "provider" ? `, your ${PROVIDER_INFO[need.provider].name} key` : need.kind === "none" ? ", your endpoint" : ""
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <SegmentedControl label="Answer with" options={options} value={useCase.transform} onChange={(v) => onUseCase(v as "search" | "chat")} />
-      <p data-testid="answer-mode-line" className="m-0 text-xs text-fg-muted">
+      <SegmentedControl label="Answer with" options={options} value={useCase.transform} describedBy={LINE_ID} onChange={(v) => onUseCase(v as "search" | "chat")} />
+      <p id={LINE_ID} data-testid="answer-mode-line" className="m-0 text-xs text-fg-muted">
         {chat ? (
           <>
+            {chatOff ? (
+              <>
+                Chat needs an API key.{" "}
+                <button type="button" className={LINK_BUTTON} onClick={() => setPanelOpen(true)}>
+                  Add a key
+                </button>
+                {" · "}
+              </>
+            ) : null}
             Model <span className="font-mono">{model}</span>
-            {whose}{" "}
+            {chatOff ? "" : whose}{" "}
             <button type="button" className={LINK_BUTTON} onClick={onChangeModel}>
               Change model
             </button>
@@ -189,6 +200,8 @@ function AnswerMode({ useCase, registry, hasKey, onUseCase, onChangeModel }: {
     </div>
   )
 }
+
+const LINE_ID = "answer-mode-line"
 
 /** Smooth unless the visitor asked for less motion. */
 function motion(): ScrollBehavior {
@@ -229,14 +242,15 @@ export function AskPanel(p: AskPanelProps) {
   const scrollBox = useRef<HTMLDivElement>(null)
   // Change settings under the answer: open the settings, then bring them into view once they are drawn.
   const settingsBox = useRef<HTMLDivElement>(null)
-  const [goSettings, setGoSettings] = useState(false)
-  const toSettings = () => {
+  const [goSettings, setGoSettings] = useState<"settings" | "answer" | false>(false)
+  const toSettings = (to: "settings" | "answer" = "settings") => {
     setOpen(true)
-    setGoSettings(true)
+    setGoSettings(to)
   }
   useEffect(() => {
     if (!goSettings) return
-    settingsBox.current?.scrollIntoView?.({ behavior: motion(), block: "start" })
+    const target = goSettings === "answer" ? settingsBox.current?.querySelector<HTMLElement>(`#${ANSWER_CARD}`) : null
+    ;(target ?? settingsBox.current)?.scrollIntoView?.({ behavior: motion(), block: "start" })
     setGoSettings(false)
   }, [goSettings])
   // The key hint, once dismissed, stays dismissed for this tab.
@@ -357,7 +371,7 @@ export function AskPanel(p: AskPanelProps) {
       {/* Scrolls on its own: the panel is a docked column or a bottom sheet, never part of the page's scroll. */}
       <div ref={scrollBox} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         {outputs.files.length ? <SearchIn files={outputs.files} value={searched?.sha ?? null} onChange={(sha) => p.onSearchIn?.(sha)} /> : null}
-        {useCase ? <AnswerMode useCase={useCase} registry={p.registry} hasKey={keyed} onUseCase={p.onUseCase} onChangeModel={toSettings} /> : null}
+        {useCase ? <AnswerMode useCase={useCase} registry={p.registry} hasKey={keyed} locked={Boolean(p.asking)} onUseCase={p.onUseCase} onChangeModel={() => toSettings("answer")} /> : null}
         {query ? (
           <QuestionField
             value={String(query.config.text ?? "")}
@@ -431,7 +445,7 @@ export function AskPanel(p: AskPanelProps) {
                 ) : (
                   <>
                     <span>Try another search or a reranker, and ask again.</span>
-                    <button type="button" className={LINK_BUTTON} onClick={toSettings}>
+                    <button type="button" className={LINK_BUTTON} onClick={() => toSettings()}>
                       Change settings
                     </button>
                   </>

@@ -581,8 +581,51 @@ describe("Answer with, above the question", () => {
     expect(line.textContent).toContain("claude-opus-5")
     expect(line.textContent).toContain("your Anthropic key")
     expect(screen.queryByTestId("ask-settings")).toBeNull()
+    const into = vi.fn()
+    HTMLElement.prototype.scrollIntoView = into
     fireEvent.click(within(line).getByRole("button", { name: "Change model" }))
     expect(screen.getByTestId("ask-settings")).toBeTruthy()
+    // It goes to the Answer card, not the top of the settings.
+    expect(into.mock.contexts.at(-1)).toBe(screen.getByRole("region", { name: "Answer: Chat" }))
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView
+  })
+
+  it("falls back to the registry's default model when the node names none", () => {
+    const bare = { ...CHAT, nodes: CHAT.nodes.map((n) => (n.stage === "use_case" ? { ...n, config: {} } : n)) }
+    setup({ keys: KEYED, graph: bare, results: ANSWERED })
+    expect(screen.getByTestId("answer-mode-line").textContent).toContain("claude-opus-5")
+  })
+
+  it("offers only Search when the registry has no chat", () => {
+    const { chat: _chat, ...rest } = LIVE.use_case as Record<string, unknown>
+    setup({ keys: KEYED, registry: { ...LIVE, use_case: rest } as unknown as Registry })
+    expect(within(mode()).queryByRole("button", { name: "Chat with a model" })).toBeNull()
+    expect(screen.getByText("Shows the pieces that match. No model, no cost.")).toBeTruthy()
+  })
+
+  it("keeps Chat on while the key status is unknown", () => {
+    setup()
+    expect(segment("Chat with a model").disabled).toBe(false)
+    expect(screen.getByText("Shows the pieces that match. No model, no cost.")).toBeTruthy()
+  })
+
+  it("is out of reach while a question is running", () => {
+    setup({ keys: KEYED, asking: true, busy: true })
+    expect(segment("Search").disabled).toBe(true)
+    expect(segment("Chat with a model").disabled).toBe(true)
+  })
+
+  it("on Chat with the key gone, says so and still offers Change model", () => {
+    setup({ graph: CHAT, server: { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as never })
+    const line = screen.getByTestId("answer-mode-line")
+    expect(line.textContent).toContain("Chat needs an API key.")
+    expect(within(line).getByRole("button", { name: "Add a key" })).toBeTruthy()
+    expect(within(line).getByRole("button", { name: "Change model" })).toBeTruthy()
+  })
+
+  it("points the switch at the line, so the reason is read with it", () => {
+    setup({ server: { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as never })
+    expect(mode().getAttribute("aria-describedby")).toBe(screen.getByTestId("answer-mode-line").id)
   })
 
   it("on Chat with the custom endpoint, says your endpoint", () => {
@@ -605,6 +648,9 @@ describe("Answer with, above the question", () => {
     fireEvent.click(within(await screen.findByTestId("ask-invite")).getByRole("button", { name: "Dismiss" }))
     expect(screen.queryByText(HINT, { exact: false })).toBeNull()
     expect(screen.getByTestId("ask-invite").textContent).toContain("Try another search or a reranker")
+    // Asking again does not bring it back.
+    fireEvent.click(askButton())
+    expect(screen.queryByText(HINT, { exact: false })).toBeNull()
   })
 
   it("shows no key hint without a key, on Chat, or before an answer", () => {

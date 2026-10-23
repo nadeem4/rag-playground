@@ -51,9 +51,9 @@ export interface AskSettingsProps {
   onSweep?: (id: string) => void
 }
 
-function Block({ title, stage, children }: { title: string; stage: string; children: ReactNode }) {
+function Block({ title, stage, id, children }: { title: string; stage: string; id?: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className="flex min-w-0 flex-col gap-2 rounded-panel border border-hairline p-3">
+    <section id={id} aria-label={title} className="flex min-w-0 scroll-mt-3 flex-col gap-2 rounded-panel border border-hairline p-3">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">{title}</h3>
         <span className="font-mono text-xs text-fg-muted">{stage}</span>
@@ -63,11 +63,14 @@ function Block({ title, stage, children }: { title: string; stage: string; child
   )
 }
 
+/** The Answer card's id: Change model scrolls to it. */
+export const ANSWER_CARD = "ask-answer-card"
+
 const GLOSS = "text-xs leading-[1.5] text-fg-muted"
 
 /** Why LLM and Chat are off: shown under the group and as the option's title. */
 const LLM_REASON = "Add a key to use the LLM reranker"
-const CHAT_REASON = "Add a key to turn Chat on"
+export const CHAT_REASON = "Add a key to turn Chat on"
 
 /** The schema with only `keys` among its fields. */
 function pick(schema: JsonSchema, keys: string[]): JsonSchema {
@@ -258,16 +261,9 @@ function Rerank({ node, ...p }: AskSettingsProps & { node?: GraphNode }) {
 }
 
 function Answer({ node, ...p }: AskSettingsProps & { node: GraphNode }) {
-  const choices: SegmentedOption[] = [{ value: "search", label: "Search" }]
-  if (p.registry.use_case?.chat) {
-    const disabled = p.hasKey === false
-    choices.push({ value: "chat", label: "Chat with a model", disabled, title: disabled ? CHAT_REASON : undefined })
-  }
+  // Search or Chat is chosen above the question; this block holds the chosen one's fields.
   return (
-    <Block title="Answer" stage="use_case">
-      <SegmentedControl label="Answer with" options={choices} value={node.transform} onChange={(v) => p.onUseCase(v as "search" | "chat")} />
-      <p className={GLOSS}>Search shows the kept pieces. Chat writes an answer with citations.</p>
-      {p.hasKey === false && p.registry.use_case?.chat ? <p className={GLOSS}>{CHAT_REASON}</p> : null}
+    <Block id={ANSWER_CARD} title={`Answer: ${node.transform === "chat" ? "Chat" : "Search"}`} stage="use_case">
       <NodeForm
         node={node}
         registry={p.registry}

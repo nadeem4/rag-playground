@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import liveRegistry from "@/api/fixtures/registry.json"
 import searchJson from "@/api/fixtures/output.search.json"
 import hybridJson from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
-import type { Keys } from "@/api/apiKey"
+import { ApiKeyProvider, useApiKey, type Keys } from "@/api/apiKey"
 import type { NodeState } from "@/api/runState"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import type { Registry } from "@/api/types"
 import { withDocuments } from "@/state/document"
-import { e2eSampleGraph, sampleGraph, setReranker, setRewrite, type PipelineGraph } from "@/state/graph"
+import { e2eSampleGraph, sampleGraph, setReranker, setRewrite, setUseCase, type PipelineGraph } from "@/state/graph"
 
 import { AskPanel, type AskPanelProps } from "./AskPanel"
 
@@ -90,8 +90,18 @@ function setup(over: Partial<AskPanelProps> = {}) {
     onAsk: vi.fn(),
     ...over,
   }
-  render(<AskPanel {...props} />)
+  render(
+    <ApiKeyProvider>
+      <KeyPanelProbe />
+      <AskPanel {...props} />
+    </ApiKeyProvider>,
+  )
   return props
+}
+
+/** Shows whether the header's key panel was asked to open. */
+function KeyPanelProbe() {
+  return <span data-testid="key-panel">{String(useApiKey().panelOpen)}</span>
 }
 
 const askButton = () => screen.getByRole("button", { name: "Ask" }) as HTMLButtonElement
@@ -519,5 +529,138 @@ describe("the Rerank block reflects the graph (Review Focus 1)", () => {
     setup()
     expect(picked()).toBe("")
     expect(screen.getByRole("button", { name: /^Reranker/ }).textContent).toContain("No reranker")
+  })
+})
+
+describe("Answer with, above the question", () => {
+  const ANSWERED = { ...INDEX_DONE, use_case: { id: "use_case", status: "done" as const, artifact_id: "out1" } }
+  const KEYED: Keys = { ...NO_KEYS, anthropic: "sk-test" }
+  const CHAT = setUseCase(sampleGraph(LIVE, SAMPLE), LIVE, "chat")
+  const mode = () => screen.getByRole("group", { name: "Answer with" })
+  const segment = (name: string) => within(mode()).getByRole("button", { name }) as HTMLButtonElement
+  const HINT = "You have a key. Switch to Chat with a model for a written answer with citations."
+
+  it("sits above the question box, outside the settings", () => {
+    setup({ keys: KEYED, results: ANSWERED })
+    expect(screen.queryByTestId("ask-settings")).toBeNull()
+    expect(segment("Search")).toBeTruthy()
+    expect(Boolean(mode().compareDocumentPosition(question()) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(segment("Search").getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("keeps the Ask button's label in Chat", () => {
+    setup({ keys: KEYED, graph: CHAT })
+    expect(askButton()).toBeTruthy()
+  })
+
+  it("switching calls onUseCase", () => {
+    const p = setup({ keys: KEYED })
+    fireEvent.click(segment("Chat with a model"))
+    expect(p.onUseCase).toHaveBeenCalledWith("chat")
+  })
+
+  it("with no key anywhere, Chat is off with its reason, and Add a key opens the key panel", () => {
+    setup({ server: { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as never })
+    expect(segment("Chat with a model").disabled).toBe(true)
+    expect(segment("Chat with a model").title).toBe("Add a key to turn Chat on")
+    expect(screen.getByText("Chat needs an API key.")).toBeTruthy()
+    expect(screen.getByTestId("key-panel").textContent).toBe("false")
+    fireEvent.click(screen.getByRole("button", { name: "Add a key" }))
+    expect(screen.getByTestId("key-panel").textContent).toBe("true")
+  })
+
+  it("on Search with a key, says what Search does", () => {
+    setup({ keys: KEYED })
+    expect(screen.getByText("Shows the pieces that match. No model, no cost.")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Add a key" })).toBeNull()
+  })
+
+  it("on Chat, names the model and the provider's key, and Change model opens the settings", () => {
+    setup({ keys: KEYED, graph: CHAT, results: ANSWERED })
+    const line = screen.getByTestId("answer-mode-line")
+    expect(line.textContent).toContain("claude-opus-5")
+    expect(line.textContent).toContain("your Anthropic key")
+    expect(screen.queryByTestId("ask-settings")).toBeNull()
+    const into = vi.fn()
+    HTMLElement.prototype.scrollIntoView = into
+    fireEvent.click(within(line).getByRole("button", { name: "Change model" }))
+    expect(screen.getByTestId("ask-settings")).toBeTruthy()
+    // It goes to the Answer card, not the top of the settings.
+    expect(into.mock.contexts.at(-1)).toBe(screen.getByRole("region", { name: "Answer: Chat" }))
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView
+  })
+
+  it("falls back to the registry's default model when the node names none", () => {
+    const bare = { ...CHAT, nodes: CHAT.nodes.map((n) => (n.stage === "use_case" ? { ...n, config: {} } : n)) }
+    setup({ keys: KEYED, graph: bare, results: ANSWERED })
+    expect(screen.getByTestId("answer-mode-line").textContent).toContain("claude-opus-5")
+  })
+
+  it("offers only Search when the registry has no chat", () => {
+    const { chat: _chat, ...rest } = LIVE.use_case as Record<string, unknown>
+    setup({ keys: KEYED, registry: { ...LIVE, use_case: rest } as unknown as Registry })
+    expect(within(mode()).queryByRole("button", { name: "Chat with a model" })).toBeNull()
+    expect(screen.getByText("Shows the pieces that match. No model, no cost.")).toBeTruthy()
+  })
+
+  it("keeps Chat on while the key status is unknown", () => {
+    setup()
+    expect(segment("Chat with a model").disabled).toBe(false)
+    expect(screen.getByText("Shows the pieces that match. No model, no cost.")).toBeTruthy()
+  })
+
+  it("is out of reach while a question is running", () => {
+    setup({ keys: KEYED, asking: true, busy: true })
+    expect(segment("Search").disabled).toBe(true)
+    expect(segment("Chat with a model").disabled).toBe(true)
+  })
+
+  it("on Chat with the key gone, says so and still offers Change model", () => {
+    setup({ graph: CHAT, server: { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as never })
+    const line = screen.getByTestId("answer-mode-line")
+    expect(line.textContent).toContain("Chat needs an API key.")
+    expect(within(line).getByRole("button", { name: "Add a key" })).toBeTruthy()
+    expect(within(line).getByRole("button", { name: "Change model" })).toBeTruthy()
+  })
+
+  it("points the switch at the line, so the reason is read with it", () => {
+    setup({ server: { anthropic: "none", openai: "none", custom: "none", openrouter: "none" } as never })
+    expect(mode().getAttribute("aria-describedby")).toBe(screen.getByTestId("answer-mode-line").id)
+  })
+
+  it("on Chat with the custom endpoint, says your endpoint", () => {
+    const custom = { ...CHAT, nodes: CHAT.nodes.map((n) => (n.stage === "use_case" ? { ...n, config: { ...n.config, model: "custom" } } : n)) }
+    setup({ keys: KEYED, graph: custom })
+    expect(screen.getByTestId("answer-mode-line").textContent).toContain("your endpoint")
+  })
+
+  it("with a key, on Search, over an answer, offers Chat in place of the generic invite; Use Chat switches", async () => {
+    const p = setup({ keys: KEYED, results: ANSWERED })
+    const hint = await screen.findByTestId("ask-invite")
+    expect(hint.textContent).toContain(HINT)
+    expect(screen.getAllByTestId("ask-invite")).toHaveLength(1)
+    fireEvent.click(within(hint).getByRole("button", { name: "Use Chat" }))
+    expect(p.onUseCase).toHaveBeenCalledWith("chat")
+  })
+
+  it("Dismiss brings the generic invite back and the hint stays gone", async () => {
+    setup({ keys: KEYED, results: ANSWERED })
+    fireEvent.click(within(await screen.findByTestId("ask-invite")).getByRole("button", { name: "Dismiss" }))
+    expect(screen.queryByText(HINT, { exact: false })).toBeNull()
+    expect(screen.getByTestId("ask-invite").textContent).toContain("Try another search or a reranker")
+    // Asking again does not bring it back.
+    fireEvent.click(askButton())
+    expect(screen.queryByText(HINT, { exact: false })).toBeNull()
+  })
+
+  it("shows no key hint without a key, on Chat, or before an answer", () => {
+    setup({ results: ANSWERED })
+    expect(screen.queryByText(HINT, { exact: false })).toBeNull()
+    cleanup()
+    setup({ keys: KEYED, results: ANSWERED, graph: CHAT })
+    expect(screen.queryByText(HINT, { exact: false })).toBeNull()
+    cleanup()
+    setup({ keys: KEYED, results: INDEX_DONE })
+    expect(screen.queryByText(HINT, { exact: false })).toBeNull()
   })
 })

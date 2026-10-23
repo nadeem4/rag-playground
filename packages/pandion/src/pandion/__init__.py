@@ -42,7 +42,7 @@ from pandion.pipeline_templates import compose_template, list_templates
 from pandion.project import new_project
 from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "Answer",

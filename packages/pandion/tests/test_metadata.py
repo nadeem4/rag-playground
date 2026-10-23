@@ -13,7 +13,7 @@ PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["
 
 
 def test_the_version_is_the_same_in_the_package_and_its_settings():
-    assert PROJECT["version"] == pandion.__version__ == "0.5.0"
+    assert PROJECT["version"] == pandion.__version__ == "0.6.0"
 
 
 def test_the_package_page_is_its_own_readme():

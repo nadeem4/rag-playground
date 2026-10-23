@@ -132,6 +132,10 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
     moveFocus.current = true
     setEditing(false)
   }
+  const openBox = () => {
+    moveFocus.current = true
+    setEditing(true)
+  }
   const apply = () => {
     const k = draft.trim()
     if (!k) return
@@ -213,10 +217,7 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
               {check.state === "checking" ? "Checking" : "Check key"}
             </Button>
           )}
-          <Button ref={replaceRef} type="button" variant="ghost" size="sm" onClick={() => {
-              moveFocus.current = true
-              setEditing(true)
-            }}>
+          <Button ref={replaceRef} type="button" variant="ghost" size="sm" onClick={openBox}>
             {key !== null ? "Replace" : "Use another key for this tab"}
           </Button>
           {key !== null ? (

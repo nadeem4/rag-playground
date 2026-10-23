@@ -57,6 +57,8 @@ let servers: Record<LlmProvider, string> = { anthropic: "none", openai: "none", 
 let demo = false
 // When set, a key check waits for it, so a test can change the key mid-check.
 let checkGate: Promise<void> | null = null
+// Likewise for the answer to which keys the server has.
+let sourcesGate: Promise<void> | null = null
 
 function headersOf(init?: RequestInit): Record<string, string> {
   const h = new Headers(init?.headers)
@@ -70,6 +72,7 @@ beforeEach(() => {
   servers = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
   demo = false
   checkGate = null
+  sourcesGate = null
   resetAppSettingsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -84,7 +87,10 @@ beforeEach(() => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
       if (url === "/api/v2/strategies") return ok({ stages: TEST_REGISTRY, defaults: {} })
       if (url === "/api/v2/documents") return ok([SOURCE])
-      if (url === "/api/v2/settings/models") return ok(servers)
+      if (url === "/api/v2/settings/models") {
+        if (sourcesGate) await sourcesGate
+        return ok(servers)
+      }
       if (url === "/api/settings/app") return ok({ demo })
       if (url === "/api/v2/settings/models/check") {
         const p = JSON.parse(String(init?.body)).provider as LlmProvider
@@ -436,6 +442,7 @@ describe("the API key panel", () => {
   })
 
   it("before the server answers, a row with no tab key shows the box", async () => {
+    sourcesGate = new Promise<void>(() => {})
     await page()
     const r = row("anthropic")
     expect(within(r).getByLabelText(LABEL.anthropic)).toBeTruthy()
@@ -444,10 +451,12 @@ describe("the API key panel", () => {
 
   it("text typed before the server answered does not come back under Use another key", async () => {
     servers = { anthropic: "env", openai: "none", custom: "none", openrouter: "none" }
+    let release = () => {}
+    sourcesGate = new Promise<void>((r) => (release = r))
     await page()
     const r = row("anthropic")
-    const box = within(r).queryByLabelText(LABEL.anthropic)
-    if (box) fireEvent.change(box, { target: { value: "half-typed" } })
+    fireEvent.change(within(r).getByLabelText(LABEL.anthropic), { target: { value: "half-typed" } })
+    release()
     await waitFor(() => expect(within(r).queryByLabelText(LABEL.anthropic)).toBeNull())
     fireEvent.click(within(r).getByRole("button", { name: "Use another key for this tab" }))
     expect((within(r).getByLabelText(LABEL.anthropic) as HTMLInputElement).value).toBe("")

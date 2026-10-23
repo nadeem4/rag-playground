@@ -38,6 +38,8 @@ describe("BestSoFar", () => {
     const button = screen.getByRole("button", { name: "Compare the two" })
     expect(button.getAttribute("aria-expanded")).toBe("false")
     expect(screen.queryByText("The panel")).toBeNull()
+    // It names the panel only once the panel is in the page.
+    expect(button.getAttribute("aria-controls")).toBeNull()
     fireEvent.click(button)
     expect(button.getAttribute("aria-expanded")).toBe("true")
     expect(screen.getByText("The panel").closest("[id]")!.id).toBe(button.getAttribute("aria-controls"))

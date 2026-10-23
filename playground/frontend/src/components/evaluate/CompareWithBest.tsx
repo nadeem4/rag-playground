@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react"
 
-import type { EvaluationResult, Registry } from "@/api/types"
+import type { EvaluationResult, Registry, ScoredRun } from "@/api/types"
 import { useRun } from "@/api/useRun"
 import { v2 } from "@/api/v2"
 import { Button } from "@/components/ui/button"
-import { pipelineDiff, questionGroups, type QuestionPair } from "@/state/bestCompare"
+import { pipelineDiff, questionGroups, rerunNote, type QuestionPair } from "@/state/bestCompare"
 import type { PipelineConfig } from "@/state/config"
 import { errorHeadline } from "@/state/pipeline"
 
@@ -15,6 +15,8 @@ import { errorHeadline } from "@/state/pipeline"
  * Best so far keeps only found or missed per question, so the other pipeline
  * runs once on the same questions when this opens (`start`); its steps shared
  * with this run come from the cache. That run is not judged for Best so far.
+ * The groups come from that run; when it found questions differently from the
+ * saved report (`saved`), which the list above comes from, one line says so.
  */
 
 function Group({ title, pairs, open, otherName }: { title: string; pairs: QuestionPair[]; open: boolean; otherName: string }) {
@@ -53,6 +55,7 @@ export function CompareWithBest({
   now,
   nowConfig,
   otherConfig,
+  saved,
   otherName,
   label,
   registry,
@@ -62,6 +65,8 @@ export function CompareWithBest({
   now: EvaluationResult
   nowConfig: PipelineConfig
   otherConfig: PipelineConfig
+  /** The other run's questions as Best so far saved them. */
+  saved: ScoredRun["questions"]
   /** The other pipeline's name in the picker. */
   otherName: string
   /** What the other run is called in a sentence: "your best", or "the last best" on a better run. */
@@ -78,8 +83,13 @@ export function CompareWithBest({
   function go() {
     setRunId(null)
     setStartError(null)
-    start().then(setRunId, (err: unknown) => setStartError(err instanceof Error ? err.message : String(err)))
+    start().then(
+      // An id that comes back after the panel went away is stopped at once.
+      (id) => (gone.current ? void v2.cancelRun(id).catch(() => undefined) : setRunId(id)),
+      (err: unknown) => !gone.current && setStartError(err instanceof Error ? err.message : String(err)),
+    )
   }
+  const gone = useRef(false)
   // Runs once, when the panel first opens.
   const began = useRef(false)
   useEffect(() => {
@@ -90,12 +100,19 @@ export function CompareWithBest({
   // Leaving the page or starting a new evaluation stops a run still going, so it does not hold up the next one.
   const going = useRef<string | null>(null)
   going.current = runId && !run.closed ? runId : null
-  useEffect(() => () => void (going.current && v2.cancelRun(going.current).catch(() => undefined)), [])
+  useEffect(() => {
+    gone.current = false
+    return () => {
+      gone.current = true
+      if (going.current) void v2.cancelRun(going.current).catch(() => undefined)
+    }
+  }, [])
 
   const failed =
     startError ?? (run.error ? errorHeadline(run.error) : run.resultFailed ? "its scores could not be read" : run.closed && (run.ok === false || result?.cancelled) ? "it stopped" : null)
   const { rows, same } = pipelineDiff(nowConfig, otherConfig, registry)
   const groups = result && !result.cancelled ? questionGroups(now.questions, result.questions) : null
+  const note = groups && result ? rerunNote(result.questions, saved, result.nondeterministic ?? [], label) : null
   const Label = label.charAt(0).toUpperCase() + label.slice(1)
 
   return (
@@ -144,6 +161,11 @@ export function CompareWithBest({
             <Group title="Only this run finds" pairs={groups.onlyNow} open otherName={otherName} />
             <Group title="Both find" pairs={groups.both} open={false} otherName={otherName} />
             <Group title="Both miss" pairs={groups.neither} open={false} otherName={otherName} />
+            {note ? (
+              <p data-testid="compare-note" className="text-xs text-fg-muted">
+                {note}
+              </p>
+            ) : null}
             <p className="text-xs text-fg-muted">Rank is where the answer's piece came in the pieces checked. "Lost at" is the step where it dropped out.</p>
           </>
         ) : (

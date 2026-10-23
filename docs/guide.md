@@ -615,11 +615,13 @@ run finds it, only this run finds it, both find it, or both miss it. Each questi
 each run's rank, or the step where the answer was lost. Best so far keeps only found or
 missed for each question, so the first time the panel opens, Evaluate runs the other
 pipeline once on the same questions to get its ranks. Steps it shares with this run come
-from the cache, so this is quick. That run does not count as a new run for Best so far.
+from the cache, so this is quick. That run does not count as a new run for Best so far. The
+groups come from that run. If it found some questions differently from when the best was
+saved, one line under the groups says how many, and names the steps that can give a
+different result each run.
 
-Only questions decide
-better and worse: hit rate first, then mean reciprocal rank to break a tie, and a question
-either run could not score is left out. Pandion makes the comparison
+Only questions decide better and worse: hit rate first, then mean reciprocal rank to break a
+tie, and a question either run could not score is left out. Pandion makes the comparison
 (`report.against(baseline)`), and its notes show under the verdict when the two runs are not
 quite like for like, such as "llm_rerank can give a different result each run, so a newly
 missed question may be noise." If the comparison cannot be made, the box stays away for that

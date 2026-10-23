@@ -1650,12 +1650,18 @@ describe("Best so far", { timeout: 15000 }, () => {
   })
 
   /** Serve the best pipeline's run (`e2`) with its own result, and count the comparisons Best so far asks for. */
-  function serveBestRun(bestResult: EvaluationResult) {
+  function serveBestRun(bestResult: EvaluationResult, hold?: Promise<void>) {
     const base = vi.mocked(fetch).getMockImplementation()!
-    const seen = { evaluations: [] as EvaluationRequest[], against: 0 }
+    const seen = { evaluations: [] as EvaluationRequest[], against: 0, cancelled: [] as string[] }
     vi.mocked(fetch).mockImplementation(async (url, init) => {
       if (url === AGAINST_URL) seen.against += 1
-      if (url === "/api/v2/evaluations") seen.evaluations.push(JSON.parse(String(init?.body)) as EvaluationRequest)
+      if (url === "/api/v2/evaluations") {
+        seen.evaluations.push(JSON.parse(String(init?.body)) as EvaluationRequest)
+        // The best pipeline's run id can be held back, as a slow server would.
+        if (hold && seen.evaluations.length === 1) await hold
+      }
+      const cancel = /^\/api\/v2\/runs\/([^/]+)\/cancel$/.exec(String(url))
+      if (cancel) seen.cancelled.push(cancel[1])
       const res = await base(url, init)
       if (url !== "/api/v2/runs/e2") return res
       return new Response(JSON.stringify({ ...(await res.json()), result: bestResult }), { status: 200 })
@@ -1692,6 +1698,8 @@ describe("Best so far", { timeout: 15000 }, () => {
     expect(within(panel).getByRole("group", { name: "Both find 1" }).textContent).toContain(A)
     expect(within(panel).getByRole("group", { name: "Only this run finds 0" })).toBeTruthy()
     expect(within(panel).getByRole("group", { name: "Both miss 0" })).toBeTruthy()
+    // It found what the saved best found, so no line says otherwise.
+    expect(within(panel).queryByTestId("compare-note")).toBeNull()
     // The run of the best pipeline is not a new run for Best so far.
     expect(seen.against).toBe(0)
     expect(readBest(bestKey(report([], KEYED))!)!.name).toBe("Best one")
@@ -1699,6 +1707,46 @@ describe("Best so far", { timeout: 15000 }, () => {
     fireEvent.click(button)
     fireEvent.click(button)
     expect(seen.evaluations).toHaveLength(1)
+  })
+
+  it("keeps the groups from the new run, and says when it found questions differently from the saved best", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    serveBestRun(report([missed("a", A), found("b", B)], { ...KEYED, nondeterministic: ["llm_rerank"] }))
+    fireEvent.click(await screen.findByRole("button", { name: "Compare the two" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(2))
+    DrivenEventSource.instances[1].emit(1, { event: "stream_end", status: "finished", ok: true })
+    const panel = screen.getByTestId("compare-best")
+    expect((await within(panel).findByRole("group", { name: "Only your best finds 1" })).textContent).toContain(B)
+    expect(within(panel).getByRole("group", { name: "Only this run finds 1" }).textContent).toContain(A)
+    expect(within(panel).getByTestId("compare-note").textContent).toBe(
+      "This time your best found 1 question differently from when it was saved, so these groups can differ from the list above. llm_rerank can give a different result each run.",
+    )
+  })
+
+  it("stops the best pipeline's run when a new evaluation starts, even if its id comes back after", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    let release = () => undefined as void
+    const seen = serveBestRun(report([found("a", A), found("b", B)], KEYED), new Promise<void>((r) => (release = r)))
+    fireEvent.click(await screen.findByRole("button", { name: "Compare the two" }))
+    await waitFor(() => expect(seen.evaluations).toHaveLength(1))
+    // Evaluate again while the best pipeline's run id is still on its way: the panel goes away.
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate again" }))
+    await waitFor(() => expect(screen.queryByTestId("compare-best")).toBeNull())
+    await act(async () => release())
+    // The new evaluation reached the server first (e2), so the held run is e3; only it is stopped.
+    await waitFor(() => expect(seen.cancelled).toEqual(["e3"]))
+  })
+
+  it("stops the best pipeline's run still going when a new evaluation starts", async () => {
+    seed(report([found("a", A), found("b", B)], KEYED))
+    await runOnce(report([found("a", A), missed("b", B)], KEYED))
+    const seen = serveBestRun(report([found("a", A), found("b", B)], KEYED))
+    fireEvent.click(await screen.findByRole("button", { name: "Compare the two" }))
+    await waitFor(() => expect(DrivenEventSource.instances.length).toBe(2))
+    fireEvent.click(screen.getByRole("button", { name: "Evaluate again" }))
+    await waitFor(() => expect(seen.cancelled).toEqual(["e2"]))
   })
 
   it("says when the best pipeline could not run, and runs it again on Try again", async () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { EvalQuestionResult, Registry, Trace } from "@/api/types"
 
-import { pipelineDiff, questionGroups } from "./bestCompare"
+import { pipelineDiff, questionGroups, rerunNote } from "./bestCompare"
 import type { PipelineConfig } from "./config"
 
 const base: PipelineConfig = {
@@ -51,6 +51,11 @@ describe("pipelineDiff", () => {
   it("has no rows when the two pipelines are the same", () => {
     expect(pipelineDiff(base, structuredClone(base)).rows).toEqual([])
   })
+
+  it("does not count settings kept in another order as a difference", () => {
+    const other: PipelineConfig = { ...base, index: { ...base.index, chunk: { chunk_overlap: 100, chunk_size: 800, use: "recursive_character" } } }
+    expect(pipelineDiff(base, other)).toEqual({ rows: [], same: ["Parse", "Chunk", "Store", "Retrieve"] })
+  })
 })
 
 const trace = (lost: Trace["lost_at"], name: string): Trace => ({
@@ -81,5 +86,29 @@ describe("questionGroups", () => {
     const other = [q("a", true), q("b", true)]
     const groups = questionGroups(now, other)
     expect([...groups.onlyOther, ...groups.onlyNow, ...groups.both, ...groups.neither].map((x) => x.id)).toEqual(["a"])
+  })
+})
+
+describe("rerunNote", () => {
+  const stored = [
+    { id: "a", question: "A?", found: true, error: null },
+    { id: "b", question: "B?", found: false, error: null },
+    { id: "c", question: "C?", found: true, error: null },
+  ]
+
+  it("says nothing when the run finds what the saved best found", () => {
+    expect(rerunNote([q("a", true), q("b", false), q("c", true)], stored, [], "your best")).toBeNull()
+  })
+
+  it("counts the questions found differently, and names the steps that can vary", () => {
+    expect(rerunNote([q("a", false), q("b", true), q("c", true)], stored, ["llm_rerank"], "your best")).toBe(
+      "This time your best found 2 questions differently from when it was saved, so these groups can differ from the list above. llm_rerank can give a different result each run.",
+    )
+  })
+
+  it("says honestly that something changed when no step says it can vary, and leaves out a question either side could not score", () => {
+    expect(rerunNote([q("a", false), q("b", true, { error: "boom" }), q("d", true)], stored, [], "the last best")).toBe(
+      "This time the last best found 1 question differently from when it was saved, so these groups can differ from the list above. None of its steps say they can vary, so something else changed since then, such as the server's version.",
+    )
   })
 })

@@ -81,7 +81,8 @@ export function BestSoFar({
       variant="outline"
       size="sm"
       aria-expanded={open}
-      aria-controls={panelId}
+      // The panel is in the page only once it has been opened.
+      aria-controls={opened ? panelId : undefined}
       onClick={() => {
         setOpen(!open)
         setOpened(true)

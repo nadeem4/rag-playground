@@ -1,4 +1,4 @@
-import type { EvalQuestionResult, Registry, Stage } from "@/api/types"
+import type { EvalQuestionResult, Registry, ScoredRun, Stage } from "@/api/types"
 
 import { strategyName } from "./compare"
 import type { PipelineConfig, Step } from "./config"
@@ -33,7 +33,12 @@ const SLOTS: { step: string; stage: Stage; of: (c: PipelineConfig) => Step[] }[]
   { step: "Answer", stage: "use_case", of: (c) => one(c.answer) },
 ]
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+/** A value as JSON with each object's keys sorted, so settings kept in another order still match. */
+const sorted = (v: unknown): string =>
+  JSON.stringify(v, (_, x: unknown) =>
+    x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x,
+  )
+const same = (a: unknown, b: unknown) => sorted(a) === sorted(b)
 
 /** One step in words: its strategy, then each of its settings the other side's step does not share. */
 function stepText(stage: Stage, s: Step, them: Step | undefined, registry: Registry): string {
@@ -96,4 +101,26 @@ export function questionGroups(now: readonly EvalQuestionResult[], other: readon
     groups[a.found ? (b.found ? "both" : "onlyNow") : b.found ? "onlyOther" : "neither"].push(pair)
   }
   return groups
+}
+
+/**
+ * One line when the other pipeline, run again, found some questions
+ * differently from its saved report, which the lost and won list above comes
+ * from. Names the steps the run says can vary, else says something else
+ * changed. Null when every question both scored agrees.
+ */
+export function rerunNote(
+  rerun: readonly EvalQuestionResult[],
+  saved: ScoredRun["questions"],
+  nondeterministic: readonly string[],
+  label: string,
+): string | null {
+  const before = new Map(saved.filter((q) => !q.error).map((q) => [q.id, q.found]))
+  const n = rerun.filter((q) => !q.error && before.has(q.id) && before.get(q.id) !== q.found).length
+  if (!n) return null
+  const steps = nondeterministic.length < 2 ? nondeterministic.join("") : `${nondeterministic.slice(0, -1).join(", ")} and ${nondeterministic[nondeterministic.length - 1]}`
+  const why = steps
+    ? `${steps} can give a different result each run.`
+    : "None of its steps say they can vary, so something else changed since then, such as the server's version."
+  return `This time ${label} found ${n} ${n === 1 ? "question" : "questions"} differently from when it was saved, so these groups can differ from the list above. ${why}`
 }

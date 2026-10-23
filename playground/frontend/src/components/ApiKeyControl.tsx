@@ -82,7 +82,7 @@ export function ApiKeyControl() {
           align="end"
           sideOffset={4}
           aria-label="API keys"
-          className="z-10 flex w-[360px] flex-col rounded-panel border border-hairline bg-surface-elevated text-fg"
+          className="z-60 flex w-[360px] flex-col rounded-panel border border-hairline bg-surface-elevated text-fg"
         >
           {serverError ? (
             <p className="px-3 pt-3 font-mono text-2xs break-words text-fg-muted">Could not ask the server which keys it has: {serverError}</p>

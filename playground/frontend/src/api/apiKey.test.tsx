@@ -650,3 +650,14 @@ describe("needsApiKey", () => {
     expect(["cross_encoder", "mmr", "search", "hybrid_rrf"].some(needsApiKey)).toBe(false)
   })
 })
+
+describe("the key panel's layer", () => {
+  it("sits above the Ask sheet (z-50) and its backdrop, so Add a key on a narrow screen opens a panel you can type in", () => {
+    render(
+      <ApiKeyProvider>
+        <AppHeader path="/" />
+      </ApiKeyProvider>,
+    )
+    expect(openPanel().className).toContain("z-60")
+  })
+})

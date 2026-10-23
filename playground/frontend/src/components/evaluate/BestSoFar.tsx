@@ -1,3 +1,5 @@
+import { useId, useState, type ReactNode } from "react"
+
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { Button } from "@/components/ui/button"
@@ -8,7 +10,9 @@ import { bestHeadline, betterLine, whenText, type BestRun, type Outcome } from "
  * Best so far, under the score: how this run compares with the best run in
  * this browser for the same questions, documents and Pieces checked. Worse
  * names the lost questions and offers the best pipeline; better names the won
- * ones; the first run becomes the best. `outcome` null means the visitor
+ * ones and any it lost; the first run becomes the best. On worse and better,
+ * Compare the two opens `compare` in place under the box. It stays mounted
+ * once opened, so closing and opening it again does not start it over. `outcome` null means the visitor
  * pressed Forget best. The page's own live region reads the headline out, so
  * this box is not a live region.
  */
@@ -55,19 +59,38 @@ export function BestSoFar({
   outcome,
   problem,
   onLoad,
-  onCompare,
+  compare,
   onForget,
 }: {
   /** How many documents the run searched: with several, the first best names them. */
   documents?: number
   outcome: Outcome | null
-  /** Why the best pipeline cannot open on this server, after a press of Load or Compare. */
+  /** Why the best pipeline cannot open on this server, after a press of Load the best pipeline. */
   problem: string | null
   onLoad: () => void
-  onCompare: () => void
+  /** This run against the best, shown in place by Compare the two. */
+  compare: ReactNode
   onForget: () => void
 }) {
   const kind = outcome?.kind ?? "forgotten"
+  const panelId = useId()
+  const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState(false)
+  const compareButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      aria-expanded={open}
+      // The panel is in the page only once it has been opened.
+      aria-controls={opened ? panelId : undefined}
+      onClick={() => {
+        setOpen(!open)
+        setOpened(true)
+      }}
+    >
+      Compare the two
+    </Button>
+  )
   return (
     <div className="flex max-w-[70ch] flex-col gap-2">
       <div data-testid="best-so-far" className={cn("flex flex-col gap-2 rounded-panel text-sm", kind === "equal" || kind === "forgotten" ? "" : "px-3 py-2", TONE[kind])}>
@@ -99,7 +122,9 @@ export function BestSoFar({
               <MonoNumbers text={`${betterLine(outcome)} (${scoreOf(outcome.before)}). This pipeline is now your best for these questions.`} />
             </p>
             <Changed kind="won" questions={outcome.won} />
+            <Changed kind="lost" questions={outcome.lost} />
             <Notes notes={outcome.notes} />
+            <div className="flex flex-wrap items-center gap-2">{compareButton}</div>
           </>
         ) : (
           <>
@@ -116,9 +141,7 @@ export function BestSoFar({
               <Button variant="outline" size="sm" onClick={onLoad}>
                 Load the best pipeline
               </Button>
-              <Button variant="outline" size="sm" onClick={onCompare}>
-                Compare the two
-              </Button>
+              {compareButton}
               <button type="button" className={cn(LINK_BUTTON, "ml-auto inline-flex items-center text-current underline")} onClick={onForget}>
                 Forget best
               </button>
@@ -131,6 +154,11 @@ export function BestSoFar({
           </>
         )}
       </div>
+      {opened && (outcome?.kind === "worse" || outcome?.kind === "better") ? (
+        <div id={panelId} hidden={!open}>
+          {compare}
+        </div>
+      ) : null}
       <p data-testid="best-note" className="text-xs text-fg-muted">
         Only questions decide "better" and "worse": found counts first, then MRR to break a tie. Best so far is kept per browser, so on the demo it
         lives only in this browser. Forget best clears it.

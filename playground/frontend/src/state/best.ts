@@ -31,7 +31,7 @@ export interface BestRun {
 export type Outcome =
   | { kind: "first" }
   /** `more` and `fewer` count over the questions both runs scored; `tie` is equal hit rates, so MRR decided. `notes` are Pandion's. */
-  | { kind: "better"; before: BestRun; more: number; tie: boolean; won: string[]; notes: string[] }
+  | { kind: "better"; before: BestRun; more: number; tie: boolean; won: string[]; lost: string[]; notes: string[] }
   | { kind: "worse"; best: BestRun; fewer: number; tie: boolean; lost: string[]; notes: string[] }
   | { kind: "equal"; best: BestRun; found: number; scored: number; notes: string[] }
 
@@ -181,7 +181,7 @@ export async function afterRun(
   const { notes } = verdict
   if (verdict.best.length === 1 && verdict.best[0] === 1) {
     store()
-    return { key, outcome: { kind: "better", before: stored, more: won.length - lost.length, tie, won, notes } }
+    return { key, outcome: { kind: "better", before: stored, more: won.length - lost.length, tie, won, lost, notes } }
   }
   if (verdict.best.length === 1) {
     return { key, outcome: { kind: "worse", best: stored, fewer: lost.length - won.length, tie, lost, notes } }

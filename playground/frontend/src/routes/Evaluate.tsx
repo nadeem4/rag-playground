@@ -71,6 +71,7 @@ import { DocumentControl } from "@/components/DocumentControl"
 import { DocumentItem } from "@/components/DocumentItem"
 import { BuildYourOwn } from "@/components/evaluate/BuildYourOwn"
 import { BestSoFar } from "@/components/evaluate/BestSoFar"
+import { CompareWithBest } from "@/components/evaluate/CompareWithBest"
 import { afterRun, bestHeadline, forgetBest, type BestPipeline, type Outcome } from "@/state/best"
 
 import { RegistryScreen } from "./Shell"
@@ -205,15 +206,15 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
   }
 
   /**
-   * Best so far's pipeline, put on Build as an unsaved one the way Build your own does, then open `href`.
+   * Best so far's pipeline, put on Build as an unsaved one the way Build your own does, then open Build.
    * Returns why it cannot open on this server, as the Library says it, or null when it opened.
    */
-  function openBest(name: string, p: BestPipeline, href: string): string | null {
+  function openBest(name: string, p: BestPipeline): string | null {
     const g = usableGraph(p, registry)
     if (!g) return `${name} cannot open here. ${notHere(p.config, registry) ?? "This server does not have every step it uses."}`
     storeGraph(g)
     setCurrentId(null)
-    navigate(href)
+    navigate("/build?from=evaluate")
     return null
   }
 
@@ -353,7 +354,7 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
   )
 }
 
-type OpenBest = (name: string, p: BestPipeline, href: string) => string | null
+type OpenBest = (name: string, p: BestPipeline) => string | null
 
 const READY_TAG ={ label: "Ready-made", tone: "plain" as const }
 const NOT_SAVED_TAG = { label: "Not saved", tone: "soft" as const }
@@ -760,12 +761,14 @@ function Evaluation({
   const [best, setBest] = useState<{ key: string; outcome: Outcome | null; problem?: string } | null>(null)
   const bestLive = useRef<HTMLParagraphElement>(null)
   const showBest = ran && !busy && score !== null && best !== null
-  /** Open the best pipeline on Build or Compare, or say why it cannot open here. */
-  function openBestAt(href: string) {
+  /** Open the best pipeline on Build, or say why it cannot open here. */
+  function loadBest() {
     if (best?.outcome?.kind !== "worse") return
-    const problem = onOpenBest(best.outcome.best.name, best.outcome.best.pipeline, href)
+    const problem = onOpenBest(best.outcome.best.name, best.outcome.best.pipeline)
     if (problem) setBest({ ...best, problem })
   }
+  // What Compare the two sets this run against: the best, or on a better run the best it replaced.
+  const bestOther = best?.outcome?.kind === "worse" ? best.outcome.best : best?.outcome?.kind === "better" ? best.outcome.before : null
   const bestInput = useRef<{ result: EvaluationResult; pipeline: BestPipeline; name: string } | null>(null)
   bestInput.current = finishedRun && result && scoredMade.ok ? { result, pipeline: scoredMade.pipeline, name: pipelineName } : null
   const judged = useRef<string | null>(null)
@@ -1049,8 +1052,21 @@ function Evaluation({
             documents={files.length || 1}
             outcome={best.outcome}
             problem={best.problem ?? null}
-            onLoad={() => openBestAt("/build?from=evaluate")}
-            onCompare={() => openBestAt("/compare")}
+            onLoad={loadBest}
+            compare={
+              bestOther && result && scoredMade.ok ? (
+                <CompareWithBest
+                  now={result}
+                  nowConfig={scoredMade.pipeline.config}
+                  otherConfig={bestOther.pipeline.config}
+                  saved={bestOther.report.questions}
+                  otherName={bestOther.name}
+                  label={best.outcome?.kind === "better" ? "the last best" : "your best"}
+                  registry={registry}
+                  start={() => v2.createEvaluation(evaluationRequest(bestOther.pipeline, asked, shownK), { keys }).then((r) => r.run_id)}
+                />
+              ) : null
+            }
             onForget={() => {
               forgetBest(best.key)
               setBest({ key: best.key, outcome: null })

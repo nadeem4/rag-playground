@@ -54,10 +54,12 @@ export function useApiKey(): ApiKeyState {
 
 /**
  * Where a provider's key for the next run comes from, in plain words. A UI key
- * wins because the server resolves the header first.
+ * wins because the server resolves the header first. Only the last 4
+ * characters of a UI key are ever shown, and none for a key too short to hide
+ * the rest.
  */
-export function keySourceLabel(provider: LlmProvider, server: LlmServerSource | null, uiKey: boolean): string {
-  if (uiKey) return "Using the key entered here, this tab only, cleared on reload"
+export function keySourceLabel(provider: LlmProvider, server: LlmServerSource | null, uiKey: string | null): string {
+  if (uiKey !== null) return `Entered here${uiKey.length < 8 ? "" : `, ends in …${uiKey.slice(-4)}`}. This tab only, cleared on reload.`
   if (server === "env") return `Using ${PROVIDER_INFO[provider].env} from the environment`
   if (server === "dotenv") return "Using the key from .env"
   return provider === "custom" ? "No key set. A local server may need none." : "No key set"

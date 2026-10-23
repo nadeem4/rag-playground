@@ -197,16 +197,19 @@ describe("keyHeaders", () => {
 
 describe("key source words", () => {
   it("names each source in plain words, a UI key first", () => {
-    expect(keySourceLabel("anthropic", "dotenv", false)).toBe("Using the key from .env")
-    expect(keySourceLabel("anthropic", "env", false)).toBe("Using ANTHROPIC_API_KEY from the environment")
-    expect(keySourceLabel("openai", "env", false)).toBe("Using OPENAI_API_KEY from the environment")
-    expect(keySourceLabel("custom", "env", false)).toBe("Using OPENAI_COMPATIBLE_API_KEY from the environment")
-    expect(keySourceLabel("openai", "none", false)).toBe("No key set")
-    expect(keySourceLabel("openai", null, false)).toBe("No key set")
-    expect(keySourceLabel("custom", "none", false)).toBe("No key set. A local server may need none.")
+    expect(keySourceLabel("anthropic", "dotenv", null)).toBe("Using the key from .env")
+    expect(keySourceLabel("anthropic", "env", null)).toBe("Using ANTHROPIC_API_KEY from the environment")
+    expect(keySourceLabel("openai", "env", null)).toBe("Using OPENAI_API_KEY from the environment")
+    expect(keySourceLabel("custom", "env", null)).toBe("Using OPENAI_COMPATIBLE_API_KEY from the environment")
+    expect(keySourceLabel("openai", "none", null)).toBe("No key set")
+    expect(keySourceLabel("openai", null, null)).toBe("No key set")
+    expect(keySourceLabel("custom", "none", null)).toBe("No key set. A local server may need none.")
     for (const s of ["env", "dotenv", "none"] as const) {
-      expect(keySourceLabel("openai", s, true)).toBe("Using the key entered here, this tab only, cleared on reload")
+      expect(keySourceLabel("openai", s, "sk-FAKE-1234")).toBe("Entered here, ends in …1234. This tab only, cleared on reload.")
     }
+    // A short key shows no ending at all.
+    expect(keySourceLabel("openai", "none", "abc1234")).toBe("Entered here. This tab only, cleared on reload.")
+    expect(keySourceLabel("openai", "none", "abcd1234")).toBe("Entered here, ends in …1234. This tab only, cleared on reload.")
   })
 
   it("the header badge counts the providers that have a key", () => {
@@ -325,20 +328,68 @@ describe("the API key panel", () => {
     expect(screen.getByTestId("api-key-button").textContent).toContain("2 set")
   })
 
-  it.each(PROVIDERS)("%s: applying shows this tab's key, empties the field, and Clear restores the server's", async (p) => {
+  it.each(PROVIDERS)("%s: applying shows a Set row with the key's ending and no box; Remove restores the server's", async (p) => {
     servers = { anthropic: "dotenv", openai: "dotenv", custom: "dotenv", openrouter: "dotenv" }
     await page()
     await waitFor(() => expect(within(row(p)).getByTestId("key-source").textContent).toBe("Using the key from .env"))
+    fireEvent.click(within(row(p)).getByRole("button", { name: "Use another key for this tab" }))
     const r = enterKey(p, FAKE[p])
-    expect(within(r).getByTestId("key-source").textContent).toBe("Using the key entered here, this tab only, cleared on reload")
-    // The field is emptied: the key is not left sitting in the DOM.
-    expect((within(r).getByLabelText(LABEL[p]) as HTMLInputElement).value).toBe("")
+    expect(within(r).getByTestId("key-source").textContent).toBe(`Entered here, ends in …${FAKE[p].slice(-4)}. This tab only, cleared on reload.`)
+    expect(within(r).getByText("Set")).toBeTruthy()
+    // No box is left in the DOM, so the key is not either.
+    expect(within(r).queryByLabelText(LABEL[p])).toBeNull()
+    expect(within(r).queryByRole("button", { name: "Apply" })).toBeNull()
     // The other rows are untouched.
     for (const q of PROVIDERS.filter((q) => q !== p)) {
       expect(within(row(q)).getByTestId("key-source").textContent).toBe("Using the key from .env")
     }
-    fireEvent.click(within(r).getByRole("button", { name: "Clear" }))
+    fireEvent.click(within(r).getByRole("button", { name: "Remove" }))
     expect(within(r).getByTestId("key-source").textContent).toBe("Using the key from .env")
+  })
+
+  it("a row with no key anywhere shows the box and Apply, with no Check key and no Clear", async () => {
+    servers = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
+    await page()
+    for (const p of PROVIDERS) {
+      const r = row(p)
+      await waitFor(() => expect(within(r).getByTestId("key-source").textContent).toMatch(/^No key set/))
+      expect(within(r).getByLabelText(LABEL[p])).toBeTruthy()
+      expect(within(r).getByRole("button", { name: "Apply" })).toBeTruthy()
+      expect(within(r).queryByRole("button", { name: "Check key" })).toBeNull()
+      expect(within(r).queryByRole("button", { name: "Clear" })).toBeNull()
+      expect(within(r).queryByText("Set")).toBeNull()
+    }
+  })
+
+  it("a server key shows Set, Check key and Use another key, but no Remove and no box", async () => {
+    servers = { anthropic: "env", openai: "none", custom: "none", openrouter: "none" }
+    await page()
+    const r = row("anthropic")
+    await waitFor(() => expect(within(r).getByText("Set")).toBeTruthy())
+    expect(within(r).getByTestId("key-source").textContent).toBe("Using ANTHROPIC_API_KEY from the environment")
+    expect(within(r).queryByLabelText(LABEL.anthropic)).toBeNull()
+    expect(within(r).getByRole("button", { name: "Check key" })).toBeTruthy()
+    expect(within(r).queryByRole("button", { name: "Remove" })).toBeNull()
+    fireEvent.click(within(r).getByRole("button", { name: "Use another key for this tab" }))
+    expect(within(r).getByLabelText(LABEL.anthropic)).toBeTruthy()
+  })
+
+  it("Replace opens a focused box; Cancel keeps the key and returns focus to Replace; Apply swaps the key", async () => {
+    await page()
+    const r = enterKey("openai", FAKE.openai)
+    fireEvent.click(within(r).getByRole("button", { name: "Replace" }))
+    const box = within(r).getByLabelText(LABEL.openai) as HTMLInputElement
+    expect(document.activeElement).toBe(box)
+    fireEvent.change(box, { target: { value: "sk-other-9999" } })
+    fireEvent.click(within(r).getByRole("button", { name: "Cancel" }))
+    expect(within(r).queryByLabelText(LABEL.openai)).toBeNull()
+    expect(within(r).getByTestId("key-source").textContent).toContain(FAKE.openai.slice(-4))
+    expect(document.activeElement).toBe(within(r).getByRole("button", { name: "Replace" }))
+    fireEvent.click(within(r).getByRole("button", { name: "Replace" }))
+    fireEvent.change(within(r).getByLabelText(LABEL.openai), { target: { value: "sk-other-9999" } })
+    fireEvent.click(within(r).getByRole("button", { name: "Apply" }))
+    expect(within(r).getByTestId("key-source").textContent).toContain("9999")
+    expect(within(r).queryByLabelText(LABEL.openai)).toBeNull()
   })
 
   it("says in plain words what happens to a key", async () => {
@@ -398,7 +449,7 @@ describe("the API key panel", () => {
 
   it("custom: no Check (it needs the endpoint's URL); says when it is checked instead", async () => {
     await page()
-    const r = row("custom")
+    const r = enterKey("custom", FAKE.custom)
     expect(within(r).queryByRole("button", { name: "Check key" })).toBeNull()
     expect(within(r).getByText("Checked when chat runs against your endpoint.")).toBeTruthy()
   })

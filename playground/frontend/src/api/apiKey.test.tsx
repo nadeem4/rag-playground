@@ -55,6 +55,8 @@ interface Sent {
 let sent: Sent[] = []
 let servers: Record<LlmProvider, string> = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
 let demo = false
+// When set, a key check waits for it, so a test can change the key mid-check.
+let checkGate: Promise<void> | null = null
 
 function headersOf(init?: RequestInit): Record<string, string> {
   const h = new Headers(init?.headers)
@@ -67,6 +69,7 @@ beforeEach(() => {
   sent = []
   servers = { anthropic: "none", openai: "none", custom: "none", openrouter: "none" }
   demo = false
+  checkGate = null
   resetAppSettingsForTests()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -86,6 +89,7 @@ beforeEach(() => {
       if (url === "/api/v2/settings/models/check") {
         const p = JSON.parse(String(init?.body)).provider as LlmProvider
         const has = headersOf(init)[H(p)]
+        if (checkGate) await checkGate
         return ok(has ? { ok: false, source: "header", error: "invalid key" } : { ok: true, source: "dotenv", error: null })
       }
       if (["/api/v2/runs", "/api/v2/ask", "/api/v2/comparisons"].includes(url) && init?.method === "POST") return ok({ run_id: "r1" }, 202)
@@ -390,6 +394,63 @@ describe("the API key panel", () => {
     fireEvent.click(within(r).getByRole("button", { name: "Apply" }))
     expect(within(r).getByTestId("key-source").textContent).toContain("9999")
     expect(within(r).queryByLabelText(LABEL.openai)).toBeNull()
+  })
+
+  it("a check still running when the key is replaced does not show its result under the new key", async () => {
+    let release = () => {}
+    checkGate = new Promise<void>((r) => (release = r))
+    await page()
+    const r = enterKey("openai", FAKE.openai)
+    fireEvent.click(within(r).getByRole("button", { name: "Check key" }))
+    fireEvent.click(within(r).getByRole("button", { name: "Replace" }))
+    fireEvent.change(within(r).getByLabelText(LABEL.openai), { target: { value: "sk-other-9999" } })
+    fireEvent.click(within(r).getByRole("button", { name: "Apply" }))
+    release()
+    await waitFor(() => expect(sent.some((s) => s.url === "/api/v2/settings/models/check")).toBe(true))
+    await new Promise((res) => setTimeout(res, 20))
+    expect(within(r).getByTestId("key-check").textContent).toBe("")
+    expect(within(r).getByRole("button", { name: "Check key" }).textContent).toBe("Check key")
+  })
+
+  it("Remove clears an earlier check result and puts focus in the new box", async () => {
+    await page()
+    const r = enterKey("openai", FAKE.openai)
+    fireEvent.click(within(r).getByRole("button", { name: "Check key" }))
+    await waitFor(() => expect(within(r).getByTestId("key-check").textContent).toMatch(/did not work/))
+    fireEvent.click(within(r).getByRole("button", { name: "Remove" }))
+    expect(within(r).getByTestId("key-check").textContent).toBe("")
+    expect(document.activeElement).toBe(within(r).getByLabelText(LABEL.openai))
+  })
+
+  it("a first Apply moves focus to Replace", async () => {
+    await page()
+    const r = enterKey("openai", FAKE.openai)
+    expect(document.activeElement).toBe(within(r).getByRole("button", { name: "Replace" }))
+  })
+
+  it("a key under 8 characters shows no ending in the row", async () => {
+    await page()
+    const r = enterKey("openai", "abc1234")
+    expect(within(r).getByTestId("key-source").textContent).toBe("Entered here. This tab only, cleared on reload.")
+    expect(document.body.textContent).not.toContain("abc1234")
+  })
+
+  it("before the server answers, a row with no tab key shows the box", async () => {
+    await page()
+    const r = row("anthropic")
+    expect(within(r).getByLabelText(LABEL.anthropic)).toBeTruthy()
+    expect(within(r).queryByRole("button", { name: "Check key" })).toBeNull()
+  })
+
+  it("text typed before the server answered does not come back under Use another key", async () => {
+    servers = { anthropic: "env", openai: "none", custom: "none", openrouter: "none" }
+    await page()
+    const r = row("anthropic")
+    const box = within(r).queryByLabelText(LABEL.anthropic)
+    if (box) fireEvent.change(box, { target: { value: "half-typed" } })
+    await waitFor(() => expect(within(r).queryByLabelText(LABEL.anthropic)).toBeNull())
+    fireEvent.click(within(r).getByRole("button", { name: "Use another key for this tab" }))
+    expect((within(r).getByLabelText(LABEL.anthropic) as HTMLInputElement).value).toBe("")
   })
 
   it("says in plain words what happens to a key", async () => {

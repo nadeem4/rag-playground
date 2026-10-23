@@ -109,46 +109,52 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
   const name = PROVIDER_INFO[provider].name
   const boxRef = useRef<HTMLInputElement>(null)
   const replaceRef = useRef<HTMLButtonElement>(null)
-  const backToReplace = useRef(false)
+  const moveFocus = useRef(false)
+  // Counts key changes and checks, so a check that finishes late is ignored.
+  const checkId = useRef(0)
 
   // A key counts as set when this tab has one or the server does. Until the
   // server answers, a row without a tab key is treated as having none.
   const isSet = key !== null || (server !== null && server !== "none")
   const showBox = !isSet || editing
 
-  // The box takes focus when it opens; closing it hands focus back to Replace.
+  // A draft does not outlive its box. After a click here, focus follows the
+  // change: into the box when it opens, onto the button that took its place.
   useEffect(() => {
-    if (editing) boxRef.current?.focus()
-    else if (backToReplace.current) {
-      backToReplace.current = false
-      replaceRef.current?.focus()
-    }
-  }, [editing])
+    if (!showBox) setDraft("")
+    if (!moveFocus.current) return
+    moveFocus.current = false
+    if (showBox) boxRef.current?.focus()
+    else replaceRef.current?.focus()
+  }, [showBox, key])
 
   const close = () => {
-    backToReplace.current = true
-    setDraft("")
+    moveFocus.current = true
     setEditing(false)
   }
   const apply = () => {
     const k = draft.trim()
     if (!k) return
     setKey(provider, k)
+    checkId.current++
     setCheck({ state: "idle" })
     close()
   }
   const remove = () => {
     setKey(provider, null)
-    setDraft("")
+    moveFocus.current = true
+    checkId.current++
     setEditing(false)
     setCheck({ state: "idle" })
   }
   const runCheck = async () => {
+    const mine = ++checkId.current
     setCheck({ state: "checking" })
     try {
-      setCheck({ state: "done", result: await v2.checkModel(provider, { keys }) })
+      const result = await v2.checkModel(provider, { keys })
+      if (mine === checkId.current) setCheck({ state: "done", result })
     } catch (err) {
-      setCheck({ state: "error", message: err instanceof Error ? err.message : String(err) })
+      if (mine === checkId.current) setCheck({ state: "error", message: err instanceof Error ? err.message : String(err) })
     }
   }
   const shown = check.state === "done" ? checkMessage(provider, check.result) : null
@@ -207,7 +213,10 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
               {check.state === "checking" ? "Checking" : "Check key"}
             </Button>
           )}
-          <Button ref={replaceRef} type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
+          <Button ref={replaceRef} type="button" variant="ghost" size="sm" onClick={() => {
+              moveFocus.current = true
+              setEditing(true)
+            }}>
             {key !== null ? "Replace" : "Use another key for this tab"}
           </Button>
           {key !== null ? (

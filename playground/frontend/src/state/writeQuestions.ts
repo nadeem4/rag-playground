@@ -88,7 +88,7 @@ export function defaultModel(models: ChatModel[]): string | null {
 export function keyNotice(provider: KeyedProvider, server: LlmSettings | null, keys: Keys): string {
   if (keys[provider]) return "The key stays in this browser and is sent only with this request."
   if (server === null) return ""
-  return `${keySourceLabel(provider, server[provider], false)}.`
+  return `${keySourceLabel(provider, server[provider], null)}.`
 }
 
 export function clampCount(n: number, max: number): number {

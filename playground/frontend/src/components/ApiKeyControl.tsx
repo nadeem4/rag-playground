@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Popover } from "radix-ui"
 
 import { v2 } from "@/api/v2"
@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils"
 
 /**
  * The header's "API key" control (plan I-8, I-18). A small panel with one row
- * per provider: where its key for the next run comes from, a password field
- * that holds a key in this tab's memory, and a check that costs no tokens.
+ * per provider: where its key for the next run comes from, a Set mark with the
+ * key's last 4 characters once one is entered, a password field while none is,
+ * and a check that costs no tokens.
  * The custom endpoint has no check: it needs a base URL, which is set on the
  * chat node, so that key is checked when chat runs.
  *
@@ -102,28 +103,62 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
   const { keys, setKey } = useApiKey()
   const key = keys[provider]
   const [draft, setDraft] = useState("")
+  const [editing, setEditing] = useState(false)
   const [check, setCheck] = useState<Check>({ state: "idle" })
   const id = useId()
   const name = PROVIDER_INFO[provider].name
+  const boxRef = useRef<HTMLInputElement>(null)
+  const replaceRef = useRef<HTMLButtonElement>(null)
+  const moveFocus = useRef(false)
+  // Counts key changes and checks, so a check that finishes late is ignored.
+  const checkId = useRef(0)
 
+  // A key counts as set when this tab has one or the server does. Until the
+  // server answers, a row without a tab key is treated as having none.
+  const isSet = key !== null || (server !== null && server !== "none")
+  const showBox = !isSet || editing
+
+  // A draft does not outlive its box. After a click here, focus follows the
+  // change: into the box when it opens, onto the button that took its place.
+  useEffect(() => {
+    if (!showBox) setDraft("")
+    if (!moveFocus.current) return
+    moveFocus.current = false
+    if (showBox) boxRef.current?.focus()
+    else replaceRef.current?.focus()
+  }, [showBox, key])
+
+  const close = () => {
+    moveFocus.current = true
+    setEditing(false)
+  }
+  const openBox = () => {
+    moveFocus.current = true
+    setEditing(true)
+  }
   const apply = () => {
     const k = draft.trim()
     if (!k) return
     setKey(provider, k)
-    setDraft("")
+    checkId.current++
     setCheck({ state: "idle" })
+    close()
   }
-  const clear = () => {
+  const remove = () => {
     setKey(provider, null)
-    setDraft("")
+    moveFocus.current = true
+    checkId.current++
+    setEditing(false)
     setCheck({ state: "idle" })
   }
   const runCheck = async () => {
+    const mine = ++checkId.current
     setCheck({ state: "checking" })
     try {
-      setCheck({ state: "done", result: await v2.checkModel(provider, { keys }) })
+      const result = await v2.checkModel(provider, { keys })
+      if (mine === checkId.current) setCheck({ state: "done", result })
     } catch (err) {
-      setCheck({ state: "error", message: err instanceof Error ? err.message : String(err) })
+      if (mine === checkId.current) setCheck({ state: "error", message: err instanceof Error ? err.message : String(err) })
     }
   }
   const shown = check.state === "done" ? checkMessage(provider, check.result) : null
@@ -132,65 +167,85 @@ function KeyRow({ provider, server }: { provider: LlmProvider; server: LlmServer
     <section role="group" aria-label={name} className="flex flex-col gap-2 border-b border-hairline p-3 last-of-type:border-b-0">
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between gap-2">
-          <label htmlFor={`${id}-key`} className="text-sm font-medium">
-            {name} API key
-          </label>
-          {provider === "custom" ? <span className="meta">optional</span> : null}
+          {showBox ? (
+            <label htmlFor={`${id}-key`} className="text-sm font-medium">
+              {name} API key
+            </label>
+          ) : (
+            <span className="text-sm font-medium">{name} API key</span>
+          )}
+          {isSet ? <span className="meta">Set</span> : provider === "custom" ? <span className="meta">optional</span> : null}
         </div>
         <p className="text-xs text-fg-muted" data-testid="key-source">
-          {keySourceLabel(provider, server, key !== null)}
+          {keySourceLabel(provider, server, key)}
         </p>
       </div>
-      <form
-        className="flex items-center gap-2"
-        autoComplete="off"
-        onSubmit={(e) => {
-          e.preventDefault()
-          apply()
-        }}
-      >
-        <Input
-          id={`${id}-key`}
-          type="password"
+      {showBox ? (
+        <form
+          className="flex items-center gap-2"
           autoComplete="off"
-          spellCheck={false}
-          data-1p-ignore=""
-          data-lpignore="true"
-          className="font-mono"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <Button type="submit" variant="outline" size="sm" disabled={!draft.trim()}>
-          Apply
-        </Button>
-        <Button type="button" variant="ghost" size="sm" disabled={key === null && !draft} onClick={clear}>
-          Clear
-        </Button>
-      </form>
+          onSubmit={(e) => {
+            e.preventDefault()
+            apply()
+          }}
+        >
+          <Input
+            id={`${id}-key`}
+            ref={boxRef}
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            data-1p-ignore=""
+            data-lpignore="true"
+            className="font-mono"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <Button type="submit" variant="outline" size="sm" disabled={!draft.trim()}>
+            Apply
+          </Button>
+          {editing ? (
+            <Button type="button" variant="ghost" size="sm" onClick={close}>
+              Cancel
+            </Button>
+          ) : null}
+        </form>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {provider === "custom" ? null : (
+            <Button type="button" variant="outline" size="sm" disabled={check.state === "checking"} onClick={() => void runCheck()}>
+              {check.state === "checking" ? "Checking" : "Check key"}
+            </Button>
+          )}
+          <Button ref={replaceRef} type="button" variant="ghost" size="sm" onClick={openBox}>
+            {key !== null ? "Replace" : "Use another key for this tab"}
+          </Button>
+          {key !== null ? (
+            <Button type="button" variant="ghost" size="sm" onClick={remove}>
+              Remove
+            </Button>
+          ) : null}
+        </div>
+      )}
       {provider === "custom" ? (
         // The server's check needs the endpoint's URL, which lives on a chat
         // node, not here. The run itself is the check.
         <p className="text-xs text-fg-muted">Checked when chat runs against your endpoint.</p>
       ) : (
-        <div className="flex flex-col gap-1">
-          <Button type="button" variant="outline" size="sm" className="self-start" disabled={check.state === "checking"} onClick={() => void runCheck()}>
-            {check.state === "checking" ? "Checking" : "Check key"}
-          </Button>
-          <div aria-live="polite" data-testid="key-check">
-            {shown ? (
-              <>
-                <p className={cn("text-xs", shown.ok ? "text-fg" : "text-danger")}>{shown.text}</p>
-                {!shown.ok && check.state === "done" && check.result.error ? (
-                  <p className="font-mono text-2xs break-words text-fg-muted">{check.result.error}</p>
-                ) : null}
-              </>
-            ) : check.state === "error" ? (
-              <>
-                <p className="text-xs text-danger">Could not check the key</p>
-                <p className="font-mono text-2xs break-words text-fg-muted">{check.message}</p>
-              </>
-            ) : null}
-          </div>
+        <div aria-live="polite" data-testid="key-check">
+          {shown ? (
+            <>
+              <p className={cn("text-xs", shown.ok ? "text-fg" : "text-danger")}>{shown.text}</p>
+              {!shown.ok && check.state === "done" && check.result.error ? (
+                <p className="font-mono text-2xs break-words text-fg-muted">{check.result.error}</p>
+              ) : null}
+            </>
+          ) : check.state === "error" ? (
+            <>
+              <p className="text-xs text-danger">Could not check the key</p>
+              <p className="font-mono text-2xs break-words text-fg-muted">{check.message}</p>
+            </>
+          ) : null}
         </div>
       )}
     </section>

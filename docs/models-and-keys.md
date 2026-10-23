@@ -89,7 +89,11 @@ The server looks for each provider's key in three places and uses the first it f
 1. **Typed in the app.** Open the key button at the top right of the header. It reads
    **Key** until a key is set, then **API key**. The panel has one row per provider:
    Anthropic, OpenAI, Custom endpoint and OpenRouter (the demo leaves out Custom endpoint).
-   Paste a key into its row and choose **Apply**.
+   Paste a key into its row and choose **Apply**. The row then shows **Set** and the last four
+   characters of the key, never the whole key (a key under 8 characters shows no ending). **Replace** swaps it, **Remove** drops it, and
+   **Check key** tests it without spending tokens (Custom endpoint has no Check key; it is checked when chat runs). A row whose key comes from the server also
+   shows **Set**, with **Use another key for this tab** in place of Remove, because the page
+   cannot remove a key the server holds.
 2. **The provider's environment variable in the server process,** for example:
 
    ```bash

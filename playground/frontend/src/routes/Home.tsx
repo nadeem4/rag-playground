@@ -61,9 +61,9 @@ const STEPS: Step[] = [
       caption: "Build from a template, ask, and see what the documents do not cover",
     },
     chapters: ["Start from a template", "Add a document", "Watch every step", "Search, then Chat", "Not in the documents"],
-    lead: "Every step shows its output:",
+    lead: "Every step shows its output.",
     // No block count: Docling's count differs between machines (Linux is the source of truth).
-    note: "Ask can Search or Chat, and an answer marks what the documents do not cover.",
+    note: "In Ask, Search lists the pieces it found, and Chat writes an answer that marks what the documents do not cover.",
   },
   {
     id: "evaluate",

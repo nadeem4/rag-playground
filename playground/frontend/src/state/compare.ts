@@ -5,7 +5,7 @@ import { compareLists, ordinal, type ListChange } from "@/components/inspectors/
 import type { ChunkStats } from "@/api/types"
 import { strategyLabel } from "@/learn/challenges"
 
-import type { Step, WorkingPipeline } from "./config"
+import { QUESTION_KEYS, type Step, type WorkingPipeline } from "./config"
 import { columnOrder, defaultConfig, INDEX_STAGES, strategyIn, type PipelineGraph } from "./graph"
 import { errorHeadline } from "./pipeline"
 import { variantLabels } from "./sweep"
@@ -676,7 +676,6 @@ export function comparePipeline(p: WorkingPipeline, graph: PipelineGraph, throug
 }
 
 const EMBED_KEYS = ["embedder", "truncate_dim"]
-const QUESTION_KEYS = ["text", "gold_answer", "gold_answers"]
 const strip = (o: Record<string, unknown>, keys: string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)))
 /** Equal settings, whatever order their keys were written in. */
 const sameSettings = (a: Record<string, unknown>, b: Record<string, unknown>) =>

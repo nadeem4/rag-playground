@@ -279,3 +279,17 @@ Found 2026-10-21 in review of the several-documents Ask (PR #185); fixed the sam
 **Why the fix worked.** Every piece already records which document it was cut from, so the citation can name it without reading that document. The piece carries its own text, offsets and pages, so a citation can be checked and placed without reading its document; looking it up in another document's text would open the wrong place.
 
 **What we learned.** With several documents, any field that says "where" must come from the piece itself, not from whichever document a step happened to read. Test with pieces from two documents, not one.
+
+### Every Rewrite recipe was refused on Compare
+
+Found 2026-10-25 while comparing query rewrites; fixed the same day.
+
+**The problem.** Compare refused every Rewrite recipe. Pandion answered that the rewrite step must not set filters, even though the person had never touched a filter.
+
+**Why it was broken.** The settings form fills each card from the defaults in its schema. The rewrite strategies carry a `filters` setting that defaults to nothing, so every Rewrite recipe held `filters: null`. Filters belong to the question and are set only with `where`. The code that built the rewrite step removed the question's text and gold answers, but not `filters`, so the empty setting was sent. Pandion refuses a rewrite step that has a `filters` key, even an empty one.
+
+**What fixed it.** The list of the question's settings now includes `filters`, and Compare and Build share that one list (`QUESTION_KEYS` in `playground/frontend/src/state/config.ts`) instead of keeping two copies.
+
+**Why the fix worked.** Both places that build a rewrite step now remove every setting that belongs to the question, so the step holds only what the rewrite itself needs.
+
+**What we learned.** A form that fills in defaults can send a setting nobody chose. When a step must not have a setting at all, remove it where the step is built, and keep one list of those settings so two copies cannot drift apart.

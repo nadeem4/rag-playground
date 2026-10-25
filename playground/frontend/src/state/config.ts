@@ -39,8 +39,8 @@ export type Converted = { ok: true; pipeline: WorkingPipeline } | { ok: false; p
 
 /** Settings written under `embed` that the store takes with `embedder` (pandion.config.EMBED_KEYS). */
 const EMBED_KEYS = ["truncate_dim"]
-/** A query card's settings that are the question, not the rewrite step's. */
-const QUESTION_KEYS = ["text", "gold_answer", "gold_answers"]
+/** A query card's settings that are the question, not the rewrite step's. Filters come from `where`. */
+export const QUESTION_KEYS = ["text", "gold_answer", "gold_answers", "filters"]
 /** Stages a pipeline has at most one of. Clean and Rerank stack. */
 const ONE_EACH: Stage[] = ["source", "parse", "chunk", "enrich", "index", "query", "retrieve", "use_case"]
 

@@ -16,17 +16,35 @@ version that matches that browser build (1.55.0 for chromium-1187).
 
 Each clip has a setup pass that is not recorded: it loads the sample, makes
 the changes the clip needs and runs every step once, so the recorded pass
-reads warm results and fits in 8 to 15 seconds. The recorded pass starts from
-the setup's stored state in a fresh browser context, once in the light theme
-and once in the dark. Timing is set by the pauses below. Each scene notes the
+reads warm results and fits in 20 to 35 seconds (one clip per page, with
+chapter chips under it on Home). The recorded pass starts from the setup's
+stored state in a fresh browser context, once in the light theme and once in
+the dark. Timing is set by the pauses below. Each scene notes the
 moment its page has loaded; the recording is cut to start there, so no blank
 frame opens the loop, and re-encoded to WebM VP9 with the ffmpeg binary that
 the imageio-ffmpeg package ships (`imageio_ffmpeg.get_ffmpeg_exe()`).
 
 Writes `playground/frontend/public/clips/<name>.webm` and `<name>-dark.webm` (1280x800; Build at
-1440x900, with the Ask dock seeded open at 698 px so the slope shows), and a
+1440x900, with the Ask dock seeded open at 698 px so the answer sits beside the steps), and a
 `.jpg` poster for each, taken with Playwright's screenshot at the clip's
-telling moment.
+telling moment. Each is kept under about 4 MB.
+
+Chapters: a scene calls `mark()` where each chapter of the clip starts. After
+the encode, the marks become seconds from the cut start (the first is 0) and
+go to `playground/frontend/src/routes/clipChapters.json` as
+`{"build": {"light": [0, 5.1, ...], "dark": [...]}, ...}`. The file is read and
+merged, so recording one clip keeps the others' entries; a scene that marks
+nothing leaves its entry as it was.
+
+`build` is five chapters: pick a template, add a second document, build the
+index, ask with Search then Chat, ask something the documents do not answer.
+Chat needs a key, and the server runs in demo mode, which ignores its own
+key, so the recorder sends `ANTHROPIC_API_KEY` (from the environment or the
+repo's `.env`, never printed or stored) as the request header on every API
+call, and answers the key-status request as a server holding the key would.
+The setup pass runs the whole scene once, without its pauses, in a second
+browser context, warming the step cache and the Chat answers so the recorded
+pass reads them cached.
 
 `compare` shows Compare's setup cards, presses Run 3 recipes, lets the rows
 fill in and ends on the finding sentence. Its setup runs only Parse and Clean,
@@ -56,6 +74,7 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "playground" / "frontend" / "public" / "clips"
+CHAPTERS_FILE = ROOT / "playground" / "frontend" / "src" / "routes" / "clipChapters.json"
 SIZE = {"width": 1280, "height": 800}
 #: Build is recorded wider, still 16:10, so the docked Ask panel can take 698 px:
 #: over the 640 px its comparison needs to set the lists side by side with the slope.
@@ -72,6 +91,55 @@ FAST_TEXT = "Parse: Fast text"
 THEMES = {"light": "", "dark": "-dark"}
 #: Past the load, so the first frame kept is a painted one.
 LOAD_MARGIN = 0.2
+
+
+#: Chapter starts of the take being recorded, as `time.time()`; `mark()` adds one.
+MARKS: list[float] = []
+#: True during a clip's setup warm pass: the scene runs without its pauses and without a poster.
+WARM = False
+#: Clips whose scenes call the model, so their browser sends a key.
+KEYED = {"build"}
+
+
+def mark() -> None:
+    """A scene calls this where a chapter of the clip starts."""
+    MARKS.append(time.time())
+
+
+def pause(page: Page, ms: int) -> None:
+    """A pause the viewer reads in; the warm pass skips it."""
+    if not WARM:
+        page.wait_for_timeout(ms)
+
+
+def anthropic_key() -> str:
+    """The key for Chat: the environment's, else the repo's `.env`. Never printed."""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        from dotenv import dotenv_values
+
+        key = dotenv_values(ROOT / ".env").get("ANTHROPIC_API_KEY")
+    if not key:
+        raise SystemExit("the build clip needs ANTHROPIC_API_KEY, in the environment or in .env")
+    return key.strip()
+
+
+def install_key(ctx) -> None:
+    """Send the key with every API call from `ctx`, as the header the UI's key panel would send.
+
+    The demo server ignores its own keys, so it would report none and turn Chat
+    off; the key-status answer is the one a server holding the key would give.
+    """
+    key = anthropic_key()
+
+    def handle(route) -> None:
+        req = route.request
+        if req.method == "GET" and req.url.split("?")[0].endswith("/settings/models"):
+            route.fulfill(json={"anthropic": "env", "openai": "none", "custom": "none", "openrouter": "none"})
+        else:
+            route.continue_(headers={**req.headers, "x-anthropic-api-key": key})
+
+    ctx.route("**/api/**", handle)
 
 
 def port_answers(port: int) -> bool:
@@ -136,23 +204,30 @@ def evaluate(page: Page) -> None:
 # ------------------------------------------------------------------ build --
 
 
+#: What the fourth chapter asks, and what the fifth adds that the documents do not answer.
+ASK_Q = "What do the dashes on the display mean?"
+ASK_MORE = ", and which vector database is the fastest?"
+
+
 def build_setup(page: Page, base: str) -> None:
+    """Leave `page`'s context clean (one sample, the dock open), after a warm pass in another one."""
+    global WARM
     pick_sample(page, base, None)
     # The dock wide open on the right; the stored state carries it into the recorded pass.
     page.evaluate("([key, value]) => localStorage.setItem(key, value)", [DOCK_KEY, json.dumps(DOCK_SEED)])
     page.reload()
     page.get_by_role("button", name="Build the index").wait_for()
-    page.get_by_role("button", name="Build the index").click()
-    ask = page.get_by_role("button", name="Ask", exact=True)
-    pick_reranker(page, "Cross-encoder")
-    ask.click(timeout=600_000)  # waits until the build lets it
-    page.get_by_text("Search order against the reranked order").wait_for(timeout=600_000)
-    # Back to no reranker, so the recorded pass shows the switch. The settings
-    # open from the button above the answer or the invite under it; either will do.
-    if not page.get_by_role("button", name=re.compile(r"^Reranker")).is_visible():
-        page.get_by_role("button", name="Change settings").first.click()
-    pick_reranker(page, "No reranker")
-    page.wait_for_timeout(500)
+    # The whole scene once, with no pauses, in a context of its own: the server keeps
+    # every step result and Chat answer, and this context keeps nothing of it.
+    warm = page.context.browser.new_context(viewport=size_for("build"), storage_state=page.context.storage_state())
+    install_key(warm)
+    WARM = True
+    try:
+        build_scene(warm.new_page(), base, None)
+    finally:
+        WARM = False
+        MARKS.clear()
+        warm.close()
 
 
 def pick(page: Page, label: str, name: str) -> None:
@@ -166,26 +241,90 @@ def pick_reranker(page: Page, name: str) -> None:
     pick(page, "Reranker", name)
 
 
-def build_scene(page: Page, base: str, poster: Path) -> float:
+def ask_done(page: Page) -> None:
+    """Wait until the question is answered: the Ask button is back."""
+    page.wait_for_timeout(800)
+    page.get_by_role("button", name="Ask", exact=True).wait_for(timeout=600_000)
+    page.wait_for_timeout(300)
+
+
+def smooth_to(loc, block: str = "start") -> None:
+    loc.evaluate(f"el => el.scrollIntoView({{ behavior: 'smooth', block: '{block}' }})")
+
+
+def build_scene(page: Page, base: str, poster: Path | None) -> float:
     page.goto(base + "/build")
     build = page.get_by_role("button", name="Build the index")
     build.wait_for()
     page.wait_for_load_state("networkidle")
     loaded = time.time()
-    page.wait_for_timeout(1200)
+    pause(page, 800)
+
+    # 1. Start from a template: a document template and a question template.
+    mark()
+    page.get_by_role("button", name="Start from a template").click()
+    pause(page, 1200)
+    page.get_by_role("button", name=re.compile("^Manuals and guides")).click()
+    pause(page, 800)
+    page.get_by_role("button", name=re.compile("^Balanced")).click()
+    pause(page, 1200)
+    page.get_by_role("button", name="Use this pipeline").click()
+    pause(page, 1500)
+
+    # 2. Add several documents: a second sample joins the first.
+    mark()
+    page.get_by_role("button", name=re.compile("^Add a document")).click()
+    pause(page, 1200)
+    page.get_by_label(re.compile("^Add a document")).get_by_text("A weather station manual").click()
+    pause(page, 2500)
+
+    # 3. Watch every step: the build, then the step cards, for each document.
+    mark()
     build.click()
-    page.get_by_text("Index ready", exact=False).wait_for(timeout=60_000)
-    page.wait_for_timeout(1400)
-    pick_reranker(page, "Cross-encoder")
-    page.wait_for_timeout(900)
-    page.get_by_role("button", name="Ask", exact=True).click()
-    slope = page.get_by_text("Search order against the reranked order")
-    slope.wait_for(timeout=60_000)
-    page.wait_for_timeout(600)
-    slope.evaluate("el => el.scrollIntoView({ behavior: 'smooth', block: 'start' })")
-    page.wait_for_timeout(2200)
-    page.screenshot(path=poster, type="jpeg", quality=80)
-    page.wait_for_timeout(2800)
+    smooth_to(page.locator('[data-node-id^="parse"]'))
+    page.get_by_text("Index ready", exact=False).wait_for(timeout=900_000)
+    pause(page, 1200)
+    smooth_to(page.locator('[data-node-id^="chunk"]'))
+    pause(page, 1200)
+    page.get_by_label("Showing the steps for").select_option(label="station-manual.pdf")
+    pause(page, 1500)
+
+    # 4. Ask: Search, then Chat.
+    mark()
+    box = page.get_by_role("textbox").first
+    box.fill("")
+    box.press_sequentially(ASK_Q, delay=25)
+    pause(page, 500)
+    ask = page.get_by_role("button", name="Ask", exact=True)
+    ask.click()
+    ask_done(page)
+    pause(page, 2000)
+    mode = page.get_by_role("group", name="Answer with")
+    smooth_to(mode, "center")
+    pause(page, 1000)
+    mode.get_by_role("button", name="Chat with a model").click()
+    pause(page, 700)
+    ask.click()
+    ask_done(page)
+    pause(page, 2200)
+
+    # 5. Answers say what is missing: more is asked than the documents hold.
+    mark()
+    smooth_to(box, "center")
+    pause(page, 800)
+    box.click()
+    box.press("End")
+    box.press("Backspace")
+    box.press_sequentially(ASK_MORE, delay=25)
+    pause(page, 500)
+    ask.click()
+    ask_done(page)
+    if page.locator("[data-testid=ask-answer] [data-not-found]").count() == 0:
+        raise SystemExit("the Chat answer has no Not in the documents part: change ASK_MORE")
+    pause(page, 1500)
+    if poster:
+        page.screenshot(path=poster, type="jpeg", quality=80)
+    pause(page, 2200)
     return loaded
 
 
@@ -304,6 +443,8 @@ def record(browser, server: Server, base: str, name: str, videos: Path) -> None:
     setup, scene = CLIPS[name]
     frame = size_for(name)
     ctx = browser.new_context(viewport=frame)
+    if name in KEYED:
+        install_key(ctx)
     setup(ctx.new_page(), base)
     state = ctx.storage_state()
     ctx.close()
@@ -318,7 +459,10 @@ def record(browser, server: Server, base: str, name: str, videos: Path) -> None:
         ctx = browser.new_context(
             viewport=frame, color_scheme=theme, storage_state=state, record_video_dir=str(videos), record_video_size=frame
         )
+        if name in KEYED:
+            install_key(ctx)
         # The recording starts with the page.
+        MARKS.clear()
         started = time.time()
         page = ctx.new_page()
         loaded = scene(page, base, OUT / f"{name}{suffix}.jpg") - started + LOAD_MARGIN
@@ -329,14 +473,26 @@ def record(browser, server: Server, base: str, name: str, videos: Path) -> None:
         encode(raw, target, loaded)
         size = target.stat().st_size
         print(f"{target.name} {seconds:.1f} s from the loaded page at {loaded:.1f} s, {size / 1048576:.2f} MB")
-        if not 8 <= seconds <= 15:
-            print(f"  warning: {target.name} runs {seconds:.1f} s, outside 8 to 15 s")
-        if size > 1.5 * 1048576:
-            print(f"  warning: {target.name} is over 1.5 MB")
+        if not 20 <= seconds <= 35:
+            print(f"  warning: {target.name} runs {seconds:.1f} s, outside 20 to 35 s")
+        if size > 4 * 1048576:
+            print(f"  warning: {target.name} is over 4 MB")
+        if MARKS:
+            starts = [max(0.0, round(t - started - loaded, 1)) for t in MARKS]
+            starts[0] = 0.0
+            write_chapters(name, theme, starts)
+            print(f"  chapters {starts}")
     if name in COLD_TAKES:
         # Back to the data the later clips build on.
         server.stop()
         server.start(snapshot)
+
+
+def write_chapters(name: str, theme: str, starts: list[float]) -> None:
+    """Merge one clip's chapter starts for one theme into clipChapters.json."""
+    data = json.loads(CHAPTERS_FILE.read_text(encoding="utf-8")) if CHAPTERS_FILE.exists() else {}
+    data.setdefault(name, {})[theme] = starts
+    CHAPTERS_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def encode(raw: Path, target: Path, start: float) -> None:

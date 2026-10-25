@@ -141,7 +141,7 @@ knowledge. It has:
 - a real finding from the scanned notes sample: 0 of 8 questions found with Docling's OCR
   off, 8 of 8 with it on (from [Lessons learned](lessons-learned.md));
 - **From your files to a project you own**: four tabs, Build, Evaluate, Compare and Take it
-  home. The first three play a short clip of the page; Take it home shows what the zip holds.
+  home. The first three play a short clip of the page, with a chip for each scene to jump to it; Take it home shows what the zip holds.
   The arrow keys, Home and End move between the tabs;
 - **Start from what you have**: a sample, your own files, or a template. Your own files
   also takes a link: paste it and press **Add**, and Build opens on the page it fetched. A

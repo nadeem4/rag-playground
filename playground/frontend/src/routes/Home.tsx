@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils"
 import { useDocument } from "@/state/document"
 import { defaultSample } from "@/state/starter"
 
+import chapterTimes from "./clipChapters.json"
+
 /**
  * Home: the front page, for developers building search over their own
  * knowledge. The hero says what they leave with (a Pandion project) beside a
@@ -39,6 +41,8 @@ interface Step {
   name: string
   what: string
   clip?: { src: string; srcDark: string; poster: string; posterDark: string; label: string; caption: string }
+  /** One label per scene of the clip, in order; times come from clipChapters.json. */
+  chapters?: string[]
   lead?: string
   note: string
 }
@@ -47,48 +51,51 @@ const STEPS: Step[] = [
   {
     id: "build",
     name: "Build",
-    what: "Parse, clean, chunk and index. Every step card shows its output.",
+    what: "Start from a template, add documents, ask, and see what the answer rests on.",
     clip: {
       src: "/clips/build.webm",
       srcDark: "/clips/build-dark.webm",
       poster: "/clips/build.jpg",
       posterDark: "/clips/build-dark.jpg",
-      label: "Clip: building the index and asking a question on Build",
-      caption: "Build the index, ask, and watch the rerank",
+      label: "Clip: starting from a template, adding a document and asking questions on Build",
+      caption: "Build from a template, ask, and see what the documents do not cover",
     },
-    lead: "On the sample:",
+    chapters: ["Start from a template", "Add a document", "Watch every step", "Search, then Chat", "Not in the documents"],
+    lead: "Every step shows its output:",
     // No block count: Docling's count differs between machines (Linux is the source of truth).
-    note: "the Parse card shows every block Docling found; the Chunk card shows every piece and where it was cut.",
+    note: "Ask can Search or Chat, and an answer marks what the documents do not cover.",
   },
   {
     id: "evaluate",
     name: "Evaluate",
-    what: "Questions you know the answers to. Bring your own, or have a model write them.",
+    what: "Model-written questions you review, a score, and one setting changed.",
     clip: {
       src: "/clips/evaluate.webm",
       srcDark: "/clips/evaluate-dark.webm",
       poster: "/clips/evaluate.jpg",
       posterDark: "/clips/evaluate-dark.jpg",
-      label: "Clip: scoring the pipeline and opening a miss on Evaluate",
-      caption: "Run the questions, change Parse, open a miss",
+      label: "Clip: writing questions, scoring the pipeline and opening a miss on Evaluate",
+      caption: "Score, change Parse, compare with your best, open a miss",
     },
-    lead: "New:",
-    note: "Write questions for me reads the document and writes questions with their evidence, on your key. You keep, edit or drop each one.",
+    chapters: ["Write questions", "Run and score", "Change one setting", "Compare with your best", "Open a miss"],
+    lead: "In the clip:",
+    note: "Docling finds 4 of 7, Fast text finds 5 of 7, and the run is marked New best. You keep, edit or drop each written question.",
   },
   {
     id: "compare",
     name: "Compare",
-    what: "Recipes side by side: found, time, tokens and cost.",
+    what: "Three rerankers on one question, side by side: found, time and cost.",
     clip: {
       src: "/clips/compare.webm",
       srcDark: "/clips/compare-dark.webm",
       poster: "/clips/compare.jpg",
       posterDark: "/clips/compare-dark.jpg",
       label: "Clip: running three recipes on Compare and reading what changed",
-      caption: "Run three recipes and read what changed",
+      caption: "Three rerankers, one question: who finds the answer, and at what cost",
     },
-    lead: "Fair numbers:",
-    note: "time, tokens and cost count only the step you changed and the steps after it, so the run order never decides the winner.",
+    chapters: ["Pick three recipes", "Run them", "Read found, time and cost", "See what changed"],
+    lead: "In the clip:",
+    note: "the LLM reranker puts the answer 1st for 2.1 s and $0.0015, MMR misses it, and the cross-encoder puts it 4th. Time, tokens and cost count only the step you changed and the steps after it.",
   },
   {
     id: "home",
@@ -97,6 +104,12 @@ const STEPS: Step[] = [
     note: "The same settings you used here, your questions and the scores to beat. Never your key or your documents.",
   },
 ]
+
+/** Pairs a step's labels with the recorded start times of each scene. */
+function chaptersOf(step: Step) {
+  const times = (chapterTimes as Record<string, { light: number[]; dark: number[] }>)[step.id]
+  return step.chapters?.map((label, i) => ({ label, at: { light: times.light[i], dark: times.dark[i] } }))
+}
 
 const ZIP_FILES = ["pipeline.yaml", "run.py", "questions.json", "requirements.txt", "README.md", "docs/"]
 
@@ -262,7 +275,7 @@ function Loop() {
       <div id="home-step-panel" role="tabpanel" aria-labelledby={`home-tab-${step.id}`} className="grid min-w-0 gap-3">
         {step.clip ? (
           <>
-            <Clip key={step.id} {...step.clip} />
+            <Clip key={step.id} {...step.clip} chapters={chaptersOf(step)} />
             <p className="m-0 text-sm">
               <b className="font-semibold">{step.lead}</b> {step.note}
             </p>

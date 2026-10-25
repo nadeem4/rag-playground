@@ -54,17 +54,20 @@ pass; each recorded take reads that same run (the recorder answers the
 and Save without a second model call. Steps and scores come from the cache.
 It sends the key like `build`.
 
-`compare` is four chapters over two documents (the chunking primer and the
-weather station manual): pick three recipes for the Retrieve step (Hybrid, Dense
-and BM25, one taken off and added back from the Add card), run them, read the
-answer's place and each recipe's time, tokens and cost, and see what changed
-(the finding sentence, then the lists). Its setup builds the index, so Parse,
-Clean, Chunk and Index come from the cache. Each take starts a fresh server on a
-copy of the data as setup left it, so the three searches really run on camera in
-both themes. A fresh server has no models loaded, so the scene first presses the
-sample the way a visit does (which starts the model warm-up) and waits
-`MODEL_WARMUP_S`; the recording is cut to start after that. Nothing here calls a
-model service, so it sends no key.
+`compare` is four chapters over one document (the chunking primer) and the Rerank step: pick three
+recipes (the LLM reranker, MMR and the cross-encoder; one taken off and added back from the Add
+card), run them, read where each puts the answer and each recipe's time, tokens and cost, and see
+what changed (the finding sentence, then the lists). The question is the sample's "Which set wanted
+each item kept whole, however long?", which uses words the document never uses: the LLM reranker
+puts the answer 1st, the cross-encoder 4th and MMR does not return it. Only the LLM recipe calls a
+model, so only it shows tokens and cost; the clip sends the key like `build`. Rerank is not on the
+step picker until the pipeline has a reranker, so the setup picks the LLM reranker on Build and the
+scene opens `/compare?node=rerank_1`. Its setup builds the index but runs no search or comparison,
+so the reranking is not cached and its time, tokens and cost are measured on camera. Each take starts
+a fresh server on a copy of the data as setup left it, so the searches really run on camera in both
+themes. A fresh server has no models loaded, so the scene first presses the sample the way a visit
+does (which starts the model warm-up) and waits `MODEL_WARMUP_S`; the recording is cut to start after
+that. Each take makes one live model call (about $0.0015).
 """
 
 from __future__ import annotations
@@ -112,7 +115,7 @@ MARKS: list[float] = []
 #: True during a clip's setup warm pass: the scene runs without its pauses and without a poster.
 WARM = False
 #: Clips whose scenes call the model, so their browser sends a key.
-KEYED = {"build", "evaluate"}
+KEYED = {"build", "compare", "evaluate"}
 
 
 def mark() -> None:
@@ -459,15 +462,18 @@ def evaluate_scene(page: Page, base: str, poster: Path | None) -> float:
 # ---------------------------------------------------------------- compare --
 
 
+#: The sample question that uses words the document never uses, and the reranker the clip compares from.
+COMPARE_Q = "Which set wanted each item kept whole, however long?"
+
+
 def compare_setup(page: Page, base: str) -> None:
-    """Two documents and a built index, so the recipes' searches are what runs on camera."""
+    """The primer's index, the missed question asked on Build and the LLM reranker chosen, with nothing run past the index."""
     pick_sample(page, base, None)
-    page.get_by_role("button", name=re.compile("^Add a document")).click()
-    page.get_by_label(re.compile("^Add a document")).get_by_text("A weather station manual").click()
-    page.wait_for_timeout(2500)
     page.get_by_role("button", name="Build the index").click()
     page.get_by_text("Index ready", exact=False).wait_for(timeout=900_000)
-    page.wait_for_timeout(500)
+    page.get_by_role("button", name=COMPARE_Q).click()
+    pick_reranker(page, "LLM")
+    page.wait_for_timeout(1000)
 
 
 def run_recipes(page: Page) -> None:
@@ -491,39 +497,34 @@ def compare_scene(page: Page, base: str, poster: Path) -> float:
     # A fresh server has no models loaded yet; a visitor's earlier sample press has started them.
     page.request.post(base + "/api/sources/sample", data={})
     page.wait_for_timeout(MODEL_WARMUP_S * 1000)
-    page.goto(base + "/compare")
+    page.goto(base + "/compare?node=rerank_1")
     page.get_by_role("button", name="Run 3 recipes").wait_for()
     page.wait_for_load_state("networkidle")
     loaded = time.time()
     pause(page, 800)
 
-    # 1. Pick three recipes: search the same pieces three ways. One is taken off and added again from the Add card.
+    # 1. Pick three recipes: three ways to reorder the same candidates. One is taken off and added again from the Add card.
     mark()
-    page.get_by_role("button", name="Retrieve", exact=True).click()
-    pause(page, 2000)
+    pause(page, 2200)
     page.get_by_role("button", name="Remove recipe 3").click()
     pause(page, 1500)
-    page.get_by_label("Add a recipe").get_by_role("button", name=re.compile("^BM25")).click()
+    page.get_by_label("Add a recipe").get_by_role("button", name=re.compile("^Cross-encoder")).click()
     pause(page, 2200)
 
-    # 2. Run over all documents: both are searched on camera, each recipe filling in.
+    # 2. Run them: the search runs, then each recipe fills in; the LLM one takes a moment.
     mark()
     run_recipes(page)
     pause(page, 4500)
 
-    # 3. Read the table: the answer's place, then the time, tokens and cost under each recipe's name.
+    # 3. Read found, time and cost: the finding sentence, then each recipe's answer place, time, tokens and cost.
     mark()
-    scroll_page(page, 230)
+    page.screenshot(path=poster, type="jpeg", quality=80)
     pause(page, 5500)
 
-    # 4. See what changed: the finding sentence, then the lists, where BM25 puts different pieces second.
+    # 4. See what changed: the lists, where the LLM puts the answer 1st and MMR leaves it out.
     mark()
-    scroll_page(page, 0)
-    pause(page, 1500)
-    page.screenshot(path=poster, type="jpeg", quality=80)
-    pause(page, 1500)
     scroll_page(page, 560)
-    pause(page, 3500)
+    pause(page, 4500)
     return loaded
 
 

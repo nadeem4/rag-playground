@@ -377,7 +377,7 @@ uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_cli
   dark. Clips are 1280x800, except Build at 1440x900 with the Ask panel docked open at
   698 px so the slope shows.
 - Build builds the index, asks with the cross-encoder and ends on the rerank slope.
-  Compare shows the setup cards, runs three recipes and ends on the finding sentence.
+  Compare opens the Rerank step on the primer, runs three rerankers (LLM, MMR and cross-encoder) and ends on the lists, where they differ in found and the LLM one shows tokens and cost.
   Evaluate scores the pipeline, scores it again with Parse set to Fast text and opens a
   miss.
 - Each clip is cut to start once the page has loaded and is encoded to WebM VP9 with the

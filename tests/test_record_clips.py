@@ -116,3 +116,7 @@ def test_waits_for_the_server_on_api_v2_health(monkeypatch, tmp_path):
     port = _free_port()
     _mod.start_server(port, tmp_path)
     assert asked == [f"http://127.0.0.1:{port}/api/v2/health"]
+
+
+def test_compare_sends_the_key_because_its_llm_recipe_calls_a_model():
+    assert "compare" in _mod.KEYED

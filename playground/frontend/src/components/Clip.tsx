@@ -44,6 +44,7 @@ export function Clip({
   posterDark,
   label,
   caption,
+  chapters,
 }: {
   src: string
   srcDark?: string
@@ -51,6 +52,8 @@ export function Clip({
   posterDark?: string
   label: string
   caption: string
+  /** Chips under the clip that jump to a part; `at` is the start second in the light and the dark file. */
+  chapters?: { label: string; at: { light: number; dark: number } }[]
 }) {
   const video = useRef<HTMLVideoElement>(null)
   const [reduce] = useState(reducedMotion)
@@ -62,6 +65,22 @@ export function Clip({
   // System with a dark file: let the browser pick by media query.
   const byMedia = theme === "system" && Boolean(srcDark)
   const file = dark && srcDark ? srcDark : src
+
+  const starts = (chapters ?? []).map((c) => (dark ? c.at.dark : c.at.light))
+  const [time, setTime] = useState(0)
+  let current = 0
+  starts.forEach((t, i) => {
+    if (t <= time) current = i
+  })
+
+  const jump = (t: number) => {
+    const v = video.current
+    if (!v) return
+    v.currentTime = t
+    setTime(t)
+    void v.play()?.catch(() => setPlaying(false))
+    setPlaying(true)
+  }
 
   const toggle = () => {
     const v = video.current
@@ -93,6 +112,7 @@ export function Clip({
           preload={reduce ? "none" : "auto"}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
+          onTimeUpdate={chapters?.length ? (e) => setTime(e.currentTarget.currentTime) : undefined}
           className="block size-full object-cover object-top-left"
         >
           {byMedia ? (
@@ -114,6 +134,21 @@ export function Clip({
       <figcaption className="text-sm font-semibold text-fg-muted md:absolute md:bottom-3 md:left-3 md:right-[68px] md:w-fit md:max-w-full md:rounded-control md:border md:border-hairline md:bg-surface-raised/90 md:px-3 md:py-1 md:text-fg">
         {caption}
       </figcaption>
+      {chapters?.length ? (
+        <div role="group" aria-label="Jump to a part of the clip" className="mt-2 flex flex-wrap gap-2">
+          {chapters.map((c, i) => (
+            <button
+              key={c.label}
+              type="button"
+              aria-pressed={i === current}
+              onClick={() => jump(starts[i])}
+              className="min-h-[36px] cursor-pointer rounded-full border border-hairline bg-surface-raised px-3 text-sm text-fg hover:bg-surface-hover aria-pressed:border-primary aria-pressed:bg-accent-wash aria-pressed:font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring) pointer-coarse:min-h-[44px]"
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </figure>
   )
 }

@@ -8,6 +8,7 @@ import { documentOf, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, storedGraphJson } from "@/state/graph"
 import { resetPipelinesForTests } from "@/state/pipelines"
 
+import chapterTimes from "./clipChapters.json"
 import { Home } from "./Home"
 
 const registry = liveRegistry as unknown as Registry
@@ -197,9 +198,26 @@ describe("Home's four steps", () => {
     fireEvent.click(tabs()[1])
     expect(tabs()[1].getAttribute("aria-selected")).toBe("true")
     expect(sources()).toEqual(["/clips/evaluate-dark.webm", "/clips/evaluate.webm"])
-    expect(within(panel()).getByText(/Write questions for me reads the document/)).toBeTruthy()
+    expect(within(panel()).getByText(/Docling finds 4 of 7, Fast text finds 5 of 7/)).toBeTruthy()
     fireEvent.click(tabs()[2])
     expect(sources()).toEqual(["/clips/compare-dark.webm", "/clips/compare.webm"])
+  })
+
+  it("show a chapter chip for every scene under each clip, matching the recorded times", () => {
+    const labels = {
+      build: ["Start from a template", "Add a document", "Watch every step", "Search, then Chat", "Not in the documents"],
+      evaluate: ["Write questions", "Run and score", "Change one setting", "Compare with your best", "Open a miss"],
+      compare: ["Pick three recipes", "Run them", "Read found, time and cost", "See what changed"],
+    }
+    render(<Home navigate={vi.fn()} />)
+    ;(["build", "evaluate", "compare"] as const).forEach((name, i) => {
+      fireEvent.click(tabs()[i])
+      const chips = within(within(panel()).getByRole("group", { name: "Jump to a part of the clip" })).getAllByRole("button")
+      expect(chips.map((c) => c.textContent), name).toEqual(labels[name])
+      // A re-record that changes the scenes must change the labels too.
+      expect(chapterTimes[name].light, name).toHaveLength(labels[name].length)
+      expect(chapterTimes[name].dark, name).toHaveLength(labels[name].length)
+    })
   })
 
   it("moves with the arrow keys, Home and End, wrapping round, and focuses the new tab", () => {

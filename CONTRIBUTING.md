@@ -374,16 +374,26 @@ uv run --with playwright==1.55.0 --with imageio-ffmpeg python scripts/record_cli
   for chromium-1187.
 - Each clip has a setup pass that is not recorded, which loads the sample and runs every
   step once, then a recorded pass on warm results, once in the light theme and once in the
-  dark. Clips are 1280x800, except Build at 1440x900 with the Ask panel docked open at
-  698 px so the slope shows.
-- Build builds the index, asks with the cross-encoder and ends on the rerank slope.
-  Compare shows the setup cards, runs three recipes and ends on the finding sentence.
-  Evaluate scores the pipeline, scores it again with Parse set to Fast text and opens a
-  miss.
+  dark. Compare's recorded pass runs its recipes cold, so the run shows. Clips are
+  1280x800, except Build at 1440x900 with the Ask panel docked open.
+- All three clips call the model, so they need `ANTHROPIC_API_KEY`, from the environment or
+  the repo's `.env`. Demo mode ignores the server's key, so the script sends it with every
+  call as the `x-anthropic-api-key` header, as the key panel would. It never prints it.
+- Build starts from the Balanced template on Manuals and guides, adds the weather station
+  manual, shows each step card, then asks in Search and in Chat and ends on an answer that
+  marks what the documents do not cover.
+  Evaluate writes questions, runs and scores them, changes one setting, compares with the
+  best run and opens a miss.
+  Compare opens the Rerank step on the primer, runs three rerankers (LLM, MMR and
+  cross-encoder) and ends on the lists, where they differ in found and the LLM one shows
+  tokens and cost.
+- The script calls `mark()` at the start of each part and writes those seconds, per clip and
+  theme, to `playground/frontend/src/routes/clipChapters.json`. Home zips them with its chip
+  labels, and a test checks the counts match, so change both together.
 - Each clip is cut to start once the page has loaded and is encoded to WebM VP9 with the
   ffmpeg that `imageio-ffmpeg` ships, so no system ffmpeg is needed. The pauses in the
-  script set the length, 8 to 15 seconds. It prints each clip's length and size, and warns
-  above 1.5 MB. The poster is a screenshot at the clip's telling moment.
+  script set the length, 20 to 35 seconds. It prints each clip's length and size, and warns
+  above 4 MB. The poster is a screenshot at the clip's telling moment.
 
 ## Regenerating the fixtures and the lesson recordings
 

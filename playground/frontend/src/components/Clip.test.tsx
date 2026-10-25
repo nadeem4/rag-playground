@@ -195,3 +195,91 @@ describe("Clip", () => {
     expect(screen.getByRole("button", { name: "Pause clip" })).toBeTruthy()
   })
 })
+
+describe("Clip chapters", () => {
+  const chapters = [
+    { label: "Build", at: { light: 0, dark: 0.5 } },
+    { label: "Ask", at: { light: 10, dark: 10.4 } },
+    { label: "Compare", at: { light: 20, dark: 20.2 } },
+  ]
+  const withChapters = () =>
+    render(
+      <Clip
+        src="/clips/tour.webm"
+        srcDark="/clips/tour-dark.webm"
+        poster="/clips/tour.jpg"
+        label={LABEL}
+        caption="Tour"
+        chapters={chapters}
+      />,
+    )
+  const darkSystem = (dark: boolean) =>
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({ matches: dark && q === "(prefers-color-scheme: dark)", media: q, addEventListener() {}, removeEventListener() {} })),
+    )
+  afterEach(() => {
+    delete document.documentElement.dataset.theme
+  })
+
+  it("renders no group without chapters", () => {
+    reduceMotion(false)
+    clip()
+    expect(screen.queryByRole("group")).toBeNull()
+  })
+
+  it("seeks to the light start and plays when a chip is clicked", () => {
+    darkSystem(false)
+    withChapters()
+    expect(screen.getByRole("group", { name: "Jump to a part of the clip" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+    expect(video().currentTime).toBe(10)
+    expect(play).toHaveBeenCalled()
+  })
+
+  it("seeks to the dark start when the dark file plays", () => {
+    darkSystem(true)
+    withChapters()
+    fireEvent.click(screen.getByRole("button", { name: "Compare" }))
+    expect(video().currentTime).toBe(20.2)
+  })
+
+  it("marks the part that is playing from timeupdate", () => {
+    darkSystem(false)
+    withChapters()
+    const pressed = () => screen.getAllByRole("button", { pressed: true }).map((b) => b.textContent)
+    expect(pressed()).toEqual(["Build"])
+    video().currentTime = 12
+    act(() => {
+      video().dispatchEvent(new Event("timeupdate"))
+    })
+    expect(pressed()).toEqual(["Ask"])
+  })
+
+  it("anchors the caption to the clip, not over the chips", () => {
+    darkSystem(false)
+    withChapters()
+    const anchor = screen.getByText("Tour").parentElement!
+    expect(anchor.className.split(/\s+/)).toContain("relative")
+    expect(anchor.contains(screen.getByRole("group"))).toBe(false)
+  })
+
+  it("seeks to the light start in dark when there is no dark file", () => {
+    darkSystem(true)
+    render(<Clip src="/clips/tour.webm" poster="/clips/tour.jpg" label={LABEL} caption="Tour" chapters={chapters} />)
+    fireEvent.click(screen.getByRole("button", { name: "Compare" }))
+    expect(video().currentTime).toBe(20)
+  })
+
+  it("marks the first part again when the theme switch loads the other file", async () => {
+    darkSystem(false)
+    withChapters()
+    video().currentTime = 12
+    act(() => {
+      video().dispatchEvent(new Event("timeupdate"))
+    })
+    document.documentElement.dataset.theme = "dark"
+    await act(async () => {})
+    expect(screen.getAllByRole("button", { pressed: true }).map((b) => b.textContent)).toEqual(["Build"])
+  })
+})

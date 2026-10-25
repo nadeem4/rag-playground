@@ -46,6 +46,14 @@ The setup pass runs the whole scene once, without its pauses, in a second
 browser context, warming the step cache and the Chat answers so the recorded
 pass reads them cached.
 
+`evaluate` is five chapters: Write questions for me, run and score, change the
+Parse setting (Fast text), Compare the two (this run against the best), open a
+missed question's trace. The model writes the questions in the setup's warm
+pass; each recorded take reads that same run (the recorder answers the
+`questions/generate` request with its run id), so it shows the review, a drop
+and Save without a second model call. Steps and scores come from the cache.
+It sends the key like `build`.
+
 `compare` shows Compare's setup cards, presses Run 3 recipes, lets the rows
 fill in and ends on the finding sentence. Its setup runs only Parse and Clean,
 and each take starts a fresh server on a copy of the data as setup left it,
@@ -98,7 +106,7 @@ MARKS: list[float] = []
 #: True during a clip's setup warm pass: the scene runs without its pauses and without a poster.
 WARM = False
 #: Clips whose scenes call the model, so their browser sends a key.
-KEYED = {"build"}
+KEYED = {"build", "evaluate"}
 
 
 def mark() -> None:
@@ -188,10 +196,13 @@ def pick_sample(page: Page, base: str, title: str | None) -> None:
     page.wait_for_url("**/build*")
     page.get_by_role("button", name="Build the index").wait_for()
     if title:
-        # The document is the pipeline's: Change sits on its Documents line.
+        # Build's Document card only adds; Evaluate's Documents line has Change.
+        page.goto(base + "/evaluate")
         page.get_by_role("button", name="Change the document", exact=False).click()
         page.get_by_text(title, exact=True).click()
         page.wait_for_timeout(1500)
+        page.goto(base + "/build")
+        page.get_by_role("button", name="Build the index").wait_for()
 
 
 def evaluate(page: Page) -> None:
@@ -331,7 +342,16 @@ def build_scene(page: Page, base: str, poster: Path | None) -> float:
 # --------------------------------------------------------------- evaluate --
 
 
+#: How many questions the Evaluate clip asks the model to write.
+WRITE_COUNT = 8
+#: The run id of the questions the warm pass wrote: the recorded pass reads that
+#: run again instead of paying for a second model call.
+WRITTEN_RUN: list[str] = []
+
+
 def evaluate_setup(page: Page, base: str) -> None:
+    """Make the Fast text pipeline, then run the whole scene once, without pauses, in another context."""
+    global WARM
     pick_sample(page, base, "Two-column report")
     page.get_by_role("button", name="Parse settings").click()
     pick(page, "Transform", "Fast text")
@@ -344,28 +364,84 @@ def evaluate_setup(page: Page, base: str) -> None:
     page.wait_for_timeout(300)
     pick(page, "Transform", "Docling")
     page.wait_for_timeout(500)
-    page.goto(base + "/evaluate")
-    evaluate(page)
-    pick(page, "Pipeline", FAST_TEXT)
-    evaluate(page)
+    # The server keeps the written questions and every step result; this context keeps no best run.
+    warm = page.context.browser.new_context(viewport=size_for("evaluate"), storage_state=page.context.storage_state())
+    install_key(warm)
+    WARM = True
+    try:
+        evaluate_scene(warm.new_page(), base, None)
+    finally:
+        WARM = False
+        MARKS.clear()
+        warm.close()
 
 
-def evaluate_scene(page: Page, base: str, poster: Path) -> float:
+def evaluate_scene(page: Page, base: str, poster: Path | None) -> float:
+    if not WARM and WRITTEN_RUN:
+        # The model's questions are the warm pass's: this take reads the same run.
+        page.route("**/questions/generate", lambda route: route.fulfill(json={"run_id": WRITTEN_RUN[0]}))
+    elif WARM:
+
+        def remember(response) -> None:
+            if response.url.endswith("/questions/generate") and response.ok:
+                WRITTEN_RUN[:] = [response.json()["run_id"]]
+
+        page.on("response", remember)
     page.goto(base + "/evaluate")
     page.get_by_role("button", name="Evaluate", exact=True).wait_for()
     page.wait_for_load_state("networkidle")
     loaded = time.time()
-    page.wait_for_timeout(1200)
+    pause(page, 800)
+
+    # 1. Write questions for me: the model writes, the visitor drops one and keeps the rest.
+    mark()
+    page.get_by_text("Use your own questions", exact=True).click()
+    pause(page, 900)
+    page.get_by_role("button", name="Write questions for me").click()
+    pause(page, 1200)
+    page.get_by_role("spinbutton", name="Questions").fill(str(WRITE_COUNT))
+    page.get_by_role("button", name=re.compile(r"^Write \d+ questions?")).click()
+    review = page.get_by_test_id("review-summary")
+    review.wait_for(timeout=600_000)
+    pause(page, 1800)
+    page.get_by_test_id("review-list").first.get_by_role("button", name="Drop").nth(1).click()
+    pause(page, 1500)
+    page.get_by_role("button", name=re.compile(r"^Save \d+ questions?")).click()
+    page.get_by_role("button", name="Evaluate", exact=True).wait_for()
+    pause(page, 1000)
+
+    # 2. Run and score: found N of M, and the first run is the best so far.
+    mark()
     evaluate(page)
-    page.wait_for_timeout(1800)
+    pause(page, 2800)
+
+    # 3. Change one setting: Fast text instead of Docling for Parse, then run again.
+    mark()
     pick(page, "Pipeline", FAST_TEXT)
-    page.wait_for_timeout(900)
+    pause(page, 1200)
     evaluate(page)
-    page.wait_for_timeout(1800)
-    # The poster keeps the score in view; the clip goes on to the first miss.
-    page.screenshot(path=poster, type="jpeg", quality=80)
+    pause(page, 1500)
+
+    # 4. Compare with your best, in place: which questions moved and which way.
+    mark()
+    compare = page.get_by_role("button", name="Compare the two")
+    smooth_to(compare, "center")
+    pause(page, 800)
+    compare.click()
+    page.get_by_text("This run", exact=True).first.wait_for(timeout=600_000)
+    pause(page, 1000)
+    if poster:
+        page.screenshot(path=poster, type="jpeg", quality=80)
+    pause(page, 2800)
+
+    # 5. Open a miss: the trace shows the step where the right piece was lost.
+    mark()
+    # The badge scrolls to the question; its Why did this miss? link opens the trace.
     page.get_by_role("button", name=re.compile(r"^Question \d+, missed")).first.click()
-    page.wait_for_timeout(2400)
+    pause(page, 1200)
+    page.get_by_role("button", name="Why did this miss?").first.click()
+    page.get_by_test_id("detail-trace").wait_for()
+    pause(page, 4200)
     return loaded
 
 

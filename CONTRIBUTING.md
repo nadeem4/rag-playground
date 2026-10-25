@@ -97,6 +97,10 @@ gh workflow run "Template parity" -f ref=feat/some-branch
 TEMPLATE_PARITY=all uv run pytest -m models tests/integration/test_template_parity.py
 ```
 
+The Home terminal test (`tests/integration/test_home_terminal.py`) replays the `pandion init`
+run shown on the Home page and checks its two result lines, so Linux confirms the figures.
+It runs under `-m models` in Release checks.
+
 To check the `pandion` wheel the way a user would install it, run
 `uv run python checks/pandion-install/run_check.py`. It installs the built wheel in new
 environments, with and without extras, and tests it there. Add `--with-models` to also

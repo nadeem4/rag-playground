@@ -54,11 +54,17 @@ pass; each recorded take reads that same run (the recorder answers the
 and Save without a second model call. Steps and scores come from the cache.
 It sends the key like `build`.
 
-`compare` shows Compare's setup cards, presses Run 3 recipes, lets the rows
-fill in and ends on the finding sentence. Its setup runs only Parse and Clean,
-and each take starts a fresh server on a copy of the data as setup left it,
-so the three chunk recipes really run on camera in both themes while the
-shared steps come from the cache.
+`compare` is four chapters over two documents (the chunking primer and the
+weather station manual): pick three recipes for the Retrieve step (Hybrid, Dense
+and BM25, one taken off and added back from the Add card), run them, read the
+answer's place and each recipe's time, tokens and cost, and see what changed
+(the finding sentence, then the lists). Its setup builds the index, so Parse,
+Clean, Chunk and Index come from the cache. Each take starts a fresh server on a
+copy of the data as setup left it, so the three searches really run on camera in
+both themes. A fresh server has no models loaded, so the scene first presses the
+sample the way a visit does (which starts the model warm-up) and waits
+`MODEL_WARMUP_S`; the recording is cut to start after that. Nothing here calls a
+model service, so it sends no key.
 """
 
 from __future__ import annotations
@@ -263,6 +269,11 @@ def smooth_to(loc, block: str = "start") -> None:
     loc.evaluate(f"el => el.scrollIntoView({{ behavior: 'smooth', block: '{block}' }})")
 
 
+def scroll_page(page: Page, top: int) -> None:
+    """Scroll the page's own scroller to `top` px, smoothly (the sticky tools sit over its first 80 px)."""
+    page.evaluate("t => document.querySelector('main > div').scrollTo({ top: t, behavior: 'smooth' })", top)
+
+
 def build_scene(page: Page, base: str, poster: Path | None) -> float:
     page.goto(base + "/build")
     build = page.get_by_role("button", name="Build the index")
@@ -449,12 +460,14 @@ def evaluate_scene(page: Page, base: str, poster: Path | None) -> float:
 
 
 def compare_setup(page: Page, base: str) -> None:
-    """Run only the shared steps, Parse and Clean, so the recipes run on camera."""
+    """Two documents and a built index, so the recipes' searches are what runs on camera."""
     pick_sample(page, base, None)
-    page.get_by_role("button", name="Clean settings").click()
-    clean = page.locator('[data-node-id^="clean"]')
-    clean.get_by_role("button", name="Run", exact=True).click()
-    clean.get_by_test_id("run-result").wait_for(timeout=600_000)
+    page.get_by_role("button", name=re.compile("^Add a document")).click()
+    page.get_by_label(re.compile("^Add a document")).get_by_text("A weather station manual").click()
+    page.wait_for_timeout(2500)
+    page.get_by_role("button", name="Build the index").click()
+    page.get_by_text("Index ready", exact=False).wait_for(timeout=900_000)
+    page.wait_for_timeout(500)
 
 
 def run_recipes(page: Page) -> None:
@@ -469,18 +482,48 @@ def run_recipes(page: Page) -> None:
     page.get_by_test_id("compare-finding").wait_for()
 
 
+#: How long a cold server gets to load its models before a take, as the Try a sample press gives it
+#: on a real visit. The recording is cut to start after it.
+MODEL_WARMUP_S = 45
+
+
 def compare_scene(page: Page, base: str, poster: Path) -> float:
+    # A fresh server has no models loaded yet; a visitor's earlier sample press has started them.
+    page.request.post(base + "/api/sources/sample", data={})
+    page.wait_for_timeout(MODEL_WARMUP_S * 1000)
     page.goto(base + "/compare")
     page.get_by_role("button", name="Run 3 recipes").wait_for()
     page.wait_for_load_state("networkidle")
     loaded = time.time()
-    # The setup cards first: what each recipe will do.
-    page.wait_for_timeout(2500)
+    pause(page, 800)
+
+    # 1. Pick three recipes: search the same pieces three ways. One is taken off and added again from the Add card.
+    mark()
+    page.get_by_role("button", name="Retrieve", exact=True).click()
+    pause(page, 2000)
+    page.get_by_role("button", name="Remove recipe 3").click()
+    pause(page, 1500)
+    page.get_by_label("Add a recipe").get_by_role("button", name=re.compile("^BM25")).click()
+    pause(page, 2200)
+
+    # 2. Run over all documents: both are searched on camera, each recipe filling in.
+    mark()
     run_recipes(page)
-    # Then the rows filled in, under the finding sentence.
-    page.wait_for_timeout(2500)
+    pause(page, 4500)
+
+    # 3. Read the table: the answer's place, then the time, tokens and cost under each recipe's name.
+    mark()
+    scroll_page(page, 230)
+    pause(page, 5500)
+
+    # 4. See what changed: the finding sentence, then the lists, where BM25 puts different pieces second.
+    mark()
+    scroll_page(page, 0)
+    pause(page, 1500)
     page.screenshot(path=poster, type="jpeg", quality=80)
-    page.wait_for_timeout(3500)
+    pause(page, 1500)
+    scroll_page(page, 560)
+    pause(page, 3500)
     return loaded
 
 

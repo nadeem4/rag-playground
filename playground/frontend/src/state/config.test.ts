@@ -64,6 +64,15 @@ describe("graphToConfig", () => {
     expect(p.question).toEqual({ text: "q", gold_answers: ["gold"] })
   })
 
+  it("leaves a query card's filters out of the rewrite step", () => {
+    const g = sampleGraph(R, DOC)
+    const llm = {
+      ...g,
+      nodes: g.nodes.map((n) => (n.stage === "query" ? { ...n, transform: "llm_rewrite", config: { text: "q", gold_answers: [], filters: null, style: "keywords" } } : n)),
+    }
+    expect(converted(llm).config.retrieve?.rewrite).toEqual({ use: "llm_rewrite", style: "keywords" })
+  })
+
   it("reads an old single gold_answer", () => {
     const g = sampleGraph(R, DOC)
     const old = { ...g, nodes: g.nodes.map((n) => (n.stage === "query" ? { ...n, config: { text: "q", gold_answer: "the gold" } } : n)) }

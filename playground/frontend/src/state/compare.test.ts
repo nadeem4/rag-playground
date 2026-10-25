@@ -473,6 +473,11 @@ describe("comparisons on /api/v2", () => {
     expect(block).toEqual([p.config.index.clean![0], { use: "dedupe_blocks", similarity: 0.5 }])
   })
 
+  it("leaves the question's settings out of a rewrite recipe's block", () => {
+    const config = { text: "q", gold_answers: ["g"], filters: null, style: "keywords" }
+    expect(variantBlock(node("retrieve"), { transform: "llm_rewrite", config }, working(), "rewrite")).toEqual({ use: "llm_rewrite", style: "keywords" })
+  })
+
   it("scores searches when the question's gold passages are known", () => {
     const req = compareRequest(working(["A chunk is a piece."]), node("retrieve"), [{ transform: "dense", config: { top_k: 5 } }, { transform: "bm25", config: { top_k: 5 } }], "retrieval")
     expect(req).toMatchObject({ stage: "search", questions: [{ id: "question", question: "What is a chunk?", gold_answers: ["A chunk is a piece."], tags: [] }] })

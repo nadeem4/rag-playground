@@ -137,7 +137,7 @@ def anthropic_key() -> str:
 
         key = dotenv_values(ROOT / ".env").get("ANTHROPIC_API_KEY")
     if not key:
-        raise SystemExit("the build clip needs ANTHROPIC_API_KEY, in the environment or in .env")
+        raise SystemExit("these clips need ANTHROPIC_API_KEY, in the environment or in .env")
     return key.strip()
 
 

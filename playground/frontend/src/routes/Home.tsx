@@ -95,7 +95,7 @@ const STEPS: Step[] = [
     },
     chapters: ["Pick three recipes", "Run them", "Read found, time and cost", "See what changed"],
     lead: "In the clip:",
-    note: "the LLM reranker puts the answer 1st for 2.1 s and $0.0015, MMR misses it, and the cross-encoder puts it 4th. Time, tokens and cost count only the step you changed and the steps after it.",
+    note: "the LLM reranker puts the answer 1st for a fraction of a cent, MMR misses it, and the cross-encoder puts it 4th. Time, tokens and cost count only the step you changed and the steps after it.",
   },
   {
     id: "home",

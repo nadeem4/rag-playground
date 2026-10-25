@@ -4,7 +4,7 @@ See why a RAG pipeline finds the answer, or misses it.
 
 [Live demo](https://rag.codewithnk.com) | [Docs](https://github.com/nadeem4/rag-playground/tree/main/docs) | [Pandion](docs/pandion.md) | [GitHub](https://github.com/nadeem4/rag-playground)
 
-![The Build page: the index pipeline on the left, the Ask panel docked on the right with the rerank slope](playground/frontend/public/clips/build.jpg)
+![The Build page: every step of the pipeline shows its output, with the Ask panel docked on the right](playground/frontend/public/clips/build.jpg)
 
 RAG Playground is two things:
 

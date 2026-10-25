@@ -280,11 +280,11 @@ Found 2026-10-21 in review of the several-documents Ask (PR #185); fixed the sam
 
 **What we learned.** With several documents, any field that says "where" must come from the piece itself, not from whichever document a step happened to read. Test with pieces from two documents, not one.
 
-### Every Rewrite recipe was refused on Compare
+### Every Rewrite step was refused on Build and Compare
 
 Found 2026-10-25 while comparing query rewrites; fixed the same day.
 
-**The problem.** Compare refused every Rewrite recipe. Pandion answered that the rewrite step must not set filters, even though the person had never touched a filter.
+**The problem.** Compare refused every Rewrite recipe, and Build refused an Ask whose query card used a model rewrite. Pandion answered that the rewrite step must not set filters, even though the person had never touched a filter.
 
 **Why it was broken.** The settings form fills each card from the defaults in its schema. The rewrite strategies carry a `filters` setting that defaults to nothing, so every Rewrite recipe held `filters: null`. Filters belong to the question and are set only with `where`. The code that built the rewrite step removed the question's text and gold answers, but not `filters`, so the empty setting was sent. Pandion refuses a rewrite step that has a `filters` key, even an empty one.
 

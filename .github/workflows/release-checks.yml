@@ -22,7 +22,8 @@ on:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.55.0 has no chromium for Ubuntu 26.04 (ubuntu-latest since Oct 2026).
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       # One fixed place for the Hugging Face models (Docling's layout model,

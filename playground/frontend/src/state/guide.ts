@@ -29,6 +29,10 @@ export const GUIDE_FIX = { chunk_size: 800, chunk_overlap: 80 }
 /** The dashed line in the Ask results, after the pieces the answer step reads. */
 export const GUIDE_LINE = "The answer step reads only the {shown} above this line."
 
+/** The Fix step's one rule, shown only when the answer rose; otherwise the neutral line. */
+export const GUIDE_RULE = "When an answer lives in one long sentence or table row, make the pieces bigger than it, or split by sentence."
+export const GUIDE_NEUTRAL = "One setting does not fix every miss. Try another chunk size, or leave the guided run to ask your own question."
+
 export const GUIDE_INVITE = {
   heading: "New to RAG? Take the guided run.",
   body: "Build a pipeline step by step, find where an answer gets lost, and fix it. It takes about five minutes and needs no API key.",

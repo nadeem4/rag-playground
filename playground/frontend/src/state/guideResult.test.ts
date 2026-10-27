@@ -5,7 +5,7 @@ import index from "@/api/fixtures/index.lancedb.json"
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 
-import { askResultLine, fixResultLine, stepResultLine } from "./guideResult"
+import { askResultLine, fixImproved, fixResultLine, stepResultLine } from "./guideResult"
 
 const doc = { filename: "report.pdf", pages: 3 }
 const cardText = (...a: Parameters<typeof outcomeFor>) => outcomeText(outcomeFor(...a)!)
@@ -76,5 +76,30 @@ describe("fixResultLine", () => {
 
   it("names the chunk when given", () => {
     expect(fixResultLine({ before: { rank: 11 }, after: { rank: 1 }, chunk: "chunk-7" })).toContain("chunk-7")
+  })
+
+  it("says the rank did not change, without claiming a move", () => {
+    const s = fixResultLine({ before: { rank: 3 }, after: { rank: 3 }, chunk: null })
+    expect(s).toContain("3rd")
+    expect(s).not.toMatch(/moved/)
+    expect(s).toMatch(/same|still/i)
+  })
+
+  it("says the answer fell when the rank is worse", () => {
+    const s = fixResultLine({ before: { rank: 2 }, after: { rank: 6 }, chunk: null })
+    expect(s).toContain("2nd")
+    expect(s).toContain("6th")
+    expect(s).not.toMatch(/moved/)
+  })
+})
+
+describe("fixImproved", () => {
+  it("is true only when the answer is found and was missing or ranked lower before", () => {
+    expect(fixImproved({ before: { rank: 11 }, after: { rank: 1 } })).toBe(true)
+    expect(fixImproved({ before: null, after: { rank: 4 } })).toBe(true)
+    expect(fixImproved({ before: { rank: 3 }, after: { rank: 3 } })).toBe(false)
+    expect(fixImproved({ before: { rank: 2 }, after: { rank: 6 } })).toBe(false)
+    expect(fixImproved({ before: { rank: 11 }, after: null })).toBe(false)
+    expect(fixImproved({ before: null, after: null })).toBe(false)
   })
 })

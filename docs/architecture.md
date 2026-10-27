@@ -474,7 +474,11 @@ leaving restores it as it was. The Ask step runs the Ask panel's own Ask (`askNo
 `routes/Shell.tsx`), lists the retrieval result's pieces in the main pane
 (`GuideAskResults`), and asks `POST /api/v2/golds/find` where the sample answer landed. That
 rank is kept as `guideAsk` in the Build session (`state/buildSession.ts`), so a reload
-keeps it and the Fix step can read it as the rank before the fix. Two keys hold its state: `rag-playground:guide:v1` in
+keeps it and the Fix step can read it as the rank before the fix. The Fix step builds the
+index (`start` on the Index card), then asks again, and keeps that rank apart as
+`guideAfter`, so the Ask step's rank is never overwritten. `fixResultLine` and `fixImproved`
+(`state/guideResult.ts`) word the result and decide whether the rule is shown. Leaving the
+guided run clears both. Two keys hold its state: `rag-playground:guide:v1` in
 localStorage (`{hidden}`) and `rag-playground:guide-step:v1` in sessionStorage (the step
 number). If storage is blocked, the guide still works for the life of the page.
 

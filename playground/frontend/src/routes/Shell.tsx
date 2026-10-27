@@ -229,6 +229,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const [comparisonHidden, setComparisonHidden] = useState<string | null>(() => session?.comparisonHidden ?? null)
   // Where the guided run's Ask step found the answer; kept with the session so a reload keeps it.
   const [guideAsk, setGuideAsk] = useState<GuideAsk | null>(() => session?.guideAsk ?? null)
+  // And where "Ask again" in the Fix step found it, kept apart from the first.
+  const [guideAfter, setGuideAfter] = useState<GuideAsk | null>(() => session?.guideAfter ?? null)
   const { keys } = useApiKey()
   // The Ask panel's dock: open or closed, its side and its width, remembered in this browser.
   const dock = useAskDock()
@@ -252,8 +254,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
 
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
   useEffect(() => {
-    if (Object.keys(tracked.results).length || transcript.length) writeBuildSession({ tracked, sigs, transcript, asked, comparisonHidden, guideAsk })
-  }, [tracked, sigs, transcript, asked, comparisonHidden, guideAsk])
+    if (Object.keys(tracked.results).length || transcript.length) writeBuildSession({ tracked, sigs, transcript, asked, comparisonHidden, guideAsk, guideAfter })
+  }, [tracked, sigs, transcript, asked, comparisonHidden, guideAsk, guideAfter])
   // A restart wipes the server's store: a restored step whose result is gone comes back as not run.
   useEffect(() => {
     if (!session) return
@@ -515,7 +517,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
   }
 
-  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, inspect: (id) => !isPhone && setInspected(id) })
+  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
   // On a phone the Ask results open in the output sheet as soon as there are some.
   const hasAskResults = guide.askResults !== null
   useEffect(() => {

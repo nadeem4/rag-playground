@@ -230,8 +230,13 @@ step, and **Run** is still there. The Ask step asks the question for real. The m
 lists every piece Search returned, in rank order, marks the piece that holds the answer, and
 draws a dashed line after the pieces the answer step reads. The coach says whether the answer
 is among those pieces, below them, or not in the returned pieces at all, with the numbers from
-your run. On a phone the list opens in the output sheet. The last step, Fix, is not ready yet.
-The coach says so, and tells you to leave the guided run if you want to ask your own question.
+your run. On a phone the list opens in the output sheet. The last step, Fix, takes you back
+to the Chunk card: **Open Chunk settings** selects it, and **Build the index** stays blocked
+until Chunk size is the value the coach names. After the index is built the button reads
+**Ask again** and asks the same question. The coach then says where the piece with the
+answer was before and where it is now. Only when it moved up does the coach add the one rule
+to take away, and when it did not, it says one setting does not fix every miss. The main pane
+keeps the first list until you ask again, then shows the new one.
 
 While the guided run is on, the Ask panel is hidden, not closed. **Leave the guided run**
 ends it and the panel comes back as it was. The invite shows again only while nothing has

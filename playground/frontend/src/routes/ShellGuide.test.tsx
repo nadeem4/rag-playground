@@ -107,6 +107,10 @@ beforeEach(() => {
       if (url === "/api/v2/results/ret-g/payload") return ok(CANDIDATES)
       if (url === "/api/v2/results/out-g") return ok({})
       if (url === "/api/v2/results/out-g/payload") return ok(READ_ROWS)
+      if (url === "/api/v2/results/ret-a") return ok({})
+      if (url === "/api/v2/results/ret-a/payload") return ok(CANDIDATES)
+      if (url === "/api/v2/results/out-a") return ok({})
+      if (url === "/api/v2/results/out-a/payload") return ok(READ_ROWS)
       if (url === "/api/v2/results/a-parse") return ok({})
       if (url === "/api/v2/results/a-parse/payload") return ok(parsedDoc)
       if (url === "/api/v2/results/a-parse-gone") return ok({})
@@ -308,9 +312,112 @@ describe("the guided run on Build", () => {
     expect(within(coach()).getByText(/no Clean card/)).toBeTruthy()
   })
 
-  it("the Fix step tells the visitor how to ask their own question", async () => {
-    await open(6)
-    expect(within(coach()).getByText(/ask your own question/)).toBeTruthy()
+  describe("the Fix step", () => {
+    const BEFORE = { artifact: "ret-g", found: { rank: 11 }, shown: 5, candidates: 20 }
+    const done = (id: string, artifact_id?: string) => ({ id, status: "done", artifact_id })
+    // The guided pipeline with the chunk size at the given value.
+    const withSize = (size: number) => {
+      const g = sampleGraph(TEST_REGISTRY, { sha: PRIMER.sha, filename: PRIMER.filename }, QUESTION)
+      storeGraph({ ...g, nodes: g.nodes.map((n) => (n.stage === "chunk" ? { ...n, config: { ...n.config, chunk_size: size } } : n)) })
+    }
+    const session = (results: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+      ...ASKED,
+      tracked: { results, history: {} },
+      guideAsk: BEFORE,
+      ...extra,
+    })
+    const AFTER_RUN = { retrieve: done("retrieve", "ret-a"), use_case: done("use_case", "out-a"), index: done("index", "idx-1") }
+    const runButton = (name: string) => within(coach()).getByRole("button", { name }) as HTMLButtonElement
+
+    it("blocks the run with the reason until Chunk size is the fix value, then enables it", async () => {
+      withSize(400)
+      await open(6, session({ retrieve: done("retrieve", "ret-g") }))
+      expect(runButton("Build the index").disabled).toBe(true)
+      expect(within(coach()).getByText(/before building the index/)).toBeTruthy()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Open Chunk settings" }))
+      fireEvent.change(within(card("chunk")).getByLabelText("Chunk Size"), { target: { value: "800" } })
+      await waitFor(() => expect(runButton("Build the index").disabled).toBe(false))
+    })
+
+    it("Build the index runs the index node, not an Ask", async () => {
+      withSize(800)
+      await open(6, session({ retrieve: done("retrieve", "ret-g") }))
+      fireEvent.click(runButton("Build the index"))
+      await waitFor(() => expect(posts).toHaveLength(1))
+      expect(posts[0].body.through).toBe(node("index").id)
+      expect(asks).toHaveLength(0)
+    })
+
+    it("once the index is fresh the button reads Ask again and asks", async () => {
+      withSize(800)
+      await open(6, session({ index: done("index", "idx-1"), chunk: done("chunk") }))
+      fireEvent.click(runButton("Ask again"))
+      await waitFor(() => expect(asks).toHaveLength(1))
+      expect(posts).toHaveLength(0)
+    })
+
+    it("shows the rank from before, then the rank after, and the one rule when it improved", async () => {
+      withSize(800)
+      goldAnswer = { found: { index: 0, gold: "Size factors." } }
+      await open(6, session(AFTER_RUN))
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("1st"))
+      expect(within(coach()).getByRole("status").textContent).toContain("11th")
+      expect(within(coach()).getByText(/long sentence or table row/)).toBeTruthy()
+      // The Fix is the last step, so its Next reads Finish.
+      expect(within(coach()).getByRole("button", { name: "Finish" })).toBeTruthy()
+    })
+
+    it("does not claim a fix, or show the rule, when the answer is still not found", async () => {
+      withSize(800)
+      goldAnswer = { found: null }
+      await open(6, session(AFTER_RUN))
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("still not found"))
+      expect(within(coach()).getByRole("status").textContent).not.toMatch(/moved|1st/)
+      expect(within(coach()).queryByText(/long sentence or table row/)).toBeNull()
+      expect(within(coach()).getByText(/does not fix every miss/)).toBeTruthy()
+    })
+
+    it("keeps the Ask step's rank and the new rank across a reload without asking again", async () => {
+      withSize(800)
+      goldAnswer = { found: { index: 0, gold: "Size factors." } }
+      await open(6, session(AFTER_RUN))
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("1st"))
+      cleanup()
+      resetGuideForTests()
+      goldAnswer = { found: null }
+      render(<Shell />)
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("1st"))
+      expect(within(coach()).getByRole("status").textContent).toContain("11th")
+    })
+
+    it("a failed index run shows its error, hides Next and leaves Build the index available", async () => {
+      withSize(800)
+      await open(6, session({ index: { id: "index", status: "failed", error: "Traceback\nThe model would not load" } }))
+      await waitFor(() => expect(within(coach()).getByText("The model would not load")).toBeTruthy())
+      expect(within(coach()).queryByRole("button", { name: "Next step" })).toBeNull()
+      expect(runButton("Build the index").disabled).toBe(false)
+    })
+
+    it("a failed Ask again shows the error, hides Next and leaves Ask again available", async () => {
+      withSize(800)
+      askFails = true
+      await open(6, session({ index: done("index", "idx-1"), chunk: done("chunk") }))
+      fireEvent.click(runButton("Ask again"))
+      await waitFor(() => expect(within(coach()).getByText("The search service is down.")).toBeTruthy())
+      expect(within(coach()).queryByRole("button", { name: "Next step" })).toBeNull()
+      expect(runButton("Ask again").disabled).toBe(false)
+    })
+
+    it("Leave clears the stored ranks, so a new guided run starts clean", async () => {
+      withSize(800)
+      await open(6, session(AFTER_RUN, { guideAfter: { artifact: "ret-a", found: { rank: 1 }, shown: 5, candidates: 20 } }))
+      fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
+      await waitFor(() => {
+        const s = JSON.parse(window.sessionStorage.getItem(BUILD_SESSION_KEY) ?? "{}")
+        expect(s.guideAsk ?? null).toBeNull()
+        expect(s.guideAfter ?? null).toBeNull()
+      })
+    })
   })
 
   it("a done step whose result cannot be read shows a line, not an empty status", async () => {

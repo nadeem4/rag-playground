@@ -33,6 +33,8 @@ export interface BuildSession {
   comparisonHidden: string | null
   /** The guided run's Ask step result; the Fix step reads it as the rank before the fix. */
   guideAsk?: GuideAsk | null
+  /** The Fix step's "Ask again" result, kept apart so the Ask step's rank stays as it was. */
+  guideAfter?: GuideAsk | null
 }
 
 function readGuideAsk(v: unknown): GuideAsk | null {
@@ -73,6 +75,7 @@ export function readBuildSession(): BuildSession | null {
     asked: isRecord(v.asked) ? (v.asked as unknown as AskSnapshot) : null,
     comparisonHidden: typeof v.comparisonHidden === "string" ? v.comparisonHidden : null,
     guideAsk: readGuideAsk(v.guideAsk),
+    guideAfter: readGuideAsk(v.guideAfter),
   }
 }
 

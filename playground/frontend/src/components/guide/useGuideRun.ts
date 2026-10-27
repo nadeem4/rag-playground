@@ -2,16 +2,21 @@ import { createElement, useEffect, useMemo, useState, type ReactNode } from "rea
 
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions } from "@/api/samples"
-import type { Registry, SampleCard } from "@/api/types"
+import type { Registry, RetrievalResult, SampleCard } from "@/api/types"
+import { useArtifactPayload } from "@/api/useArtifact"
 import { fresh, finalRows, useAskOutputs } from "@/components/ask/AskResults"
 import { findGold, goldsOf } from "@/components/ask/Transcript"
 import { rowsFromResult } from "@/components/inspectors/hits"
 import type { NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { useOutcome } from "@/components/pipeline/useOutcome"
+import { Button } from "@/components/ui/button"
 import { documentOf } from "@/state/document"
 import type { GuideAsk } from "@/state/buildSession"
 import { askNodes, infoFor, type PipelineGraph } from "@/state/graph"
 import {
+  GUIDE_FIX,
+  GUIDE_NEUTRAL,
+  GUIDE_RULE,
   GUIDE_SAMPLE,
   GUIDE_STEPS,
   guideGraph,
@@ -20,7 +25,7 @@ import {
   stageNode,
   useGuideHidden,
 } from "@/state/guide"
-import { askResultLine, stepResultLine } from "@/state/guideResult"
+import { askResultLine, fixImproved, fixResultLine, stepResultLine } from "@/state/guideResult"
 import { errorHeadline } from "@/state/pipeline"
 import { isEdited, isUnsaved, readCurrentId, readPipelines, setCurrentId, STARTER_ID } from "@/state/pipelines"
 import type { StarterPipeline } from "@/state/starter"
@@ -30,10 +35,9 @@ import { GuideAskResults } from "./GuideAskResults"
 import { GuideInvite } from "./GuideInvite"
 import { GuideReplace } from "./GuideReplace"
 
-/** Steps from this one on (the Fix) come with the next task of the guided run. */
-const FIRST_UNBUILT = 6
 const INDEX_STEP = 4
 const ASK_STEP = 5
+const FIX_STEP = 6
 
 export interface GuideRunInput {
   registry: Registry
@@ -54,7 +58,12 @@ export interface GuideRunInput {
   ask: () => void
   /** Where the Ask step found the answer, kept by Build with the session. */
   guideAsk: GuideAsk | null
-  setGuideAsk: (value: GuideAsk) => void
+  setGuideAsk: (value: GuideAsk | null) => void
+  /** Where "Ask again" in the Fix step found the answer; kept apart from guideAsk. */
+  guideAfter: GuideAsk | null
+  setGuideAfter: (value: GuideAsk | null) => void
+  /** Select a card, which opens its settings. */
+  selectCard: (id: string) => void
   /** Show a card's output in the Inspector. */
   inspect: (id: string) => void
 }
@@ -87,9 +96,15 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const type = node ? infoFor(registry, node)?.output : undefined
   const outcome = useOutcome(node?.stage ?? "source", type, node?.stage === "source" ? undefined : artifact)
 
+  const { guideAsk, setGuideAsk, guideAfter, setGuideAfter } = a
   const goTo = (n: number | null) => {
     setStepState(n)
     setGuideStep(n)
+    // Leaving the guided run forgets where the answer landed, so a new run starts clean.
+    if (n === null) {
+      setGuideAsk(null)
+      setGuideAfter(null)
+    }
   }
   // The Ask results: the candidates Search returned, the pieces the answer step reads, and where the answer is.
   const outputs = useAskOutputs(graph, results, stale)
@@ -101,20 +116,35 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const outputPending = fresh(results, stale, askNodes(graph).useCase) !== undefined && output === undefined
   const golds = useMemo(() => (questions ? goldsOf(String(graph.nodes.find((n) => n.stage === "query")?.config.text ?? ""), questions) : []), [questions, graph])
   const [findFailed, setFindFailed] = useState<string | null>(null)
-  const { guideAsk, setGuideAsk } = a
+  const onFix = step === FIX_STEP
+  // The Ask step saves its rank as guideAsk. The Fix step saves a later result as guideAfter, and never over the first.
+  const saved = onFix ? guideAfter : guideAsk
+  const save = onFix ? setGuideAfter : setGuideAsk
   useEffect(() => {
-    if (step !== ASK_STEP || !retrieveId || !candidates || !readRows || outputPending || !golds.length) return
-    if (guideAsk?.artifact === retrieveId) return
+    if ((step !== ASK_STEP && !onFix) || !retrieveId || !candidates || !readRows || outputPending || !golds.length) return
+    if (onFix && (guideAsk === null || guideAsk.artifact === retrieveId)) return
+    if (saved?.artifact === retrieveId) return
     let live = true
     findGold(candidates, golds).then(
-      (f) => live && setGuideAsk({ artifact: retrieveId, found: f ? { rank: f.rank } : null, shown: readRows.length, candidates: candidates.length }),
+      (f) => live && save({ artifact: retrieveId, found: f ? { rank: f.rank } : null, shown: readRows.length, candidates: candidates.length }),
       () => live && setFindFailed(retrieveId),
     )
     return () => {
       live = false
     }
-  }, [step, retrieveId, candidates, readRows, outputPending, golds, guideAsk, setGuideAsk])
-  const asked = guideAsk !== null && guideAsk.artifact === retrieveId ? guideAsk : null
+  }, [step, onFix, retrieveId, candidates, readRows, outputPending, golds, guideAsk, saved, save])
+  // The result for the Ask that is on screen now: the Ask step's own, or (in the Fix step) the one after the fix.
+  // The Fix step: Chunk size set to the fix value, then Build the index, then Ask again.
+  const indexCard = stageNode(graph, "index")
+  const sizeSet = stageNode(graph, "chunk")?.config.chunk_size === GUIDE_FIX.chunk_size
+  const indexFresh = fresh(results, stale, indexCard) !== undefined
+  // Once the index has been built, the button stays "Ask again" even if an Ask fails.
+  const [indexBuilt, setIndexBuilt] = useState(false)
+  useEffect(() => setIndexBuilt(sizeSet && (indexFresh || indexBuilt)), [sizeSet, indexFresh, indexBuilt])
+  const asked = saved !== null && saved.artifact === retrieveId && (!onFix || guideAsk?.artifact !== retrieveId) ? saved : null
+  // Until the Fix step asks again, its main pane keeps showing the Ask step's candidates.
+  const beforeData = useArtifactPayload(onFix && !asked ? guideAsk?.artifact : undefined).data as RetrievalResult | undefined
+  const beforeRows = useMemo(() => (beforeData && Array.isArray(beforeData.hits) ? rowsFromResult(beforeData) : null), [beforeData])
 
   // Step 1 only loads the document; it is never a run.
   const [loaded, setLoaded] = useState(false)
@@ -130,6 +160,8 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     setLoaded(false)
     // The guide pipeline is a new working copy, not the saved pipeline that was selected: Save changes must not overwrite that one.
     setCurrentId(null)
+    setGuideAsk(null)
+    setGuideAfter(null)
     a.edit(target)
     goTo(0)
   }
@@ -173,52 +205,87 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   if (chunk?.config.chunk_size !== undefined) values.size = String(chunk.config.chunk_size)
   values.dim = typeof dim === "number" ? String(dim) : "many"
 
-  const own = node ? results[node.id] : undefined
-  const failed = own?.status === "failed" && !stale.has(own.id)
   const onAsk = index === ASK_STEP
-  let error = failed ? errorHeadline(own.error ?? "") : ((node && a.errors[node.id]?.message) ?? null)
-  if (!error && onAsk && !a.busy && a.columnError) error = a.columnError
-  if (!error && onAsk && findFailed !== null && findFailed === retrieveId) error = "Could not check where the answer landed. Ask the question again."
+  // The Fix step's own run is the Index card's.
+  const own = onFix ? (indexCard ? results[indexCard.id] : undefined) : node ? results[node.id] : undefined
+  const failed = own?.status === "failed" && !stale.has(own.id)
+  const errorNode = onFix ? indexCard : node
+  let error = failed ? errorHeadline(own.error ?? "") : ((errorNode && a.errors[errorNode.id]?.message) ?? null)
+  if (!error && (onAsk || onFix) && !a.busy && a.columnError) error = a.columnError
+  if (!error && (onAsk || onFix) && findFailed !== null && findFailed === retrieveId) error = "Could not check where the answer landed. Ask the question again."
   // The step is done only when its own node is, even if a later card ran.
   const isSource = node?.stage === "source"
-  const done = isSource
-    ? loaded
-    : own !== undefined && (own.status === "done" || own.status === "cached") && !stale.has(own.id) && (!onAsk || (asked !== null && !error))
+  const done = onFix
+    ? asked !== null && !error
+    : isSource
+      ? loaded
+      : own !== undefined && (own.status === "done" || own.status === "cached") && !stale.has(own.id) && (!onAsk || (asked !== null && !error))
   let line: string | null = null
-  if (done && onAsk && asked) line = askResultLine({ found: asked.found, shown: asked.shown, candidates: asked.candidates })
+  if (done && onFix && asked) {
+    const chunkLine = outcome?.kind === "ready" && node ? stepResultLine(node.stage, type, outcome.data, { filename, pages }) : null
+    line = fixResultLine({ before: guideAsk?.found ?? null, after: asked.found, chunk: chunkLine })
+  } else if (done && onAsk && asked) line = askResultLine({ found: asked.found, shown: asked.shown, candidates: asked.candidates })
   else if (done && isSource) line = stepResultLine("source", undefined, null, { filename: title, pages })
   else if (done && node && outcome?.kind === "ready") line = stepResultLine(node.stage, type, outcome.data, { filename, pages })
   else if (done && outcome?.kind === "error") line = "The result could not be read. Run this step again."
-  let blockedReason = "This step comes in the next part of the guided run. To ask your own question now, leave the guided run."
+  let blockedReason = ""
   let state: GuideCoachProps["state"] = a.busy ? "running" : done ? "done" : "ready"
   if (!node) {
     state = "blocked"
     blockedReason = `This pipeline has no ${spec.stage === "source" ? "Document" : spec.stage[0].toUpperCase() + spec.stage.slice(1)} card, so this step cannot run. Leave the guided run and start it again.`
+  } else if (onFix && !a.busy && !indexCard) {
+    state = "blocked"
+    blockedReason = "This pipeline has no Index card, so this step cannot run. Leave the guided run and start it again."
+  } else if (onFix && !a.busy && !sizeSet && !done) {
+    state = "blocked"
+    blockedReason = `Set Chunk size to ${GUIDE_FIX.chunk_size} before building the index.`
   }
-  if (index >= FIRST_UNBUILT) state = "blocked"
   const question = String(graph.nodes.find((n) => n.stage === "query")?.config.text ?? "")
+  // The Fix step's run: build the index, and once it is fresh, ask again.
+  const askAgain = onFix && (indexFresh || (indexBuilt && sizeSet))
+  const stepOut = onFix ? { ...spec, run: askAgain ? "Ask again" : spec.run } : spec
+
+  let extra: ReactNode = null
+  if (onFix && node) {
+    const improved = done && asked ? fixImproved({ before: guideAsk?.found ?? null, after: asked.found }) : null
+    extra = createElement(
+      "div",
+      { className: "flex flex-col items-start gap-2" },
+      createElement("p", { className: "m-0 text-sm text-fg" }, `Set Chunk size to ${GUIDE_FIX.chunk_size}.`),
+      createElement(Button, { variant: "outline", onClick: () => a.selectCard(node.id) }, "Open Chunk settings"),
+      improved !== null ? createElement("p", { className: "m-0 text-sm text-fg" }, improved ? GUIDE_RULE : GUIDE_NEUTRAL) : null,
+    )
+  }
+  // Ask and Fix show the candidates: the Fix step shows the Ask step's until it asks again.
+  const shownAsk = asked ?? (onFix ? guideAsk : null)
+  const shownRows = asked ? candidates : onFix ? beforeRows : candidates
+  const askResults =
+    index >= ASK_STEP && shownAsk && shownRows
+      ? createElement(GuideAskResults, { question, candidates: shownRows, shown: shownAsk.shown, found: shownAsk.found })
+      : null
 
   return {
     active: true,
     invite: null,
     marks,
-    askResults:
-      index >= ASK_STEP && asked && candidates
-        ? createElement(GuideAskResults, { question, candidates, shown: asked.shown, found: asked.found })
-        : null,
+    askResults,
     coach: {
       index,
       question,
-      step: spec,
+      step: stepOut,
       values,
       state,
       result: line,
       error,
       blockedReason,
+      extra,
       onRun: () => {
         if (!node) return
         if (isSource) setLoaded(true)
-        else if (onAsk) a.ask()
+        else if (onAsk || askAgain) a.ask()
+        else if (onFix) {
+          if (indexCard) void a.start(indexCard.id, false, false)
+        }
         else void a.start(node.id, false, index !== INDEX_STEP)
       },
       onNext: () => goTo(index === GUIDE_STEPS.length - 1 ? null : index + 1),

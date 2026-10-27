@@ -15,6 +15,7 @@ const SESSION: BuildSession = {
   asked: { runId: "r1", question: "How long did the survey run?", pipeline: "Working copy", reranker: "no rerank", signature: "sig-use" },
   comparisonHidden: null,
   guideAsk: { artifact: "ret1", found: { rank: 11 }, shown: 5, candidates: 20 },
+  guideAfter: { artifact: "ret2", found: { rank: 1 }, shown: 5, candidates: 20 },
 }
 
 beforeEach(() => window.sessionStorage.clear())
@@ -32,8 +33,9 @@ describe("the Build session", () => {
   })
 
   it("reads a session from before the guided run as having no Ask result", () => {
-    writeBuildSession({ ...SESSION, guideAsk: undefined })
+    writeBuildSession({ ...SESSION, guideAsk: undefined, guideAfter: undefined })
     expect(readBuildSession()?.guideAsk).toBeNull()
+    expect(readBuildSession()?.guideAfter).toBeNull()
   })
 
   it("keeps only finished results: a step left running or waiting is dropped, with its signature", () => {

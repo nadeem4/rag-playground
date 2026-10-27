@@ -8,7 +8,7 @@ import { resetSampleQuestionsCache } from "@/api/samples"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 import { BUILD_SESSION_KEY } from "@/state/buildSession"
 import { resetDocumentForTests } from "@/state/document"
-import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph } from "@/state/graph"
+import { readStoredGraph, resetStoredGraphForTests, sampleGraph, signature, storeGraph } from "@/state/graph"
 import { GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
@@ -111,6 +111,8 @@ beforeEach(() => {
       if (url === "/api/v2/results/ret-a/payload") return ok(CANDIDATES)
       if (url === "/api/v2/results/out-a") return ok({})
       if (url === "/api/v2/results/out-a/payload") return ok(READ_ROWS)
+      // The saved index result exists on the server; an unknown artifact would be dropped as gone after a restart.
+      if (url === "/api/v2/results/idx-1") return ok({})
       if (url === "/api/v2/results/a-parse") return ok({})
       if (url === "/api/v2/results/a-parse/payload") return ok(parsedDoc)
       if (url === "/api/v2/results/a-parse-gone") return ok({})
@@ -396,6 +398,17 @@ describe("the guided run on Build", () => {
       await waitFor(() => expect(within(coach()).getByText("The model would not load")).toBeTruthy())
       expect(within(coach()).queryByRole("button", { name: "Next step" })).toBeNull()
       expect(runButton("Build the index").disabled).toBe(false)
+    })
+
+    it("goes back to Build the index when another setting makes the built index out of date", async () => {
+      withSize(800)
+      const g = readStoredGraph(TEST_REGISTRY)!
+      const sig = signature(g, "index", TEST_REGISTRY)
+      await open(6, session({ index: done("index", "idx-1"), chunk: done("chunk") }, { sigs: { index: sig, chunk: signature(g, "chunk", TEST_REGISTRY) } }))
+      expect(runButton("Ask again").disabled).toBe(false)
+      fireEvent.click(within(coach()).getByRole("button", { name: "Open Chunk settings" }))
+      fireEvent.change(within(card("chunk")).getByLabelText("Chunk Overlap"), { target: { value: "7" } })
+      await waitFor(() => expect(runButton("Build the index").disabled).toBe(false))
     })
 
     it("a failed Ask again shows the error, hides Next and leaves Ask again available", async () => {

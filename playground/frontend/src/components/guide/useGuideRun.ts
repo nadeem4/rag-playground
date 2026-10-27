@@ -138,9 +138,6 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const indexCard = stageNode(graph, "index")
   const sizeSet = stageNode(graph, "chunk")?.config.chunk_size === GUIDE_FIX.chunk_size
   const indexFresh = fresh(results, stale, indexCard) !== undefined
-  // Once the index has been built, the button stays "Ask again" even if an Ask fails.
-  const [indexBuilt, setIndexBuilt] = useState(false)
-  useEffect(() => setIndexBuilt(sizeSet && (indexFresh || indexBuilt)), [sizeSet, indexFresh, indexBuilt])
   const asked = saved !== null && saved.artifact === retrieveId && (!onFix || guideAsk?.artifact !== retrieveId) ? saved : null
   // Until the Fix step asks again, its main pane keeps showing the Ask step's candidates.
   const beforeData = useArtifactPayload(onFix && !asked ? guideAsk?.artifact : undefined).data as RetrievalResult | undefined
@@ -242,7 +239,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   }
   const question = String(graph.nodes.find((n) => n.stage === "query")?.config.text ?? "")
   // The Fix step's run: build the index, and once it is fresh, ask again.
-  const askAgain = onFix && (indexFresh || (indexBuilt && sizeSet))
+  const askAgain = onFix && sizeSet && indexFresh
   const stepOut = onFix ? { ...spec, run: askAgain ? "Ask again" : spec.run } : spec
 
   let extra: ReactNode = null

@@ -1,4 +1,4 @@
-﻿import { PanelLeft, PanelRight, X } from "lucide-react"
+import { PanelLeft, PanelRight, X } from "lucide-react"
 import {
   useCallback,
   useEffect,
@@ -220,7 +220,7 @@ export function AskDock({
 
   // Alt+A opens and closes the panel from anywhere on Build, once per press. It
   // leaves a field alone, except the question box; there only the a key counts,
-  // so Option+A still types Ã¥ on a Mac. Elsewhere the key code, so it works there too.
+  // so Option+A still types å on a Mac. Elsewhere the key code, so it works there too.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (suppressed || !e.altKey || e.ctrlKey || e.metaKey || e.repeat) return
@@ -402,4 +402,3 @@ export function AskDock({
     </>
   )
 }
-

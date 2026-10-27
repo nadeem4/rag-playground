@@ -1,4 +1,4 @@
-﻿import { readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { useEffect } from "react"
@@ -334,8 +334,8 @@ describe("Alt+A", () => {
     altA("A")
     expect(dockEl().hidden).toBe(false)
     expect(document.activeElement).toBe(question())
-    // On a Mac, Option+A types Ã¥; the key code is still KeyA.
-    altA("Ã¥")
+    // On a Mac, Option+A types å; the key code is still KeyA.
+    altA("å")
     expect(dockEl().hidden).toBe(true)
   })
 
@@ -360,10 +360,10 @@ describe("Alt+A", () => {
     expect(document.activeElement).toBe(field)
   })
 
-  it("in the question box it answers only to the a key, so Option+A still types Ã¥ on a Mac", () => {
+  it("in the question box it answers only to the a key, so Option+A still types å on a Mac", () => {
     render(<Harness />)
     question().focus()
-    fireEvent.keyDown(question(), { key: "Ã¥", code: "KeyA", altKey: true })
+    fireEvent.keyDown(question(), { key: "å", code: "KeyA", altKey: true })
     expect(dockEl().hidden).toBe(false)
     fireEvent.keyDown(question(), { key: "a", code: "KeyA", altKey: true })
     expect(dockEl().hidden).toBe(true)
@@ -626,4 +626,3 @@ describe("a suppressed dock (the guided run owns the right column)", () => {
     expect(screen.queryByTestId("ask-backdrop")).toBeNull()
   })
 })
-

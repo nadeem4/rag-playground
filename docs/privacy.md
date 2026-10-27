@@ -17,7 +17,7 @@ with a run, and a question set while it is checked.
 | Theme and contrast | In this browser's storage | Until you change them. |
 | Where the Ask panel sits on Build | In this browser's storage | Its side, its width and whether it is open, until you change them. |
 | Whether Ask marks parts with no source | In this browser's storage | Until you change it. |
-| Whether you hid the guided run invite | In this browser's storage, under `rag-playground:guide:v1` | Until you clear this site's data. |
+| Whether you hid the guided run invite | In this browser's storage, under `rag-playground:guide:v1` | Until you clear this site's data. That is the only way to bring the invite back. |
 | Which step of the guided run you are on | In this tab only, under `rag-playground:guide-step:v1` | Until you close the tab. |
 | Your best evaluation for each question set | In this browser's storage | Until you press Forget best on Evaluate or clear this site's data. It holds the score, the pipeline's name and settings, and which questions were found. |
 | Page images you viewed | In this browser's cache | They may stay in this browser's cache until it is cleared, even after the upload they show is deleted. |

@@ -218,17 +218,22 @@ Compare with the step on against off. Fixed token count and By sentence also hav
 ### The guided run
 
 When nothing has run yet on Build, an invite offers a guided run. It sits in the pane beside
-the cards on a laptop or tablet, and above the cards on a phone. **Start** replaces the
-working pipeline with a small chunking pipeline and a question about what sets chunk size.
-If you have unsaved work, it warns you first. A coach then walks the steps in order:
-Document, Parse, Clean, Chunk and Index. Each step is a real run, and the coach reads the
-result back to you in plain words. If a step fails, the coach shows the card's own error
-and stays on that step, and **Run** is still there. The last two steps, Ask and Fix, are
-not ready yet and say so.
+the cards on a laptop or tablet, and above the cards on a phone. **Start the guided run**
+replaces the working pipeline with a small chunking pipeline and a question about what sets
+chunk size. It becomes a new working copy, so a saved pipeline you had selected is not
+changed. If you have unsaved work, it warns you first. A coach then walks the steps in
+order: Document, Parse, Clean, Chunk and Index. The first step only loads the document.
+Each later step is a real run, started with its **Run** button (for example **Run Parse**),
+and the coach reads the result back to you in plain words. The Inspector shows the card of
+the step you are on. If a step fails, the coach shows the card's own error and stays on that
+step, and **Run** is still there. The last two steps, Ask and Fix, are not ready yet. The
+coach says so, and tells you to leave the guided run if you want to ask your own question.
 
-While the guided run is on, the Ask panel is hidden, not closed. **Leave** ends the guided
-run and the panel comes back as it was. A reload keeps your step and results for as long as
-the tab is open. **I know RAG, hide this** hides the invite in this browser.
+While the guided run is on, the Ask panel is hidden, not closed. **Leave the guided run**
+ends it and the panel comes back as it was. The invite shows again only while nothing has
+run on Build. A reload keeps your step and results for as long as the tab is open.
+**I know RAG, hide this** hides the invite in this browser. The only way to bring a hidden
+invite back is to clear this site's data in the browser.
 
 ### Start from a template
 

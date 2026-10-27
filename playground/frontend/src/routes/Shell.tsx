@@ -506,7 +506,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   else if (built && segments.length && segments.every((s) => s.state === "done" || s.state === "reused"))
     stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
 
-  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, busy, edit, start })
+  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, busy, edit, start, inspect: (id) => !isPhone && setInspected(id) })
 
   return (
     <main
@@ -731,7 +731,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         )}
       </AskDock>
       {guide.coach ? (
-        <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 md:min-h-0 xl:order-last xl:col-span-1 xl:overflow-y-auto">
+        <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 md:min-h-0 md:max-h-[40dvh] md:overflow-y-auto xl:max-h-none xl:order-last xl:col-span-1 xl:overflow-y-auto">
           <GuideCoach {...guide.coach} />
         </div>
       ) : null}

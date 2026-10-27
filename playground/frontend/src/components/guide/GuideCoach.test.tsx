@@ -66,14 +66,14 @@ describe("GuideCoach", () => {
 
   it("shows result, Why and Next only when done", () => {
     const { unmount } = setup({ state: "ready" })
-    expect(screen.queryByText("Why")).toBeNull()
+    expect(screen.queryByText("Why:")).toBeNull()
     expect(screen.queryByRole("button", { name: "Next step" })).toBeNull()
     expect(screen.getByRole("status").textContent).toBe("")
     unmount()
 
     const { props } = setup({ state: "done", result: "Made 12 pieces." })
     expect(screen.getByRole("status").textContent).toBe("Made 12 pieces.")
-    expect(screen.getByText("Why")).toBeTruthy()
+    expect(screen.getByText("Why:")).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Next step" }))
     expect(props.onNext).toHaveBeenCalledTimes(1)
   })
@@ -82,7 +82,7 @@ describe("GuideCoach", () => {
     for (const state of ["running", "blocked"] as const) {
       const { unmount } = setup({ state, result: "Leaked result.", blockedReason: "Wait" })
       expect(screen.queryByText("Leaked result.")).toBeNull()
-      expect(screen.queryByText("Why")).toBeNull()
+      expect(screen.queryByText("Why:")).toBeNull()
       expect(screen.queryByRole("button", { name: "Next step" })).toBeNull()
       unmount()
     }
@@ -93,7 +93,7 @@ describe("GuideCoach", () => {
     expect(screen.getByRole("status").textContent).toBe("Docling is not reachable.")
     expect((screen.getByRole("button", { name: GUIDE_STEPS[3].run }) as HTMLButtonElement).disabled).toBe(false)
     expect(screen.queryByRole("button", { name: "Next step" })).toBeNull()
-    expect(screen.queryByText("Why")).toBeNull()
+    expect(screen.queryByText("Why:")).toBeNull()
   })
 
   it("reads Finish on the last step", () => {

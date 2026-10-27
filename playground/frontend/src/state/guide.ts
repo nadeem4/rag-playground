@@ -92,9 +92,14 @@ export const GUIDE_STEPS: GuideStep[] = [
   },
 ]
 
-/** Fill {name} placeholders; a name with no value stays as written. */
+/** Fill {name} placeholders; a sentence holding a name with no value is left out. */
 export function fill(text: string, values: Record<string, string | number>): string {
-  return text.replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? String(values[k]) : m))
+  const sentences = text.match(/[^.]+\.?\s*/g) ?? [text]
+  return sentences
+    .filter((s) => ![...s.matchAll(/\{(\w+)\}/g)].some((m) => !(m[1] in values)))
+    .join("")
+    .replace(/\{(\w+)\}/g, (_, k: string) => String(values[k]))
+    .trim()
 }
 
 /** The starter graph on the primer, asking the size-factors question; null when either is missing. */

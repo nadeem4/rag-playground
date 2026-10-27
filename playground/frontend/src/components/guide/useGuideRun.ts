@@ -1,4 +1,4 @@
-import { createElement, useState, type ReactNode } from "react"
+import { createElement, useEffect, useState, type ReactNode } from "react"
 
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions } from "@/api/samples"
@@ -19,7 +19,7 @@ import {
 } from "@/state/guide"
 import { stepResultLine } from "@/state/guideResult"
 import { errorHeadline } from "@/state/pipeline"
-import { isEdited, isUnsaved, readCurrentId, readPipelines, STARTER_ID } from "@/state/pipelines"
+import { isEdited, isUnsaved, readCurrentId, readPipelines, setCurrentId, STARTER_ID } from "@/state/pipelines"
 import type { StarterPipeline } from "@/state/starter"
 
 import type { GuideCoachProps } from "./GuideCoach"
@@ -43,6 +43,8 @@ export interface GuideRunInput {
   edit: (next: PipelineGraph, ...touched: string[]) => void
   /** Build's own run starter: (node id, force, select). */
   start: (target: string | undefined, force: boolean, select?: boolean) => Promise<string | undefined>
+  /** Show a card's output in the Inspector. */
+  inspect: (id: string) => void
 }
 
 export interface GuideRun {
@@ -75,9 +77,20 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     setStepState(n)
     setGuideStep(n)
   }
+  // Step 1 only loads the document; it is never a run.
+  const [loaded, setLoaded] = useState(false)
+  // The Inspector shows the card the step points at.
+  const nodeId = node?.id
+  useEffect(() => {
+    if (step !== null && nodeId) a.inspect(nodeId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the step and its card only
+  }, [step, nodeId])
   const begin = () => {
     if (!target) return
     setConfirming(false)
+    setLoaded(false)
+    // The guide pipeline is a new working copy, not the saved pipeline that was selected: Save changes must not overwrite that one.
+    setCurrentId(null)
     a.edit(target)
     goTo(0)
   }
@@ -111,7 +124,9 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const source = graph.nodes.find((n) => n.stage === "source")
   const filename = String(source?.config.filename ?? "")
   const sha = source?.config.sha
-  const pages = a.samples?.find((c) => c.sha === sha)?.pages
+  const card = a.samples?.find((c) => c.sha === sha)
+  const pages = card?.pages
+  const title = card?.title ?? filename
   const chunk = stageNode(graph, "chunk")
   const dim = outcome?.kind === "ready" ? (outcome.data as { dim?: unknown } | null)?.dim : undefined
   const values: Record<string, string> = {}
@@ -123,12 +138,21 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const failed = own?.status === "failed" && !stale.has(own.id)
   const error = failed ? errorHeadline(own.error ?? "") : ((node && a.errors[node.id]?.message) ?? null)
   // The step is done only when its own node is, even if a later card ran.
-  const done = own !== undefined && (own.status === "done" || own.status === "cached") && !stale.has(own.id)
+  const isSource = node?.stage === "source"
+  const done = isSource
+    ? loaded
+    : own !== undefined && (own.status === "done" || own.status === "cached") && !stale.has(own.id)
   let line: string | null = null
-  if (done && node?.stage === "source") line = stepResultLine("source", undefined, null, { filename, pages })
+  if (done && isSource) line = stepResultLine("source", undefined, null, { filename: title, pages })
   else if (done && node && outcome?.kind === "ready") line = stepResultLine(node.stage, type, outcome.data, { filename, pages })
-  const state: GuideCoachProps["state"] =
-    index >= FIRST_UNBUILT ? "blocked" : a.busy ? "running" : done ? "done" : "ready"
+  else if (done && outcome?.kind === "error") line = "The result could not be read. Run this step again."
+  let blockedReason = "This step comes in the next part of the guided run. To ask your own question now, leave the guided run."
+  let state: GuideCoachProps["state"] = a.busy ? "running" : done ? "done" : "ready"
+  if (!node) {
+    state = "blocked"
+    blockedReason = `This pipeline has no ${spec.stage[0].toUpperCase()}${spec.stage.slice(1)} card, so this step cannot run. Leave the guided run and start it again.`
+  }
+  if (index >= FIRST_UNBUILT) state = "blocked"
   const question = String(graph.nodes.find((n) => n.stage === "query")?.config.text ?? "")
 
   return {
@@ -143,9 +167,11 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
       state,
       result: line,
       error,
-      blockedReason: "This step comes in the next part of the guided run.",
+      blockedReason,
       onRun: () => {
-        if (node) void a.start(node.id, false, index !== INDEX_STEP)
+        if (!node) return
+        if (isSource) setLoaded(true)
+        else void a.start(node.id, false, index !== INDEX_STEP)
       },
       onNext: () => goTo(index === GUIDE_STEPS.length - 1 ? null : index + 1),
       onLeave: () => goTo(null),

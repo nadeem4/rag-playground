@@ -6,9 +6,9 @@ import { resetSampleQuestionsCache } from "@/api/samples"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 import { BUILD_SESSION_KEY } from "@/state/buildSession"
 import { resetDocumentForTests } from "@/state/document"
-import { readStoredGraph, resetStoredGraphForTests } from "@/state/graph"
+import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph } from "@/state/graph"
 import { GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
-import { resetPipelinesForTests } from "@/state/pipelines"
+import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
 import { Shell } from "./Shell"
@@ -38,9 +38,13 @@ const QUESTIONS = [{ id: "size-factors", question: QUESTION, gold_answer: "Size 
 const STEP_KEY = "rag-playground:guide-step:v1"
 
 let posts: { path: string; body: { through?: string } }[] = []
+let calls: string[] = []
+let payloadFails = false
 
 beforeEach(() => {
   posts = []
+  calls = []
+  payloadFails = false
   resetSampleQuestionsCache()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -54,6 +58,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const ok = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
+      if (init?.method === "POST") calls.push(url)
       if (url === "/api/v2/strategies") return ok({ stages: TEST_REGISTRY })
       if (url === "/api/v2/documents") return ok([PRIMER])
       if (url === "/api/samples") return ok([CARD])
@@ -63,7 +68,7 @@ beforeEach(() => {
         return ok({ run_id: "r1" }, 202)
       }
       if (url === "/api/v2/results/a-parse") return ok({})
-      if (url === "/api/v2/results/a-parse/payload") return ok(parsedDoc)
+      if (url === "/api/v2/results/a-parse/payload") return payloadFails ? ok({ detail: "gone" }, 500) : ok(parsedDoc)
       if (url === "/api/v2/explain") return ok({ settings: "s", tradeoff: null, warning: null, blocking: false })
       return ok({ detail: "not found" }, 404)
     }),
@@ -214,6 +219,66 @@ describe("the guided run on Build", () => {
     expect(within(coach()).getByText(/step 3 of 7/)).toBeTruthy()
     expect(window.sessionStorage.getItem(STEP_KEY)).toBe("2")
   })
+  it("Start does not keep the selected saved pipeline, so Save changes cannot overwrite it", async () => {
+    const mine = sampleGraph(TEST_REGISTRY, { sha: "ee".repeat(32), filename: "mine.pdf" }, "Mine?")
+    savePipeline("Mine", mine)
+    storeGraph(mine)
+    const before = readPipelines()
+    const id = readCurrentId()
+    expect(id).toBeTruthy()
+    await open()
+    await waitFor(() => expect(invite()).toBeTruthy())
+    fireEvent.click(screen.getByRole("button", { name: "Start the guided run" }))
+    await waitFor(() => expect(coach()).toBeTruthy())
+    expect(readCurrentId()).not.toBe(id)
+    expect(readPipelines()).toEqual(before)
+  })
+
+  it("step 1 only loads the document: no run starts, and Next shows", async () => {
+    await open(0)
+    fireEvent.click(within(coach()).getByRole("button", { name: "Use this document" }))
+    await waitFor(() => expect(within(coach()).getByRole("button", { name: "Next step" })).toBeTruthy())
+    expect(calls.filter((u) => u === "/api/v2/runs" || u === "/api/v2/ask")).toEqual([])
+    expect(within(coach()).getByText(/A primer on chunking/)).toBeTruthy()
+  })
+
+  it("the Inspector follows the step", async () => {
+    await open(1)
+    await waitFor(() => expect(screen.queryByText("Pick a step")).toBeNull())
+  })
+
+  it("a step whose card is missing says so instead of doing nothing", async () => {
+    const g = sampleGraph(TEST_REGISTRY, { sha: PRIMER.sha, filename: PRIMER.filename }, QUESTION)
+    const gone = g.nodes.find((n) => n.stage === "clean")!.id
+    const into = g.edges.find((e) => e.dst === gone)!.src
+    const out = g.edges.find((e) => e.src === gone)!.dst
+    storeGraph({
+      ...g,
+      nodes: g.nodes.filter((n) => n.id !== gone),
+      edges: [...g.edges.filter((e) => e.src !== gone && e.dst !== gone), { src: into, dst: out } as (typeof g.edges)[number]],
+    })
+    await open(2)
+    expect((within(coach()).getByRole("button", { name: "Run Clean" }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(coach()).getByText(/no Clean card/)).toBeTruthy()
+  })
+
+  it("the last steps tell the visitor how to ask their own question", async () => {
+    await open(5)
+    expect(within(coach()).getByText(/ask your own question/)).toBeTruthy()
+  })
+
+  it("a done step whose result cannot be read shows a line, not an empty status", async () => {
+    payloadFails = true
+    await open(1, {
+      tracked: { results: { parse: { id: "parse", status: "done", artifact_id: "a-parse" } }, history: {} },
+      sigs: {},
+      transcript: [],
+      asked: null,
+      comparisonHidden: null,
+    })
+    await waitFor(() => expect(within(coach()).getByRole("status").textContent).not.toBe(""))
+  })
+
   it("on a phone the invite sits above the cards, and only there", async () => {
     vi.stubGlobal(
       "matchMedia",

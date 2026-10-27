@@ -79,8 +79,13 @@ describe("the guide steps", () => {
 })
 
 describe("fill", () => {
-  it("replaces placeholders and leaves unknown ones", () => {
-    expect(fill("{pages} pages, {size}, {x}", { pages: 6, size: "800" })).toBe("6 pages, 800, {x}")
+  it("replaces placeholders", () => {
+    expect(fill("{pages} pages, {size}.", { pages: 6, size: "800" })).toBe("6 pages, 800.")
+  })
+
+  it("drops the sentence that holds a value it does not have", () => {
+    expect(fill("It has {pages} pages. We ask one question.", {})).toBe("We ask one question.")
+    expect(fill("One. Two has {x}. Three.", {})).toBe("One. Three.")
   })
 })
 

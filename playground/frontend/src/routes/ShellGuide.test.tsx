@@ -39,12 +39,10 @@ const STEP_KEY = "rag-playground:guide-step:v1"
 
 let posts: { path: string; body: { through?: string } }[] = []
 let calls: string[] = []
-let payloadFails = false
 
 beforeEach(() => {
   posts = []
   calls = []
-  payloadFails = false
   resetSampleQuestionsCache()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -68,7 +66,9 @@ beforeEach(() => {
         return ok({ run_id: "r1" }, 202)
       }
       if (url === "/api/v2/results/a-parse") return ok({})
-      if (url === "/api/v2/results/a-parse/payload") return payloadFails ? ok({ detail: "gone" }, 500) : ok(parsedDoc)
+      if (url === "/api/v2/results/a-parse/payload") return ok(parsedDoc)
+      if (url === "/api/v2/results/a-parse-gone") return ok({})
+      if (url === "/api/v2/results/a-parse-gone/payload") return ok({ detail: "gone" }, 500)
       if (url === "/api/v2/explain") return ok({ settings: "s", tradeoff: null, warning: null, blocking: false })
       return ok({ detail: "not found" }, 404)
     }),
@@ -228,8 +228,12 @@ describe("the guided run on Build", () => {
     expect(id).toBeTruthy()
     await open()
     await waitFor(() => expect(invite()).toBeTruthy())
+    // Before Start, "Mine" is selected, so the bar offers its Save control.
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Start the guided run" }))
     await waitFor(() => expect(coach()).toBeTruthy())
+    // After Start, "Mine" is no longer selected, so nothing offers to save over it.
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull()
     expect(readCurrentId()).not.toBe(id)
     expect(readPipelines()).toEqual(before)
   })
@@ -268,15 +272,17 @@ describe("the guided run on Build", () => {
   })
 
   it("a done step whose result cannot be read shows a line, not an empty status", async () => {
-    payloadFails = true
+    // A distinct id: loadPayload caches artifacts at module level, so "a-parse" is already loaded.
     await open(1, {
-      tracked: { results: { parse: { id: "parse", status: "done", artifact_id: "a-parse" } }, history: {} },
+      tracked: { results: { parse: { id: "parse", status: "done", artifact_id: "a-parse-gone" } }, history: {} },
       sigs: {},
       transcript: [],
       asked: null,
       comparisonHidden: null,
     })
-    await waitFor(() => expect(within(coach()).getByRole("status").textContent).not.toBe(""))
+    await waitFor(() =>
+      expect(within(coach()).getByRole("status").textContent).toContain("The result could not be read. Run this step again."),
+    )
   })
 
   it("on a phone the invite sits above the cards, and only there", async () => {

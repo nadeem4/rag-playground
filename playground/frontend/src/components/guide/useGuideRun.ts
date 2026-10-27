@@ -150,7 +150,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   let state: GuideCoachProps["state"] = a.busy ? "running" : done ? "done" : "ready"
   if (!node) {
     state = "blocked"
-    blockedReason = `This pipeline has no ${spec.stage[0].toUpperCase()}${spec.stage.slice(1)} card, so this step cannot run. Leave the guided run and start it again.`
+    blockedReason = `This pipeline has no ${spec.stage === "source" ? "Document" : spec.stage[0].toUpperCase() + spec.stage.slice(1)} card, so this step cannot run. Leave the guided run and start it again.`
   }
   if (index >= FIRST_UNBUILT) state = "blocked"
   const question = String(graph.nodes.find((n) => n.stage === "query")?.config.text ?? "")

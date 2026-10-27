@@ -26,6 +26,9 @@ export const GUIDE_SAMPLE = "chunking-primer"
 export const GUIDE_QUESTION_ID = "size-factors"
 export const GUIDE_FIX = { chunk_size: 800, chunk_overlap: 80 }
 
+/** The dashed line in the Ask results, after the pieces the answer step reads. */
+export const GUIDE_LINE = "The answer step reads only the {shown} above this line."
+
 export const GUIDE_INVITE = {
   heading: "New to RAG? Take the guided run.",
   body: "Build a pipeline step by step, find where an answer gets lost, and fix it. It takes about five minutes and needs no API key.",

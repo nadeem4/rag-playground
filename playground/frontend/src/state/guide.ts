@@ -38,7 +38,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     stage: "source",
     card: "source",
     title: "Pick the document",
-    body: "Every run starts with a document. This one has {pages} pages of notes on chunking. We will ask it a single question and follow that question through every step.",
+    body: "Every run starts with a document. This document has {pages} pages of notes on chunking. We will ask it a single question and follow that question through every step.",
     run: "Use this document",
     why: "The playground keeps the document on your computer, or on the demo for a short time. Nothing is shared.",
   },
